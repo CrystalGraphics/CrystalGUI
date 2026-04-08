@@ -1,4 +1,4 @@
-package com.myname.mymodid;
+package io.github.somehussar.crystalgui;
 
 import java.io.File;
 

@@ -1,4 +1,4 @@
-package com.myname.mymodid;
+package io.github.somehussar.crystalgui;
 
 public class ClientProxy extends CommonProxy {
 

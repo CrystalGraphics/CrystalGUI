@@ -35,8 +35,14 @@
  */
 dependencies {
     //runtimeOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.7.69-GTNH:dev")
-    shadowImplementation("org.appliedenergistics.yoga:yoga:${yoga_version}")
+//    shadowImplementation("org.appliedenergistics.yoga:yoga:${yoga_version}")
+
+    compileOnly("org.projectlombok:lombok:1.18.44")
+    annotationProcessor("org.projectlombok:lombok:1.18.44")
+    testCompileOnly("org.projectlombok:lombok:1.18.44")
+    testAnnotationProcessor("org.projectlombok:lombok:1.18.44")
 
     // Taffy
-//    shadowImplementation("dev.vfyjxf:taffy:${taffy_version}")
+    shadowImplementation("dev.vfyjxf:taffy:${taffy_version}")
+    shadowImplementation("org.joml:joml:${jomlVersion}")
 }
