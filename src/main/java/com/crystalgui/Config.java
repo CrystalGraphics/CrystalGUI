@@ -1,4 +1,4 @@
-package io.github.somehussar.crystalgui;
+package com.crystalgui;
 
 import java.io.File;
 
