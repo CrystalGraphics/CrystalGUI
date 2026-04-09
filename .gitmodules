@@ -1,4 +1,4 @@
 [submodule "CrystalGraphics"]
 	path = CrystalGraphics
 	url = https://github.com/CrystalGraphics/CrystalGraphics.git
-	branch = font-bindings
+	branch = master
