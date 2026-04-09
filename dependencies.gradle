@@ -41,6 +41,7 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok:1.18.44")
     testCompileOnly("org.projectlombok:lombok:1.18.44")
     testAnnotationProcessor("org.projectlombok:lombok:1.18.44")
+    testImplementation("junit:junit:4.13.2")
 
     // Taffy
     shadowImplementation("dev.vfyjxf:taffy:${taffy_version}")
