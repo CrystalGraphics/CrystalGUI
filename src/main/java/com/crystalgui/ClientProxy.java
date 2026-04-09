@@ -1,4 +1,4 @@
-package io.github.somehussar.crystalgui;
+package com.crystalgui;
 
 public class ClientProxy extends CommonProxy {
 
