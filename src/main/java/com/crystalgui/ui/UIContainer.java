@@ -1,26 +1,19 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.layout.LayoutContext;
+import lombok.Getter;
 
 import javax.annotation.Nullable;
 
 public final class UIContainer {
 
+    @Getter
     private final LayoutContext layoutContext = new LayoutContext();
-    @Nullable
+    @Getter @Nullable
     private UIDocument document;
 
     public UIContainer(UIDocument document) {
         attachDocument(document);
-    }
-
-    public LayoutContext getLayoutContext() {
-        return layoutContext;
-    }
-
-    @Nullable
-    public UIDocument getDocument() {
-        return document;
     }
 
     public UIElement getRoot() {

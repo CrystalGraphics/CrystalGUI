@@ -7,17 +7,15 @@ import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
 import com.crystalgui.core.geometry.UiRect;
 import com.crystalgui.ui.UIElement;
+import lombok.Getter;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public final class LayoutContext {
 
+    @Getter
     private final TaffyTree taffyTree = new TaffyTree();
-
-    public TaffyTree getTaffyTree() {
-        return taffyTree;
-    }
 
     public void attachSubtree(UIElement element) {
         if (element.getLayoutState().isAttachedToLayoutTree()) {
