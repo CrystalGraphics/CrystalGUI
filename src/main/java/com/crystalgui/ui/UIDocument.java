@@ -1,5 +1,8 @@
 package com.crystalgui.ui;
 
+import lombok.Getter;
+
+@Getter
 public final class UIDocument {
 
     private final UIElement root;
@@ -13,9 +16,5 @@ public final class UIDocument {
 
     public static UIDocument of(UIElement root) {
         return new UIDocument(root);
-    }
-
-    public UIElement getRoot() {
-        return root;
     }
 }

@@ -5,6 +5,7 @@ import com.crystalgui.core.event.UiEvent;
 import com.crystalgui.core.event.UiEventListener;
 import com.crystalgui.core.event.UiEventType;
 import com.crystalgui.core.layout.LayoutNodeState;
+import lombok.Getter;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -17,55 +18,40 @@ import java.util.Set;
 
 public class UIElement {
 
+    @Getter
     private final LayoutNodeState layoutState = new LayoutNodeState();
+    @Getter
     private final TaffyStyle layoutStyle = new TaffyStyle();
 
-    @Nullable
+    @Getter @Nullable
     private String id;
     private final Set<String> styleClasses = new LinkedHashSet<String>();
 
+    @Getter
     private boolean visible = true;
+    @Getter
     private boolean enabled = true;
+    @Getter
     private boolean hitTestVisible = true;
 
+    @Getter
     private boolean layoutDirty = true;
+    @Getter
     private boolean styleDirty = true;
+    @Getter
     private boolean renderDirty = true;
 
-    @Nullable
+    @Getter @Nullable
     private UIContainer container;
 
-    @Nullable
+    @Getter @Nullable
     private UIElement parent;
     private final List<UIElement> children = new ArrayList<UIElement>();
     private final Map<UiEventType, List<UiEventListener>> bubbleListeners = new EnumMap<UiEventType, List<UiEventListener>>(UiEventType.class);
     private final Map<UiEventType, List<UiEventListener>> captureListeners = new EnumMap<UiEventType, List<UiEventListener>>(UiEventType.class);
 
-    @Nullable
-    public UIContainer getContainer() {
-        return container;
-    }
-
-    @Nullable
-    public UIElement getParent() {
-        return parent;
-    }
-
     public List<UIElement> getChildren() {
         return Collections.unmodifiableList(children);
-    }
-
-    public LayoutNodeState getLayoutState() {
-        return layoutState;
-    }
-
-    public TaffyStyle getLayoutStyle() {
-        return layoutStyle;
-    }
-
-    @Nullable
-    public String getId() {
-        return id;
     }
 
     public UIElement setId(@Nullable String id) {
@@ -95,20 +81,12 @@ public class UIElement {
         return this;
     }
 
-    public boolean isVisible() {
-        return visible;
-    }
-
     public UIElement setVisible(boolean visible) {
         if (this.visible != visible) {
             this.visible = visible;
             markRenderDirty();
         }
         return this;
-    }
-
-    public boolean isEnabled() {
-        return enabled;
     }
 
     public UIElement setEnabled(boolean enabled) {
@@ -119,25 +97,9 @@ public class UIElement {
         return this;
     }
 
-    public boolean isHitTestVisible() {
-        return hitTestVisible;
-    }
-
     public UIElement setHitTestVisible(boolean hitTestVisible) {
         this.hitTestVisible = hitTestVisible;
         return this;
-    }
-
-    public boolean isLayoutDirty() {
-        return layoutDirty;
-    }
-
-    public boolean isStyleDirty() {
-        return styleDirty;
-    }
-
-    public boolean isRenderDirty() {
-        return renderDirty;
     }
 
     public boolean isAttached() {
