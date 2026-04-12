@@ -5,6 +5,7 @@ import com.crystalgui.core.event.UiEvent;
 import com.crystalgui.core.event.UiEventListener;
 import com.crystalgui.core.event.UiEventType;
 import com.crystalgui.core.layout.LayoutNodeState;
+import com.crystalgui.core.render.CgUIRenderContext;
 import lombok.Getter;
 
 import javax.annotation.Nullable;
@@ -16,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class UIElement {
+public class UIElement implements CgUIDrawable {
 
     @Getter
     private final LayoutNodeState layoutState = new LayoutNodeState();
@@ -222,6 +223,35 @@ public class UIElement {
         styleDirty = false;
         renderDirty = false;
         layoutState.clearLayoutDirty();
+    }
+
+    // ── Drawable integration (plan §12.6) ─────────────────────────────
+
+    /**
+     * Default no-op draw implementation. Subclasses that produce visual output
+     * override this to paint into the render context's typed layers.
+     */
+    @Override
+    public void draw(CgUIRenderContext ctx) {
+        // No-op by default — override in concrete visual element subclasses
+    }
+
+    /**
+     * Recursively draws this element and all visible children in document order.
+     *
+     * <p>This is the render traversal entry point called by {@link UIContainer}.
+     * The traversal skips invisible elements and their entire subtrees.</p>
+     *
+     * @param ctx the UI render context for this frame
+     */
+    public void drawSubtree(CgUIRenderContext ctx) {
+        if (!visible) {
+            return;
+        }
+        draw(ctx);
+        for (UIElement child : children) {
+            child.drawSubtree(ctx);
+        }
     }
 
     void attachToContainer(UIContainer container) {
