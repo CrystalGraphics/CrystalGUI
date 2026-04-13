@@ -1,31 +1,64 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.layout.LayoutContext;
-import com.crystalgui.core.render.CgUILayers;
-import com.crystalgui.core.render.CgUIRenderContext;
-import io.github.somehussar.crystalgraphics.gl.render.CgBufferSource;
+import com.crystalgui.core.render.CgUiBatchSlots;
+import com.crystalgui.core.render.CgUiDrawList;
+import com.crystalgui.core.render.CgUiDrawListExecutor;
+import com.crystalgui.core.render.CgUiPaintContext;
+import com.crystalgui.core.render.CgUiRuntime;
+import com.crystalgui.core.render.ScissorStack;
+import io.github.somehussar.crystalgraphics.text.render.CgTextRenderContext;
+import io.github.somehussar.crystalgraphics.api.vertex.CgVertexFormat;
 import lombok.Getter;
 
 import org.joml.Matrix4f;
 
 import javax.annotation.Nullable;
 
+@Getter
 public final class UIContainer {
 
-    @Getter
+
     private final LayoutContext layoutContext = new LayoutContext();
-    @Getter @Nullable
     private UIDocument document;
 
-    /**
-     * The render context for batched UI drawing. Set via
-     * {@link #setRenderContext(CgUIRenderContext)} once the buffer source
-     * has been assembled. Null until then.
-     */
-    @Getter @Nullable
-    private CgUIRenderContext renderContext;
+    // ── Draw-list rendering ─────────────────────────────────────────────
 
+    private final CgUiBatchSlots batchSlots;
+    private final CgUiDrawList drawList;
+    private final CgUiPaintContext paintContext;
+    private final CgUiDrawListExecutor drawListExecutor;
+    private final CgUiRuntime runtime;
+    private CgTextRenderContext textRenderContext;
+
+    /**
+     * Creates a container with default batch slots, auto-fetching the global
+     * {@link CgUiRuntime} for shared rendering services.
+     *
+     * <p>This is the preferred constructor for most callers — just provide a
+     * document and start building UI.</p>
+     *
+     * @param document the UI document to attach
+     */
     public UIContainer(UIDocument document) {
+        this(document, CgUiBatchSlots.single(CgVertexFormat.POS2_UV2_COL4UB, 4096));
+    }
+
+    /**
+     * Creates a container with custom batch slots, auto-fetching the global
+     * {@link CgUiRuntime} for shared rendering services.
+     *
+     * @param document   the UI document to attach
+     * @param batchSlots custom batch slot configuration
+     */
+    public UIContainer(UIDocument document, CgUiBatchSlots batchSlots) {
+        if (batchSlots == null) throw new IllegalArgumentException("batchSlots must not be null");
+        this.batchSlots = batchSlots;
+        this.runtime = CgUiRuntime.get();
+        this.drawList = new CgUiDrawList();
+        ScissorStack scissorStack = new ScissorStack();
+        this.paintContext = new CgUiPaintContext(drawList, batchSlots, scissorStack, runtime);
+        this.drawListExecutor = new CgUiDrawListExecutor();
         attachDocument(document);
     }
 
@@ -67,50 +100,44 @@ public final class UIContainer {
         layoutContext.computeLayout(document.getRoot(), availableWidth, availableHeight);
     }
 
-    // ── Render context + draw traversal (plan §12.4, §12.6) ─────────
+    // ── Draw-list render path ──────────────────────────────────────────
 
     /**
-     * Sets the render context used by {@link #render(Matrix4f)}.
-     *
-     * <p>This must be called after assembling the {@link CgBufferSource}
-     * via {@link CgUILayers} and wrapping it in a
-     * {@link CgUIRenderContext}.</p>
-     *
-     * @param renderContext the render context, or {@code null} to disconnect rendering
-     */
-    public void setRenderContext(@Nullable CgUIRenderContext renderContext) {
-        this.renderContext = renderContext;
-    }
-
-    /**
-     * Executes the full UI draw traversal: begins the render context, walks
-     * the DOM tree in document order painting visible {@link CgUIDrawable} nodes,
-     * then ends the context (flushing all remaining geometry).
-     *
-     * <p>This is the primary render entry point. Call after
-     * {@link #computeLayout(float, float)} has resolved layout positions.</p>
+     * Executes the full draw-list UI render: records all UI geometry into the
+     * draw list during DOM traversal, then replays the list sequentially through
+     * the batch renderer backend.
      *
      * @param projection the orthographic projection matrix for this frame
-     * @throws IllegalStateException if no document is attached or no render
-     *                               context has been set
      */
     public void render(Matrix4f projection) {
         if (document == null) {
             throw new IllegalStateException("No document is attached");
         }
-        if (renderContext == null) {
-            throw new IllegalStateException("No render context has been set — call setRenderContext() first");
+
+        if (runtime.hasTextServices()) {
+            if (textRenderContext == null) {
+                textRenderContext = new CgTextRenderContext(projection);
+                paintContext.configureText(runtime.getTextRenderer(), runtime.getDefaultFontFamily(), textRenderContext);
+            } else {
+                textRenderContext.getProjection().set(projection);
+            }
         }
 
-        renderContext.begin(projection);
+        paintContext.beginRecord();
         try {
-            document.getRoot().drawSubtree(renderContext);
+            document.getRoot().drawSubtree(paintContext);
         } finally {
-            renderContext.end();
+            paintContext.endRecord();
+        }
+        try {
+            drawListExecutor.execute(drawList, batchSlots, projection);
+        } finally {
+            paintContext.finishFrame();
         }
     }
 
     public void dispose() {
         detachDocument();
+        batchSlots.delete();
     }
 }
