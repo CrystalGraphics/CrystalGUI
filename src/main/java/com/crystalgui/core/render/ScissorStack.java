@@ -1,19 +1,32 @@
 package com.crystalgui.core.render;
 
+import io.github.somehussar.crystalgraphics.api.state.CgScissorRect;
 import org.lwjgl.opengl.GL11;
 
 /**
  * Allocation-free scissor rectangle stack for nested clip regions.
  *
- * <p>Wraps a flat {@code int[]} for hot-path storage while exposing a clean
- * push/pop API.  Each {@link #push(int, int, int, int)} call intersects the
- * new rectangle with the current top-of-stack so that child clips never
- * exceed their parent's visible area.</p>
+ * <p>Uses a preallocated pool of {@link CgScissorRect} objects for hot-path
+ * storage while exposing a clean push/pop API. Each {@link #push(int, int, int, int)}
+ * call intersects the new rectangle with the current top-of-stack so that child
+ * clips never exceed their parent's visible area.</p>
  *
- * <p><strong>Flush-before-scissor invariant</strong>: callers (i.e.
- * {@link CgUIRenderContext}) must flush all dirty layers before calling
- * {@link #push(int, int, int, int)} or {@link #pop()} to avoid scissor
- * state bleeding into already-queued geometry.</p>
+ * <h3>Dual-mode operation (V3.1)</h3>
+ * <p>This class serves two purposes:</p>
+ * <ol>
+ *   <li><strong>Logical-only</strong> — during draw-list recording, the stack tracks
+ *       nested clips without issuing GL calls. Use {@link #push(int, int, int, int)}
+ *       and {@link #pop()} without calling {@link #applyCurrentGl()}.</li>
+ *   <li><strong>GL apply helper</strong> — during replay or legacy typed-layer paths,
+ *       {@link #applyCurrentGl()} and {@link #disableGl()} issue the actual GL
+ *       scissor state changes.</li>
+ * </ol>
+ *
+ * <p><strong>Flush-before-scissor invariant</strong>: callers that use the GL apply
+ * path must flush all dirty layers before calling {@link #push(int, int, int, int)}
+ * or {@link #pop()} to avoid scissor state bleeding into already-queued geometry.
+ * In the draw-list recording path, scissor is tracked logically and applied during
+ * replay, so the flush invariant is handled by the executor.</p>
  *
  * <p>Maximum nesting depth is {@value #MAX_DEPTH}.  Exceeding it throws
  * {@link IllegalStateException}.</p>
@@ -23,32 +36,34 @@ public final class ScissorStack {
     /** Maximum nesting depth for scissor rectangles. */
     static final int MAX_DEPTH = 16;
 
-    /**
-     * Flat storage: 4 ints per entry (x, y, w, h).
-     * Index into this array = depth * 4.
-     */
-    private final int[] stack = new int[MAX_DEPTH * 4];
+    /** Preallocated pool of scissor rects — never reallocated. */
+    private final CgScissorRect[] pool = new CgScissorRect[MAX_DEPTH];
 
     /** Current stack depth (0 = empty). */
     private int depth;
 
     /** Whether GL_SCISSOR_TEST is currently enabled by this stack. */
-    private boolean active;
+    private boolean glActive;
+
+    public ScissorStack() {
+        for (int i = 0; i < MAX_DEPTH; i++) {
+            pool[i] = new CgScissorRect();
+        }
+    }
 
     /**
      * Pushes a new scissor rectangle, intersecting it with the current
-     * top-of-stack if one exists.
-     *
-     * <p>Enables {@code GL_SCISSOR_TEST} on the first push and applies
-     * the intersected rectangle via {@code glScissor}.</p>
+     * top-of-stack if one exists. Does NOT issue GL calls — call
+     * {@link #applyCurrentGl()} separately if GL state change is needed.
      *
      * @param x x-origin of the scissor rect (screen-space pixels)
      * @param y y-origin of the scissor rect (screen-space pixels)
      * @param w width  of the scissor rect (pixels, must be ≥ 0)
      * @param h height of the scissor rect (pixels, must be ≥ 0)
+     * @return the effective (intersected) scissor rect at the new top of stack
      * @throws IllegalStateException if maximum nesting depth is exceeded
      */
-    public void push(int x, int y, int w, int h) {
+    public CgScissorRect push(int x, int y, int w, int h) {
         if (depth >= MAX_DEPTH) {
             throw new IllegalStateException(
                 "ScissorStack overflow: maximum depth " + MAX_DEPTH + " exceeded");
@@ -56,11 +71,11 @@ public final class ScissorStack {
 
         // Intersect with current top-of-stack if one exists
         if (depth > 0) {
-            int base = (depth - 1) * 4;
-            int px = stack[base];
-            int py = stack[base + 1];
-            int pw = stack[base + 2];
-            int ph = stack[base + 3];
+            CgScissorRect parent = pool[depth - 1];
+            int px = parent.getX();
+            int py = parent.getY();
+            int pw = parent.getWidth();
+            int ph = parent.getHeight();
 
             // Compute intersection
             int ix = Math.max(x, px);
@@ -74,27 +89,15 @@ public final class ScissorStack {
             h = Math.max(0, iy2 - iy);
         }
 
-        // Store the (possibly intersected) rectangle
-        int offset = depth * 4;
-        stack[offset] = x;
-        stack[offset + 1] = y;
-        stack[offset + 2] = w;
-        stack[offset + 3] = h;
+        CgScissorRect rect = pool[depth];
+        rect.set(x, y, w, h);
         depth++;
-
-        // Enable scissor test on first push
-        if (!active) {
-            GL11.glEnable(GL11.GL_SCISSOR_TEST);
-            active = true;
-        }
-
-        GL11.glScissor(x, y, w, h);
+        return rect;
     }
 
     /**
-     * Pops the current scissor rectangle and restores the previous one.
-     *
-     * <p>If the stack becomes empty, disables {@code GL_SCISSOR_TEST}.</p>
+     * Pops the current scissor rectangle. Does NOT issue GL calls — call
+     * {@link #applyCurrentGl()} or {@link #disableGl()} separately as needed.
      *
      * @throws IllegalStateException if the stack is already empty
      */
@@ -102,22 +105,53 @@ public final class ScissorStack {
         if (depth <= 0) {
             throw new IllegalStateException("ScissorStack underflow: pop() on empty stack");
         }
-
         depth--;
+    }
 
+    /**
+     * Returns the current top-of-stack scissor rect, or {@code null} if the
+     * stack is empty.
+     */
+    public CgScissorRect current() {
+        return depth > 0 ? pool[depth - 1] : null;
+    }
+
+    /** Returns the current nesting depth (0 = no active scissor). */
+    public int getDepth() {
+        return depth;
+    }
+
+    /** Returns whether GL_SCISSOR_TEST is currently enabled by this stack. */
+    public boolean isGlActive() {
+        return glActive;
+    }
+
+    // ── GL apply helpers (replay / legacy path) ─────────────────────────
+
+    /**
+     * Applies the current top-of-stack scissor rect to GL. Enables
+     * {@code GL_SCISSOR_TEST} if not already active. If the stack is
+     * empty, disables scissor test.
+     */
+    public void applyCurrentGl() {
         if (depth == 0) {
-            // Stack is now empty — disable scissor test
+            disableGl();
+            return;
+        }
+        if (!glActive) {
+            GL11.glEnable(GL11.GL_SCISSOR_TEST);
+            glActive = true;
+        }
+        pool[depth - 1].applyGl();
+    }
+
+    /**
+     * Disables {@code GL_SCISSOR_TEST} without modifying the logical stack.
+     */
+    public void disableGl() {
+        if (glActive) {
             GL11.glDisable(GL11.GL_SCISSOR_TEST);
-            active = false;
-        } else {
-            // Restore previous rectangle
-            int offset = (depth - 1) * 4;
-            GL11.glScissor(
-                stack[offset],
-                stack[offset + 1],
-                stack[offset + 2],
-                stack[offset + 3]
-            );
+            glActive = false;
         }
     }
 
@@ -127,10 +161,7 @@ public final class ScissorStack {
      * <p>Called at frame/pass end to ensure clean GL state.</p>
      */
     public void disable() {
-        if (active) {
-            GL11.glDisable(GL11.GL_SCISSOR_TEST);
-            active = false;
-        }
+        disableGl();
         depth = 0;
     }
 
@@ -141,16 +172,6 @@ public final class ScissorStack {
      */
     public void reset() {
         depth = 0;
-        active = false;
-    }
-
-    /** Returns the current nesting depth (0 = no active scissor). */
-    public int getDepth() {
-        return depth;
-    }
-
-    /** Returns whether the scissor test is currently active. */
-    public boolean isActive() {
-        return active;
+        glActive = false;
     }
 }

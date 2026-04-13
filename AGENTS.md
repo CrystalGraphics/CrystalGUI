@@ -16,6 +16,34 @@ The core of CrystalGUI can be written in versions of Java newer than 8 and depen
 - Code based GUI creation
 - Stylesheet support
 
+## UI Render Architecture (V3.1 Draw-List)
+
+The primary UI rendering model uses a **painter's-order draw list** instead of typed layers.
+
+### Key concepts
+- `CgUiDrawList` — packed `int[]` command pool recording draw commands in DOM traversal order
+- `CgUiPaintContext` — paint surface passed through UI traversal (recording side)
+- `CgUiDrawListExecutor` — stateless sequential replay
+- `CgUiDrawState` — cached command-local draw state (reference-identity merge)
+- `CgUiBatchSlots` — `Map<CgVertexFormat, CgBatchRenderer>` with stable slot indices
+- `ScissorStack` — allocation-free nested clips (dual-mode: logical + GL apply)
+- `CgScissorRect` — lives in CrystalGraphics `api/state/`, pooled by ScissorStack
+
+### Source package guide
+- `src/main/java/com/crystalgui/core/render/AGENTS.md` — authoritative package guide
+
+### UI element and test packages
+- `ui/elements/` — reusable `UIElement` subclasses (`UiPanel`: filled rectangle via draw-list)
+- `ui/test/` — reusable demo/test UI factories (`CguiTestUi`: static factory building a test `UIContainer`)
+
+### Frame lifecycle
+```
+paintContext.beginRecord()
+  root.drawSubtree(paintContext)   // DOM traversal, painter's order
+paintContext.endRecord()
+executor.execute(drawList, slots, projection)  // replay
+```
+
 ## CrystalGraphics Ownership Boundary (Critical)
 
 CrystalGraphics **must own the rendering backend**.
@@ -77,5 +105,11 @@ The main module for now. other modules will come in the future, but we must ensu
 and thats also where the future abstraction layer comes in.
 The 1.7.10 module of CrystalGUI contains the version-specific implementations, uses JVMDowngrader to make CrystalGUI & its dependencies run in Java 8.
 Most of the logic should be handled in the core. 
+
+
+
+LDLib2 Repo: research_repos/LDLib2/
+Minecraft 1.20.1 source | `C:\Users\mazen\.gradle\caches\forge_gradle\minecraft_user_repo\net\minecraftforge\forge\1.20.1-47.4.10_mapped_parchment_2023.09.03-1.20.1\forge-1.20.1-47.4.10_mapped_parchment_2023.09.03-1.20.1-recomp.jar`
+AND DECOMPILED AT `X:\projects\mc1201_sources`
 
 
