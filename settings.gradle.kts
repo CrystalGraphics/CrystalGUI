@@ -21,3 +21,7 @@ plugins {
 }
 
 apply(from = "gradle/module_integration/composite.settings.gradle.kts")
+
+// Standalone GL debug harness (no Minecraft/Forge)
+if (file("gl-debug-harness").exists())
+    include(":gl-debug-harness")
