@@ -46,10 +46,10 @@ public final class CgUiRuntime {
     private final CgFontFamily defaultFontFamily;
     
     /**
-     * Prebuilt solid-fill draw state for UI rectangles.
+     * Prebuilt solid-fill render state for UI rectangles.
      * Uses the shared UI shader with alpha blend, no depth, no cull.
      */
-    private CgUiDrawState solidFill;
+    private CgRenderState solidFill;
 
 
     private CgUiRuntime(@Nullable CgTextRenderer textRenderer,
@@ -130,13 +130,13 @@ public final class CgUiRuntime {
 
     // ── Internal ──
 
-    public CgUiDrawState solidFill() {
+    public CgRenderState solidFill() {
         if(solidFill != null) return solidFill;
         CgRenderState uiRenderState = CgRenderState.builder(UI_SHADER)
                 .blend(CgBlendState.ALPHA)
                 .depth(CgDepthState.NONE)
                 .cull(CgCullState.NONE)
                 .build();
-        return solidFill = new CgUiDrawState(uiRenderState);
+        return solidFill = uiRenderState;
     }
 }

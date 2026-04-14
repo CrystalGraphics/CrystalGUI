@@ -1,4 +1,4 @@
-# core/render — Draw-List UI Render Architecture
+# core/render — Draw-List UI Render Architecture (V3.2)
 
 > Root guide: [`AGENTS.md`](../../../../../../AGENTS.md)
 
@@ -14,7 +14,7 @@ sequentially through the CrystalGraphics batch backend.
 ```
 UIContainer (frame orchestration)
 ├── CgUiBatchSlots       → Map<CgVertexFormat, CgBatchRenderer> with stable slot indices
-├── CgUiDrawList         → packed int[] command pool + CgUiDrawState[] refs
+├── CgUiDrawList         → packed int[] command pool + CgRenderState[] refs + text side arrays
 ├── CgUiPaintContext     → paint surface for UI traversal (recording side)
 ├── CgUiDrawListExecutor → sequential replay (upload → draw → cleanup)
 └── ScissorStack         → allocation-free nested clip regions
@@ -27,7 +27,7 @@ Recording phase (DOM traversal):
 
 Replay phase (CgUiDrawListExecutor):
   upload all batch slots once
-    → for each command: scissor transition → draw-state apply → drawUploadedRange()
+    → for each command: scissor transition → render-state apply → drawUploadedRange()
     → cleanup + finish all slots
 ```
 
@@ -36,9 +36,11 @@ Replay phase (CgUiDrawListExecutor):
 ```
 CgUiPaintContext
 ├── CgUiDrawList (owns packed command pool)
-│   ├── int[] cmdPool         — CMD_STRIDE * MAX_COMMANDS packed ints
-│   ├── CgUiDrawState[] refs  — parallel draw-state reference array
-│   └── hot-path merge cache  — lastDrawState, lastBatchSlot, lastScissor*
+│   ├── int[] cmdPool          — CMD_STRIDE * MAX_COMMANDS packed ints
+│   ├── CgRenderState[] refs   — parallel render-state reference array
+│   ├── int[] textTextureIds   — parallel text texture ID array (CMD_KIND_TEXT only)
+│   ├── float[] textPxRanges   — parallel text pxRange array (CMD_KIND_TEXT only)
+│   └── hot-path merge cache   — lastRenderState, lastCmdKind, lastBatchSlot, lastScissor*, lastTextTexture*, lastTextPxRange
 ├── CgUiBatchSlots
 │   ├── Map<CgVertexFormat, CgBatchRenderer> renderersByFormat
 │   ├── CgBatchRenderer[] indexedRenderers  — for slot-index replay access
@@ -46,11 +48,6 @@ CgUiPaintContext
 └── ScissorStack
     └── CgScissorRect[] pool  — preallocated, mutable, never reallocated
        (CgScissorRect lives in CrystalGraphics api/state/)
-
-CgUiDrawState (command-local resolved state)
-├── CgRenderState renderState  — reusable, shared
-├── CgTextureBinding textureOverride  — nullable, for dynamic per-command textures
-└── float textPxRange  — Float.NaN when unused
 
 CgUiDrawListExecutor (stateless replay)
 └── takes CgUiDrawList + CgUiBatchSlots + Matrix4f projection as input
@@ -60,10 +57,9 @@ CgUiDrawListExecutor (stateless replay)
 
 | File | Role |
 |------|------|
-| `CgUiDrawList.java` | Packed `int[]` command pool with hot-path merge. **The core data structure.** |
-| `CgUiDrawState.java` | Command-local resolved draw state wrapping `CgRenderState` + overrides |
-| `CgUiPaintContext.java` | Recording-side paint surface with high-level and low-level APIs |
-| `CgUiDrawListExecutor.java` | Stateless sequential replay: upload → commands → cleanup |
+| `CgUiDrawList.java` | Packed `int[]` command pool with hot-path merge, typed `CMD_KIND_SOLID`/`CMD_KIND_TEXT` discriminant, and parallel text arrays. **The core data structure.** |
+| `CgUiPaintContext.java` | Recording-side paint surface with high-level and low-level APIs. Contains `DrawListTextSink` inner class implementing `CgTextQuadSink`. |
+| `CgUiDrawListExecutor.java` | Stateless sequential replay: upload → commands → cleanup. Branches on `cmdKind` for text vs. non-text state transitions. |
 | `CgUiBatchSlots.java` | `Map<CgVertexFormat, CgBatchRenderer>` with stable slot indices for packed command pool |
 | `ScissorStack.java` | Allocation-free scissor stack, dual-mode (logical / GL-apply) |
 
@@ -74,10 +70,17 @@ These invariants must be preserved in all modifications to this package:
 1. **Packed `int[]` command storage** — `CgUiDrawList.cmdPool` is a fixed-capacity array, not an object graph.
 2. **No per-command heap allocation** — during recording or replay. Zero GC pressure in the frame hot path.
 3. **Pooled `CgScissorRect` objects** — `ScissorStack` uses preallocated `CgScissorRect[]`. Never `new CgScissorRect()` in hot path.
-4. **Merge detection: reference identity for draw state, field equality for scissor** — `drawState == lastDrawState` and `scissorX == lastScissorX && ...`.
-5. **Text draw states are cached** — never created per glyph or per frame. Built per `(shader, atlas page, pxRange)`.
+4. **Merge detection: reference identity for render state, field equality for scissor and text fields** — `renderState == lastRenderState` and `scissorX == lastScissorX && ...`. Text commands additionally compare `textTextureId` and `pxRange`.
+5. **`CgRenderState` instances are pre-built statics** — BITMAP_LAYER_STATE, MSDF_LAYER_STATE, etc. in `CgTextRenderer`. The draw-list stores references. Text fields are primitives in parallel arrays.
 6. **Recording and replay are strictly non-overlapping** — `beginRecord()` → all recording → `endRecord()` → `execute()`.
 7. **Staging cannot grow after `uploadPendingVertices()`** — enforced by `CgBatchRenderer`.
+
+## Command Kind Model
+
+Each draw command carries a typed discriminant in `OFF_FLAGS`:
+
+- `CMD_KIND_SOLID = 0` — non-text commands (fillRect, strokeRect, drawImage, etc.). Render state is applied directly with projection.
+- `CMD_KIND_TEXT = 1` — text commands. Carry `textTextureId` and `textPxRange` in parallel side arrays. The executor applies ephemeral shader bindings (`u_modelview` identity, optional `u_pxRange`) before `renderState.apply(projection, texId)`.
 
 ## Recording / Replay Boundary
 
@@ -85,7 +88,7 @@ These invariants must be preserved in all modifications to this package:
 - Select draw state via `setDrawState()`
 - Reserve quads, write vertices
 - Push/pop scissor logically
-- Emit text through `CgTextEmissionTarget`
+- Emit text through `CgTextQuadSink` (via `DrawListTextSink` adapter)
 
 ### Recording phase (forbidden)
 - GL state mutation
@@ -95,7 +98,7 @@ These invariants must be preserved in all modifications to this package:
 ### Replay phase (allowed)
 - Upload per slot once
 - Exact scissor transitions
-- Draw-state apply/clear
+- Render-state apply/clear
 - `drawUploadedRange()` calls
 
 ### Replay phase (forbidden)
@@ -105,8 +108,8 @@ These invariants must be preserved in all modifications to this package:
 
 ## Key Design Decisions
 
-- **Merge uses `drawState == lastDrawState` (reference identity)** — not `equals()`. All `CgUiDrawState`
-  instances in hot paths must be prebuilt and cached. This keeps merge as cheap as possible.
+- **Merge uses `renderState == lastRenderState` (reference identity)** — not `equals()`. All `CgRenderState`
+  instances in hot paths are prebuilt static finals. This keeps merge as cheap as possible.
 
 - **Scissor merge uses field equality** — because `ScissorStack` reuses pooled rects, reference equality
   would be incorrect across mutations.
@@ -114,9 +117,10 @@ These invariants must be preserved in all modifications to this package:
 - **One global draw list per `UIContainer`** — painter's order is maintained by DOM traversal order.
   The renderer makes no independent z-order decisions.
 
-- **Text emission target** — `CgUiPaintContext.textEmissionTarget()` returns a `CgTextEmissionTarget`
-  adapter (`DrawListEmissionTarget`) that bridges CrystalGraphics' text renderer to draw-list recording.
-  One element's text emission is contiguous in the draw list.
+- **Text emission via `CgTextQuadSink`** — `CgUiPaintContext` drawText() methods create a `DrawListTextSink`
+  adapter that implements `CgTextQuadSink`. The adapter tracks vertex cursors internally and flushes
+  pending vertices as text draw commands on batch transitions. One element's text emission is contiguous
+  in the draw list.
 
 - **`CgUiDrawCommand` is conceptual only** — the plan's §3.4 describes a "conceptual struct", but
   the runtime representation is the packed `int[]` pool. No separate command class exists.
@@ -149,13 +153,14 @@ scissorStack.disableGl();              // GL11.glDisable
 
 ## Common Agent Mistakes to Avoid
 
-- Do NOT construct `CgUiDrawState` in element `draw()` hot paths. Use cached prebuilt instances.
-- Do NOT use `equals()` for draw-state merge in `CgUiDrawList`. Use `==`.
+- Do NOT construct `CgRenderState` in element `draw()` hot paths. Use cached prebuilt instances.
+- Do NOT use `equals()` for render-state merge in `CgUiDrawList`. Use `==`.
 - Do NOT call `CgBatchRenderer.vertex()` or `CgBatchRenderer.flush()` during replay.
 - Do NOT issue GL calls during the recording phase.
 - Do NOT interleave other draw-list commands into a single text emission call.
 - Do NOT replace the packed `int[]` command pool with object-per-command storage.
 - Do NOT assume scissor reference equality. Always use field comparison for merge.
+- Do NOT re-introduce a `CgUiDrawState` wrapper or equivalent under another name. Render state + typed command kind + parallel text arrays is the authoritative model.
 
 ## Future Optimization Lanes (Not Yet Implemented)
 
