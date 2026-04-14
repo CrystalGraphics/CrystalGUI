@@ -2,13 +2,12 @@ package com.crystalgui.core.render;
 
 import io.github.somehussar.crystalgraphics.api.vertex.CgVertexConsumer;
 import io.github.somehussar.crystalgraphics.api.vertex.CgVertexFormat;
-import io.github.somehussar.crystalgraphics.api.vertex.CgTextureBinding;
 import io.github.somehussar.crystalgraphics.api.font.CgFontFamily;
 import io.github.somehussar.crystalgraphics.api.text.CgTextLayout;
 import io.github.somehussar.crystalgraphics.api.state.CgRenderState;
 import io.github.somehussar.crystalgraphics.api.state.CgScissorRect;
 import io.github.somehussar.crystalgraphics.gl.render.CgBatchRenderer;
-import io.github.somehussar.crystalgraphics.text.render.CgTextEmissionTarget;
+import io.github.somehussar.crystalgraphics.text.render.CgTextQuadSink;
 import io.github.somehussar.crystalgraphics.text.render.CgTextRenderContext;
 import io.github.somehussar.crystalgraphics.text.render.CgTextRenderer;
 import io.github.somehussar.crystalgraphics.api.PoseStack;
@@ -41,6 +40,12 @@ public final class CgUiPaintContext {
     @Nullable
     private final CgUiRuntime runtime;
 
+    // Cached solid-fill render state resolved from the runtime at construction time.
+    // Elements use fillRect(x,y,w,h,rgba) which delegates here instead of reaching
+    // into the runtime directly.
+    @Nullable
+    private final CgRenderState solidFillState;
+
     // Context-owned text services (optional until configured by the host)
     private CgTextRenderer textRenderer;
     private CgFontFamily defaultFontFamily;
@@ -48,7 +53,7 @@ public final class CgUiPaintContext {
     private long textFrame;
 
     // Current recording state
-    private CgUiDrawState currentDrawState;
+    private CgRenderState currentRenderState;
     private int currentBatchSlot;
     private boolean recording;
 
@@ -60,6 +65,7 @@ public final class CgUiPaintContext {
         this.batchSlots = batchSlots;
         this.scissorStack = scissorStack;
         this.runtime = runtime;
+        this.solidFillState = (runtime != null) ? runtime.solidFill() : null;
         if (runtime != null && runtime.hasTextServices()) {
             this.textRenderer = runtime.getTextRenderer();
             this.defaultFontFamily = runtime.getDefaultFontFamily();
@@ -74,7 +80,7 @@ public final class CgUiPaintContext {
         for (int s = 0; s < batchSlots.size(); s++) {
             batchSlots.renderer(s).begin();
         }
-        currentDrawState = null;
+        currentRenderState = null;
         recording = true;
     }
 
@@ -112,7 +118,7 @@ public final class CgUiPaintContext {
      * {@link CgBatchRenderer#begin()} again.</p>
      */
     public void finishFrame() {
-        currentDrawState = null;
+        currentRenderState = null;
         recording = false;
         for (int s = 0; s < batchSlots.size(); s++) {
             batchSlots.renderer(s).end();
@@ -122,19 +128,19 @@ public final class CgUiPaintContext {
     // ── Low-level recording API ─────────────────────────────────────────
 
     /**
-     * Sets the active draw state and vertex format for subsequent vertex recording.
+     * Sets the active render state and vertex format for subsequent vertex recording.
      * Must be called before {@link #vertex()} or {@link #reserveQuads(int)}.
      */
-    public void setDrawState(CgUiDrawState state, CgVertexFormat format) {
+    public void setDrawState(CgRenderState state, CgVertexFormat format) {
         if (!recording) throw new IllegalStateException("Not recording");
         if (state == null) throw new IllegalArgumentException("state must not be null");
-        currentDrawState = state;
+        currentRenderState = state;
         currentBatchSlot = batchSlots.slotIndexFor(format);
     }
 
     public CgVertexConsumer vertex() {
         if (!recording) throw new IllegalStateException("Not recording");
-        if (currentDrawState == null) throw new IllegalStateException("No draw state set — call setDrawState() first");
+        if (currentRenderState == null) throw new IllegalStateException("No draw state set — call setDrawState() first");
         return batchSlots.renderer(currentBatchSlot).vertex();
     }
 
@@ -144,7 +150,7 @@ public final class CgUiPaintContext {
      */
     public void reserveQuads(int count) {
         if (!recording) throw new IllegalStateException("Not recording");
-        if (currentDrawState == null) throw new IllegalStateException("No draw state set");
+        if (currentRenderState == null) throw new IllegalStateException("No draw state set");
         batchSlots.renderer(currentBatchSlot).staging().ensureRoomForQuads(count);
     }
 
@@ -166,7 +172,7 @@ public final class CgUiPaintContext {
         if (sc != null) {
             sx = sc.getX(); sy = sc.getY(); sw = sc.getWidth(); sh = sc.getHeight();
         }
-        drawList.record(currentDrawState, currentBatchSlot, sx, sy, sw, sh, vtxStart, vtxCount);
+        drawList.record(currentRenderState, currentBatchSlot, sx, sy, sw, sh, vtxStart, vtxCount);
     }
 
     // ── Scissor stack ───────────────────────────────────────────────────
@@ -184,10 +190,10 @@ public final class CgUiPaintContext {
     // ── High-level convenience API ──────────────────────────────────────
 
     /**
-     * Emits a positioned quad (4 vertices) with the given draw state, UVs, and color,
+     * Emits a positioned quad (4 vertices) with the given render state, UVs, and color,
      * and records the draw command. This is the general-purpose quad helper.
      *
-     * @param state the prebuilt draw state
+     * @param state the prebuilt render state
      * @param x0    left X
      * @param y0    top Y
      * @param x1    right X
@@ -198,7 +204,7 @@ public final class CgUiPaintContext {
      * @param v1    bottom UV
      * @param rgba  packed RGBA color (0xRRGGBBAA)
      */
-    public void quad(CgUiDrawState state, float x0, float y0, float x1, float y1,
+    public void quad(CgRenderState state, float x0, float y0, float x1, float y1,
                      float u0, float v0, float u1, float v1, int rgba) {
         setDrawState(state, CgVertexFormat.POS2_UV2_COL4UB);
         CgBatchRenderer renderer = batchSlots.renderer(currentBatchSlot);
@@ -224,16 +230,27 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Fills a rectangle with the given draw state and color.
+     * Fills a rectangle with the given render state and color.
      */
-    public void fillRect(CgUiDrawState state, float x, float y, float w, float h, int rgba) {
+    public void fillRect(CgRenderState state, float x, float y, float w, float h, int rgba) {
         quad(state, x, y, x + w, y + h, 0, 0, 1, 1, rgba);
+    }
+
+    /**
+     * Fills a solid-color rectangle using the context's cached solid-fill render state.
+     * Elements should use this instead of reaching into the runtime for a draw state.
+     */
+    public void fillRect(float x, float y, float w, float h, int rgba) {
+        if (solidFillState == null) {
+            throw new IllegalStateException("No solid-fill render state available — runtime not configured");
+        }
+        fillRect(solidFillState, x, y, w, h, rgba);
     }
 
     /**
      * Draws a textured image quad.
      */
-    public void drawImage(CgUiDrawState state, float x, float y, float w, float h,
+    public void drawImage(CgRenderState state, float x, float y, float w, float h,
                           float u0, float v0, float u1, float v1, int rgba) {
         quad(state, x, y, x + w, y + h, u0, v0, u1, v1, rgba);
     }
@@ -241,7 +258,7 @@ public final class CgUiPaintContext {
     /**
      * Fills a rectangle with separate float color components (0.0-1.0).
      */
-    public void fillRect(CgUiDrawState state, float x, float y, float w, float h,
+    public void fillRect(CgRenderState state, float x, float y, float w, float h,
                          float r, float g, float b, float a) {
         fillRect(state, x, y, w, h, packRgba(r, g, b, a));
     }
@@ -249,7 +266,7 @@ public final class CgUiPaintContext {
     /**
      * Draws the border (outline) of a rectangle as four thin quads.
      *
-     * @param state     the prebuilt draw state
+     * @param state     the prebuilt render state
      * @param x         left edge
      * @param y         top edge
      * @param w         width of the rectangle
@@ -257,7 +274,7 @@ public final class CgUiPaintContext {
      * @param thickness border thickness in pixels
      * @param rgba      packed RGBA color (0xRRGGBBAA)
      */
-    public void strokeRect(CgUiDrawState state, float x, float y, float w, float h,
+    public void strokeRect(CgRenderState state, float x, float y, float w, float h,
                            float thickness, int rgba) {
         // Top edge
         fillRect(state, x, y, w, thickness, rgba);
@@ -272,40 +289,42 @@ public final class CgUiPaintContext {
     /**
      * Draws a horizontal line as a 1px-high filled rectangle.
      */
-    public void hLine(CgUiDrawState state, float x, float y, float length, int rgba) {
+    public void hLine(CgRenderState state, float x, float y, float length, int rgba) {
         fillRect(state, x, y, length, 1, rgba);
     }
 
     /**
      * Draws a vertical line as a 1px-wide filled rectangle.
      */
-    public void vLine(CgUiDrawState state, float x, float y, float length, int rgba) {
+    public void vLine(CgRenderState state, float x, float y, float length, int rgba) {
         fillRect(state, x, y, 1, length, rgba);
     }
 
     /**
-     * Draws text into the draw list via a {@link CgTextEmissionTarget} adapter.
+     * Draws text into the draw list via a {@link CgTextQuadSink} adapter.
      *
-     * <p>The caller provides a callback that receives the emission target and uses
+     * <p>The caller provides a callback that receives the text quad sink and uses
      * the CrystalGraphics text renderer's target-based API to emit glyphs. All
      * emitted quads are recorded into the draw list in painter's order.</p>
      *
      * <p>Usage example:</p>
      * <pre>{@code
-     * paintContext.drawText(target -> {
-     *     textRenderer.drawInternalTarget(target, layout, font, x, y, color, frame, renderCtx, poseStack);
+     * paintContext.drawText(sink -> {
+     *     textRenderer.drawInternalTarget(sink, layout, font, x, y, color, frame, renderCtx, poseStack);
      * });
      * }</pre>
      *
-     * @param emitter a callback that receives the text emission target
+     * @param emitter a callback that receives the text quad sink
      */
     public void drawText(TextEmitter emitter) {
         if (!recording) throw new IllegalStateException("Not recording");
-        emitter.emit(textEmissionTarget());
+        DrawListTextSink sink = new DrawListTextSink(this);
+        emitter.emit(sink);
+        sink.endText();
     }
 
     /**
-     * Convenience helper that emits text through the generic draw-list text target.
+     * Convenience helper that emits text through the generic draw-list text sink.
      * This is the normal text path for UI elements that already have a text renderer,
      * font family, and render context available.
      */
@@ -325,7 +344,9 @@ public final class CgUiPaintContext {
         if (pose == null) throw new IllegalArgumentException("pose must not be null");
         if (!recording) throw new IllegalStateException("Not recording");
 
-        textRenderer.drawInternalTarget(textEmissionTarget(), layout, family, x, y, rgba, frame, context, pose);
+        DrawListTextSink sink = new DrawListTextSink(this);
+        textRenderer.drawInternalTarget(sink, layout, family, x, y, rgba, frame, context, pose);
+        sink.endText();
     }
 
     /**
@@ -347,7 +368,9 @@ public final class CgUiPaintContext {
         if (pose == null) throw new IllegalArgumentException("pose must not be null");
         if (!recording) throw new IllegalStateException("Not recording");
 
-        textRenderer.drawInternalTarget(textEmissionTarget(), text, family, x, y, rgba, frame, context, pose);
+        DrawListTextSink sink = new DrawListTextSink(this);
+        textRenderer.drawInternalTarget(sink, text, family, x, y, rgba, frame, context, pose);
+        sink.endText();
     }
 
     /**
@@ -356,7 +379,9 @@ public final class CgUiPaintContext {
     public void drawText(String text, float x, float y, int rgba) {
         ensureTextConfigured();
         if (text == null || text.isEmpty()) return;
-        textRenderer.drawInternalTarget(textEmissionTarget(), text, defaultFontFamily, x, y, rgba, textFrame, textRenderContext, new PoseStack());
+        DrawListTextSink sink = new DrawListTextSink(this);
+        textRenderer.drawInternalTarget(sink, text, defaultFontFamily, x, y, rgba, textFrame, textRenderContext, new PoseStack());
+        sink.endText();
     }
 
     /**
@@ -366,24 +391,16 @@ public final class CgUiPaintContext {
         ensureTextConfigured();
         if (family == null) throw new IllegalArgumentException("family must not be null");
         if (text == null || text.isEmpty()) return;
-        textRenderer.drawInternalTarget(textEmissionTarget(), text, family, x, y, rgba, textFrame, textRenderContext, new PoseStack());
+        DrawListTextSink sink = new DrawListTextSink(this);
+        textRenderer.drawInternalTarget(sink, text, family, x, y, rgba, textFrame, textRenderContext, new PoseStack());
+        sink.endText();
     }
 
     /**
      * Functional interface for text emission into the draw list.
      */
     public interface TextEmitter {
-        void emit(CgTextEmissionTarget target);
-    }
-
-    /**
-     * Returns a {@link CgTextEmissionTarget} adapter that the CrystalGraphics text
-     * renderer can emit into. Quads emitted through this target are recorded into
-     * the draw list in painter's order.
-     */
-    public CgTextEmissionTarget textEmissionTarget() {
-        if (!recording) throw new IllegalStateException("Not recording");
-        return new DrawListEmissionTarget(this);
+        void emit(CgTextQuadSink sink);
     }
 
     // ── Access ──────────────────────────────────────────────────────────
@@ -391,6 +408,12 @@ public final class CgUiPaintContext {
     public CgUiDrawList getDrawList() { return drawList; }
     public CgUiBatchSlots getBatchSlots() { return batchSlots; }
     public ScissorStack getScissorStack() { return scissorStack; }
+
+    /**
+     * @deprecated Elements must not use the runtime directly. Use {@link #fillRect(float, float, float, float, int)}
+     *             or other context convenience methods instead.
+     */
+    @Deprecated
     public CgUiRuntime getRuntime() { return runtime; }
     public boolean isRecording() { return recording; }
 
@@ -419,41 +442,88 @@ public final class CgUiPaintContext {
         }
     }
 
-    // ── Inner text emission target adapter ──────────────────────────────
+    // ── Package-private helpers for DrawListTextSink ─────────────────────
 
     /**
-     * Bridges CrystalGraphics' generic {@link CgTextEmissionTarget} to the
-     * draw-list recording path. Converts render-state/texture/pxRange transitions
-     * into {@link CgUiDrawState} instances for the draw list.
+     * Records a text draw command in the draw list with the current scissor state.
+     * Package-private: called by {@link DrawListTextSink} to flush pending text vertices.
      */
-    private static final class DrawListEmissionTarget implements CgTextEmissionTarget {
+    void recordTextCommand(CgRenderState renderState, int textureId, float pxRange,
+                           int vtxStart, int vtxCount) {
+        CgScissorRect sc = scissorStack.current();
+        int sx = 0, sy = 0, sw = 0, sh = 0;
+        if (sc != null) {
+            sx = sc.getX(); sy = sc.getY(); sw = sc.getWidth(); sh = sc.getHeight();
+        }
+        drawList.recordText(renderState, textureId, pxRange, currentBatchSlot,
+                            sx, sy, sw, sh, vtxStart, vtxCount);
+    }
+
+    // ── Inner text quad sink adapter ────────────────────────────────────
+
+    /**
+     * Bridges CrystalGraphics' generic {@link CgTextQuadSink} to the draw-list
+     * recording path. Converts {@link CgTextQuadSink#beginBatch} transitions into
+     * text draw commands with the appropriate render state, texture, and pxRange.
+     *
+     * <p>Tracks the vertex cursor internally. On each {@code beginBatch()}, any
+     * pending vertices from the previous batch are flushed as a draw command.
+     * After the text renderer returns, the caller invokes {@link #endText()}
+     * to record any remaining vertices.</p>
+     */
+    private static final class DrawListTextSink implements CgTextQuadSink {
         private final CgUiPaintContext ctx;
-        DrawListEmissionTarget(CgUiPaintContext ctx) { this.ctx = ctx; }
+        private CgRenderState batchRenderState;
+        private int batchTextureId;
+        private float batchPxRange;
+        private int vtxCursorStart = -1;
+
+        DrawListTextSink(CgUiPaintContext ctx) { this.ctx = ctx; }
 
         @Override
-        public void switchBatch(CgRenderState renderState, int textureId, float pxRange) {
-            CgTextureBinding texOverride = textureId >= 0 ? CgTextureBinding.texture2D(textureId) : null;
-            CgUiDrawState state = new CgUiDrawState(renderState, texOverride, pxRange);
-            ctx.setDrawState(state, CgVertexFormat.POS2_UV2_COL4UB);
+        public void beginBatch(CgRenderState renderState, int textureId, float pxRange) {
+            flushPendingVertices();
+            batchRenderState = renderState;
+            batchTextureId = textureId;
+            batchPxRange = pxRange;
+            // Set the render state + batch slot on the paint context
+            ctx.setDrawState(renderState, CgVertexFormat.POS2_UV2_COL4UB);
+            vtxCursorStart = currentStagingVertexCount();
         }
 
         @Override
-        public CgVertexConsumer vertexConsumer() {
-            return ctx.vertex();
+        public void emitQuad(float x0, float y0, float x1, float y1,
+                             float u0, float v0, float u1, float v1,
+                             int r, int g, int b, int a) {
+            CgBatchRenderer renderer = ctx.batchSlots.renderer(ctx.currentBatchSlot);
+            renderer.staging().ensureRoomForQuads(1);
+            CgVertexConsumer vc = renderer.vertex();
+            vc.vertex(x0, y0).uv(u0, v0).color(r, g, b, a).endVertex();
+            vc = renderer.vertex();
+            vc.vertex(x1, y0).uv(u1, v0).color(r, g, b, a).endVertex();
+            vc = renderer.vertex();
+            vc.vertex(x1, y1).uv(u1, v1).color(r, g, b, a).endVertex();
+            vc = renderer.vertex();
+            vc.vertex(x0, y1).uv(u0, v1).color(r, g, b, a).endVertex();
         }
 
         @Override
-        public void reserveQuads(int count) {
-            ctx.reserveQuads(count);
+        public void endText() {
+            flushPendingVertices();
         }
 
-        @Override
-        public void recordQuad(int vtxStart, int vtxCount) {
-            ctx.recordCommand(vtxStart, vtxCount);
+        private void flushPendingVertices() {
+            if (vtxCursorStart < 0) return;
+            int vtxNow = currentStagingVertexCount();
+            int vtxCount = vtxNow - vtxCursorStart;
+            if (vtxCount > 0) {
+                ctx.recordTextCommand(batchRenderState, batchTextureId, batchPxRange,
+                                      vtxCursorStart, vtxCount);
+            }
+            vtxCursorStart = -1;
         }
 
-        @Override
-        public int currentVertexCount() {
+        private int currentStagingVertexCount() {
             CgBatchRenderer renderer = ctx.batchSlots.renderer(ctx.currentBatchSlot);
             return renderer.staging().vertexCount();
         }

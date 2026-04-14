@@ -1,8 +1,6 @@
 package com.crystalgui.ui.elements;
 
-import com.crystalgui.core.render.CgUiDrawState;
 import com.crystalgui.core.render.CgUiPaintContext;
-import com.crystalgui.core.render.CgUiRuntime;
 import com.crystalgui.core.geometry.UiRect;
 import com.crystalgui.ui.UIElement;
 import lombok.Getter;
@@ -20,7 +18,7 @@ public class UiPanel extends UIElement {
     private int color;
 
     /**
-     * Creates a panel using the global {@link CgUiRuntime#solidFill()} draw state.
+     * Creates a panel using the global {@link com.crystalgui.core.render.CgUiRuntime#solidFill()} draw state.
      *
      * @param color packed RGBA color (0xRRGGBBAA)
      */
@@ -32,6 +30,6 @@ public class UiPanel extends UIElement {
     public void draw(CgUiPaintContext ctx) {
         UiRect box = getLayoutState().getLayoutBox();
         if (box.getWidth() <= 0 || box.getHeight() <= 0) return;
-        ctx.fillRect(ctx.getRuntime().solidFill(), box.getX(), box.getY(), box.getWidth(), box.getHeight(), color);
+        ctx.fillRect(box.getX(), box.getY(), box.getWidth(), box.getHeight(), color);
     }
 }

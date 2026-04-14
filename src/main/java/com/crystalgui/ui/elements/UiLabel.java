@@ -13,6 +13,11 @@ import lombok.Setter;
  */
 public class UiLabel extends UIElement {
 
+    // Temporary layout hack: horizontal padding and approximate vertical centering.
+    // These must be replaced with proper text measurement once CgFontFamily exposes metrics.
+    private static final float TEXT_PADDING_LEFT = 8.0f;
+    private static final float TEXT_BASELINE_FACTOR = 0.72f;
+
     @Getter @Setter
     private CgFontFamily fontFamily;
 
@@ -39,6 +44,7 @@ public class UiLabel extends UIElement {
             return;
         }
 
-        ctx.drawText(fontFamily, text, box.getX() + 8.0f, box.getY() + box.getHeight() * 0.72f, color);
+        ctx.drawText(fontFamily, text, box.getX() + TEXT_PADDING_LEFT,
+                     box.getY() + box.getHeight() * TEXT_BASELINE_FACTOR, color);
     }
 }
