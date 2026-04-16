@@ -1,10 +1,12 @@
 package com.crystalgui.core.layout;
 
+import dev.vfyjxf.taffy.geometry.FloatSize;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.AvailableSpace;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
+import dev.vfyjxf.taffy.util.MeasureFunc;
 import com.crystalgui.core.geometry.UiRect;
 import com.crystalgui.ui.UIElement;
 import lombok.Getter;
@@ -12,7 +14,18 @@ import lombok.Getter;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Manages the Taffy layout tree for a UI container.
+ *
+ * <p>Supports measured leaves: elements that provide a {@link MeasureFunc}
+ * via {@link UIElement#getMeasureFunc()} are attached with
+ * {@code newLeafWithMeasure}, and layout is always computed through
+ * {@code computeLayoutWithMeasure} so measured nodes participate correctly.</p>
+ */
 public final class LayoutContext {
+
+    /** No-op measure returning zero size — used as the default for non-measured leaves. */
+    private static final MeasureFunc NOOP_MEASURE = (knownDimensions, availableSpace) -> new FloatSize(0, 0);
 
     @Getter
     private final TaffyTree taffyTree = new TaffyTree();
@@ -23,7 +36,13 @@ public final class LayoutContext {
             return;
         }
 
-        NodeId nodeId = taffyTree.newLeaf(element.getLayoutStyle().copy());
+        MeasureFunc measureFunc = element.getMeasureFunc();
+        NodeId nodeId;
+        if (measureFunc != null) {
+            nodeId = taffyTree.newLeafWithMeasure(element.getLayoutStyle().copy(), measureFunc);
+        } else {
+            nodeId = taffyTree.newLeaf(element.getLayoutStyle().copy());
+        }
         element.getLayoutState().attachNode(nodeId);
 
         for (UIElement child : element.getChildren()) {
@@ -65,19 +84,33 @@ public final class LayoutContext {
         NodeId nodeId = element.getLayoutState().getNodeId();
         if (nodeId != null && taffyTree.containsNode(nodeId)) {
             taffyTree.setStyle(nodeId, element.getLayoutStyle().copy());
+            // Update measure function if it changed
+            MeasureFunc measureFunc = element.getMeasureFunc();
+            if (measureFunc != null) {
+                taffyTree.setMeasureFunc(nodeId, measureFunc);
+            }
             taffyTree.markDirty(nodeId);
         }
     }
 
+    /**
+     * Computes the layout for the subtree rooted at the given element.
+     *
+     * <p>Uses {@code computeLayoutWithMeasure} so that elements with measure
+     * functions (like UiLabel) participate in layout correctly.</p>
+     */
     public void computeLayout(UIElement root, float availableWidth, float availableHeight) {
         if (!root.getLayoutState().isAttachedToLayoutTree()) {
             attachSubtree(root);
         }
 
         refreshSubtree(root);
-        taffyTree.computeLayout(
+        // Use computeLayoutWithMeasure with NOOP_MEASURE as default
+        // so measured leaves registered via newLeafWithMeasure are respected
+        taffyTree.computeLayoutWithMeasure(
                 requireNodeId(root),
-                TaffySize.of(AvailableSpace.definite(availableWidth), AvailableSpace.definite(availableHeight))
+                TaffySize.of(AvailableSpace.definite(availableWidth), AvailableSpace.definite(availableHeight)),
+                NOOP_MEASURE
         );
         updateLayoutBoxes(root, 0.0f, 0.0f);
     }
@@ -85,6 +118,12 @@ public final class LayoutContext {
     private void refreshSubtree(UIElement element) {
         NodeId nodeId = requireNodeId(element);
         taffyTree.setStyle(nodeId, element.getLayoutStyle().copy());
+
+        // Update measure function during refresh
+        MeasureFunc measureFunc = element.getMeasureFunc();
+        if (measureFunc != null) {
+            taffyTree.setMeasureFunc(nodeId, measureFunc);
+        }
 
         List<NodeId> childNodes = new ArrayList<NodeId>();
         for (UIElement child : element.getChildren()) {

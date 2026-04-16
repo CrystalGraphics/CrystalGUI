@@ -36,12 +36,38 @@ The primary UI rendering model uses a **painter's-order draw list** instead of t
 - `ui/elements/` — reusable `UIElement` subclasses (`UiPanel`: filled rectangle via draw-list)
 - `ui/test/` — reusable demo/test UI factories (`CguiTestUi`: static factory building a test `UIContainer`)
 
+### Interaction & reactivity packages (Phases 0–3)
+- `core/signal/` — unified signal/slot primitives (`Signal.Action`, `Signal.Value<T>`, `Signal.Pair<A,B>`, `SignalBase`, `Connection`, `ConnectionGroup`); see `core/signal/AGENTS.md`
+- `core/property/` — observable `Property<T>` with equality-suppressing change notification, one-way and bidirectional binding; see `core/property/AGENTS.md`
+- `core/input/` — container-scoped interaction layer (`UiInputManager`, `FocusManager`, `FocusPolicy`); see `core/input/AGENTS.md`
+- `core/event/` — DOM-style three-phase event dispatch, typed event hierarchy (`UiMouseEvent`, `UiKeyEvent`, `CgUiKeyCodes`, `Modifiers`), verbose debug logging (`CgUiDebug`); see `core/event/AGENTS.md`
+- `ui/elements/UiButton` — first interactive widget: click signal, hover signal, `FocusPolicy.CLICK`; see `ui/elements/AGENTS.md`
+- `ui/elements/UiLabel` — property-backed text label with Taffy `MeasureFunc` for intrinsic sizing
+- `ui/elements/UiTextbox` — single-line text input widget: `textChanged` signal, `submitted` signal, caret navigation, backspace/delete, `FocusPolicy.CLICK`
+
+### Minecraft adapter package
+- `mc/` — decoupled LWJGL 2 adapter utilities: `CgUiInputAdapater` (stateless input forwarding with caller-supplied coordinate transform/key filter), `CgUiRenderAdapter` (layout + render invocation), `CgUiForgeEventHandler` (ready-to-use `@SubscribeEvent` handler for `InputEvent.MouseInputEvent`/`KeyInputEvent`/`RenderGameOverlayEvent.Post`), `LwjglKeyTranslator` (LWJGL 2 → CgUiKeyCodes translation); see `mc/AGENTS.md`
+
+### Documentation
+- `docs/DOM_UI_FUNDAMENTALS V2.md` — learning document: theory and mental models for DOM-based UI frameworks
+- `docs/CRYSTALGUI_BACKEND_ROADMAP.md` — phased development plan (signal/slot, LDLib2 analysis, Phases 0–8)
+- `docs/PHASES_0_3_IMPLEMENTATION_GUIDE.md` — deep walkthrough of what Phases 0–3 actually built, how the pieces connect, and where the implementation diverged from the roadmap
+
 ### Frame lifecycle
 ```
 paintContext.beginRecord()
   root.drawSubtree(paintContext)   // DOM traversal, painter's order
 paintContext.endRecord()
 executor.execute(drawList, slots, projection)  // replay
+```
+
+### Interaction lifecycle
+```
+UiInputManager.processMouseMove(x, y, mods)  // one hit-test → hover enter/leave → move dispatch
+UiInputManager.processMouseDown(x, y, btn, mods)  // hit-test → MOUSE_DOWN → click-to-focus
+UiInputManager.processMouseUp(x, y, btn, mods)  // MOUSE_UP → click/double-click synthesis
+FocusManager.dispatchKeyEvent(keyEvent)  // Tab traversal or routed key dispatch
+UIContainer.computeLayout(w, h)  // → validateFocus() after layout
 ```
 
 ## CrystalGraphics Ownership Boundary (Critical)
@@ -108,8 +134,8 @@ Most of the logic should be handled in the core.
 
 
 
-LDLib2 Repo: research_repos/LDLib2/
-Minecraft 1.20.1 source | `C:\Users\mazen\.gradle\caches\forge_gradle\minecraft_user_repo\net\minecraftforge\forge\1.20.1-47.4.10_mapped_parchment_2023.09.03-1.20.1\forge-1.20.1-47.4.10_mapped_parchment_2023.09.03-1.20.1-recomp.jar`
-AND DECOMPILED AT `X:\projects\mc1201_sources`
+Taffy source: `research_repos/taffy/`
+Minecraft 1.7.10 DECOMPILED AT `build/rfg/minecraft-src/java`
+Minecraft 1.20.1 DECOMPILED AT `research_repos/mc1201_sources/`
 
 

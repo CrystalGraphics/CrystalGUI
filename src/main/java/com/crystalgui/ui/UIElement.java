@@ -1,11 +1,14 @@
 package com.crystalgui.ui;
 
 import dev.vfyjxf.taffy.style.TaffyStyle;
+import dev.vfyjxf.taffy.util.MeasureFunc;
 import com.crystalgui.core.event.UiEvent;
 import com.crystalgui.core.event.UiEventListener;
 import com.crystalgui.core.event.UiEventType;
+import com.crystalgui.core.input.FocusPolicy;
 import com.crystalgui.core.layout.LayoutNodeState;
 import com.crystalgui.core.render.CgUiPaintContext;
+import com.crystalgui.core.signal.ConnectionGroup;
 import lombok.Getter;
 
 import javax.annotation.Nullable;
@@ -24,9 +27,13 @@ public class UIElement implements CgUiDrawable {
     @Getter
     private final TaffyStyle layoutStyle = new TaffyStyle();
 
+    /** Connection group for lifecycle-safe signal cleanup on detach. */
+    @Getter
+    private final ConnectionGroup connections = new ConnectionGroup();
+
     @Getter @Nullable
     private String id;
-    private final Set<String> styleClasses = new LinkedHashSet<String>();
+    private final Set<String> styleClasses = new LinkedHashSet<>();
 
     @Getter
     private boolean visible = true;
@@ -41,6 +48,10 @@ public class UIElement implements CgUiDrawable {
     private boolean styleDirty = true;
     @Getter
     private boolean renderDirty = true;
+
+    /** Focus policy controlling how this element participates in focus navigation. */
+    @Getter
+    private FocusPolicy focusPolicy = FocusPolicy.NONE;
 
     @Getter @Nullable
     private UIContainer container;
@@ -103,6 +114,12 @@ public class UIElement implements CgUiDrawable {
         return this;
     }
 
+    public UIElement setFocusPolicy(FocusPolicy focusPolicy) {
+        if (focusPolicy == null) throw new IllegalArgumentException("focusPolicy must not be null");
+        this.focusPolicy = focusPolicy;
+        return this;
+    }
+
     public boolean isAttached() {
         return container != null;
     }
@@ -111,6 +128,20 @@ public class UIElement implements CgUiDrawable {
         return visible && hitTestVisible && layoutState.getLayoutBox().contains(x, y);
     }
 
+    /**
+     * Returns the measure function for this element, if it provides intrinsic sizing.
+     * Override in leaf elements like {@code UiLabel} that need measured layout.
+     *
+     * @return a MeasureFunc, or null if this element does not provide intrinsic sizing
+     */
+    @Nullable
+    public MeasureFunc getMeasureFunc() {
+        return null;
+    }
+
+    // ── Event listener registration ─────────────────────────────────────
+
+    //TODO: use UIEventType.bubbles for default instead of false
     public UIElement addEventListener(UiEventType eventType, UiEventListener listener) {
         return addEventListener(eventType, listener, false);
     }
@@ -139,6 +170,8 @@ public class UIElement implements CgUiDrawable {
     public List<UiEventListener> getBubbleListeners(UiEventType eventType) {
         return getListeners(bubbleListeners, eventType);
     }
+
+    // ── Tree manipulation ───────────────────────────────────────────────
 
     public UIElement addChild(UIElement child) {
         return addChild(children.size(), child);
@@ -196,6 +229,8 @@ public class UIElement implements CgUiDrawable {
         }
         return this;
     }
+
+    // ── Dirty flags ─────────────────────────────────────────────────────
 
     public void markLayoutDirty() {
         layoutDirty = true;
@@ -256,6 +291,8 @@ public class UIElement implements CgUiDrawable {
         }
     }
 
+    // ── Container lifecycle ─────────────────────────────────────────────
+
     void attachToContainer(UIContainer container) {
         if (this.container == container) {
             return;
@@ -271,6 +308,11 @@ public class UIElement implements CgUiDrawable {
         }
     }
 
+    /**
+     * Detaches this element from its container. Connection group is cleaned
+     * up unconditionally AFTER onDetached — subclasses cannot accidentally
+     * skip cleanup by forgetting super.onDetached().
+     */
     void detachFromContainer(UIContainer container) {
         if (this.container != container) {
             return;
@@ -279,6 +321,8 @@ public class UIElement implements CgUiDrawable {
             child.detachFromContainer(container);
         }
         onDetached(container);
+        // Unconditional connection cleanup after subclass hook
+        connections.disconnectAll();
         this.container = null;
     }
 
@@ -288,10 +332,20 @@ public class UIElement implements CgUiDrawable {
     protected void onDetached(UIContainer container) {
     }
 
+    // ── Event dispatch helpers ───────────────────────────────────────────
+
+    /**
+     * Invokes capture listeners for the event, using a snapshot of the listener
+     * list to protect against concurrent modification during dispatch.
+     */
     public void invokeCaptureListeners(UiEvent event) {
         invokeListeners(getCaptureListeners(event.getType()), event);
     }
 
+    /**
+     * Invokes bubble listeners for the event, using a snapshot of the listener
+     * list to protect against concurrent modification during dispatch.
+     */
     public void invokeBubbleListeners(UiEvent event) {
         invokeListeners(getBubbleListeners(event.getType()), event);
     }
@@ -301,15 +355,50 @@ public class UIElement implements CgUiDrawable {
         if (typedListeners == null || typedListeners.isEmpty()) {
             return Collections.emptyList();
         }
-        return Collections.unmodifiableList(typedListeners);
+        // Return a snapshot to make dispatch safe against listener mutation
+        return new ArrayList<UiEventListener>(typedListeners);
     }
 
     private void invokeListeners(List<UiEventListener> listeners, UiEvent event) {
-        for (UiEventListener listener : listeners) {
-            listener.handle(event);
+        for (int i = 0, n = listeners.size(); i < n; i++) {
+            if (event.isImmediatePropagationStopped()) {
+                return;
+            }
+            listeners.get(i).handle(event);
             if (event.isPropagationStopped()) {
                 return;
             }
         }
+    }
+
+    // ── Document-order traversal helper ─────────────────────────────────
+
+    /**
+     * Collects all elements in this subtree in document order (depth-first pre-order).
+     *
+     * @param out the list to append elements to
+     */
+    public void collectSubtreeDocumentOrder(List<UIElement> out) {
+        out.add(this);
+        for (UIElement child : children) {
+            child.collectSubtreeDocumentOrder(out);
+        }
+    }
+
+    /**
+     * Finds the first element with the given id in this subtree (depth-first).
+     *
+     * @param targetId the id to search for
+     * @return the element, or null if not found
+     */
+    @Nullable
+    public UIElement findById(String targetId) {
+        if (targetId == null) return null;
+        if (targetId.equals(this.id)) return this;
+        for (UIElement child : children) {
+            UIElement found = child.findById(targetId);
+            if (found != null) return found;
+        }
+        return null;
     }
 }
