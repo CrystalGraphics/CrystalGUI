@@ -15,7 +15,7 @@ public class UIContainerLifecycleTest {
         root.addChild(child);
 
         UIDocument document = UIDocument.of(root);
-        UIContainer container = new UIContainer(document);
+        UIContainer container = UIContainer.headless(document);
 
         Assert.assertSame(container, root.getContainer());
         Assert.assertSame(container, child.getContainer());

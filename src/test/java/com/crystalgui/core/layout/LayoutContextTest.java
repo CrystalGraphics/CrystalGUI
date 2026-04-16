@@ -28,7 +28,7 @@ public class LayoutContextTest {
         root.addChild(childA);
         root.addChild(childB);
 
-        UIContainer container = new UIContainer(UIDocument.of(root));
+        UIContainer container = UIContainer.headless(UIDocument.of(root));
         container.computeLayout(150.0f, 50.0f);
 
         Assert.assertEquals(0.0f, root.getLayoutState().getLayoutBox().getX(), 0.01f);

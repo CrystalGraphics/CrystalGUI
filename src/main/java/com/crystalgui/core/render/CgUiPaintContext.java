@@ -3,6 +3,7 @@ package com.crystalgui.core.render;
 import io.github.somehussar.crystalgraphics.api.vertex.CgVertexConsumer;
 import io.github.somehussar.crystalgraphics.api.vertex.CgVertexFormat;
 import io.github.somehussar.crystalgraphics.api.font.CgFontFamily;
+import io.github.somehussar.crystalgraphics.api.font.CgTextLayoutBuilder;
 import io.github.somehussar.crystalgraphics.api.text.CgTextLayout;
 import io.github.somehussar.crystalgraphics.api.state.CgRenderState;
 import io.github.somehussar.crystalgraphics.api.state.CgScissorRect;
@@ -51,6 +52,9 @@ public final class CgUiPaintContext {
     private CgFontFamily defaultFontFamily;
     private CgTextRenderContext textRenderContext;
     private long textFrame;
+
+    // Reusable builder for measureTextWidth — avoids allocation per call
+    private CgTextLayoutBuilder measureBuilder;
 
     // Current recording state
     private CgRenderState currentRenderState;
@@ -419,6 +423,19 @@ public final class CgUiPaintContext {
 
     public boolean hasTextServices() {
         return textRenderer != null && defaultFontFamily != null && textRenderContext != null;
+    }
+
+    public CgFontFamily getDefaultFontFamily() {
+        return defaultFontFamily;
+    }
+
+    public float measureTextWidth(CgFontFamily family, String text) {
+        if (family == null || text == null || text.isEmpty()) return 0;
+        if (measureBuilder == null) {
+            measureBuilder = new CgTextLayoutBuilder();
+        }
+        CgTextLayout layout = measureBuilder.layout(text, family, 0, 0);
+        return layout.getTotalWidth();
     }
 
     // ── Color packing utility ───────────────────────────────────────────

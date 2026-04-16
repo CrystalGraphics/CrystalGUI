@@ -1,5 +1,7 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.input.FocusManager;
+import com.crystalgui.core.input.UiInputManager;
 import com.crystalgui.core.layout.LayoutContext;
 import com.crystalgui.core.render.CgUiBatchSlots;
 import com.crystalgui.core.render.CgUiDrawList;
@@ -18,9 +20,13 @@ import javax.annotation.Nullable;
 @Getter
 public final class UIContainer {
 
-
     private final LayoutContext layoutContext = new LayoutContext();
     private UIDocument document;
+
+    @Nullable
+    private UiInputManager inputManager;
+    @Nullable
+    private FocusManager focusManager;
 
     // ── Draw-list rendering ─────────────────────────────────────────────
 
@@ -62,6 +68,27 @@ public final class UIContainer {
         attachDocument(document);
     }
 
+    /**
+     * Headless constructor for unit tests — bypasses all GL/rendering initialization.
+     * Only layout, lifecycle, and event systems are available.
+     */
+    UIContainer(UIDocument document, @SuppressWarnings("unused") boolean headless) {
+        this.batchSlots = null;
+        this.runtime = null;
+        this.drawList = null;
+        this.paintContext = null;
+        this.drawListExecutor = null;
+        attachDocument(document);
+    }
+
+    /**
+     * Creates a headless UIContainer for unit testing (no GL context required).
+     * Only layout, lifecycle, event, and focus systems are functional.
+     */
+    public static UIContainer headless(UIDocument document) {
+        return new UIContainer(document, true);
+    }
+
     public UIElement getRoot() {
         if (document == null) {
             throw new IllegalStateException("No document is attached");
@@ -80,6 +107,9 @@ public final class UIContainer {
         this.document = document;
         document.getRoot().attachToContainer(this);
         layoutContext.attachSubtree(document.getRoot());
+
+        this.inputManager = new UiInputManager(this);
+        this.focusManager = new FocusManager(this);
     }
 
     public void detachDocument() {
@@ -87,10 +117,16 @@ public final class UIContainer {
             return;
         }
 
+        if (focusManager != null) {
+            focusManager.clearFocusSilently();
+        }
+
         UIElement root = document.getRoot();
         layoutContext.detachSubtree(root);
         root.detachFromContainer(this);
         document = null;
+        inputManager = null;
+        focusManager = null;
     }
 
     public void computeLayout(float availableWidth, float availableHeight) {
@@ -98,6 +134,10 @@ public final class UIContainer {
             throw new IllegalStateException("No document is attached");
         }
         layoutContext.computeLayout(document.getRoot(), availableWidth, availableHeight);
+
+        if (focusManager != null) {
+            focusManager.validateFocus();
+        }
     }
 
     // ── Draw-list render path ──────────────────────────────────────────
@@ -138,6 +178,8 @@ public final class UIContainer {
 
     public void dispose() {
         detachDocument();
-        batchSlots.delete();
+        if (batchSlots != null) {
+            batchSlots.delete();
+        }
     }
 }
