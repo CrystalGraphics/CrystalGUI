@@ -132,7 +132,9 @@ public final class CgUiRuntime {
 
     public CgRenderState solidFill() {
         if(solidFill != null) return solidFill;
-        CgRenderState uiRenderState = CgRenderState.builder(UI_SHADER)
+        // TODO: CgRenderState no longer carries a shader — UI_SHADER must be bound separately
+        //       via CgMaterial.bind() once CgRenderLayer is migrated to the new material framework.
+        CgRenderState uiRenderState = CgRenderState.builder()
                 .blend(CgBlendState.ALPHA)
                 .depth(CgDepthState.NONE)
                 .cull(CgCullState.NONE)
