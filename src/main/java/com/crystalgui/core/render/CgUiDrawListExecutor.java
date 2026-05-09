@@ -1,6 +1,5 @@
 package com.crystalgui.core.render;
 
-import io.github.somehussar.crystalgraphics.api.shader.CgShader;
 import io.github.somehussar.crystalgraphics.api.state.CgRenderState;
 import io.github.somehussar.crystalgraphics.gl.render.CgBatchRenderer;
 
@@ -22,6 +21,8 @@ public final class CgUiDrawListExecutor {
      * Cached identity matrix used as {@code u_modelview} for text shaders
      * during draw-list replay. UI text renders in screen space with an
      * orthographic projection; no model-view transform is needed.
+     * TODO: feed IDENTITY into u_modelview once shader uniform binding is
+     *       restored via CgMaterial.bind() after CgRenderLayer migration.
      */
     private static final Matrix4f IDENTITY = new Matrix4f();
 
@@ -97,23 +98,24 @@ public final class CgUiDrawListExecutor {
                         int texId = drawList.textTextureId(i);
                         float pxRange = drawList.textPxRange(i);
 
-                        // Text shaders require u_modelview (identity for UI) and
-                        // u_pxRange.  Set them as ephemeral bindings BEFORE apply()
-                        // so they are consumed in the same bind() call that apply()
-                        // triggers internally.
-                        // Uses cmdKind == TEXT — not pxRange check — because bitmap
-                        // text has NaN pxRange but still needs u_modelview.
-                        CgShader shader = cmdRenderState.getShader();
-                        shader.applyBindings(b -> {
-                            b.mat4("u_modelview", IDENTITY);
-                            if (!Float.isNaN(pxRange)) b.set1f("u_pxRange", pxRange);
-                        });
+                        // TODO: shader uniform binding (u_modelview=IDENTITY, u_pxRange) was
+                        //       previously set here via cmdRenderState.getShader().applyBindings().
+                        //       getShader() was removed from CgRenderState in T8. Must be
+                        //       re-wired via CgMaterial.bind() once CgRenderLayer is migrated
+                        //       to the CrystalShader material framework.
 
-                        cmdRenderState.apply(projection, texId);
+                        // TODO: projection and texture (texId) were previously supplied to
+                        //       apply(projection, texId). Those parameters are gone from the
+                        //       no-arg apply(). Projection + texture binding must be restored
+                        //       via CgMaterial once the migration is complete.
+                        cmdRenderState.apply();
                         activeTextTextureId = texId;
                         activeTextPxRange = pxRange;
                     } else {
-                        cmdRenderState.apply(projection);
+                        // TODO: projection was previously supplied to apply(projection).
+                        //       Projection binding must be restored via CgMaterial once the
+                        //       CgRenderLayer migration is complete.
+                        cmdRenderState.apply();
                     }
 
                     activeRenderState = cmdRenderState;
