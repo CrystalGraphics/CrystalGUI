@@ -2,7 +2,6 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.event.CgUiDebug;
 import com.crystalgui.core.event.CgUiKeyCodes;
-import com.crystalgui.core.event.Modifiers;
 import com.crystalgui.core.event.UiEventType;
 import com.crystalgui.core.event.UiKeyEvent;
 import com.crystalgui.core.geometry.UiRect;
@@ -10,7 +9,7 @@ import com.crystalgui.core.input.FocusPolicy;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.render.CgUiPaintContext;
 import com.crystalgui.core.signal.Signal;
-import io.github.somehussar.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.api.font.CgFontFamily;
 import lombok.Getter;
 
 import javax.annotation.Nullable;

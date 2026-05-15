@@ -1,17 +1,17 @@
 package com.crystalgui.core.render;
 
-import io.github.somehussar.crystalgraphics.api.vertex.CgVertexConsumer;
-import io.github.somehussar.crystalgraphics.api.vertex.CgVertexFormat;
-import io.github.somehussar.crystalgraphics.api.font.CgFontFamily;
-import io.github.somehussar.crystalgraphics.api.font.CgTextLayoutBuilder;
-import io.github.somehussar.crystalgraphics.api.text.CgTextLayout;
-import io.github.somehussar.crystalgraphics.api.state.CgRenderState;
-import io.github.somehussar.crystalgraphics.api.state.CgScissorRect;
-import io.github.somehussar.crystalgraphics.gl.render.CgBatchRenderer;
-import io.github.somehussar.crystalgraphics.text.render.CgTextQuadSink;
-import io.github.somehussar.crystalgraphics.text.render.CgTextRenderContext;
-import io.github.somehussar.crystalgraphics.text.render.CgTextRenderer;
-import io.github.somehussar.crystalgraphics.api.PoseStack;
+import com.crystalgraphics.api.vertex.CgVertexConsumer;
+import com.crystalgraphics.api.vertex.CgVertexFormat;
+import com.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.api.font.CgTextLayoutBuilder;
+import com.crystalgraphics.api.text.CgTextLayout;
+import com.crystalgraphics.api.state.CgRenderState;
+import com.crystalgraphics.api.state.CgScissorRect;
+import com.crystalgraphics.gl.render.CgBatchRenderer;
+import com.crystalgraphics.text.render.CgTextQuadSink;
+import com.crystalgraphics.text.render.CgTextRenderContext;
+import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.api.PoseStack;
 
 import javax.annotation.Nullable;
 

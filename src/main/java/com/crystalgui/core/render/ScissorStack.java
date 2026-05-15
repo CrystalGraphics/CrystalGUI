@@ -1,6 +1,6 @@
 package com.crystalgui.core.render;
 
-import io.github.somehussar.crystalgraphics.api.state.CgScissorRect;
+import com.crystalgraphics.api.state.CgScissorRect;
 import org.lwjgl.opengl.GL11;
 
 /**

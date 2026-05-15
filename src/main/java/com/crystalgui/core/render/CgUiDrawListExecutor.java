@@ -1,7 +1,7 @@
 package com.crystalgui.core.render;
 
-import io.github.somehussar.crystalgraphics.api.state.CgRenderState;
-import io.github.somehussar.crystalgraphics.gl.render.CgBatchRenderer;
+import com.crystalgraphics.api.state.CgRenderState;
+import com.crystalgraphics.gl.render.CgBatchRenderer;
 
 import org.joml.Matrix4f;
 
