@@ -8,7 +8,7 @@ extra["submoduleMods"] = listOf(
         "devDependencies" to listOf("com.crystalgraphics:crystalgraphics:1.0.0"),
         "substitutions" to listOf(
             mapOf("module" to "com.crystalgraphics:crystalgraphics",
-                "projectPath" to ":"),
+                "projectPath" to ":mc1710"),
             mapOf("module" to "com.crystalgraphics:freetype-msdfgen-harfbuzz-bindings",
                 "projectPath" to ":freetype-msdfgen-harfbuzz-bindings")
         ),
