@@ -9,8 +9,8 @@ import com.crystalgui.core.render.CgUiDrawListExecutor;
 import com.crystalgui.core.render.CgUiPaintContext;
 import com.crystalgui.core.render.CgUiRuntime;
 import com.crystalgui.core.render.ScissorStack;
-import io.github.somehussar.crystalgraphics.text.render.CgTextRenderContext;
-import io.github.somehussar.crystalgraphics.api.vertex.CgVertexFormat;
+import com.crystalgraphics.text.render.CgTextRenderContext;
+import com.crystalgraphics.api.vertex.CgVertexFormat;
 import lombok.Getter;
 
 import org.joml.Matrix4f;

@@ -1,14 +1,14 @@
 package com.crystalgui.core.render;
 
-import io.github.somehussar.crystalgraphics.api.font.CgFontFamily;
-import io.github.somehussar.crystalgraphics.api.shader.CgShader;
-import io.github.somehussar.crystalgraphics.api.state.CgBlendState;
-import io.github.somehussar.crystalgraphics.api.state.CgCullState;
-import io.github.somehussar.crystalgraphics.api.state.CgDepthState;
-import io.github.somehussar.crystalgraphics.api.state.CgRenderState;
-import io.github.somehussar.crystalgraphics.api.vertex.CgVertexFormat;
-import io.github.somehussar.crystalgraphics.gl.shader.CgShaderFactory;
-import io.github.somehussar.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.api.shader.CgShader;
+import com.crystalgraphics.api.state.CgBlendState;
+import com.crystalgraphics.api.state.CgCullState;
+import com.crystalgraphics.api.state.CgDepthState;
+import com.crystalgraphics.api.state.CgRenderState;
+import com.crystalgraphics.api.vertex.CgVertexFormat;
+import com.crystalgraphics.gl.shader.CgShaderFactory;
+import com.crystalgraphics.text.render.CgTextRenderer;
 import lombok.Getter;
 
 import javax.annotation.Nullable;

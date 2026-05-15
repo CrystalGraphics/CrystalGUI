@@ -8,10 +8,10 @@ import dev.vfyjxf.taffy.geometry.FloatSize;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.AvailableSpace;
 import dev.vfyjxf.taffy.util.MeasureFunc;
-import io.github.somehussar.crystalgraphics.api.font.CgFontFamily;
-import io.github.somehussar.crystalgraphics.api.font.CgFontMetrics;
-import io.github.somehussar.crystalgraphics.api.font.CgTextLayoutBuilder;
-import io.github.somehussar.crystalgraphics.api.text.CgTextLayout;
+import com.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.api.font.CgFontMetrics;
+import com.crystalgraphics.api.font.CgTextLayoutBuilder;
+import com.crystalgraphics.api.text.CgTextLayout;
 import lombok.Getter;
 
 import javax.annotation.Nullable;

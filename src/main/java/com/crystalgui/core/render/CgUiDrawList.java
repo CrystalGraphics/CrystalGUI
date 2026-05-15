@@ -1,6 +1,6 @@
 package com.crystalgui.core.render;
 
-import io.github.somehussar.crystalgraphics.api.state.CgRenderState;
+import com.crystalgraphics.api.state.CgRenderState;
 
 /**
  * Records UI draw commands in painter's order during DOM traversal.

@@ -1,7 +1,6 @@
 package com.crystalgui.ui.test;
 
 import com.crystalgui.core.event.CgUiDebug;
-import com.crystalgui.core.event.UiEventType;
 import com.crystalgui.core.render.CgUiRuntime;
 import com.crystalgui.ui.UIContainer;
 import com.crystalgui.ui.UIDocument;
@@ -15,7 +14,7 @@ import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.LengthPercentage;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
-import io.github.somehussar.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.api.font.CgFontFamily;
 
 /**
  * Reusable test/demo UI that exercises the real CrystalGUI interaction foundation.
