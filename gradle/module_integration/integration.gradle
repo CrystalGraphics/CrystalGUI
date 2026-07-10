@@ -1,0 +1,34 @@
+// Groovy script — applied from mc1710/build.gradle.kts.
+// Registers dev dependencies and injects composite submodule bootstrap args into run tasks.
+
+apply from: rootProject.file("gradle/module_integration/submodules.gradle.kts").toURI()
+
+List<Map<String, Object>> submoduleMods = project.ext["submoduleMods"] as List<Map<String, Object>>
+
+def stringList = { Map<String, Object> m, String key ->
+    def v = m.get(key)
+    (v instanceof List) ? v.findAll { it instanceof String } : []
+}
+
+dependencies {
+    submoduleMods.collectMany { stringList(it, "devDependencies") }
+                 .unique()
+                 .each { dep -> add("devOnlyNonPublishable", dep) }
+}
+
+// Inject composite submodule bootstrap args into RunMinecraftTask instances.
+tasks.configureEach { task ->
+    if (task.class.simpleName == "RunMinecraftTask") {
+        def configuredCoremods = submoduleMods.collectMany { stringList(it, "coremods") }.unique()
+        if (configuredCoremods) {
+            def existing = (task.systemProperties["fml.coreMods.load"] as String ?: "")
+                    .split(',').collect { it.trim() }.findAll { it }
+            task.systemProperty("fml.coreMods.load",
+                    (existing + configuredCoremods).unique().join(','))
+        }
+        submoduleMods.collectMany { stringList(it, "tweakClasses") }.unique()
+                     .each { task.extraArgs.addAll("--tweakClass", it) }
+        submoduleMods.collectMany { stringList(it, "mixinConfigs") }.unique()
+                     .each { task.extraArgs.addAll("--mixin", it) }
+    }
+}

@@ -1,0 +1,26 @@
+modLoader = "javafml"
+loaderVersion = "[40,)"
+license = "LGPL-3.0-or-later"
+
+[[mixins]]
+    config = "crystalgui.forge.mixins.json"
+
+[[dependencies.crystalgui]]
+    modId = "forge"
+    mandatory = true
+    versionRange = "[47,)"
+    ordering = "NONE"
+    side = "BOTH"
+
+[[dependencies.crystalgui]]
+    modId = "minecraft"
+    mandatory = true
+    versionRange = "[1.20.1,1.21)"
+    ordering = "NONE"
+    side = "BOTH"
+
+[[mods]]
+    modId = "crystalgui"
+    version = "${file.jarVersion}"
+    displayName = "CrystalGUI"
+    description = "UI engine library for Minecraft mods."
