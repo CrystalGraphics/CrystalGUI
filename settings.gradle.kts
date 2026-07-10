@@ -1,5 +1,19 @@
 
 pluginManagement {
+    // Pins load plugin JARs into the settings classloader so all subprojects share the
+    // same RetroFuturaGradle classes — required by Gradle build services.
+    // gtnhsettingsconvention and gtnhconvention are pinned (not applied) so subprojects
+    // can use id("com.gtnewhorizons.gtnhconvention") without specifying a version.
+    // Applying gtnhsettingsconvention here would inject spotless onto every subproject's
+    // buildscript classpath — including the implicit :mc1201 parent with no repos.
+    plugins {
+        id("com.gtnewhorizons.gtnhconvention") version("2.0.20")
+        id("com.gtnewhorizons.gtnhsettingsconvention") version("2.0.20")
+        // Single version pin for all mc1201 loader subprojects.
+        // com.gradleup.shadow is the maintained successor to com.github.johnrengelman.shadow.
+        id("com.gradleup.shadow") version("9.2.2")
+    }
+
     repositories {
         maven {
             // RetroFuturaGradle
@@ -13,15 +27,36 @@ pluginManagement {
         gradlePluginPortal()
         mavenCentral()
         mavenLocal()
+        // Loader plugin repos — registered without exclusiveContent to remain compatible
+        // with loader plugins (ModDevGradle, Fabric Loom) that add their own
+        // buildscript.repositories at configuration time, which Gradle 9 forbids when
+        // exclusiveContent is active in pluginManagement.repositories.
+        maven("https://maven.fabricmc.net/") { name = "Fabric" }
+        maven("https://repo.spongepowered.org/repository/maven-public/") { name = "Sponge" }
+        maven("https://maven.minecraftforge.net/") { name = "Forge" }
+        maven("https://maven.neoforged.net/releases") { name = "NeoForge" }
     }
 }
 
 plugins {
-    id("com.gtnewhorizons.gtnhsettingsconvention") version("2.0.20")
+    id("net.neoforged.moddev.repositories") version "2.0.141"
 }
+
+includeBuild("mc1201/build-logic")
+
+rootProject.name = "CrystalGUI"
 
 apply(from = "gradle/module_integration/composite.settings.gradle.kts")
 
 // Standalone GL debug harness (no Minecraft/Forge)
 if (file("gl-debug-harness").exists())
     include(":gl-debug-harness")
+
+include(":core")
+include(":mc1710")
+
+// mc1201 subprojects — nested under mc1201/
+include(":mc1201:common")
+include(":mc1201:neoforge")
+include(":mc1201:fabric")
+include(":mc1201:forge")

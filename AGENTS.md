@@ -1,3 +1,53 @@
+# ⚠️ AGENT EXECUTION RULES — READ BEFORE ANYTHING ELSE
+
+**These rules apply to ALL agents operating in this repository, including subagents.**
+
+---
+
+## 📂 Required Reading — Additional Context Files
+
+This repository has multiple context files beyond this one. **Before doing any work, you must read the files relevant to your task scope.**
+
+### Always read (every session):
+- `docs/CRYSTALSHADER_MANIFESTO.md` — Grand goal, rendering philosophy, architecture principles
+
+### Read when working on CrystalGraphics:
+- `CrystalGraphics/AGENTS.md` — CrystalGraphics module: full infrastructure ownership map, class inventory, package guide, rendering rules. **Mandatory before touching any rendering, buffer, shader, VAO, or mesh code.**
+
+### Read when working on specific subsystems (if it exists):
+- Any `AGENTS.md` found inside the package you are modifying — these contain authoritative package-level guidance
+
+---
+
+## NO RE-DELEGATION
+
+**Subagents MUST NOT delegate their assigned work to another agent.**
+
+When you are assigned a task — whether by Sisyphus, a plan, or a user — you execute it yourself using the tools available to you (Read, Edit, Write, Bash, Glob, Grep, etc.). You do not spawn a child agent, fire a background task, or use `task()` to hand off the work.
+
+**This is an absolute prohibition. No exceptions.**
+
+Violation examples (all forbidden):
+- Receiving a "test and fix" task, then calling `task(category="unspecified-high", ...)` to do the testing
+- Receiving an implementation task, then calling `task(subagent_type="explore", ...)` to explore and never implementing
+- Delegating "because it's complex" — complexity is not a reason to re-delegate
+
+The only tool use that touches another agent is asking Sisyphus (the orchestrator) a clarifying question, which must be done inline, not as a background task.
+
+**If you are a subagent and you find yourself writing a `task()` call: STOP. Do the work yourself.**
+
+---
+
+# THE GRAND GOAL — READ THIS FIRST
+> **Every line of code in this repository exists to serve one end goal:**
+> A **node-based shader graph for Minecraft (cross-version: 1.7.10 and 1.20.1)** — like Unity's Shader Graph, but staying true to GLSL, running on a modern GL 3.x+ pipeline, with instancing as the default draw path from day one.
+>
+> The full architecture, principles, file format, instancing strategy, compilation pipeline, and ordered roadmap are defined in the manifesto. **Read it before making any rendering or shader-related decision.**
+>
+> 📄 **[CrystalShader Manifesto](docs/CRYSTALSHADER_MANIFESTO.md)**
+
+---
+
 # Crystal GUI:
 
 The idea of this mod is to be UI engine similar to a lightweight web browser.
@@ -137,5 +187,120 @@ Most of the logic should be handled in the core.
 Taffy source: `research_repos/taffy/`
 Minecraft 1.7.10 DECOMPILED AT `build/rfg/minecraft-src/java`
 Minecraft 1.20.1 DECOMPILED AT `research_repos/mc1201_sources/`
+
+---
+
+# CrystalGraphics Infrastructure — Use What Exists (MANDATORY)
+
+CrystalGraphics has mature, layered GPU infrastructure. **Before writing any buffer, shader, VAO, mesh, or data-packing code, you are required to check whether an existing class already owns that concern.**
+
+The pattern of defaulting to raw OpenGL calls or raw `float[]`/`byte[]` when project abstractions exist is forbidden. Every class below was built to own its use case permanently.
+
+---
+
+## Reconnaissance Protocol (Run Before Every Implementation)
+
+1. Grep for the concept: `buffer`, `writer`, `staging`, `mesh`, `shader`, `vao`, `stream`
+2. Read the 2-3 closest classes in full before writing anything
+3. Ask: "Is what I need an extension of an existing class's scope, or genuinely orthogonal?"
+4. If the existing class almost fits → **widen it** (add the method, extract an abstract parent)
+5. Only create something new when the semantics are genuinely apples-to-oranges
+
+---
+
+## Infrastructure Ownership Map
+
+### GPU Buffer Upload — `CgStreamBuffer`
+**File**: `CrystalGraphics/src/main/java/com/crystalgraphics/gl/buffer/CgStreamBuffer.java`
+- Owns: ALL dynamic GPU buffer uploads — vertex data, shader buffer data, anything that streams to the GPU per-frame
+- Key methods: `uploadFloats(float[], int)`, `map(int)`, `commit(int)`, `bind()`, factory `create(int)` / `createForShaderBuffer(int, int)`
+- ❌ NEVER: `GL15.glGenBuffers()` + raw `glBufferData`/`glBufferSubData` in a feature class. That is CgStreamBuffer's job.
+
+### CPU Data Staging — `CgStagingBuffer`
+**File**: `CrystalGraphics/src/main/java/com/crystalgraphics/gl/buffer/staging/CgStagingBuffer.java`
+- Owns: ALL CPU-side float accumulation before GPU upload — growing float array, write cursor, reset
+- Key methods: `putFloat(float)`, `putIntBits(int)`, `ensureRoomForNextVertex()`, `reset()`, `rawData()`, `rawCursor()`
+- ❌ NEVER: a raw `float[]` field + manual index tracking inside a writer or buffer class. That is CgStagingBuffer's job.
+
+### Vertex Data Packing — `CgVertexWriter`
+**File**: `CrystalGraphics/src/main/java/com/crystalgraphics/gl/buffer/staging/CgVertexWriter.java`
+- Owns: Converting semantic vertex attributes (position, UV, color, normal) → interleaved floats in a CgStagingBuffer
+- Key methods: `vertex(x,y,z)`, `uv(u,v)`, `color(r,g,b,a)`, `normal(x,y,z)`, `endVertex()`
+- ❌ NEVER: Manually calling `stagingBuffer.putFloat(x); stagingBuffer.putFloat(y)` for vertex attributes. Use CgVertexWriter.
+
+### Per-Instance Data Packing — `CgInstanceWriter`
+**File**: `CrystalGraphics/src/main/java/com/crystalgraphics/gl/buffer/staging/CgInstanceWriter.java`
+- Owns: Packing per-instance data (matrices, colors, custom floats) into a CgStagingBuffer for instanced draw calls
+- Key methods: `mat4(Matrix4f)`, `mat3(Matrix3f)`, `vec2/3/4(...)`, `colorARGB(int)`, `beginInstance()`, `endInstance()`
+- ❌ NEVER: A raw float[] for instance data, or calling putFloat manually for matrices. Use CgInstanceWriter.
+
+### Shader Buffer Data Packing — `CgBufferWriter`
+**File**: `CrystalGraphics/src/main/java/com/crystalgraphics/gl/buffer/staging/CgBufferWriter.java`
+- Owns: Writing uniform block data, SSBO data, TBO data — all non-vertex GPU float packing, backed by CgStagingBuffer
+- Key methods: `putFloat(float)`, `putInt(int)`, `vec2/3/4(...)`, `mat3/4(...)`, `beginRecord()`, `endRecord(int)`, `reset()`
+- Sister classes: `CgVertexWriter`, `CgInstanceWriter` — if you need a new writer, model it on these and back it with CgStagingBuffer
+
+### Shader Buffer Lifecycle — `CgShaderBuffer` + subclasses
+**File**: `CrystalGraphics/src/main/java/com/crystalgraphics/gl/buffer/shader/CgShaderBuffer.java`
+- Owns: SSBO/TBO/UBO lifecycle — create, write session (`beginWrite`/`endWrite`), GPU upload, bind/unbind
+- Subclasses: `CgShaderStorageBuffer` (GL 4.3+), `CgTextureBuffer` (GL 3.1 fallback), `CgUniformBuffer` (per-frame uniforms)
+- Key methods: `create(int)`, `beginWrite(int)`, `advanceRecord()`, `writer()`, `endWrite()`, `bind(int)`
+- ❌ NEVER: A raw `int glBufferId` field created with `GL15.glGenBuffers()` in a shader buffer class. That is CgStreamBuffer's job, already used by CgShaderBuffer.
+- ❌ NEVER: A new SSBO/UBO/TBO class that does not extend CgShaderBuffer.
+
+### Static Mesh — `CgMesh`
+**File**: `CrystalGraphics/src/main/java/com/crystalgraphics/gl/mesh/CgMesh.java`
+- Owns: Immutable static geometry — VBO + optional IBO + VAO, uploaded once, drawn many times
+- Key methods: `upload(CgVertexFormat, CgMeshTopology, ByteBuffer, ByteBuffer, int)`, `drawDirect()`, `delete()`
+- ❌ NEVER: Manually creating a VBO + VAO for static geometry. CgMesh handles that.
+
+### VAO Management — `CgVertexArray`
+**File**: `CrystalGraphics/src/main/java/com/crystalgraphics/gl/vertex/CgVertexArray.java`
+- Owns: VAO lifecycle and attribute pointer setup across GL 3.0 core / ARB fallback
+- Key methods: `create()`, `bind()`, `unbind()`, `configure(CgVertexFormat)`, `reconfigureWithOffset(...)`
+- ❌ NEVER: `GL30.glGenVertexArrays()` / `ARBVertexArrayObject.glGenVertexArrays()` outside this class.
+
+### Shader Programs — `CgAbstractShaderProgram` + `CgShaderFactory`
+**Files**: `gl/shader/CgAbstractShaderProgram.java`, `gl/shader/CgShaderFactory.java`
+- `CgAbstractShaderProgram` owns: shader lifecycle (bind, unbind, delete, ownership tracking)
+- `CgShaderFactory` owns: compilation + framebufferPath waterfall selection (core vs ARB)
+- ❌ NEVER: `glCreateProgram()` / `glCreateShader()` outside these classes.
+
+### Buffer Interface — `CgObjectBuffer`
+**File**: `CrystalGraphics/src/main/java/com/crystalgraphics/api/buffer/CgObjectBuffer.java`
+- The common interface for all GPU-resident data blocks. New buffer types must implement it.
+
+---
+
+## Decision Tree: "I need a buffer / writer / shader"
+
+```
+Need to upload data to GPU per-frame?
+  └─> CgStreamBuffer
+
+Need to accumulate float data CPU-side before upload?
+  └─> CgStagingBuffer (directly) or via a Writer class
+
+Need to write vertex attributes (pos, uv, color, normal)?
+  └─> CgVertexWriter
+
+Need to write per-instance data (matrices, colors)?
+  └─> CgInstanceWriter
+
+Need to write uniform block / SSBO / TBO data?
+  └─> CgBufferWriter (CPU side) + CgShaderBuffer subclass (GPU side)
+
+Need a new SSBO/UBO/TBO type?
+  └─> Extend CgShaderBuffer. Do NOT create a new raw buffer.
+
+Need static geometry on GPU?
+  └─> CgMesh
+
+Need a VAO?
+  └─> CgVertexArray
+
+Need a shader program?
+  └─> CgShaderFactory.compile() / extend CgAbstractShaderProgram
+```
 
 
