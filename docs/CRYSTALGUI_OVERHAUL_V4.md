@@ -86,7 +86,7 @@ The class name and public API surface (`fillRect`, `drawText`, `drawImage`, `pus
 We own CrystalGraphics. We add exactly what is needed to support UI rendering — no workarounds,
 no hacks inside CrystalGUI.
 
-### 2.1 `CgVertexFormat.UI` — New Vertex Format
+### ~~2.1 `CgVertexFormat.UI` — New Vertex Format~~ ADDED
 
 `CgVertexFormat.SPATIAL` (vec3 pos + vec2 uv + vec3 normal, 32 bytes) is for 3D meshes. UI quads
 are 2D — normal is meaningless, 32 bytes per vertex is wasteful. Add a dedicated UI format.
@@ -107,7 +107,7 @@ range without any conversion. Color packing remains `0xRRGGBBAA` integers on the
 `CgMeshBuilder` gets a `unitQuadUI()` factory producing `CgMeshData` in `CgVertexFormat.UI`:
 the canonical `[(0,0),(1,0),(1,1),(0,1)]` unit quad with UVs and white vertex color.
 
-### 2.2 `#type UI` — Dynamic Vertex Format Attachment
+### ~~2.2 `#type UI` — Dynamic Vertex Format Attachment~~  VERY EASY TO ADD, JUST ADD CONSTANT TO CgVertexFormat THATS ALL
 
 The `.shader` `#type` tag is now **dynamically attached to a `CgVertexFormat`**. Writing
 `#type UI` in a `.shader` file causes the compiler to look up the registered format named
