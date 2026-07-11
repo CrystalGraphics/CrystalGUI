@@ -23,7 +23,7 @@ version = rootProject.properties["modVersion"] as String
 base { archivesName.set("crystalgui-mc1201-forge") }
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
-apply(from = rootProject.file("gradle/module_integration/mc1201-integration.gradle").toURI())
+apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
 legacyForge {
     // MinecraftForge artifact ID format: "<mcVersion>-<forgeVersion>"

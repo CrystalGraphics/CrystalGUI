@@ -16,4 +16,4 @@ base { archivesName.set("crystalgui-mc1201-common") }
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common, freetype) via
 // composite substitution — same as the three loader subprojects. mc1201:common needs to
 // see CrystalGraphics' platform types to compile its platform service adapter code.
-apply(from = rootProject.file("gradle/module_integration/mc1201-integration.gradle").toURI())
+apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
