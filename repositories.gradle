@@ -1,8 +1,0 @@
-// Add any additional repositories for your dependencies here.
-
-repositories {
-    mavenCentral()
-    maven {
-        url "https://central.sonatype.com/repository/maven-snapshots/"
-    }
-}
