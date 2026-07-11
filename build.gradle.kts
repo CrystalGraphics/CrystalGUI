@@ -11,14 +11,6 @@ plugins {
     idea
 }
 
-// IntelliJ IDEA triggers 'processIdeaSettings' on the root project during Gradle sync.
-// gtnhconvention only registers this task on subprojects that apply it, so register a
-// no-op here to prevent "task not found" errors during IDEA sync.
-tasks.register("processIdeaSettings") {
-    group = "ide"
-    description = "No-op task for IntelliJ IDEA Gradle sync compatibility"
-}
-
 buildscript {
     repositories {
         maven {
