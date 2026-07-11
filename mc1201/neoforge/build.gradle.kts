@@ -14,7 +14,7 @@ version = rootProject.properties["modVersion"] as String
 base { archivesName.set("crystalgui-mc1201-neoforge") }
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
-apply(from = rootProject.file("gradle/module_integration/mc1201-integration.gradle").toURI())
+apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
 // ADHOC: Re-declare two Maven repos that net.neoforged.moddev.repositories (settings plugin)
 // should provide at project level. The cg-mc1201-loader convention plugin's repositories block

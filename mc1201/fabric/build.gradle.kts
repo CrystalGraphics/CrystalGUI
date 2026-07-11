@@ -14,7 +14,7 @@ version = rootProject.properties["modVersion"] as String
 base { archivesName.set("crystalgui-mc1201-fabric") }
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
-apply(from = rootProject.file("gradle/module_integration/mc1201-integration.gradle").toURI())
+apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
 dependencies {
     minecraft("com.mojang:minecraft:${rootProject.properties["mc1201.minecraft"]}")
