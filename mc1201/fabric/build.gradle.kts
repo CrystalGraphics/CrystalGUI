@@ -1,3 +1,5 @@
+@file:Suppress("UnstableApiUsage")
+
 plugins {
     id("cg-mc1201-loader")
     // Upstream fabric-loom 1.15.x supports Gradle 9.x (1.16 requires 9.4+, 1.15 works on 9.0+).
@@ -48,14 +50,6 @@ tasks.jar {
     from(zipTree(coreJar))
     from(zipTree(commonJar))
 }
-
-tasks.shadowJar {
-    configurations = listOf()  // no runtime classpath shadowing — only explicit inclusions below
-    from(zipTree(coreJar))
-    from(zipTree(commonJar))
-}
-
-tasks.assemble { dependsOn(tasks.shadowJar) }
 
 // Extracts Fabric MC 1.20.1 sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when jars change between toolchain version bumps.

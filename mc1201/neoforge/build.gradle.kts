@@ -59,21 +59,6 @@ neoForge {
     }
 }
 
-// Merge core and mc1201:common into the loader JAR — mirrors mc1710 pattern exactly.
-tasks.shadowJar {
-    dependsOn(":core:jar", ":mc1201:common:jar")
-    configurations = listOf()  // no runtime classpath shadowing — only explicit inclusions below
-}
-
-afterEvaluate {
-    tasks.shadowJar.configure {
-        from(zipTree(project(":core").tasks.named<Jar>("jar").get().archiveFile.get()))
-        from(zipTree(project(":mc1201:common").tasks.named<Jar>("jar").get().archiveFile.get()))
-    }
-}
-
-tasks.assemble { dependsOn(tasks.shadowJar) }
-
 // Extracts NeoForge + MC 1.20.4 sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when the source jar changes between toolchain version bumps.
 val extractMcSources by tasks.registering(Sync::class) {

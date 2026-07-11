@@ -58,19 +58,6 @@ legacyForge {
     }
 }
 
-// Merge core and mc1201:common into the loader JAR.
-tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
-    dependsOn(":core:jar", ":mc1201:common:jar")
-    configurations = listOf()
-}
-afterEvaluate {
-    tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
-        from(zipTree(project(":core").tasks.named<Jar>("jar").get().archiveFile.get()))
-        from(zipTree(project(":mc1201:common").tasks.named<Jar>("jar").get().archiveFile.get()))
-    }
-}
-tasks.assemble { dependsOn(tasks.named("shadowJar")) }
-
 // Extracts MinecraftForge 1.20.1 sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when the source jar changes between toolchain version bumps.
 val extractMcSources by tasks.registering(Sync::class) {

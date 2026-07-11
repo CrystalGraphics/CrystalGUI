@@ -23,3 +23,6 @@ dependencies {
     "annotationProcessor"("org.spongepowered:mixin:${property("mc1201.mixin")}:processor")
     "compileOnly"("io.github.llamalad7:mixinextras-common:${property("mc1201.mixinextras")}")
 }
+
+// Shared shadow JAR bundling: bundles :core and :mc1201:common into shadowJar.
+cgbuildlogic.configureShadowJarBundling(project)
