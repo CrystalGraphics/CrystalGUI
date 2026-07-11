@@ -2,3 +2,7 @@
 	path = CrystalGraphics
 	url = https://github.com/CrystalGraphics/CrystalGraphics.git
 	branch = master
+[submodule "gl-debug-harness"]
+	path = gl-debug-harness
+	url = https://github.com/CrystalGraphics/gl-debug-harness
+	branch = crystalgui
