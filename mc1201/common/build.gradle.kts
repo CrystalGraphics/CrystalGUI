@@ -9,8 +9,8 @@ plugins {
     id("cg-mc1201-common")
 }
 
-group = rootProject.properties["modGroup"] as String
-version = rootProject.properties["modVersion"] as String
+group = property("modGroup").toString()
+version = property("modVersion").toString()
 base { archivesName.set("crystalgui-mc1201-common") }
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common, freetype) via

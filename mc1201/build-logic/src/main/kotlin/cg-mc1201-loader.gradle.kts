@@ -19,7 +19,7 @@ dependencies {
     "runtimeOnly"(project(":mc1201:common"))
     "runtimeOnly"(project(":core"))
     // Mixin compileOnly — loaders bundle it at runtime
-    "compileOnly"("org.spongepowered:mixin:${rootProject.properties["mc1201.mixin"]}")
-    "annotationProcessor"("org.spongepowered:mixin:${rootProject.properties["mc1201.mixin"]}:processor")
-    "compileOnly"("io.github.llamalad7:mixinextras-common:${rootProject.properties["mc1201.mixinextras"]}")
+    "compileOnly"("org.spongepowered:mixin:${property("mc1201.mixin")}")
+    "annotationProcessor"("org.spongepowered:mixin:${property("mc1201.mixin")}:processor")
+    "compileOnly"("io.github.llamalad7:mixinextras-common:${property("mc1201.mixinextras")}")
 }

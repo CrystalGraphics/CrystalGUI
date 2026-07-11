@@ -9,21 +9,21 @@ plugins {
     id("com.gradleup.shadow") // version pinned in settings.gradle.kts pluginManagement
 }
 
-group = rootProject.properties["modGroup"] as String
-version = rootProject.properties["modVersion"] as String
+group = property("modGroup").toString()
+version = property("modVersion").toString()
 base { archivesName.set("crystalgui-mc1201-fabric") }
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
 apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
 dependencies {
-    minecraft("com.mojang:minecraft:${rootProject.properties["mc1201.minecraft"]}")
+    minecraft("com.mojang:minecraft:${property("mc1201.minecraft")}")
     mappings(loom.layered {
         officialMojangMappings()
-        parchment("org.parchmentmc.data:parchment-${rootProject.properties["mc1201.parchment.mc"]}:${rootProject.properties["mc1201.parchment"]}@zip")
+        parchment("org.parchmentmc.data:parchment-${property("mc1201.parchment.mc")}:${property("mc1201.parchment")}@zip")
     })
-    modImplementation("net.fabricmc:fabric-loader:${rootProject.properties["mc1201.fabric.loader"]}")
-    modImplementation("net.fabricmc.fabric-api:fabric-api:${rootProject.properties["mc1201.fabric.api"]}")
+    modImplementation("net.fabricmc:fabric-loader:${property("mc1201.fabric.loader")}")
+    modImplementation("net.fabricmc.fabric-api:fabric-api:${property("mc1201.fabric.api")}")
 }
 
 loom {

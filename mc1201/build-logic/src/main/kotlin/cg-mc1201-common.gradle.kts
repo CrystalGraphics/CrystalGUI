@@ -23,12 +23,12 @@ dependencies {
     // implementation — core is an internal dependency consumed by common.
     "implementation"(project(":core"))
     // Mixin compileOnly — both loaders bundle it at runtime; never shade it.
-    "compileOnly"("org.spongepowered:mixin:${rootProject.properties["mc1201.mixin"]}")
+    "compileOnly"("org.spongepowered:mixin:${property("mc1201.mixin")}")
     // NOTE: mixin annotationProcessor is intentionally omitted here — legacyForge configures
     // the Mixin AP with the correct SRG file automatically. Adding a second AP without SRG
     // causes duplicate-AP obfuscation-mapping errors for all @Inject targets.
-    "compileOnly"("io.github.llamalad7:mixinextras-common:${rootProject.properties["mc1201.mixinextras"]}")
-    "annotationProcessor"("io.github.llamalad7:mixinextras-common:${rootProject.properties["mc1201.mixinextras"]}")
+    "compileOnly"("io.github.llamalad7:mixinextras-common:${property("mc1201.mixinextras")}")
+    "annotationProcessor"("io.github.llamalad7:mixinextras-common:${property("mc1201.mixinextras")}")
 }
 
 // Export compiled JAR so loader subprojects can depend on it as a binary
@@ -44,5 +44,5 @@ artifacts { add("commonOutput", tasks.named("jar")) }
 // Do NOT use neoForge{} here — there is no NeoForge artifact for MC 1.20.1.
 legacyForge {
     // MinecraftForge artifact ID format: "<mcVersion>-<forgeVersion>"
-    version = "1.20.1-${rootProject.properties["mc1201.forge"]}"
+    version = "1.20.1-${property("mc1201.forge")}"
 }

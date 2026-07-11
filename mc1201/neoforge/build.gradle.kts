@@ -9,8 +9,8 @@ plugins {
     id("com.gradleup.shadow")
 }
 
-group = rootProject.properties["modGroup"] as String
-version = rootProject.properties["modVersion"] as String
+group = property("modGroup").toString()
+version = property("modVersion").toString()
 base { archivesName.set("crystalgui-mc1201-neoforge") }
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
@@ -33,11 +33,11 @@ repositories {
 }
 
 neoForge {
-    version = rootProject.properties["mc1204.neoforge"] as String
+    version = property("mc1204.neoforge").toString()
 
     parchment {
-        minecraftVersion = rootProject.properties["mc1204.parchment.mc"] as String
-        mappingsVersion = rootProject.properties["mc1204.parchment"] as String
+        minecraftVersion = property("mc1204.parchment.mc").toString()
+        mappingsVersion = property("mc1204.parchment").toString()
     }
 
     runs {
