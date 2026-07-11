@@ -18,8 +18,8 @@ plugins {
     id("com.gradleup.shadow")
 }
 
-group = rootProject.properties["modGroup"] as String
-version = rootProject.properties["modVersion"] as String
+group = property("modGroup").toString()
+version = property("modVersion").toString()
 base { archivesName.set("crystalgui-mc1201-forge") }
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
@@ -27,11 +27,11 @@ apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts"
 
 legacyForge {
     // MinecraftForge artifact ID format: "<mcVersion>-<forgeVersion>"
-    version = "1.20.1-${rootProject.properties["mc1201.forge"]}"
+    version = "1.20.1-${property("mc1201.forge")}"
 
     parchment {
-        minecraftVersion = rootProject.properties["mc1201.parchment.mc"] as String
-        mappingsVersion = rootProject.properties["mc1201.parchment"] as String
+        minecraftVersion = property("mc1201.parchment.mc").toString()
+        mappingsVersion = property("mc1201.parchment").toString()
     }
 
     runs {
