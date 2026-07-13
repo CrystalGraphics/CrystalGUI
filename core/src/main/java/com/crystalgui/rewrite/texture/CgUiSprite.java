@@ -12,7 +12,7 @@ import com.crystalgui.rewrite.render.CgUiPaintContext;
  * CrystalGraphics' own texture manager — repeated construction of this class with the
  * same path is cheap) and reused on every {@link #draw} call.</p>
  */
-public final class CgUiSprite implements ICgUiDrawable {
+public final class CgUiSprite implements CgUiDrawable {
 
     private final CgTexture2D texture;
     private final float u0, v0, u1, v1;

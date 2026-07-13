@@ -2,7 +2,7 @@ package com.crystalgui.rewrite;
 
 import com.crystalgui.rewrite.layout.LayoutStyle;
 import com.crystalgui.rewrite.render.CgUiPaintContext;
-import com.crystalgui.rewrite.texture.ICgUiDrawable;
+import com.crystalgui.rewrite.texture.CgUiDrawable;
 import dev.vfyjxf.taffy.style.TaffyStyle;
 import dev.vfyjxf.taffy.tree.NodeId;
 
@@ -61,8 +61,8 @@ public class UIElement {
     UiRuntime attachedRuntime;
 
     // ── Generic box model ─────────────────────
-    private ICgUiDrawable background;
-    private ICgUiDrawable overlay;
+    private CgUiDrawable background;
+    private CgUiDrawable overlay;
     private float opacity = 1f;
     private int colorTint = 0xFFFFFFFF;
     private int zIndex = 0;
@@ -205,12 +205,12 @@ public class UIElement {
 
     // ── Box model ────────────────────────────────────────────────────────────
 
-    public UIElement setBackground(ICgUiDrawable background) {
+    public UIElement setBackground(CgUiDrawable background) {
         this.background = background;
         return this;
     }
 
-    public UIElement setOverlay(ICgUiDrawable overlay) {
+    public UIElement setOverlay(CgUiDrawable overlay) {
         this.overlay = overlay;
         return this;
     }
