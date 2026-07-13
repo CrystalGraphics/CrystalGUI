@@ -83,6 +83,15 @@ public final class LayoutStyle {
 
     // ── Flex container ──────────────────────────────────────────────────────
 
+    public LayoutStyle flex(float flex) {
+        if (Float.isNaN(flex) && Float.isNaN(style.flex)) return this;
+        if (style.flex != flex) {
+            style.flex = flex;
+            mark();
+        }
+        return this;
+    }
+
     public LayoutStyle flexDirection(FlexDirection direction) {
         style.flexDirection = direction;
         return mark();
