@@ -1,5 +1,6 @@
 package com.crystalgui.rewrite.texture;
 
+import com.crystalgraphics.api.texture.CgTextureSpec;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.rewrite.render.CgUiPaintContext;
 
@@ -23,7 +24,7 @@ public final class CgUiSprite implements ICgUiDrawable {
 
     /** Sub-rect UVs, e.g. for one icon inside a shared atlas. */
     public CgUiSprite(String texturePath, float u0, float v0, float u1, float v1) {
-        this.texture = CgTexture2D.create(texturePath);
+        this.texture = CgTexture2D.create(texturePath, CgTextureSpec.RGBA8_NEAREST);
         this.u0 = u0;
         this.v0 = v0;
         this.u1 = u1;
