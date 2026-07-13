@@ -5,6 +5,7 @@ import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
 import com.crystalgraphics.api.vertex.CgVertexFormat;
+import com.crystalgraphics.gl.buffer.staging.CgVertexWriter;
 import com.crystalgraphics.gl.render.CgBatchRenderer;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
@@ -76,9 +77,9 @@ public final class CgUiPaintContext {
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
 
         // Save GL state before UI rendering
-//        glScope = CgGlState.save(
-//                CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
-//                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT);
+        glScope = CgGlState.save(
+                CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
+                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT);
 
         // Save CgFrameData
         CgRenderPipeline pipeline = CgRenderPipeline.getInstance();
@@ -116,18 +117,18 @@ public final class CgUiPaintContext {
         renderer.end();
 
         // Restore CgFrameData
-//        CgRenderPipeline pipeline = CgRenderPipeline.getInstance();
-//        CgFrameData fd = pipeline.getFrameData();
-//        fd.viewMatrix.set(savedViewMatrix);
-//        fd.projMatrix.set(savedProjMatrix);
-//        fd.viewportW = savedViewportW;
-//        fd.viewportH = savedViewportH;
+        CgRenderPipeline pipeline = CgRenderPipeline.getInstance();
+        CgFrameData fd = pipeline.getFrameData();
+        fd.viewMatrix.set(savedViewMatrix);
+        fd.projMatrix.set(savedProjMatrix);
+        fd.viewportW = savedViewportW;
+        fd.viewportH = savedViewportH;
 
-//        // Restore GL state
-//        if (glScope != null) {
-//            glScope.close();
-//            glScope = null;
-//        }
+        // Restore GL state
+        if (glScope != null) {
+            glScope.close();
+            glScope = null;
+        }
     }
 
     // ── Public draw API ─────────────────────────────────────────────────────
@@ -154,7 +155,7 @@ public final class CgUiPaintContext {
             u0 = 0; v0 = 0; u1 = 1; v1 = 1;
         }
 
-        com.crystalgraphics.gl.buffer.staging.CgVertexWriter vc = renderer.vertex();
+        CgVertexWriter vc = renderer.vertex();
         vc.vertex(x, y).uv(u0, v0).colorArgb(argb).endVertex();
         vc.vertex(x + w, y).uv(u1, v0).colorArgb(argb).endVertex();
         vc.vertex(x + w, y + h).uv(u1, v1).colorArgb(argb).endVertex();
