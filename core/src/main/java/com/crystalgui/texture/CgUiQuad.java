@@ -20,6 +20,9 @@ public final class CgUiQuad implements CgUiDrawable {
 
     @Override
     public void draw(CgUiPaintContext ctx, float x, float y, float width, float height, int tintArgb) {
-        ctx.fillRect(x, y, width, height, CgUiPaintContext.multiplyArgb(colorArgb, tintArgb));
+        ctx.fillRect(x, y, width, height,
+                //CgUiPaintContext.multiplyArgb(colorArgb, tintArgb)
+                colorArgb // TODO replace with multiplication code?
+        );
     }
 }

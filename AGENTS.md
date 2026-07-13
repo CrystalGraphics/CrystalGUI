@@ -183,7 +183,7 @@ The 1.7.10 module of CrystalGUI contains the version-specific implementations, u
 Most of the logic should be handled in the core. 
 
 
-
+LDLib2 Source: `research_repos/LDLib2/`
 Taffy source: `research_repos/taffy/`
 Minecraft 1.7.10 DECOMPILED AT `build/rfg/minecraft-src/java`
 Minecraft 1.20.1 DECOMPILED AT `research_repos/mc1201_sources/`
