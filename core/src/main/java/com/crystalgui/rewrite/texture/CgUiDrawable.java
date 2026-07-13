@@ -11,7 +11,7 @@ import com.crystalgui.rewrite.render.CgUiPaintContext;
  * to {@link #draw} is expected to issue exactly one GPU draw call (or zero, for a
  * fully-transparent tint) before returning.</p>
  */
-public interface ICgUiDrawable {
+public interface CgUiDrawable {
 
     /**
      * Paints this texture into the given rect, immediately.

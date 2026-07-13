@@ -10,7 +10,7 @@ import com.crystalgui.rewrite.render.CgUiPaintContext;
  * rebind against each other, only against the element before/after them that uses a
  * different texture.</p>
  */
-public final class CgUiQuad implements ICgUiDrawable {
+public final class CgUiQuad implements CgUiDrawable {
 
     private final int colorArgb;
 
