@@ -5,8 +5,6 @@ import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
-import com.crystalgraphics.api.vertex.CgVertexFormat;
-import com.crystalgraphics.gl.render.CgBatchRenderer;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
@@ -43,7 +41,7 @@ public final class CgUiPaintContext {
      * <b>Currently intended for immediate flushing, despite it being inefficient and going against the idea of "Batching"</b>
      */
     @Getter
-    private final CgRenderWrapper renderWrapper;
+    private final CgUIRenderer renderWrapper;
 
     // ── GL state isolation ──────────────────────────────────────────────────
     private CgGlScope glScope;
@@ -61,7 +59,7 @@ public final class CgUiPaintContext {
 
     public CgUiPaintContext() {
         this.poseStack = new PoseStack(false);
-        this.renderWrapper = new CgRenderWrapper(this);
+        this.renderWrapper = new CgUIRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
     }

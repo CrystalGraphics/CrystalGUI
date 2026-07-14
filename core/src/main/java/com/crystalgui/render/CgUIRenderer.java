@@ -9,7 +9,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import org.joml.Matrix4f;
 
-public final class CgRenderWrapper {
+public final class CgUIRenderer {
     private static final CgVertexFormat FORMAT = CgVertexFormat.POS2_UV2_COL4UB;
     private static final int INITIAL_MAX_QUADS = 9;
 
@@ -18,9 +18,12 @@ public final class CgRenderWrapper {
 
     private final CgTexture2D MISSING_TEX = CgTextureManager.get().getFallback();
 
-    CgRenderWrapper(CgUiPaintContext cgUiPaintContext) {
+    private final VertexWriter writer;
+
+    CgUIRenderer(CgUiPaintContext cgUiPaintContext) {
         this.renderer = CgBatchRenderer.create(FORMAT, INITIAL_MAX_QUADS);
         this.ctx = cgUiPaintContext;
+        this.writer = new VertexWriter(renderer.vertex(), ctx.getPoseStack());;
     }
 
     public void flush() {
@@ -49,17 +52,17 @@ public final class CgRenderWrapper {
         vc.vertex(x, y + h).uv(u0, v1).colorArgb(argb).endVertex();
     }
 
-    public Vertex2DWriter vertex() {
-        return new Vertex2DWriter(renderer.vertex(), ctx.getPoseStack());
+    public VertexWriter vertex() {
+        return writer;
     }
 
     // PoseStack-aware VertexWriter, obviously set up in 2D mode.
-    public final static class Vertex2DWriter implements CgVertexConsumer {
+    public final static class VertexWriter implements CgVertexConsumer {
 
         private final CgVertexWriter writer;
         private final PoseStack poseStack;
 
-        private Vertex2DWriter(CgVertexWriter writer, PoseStack poseStack) {
+        private VertexWriter(CgVertexWriter writer, PoseStack poseStack) {
             this.writer = writer;
             this.poseStack = poseStack;
         }

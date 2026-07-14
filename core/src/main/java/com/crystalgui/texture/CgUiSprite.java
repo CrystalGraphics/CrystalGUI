@@ -1,12 +1,11 @@
 package com.crystalgui.texture;
 
 import com.crystalgraphics.api.texture.CgTextureSpec;
-import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgui.core.geometry.Position;
 import com.crystalgui.core.geometry.Size;
-import com.crystalgui.render.CgRenderWrapper;
+import com.crystalgui.render.CgUIRenderer;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -142,7 +141,7 @@ public final class CgUiSprite implements CgUiDrawable {
         final int tintArgb = 0xFFFFFFFF;
         ctx.bindTexture(texture);
 
-        CgRenderWrapper renderer = ctx.getRenderWrapper();
+        CgUIRenderer renderer = ctx.getRenderWrapper();
 
 
         if (!hasBorder) {
