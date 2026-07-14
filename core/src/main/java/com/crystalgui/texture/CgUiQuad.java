@@ -19,7 +19,7 @@ public final class CgUiQuad implements CgUiDrawable {
     }
 
     @Override
-    public void draw(CgUiPaintContext ctx, float x, float y, float width, float height, int tintArgb) {
+    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         ctx.fillRect(x, y, width, height,
                 //CgUiPaintContext.multiplyArgb(colorArgb, tintArgb)
                 colorArgb // TODO replace with multiplication code?
