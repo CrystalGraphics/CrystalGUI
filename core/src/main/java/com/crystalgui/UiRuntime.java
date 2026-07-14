@@ -117,10 +117,14 @@ public final class UiRuntime {
         paintContext.getPoseStack().translate(screenWidth/2f - halfWidth, screenHeight/2f - halfHeight, 0);
 
         long millisIntoDegrees = System.currentTimeMillis() % 360000L;
-        float secondsAsDegrees = millisIntoDegrees / 1000f;
+        float secondsAsDegrees = millisIntoDegrees / 100f;
         Quaternionf myRotation = new Quaternionf().rotationZ((float) Math.toRadians(secondsAsDegrees));
         paintContext.getPoseStack().rotateAround(myRotation, halfWidth, halfHeight, 0);
         ui.rootElement.drawSubtree(paintContext);
         paintContext.endFrame();
+    }
+
+    public void setMouse(float mouseX, float mouseY) {
+        paintContext.mouseX = mouseX; paintContext.mouseY = mouseY;
     }
 }
