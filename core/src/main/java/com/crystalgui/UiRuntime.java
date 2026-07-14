@@ -1,5 +1,6 @@
 package com.crystalgui;
 
+import com.crystalgraphics.api.PoseStack;
 import com.crystalgui.render.CgUiPaintContext;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.AvailableSpace;
@@ -39,7 +40,6 @@ public final class UiRuntime {
     public UiRuntime(Ui ui) {
         this.ui = ui;
         this.taffyTree = new TaffyTree();
-        this.taffyTree.disableRounding();
         rebuildTree();
     }
 
@@ -117,17 +117,35 @@ public final class UiRuntime {
         paintContext.beginFrame(screenWidth, screenHeight);
         final float halfWidth = ui.rootElement.getSizeWidth() / 2f, halfHeight = ui.rootElement.getSizeHeight() / 2f;
 
-        paintContext.getPoseStack().translate(screenWidth/2f - halfWidth, screenHeight/2f - halfHeight, 0);
+
+        PoseStack pose = paintContext.getPoseStack();
+        pose.pushPose();
+
+        float scale = 2f;
+        float elementWidth = ui.rootElement.getSizeWidth();
+        float elementHeight = ui.rootElement.getSizeHeight();
+
+        float startX = (screenWidth - (elementWidth * scale)) / 2f;
+        float startY = (screenHeight - (elementHeight * scale)) / 2f;
+
+        pose.translate(startX, startY, 0f);
+
+        pose.scale(scale, scale, 1f);
 
         long millisIntoDegrees = System.currentTimeMillis() % 360000L;
         float secondsAsDegrees = millisIntoDegrees / 100f;
         Quaternionf myRotation = new Quaternionf().rotationZ((float) Math.toRadians(secondsAsDegrees));
-        paintContext.getPoseStack().rotateAround(myRotation, halfWidth, halfHeight, 0);
+
+        pose.rotateAround(myRotation, elementWidth / 2f, elementHeight / 2f, 0f);
+
         ui.rootElement.drawSubtree(paintContext);
+
+        pose.popPose();
+
         paintContext.endFrame();
     }
 
-    public void setMouse(float mouseX, float mouseY) {
+    public void setMouse(int mouseX, int mouseY) {
         paintContext.mouseX = mouseX; paintContext.mouseY = mouseY;
     }
 }
