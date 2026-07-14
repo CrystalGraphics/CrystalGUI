@@ -93,7 +93,7 @@ public final class CgUIRenderer {
         @Override
         public CgVertexConsumer vertex(float x, float y) {
             Matrix4f pose = poseStack.last().pose();
-            getDelegate().vertex(pose, x, y);
+            getDelegate().vertex(pose, Math.round(x), Math.round(y));
             return this;
         }
 

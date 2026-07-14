@@ -64,7 +64,7 @@ public final class CgUiPaintContext {
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
     }
 
-    public float mouseX, mouseY;
+    public int mouseX, mouseY;
 
     // ── Frame lifecycle ─────────────────────────────────────────────────────
 
