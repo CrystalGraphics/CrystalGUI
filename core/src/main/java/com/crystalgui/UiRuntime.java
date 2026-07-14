@@ -6,6 +6,7 @@ import dev.vfyjxf.taffy.style.AvailableSpace;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
+import org.joml.Quaternionf;
 
 import java.util.List;
 
@@ -114,6 +115,11 @@ public final class UiRuntime {
         final float halfWidth = ui.rootElement.getSizeWidth() / 2f, halfHeight = ui.rootElement.getSizeHeight() / 2f;
 
         paintContext.getPoseStack().translate(screenWidth/2f - halfWidth, screenHeight/2f - halfHeight, 0);
+
+        long millisIntoDegrees = System.currentTimeMillis() % 360000L;
+        float secondsAsDegrees = millisIntoDegrees / 1000f;
+        Quaternionf myRotation = new Quaternionf().rotationZ((float) Math.toRadians(secondsAsDegrees));
+        paintContext.getPoseStack().rotateAround(myRotation, halfWidth, halfHeight, 0);
         ui.rootElement.drawSubtree(paintContext);
         paintContext.endFrame();
     }
