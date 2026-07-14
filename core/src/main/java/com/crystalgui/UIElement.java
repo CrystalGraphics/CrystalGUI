@@ -6,6 +6,8 @@ import com.crystalgui.texture.CgUiDrawable;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyStyle;
 import dev.vfyjxf.taffy.tree.NodeId;
+import org.joml.Matrix4f;
+import org.joml.Vector4f;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -262,7 +264,16 @@ public class UIElement {
             }
         }
 
-        paintOverlay(ctx);
+        Matrix4f localToWorld = ctx.getPoseStack().last().pose();
+        Matrix4f worldToLocal = localToWorld.invert(new Matrix4f());
+        System.out.printf("%.2f, %.2f\n", ctx.mouseX, ctx.mouseY);
+        Vector4f v = new Vector4f();
+        v.set(ctx.mouseX, ctx.mouseY, 0, 1.0f);
+        worldToLocal.transform(v);
+        final float mouseX = v.x(), mouseY = v.y();
+
+        if (mouseX >= x && mouseX <= x+width && mouseY >= y && mouseY <= y+height)
+            paintOverlay(ctx);
     }
 
     /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */
