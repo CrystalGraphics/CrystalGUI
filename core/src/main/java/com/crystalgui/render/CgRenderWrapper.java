@@ -5,15 +5,21 @@ import com.crystalgraphics.api.vertex.CgVertexConsumer;
 import com.crystalgraphics.api.vertex.CgVertexFormat;
 import com.crystalgraphics.gl.buffer.staging.CgVertexWriter;
 import com.crystalgraphics.gl.render.CgBatchRenderer;
+import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.gl.texture.CgTextureManager;
 import org.joml.Matrix4f;
 
 public final class CgRenderWrapper {
+    private static final CgVertexFormat FORMAT = CgVertexFormat.POS2_UV2_COL4UB;
+    private static final int INITIAL_MAX_QUADS = 9;
 
     private final CgBatchRenderer renderer;
     private final CgUiPaintContext ctx;
 
-    CgRenderWrapper(CgBatchRenderer renderer, CgUiPaintContext cgUiPaintContext) {
-        this.renderer = renderer;
+    private final CgTexture2D MISSING_TEX = CgTextureManager.get().getFallback();
+
+    CgRenderWrapper(CgUiPaintContext cgUiPaintContext) {
+        this.renderer = CgBatchRenderer.create(FORMAT, INITIAL_MAX_QUADS);
         this.ctx = cgUiPaintContext;
     }
 
@@ -28,11 +34,26 @@ public final class CgRenderWrapper {
     void begin() {
         renderer.begin();
     }
-    
+
+    public void submitQuad(float x, float y, float w, float h, float u0, float v0, float u1, float v1, int argb) {
+        if (!ctx.isFrameActive()) throw new IllegalStateException("Draw called outside beginFrame()/endFrame()");
+
+        if (ctx.getCurrentTexture() == MISSING_TEX) {
+            u0 = 0; v0 = 0; u1 = 1; v1 = 1;
+        }
+
+        CgVertexConsumer vc = this.vertex();
+        vc.vertex(x, y).uv(u0, v0).colorArgb(argb).endVertex();
+        vc.vertex(x + w, y).uv(u1, v0).colorArgb(argb).endVertex();
+        vc.vertex(x + w, y + h).uv(u1, v1).colorArgb(argb).endVertex();
+        vc.vertex(x, y + h).uv(u0, v1).colorArgb(argb).endVertex();
+    }
+
     public Vertex2DWriter vertex() {
         return new Vertex2DWriter(renderer.vertex(), ctx.getPoseStack());
     }
 
+    // PoseStack-aware VertexWriter, obviously set up in 2D mode.
     public final static class Vertex2DWriter implements CgVertexConsumer {
 
         private final CgVertexWriter writer;

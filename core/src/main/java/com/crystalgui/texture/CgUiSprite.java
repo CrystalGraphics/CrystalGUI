@@ -147,7 +147,7 @@ public final class CgUiSprite implements CgUiDrawable {
 
         if (!hasBorder) {
             if (width > 0 && height > 0) {
-                ctx.submitQuad(x, y, width, height, u0, v0, u3, v3, tintArgb);
+                renderer.submitQuad(x, y, width, height, u0, v0, u3, v3, tintArgb);
                 renderer.flush();
             }
             return;
@@ -180,19 +180,19 @@ public final class CgUiSprite implements CgUiDrawable {
         float rowH0 = y1 - y0, rowH1 = y2 - y1, rowH2 = y3 - y2;
 
         if (rowH0 > 0) {
-            if (colW0 > 0) ctx.submitQuad(x0, y0, colW0, rowH0, u0, v0, u1, v1, tintArgb);
-            if (colW1 > 0) ctx.submitQuad(x1, y0, colW1, rowH0, u1, v0, u2, v1, tintArgb);
-            if (colW2 > 0) ctx.submitQuad(x2, y0, colW2, rowH0, u2, v0, u3, v1, tintArgb);
+            if (colW0 > 0) renderer.submitQuad(x0, y0, colW0, rowH0, u0, v0, u1, v1, tintArgb);
+            if (colW1 > 0) renderer.submitQuad(x1, y0, colW1, rowH0, u1, v0, u2, v1, tintArgb);
+            if (colW2 > 0) renderer.submitQuad(x2, y0, colW2, rowH0, u2, v0, u3, v1, tintArgb);
         }
         if (rowH1 > 0) {
-            if (colW0 > 0) ctx.submitQuad(x0, y1, colW0, rowH1, u0, v1, u1, v2, tintArgb);
-            if (colW1 > 0) ctx.submitQuad(x1, y1, colW1, rowH1, u1, v1, u2, v2, tintArgb);
-            if (colW2 > 0) ctx.submitQuad(x2, y1, colW2, rowH1, u2, v1, u3, v2, tintArgb);
+            if (colW0 > 0) renderer.submitQuad(x0, y1, colW0, rowH1, u0, v1, u1, v2, tintArgb);
+            if (colW1 > 0) renderer.submitQuad(x1, y1, colW1, rowH1, u1, v1, u2, v2, tintArgb);
+            if (colW2 > 0) renderer.submitQuad(x2, y1, colW2, rowH1, u2, v1, u3, v2, tintArgb);
         }
         if (rowH2 > 0) {
-            if (colW0 > 0) ctx.submitQuad(x0, y2, colW0, rowH2, u0, v2, u1, v3, tintArgb);
-            if (colW1 > 0) ctx.submitQuad(x1, y2, colW1, rowH2, u1, v2, u2, v3, tintArgb);
-            if (colW2 > 0) ctx.submitQuad(x2, y2, colW2, rowH2, u2, v2, u3, v3, tintArgb);
+            if (colW0 > 0) renderer.submitQuad(x0, y2, colW0, rowH2, u0, v2, u1, v3, tintArgb);
+            if (colW1 > 0) renderer.submitQuad(x1, y2, colW1, rowH2, u1, v2, u2, v3, tintArgb);
+            if (colW2 > 0) renderer.submitQuad(x2, y2, colW2, rowH2, u2, v2, u3, v3, tintArgb);
         }
 
         renderer.flush();
