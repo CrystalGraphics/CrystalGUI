@@ -1,9 +1,12 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.CrystalGraphics;
+import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
+import com.crystalgraphics.api.vertex.CgVertexConsumer;
 import com.crystalgraphics.api.vertex.CgVertexFormat;
 import com.crystalgraphics.gl.buffer.staging.CgVertexWriter;
 import com.crystalgraphics.gl.render.CgBatchRenderer;
@@ -39,18 +42,17 @@ public final class CgUiPaintContext {
     private final CgTextureAbstract MISSING_TEX = CgTextureManager.get().getFallback();
 
     // Batch-Renderer set up in immediate flush mode
-    private final CgBatchRenderer renderer;
     private final CgMaterial boxModelMaterial;
     private final CgTexture2D whitePixel;
+
+    private final PoseStack poseStack;
+
+    @Getter
+    private final CgRenderWrapper renderWrapper;
 
     // ── GL state isolation ──────────────────────────────────────────────────
     private CgGlScope glScope;
 
-    // ── Frame data save/restore ─────────────────────────────────────────────
-    private final Matrix4f savedViewMatrix = new Matrix4f();
-    private final Matrix4f savedProjMatrix = new Matrix4f();
-    private int savedViewportW;
-    private int savedViewportH;
 
     // ── Scissor ─────────────────────────────────────────────────────────────
     @Getter
@@ -61,10 +63,13 @@ public final class CgUiPaintContext {
     private boolean frameActive;
 
     public CgUiPaintContext() {
-        this.renderer = CgBatchRenderer.create(FORMAT, INITIAL_MAX_QUADS);
+        this.poseStack = new PoseStack(false);
+        this.renderWrapper = new CgRenderWrapper(CgBatchRenderer.create(FORMAT, INITIAL_MAX_QUADS), this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
     }
+
+    public float mouseX, mouseY;
 
     // ── Frame lifecycle ─────────────────────────────────────────────────────
 
@@ -84,11 +89,6 @@ public final class CgUiPaintContext {
         // Save CgFrameData
         CgRenderPipeline pipeline = CgRenderPipeline.getInstance();
         CgFrameData fd = pipeline.getFrameData();
-        savedViewMatrix.set(fd.viewMatrix);
-        savedProjMatrix.set(fd.projMatrix);
-        savedViewportW = fd.viewportW;
-        savedViewportH = fd.viewportH;
-
         // Set ortho projection for UI
         fd.viewMatrix.identity();
         fd.projMatrix.identity().ortho(0, screenWidth, screenHeight, 0, -1, 1);
@@ -96,7 +96,8 @@ public final class CgUiPaintContext {
         fd.viewportH = screenHeight;
         pipeline.prepareFrame();
 
-        renderer.begin();
+        poseStack.pushPose();
+        renderWrapper.begin();
         boxModelMaterial.bind();
         currentTexture = null;
         scissorStack.reset();
@@ -114,16 +115,14 @@ public final class CgUiPaintContext {
         boxModelMaterial.unbind();
         currentTexture = null;
         frameActive = false;
-        renderer.end();
+        renderWrapper.end();
+
+        poseStack.popPose();
+
+        if (!poseStack.clear()) throw new IllegalStateException("Unpopped stack(s) in UI frame");
 
         // Restore CgFrameData
         CgRenderPipeline pipeline = CgRenderPipeline.getInstance();
-        CgFrameData fd = pipeline.getFrameData();
-        fd.viewMatrix.set(savedViewMatrix);
-        fd.projMatrix.set(savedProjMatrix);
-        fd.viewportW = savedViewportW;
-        fd.viewportH = savedViewportH;
-
         // Restore GL state
         if (glScope != null) {
             glScope.close();
@@ -137,7 +136,7 @@ public final class CgUiPaintContext {
     public void fillRect(float x, float y, float width, float height, int argb) {
         bindTexture(whitePixel);
         submitQuad(x, y, width, height, 0f, 0f, 1f, 1f, argb);
-        flushRenderer();
+        renderWrapper.flush();
     }
 
     /** Textured draw with an explicit UV sub-rect (atlas support), tint already includes opacity. */
@@ -145,9 +144,9 @@ public final class CgUiPaintContext {
                            float u0, float v0, float u1, float v1, int argb) {
         bindTexture(texture);
         submitQuad(x, y, width, height, u0, v0, u1, v1, argb);
-        flushRenderer();
+        renderWrapper.flush();
     }
-
+//
     public void submitQuad(float x, float y, float w, float h, float u0, float v0, float u1, float v1, int argb) {
         if (!frameActive) throw new IllegalStateException("Draw called outside beginFrame()/endFrame()");
 
@@ -155,11 +154,15 @@ public final class CgUiPaintContext {
             u0 = 0; v0 = 0; u1 = 1; v1 = 1;
         }
 
-        CgVertexWriter vc = renderer.vertex();
+        CgVertexConsumer vc = renderWrapper.vertex();
         vc.vertex(x, y).uv(u0, v0).colorArgb(argb).endVertex();
         vc.vertex(x + w, y).uv(u1, v0).colorArgb(argb).endVertex();
         vc.vertex(x + w, y + h).uv(u1, v1).colorArgb(argb).endVertex();
         vc.vertex(x, y + h).uv(u0, v1).colorArgb(argb).endVertex();
+    }
+
+    public PoseStack getPoseStack() {
+        return this.poseStack;
     }
 
     public void bindTexture(CgTexture2D texture) {
@@ -167,7 +170,9 @@ public final class CgUiPaintContext {
         texture.bind(0);
         currentTexture = texture;
     }
-    public void flushRenderer() {
-        renderer.flush();
-    }
+
+    //    public void flushRenderer() {
+//        renderer.flush();
+//    }
+
 }

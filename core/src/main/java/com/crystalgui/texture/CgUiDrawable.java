@@ -22,9 +22,10 @@ public interface CgUiDrawable {
      * @param y        top edge, in screen pixels
      * @param width    rect width, in screen pixels
      * @param height   rect height, in screen pixels
-     * @param tintArgb packed 0xAARRGGBB tint (already includes the element's opacity
-     *                 multiplied in — see {@code UIElement.paintSelf}); implementations
-     *                 should multiply this into their own color rather than ignoring it
      */
-    void draw(CgUiPaintContext ctx, float x, float y, float width, float height, int tintArgb);
+    default void draw(CgUiPaintContext ctx, float x, float y, float width, float height) {
+        this.draw(ctx, ctx.mouseX, ctx.mouseY, x, y, width, height);
+    }
+
+    void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height);
 }

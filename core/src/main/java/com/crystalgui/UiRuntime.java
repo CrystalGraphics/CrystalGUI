@@ -111,6 +111,9 @@ public final class UiRuntime {
     public void paintFrame() {
         layout();
         paintContext.beginFrame(screenWidth, screenHeight);
+        final float halfWidth = ui.rootElement.getSizeWidth() / 2f, halfHeight = ui.rootElement.getSizeHeight() / 2f;
+
+        paintContext.getPoseStack().translate(screenWidth/2f - halfWidth, screenHeight/2f - halfHeight, 0);
         ui.rootElement.drawSubtree(paintContext);
         paintContext.endFrame();
     }

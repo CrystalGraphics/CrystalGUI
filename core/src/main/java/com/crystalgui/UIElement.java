@@ -3,6 +3,7 @@ package com.crystalgui;
 import com.crystalgui.layout.LayoutStyle;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.texture.CgUiDrawable;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyStyle;
 import dev.vfyjxf.taffy.tree.NodeId;
 
@@ -244,7 +245,12 @@ public class UIElement {
      * defers or accumulates work for later replay.
      */
     public final void drawSubtree(CgUiPaintContext ctx) {
-        if (!visible) return;
+        if (taffyStyle.display == TaffyDisplay.NONE || !isVisible() || opacity == 0) {
+            return;
+        }
+
+        var zIndex = getZIndex();
+
 
         paintSelf(ctx);
 
@@ -262,14 +268,14 @@ public class UIElement {
     /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */
     protected void paintSelf(CgUiPaintContext ctx) {
         if (background != null) {
-            background.draw(ctx, x, y, width, height, tintWithOpacity());
+            background.draw(ctx, x, y, width, height);
         }
     }
 
     /** Override for custom drawing that must appear above children. Called after children paint. */
     protected void paintOverlay(CgUiPaintContext ctx) {
         if (overlay != null) {
-            overlay.draw(ctx, x, y, width, height, tintWithOpacity());
+            overlay.draw(ctx, x, y, width, height);
         }
     }
 

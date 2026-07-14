@@ -6,6 +6,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgui.core.geometry.Position;
 import com.crystalgui.core.geometry.Size;
+import com.crystalgui.render.CgRenderWrapper;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -133,18 +134,21 @@ public final class CgUiSprite implements CgUiDrawable {
     }
 
     @Override
-    public void draw(CgUiPaintContext ctx, float x, float y, float width, float height, int tintArgb) {
+    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         if (texture == null || textureSize.width <= 0 || textureSize.height <= 0) return;
 
         updateUvCacheIfNeeded();
 
+        final int tintArgb = 0xFFFFFFFF;
         ctx.bindTexture(texture);
+
+        CgRenderWrapper renderer = ctx.getRenderWrapper();
 
 
         if (!hasBorder) {
             if (width > 0 && height > 0) {
                 ctx.submitQuad(x, y, width, height, u0, v0, u3, v3, tintArgb);
-                ctx.flushRenderer();
+                renderer.flush();
             }
             return;
         }
@@ -191,7 +195,6 @@ public final class CgUiSprite implements CgUiDrawable {
             if (colW2 > 0) ctx.submitQuad(x2, y2, colW2, rowH2, u2, v2, u3, v3, tintArgb);
         }
 
-        ctx.flushRenderer();
+        renderer.flush();
     }
-
 }
