@@ -6,6 +6,8 @@ import com.crystalgui.texture.CgUiDrawable;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyStyle;
 import dev.vfyjxf.taffy.tree.NodeId;
+import lombok.Getter;
+import lombok.experimental.Accessors;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
 
@@ -40,6 +42,7 @@ import java.util.function.Consumer;
  * (scissor/mask), input/events, styles/classes-as-cascade (only plain class tags exist here,
  * no selector matching yet).</p>
  */
+@Accessors(chain = true)
 public class UIElement {
 
     private String id = "";
@@ -49,14 +52,22 @@ public class UIElement {
     private final List<UIElement> children = new ArrayList<>();
     private final List<UIElement> childrenView = Collections.unmodifiableList(children);
 
+    @Getter
     private boolean visible = true;
+    @Getter
     private boolean active = true;
 
     // Absolute screen-space geometry, written by UiRuntime's layout pass (or manually
     // via setBounds for unattached elements).
     private float x, y, width, height;
 
+    /**
+     * -- GETTER --
+     * The raw Taffy style backing this element, for direct field access beyond what
+     *  exposes.
+     */
     // ── Layout (Taffy) ───────────────────────────────────────────────────────
+    @Getter
     private final TaffyStyle taffyStyle = new TaffyStyle();
     /** Set by UiRuntime once this element is attached to a live TaffyTree; null until then. */
     NodeId taffyNodeId;
@@ -114,10 +125,6 @@ public class UIElement {
 
     // ── Id / classes ──────────────────────────────────────────────────────────
 
-    public String getId() {
-        return id;
-    }
-
     public UIElement setId(String id) {
         this.id = id == null ? "" : id;
         return this;
@@ -139,17 +146,9 @@ public class UIElement {
 
     // ── State ────────────────────────────────────────────────────────────────
 
-    public boolean isVisible() {
-        return visible;
-    }
-
     public UIElement setVisible(boolean visible) {
         this.visible = visible;
         return this;
-    }
-
-    public boolean isActive() {
-        return active;
     }
 
     public UIElement setActive(boolean active) {
@@ -193,11 +192,6 @@ public class UIElement {
     public UIElement layout(Consumer<LayoutStyle> configurator) {
         configurator.accept(new LayoutStyle(taffyStyle, this::markLayoutDirty));
         return this;
-    }
-
-    /** The raw Taffy style backing this element, for direct field access beyond what {@link LayoutStyle} exposes. */
-    public TaffyStyle getTaffyStyle() {
-        return taffyStyle;
     }
 
     private void markLayoutDirty() {
@@ -256,6 +250,7 @@ public class UIElement {
             ctx.getPoseStack().pushPose();
             ctx.getPoseStack().translate(0, 0, zIndex);
         }
+
 
 
         paintSelf(ctx);
