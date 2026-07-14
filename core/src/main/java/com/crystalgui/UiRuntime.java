@@ -9,6 +9,7 @@ import dev.vfyjxf.taffy.tree.TaffyTree;
 import org.joml.Quaternionf;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Runtime engine. Owns the paint context, the live
@@ -29,7 +30,7 @@ public final class UiRuntime {
     public final Ui ui;
     private static final CgUiPaintContext paintContext = new CgUiPaintContext();
 
-    private final TaffyTree taffyTree = new TaffyTree();
+    private final TaffyTree taffyTree;
     private NodeId rootNodeId;
 
     private int screenWidth;
@@ -37,6 +38,8 @@ public final class UiRuntime {
 
     public UiRuntime(Ui ui) {
         this.ui = ui;
+        this.taffyTree = new TaffyTree();
+        this.taffyTree.disableRounding();
         rebuildTree();
     }
 
