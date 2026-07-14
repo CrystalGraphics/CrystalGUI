@@ -252,6 +252,10 @@ public class UIElement {
         }
 
         var zIndex = getZIndex();
+        if (zIndex != 0) {
+            ctx.getPoseStack().pushPose();
+            ctx.getPoseStack().translate(0, 0, zIndex);
+        }
 
 
         paintSelf(ctx);
@@ -274,6 +278,10 @@ public class UIElement {
 
         if (mouseX >= x && mouseX <= x+width && mouseY >= y && mouseY <= y+height)
             paintOverlay(ctx);
+
+        if (zIndex != 0) {
+            ctx.getPoseStack().popPose();
+        }
     }
 
     /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */
