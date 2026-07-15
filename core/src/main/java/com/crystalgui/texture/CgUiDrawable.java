@@ -14,6 +14,8 @@ import org.joml.Matrix4f;
  */
 public interface CgUiDrawable {
 
+    CgUiQuad EMPTY = new CgUiQuad(0);
+
     /**
      * Paints this texture into the given rect, immediately.
      *

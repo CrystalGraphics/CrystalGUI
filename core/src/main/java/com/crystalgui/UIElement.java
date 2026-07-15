@@ -1,11 +1,12 @@
 package com.crystalgui;
 
-import com.crystalgui.layout.LayoutStyle;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.style.ElementStyle;
+import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.texture.CgUiDrawable;
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyStyle;
 import dev.vfyjxf.taffy.tree.NodeId;
+import dev.vfyjxf.taffy.tree.TaffyTree;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -14,8 +15,6 @@ import org.joml.Vector4f;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -47,9 +46,9 @@ import java.util.function.Consumer;
 @Accessors(chain = true)
 public class UIElement {
 
+
     @Getter
-    private final TaffyStyle taffyStyle = new TaffyStyle();
-    /** Set by UiRuntime once this element is attached to a live TaffyTree; null until then. */
+    private final ElementStyle style = new ElementStyle(this);
     protected NodeId taffyNodeId;
     /** Set by UiRuntime once this element is attached; used so layout(...) can mark the node dirty. */
     @Getter
@@ -61,31 +60,39 @@ public class UIElement {
     @Getter
     private final List<UIElement> children = new ArrayList<>();
 
-    private final Set<String> classes = new LinkedHashSet<>();
-
     @Getter
     private String id = "";
-    @Getter @Setter
-    private boolean visible = true;
-    @Getter @Setter
-    private boolean active = true;
+
+    public UIElement setId(String id) {
+        this.id = id == null ? "" : id;
+        return this;
+    }
+
+
+    @Getter
+    private final Set<String> classes = new LinkedHashSet<>();
+
+    public UIElement addClass(String cls) {
+        classes.add(cls);
+        return this;
+    }
+
+    public UIElement removeClass(String cls) {
+        classes.remove(cls);
+        return this;
+    }
+
+    public boolean hasClass(String cls) {
+        return classes.contains(cls);
+    }
 
     // Absolute screen-space geometry, written by UiRuntime's layout pass (or manually
     // via setBounds for unattached elements).
     private float x, y, width, height;
 
+    @Getter @Setter
+    public CgUiDrawable background, overlay;
 
-    // ── Generic box model ─────────────────────
-    @Getter @Setter @Nullable
-    private CgUiDrawable background;
-    @Getter @Setter @Nullable
-    private CgUiDrawable overlay;
-    @Getter @Setter
-    private float opacity = 1f;
-    @Getter @Setter
-    private int colorTint = 0xFFFFFFFF;
-    @Getter @Setter
-    private int zIndex = 0;
 
     public UIElement addChild(UIElement child) {
         if (child.parent != null) {
@@ -119,27 +126,6 @@ public class UIElement {
         }
     }
 
-    // ── Id / classes ──────────────────────────────────────────────────────────
-
-    public UIElement setId(String id) {
-        this.id = id == null ? "" : id;
-        return this;
-    }
-
-    public UIElement addClass(String cls) {
-        classes.add(cls);
-        return this;
-    }
-
-    public UIElement removeClass(String cls) {
-        classes.remove(cls);
-        return this;
-    }
-
-    public boolean hasClass(String cls) {
-        return classes.contains(cls);
-    }
-
     // ── Geometry (placeholder — see class javadoc) ──────────────────────────
 
     public float getPositionX() {
@@ -168,13 +154,8 @@ public class UIElement {
 
     // ── Layout ───────────────────────────────────────────────────────────────
 
-    /**
-     * Configures this element's {@link TaffyStyle} via the fluent {@link LayoutStyle}
-     * wrapper. If this element is already attached to a {@link UiRuntime},
-     * marks the Taffy node dirty so the next {@code computeLayout()} pass picks up the change.
-     */
-    public UIElement layout(Consumer<LayoutStyle> configurator) {
-        configurator.accept(new LayoutStyle(taffyStyle, this::markLayoutDirty));
+    public UIElement layout(Consumer<LayoutGroup> configurator) {
+        configurator.accept(this.getStyle().getLayoutGroup());
         return this;
     }
 
@@ -193,15 +174,15 @@ public class UIElement {
      * defers or accumulates work for later replay.
      */
     public final void drawSubtree(CgUiPaintContext ctx) {
-        if (taffyStyle.display == TaffyDisplay.NONE || !isVisible() || opacity == 0) {
-            return;
-        }
-
-        var zIndex = getZIndex();
-        if (zIndex != 0) {
-            ctx.getPoseStack().pushPose();
-            ctx.getPoseStack().translate(0, 0, zIndex);
-        }
+//        if ( == TaffyDisplay.NONE || !isVisible() || opacity == 0) {
+//            return;
+//        }
+//
+//        var zIndex = getZIndex();
+//        if (zIndex != 0) {
+//            ctx.getPoseStack().pushPose();
+//            ctx.getPoseStack().translate(0, 0, zIndex);
+//        }
 
 
 
@@ -209,25 +190,16 @@ public class UIElement {
 
         if (!children.isEmpty()) {
             List<UIElement> sorted = new ArrayList<>(children);
-            sorted.sort(Comparator.comparingInt(UIElement::getZIndex));
+//            sorted.sort(Comparator.comparingInt(UIElement::getZIndex));
             for (UIElement child : sorted) {
                 child.drawSubtree(ctx);
             }
         }
 
-        Matrix4f localToWorld = ctx.getPoseStack().last().pose();
-        Matrix4f worldToLocal = localToWorld.invert(new Matrix4f());
-        Vector4f v = new Vector4f();
-        v.set(ctx.mouseX, ctx.mouseY, 0, 1.0f);
-        worldToLocal.transform(v);
-        final float mouseX = v.x(), mouseY = v.y();
 
-        if (mouseX >= x && mouseX <= x+width && mouseY >= y && mouseY <= y+height)
-            paintOverlay(ctx);
-
-        if (zIndex != 0) {
-            ctx.getPoseStack().popPose();
-        }
+//        if (zIndex != 0) {
+//            ctx.getPoseStack().popPose();
+//        }
     }
 
     /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */
@@ -239,14 +211,34 @@ public class UIElement {
 
     /** Override for custom drawing that must appear above children. Called after children paint. */
     protected void paintOverlay(CgUiPaintContext ctx) {
+        Matrix4f localToWorld = ctx.getPoseStack().last().pose();
+        Matrix4f worldToLocal = localToWorld.invert(new Matrix4f());
+        Vector4f v = new Vector4f();
+        v.set(ctx.mouseX, ctx.mouseY, 0, 1.0f);
+        worldToLocal.transform(v);
+        final float mouseX = v.x(), mouseY = v.y();
+
+        if (mouseX >= x && mouseX <= x+width && mouseY >= y && mouseY <= y+height)
+            paintOverlay(ctx);
         if (overlay != null) {
             overlay.draw(ctx, x, y, width, height);
         }
     }
 
-    private int tintWithOpacity() {
-        int a = (int) (((colorTint >>> 24) & 0xFF) * opacity);
-        return (a << 24) | (colorTint & 0x00FFFFFF);
+
+    public void onStyleChanged() {
+        // no-op.
+    }
+
+    @Nullable
+    public TaffyTree getTaffyTree() {
+        return attachedRuntime == null ? null : attachedRuntime.getTaffyTree();
+    }
+    public void markTreeDirty() {
+        var taffyTree = getTaffyTree();
+        if (taffyTree != null) {
+            taffyTree.markDirty(taffyNodeId);
+        }
     }
 
 }
