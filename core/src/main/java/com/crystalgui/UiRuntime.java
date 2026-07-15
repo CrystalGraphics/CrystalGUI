@@ -10,7 +10,6 @@ import dev.vfyjxf.taffy.tree.TaffyTree;
 import org.joml.Quaternionf;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Runtime engine. Owns the paint context, the live
@@ -40,6 +39,7 @@ public final class UiRuntime {
     public UiRuntime(Ui ui) {
         this.ui = ui;
         this.taffyTree = new TaffyTree();
+        this.taffyTree.disableRounding();
         rebuildTree();
     }
 
@@ -121,7 +121,11 @@ public final class UiRuntime {
         PoseStack pose = paintContext.getPoseStack();
         pose.pushPose();
 
-        float scale = 2f;
+        long time = System.currentTimeMillis();
+        double cycleDurationMs = 4000.0; // 2 seconds for a complete 0 -> 2 -> 0 cycle
+        double cyclePosition = (time / cycleDurationMs) * Math.PI;
+
+        float scale = (float) (Math.sin(cyclePosition) + 3.0);
         float elementWidth = ui.rootElement.getSizeWidth();
         float elementHeight = ui.rootElement.getSizeHeight();
 
