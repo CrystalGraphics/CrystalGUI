@@ -7,10 +7,12 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyStyle;
 import dev.vfyjxf.taffy.tree.NodeId;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -45,51 +47,45 @@ import java.util.function.Consumer;
 @Accessors(chain = true)
 public class UIElement {
 
-    private String id = "";
+    @Getter
+    private final TaffyStyle taffyStyle = new TaffyStyle();
+    /** Set by UiRuntime once this element is attached to a live TaffyTree; null until then. */
+    protected NodeId taffyNodeId;
+    /** Set by UiRuntime once this element is attached; used so layout(...) can mark the node dirty. */
+    @Getter
+    @Nullable
+    UiRuntime attachedRuntime;
+
+    @Nullable
+    private UIElement parent;
+    @Getter
+    private final List<UIElement> children = new ArrayList<>();
+
     private final Set<String> classes = new LinkedHashSet<>();
 
-    private UIElement parent;
-    private final List<UIElement> children = new ArrayList<>();
-    private final List<UIElement> childrenView = Collections.unmodifiableList(children);
-
     @Getter
+    private String id = "";
+    @Getter @Setter
     private boolean visible = true;
-    @Getter
+    @Getter @Setter
     private boolean active = true;
 
     // Absolute screen-space geometry, written by UiRuntime's layout pass (or manually
     // via setBounds for unattached elements).
     private float x, y, width, height;
 
-    /**
-     * -- GETTER --
-     * The raw Taffy style backing this element, for direct field access beyond what
-     *  exposes.
-     */
-    // ── Layout (Taffy) ───────────────────────────────────────────────────────
-    @Getter
-    private final TaffyStyle taffyStyle = new TaffyStyle();
-    /** Set by UiRuntime once this element is attached to a live TaffyTree; null until then. */
-    NodeId taffyNodeId;
-    /** Set by UiRuntime once this element is attached; used so layout(...) can mark the node dirty. */
-    UiRuntime attachedRuntime;
 
     // ── Generic box model ─────────────────────
+    @Getter @Setter @Nullable
     private CgUiDrawable background;
+    @Getter @Setter @Nullable
     private CgUiDrawable overlay;
+    @Getter @Setter
     private float opacity = 1f;
+    @Getter @Setter
     private int colorTint = 0xFFFFFFFF;
+    @Getter @Setter
     private int zIndex = 0;
-
-    // ── Tree structure ───────────────────────────────────────────────────────
-
-    public UIElement getParent() {
-        return parent;
-    }
-
-    public List<UIElement> getChildren() {
-        return childrenView;
-    }
 
     public UIElement addChild(UIElement child) {
         if (child.parent != null) {
@@ -144,18 +140,6 @@ public class UIElement {
         return classes.contains(cls);
     }
 
-    // ── State ────────────────────────────────────────────────────────────────
-
-    public UIElement setVisible(boolean visible) {
-        this.visible = visible;
-        return this;
-    }
-
-    public UIElement setActive(boolean active) {
-        this.active = active;
-        return this;
-    }
-
     // ── Geometry (placeholder — see class javadoc) ──────────────────────────
 
     public float getPositionX() {
@@ -200,38 +184,6 @@ public class UIElement {
         }
     }
 
-    // ── Box model ────────────────────────────────────────────────────────────
-
-    public UIElement setBackground(CgUiDrawable background) {
-        this.background = background;
-        return this;
-    }
-
-    public UIElement setOverlay(CgUiDrawable overlay) {
-        this.overlay = overlay;
-        return this;
-    }
-
-    public UIElement setOpacity(float opacity) {
-        this.opacity = opacity;
-        return this;
-    }
-
-    /** ARGB tint multiplied into background/overlay draws (and inherited visually by nothing else */
-    public UIElement setColor(int argb) {
-        this.colorTint = argb;
-        return this;
-    }
-
-    public int getZIndex() {
-        return zIndex;
-    }
-
-    public UIElement setZIndex(int zIndex) {
-        this.zIndex = zIndex;
-        return this;
-    }
-
     // ── Paint ────────────────────────────────────────────────────────────────
 
     /**
@@ -265,7 +217,6 @@ public class UIElement {
 
         Matrix4f localToWorld = ctx.getPoseStack().last().pose();
         Matrix4f worldToLocal = localToWorld.invert(new Matrix4f());
-        System.out.printf("%.2f, %.2f\n", ctx.mouseX, ctx.mouseY);
         Vector4f v = new Vector4f();
         v.set(ctx.mouseX, ctx.mouseY, 0, 1.0f);
         worldToLocal.transform(v);
@@ -297,4 +248,5 @@ public class UIElement {
         int a = (int) (((colorTint >>> 24) & 0xFF) * opacity);
         return (a << 24) | (colorTint & 0x00FFFFFF);
     }
+
 }
