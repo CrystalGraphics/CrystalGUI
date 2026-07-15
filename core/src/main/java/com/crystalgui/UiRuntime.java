@@ -7,6 +7,7 @@ import dev.vfyjxf.taffy.style.AvailableSpace;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
+import lombok.Getter;
 import org.joml.Quaternionf;
 
 import java.util.List;
@@ -30,6 +31,7 @@ public final class UiRuntime {
     public final Ui ui;
     private static final CgUiPaintContext paintContext = new CgUiPaintContext();
 
+    @Getter
     private final TaffyTree taffyTree;
     private NodeId rootNodeId;
 
@@ -62,13 +64,13 @@ public final class UiRuntime {
         List<UIElement> children = element.getChildren();
         NodeId id;
         if (children.isEmpty()) {
-            id = taffyTree.newLeaf(element.getTaffyStyle());
+            id = taffyTree.newLeaf(element.getStyle().getTaffyBridge().style);
         } else {
             NodeId[] childIds = new NodeId[children.size()];
             for (int i = 0; i < children.size(); i++) {
                 childIds[i] = buildNode(children.get(i));
             }
-            id = taffyTree.newWithChildren(element.getTaffyStyle(), childIds);
+            id = taffyTree.newWithChildren(element.getStyle().getTaffyBridge().style, childIds);
         }
         element.taffyNodeId = id;
         element.attachedRuntime = this;
@@ -149,6 +151,7 @@ public final class UiRuntime {
         paintContext.endFrame();
     }
 
+    // TODO: Replace this BS ;9
     public void setMouse(int mouseX, int mouseY) {
         paintContext.mouseX = mouseX; paintContext.mouseY = mouseY;
     }
