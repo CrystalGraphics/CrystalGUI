@@ -116,14 +116,14 @@ public final class UiRuntime {
     public void paintFrame() {
         layout();
         paintContext.beginFrame(screenWidth, screenHeight);
-        CgUiRenderer rend = paintContext.getRenderer();
-        paintContext.bindTexture((CgTexture2D) CgFallbackTextures.WHITE_1x1);
-        rend.submitQuad(0,0, 1, 1, 0,0,1,1, 0xFF0000FF);
-        rend.submitQuad(1,0, 2, 2, 0,0,1,1, 0xFFFF0000);
-        rend.flush();
+        
+        paintContext.bindTexture(paintContext.getWhitePixel());
+        paintContext.submitQuad(0,0, 1, 1, 0,0,1,1, 0xFF0000FF);
+        paintContext.submitQuad(1,0, 2, 2, 0,0,1,1, 0xFFFF0000);
+        paintContext.flush();
+        
         final float halfWidth = ui.rootElement.getSizeWidth() / 2f, halfHeight = ui.rootElement.getSizeHeight() / 2f;
-
-
+        
         PoseStack pose = paintContext.getPoseStack();
         pose.pushPose();
 

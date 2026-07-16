@@ -29,6 +29,9 @@ import lombok.Getter;
 public final class CgUiPaintContext {
 
     private final CgMaterial boxModelMaterial;
+
+    /** 1×1 fully opaque white ({@code RGBA = 255, 255, 255, 255}). */
+    @Getter
     private final CgTexture2D whitePixel;
 
     @Getter
