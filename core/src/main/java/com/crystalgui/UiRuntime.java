@@ -3,7 +3,7 @@ package com.crystalgui;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
-import com.crystalgui.render.CgUIRenderer;
+import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.CgUiPaintContext;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.AvailableSpace;
@@ -11,7 +11,6 @@ import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
 import lombok.Getter;
-import org.joml.Quaternionf;
 
 import java.util.List;
 
@@ -117,7 +116,7 @@ public final class UiRuntime {
     public void paintFrame() {
         layout();
         paintContext.beginFrame(screenWidth, screenHeight);
-        CgUIRenderer rend = paintContext.getRenderWrapper();
+        CgUiRenderer rend = paintContext.getRenderer();
         paintContext.bindTexture((CgTexture2D) CgFallbackTextures.WHITE_1x1);
         rend.submitQuad(0,0, 1, 1, 0,0,1,1, 0xFF0000FF);
         rend.submitQuad(1,0, 2, 2, 0,0,1,1, 0xFFFF0000);

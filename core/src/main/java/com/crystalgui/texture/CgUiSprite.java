@@ -5,7 +5,6 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgui.core.geometry.Position;
 import com.crystalgui.core.geometry.Size;
-import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
