@@ -2,6 +2,7 @@ package com.crystalgui.style;
 
 import com.crystalgui.UIElement;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.property.StyleValue;
 import dev.vfyjxf.taffy.style.TaffyStyle;
@@ -30,6 +31,8 @@ public final class ElementStyle {
     public final Map<StyleProperty<?>, List<StyleSlot<?>>> candidates = new HashMap<>();
     private final Map<StyleProperty<?>, StyleSlot<?>> computedSlots = new HashMap<>();
     private final BitSet dirtyProps = new BitSet();
+
+    @Getter
     private boolean dirty = true;
 
     public ElementStyle(UIElement element) {
@@ -45,10 +48,42 @@ public final class ElementStyle {
         }
     }
 
+//    public void compute() {
+//        if (!isDirty()) return;
+//
+//        var old = new HashMap<StyleProperty<?>, StyleSlot<?>>();
+//
+//        for (int pid = dirtyProps.nextSetBit(0); pid >= 0; pid = dirtyProps.nextSetBit(pid + 1)) {
+//            var p = StylePropertyRegistry.byId(pid);
+//            if (p == null) continue;
+//            old.put(p, computedSlots.get(p));
+//            computedSlots.put(p, computeCandidateSlot(p));
+//        }
+//
+//        dirtyProps.clear();
+//        dirty = false;
+//
+//
+//        for (var entry : old.entrySet()) {
+//            var property = entry.getKey();
+//            var oldSlot = entry.getValue();
+//            var newSlot = computedSlots.get(property);
+//            var oldValue = oldSlot == null ? null : oldSlot.value();
+//            var newValue = newSlot == null ? null : newSlot.value();
+//            if (!Objects.equals(oldValue, newValue)) {
+//                // apply transition while changes
+//                 property.notifyListeners(element, cast(oldValue), cast(newValue));
+//
+//            }
+//        }
+//    }
+
     public <T> void putCandidate(StyleProperty<T> p, StyleSlot<T> slot) {
         candidates.computeIfAbsent(p, k -> new ArrayList<>()).add(slot);
         dirtyProps.set(p.id);
         markDirty();
+        computedSlots.put(p, computeCandidateSlot(p));
+        p.notifyListeners(element, null, slot.value());
         element.onStyleChanged();
     }
     public <T> void replaceOrPutCandidate(StyleProperty<T> p, StyleSlot<T> slot) {

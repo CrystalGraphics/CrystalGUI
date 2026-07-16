@@ -1,6 +1,9 @@
 package com.crystalgui;
 
 import com.crystalgraphics.api.PoseStack;
+import com.crystalgraphics.gl.texture.CgFallbackTextures;
+import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgui.render.CgUIRenderer;
 import com.crystalgui.render.CgUiPaintContext;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.AvailableSpace;
@@ -96,9 +99,6 @@ public final class UiRuntime {
 
     private void applyLayout(UIElement element, float parentAbsX, float parentAbsY) {
         Layout layout = taffyTree.getLayout(element.taffyNodeId);
-        // NOTE: FloatPoint/FloatSize are plain classes with public fields (x/y, width/height),
-        // NOT records — unlike Layout itself, which is a record (hence layout.location()/size()
-        // being method calls while .x/.y/.width/.height below are field access).
         float absX = parentAbsX + layout.location().x;
         float absY = parentAbsY + layout.location().y;
         element.setBounds(absX, absY, layout.size().width, layout.size().height);
@@ -117,6 +117,11 @@ public final class UiRuntime {
     public void paintFrame() {
         layout();
         paintContext.beginFrame(screenWidth, screenHeight);
+        CgUIRenderer rend = paintContext.getRenderWrapper();
+        paintContext.bindTexture((CgTexture2D) CgFallbackTextures.WHITE_1x1);
+        rend.submitQuad(0,0, 1, 1, 0,0,1,1, 0xFF0000FF);
+        rend.submitQuad(1,0, 2, 2, 0,0,1,1, 0xFFFF0000);
+        rend.flush();
         final float halfWidth = ui.rootElement.getSizeWidth() / 2f, halfHeight = ui.rootElement.getSizeHeight() / 2f;
 
 
@@ -125,9 +130,8 @@ public final class UiRuntime {
 
         long time = System.currentTimeMillis();
         double cycleDurationMs = 4000.0; // 2 seconds for a complete 0 -> 2 -> 0 cycle
-        double cyclePosition = (time / cycleDurationMs) * Math.PI;
 
-        float scale = (float) (Math.sin(cyclePosition) + 3.0);
+        float scale = 2;
         float elementWidth = ui.rootElement.getSizeWidth();
         float elementHeight = ui.rootElement.getSizeHeight();
 
@@ -138,11 +142,11 @@ public final class UiRuntime {
 
         pose.scale(scale, scale, 1f);
 
-        long millisIntoDegrees = System.currentTimeMillis() % 360000L;
-        float secondsAsDegrees = millisIntoDegrees / 100f;
-        Quaternionf myRotation = new Quaternionf().rotationZ((float) Math.toRadians(secondsAsDegrees));
-
-        pose.rotateAround(myRotation, elementWidth / 2f, elementHeight / 2f, 0f);
+//        long millisIntoDegrees = System.currentTimeMillis() % 360000L;
+//        float secondsAsDegrees = millisIntoDegrees / 100f;
+//        Quaternionf myRotation = new Quaternionf().rotationZ((float) Math.toRadians(secondsAsDegrees));
+//
+//        pose.rotateAround(myRotation, elementWidth / 2f, elementHeight / 2f, 0f);
 
         ui.rootElement.drawSubtree(paintContext);
 

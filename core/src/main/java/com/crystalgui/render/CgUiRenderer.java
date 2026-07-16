@@ -3,11 +3,13 @@ package com.crystalgui.render;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.vertex.CgVertexConsumer;
 import com.crystalgraphics.api.vertex.CgVertexFormat;
+import com.crystalgraphics.api.vertex.CgVertexTransformUtil;
 import com.crystalgraphics.gl.buffer.staging.CgVertexWriter;
 import com.crystalgraphics.gl.render.CgBatchRenderer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import org.joml.Matrix4f;
+import org.joml.Vector4f;
 
 public final class CgUiRenderer {
     private static final CgVertexFormat FORMAT = CgVertexFormat.UI;
@@ -100,7 +102,8 @@ public final class CgUiRenderer {
         @Override
         public CgVertexConsumer vertex(float x, float y) {
             Matrix4f pose = poseStack.last().pose();
-            getDelegate().vertex(pose, Math.round(x), Math.round(y));
+            Vector4f vec = CgVertexTransformUtil.transformPosition(pose, x, y);
+            this.getDelegate().vertex(Math.round(vec.x()), Math.round(vec.y()));
             return this;
         }
 

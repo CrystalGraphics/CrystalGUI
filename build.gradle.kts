@@ -10,23 +10,3 @@
 plugins {
     idea
 }
-
-buildscript {
-    repositories {
-        maven {
-            name = "GTNH Maven"
-            url = uri("https://nexus.gtnewhorizons.com/repository/public/")
-        }
-        gradlePluginPortal()
-        mavenCentral()
-    }
-}
-
-repositories {
-    maven {
-        name = "GTNH Maven"
-        url = uri("https://nexus.gtnewhorizons.com/repository/public/")
-    }
-    gradlePluginPortal()
-    mavenCentral()
-}

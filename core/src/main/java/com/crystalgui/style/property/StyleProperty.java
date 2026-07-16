@@ -64,6 +64,13 @@ public class StyleProperty<VALUE> {
         return name;
     }
 
+
+    public void notifyListeners(UIElement element, @Nullable VALUE oldVal, @Nullable VALUE newVal) {
+        for (var listener : styleChangeListeners) {
+            listener.onComputedChange(element, this, oldVal, newVal);
+        }
+    }
+
     public StyleProperty<VALUE> addListener(StyleChangeListener<VALUE> listener) {
         styleChangeListeners.add(listener);
         return this;
