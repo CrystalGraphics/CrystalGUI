@@ -58,7 +58,7 @@ public final class CgUiPaintContext {
     private boolean frameActive;
 
     public CgUiPaintContext() {
-        this.poseStack = new PoseStack();
+        this.poseStack = new PoseStack(false);
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
