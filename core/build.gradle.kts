@@ -7,18 +7,13 @@ plugins {
     `java-library`
 }
 
-group = "com.crystalgui"
-version = rootProject.version.toString()
-
 java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
     toolchain {
+        // Jabel is stable on 17 and 21. It is not stable on 25.
         languageVersion.set(JavaLanguageVersion.of(21))
     }
-    // Disable auto target JVM compatibility — core/ uses a JDK 21 toolchain but
-    // deliberately targets Java 8 bytecode via Jabel + --release 8.
-    // Without this, Gradle restricts dependency resolution to JVM 8 compatible
-    // libraries, which breaks modern deps like Taffy (JVM 17+).
-    disableAutoTargetJvm()
 }
 
 repositories {
@@ -37,7 +32,9 @@ repositories {
 
 dependencies {
     // CrystalGraphics API — resolved via composite build substitution to CG's mc1710 subproject
-    compileOnly("com.crystalgraphics:crystalgraphics:1.0.0")
+//    compileOnly("com.crystalgraphics:crystalgraphics:1.0.0")
+    compileOnly("com.crystalgraphics:core:1.0.0")
+    compileOnly("com.crystalgraphics:platform:1.0.0")
     implementation("org.apache.logging.log4j:log4j-core:2.26.1")
 
     // Taffy layout engine + JOML (consumed from CG at runtime; needed here for compile)
@@ -62,30 +59,12 @@ dependencies {
 
     // Jabel: backports modern Java syntax (records, sealed classes, etc.) to Java 8 bytecode.
     // Requires --release 8 in compilerArgs (see tasks.withType<JavaCompile> below).
-    annotationProcessor("com.github.bsideup.jabel:jabel-javac-plugin:1.0.0")
-    compileOnly("com.github.bsideup.jabel:jabel-javac-plugin:1.0.0")
+//    annotationProcessor("com.github.bsideup.jabel:jabel-javac-plugin:1.0.1")
+    compileOnly("com.github.bsideup.jabel:jabel-javac-plugin:1.0.1")
 
     testImplementation("junit:junit:4.13.2")
 }
 
-tasks.withType<JavaCompile> {
-    options.encoding = "UTF-8"
-    // Use -source/-target instead of --release 8.
-    //
-    // --release 8 would restrict the compiler's boot classpath to Java 8 APIs, which
-    // causes "cannot access Record" when the compiler reads Taffy's class files (Taffy
-    // uses Java Records internally). -source/-target produce the same Java 8 bytecode
-    // without the boot classpath restriction, so modern dependencies resolve correctly.
-    //
-    // IntelliJ reads the toolchain JDK (21) as the module language level regardless —
-    // no options.release.set() call means IntelliJ keeps the toolchain version.
-    //
-    // Jabel still activates: it checks for -target 8 and applies its AST patching.
-    options.compilerArgs.addAll(listOf("-source", "8", "-target", "8"))
-    // Jabel uses ByteBuddy which only officially supports up to JDK 20.
-    options.isFork = true
-    options.forkOptions.jvmArgs!!.add("-Dnet.bytebuddy.experimental=true")
-}
 
 // -- Import guard -------------------------------------------------------------
 // Fails the build if any core/ source imports MC, Forge, or LWJGL classes.
@@ -94,13 +73,13 @@ tasks.withType<JavaCompile> {
 // Known V3.x legacy exemptions (scheduled for deletion in Phase 2):
 //   ScissorStack.java — uses raw GL11 from LWJGL; the entire core/render/ package
 //   will be replaced by a CrystalGraphics-backed implementation in Phase 2.
-val platformImportExemptions = setOf("ScissorStack.java")
+//val platformImportExemptions = setOf("ScissorStack.java")
 
 tasks.named<JavaCompile>("compileJava") {
     val srcRoot: String = layout.projectDirectory.dir("src/main/java").asFile.absolutePath
     doLast {
         val violations = JFile(srcRoot).walkTopDown()
-            .filter { it.isFile && it.extension == "java" && it.name !in platformImportExemptions }
+            .filter { it.isFile && it.extension == "java" }
             .filter { f ->
                 f.readLines().any { line ->
                     val trimmed = line.trimStart()
