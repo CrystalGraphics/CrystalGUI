@@ -35,6 +35,9 @@ public final class CgUiRenderer {
         renderer.end();
     }
 
+    /**
+     * Flushes renderer queue and draws all submitted quads.
+     */
     public void flush() {
         renderer.flush();
     }
@@ -46,6 +49,10 @@ public final class CgUiRenderer {
         return poseWriter;
     }
 
+    /** Submits quad (4 vertices from the given parameters) to the renderer's queue
+     *  but doesn't request the draw call.
+     *  Must {@link #flush()} to draw.
+     */
     public void submitQuad(float x, float y, float w, float h, float u0, float v0, float u1, float v1, int argb) {
         if (ctx.getCurrentTexture() == MISSING_TEX) {
             u0 = 0; v0 = 0; u1 = 1; v1 = 1;
@@ -99,7 +106,7 @@ public final class CgUiRenderer {
 
         @Override
         public CgVertexConsumer vertex(float x, float y, float z) {
-            throw new IllegalStateException("Format is not 3D-position format");
+            throw new IllegalStateException("Vertex Format of UI renderer only supports 2D positions (X,Y) and not 3D ones.");
         }
 
         @Override
