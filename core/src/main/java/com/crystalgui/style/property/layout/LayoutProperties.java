@@ -89,6 +89,10 @@ public class LayoutProperties {
     public static final StyleProperty<Grid> GRID_ROW = create("grid-row", Grid.EMPTY);
     public static final StyleProperty<Grid> GRID_COLUMN = create("grid-column", Grid.EMPTY);
 
+    static {
+        init();
+    }
+
     public static void init() {
         createSetter(LayoutProperties.DISPLAY, TaffyBridge::setDisplay);
         createSetter(LayoutProperties.LAYOUT_DIRECTION, TaffyBridge::setDirection);
