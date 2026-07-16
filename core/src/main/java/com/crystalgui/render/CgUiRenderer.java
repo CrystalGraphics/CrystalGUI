@@ -9,9 +9,9 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import org.joml.Matrix4f;
 
-public final class CgUIRenderer {
-    private static final CgVertexFormat FORMAT = CgVertexFormat.POS2_UV2_COL4UB;
-    private static final int INITIAL_MAX_QUADS = 9;
+public final class CgUiRenderer {
+    private static final CgVertexFormat FORMAT = CgVertexFormat.UI;
+    private static final int INITIAL_MAX_QUADS = 64;
 
     private final CgBatchRenderer renderer;
     private final CgUiPaintContext ctx;
@@ -19,7 +19,7 @@ public final class CgUIRenderer {
 
     private final VertexWriter poseWriter;
 
-    CgUIRenderer(CgUiPaintContext ctx) {
+    CgUiRenderer(CgUiPaintContext ctx) {
         this.renderer = CgBatchRenderer.create(FORMAT, INITIAL_MAX_QUADS);
         this.ctx = ctx;
         this.poseWriter = new VertexWriter(ctx.getPoseStack());
