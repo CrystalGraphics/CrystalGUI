@@ -41,7 +41,7 @@ public final class CgUiPaintContext {
      * <b>Currently intended for immediate flushing, despite it being inefficient and going against the idea of "Batching"</b>
      */
     @Getter
-    private final CgUIRenderer renderWrapper;
+    private final CgUiRenderer renderer;
 
     // ── GL state isolation ──────────────────────────────────────────────────
     private CgGlScope glScope;
@@ -58,8 +58,8 @@ public final class CgUiPaintContext {
     private boolean frameActive;
 
     public CgUiPaintContext() {
-        this.poseStack = new PoseStack(false);
-        this.renderWrapper = new CgUIRenderer(this);
+        this.poseStack = new PoseStack();
+        this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
     }
@@ -92,7 +92,7 @@ public final class CgUiPaintContext {
         pipeline.prepareFrame();
 
         poseStack.pushPose();
-        renderWrapper.begin();
+        renderer.begin();
         boxModelMaterial.bind();
         currentTexture = null;
         scissorStack.reset();
@@ -110,7 +110,7 @@ public final class CgUiPaintContext {
         boxModelMaterial.unbind();
         currentTexture = null;
         frameActive = false;
-        renderWrapper.end();
+        renderer.end();
 
         poseStack.popPose();
 
@@ -130,16 +130,16 @@ public final class CgUiPaintContext {
     /** Solid-color fill, tint already includes opacity. */
     public void fillRect(float x, float y, float width, float height, int argb) {
         bindTexture(whitePixel);
-        renderWrapper.submitQuad(x, y, width, height, 0f, 0f, 1f, 1f, argb);
-        renderWrapper.flush();
+        submitQuad(x, y, width, height, 0f, 0f, 1f, 1f, argb);
+        flush();
     }
 
     /** Textured draw with an explicit UV sub-rect (atlas support), tint already includes opacity. */
     public void drawImage(CgTexture2D texture, float x, float y, float width, float height,
                            float u0, float v0, float u1, float v1, int argb) {
         bindTexture(texture);
-        renderWrapper.submitQuad(x, y, width, height, u0, v0, u1, v1, argb);
-        renderWrapper.flush();
+        submitQuad(x, y, width, height, u0, v0, u1, v1, argb);
+        flush();
     }
 
 
@@ -149,4 +149,19 @@ public final class CgUiPaintContext {
         currentTexture = texture;
     }
 
+    /** Submits quad (4 vertices from the given parameters) to the renderer's queue
+     *  but doesn't request the draw call.
+     *  Must {@link #flush()} to draw.
+     */
+    public void submitQuad(float x, float y, float width, float height, 
+                           float u0, float v0, float u1, float v1, int argb) {
+        renderer.submitQuad(x, y, width, height, u0, v0, u1, v1, argb);
+    }
+
+    /**
+     * Flushes renderer queue and draws all submitted quads
+     */
+    public void flush() {
+        renderer.flush();
+    }
 }
