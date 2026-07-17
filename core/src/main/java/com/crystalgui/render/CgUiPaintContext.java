@@ -11,6 +11,7 @@ import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.core.render.ScissorStack;
 import lombok.Getter;
+import lombok.Setter;
 
 /**
  * True immediate-mode 2D paint context for CrystalGUI's box-model layer.
@@ -56,6 +57,9 @@ public final class CgUiPaintContext {
     private CgTexture2D currentTexture;
     @Getter
     private boolean frameActive;
+
+    @Getter @Setter
+    private int color = 0xFFFFFFFF;
 
     public CgUiPaintContext() {
         this.poseStack = new PoseStack(false);

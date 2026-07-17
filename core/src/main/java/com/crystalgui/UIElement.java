@@ -2,13 +2,14 @@ package com.crystalgui;
 
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ElementStyle;
+import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.texture.CgUiDrawable;
+import com.crystalgui.texture.CgUiQuad;
 import dev.vfyjxf.taffy.style.TaffyStyle;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
@@ -90,9 +91,6 @@ public class UIElement {
     // via setBounds for unattached elements).
     private float x, y, width, height;
 
-    @Getter @Setter
-    public CgUiDrawable background, overlay;
-
 
     public UIElement addChild(UIElement child) {
         if (child.parent != null) {
@@ -167,6 +165,15 @@ public class UIElement {
 
     // ── Paint ────────────────────────────────────────────────────────────────
 
+    public UIElement style(Consumer<ElementStyle> configurator) {
+        configurator.accept(this.getStyle());
+        return this;
+    }
+
+    public UIElement generalStyle(Consumer<GeneralGroup> configurator) {
+        configurator.accept(this.getStyle().getGeneralGroup());
+        return this;
+    }
     /**
      * Paints this element's background, then recurses into children (z-index-sorted,
      * DOM order as tiebreak), then paints this element's overlay. Fully synchronous —
@@ -178,35 +185,29 @@ public class UIElement {
 //            return;
 //        }
 //
-//        var zIndex = getZIndex();
-//        if (zIndex != 0) {
-//            ctx.getPoseStack().pushPose();
-//            ctx.getPoseStack().translate(0, 0, zIndex);
-//        }
-
 
 
         paintSelf(ctx);
 
         if (!children.isEmpty()) {
-            List<UIElement> sorted = new ArrayList<>(children);
-//            sorted.sort(Comparator.comparingInt(UIElement::getZIndex));
-            for (UIElement child : sorted) {
+            for (UIElement child : getChildren()) {
                 child.drawSubtree(ctx);
             }
         }
 
 
-//        if (zIndex != 0) {
-//            ctx.getPoseStack().popPose();
-//        }
     }
 
     /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */
     protected void paintSelf(CgUiPaintContext ctx) {
-        if (background != null) {
-            background.draw(ctx, x, y, width, height);
-        }
+//        if (background != null) {
+//            background.draw(ctx, x, y, width, height);
+//        }
+        GeneralGroup styleGen = style.getGeneralGroup();
+        ctx.setColor(styleGen.color());
+        styleGen.background().draw(ctx, x, y, width, height);
+        paintOverlay(ctx);
+        ctx.setColor(0xFFFFFFFF);
     }
 
     /** Override for custom drawing that must appear above children. Called after children paint. */
@@ -219,10 +220,7 @@ public class UIElement {
         final float mouseX = v.x(), mouseY = v.y();
 
         if (mouseX >= x && mouseX <= x+width && mouseY >= y && mouseY <= y+height)
-            paintOverlay(ctx);
-        if (overlay != null) {
-            overlay.draw(ctx, x, y, width, height);
-        }
+            style.getGeneralGroup().overlay().draw(ctx, x, y, width, height);
     }
 
 
@@ -240,5 +238,4 @@ public class UIElement {
             taffyTree.markDirty(taffyNodeId);
         }
     }
-
 }

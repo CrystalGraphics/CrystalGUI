@@ -137,7 +137,7 @@ public final class CgUiSprite implements CgUiDrawable {
 
         updateUvCacheIfNeeded();
 
-        final int tintArgb = 0xFFFFFFFF;
+        final int tintArgb = ctx.getColor();
         ctx.bindTexture(texture);
 
         if (!hasBorder) {
