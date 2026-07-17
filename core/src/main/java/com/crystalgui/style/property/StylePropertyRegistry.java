@@ -7,7 +7,7 @@ import com.crystalgui.style.property.general.ints.IntProperty;
 import com.crystalgui.style.property.general.strings.StringValue;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.texture.TextureProperty;
-import com.crystalgui.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiDrawable;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;

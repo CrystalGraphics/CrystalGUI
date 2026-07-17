@@ -1,7 +1,7 @@
 package com.crystalgui.style.property.general.enums;
 
 import com.crystalgui.style.property.StyleProperty;
-import com.crystalgui.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiDrawable;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 

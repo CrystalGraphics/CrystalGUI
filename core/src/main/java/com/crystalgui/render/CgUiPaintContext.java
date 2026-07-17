@@ -9,7 +9,6 @@ import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
-import com.crystalgui.core.render.ScissorStack;
 import lombok.Getter;
 import lombok.Setter;
 

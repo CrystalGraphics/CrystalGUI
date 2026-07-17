@@ -1,4 +1,4 @@
-package com.crystalgui.core.render;
+package com.crystalgui.render;
 
 import com.crystalgraphics.platform.gl.CgGL;
 

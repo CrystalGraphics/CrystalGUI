@@ -4,8 +4,6 @@ import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
-import com.crystalgui.texture.CgUiDrawable;
-import com.crystalgui.texture.CgUiQuad;
 import dev.vfyjxf.taffy.style.TaffyStyle;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;

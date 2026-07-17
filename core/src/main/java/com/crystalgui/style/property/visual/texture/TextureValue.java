@@ -1,8 +1,8 @@
 package com.crystalgui.style.property.visual.texture;
 
 import com.crystalgui.style.property.StyleValue;
-import com.crystalgui.texture.CgUiDrawable;
-import com.crystalgui.texture.CgUiSprite;
+import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiSprite;
 
 import javax.annotation.Nullable;
 

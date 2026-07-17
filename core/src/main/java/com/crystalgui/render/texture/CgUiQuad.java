@@ -1,4 +1,4 @@
-package com.crystalgui.texture;
+package com.crystalgui.render.texture;
 
 import com.crystalgui.render.CgUiPaintContext;
 

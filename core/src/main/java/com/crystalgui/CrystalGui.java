@@ -1,4 +1,4 @@
-package com.crystalgui.core;
+package com.crystalgui;
 
 
 import org.apache.logging.log4j.LogManager;

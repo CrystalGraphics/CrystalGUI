@@ -1,7 +1,7 @@
 package com.crystalgui.style;
 
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiDrawable;
 
 public class GeneralGroup extends StyleGroup<GeneralGroup> {
 

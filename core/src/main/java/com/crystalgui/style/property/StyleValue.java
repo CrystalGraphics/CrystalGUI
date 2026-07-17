@@ -1,7 +1,6 @@
 package com.crystalgui.style.property;
 
-import com.crystalgui.UIElement;
-import com.crystalgui.core.CrystalGui;
+import com.crystalgui.CrystalGui;
 
 import javax.annotation.Nullable;
 import java.util.Objects;
