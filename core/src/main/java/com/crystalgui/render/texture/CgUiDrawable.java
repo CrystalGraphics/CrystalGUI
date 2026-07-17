@@ -1,7 +1,6 @@
-package com.crystalgui.texture;
+package com.crystalgui.render.texture;
 
 import com.crystalgui.render.CgUiPaintContext;
-import org.joml.Matrix4f;
 
 /**
  * Pluggable "how do I paint myself into a rect" strategy.
