@@ -61,6 +61,10 @@ public class UIElement {
     @Getter
     private final List<UIElement> children = new ArrayList<>();
 
+    // Absolute screen-space geometry, written by UiRuntime's layout pass (or manually
+    // via setBounds for unattached elements).
+    private float x, y, width, height;
+
     @Getter
     private String id = "";
 
@@ -68,7 +72,6 @@ public class UIElement {
         this.id = id == null ? "" : id;
         return this;
     }
-
 
     @Getter
     private final Set<String> classes = new LinkedHashSet<>();
@@ -86,11 +89,6 @@ public class UIElement {
     public boolean hasClass(String cls) {
         return classes.contains(cls);
     }
-
-    // Absolute screen-space geometry, written by UiRuntime's layout pass (or manually
-    // via setBounds for unattached elements).
-    private float x, y, width, height;
-
 
     public UIElement addChild(UIElement child) {
         if (child.parent != null) {
@@ -194,19 +192,16 @@ public class UIElement {
                 child.drawSubtree(ctx);
             }
         }
+        paintOverlay(ctx);
 
 
     }
 
     /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */
     protected void paintSelf(CgUiPaintContext ctx) {
-//        if (background != null) {
-//            background.draw(ctx, x, y, width, height);
-//        }
         GeneralGroup styleGen = style.getGeneralGroup();
         ctx.setColor(styleGen.color());
         styleGen.background().draw(ctx, x, y, width, height);
-        paintOverlay(ctx);
         ctx.setColor(0xFFFFFFFF);
     }
 
