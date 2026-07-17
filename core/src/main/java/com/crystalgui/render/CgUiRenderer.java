@@ -87,7 +87,7 @@ public final class CgUiRenderer {
             this.delegate = null;
         }
 
-        private CgVertexWriter getDelegate() {
+        public CgVertexWriter getDelegate() {
             if (delegate == null) {
                 throw new IllegalStateException("Vertex writes attempted outside of renderer begin()/end() block");
             }

@@ -2,14 +2,13 @@ package com.crystalgui.style;
 
 import com.crystalgui.UIElement;
 import com.crystalgui.style.property.StyleProperty;
-import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.property.StyleValue;
-import dev.vfyjxf.taffy.style.TaffyStyle;
 import lombok.Getter;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -26,7 +25,7 @@ public final class ElementStyle {
     @Getter
     public final LayoutGroup layoutGroup;
     @Getter
-    public final VisualGroup visualGroup;
+    public final GeneralGroup generalGroup;
 
     public final Map<StyleProperty<?>, List<StyleSlot<?>>> candidates = new HashMap<>();
     private final Map<StyleProperty<?>, StyleSlot<?>> computedSlots = new HashMap<>();
@@ -35,11 +34,21 @@ public final class ElementStyle {
     @Getter
     private boolean dirty = true;
 
+    public ElementStyle layout(Consumer<LayoutGroup> configurator) {
+        configurator.accept(this.getLayoutGroup());
+        return this;
+    }
+
+    public ElementStyle general(Consumer<LayoutGroup> configurator) {
+        configurator.accept(this.getLayoutGroup());
+        return this;
+    }
+
     public ElementStyle(UIElement element) {
         this.element = element;
         this.taffyBridge = new TaffyBridge(this);
         this.layoutGroup = new LayoutGroup(this);
-        this.visualGroup = new VisualGroup(this);
+        this.generalGroup = new GeneralGroup(this);
     }
 
     public void markDirty() {
