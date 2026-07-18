@@ -1,0 +1,264 @@
+package com.crystalgui;
+
+import com.crystalgraphics.api.PoseStack;
+import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.style.property.layout.LayoutProperties;
+import dev.vfyjxf.taffy.geometry.TaffySize;
+import dev.vfyjxf.taffy.style.AvailableSpace;
+import dev.vfyjxf.taffy.style.TaffyDimension;
+import dev.vfyjxf.taffy.style.TaffyPosition;
+import dev.vfyjxf.taffy.tree.Layout;
+import dev.vfyjxf.taffy.tree.NodeId;
+import dev.vfyjxf.taffy.tree.TaffyTree;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.util.*;
+
+/**
+ * Runtime engine. Owns the paint context, the live
+ * {@link TaffyTree}, and drives the per-frame layout + paint entry points.
+ *
+ * <p>Deliberately does NOT implement any platform (LWJGL2/LWJGL3/MC) widget or Screen
+ * interface itself. Need MC-Sided adapters.</p>
+ */
+public final class UIWindow {
+    public static final Layout EMPTY_LAYOUT = new Layout();
+
+    public final Ui ui;
+    private static final CgUiPaintContext paintContext = new CgUiPaintContext();
+
+    @Getter
+    private final TaffyTree taffyTree;
+    private NodeId rootNodeId;
+
+    private final List<UIElement> elements = new ArrayList<>();
+
+    private int actualScreenWidth;
+    private int actualScreenHeight;
+
+    @Getter
+    @Setter
+    private float uiScale = 2;
+    @Getter
+    private float leftPos, topPos, width, height;
+    @Getter
+    private float layoutWidth = Float.NaN, layoutHeight = Float.NaN;
+    @Getter @Setter
+    private int screenWidth, screenHeight;
+
+
+    private final Map<NodeId, UIElement> elementByNode = new HashMap<>();
+    private final Set<NodeId> nodesWithNewLayout = new HashSet<>();
+    private final Set<NodeId> nodesWithNewGeometry = new HashSet<>();
+
+    public UIWindow(Ui ui) {
+        this.ui = ui;
+        this.taffyTree = new TaffyTree();
+        this.taffyTree.disableRounding();
+        this.taffyTree.setLayoutChangeListener(((nodeId, oldLayout, newLayout) -> {
+            nodesWithNewLayout.add(nodeId);
+            if (Objects.equals(oldLayout, newLayout)) return;
+            nodesWithNewGeometry.add(nodeId);
+        }));
+    }
+
+    public void init(int screenWidth, int screenHeight) {
+        if (this.actualScreenWidth == screenWidth && this.actualScreenHeight == screenHeight)
+            return;
+        this.actualScreenWidth = screenWidth;
+        this.actualScreenHeight = screenHeight;
+
+        this.screenWidth = Math.round(actualScreenWidth / uiScale);
+        this.screenHeight = Math.round(actualScreenHeight / uiScale);
+
+        final var rootElement = ui.rootElement;
+        final var rootStyle = rootElement.getStyle();
+
+        var isRelative = Optional.ofNullable(rootStyle.computeCandidate(LayoutProperties.POSITION))
+                .orElse(TaffyPosition.RELATIVE) != TaffyPosition.ABSOLUTE;
+
+        var width = Optional.ofNullable(rootStyle.computeCandidate(LayoutProperties.WIDTH))
+                .orElseGet(TaffyDimension::auto);
+        var height = Optional.ofNullable(rootStyle.computeCandidate(LayoutProperties.HEIGHT))
+                .orElseGet(TaffyDimension::auto);
+
+        this.width = switch (width.getType()) {
+            case PERCENT -> width.getValue() * this.screenWidth;
+            case LENGTH -> width.getValue();
+            default -> 0;
+        };
+        this.height = switch (height.getType()) {
+            case PERCENT -> height.getValue() * this.screenHeight;
+            case LENGTH -> height.getValue();
+            default -> 0;
+        };
+        if (width.isPercent()) {
+            this.layoutWidth = this.screenWidth;
+        } else {
+            this.layoutWidth = Float.NaN;
+        }
+        if (height.isPercent()) {
+            this.layoutHeight = this.screenHeight;
+        } else {
+            this.layoutHeight = Float.NaN;
+        }
+
+        if (rootElement.getAttachedWindow() != this)
+            rootElement.setAttachedWindow(this);
+
+        rootElement.initScreen(this.screenWidth, this.screenHeight);
+        rootStyle.markTaffyStyleDirty();
+        calculateLayout();
+
+        var rootTaffyLocation = rootElement.getTaffyLayout().location();
+        var elementBounds = rootElement.getRuntimeBounds();
+        if (width.isAuto()) {
+            this.width = elementBounds.getWidth();
+            this.leftPos = isRelative ? (this.screenWidth - this.width) / 2 : rootTaffyLocation.x;
+        } else {
+            this.leftPos = isRelative ? (this.screenWidth - this.width) / 2 : rootTaffyLocation.x;
+        }
+        if (height.isAuto()) {
+            this.height = elementBounds.getHeight();
+            this.topPos = isRelative ? (this.screenHeight - this.height) / 2 : rootTaffyLocation.y;
+        } else {
+            this.topPos = isRelative ? (this.screenHeight - this.height) / 2 : rootTaffyLocation.y;
+        }
+
+        this.leftPos = Math.round(this.leftPos);
+        this.topPos = Math.round(this.topPos);
+        this.ui.rootElement.clearLayoutCache();
+    }
+
+    /** Marks a Taffy node dirty. Called by {@code UIElement.layout(...)} after a style change. */
+    void markDirty(NodeId nodeId) {
+        taffyTree.markDirty(nodeId);
+    }
+
+
+    void calculateLayout() {
+        TaffySize<AvailableSpace> availableSpace = new TaffySize<>(
+                Float.isNaN(layoutWidth) ? AvailableSpace.MAX_CONTENT : AvailableSpace.definite(layoutWidth),
+                Float.isNaN(layoutHeight) ? AvailableSpace.MAX_CONTENT : AvailableSpace.definite(layoutHeight)
+        );
+
+        while (taffyTree.isDirty(ui.rootElement.taffyNodeId)) {
+            if (taffyTree.isDirty(ui.rootElement.taffyNodeId)) {
+                taffyTree.computeLayout(ui.rootElement.taffyNodeId, availableSpace);
+
+                for (var nodeId : nodesWithNewLayout) {
+                    var element = elementByNode.get(nodeId);
+                    if (element != null) {
+                        element.onLayoutChanged(nodesWithNewGeometry.contains(nodeId));
+                    }
+                }
+                nodesWithNewLayout.clear();
+                nodesWithNewGeometry.clear();
+            }
+
+        }
+    }
+
+    /**
+     * Lays out and paints the whole tree, once, synchronously, right now. Call this from
+     * wherever your per-frame render hook lives (harness scene, or later the platform
+     * adapter's render callback). No batching, no queued commands — by the time this method
+     * returns, every visible element's GPU draw calls have already been issued in painter's
+     * order, using bounds computed by this same call.
+     */
+    public void paintFrame() {
+        calculateLayout();
+        paintContext.beginFrame(actualScreenWidth, actualScreenHeight);
+        
+        paintContext.bindTexture(paintContext.getWhitePixel());
+        paintContext.submitQuad(0,0, 1, 1, 0,0,1,1, 0xFF0000FF);
+        paintContext.submitQuad(1,0, 2, 2, 0,0,1,1, 0xFFFF0000);
+        paintContext.flush();
+
+//        final float halfWidth = ui.rootElement.getSizeWidth() / 2f, halfHeight = ui.rootElement.getSizeHeight() / 2f;
+
+        PoseStack pose = paintContext.getPoseStack();
+        pose.pushPose();
+
+        long time = System.currentTimeMillis();
+        double cycleDurationMs = 4000.0; // 2 seconds for a complete 0 -> 2 -> 0 cycle
+
+
+//        float startX = (screenWidth - (elementWidth * scale)) / 2f;
+//        float startY = (screenHeight - (elementHeight * scale)) / 2f;
+
+//        pose.translate(startX, startY, 0f);
+
+        pose.scale(uiScale, uiScale, 1f);
+
+//        long millisIntoDegrees = System.currentTimeMillis() % 360000L;
+//        float secondsAsDegrees = millisIntoDegrees / 100f;
+//        Quaternionf myRotation = new Quaternionf().rotationZ((float) Math.toRadians(secondsAsDegrees));
+//
+//        pose.rotateAround(myRotation, elementWidth / 2f, elementHeight / 2f, 0f);
+
+        ui.rootElement.drawSubtree(paintContext);
+
+        pose.popPose();
+
+        paintContext.endFrame();
+    }
+
+    // TODO: Replace this BS ;9
+    public void setMouse(int mouseX, int mouseY) {
+        paintContext.mouseX = mouseX; paintContext.mouseY = mouseY;
+    }
+
+    public void unregisterElement(UIElement element) {
+        if (element == null) return;
+
+
+        elementByNode.remove(element.taffyNodeId);
+        if (element.taffyNodeId != null) {
+            if (element.getParent() != null) {
+                var parentID = element.getParent().taffyNodeId;
+                // parent may already belong to other tree.
+                if (parentID != null && taffyTree.containsNode(parentID)) {
+                    taffyTree.removeChild(parentID, element.taffyNodeId);
+                }
+            }
+            taffyTree.remove(element.taffyNodeId);
+            element.taffyNodeId = null;
+        }
+
+        elements.remove(element);
+    }
+
+    public void registerElement(UIElement element) {
+        if (element == null) return;
+
+        elements.add(element);
+
+        element.taffyNodeId = taffyTree.newLeaf(element.getStyle().getTaffyBridge().style);
+        elementByNode.put(element.taffyNodeId, element);
+        if (element.getParent() != null) {
+            var parentID = element.getParent().taffyNodeId;
+            if (taffyTree.containsNode(parentID)) {
+                taffyTree.insertChildAtIndex(parentID, element.getSiblingIndex(), element.taffyNodeId);
+            }
+        }
+    }
+
+    private NodeId buildNode(UIElement element) {
+        List<UIElement> children = element.getChildren();
+        NodeId id;
+        if (children.isEmpty()) {
+            id = taffyTree.newLeaf(element.getStyle().getTaffyBridge().style);
+        } else {
+            NodeId[] childIds = new NodeId[children.size()];
+            for (int i = 0; i < children.size(); i++) {
+                childIds[i] = buildNode(children.get(i));
+            }
+            id = taffyTree.newWithChildren(element.getStyle().getTaffyBridge().style, childIds);
+        }
+        element.taffyNodeId = id;
+        element.attachedWindow = this;
+        return id;
+    }
+}

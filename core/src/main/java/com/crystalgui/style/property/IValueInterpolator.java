@@ -1,7 +1,7 @@
 package com.crystalgui.style.property;
 
 @FunctionalInterface
-@SuppressWarnings("rawtypes")
+@SuppressWarnings({"rawtypes","unchecked"})
 public interface IValueInterpolator<T> {
         /** Instantly snaps to the end value (equivalent to CSS transition-timing-function: step-end). */
         IValueInterpolator SNAP_TO_END = (from, to, interpolation) -> to;
@@ -11,12 +11,6 @@ public interface IValueInterpolator<T> {
         IValueInterpolator BINARY = (from, to, interpolation) -> interpolation < 0.5f ? from : to;
 
         static <V> IValueInterpolator<V> snapToEnd() {
-            return SNAP_TO_END;
-        }
-
-        /** @deprecated Use {@link #snapToEnd()} */
-        @Deprecated
-        static <V> IValueInterpolator<V> alwaysInterpolate() {
             return SNAP_TO_END;
         }
 
