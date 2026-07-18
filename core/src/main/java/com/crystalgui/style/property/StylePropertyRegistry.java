@@ -5,6 +5,7 @@ import com.crystalgui.style.property.general.enums.EnumProperty;
 import com.crystalgui.style.property.general.floats.FloatProperty;
 import com.crystalgui.style.property.general.ints.IntProperty;
 import com.crystalgui.style.property.general.strings.StringValue;
+import com.crystalgui.style.property.visual.OverflowClip;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.texture.TextureProperty;
 import com.crystalgui.render.texture.CgUiDrawable;
@@ -29,9 +30,9 @@ public class StylePropertyRegistry {
             elem.getParent().getRuntimeCache().sortedChildren.invalidate();
         }
     });
-//    public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
+    public static final StyleProperty<OverflowClip> CLIP = create("clip", OverflowClip.class, OverflowClip.NONE);
+    public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
 //    public static final StyleProperty<Transition> TRANSITION = create("transition", Transition.EMPTY);
-//    public static final StyleProperty<Clip> CLIP = create("clip", Clip.class, Clip.NONE);
 //    public static final StyleProperty<Tooltips> TOOLTIPS = create("tooltips", Tooltips.empty());
 //    public static final StyleProperty<Transform2D> TRANSFORM_2D = create("transform", Transform2D.identity());
 
