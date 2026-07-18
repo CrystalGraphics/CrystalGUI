@@ -2,7 +2,7 @@ package com.crystalgui;
 
 /**
  * Declarative UI description Just a root element handle;
- * no runtime state, no layout state, no GL state. Owned and driven by {@link UiRuntime}.
+ * no runtime state, no layout state, no GL state. Owned and driven by {@link UIWindow}.
  *
  * <p>This is intentionally the minimal version needed to get painting
  * working.</p>
