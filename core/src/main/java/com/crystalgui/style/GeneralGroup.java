@@ -2,6 +2,7 @@ package com.crystalgui.style;
 
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.style.property.visual.OverflowClip;
 
 public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
@@ -53,6 +54,25 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         set(StylePropertyRegistry.Z_INDEX, zIndex);
         return this;
     }
+
+    public OverflowClip overflow() {
+        return getValueSave(StylePropertyRegistry.CLIP);
+    }
+
+    public GeneralGroup overflow(OverflowClip clip) {
+        set(StylePropertyRegistry.CLIP, clip);
+        return this;
+    }
+
+    public CgUiDrawable mask() {
+        return getValueSave(StylePropertyRegistry.MASK);
+    }
+
+    public GeneralGroup mask(CgUiDrawable overflowClip) {
+        set(StylePropertyRegistry.MASK, overflowClip);
+        return this;
+    }
+
 
 //    public CgUiDrawable mask() {
 //        return getValueSave(StylePropertyRegistry.MASK);

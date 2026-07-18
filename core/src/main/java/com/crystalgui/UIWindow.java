@@ -1,17 +1,20 @@
 package com.crystalgui;
 
 import com.crystalgraphics.api.PoseStack;
+import com.crystalgraphics.api.vertex.CgVertexTransformUtil;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.AvailableSpace;
 import dev.vfyjxf.taffy.style.TaffyDimension;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
 import lombok.Getter;
 import lombok.Setter;
+import org.joml.Matrix4f;
 
 import java.util.*;
 
@@ -176,8 +179,6 @@ public final class UIWindow {
         paintContext.submitQuad(1,0, 2, 2, 0,0,1,1, 0xFFFF0000);
         paintContext.flush();
 
-//        final float halfWidth = ui.rootElement.getSizeWidth() / 2f, halfHeight = ui.rootElement.getSizeHeight() / 2f;
-
         PoseStack pose = paintContext.getPoseStack();
         pose.pushPose();
 
@@ -185,18 +186,8 @@ public final class UIWindow {
         double cycleDurationMs = 4000.0; // 2 seconds for a complete 0 -> 2 -> 0 cycle
 
 
-//        float startX = (screenWidth - (elementWidth * scale)) / 2f;
-//        float startY = (screenHeight - (elementHeight * scale)) / 2f;
-
-//        pose.translate(startX, startY, 0f);
-
         pose.scale(uiScale, uiScale, 1f);
 
-//        long millisIntoDegrees = System.currentTimeMillis() % 360000L;
-//        float secondsAsDegrees = millisIntoDegrees / 100f;
-//        Quaternionf myRotation = new Quaternionf().rotationZ((float) Math.toRadians(secondsAsDegrees));
-//
-//        pose.rotateAround(myRotation, elementWidth / 2f, elementHeight / 2f, 0f);
 
         ui.rootElement.drawSubtree(paintContext);
 
@@ -245,20 +236,29 @@ public final class UIWindow {
         }
     }
 
-    private NodeId buildNode(UIElement element) {
-        List<UIElement> children = element.getChildren();
-        NodeId id;
-        if (children.isEmpty()) {
-            id = taffyTree.newLeaf(element.getStyle().getTaffyBridge().style);
-        } else {
-            NodeId[] childIds = new NodeId[children.size()];
-            for (int i = 0; i < children.size(); i++) {
-                childIds[i] = buildNode(children.get(i));
-            }
-            id = taffyTree.newWithChildren(element.getStyle().getTaffyBridge().style, childIds);
-        }
-        element.taffyNodeId = id;
-        element.attachedWindow = this;
-        return id;
+    public UIElement getHoveredElement(float mouseX, float mouseY) {
+        return elementHitTest(ui.rootElement, mouseX, mouseY);
     }
+
+    private UIElement elementHitTest(UIElement element, float mouseX, float mouseY) {
+        if (element.getStyle().taffyBridge.style.display == TaffyDisplay.NONE) return null;
+
+        Matrix4f transform = element.getRuntimeCache().worldToLocal.get();
+        var local = CgVertexTransformUtil.transformPosition(transform, mouseX, mouseY);
+        float localX = local.x(), localY = local.y();
+        boolean contentCanClipOut = element.getStyle().generalGroup.overflow().isClipped();
+        if (!contentCanClipOut || element.isMouseOverContent(localX, localY)) {
+            for (var child : element.getRuntimeCache().sortedChildren.get()) {
+                var result = elementHitTest(child, mouseX, mouseY);
+                if (result != null) {
+                    return result;
+                }
+            }
+        }
+        if (element.isHitTest() && element.isMouseOverElement(localX, localY)) {
+            return element;
+        }
+        return null;
+    }
+
 }

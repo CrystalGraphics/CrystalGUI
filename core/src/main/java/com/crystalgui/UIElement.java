@@ -126,32 +126,11 @@ public class UIElement {
         }
     }
 
-    public final UIElement getHoveredElement(float mouseX, float mouseY) {
-        if (style.taffyBridge.style.display == TaffyDisplay.NONE) return null;
-
-        Matrix4f transform = runtimeCache.worldToLocal.get();
-        var local = CgVertexTransformUtil.transformPosition(transform, mouseX, mouseY);
-        float localX = local.x(), localY = local.y();
-        boolean contentCanClipOut = true;
-        if (isMouseOverContent(localX, localY) || contentCanClipOut) {
-            for (var child : runtimeCache.sortedChildren.get()) {
-                var result = child.getHoveredElement(mouseX, mouseY);
-                if (result != null) {
-                    return result;
-                }
-            }
-        }
-        if (isHitTest() && isMouseOverElement(localX, localY)) {
-            return this;
-        }
-        return null;
+    boolean isMouseOverElement(float localMouseX, float localMouseY) {
+        return insideRectangle(localMouseX, localMouseY, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
     }
 
-    private boolean isMouseOverElement(float mouseX, float mouseY) {
-        return insideRectangle(mouseX, mouseY, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
-    }
-
-    private boolean isMouseOverContent(float mouseX, float mouseY) {
+    boolean isMouseOverContent(float localMouseX, float localMouseY) {
         var layout = getTaffyLayout();
 
         final float
@@ -160,7 +139,7 @@ public class UIElement {
                 contentWidth = layout.contentBoxWidth(),
                 contentHeight = layout.contentBoxHeight();
 
-        return insideRectangle(mouseX, mouseY, contentX, contentY, contentWidth, contentHeight);
+        return insideRectangle(localMouseX, localMouseY, contentX, contentY, contentWidth, contentHeight);
 
     }
 
