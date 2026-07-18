@@ -24,7 +24,11 @@ public class StylePropertyRegistry {
     public static final StyleProperty<CgUiDrawable> OVERLAY = create("overlay", CgUiDrawable.EMPTY);
     public static final StyleProperty<Float> OPACITY = create("opacity", 1f).setRange(0f, 1f);
     public static final StyleProperty<Integer> COLOR = create(new ColorProperty("color", -1));
-    public static final StyleProperty<Integer> Z_INDEX = create("z-index", 0);
+    public static final StyleProperty<Integer> Z_INDEX = create("z-index", 0).addListener((elem, prop, oldVal, newVal) -> {
+        if (elem.getParent() != null) {
+            elem.getParent().getRuntimeCache().sortedChildren.invalidate();
+        }
+    });
 //    public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
 //    public static final StyleProperty<Transition> TRANSITION = create("transition", Transition.EMPTY);
 //    public static final StyleProperty<Clip> CLIP = create("clip", Clip.class, Clip.NONE);

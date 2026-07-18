@@ -112,7 +112,7 @@ public final class UIWindow {
         calculateLayout();
 
         var rootTaffyLocation = rootElement.getTaffyLayout().location();
-        var elementBounds = rootElement.getRuntimeBounds();
+        var elementBounds = rootElement.getRuntimeCache();
         if (width.isAuto()) {
             this.width = elementBounds.getWidth();
             this.leftPos = isRelative ? (this.screenWidth - this.width) / 2 : rootTaffyLocation.x;
