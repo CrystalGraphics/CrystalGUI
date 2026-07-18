@@ -15,10 +15,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector4f;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Consumer;
 
 import static com.crystalgui.UIWindow.EMPTY_LAYOUT;
@@ -29,7 +26,7 @@ import static com.crystalgui.UIWindow.EMPTY_LAYOUT;
  */
 @Accessors(chain = true)
 public class UIElement {
-
+    private static final Comparator<UIElement> Z_INDEX_DESCENDING = (a, b) -> Integer.compare(b.style.generalGroup.zIndex(), a.style.generalGroup.zIndex());
 
     @Getter
     private final ElementStyle style = new ElementStyle(this);
@@ -49,7 +46,7 @@ public class UIElement {
 
     // Runtime only data.
     @Getter
-    private final BoundsCache runtimeBounds = new BoundsCache();
+    private final RuntimeCache runtimeCache = new RuntimeCache();
 
     public UIElement setId(String id) {
         this.id = id == null ? "" : id;
@@ -74,12 +71,23 @@ public class UIElement {
     }
 
     public UIElement addChild(UIElement child) {
-        if (child.parent != null) {
-            child.parent.removeChild(child);
+        if (child == null) return this;
+        if (child == this) throw new IllegalArgumentException("Cannot add self as a child");
+        if (hasChild(child)) throw new IllegalArgumentException("Cannot add the same child twice");
+
+        if (child.hasParent()) {
+            assert child.getParent() != null;
+            child.getParent().removeChild(child);
         }
+
         child.parent = this;
         children.add(child);
+        this.runtimeCache.sortedChildren.invalidate();
         return this;
+    }
+
+    private boolean hasParent() {
+        return this.parent != null;
     }
 
     public UIElement addChildren(UIElement... elements) {
@@ -88,11 +96,19 @@ public class UIElement {
     }
 
     public boolean removeChild(UIElement child) {
-        if (children.remove(child)) {
-            child.parent = null;
-            return true;
-        }
-        return false;
+        if (child == null) return false;
+        if (!hasChild(child)) return false;
+
+        children.remove(child);
+        //child.onRemoved();
+        child.setAttachedWindow(null);
+        child.parent = null;
+        this.runtimeCache.sortedChildren.invalidate();
+        return true;
+    }
+
+    private boolean hasChild(UIElement child) {
+        return children.contains(child);
     }
 
     public void removeSelf() {
@@ -140,9 +156,9 @@ public class UIElement {
 //            return;
 //        }
 //
-        if (runtimeBounds.localToWorld.isDirty()) {
-        this.runtimeBounds.localToWorld.set(ctx.getPoseStack().last().pose());
-        this.runtimeBounds.worldToLocal.invalidate();
+        if (runtimeCache.localToWorld.isDirty()) {
+            this.runtimeCache.localToWorld.set(ctx.getPoseStack().last().pose());
+            this.runtimeCache.worldToLocal.invalidate();
         }
 
         paintSelf(ctx);
@@ -161,18 +177,18 @@ public class UIElement {
     protected void paintSelf(CgUiPaintContext ctx) {
         GeneralGroup styleGen = style.getGeneralGroup();
         ctx.setColor(styleGen.color());
-        styleGen.background().draw(ctx, runtimeBounds.getX(), runtimeBounds.getY(), runtimeBounds.getWidth(), runtimeBounds.getHeight());
+        styleGen.background().draw(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
         ctx.setColor(0xFFFFFFFF);
     }
 
     /** Override for custom drawing that must appear above children. Called after children paint. */
     protected void paintOverlay(CgUiPaintContext ctx) {
-        Matrix4f worldToLocal = runtimeBounds.worldToLocal.get();
+        Matrix4f worldToLocal = runtimeCache.worldToLocal.get();
         Vector4f v = new Vector4f();
         v.set(ctx.mouseX, ctx.mouseY, 0, 1.0f);
         worldToLocal.transform(v);
         final float mouseX = v.x(), mouseY = v.y();
-        final float x = runtimeBounds.getX(), y = runtimeBounds.getY(), width = runtimeBounds.getWidth(), height = runtimeBounds.getHeight();
+        final float x = runtimeCache.getX(), y = runtimeCache.getY(), width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
 
         if (mouseX >= x && mouseX <= x+width && mouseY >= y && mouseY <= y+height)
             style.getGeneralGroup().overlay().draw(ctx, x, y, width, height);
@@ -216,12 +232,15 @@ public class UIElement {
     }
 
     public void initScreen(int screenWidth, int screenHeight) {
-        runtimeBounds.resetCache();
+        runtimeCache.resetCache();
         children.forEach(el -> el.initScreen(screenWidth, screenHeight));
     }
 
     public void clearLayoutCache() {
-        runtimeBounds.resetCache();
+        runtimeCache.resetPoseCache();
+        if (runtimeCache.isPositionDirty()) return;
+        runtimeCache.resetLayoutCache();
+        children.forEach(UIElement::clearLayoutCache);
     }
 
     public void onLayoutChanged(boolean hasGeometryChanged) {
@@ -246,10 +265,32 @@ public class UIElement {
         return getTaffyTree().getLayout(this.taffyNodeId);
     }
 
-    public class BoundsCache {
+    protected final float getLayoutY() {
+        return (parent == null ? attachedWindow == null ? 0 : attachedWindow.getTopPos() : getTaffyLayout().location().y);
+    }
+
+    protected final float getLayoutX() {
+        return (parent == null ? attachedWindow == null ? 0 : attachedWindow.getLeftPos() : getTaffyLayout().location().x);
+    }
+
+    public class RuntimeCache {
         private float x, y;
 
-        private final CacheCell<Matrix4f> localToWorld = new CacheCell<>(new Matrix4f()).setCalculator( old -> {
+        public final CacheCell<UIElement[]> sortedChildren = new CacheCell<UIElement[]>().setCalculator(ignored -> {
+            int n = children.size();
+            UIElement[] sorted = new UIElement[n];
+
+            // Fill in reverse insertion order — stable sort then preserves
+            // "later-inserted first" for any equal-zIndex ties, with no index tracking needed.
+            for (int i = 0; i < n; i++) {
+                sorted[i] = children.get(n - 1 - i);
+            }
+
+            Arrays.sort(sorted, Z_INDEX_DESCENDING);
+            return sorted;
+        });
+
+        public final CacheCell<Matrix4f> localToWorld = new CacheCell<>(new Matrix4f()).setCalculator( old -> {
             var element = UIElement.this;
             var parent = element.getParent();
             if (parent == null) {
@@ -257,27 +298,27 @@ public class UIElement {
 //                return old.set()
                 return old.identity();
             }
-            old.set(parent.getRuntimeBounds().getLocalToWorldMatrix());
+            old.set(parent.getRuntimeCache().localToWorld.get());
             // TODO: Style transforms
             return old;
         });
-        private final CacheCell<Matrix4f> worldToLocal = new CacheCell<>(new Matrix4f()).setCalculator(old -> localToWorld.get().invert(old));
+        public final CacheCell<Matrix4f> worldToLocal = new CacheCell<>(new Matrix4f()).setCalculator(old -> localToWorld.get().invert(old));
 
-        private BoundsCache() {
+        private RuntimeCache() {
             resetCache();
         }
 
-        private void resetCache() {
+        public void resetCache() {
             resetLayoutCache();
             resetPoseCache();
         }
 
-        protected void resetLayoutCache() {
+        public void resetLayoutCache() {
             x = Float.NaN;
             y = Float.NaN;
         }
 
-        protected void resetPoseCache() {
+        public void resetPoseCache() {
             localToWorld.invalidate();
             worldToLocal.invalidate();
         }
@@ -285,7 +326,7 @@ public class UIElement {
         public float getX() {
             if (Float.isNaN(x)){
                 UIElement element = UIElement.this;
-                x = element.getLayoutX() + (element.getParent() == null ? 0 : element.getParent().getRuntimeBounds().getX());
+                x = element.getLayoutX() + (element.getParent() == null ? 0 : element.getParent().getRuntimeCache().getX());
             }
             return x;
         }
@@ -293,7 +334,7 @@ public class UIElement {
         public float getY() {
             if (Float.isNaN(y)){
                 UIElement element = UIElement.this;
-                y = element.getLayoutY() + (element.getParent() == null ? 0 : element.getParent().getRuntimeBounds().getY());
+                y = element.getLayoutY() + (element.getParent() == null ? 0 : element.getParent().getRuntimeCache().getY());
             }
             return y;
         }
@@ -305,23 +346,10 @@ public class UIElement {
             return UIElement.this.getTaffyLayout().size().height;
         }
 
-        public Matrix4f getLocalToWorldMatrix() {
-            return localToWorld.get();
+
+        public boolean isPositionDirty() {
+            return Float.isNaN(x) && Float.isNaN(y);
         }
-
-        public Matrix4f getWorldToLocalMatrix() {
-            return worldToLocal.get();
-        }
-
-
-    }
-
-    public final float getLayoutY() {
-        return (parent == null ? attachedWindow == null ? 0 : attachedWindow.getTopPos() : getTaffyLayout().location().y);
-    }
-
-    public final float getLayoutX() {
-        return (parent == null ? attachedWindow == null ? 0 : attachedWindow.getLeftPos() : getTaffyLayout().location().x);
     }
 
 }

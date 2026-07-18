@@ -4,15 +4,21 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 
+import javax.annotation.Nullable;
 import java.util.function.Function;
 
 @Accessors(chain = true)
 public class CacheCell<T> {
+    @Nullable
     private T value;
     @Getter
     private boolean isDirty;
     @Setter
     private Function<T, T> calculator;
+
+    public CacheCell() {
+        this(null);
+    }
 
     public CacheCell(T initialValue) {
         this(initialValue, true);
