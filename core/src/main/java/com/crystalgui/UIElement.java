@@ -1,10 +1,12 @@
 package com.crystalgui;
 
+import com.crystalgraphics.api.vertex.CgVertexTransformUtil;
 import com.crystalgui.core.CacheCell;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
@@ -47,6 +49,9 @@ public class UIElement {
     // Runtime only data.
     @Getter
     private final RuntimeCache runtimeCache = new RuntimeCache();
+
+    @Getter @Setter
+    private boolean hitTest = true;
 
     public UIElement setId(String id) {
         this.id = id == null ? "" : id;
@@ -119,6 +124,51 @@ public class UIElement {
         for (UIElement child : new ArrayList<>(children)) {
             removeChild(child);
         }
+    }
+
+    public final UIElement getHoveredElement(float mouseX, float mouseY) {
+        if (style.taffyBridge.style.display == TaffyDisplay.NONE) return null;
+
+        Matrix4f transform = runtimeCache.worldToLocal.get();
+        var local = CgVertexTransformUtil.transformPosition(transform, mouseX, mouseY);
+        float localX = local.x(), localY = local.y();
+        boolean contentCanClipOut = true;
+        if (isMouseOverContent(localX, localY) || contentCanClipOut) {
+            for (var child : runtimeCache.sortedChildren.get()) {
+                var result = child.getHoveredElement(mouseX, mouseY);
+                if (result != null) {
+                    return result;
+                }
+            }
+        }
+        if (isHitTest() && isMouseOverElement(localX, localY)) {
+            return this;
+        }
+        return null;
+    }
+
+    private boolean isMouseOverElement(float mouseX, float mouseY) {
+        return insideRectangle(mouseX, mouseY, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
+    }
+
+    private boolean isMouseOverContent(float mouseX, float mouseY) {
+        var layout = getTaffyLayout();
+
+        final float
+                contentX = runtimeCache.getX() + layout.border().left + layout.padding().left,
+                contentY = runtimeCache.getY() + layout.border().top + layout.padding().top,
+                contentWidth = layout.contentBoxWidth(),
+                contentHeight = layout.contentBoxHeight();
+
+        return insideRectangle(mouseX, mouseY, contentX, contentY, contentWidth, contentHeight);
+
+    }
+
+    private boolean insideRectangle(float mouseX, float mouseY, float rectX, float rectY, float rectWidth, float rectHeight) {
+        return mouseX >= rectX
+                && mouseY >= rectY
+                && rectX + rectWidth >= mouseX
+                && rectY + rectHeight >= mouseY;
     }
 
     // ── Layout ───────────────────────────────────────────────────────────────
