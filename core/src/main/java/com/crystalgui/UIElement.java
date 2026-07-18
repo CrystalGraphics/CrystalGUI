@@ -1,5 +1,6 @@
 package com.crystalgui;
 
+import com.crystalgui.core.CacheCell;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
@@ -48,7 +49,7 @@ public class UIElement {
 
     // Runtime only data.
     @Getter
-    private final BoundsCache runtimeBounds = new BoundsCache(this);
+    private final BoundsCache runtimeBounds = new BoundsCache();
 
     public UIElement setId(String id) {
         this.id = id == null ? "" : id;
@@ -139,6 +140,10 @@ public class UIElement {
 //            return;
 //        }
 //
+        if (runtimeBounds.localToWorld.isDirty()) {
+        this.runtimeBounds.localToWorld.set(ctx.getPoseStack().last().pose());
+        this.runtimeBounds.worldToLocal.invalidate();
+        }
 
         paintSelf(ctx);
 
@@ -162,8 +167,7 @@ public class UIElement {
 
     /** Override for custom drawing that must appear above children. Called after children paint. */
     protected void paintOverlay(CgUiPaintContext ctx) {
-        Matrix4f localToWorld = ctx.getPoseStack().last().pose();
-        Matrix4f worldToLocal = localToWorld.invert(new Matrix4f());
+        Matrix4f worldToLocal = runtimeBounds.worldToLocal.get();
         Vector4f v = new Vector4f();
         v.set(ctx.mouseX, ctx.mouseY, 0, 1.0f);
         worldToLocal.transform(v);
@@ -242,22 +246,45 @@ public class UIElement {
         return getTaffyTree().getLayout(this.taffyNodeId);
     }
 
-    public static class BoundsCache {
-        private final UIElement element;
+    public class BoundsCache {
         private float x, y;
 
-        private BoundsCache(UIElement element) {
-            this.element = element;
+        private final CacheCell<Matrix4f> localToWorld = new CacheCell<>(new Matrix4f()).setCalculator( old -> {
+            var element = UIElement.this;
+            var parent = element.getParent();
+            if (parent == null) {
+                if (element.attachedWindow == null) return old.identity();
+//                return old.set()
+                return old.identity();
+            }
+            old.set(parent.getRuntimeBounds().getLocalToWorldMatrix());
+            // TODO: Style transforms
+            return old;
+        });
+        private final CacheCell<Matrix4f> worldToLocal = new CacheCell<>(new Matrix4f()).setCalculator(old -> localToWorld.get().invert(old));
+
+        private BoundsCache() {
             resetCache();
         }
 
         private void resetCache() {
+            resetLayoutCache();
+            resetPoseCache();
+        }
+
+        protected void resetLayoutCache() {
             x = Float.NaN;
             y = Float.NaN;
         }
 
+        protected void resetPoseCache() {
+            localToWorld.invalidate();
+            worldToLocal.invalidate();
+        }
+
         public float getX() {
             if (Float.isNaN(x)){
+                UIElement element = UIElement.this;
                 x = element.getLayoutX() + (element.getParent() == null ? 0 : element.getParent().getRuntimeBounds().getX());
             }
             return x;
@@ -265,16 +292,25 @@ public class UIElement {
 
         public float getY() {
             if (Float.isNaN(y)){
+                UIElement element = UIElement.this;
                 y = element.getLayoutY() + (element.getParent() == null ? 0 : element.getParent().getRuntimeBounds().getY());
             }
             return y;
         }
 
         public float getWidth() {
-            return element.getTaffyLayout().size().width;
+            return UIElement.this.getTaffyLayout().size().width;
         }
         public float getHeight() {
-            return element.getTaffyLayout().size().height;
+            return UIElement.this.getTaffyLayout().size().height;
+        }
+
+        public Matrix4f getLocalToWorldMatrix() {
+            return localToWorld.get();
+        }
+
+        public Matrix4f getWorldToLocalMatrix() {
+            return worldToLocal.get();
         }
 
 
