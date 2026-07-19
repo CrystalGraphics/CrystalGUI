@@ -12,7 +12,7 @@ import java.awt.*;
 
 public class UIInputHandler implements SystemInput.Keyboard, SystemInput.Mouse {
 
-    private final static long multiClickInterval = ((Long) Toolkit.getDefaultToolkit().getDesktopProperty("awt.multiClickInterval"));
+    private final static long multiClickInterval = SystemInput.multiClickInterval.get();
 
     private final UIWindow window;
 
@@ -47,11 +47,12 @@ public class UIInputHandler implements SystemInput.Keyboard, SystemInput.Mouse {
         mouseFramePositionGlobal.set(event.x(), event.y());
         accumulatedMouseChange.add(event.dx(), event.dy());
         scrollDelta += event.wheelDelta();
-        processMouseButtons(event);
+        if (event.button() != -1) processMouseButtons(event);
         return false;
     }
 
     private void processMouseButtons(Mouse.Event event) {
+
 
     }
 }

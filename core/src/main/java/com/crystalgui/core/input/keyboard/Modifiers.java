@@ -1,4 +1,4 @@
-package com.crystalgui.core.input;
+package com.crystalgui.core.input.keyboard;
 
 /**
  * Platform-agnostic modifier bitmask constants.
@@ -6,6 +6,7 @@ package com.crystalgui.core.input;
  * <p>No LWJGL/GLFW imports. Platform adapters convert native modifier
  * state into these flags before dispatching into core.</p>
  */
+@SuppressWarnings("unused")
 public final class Modifiers {
 
     private Modifiers() {}
