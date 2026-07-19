@@ -1,6 +1,5 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ElementStyle;
@@ -309,8 +308,8 @@ public class UIElement {
         return (parent == null ? attachedWindow == null ? 0 : attachedWindow.getLeftPos() : getTaffyLayout().location().x);
     }
 
-    public void clicked() {
-        System.out.println("TESTING NEW EVENTS #" + getId());
+    public void clicked(int detail) {
+        System.out.println(detail + "x - TESTING NEW EVENTS #" + getId());
     }
 
     public class RuntimeCache {
