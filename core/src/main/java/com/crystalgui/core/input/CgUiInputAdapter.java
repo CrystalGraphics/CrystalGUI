@@ -89,4 +89,9 @@ public interface CgUiInputAdapter {
     }
 
     boolean isMouseDown(int localMouseCode);
+
+    /**
+     * @return How many mouse keys are supported by your platform
+     */
+    int howManyMouseButtons();
 }
