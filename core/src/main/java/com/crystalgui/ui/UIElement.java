@@ -5,6 +5,9 @@ import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
+import com.crystalgui.ui.event.FocusEvent;
+import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
@@ -42,6 +45,23 @@ public class UIElement {
     private final List<UIElement> children = new ArrayList<>();
 
     @Getter
+    private FocusPolicy focusPolicy = FocusPolicy.CLICK;
+
+    public final EventListenerGroup.Map events = new EventListenerGroup.Map(this);
+
+    // Mouse
+    public final EventListenerGroup<MouseEvent.Down> onMouseDown = events.getGroup(MouseEvent.Down.class);
+    public final EventListenerGroup<MouseEvent.Up> onMouseUp = events.getGroup(MouseEvent.Up.class);
+    public final EventListenerGroup<MouseEvent.Scroll> onMouseScroll = events.getGroup(MouseEvent.Scroll.class);
+    public final EventListenerGroup<MouseEvent.Move> onMouseMove = events.getGroup(MouseEvent.Move.class);
+    public final EventListenerGroup<MouseEvent.Enter> onMouseEnter = events.getGroup(MouseEvent.Enter.class);
+    public final EventListenerGroup<MouseEvent.Leave> onMouseLeave = events.getGroup(MouseEvent.Leave.class);
+
+    // Focus
+    public final EventListenerGroup<FocusEvent.Focus> onFocus = events.getGroup(FocusEvent.Focus.class);
+    public final EventListenerGroup<FocusEvent.Blur> onBlur = events.getGroup(FocusEvent.Blur.class);
+
+    @Getter
     private String id = "";
 
     // Runtime only data.
@@ -58,6 +78,12 @@ public class UIElement {
 
     @Getter
     private final Set<String> classes = new LinkedHashSet<>();
+
+    public UIElement setFocusPolicy(FocusPolicy policy) {
+        if (focusPolicy == null) return this;
+        this.focusPolicy = policy;
+        return this;
+    }
 
     public UIElement addClass(String cls) {
         classes.add(cls);
