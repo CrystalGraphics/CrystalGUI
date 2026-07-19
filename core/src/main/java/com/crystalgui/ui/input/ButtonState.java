@@ -18,6 +18,7 @@ public final class ButtonState {
     }
 
     private void setPressed(long millis) {
+        pressed = true;
         final long millisDiff = millis - lastPressedMillis;
         lastPressedMillis = millis;
         if (millisDiff <= UIInputHandler.multiClickInterval) {
