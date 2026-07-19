@@ -38,7 +38,18 @@ public interface SystemInput {
     @FunctionalInterface
     interface Mouse {
 
-        record Event(int x, int y, int dx, int dy, int button, boolean state, int wheelDelta, long nanos) {}
+        /**
+         * Low-level mouse event representation
+         * @param x Screen/Window X-coordinate of the mouse event (Top-Left origin)
+         * @param y Screen/Window Y-coordinate of the mouse event (Top-Left origin)
+         * @param dx Delta X
+         * @param dy Delta Y
+         * @param button {@link CgUiMouseCodes} button ID of the event or -1 for no click events
+         * @param state state of the selected button. (True for pressed)
+         * @param wheelDelta
+         * @param millis Timestamp for click/release events, -1 for move events.
+         */
+        record Event(int x, int y, int dx, int dy, int button, boolean state, int wheelDelta, long millis) {}
 
         /**
          * Process event
@@ -52,7 +63,15 @@ public interface SystemInput {
     @FunctionalInterface
     interface Keyboard {
 
-        record Event(int character, int key, boolean pressed, boolean repeat, long nanos) {}
+        /**
+         * Low-level mouse event representation
+         * @param character character code
+         * @param key {@link CgUiKeyCodes} keycode
+         * @param pressed Whether the button was pressed (true) or released (false)
+         * @param repeat Was this a repeated event or a unique event.
+         * @param millis Timestamp of the event.
+         */
+        record Event(char character, int key, boolean pressed, boolean repeat, long millis) {}
 
         /**
          * Process event
