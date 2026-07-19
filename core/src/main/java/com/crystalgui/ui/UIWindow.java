@@ -177,7 +177,6 @@ public final class UIWindow {
      */
     public void paintFrame() {
         calculateLayout();
-        inputHandler.beginFrame();
 
         paintContext.beginFrame(actualScreenWidth, actualScreenHeight);
         
@@ -201,6 +200,7 @@ public final class UIWindow {
         pose.popPose();
 
         paintContext.endFrame();
+        inputHandler.beginFrame();
         inputHandler.endFrame();
     }
 

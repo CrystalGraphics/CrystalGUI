@@ -1,5 +1,6 @@
 package com.crystalgui.ui.event;
 
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.UIElement;
 import lombok.Getter;
 
@@ -46,5 +47,9 @@ public abstract class UIEvent {
     /** Prevents the default action associated with this event. */
     public void preventDefault() {
         this.defaultPrevented = true;
+    }
+
+    public interface Listener<T extends UIEvent> extends Signal.Pair.Listener<UIElement, T> {
+        void accept(UIElement thisElement, T event);
     }
 }
