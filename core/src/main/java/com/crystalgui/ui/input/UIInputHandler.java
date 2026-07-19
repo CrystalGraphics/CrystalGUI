@@ -70,6 +70,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         final ButtonState buttonState = getMouseButtonState(buttonOrdinal);
         final int detail = buttonState == null ? 1 : buttonState.getDetail();
 
+        if (event.state() && target != null)
+            target.clicked();
+
         // TODO Capture, target, bubble. (Update focus as well)
 
     }
