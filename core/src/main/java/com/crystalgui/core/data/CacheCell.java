@@ -13,8 +13,14 @@ public class CacheCell<T> {
     private T value;
     @Getter
     private boolean isDirty;
-    @Setter
+
     private Function<T, T> calculator;
+
+    public CacheCell<T> setCalculator(Function<T, T> calc) {
+        this.calculator = calc;
+        this.isDirty = true;
+        return this;
+    }
 
     public CacheCell() {
         this(null);
