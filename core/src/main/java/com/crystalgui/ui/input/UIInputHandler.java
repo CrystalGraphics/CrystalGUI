@@ -70,8 +70,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         Class<? extends UIEvent> eventClass = event.getClass();
         event.setPhase(PropagationPhase.CAPTURE);
         for (int i = path.size()-1; i > 0; i--) {
-            var el = path.get(i);
-            el.events.emitToGroup(event);
+            var eventListeners = path.get(i).events;
+            if (eventListeners.hasGroup(eventClass))
+                eventListeners.emitToGroup(event);
         }
 
         event.setPhase(PropagationPhase.TARGET);
@@ -80,8 +81,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         if (!event.isBubbles()) return;
         event.setPhase(PropagationPhase.BUBBLE);
         for (int i = 1; i < path.size(); i++) {
-            var el = path.get(i);
-            el.events.emitToGroup(event);
+            var eventListeners = path.get(i).events;
+            if (eventListeners.hasGroup(eventClass))
+                eventListeners.emitToGroup(event);
         }
 
 
