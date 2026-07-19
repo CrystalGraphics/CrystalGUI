@@ -30,17 +30,18 @@ public class CacheCell<T> {
     }
 
     public CacheCell(T initialValue, boolean isDirty) {
-        this.value = initialValue;
-        this.isDirty = isDirty;
+        set(initialValue, isDirty);
     }
 
     // Call this whenever the underlying source changes
-    public void invalidate() {
+    public CacheCell<T> invalidate() {
         this.isDirty = true;
+        return this;
     }
 
-    public void set(T value) {
+    public CacheCell<T> set(T value) {
         this.set(value, false);
+        return this;
     }
 
     private void set(T value, boolean setDirty) {

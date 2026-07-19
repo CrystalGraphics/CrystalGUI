@@ -73,6 +73,8 @@ public final class UIWindow {
     public void init(int screenWidth, int screenHeight) {
         if (this.actualScreenWidth == screenWidth && this.actualScreenHeight == screenHeight)
             return;
+
+        inputHandler.resetHandler();
         this.actualScreenWidth = screenWidth;
         this.actualScreenHeight = screenHeight;
 

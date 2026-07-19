@@ -16,6 +16,11 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     private final UIWindow window;
 
+    /**
+     * Needed in case InputHandler starts processing mouse movements before elements cached their transforms.
+     */
+    private boolean firstFrameOver = false;
+
     @Getter
     private float scrollDelta = 0;
     @Getter
@@ -43,6 +48,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         updateHoverState();
         accumulatedMouseChange.zero();
         scrollDelta = 0;
+        firstFrameOver = true;
     }
 
     private void fireAccumulatedMouseEvents() {
@@ -111,10 +117,16 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     private class HoverFrameData {
         private final Vector2f position = new Vector2f();
 
-        private final CacheCell<UIElement> hoveredElement = new CacheCell<UIElement>().setCalculator(ignored -> UIInputHandler.this.window.getHoveredElement(position.x(), position.y()));
+        private final CacheCell<UIElement> hoveredElement = new CacheCell<UIElement>()
+                .setCalculator(ignored -> UIInputHandler.this.window.getHoveredElement(position.x(), position.y()))
+                .set(null);
+
+        boolean positionChanged(int x, int y) {
+            return x != position.x() || y != position.y();
+        }
 
         void updatePosition(int x, int y) {
-            if (x != position.x() || y != position.y()) hoveredElement.invalidate();
+            if (UIInputHandler.this.firstFrameOver && positionChanged(x, y)) hoveredElement.invalidate();
             position.set(x, y);
         }
 
@@ -125,5 +137,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         void invalidate() {
             hoveredElement.invalidate();
         }
+    }
+
+    public void resetHandler() {
+        firstFrameOver = false;
     }
 }
