@@ -1,6 +1,6 @@
 package com.crystalgui.core.input;
 
-import com.crystalgui.core.data.CacheCell;
+import com.crystalgui.core.data.LongCacheCell;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.core.input.mouse.CgUiMouseCodes;
 
@@ -21,7 +21,7 @@ public interface SystemInput {
      * Change from CacheCell to something else.
      * Cache cell at least lets the end user to modify this?... idk shitty code.
      */
-    CacheCell<Long> multiClickInterval = new CacheCell<Long>().setCalculator((ignore) -> {
+    LongCacheCell multiClickInterval = new LongCacheCell().setCalculator((ignore) -> {
         if (GraphicsEnvironment.isHeadless()) {
             return DEFAULT_MULTI_CLICK_INTERVAL_MS;
         }
