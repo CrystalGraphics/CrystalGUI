@@ -1,4 +1,4 @@
-package com.crystalgui;
+package com.crystalgui.ui;
 
 /**
  * Declarative UI description Just a root element handle;

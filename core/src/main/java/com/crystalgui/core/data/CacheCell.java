@@ -1,4 +1,4 @@
-package com.crystalgui.core;
+package com.crystalgui.core.data;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -19,7 +19,6 @@ public class CacheCell<T> {
     public CacheCell() {
         this(null);
     }
-
     public CacheCell(T initialValue) {
         this(initialValue, true);
     }

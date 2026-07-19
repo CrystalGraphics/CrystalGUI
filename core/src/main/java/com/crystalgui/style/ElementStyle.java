@@ -1,6 +1,6 @@
 package com.crystalgui.style;
 
-import com.crystalgui.UIElement;
+import com.crystalgui.ui.UIElement;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.property.StyleValue;

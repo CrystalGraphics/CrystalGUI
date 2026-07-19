@@ -1,9 +1,10 @@
-package com.crystalgui;
+package com.crystalgui.ui;
 
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.vertex.CgVertexTransformUtil;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.ui.input.UIInputHandler;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.AvailableSpace;
 import dev.vfyjxf.taffy.style.TaffyDimension;
@@ -34,6 +35,9 @@ public final class UIWindow {
     @Getter
     private final TaffyTree taffyTree;
     private NodeId rootNodeId;
+
+    @Getter
+    private final UIInputHandler inputHandler = new UIInputHandler(this);
 
     private final List<UIElement> elements = new ArrayList<>();
 
@@ -141,7 +145,7 @@ public final class UIWindow {
                 Float.isNaN(layoutHeight) ? AvailableSpace.MAX_CONTENT : AvailableSpace.definite(layoutHeight)
         );
 
-        while (taffyTree.isDirty(ui.rootElement.taffyNodeId)) {
+        while (isLayoutDirty()) {
             if (taffyTree.isDirty(ui.rootElement.taffyNodeId)) {
                 taffyTree.computeLayout(ui.rootElement.taffyNodeId, availableSpace);
 
@@ -156,6 +160,10 @@ public final class UIWindow {
             }
 
         }
+    }
+
+    public boolean isLayoutDirty() {
+        return taffyTree.isDirty(ui.rootElement.taffyNodeId);
     }
 
     /**
@@ -189,6 +197,7 @@ public final class UIWindow {
         pose.popPose();
 
         paintContext.endFrame();
+        inputHandler.endFrame();
     }
 
 
