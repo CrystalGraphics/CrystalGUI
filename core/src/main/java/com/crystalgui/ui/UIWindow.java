@@ -175,6 +175,8 @@ public final class UIWindow {
      */
     public void paintFrame() {
         calculateLayout();
+        inputHandler.beginFrame();
+
         paintContext.beginFrame(actualScreenWidth, actualScreenHeight);
         
         paintContext.bindTexture(paintContext.getWhitePixel());
