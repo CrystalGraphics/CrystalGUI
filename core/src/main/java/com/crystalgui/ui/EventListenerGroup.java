@@ -18,11 +18,11 @@ public final class EventListenerGroup<T extends UIEvent> {
         this.element = element;
     }
 
-    void attachDefaultListener(Signal.Pair.Listener<UIElement, T> listener) {
+    void attachDefaultListener(UIEvent.Listener<T> listener) {
         defaultEvents.connect(listener);
     }
 
-    public UIElement attachListener(Signal.Pair.Listener<UIElement, T> listener, boolean capture, boolean bubble) {
+    public UIElement attachListener(UIEvent.Listener<T> listener, boolean capture, boolean bubble) {
         this.target.connect(listener);
         if (bubble)
             this.bubble.connect(listener);
@@ -58,10 +58,6 @@ public final class EventListenerGroup<T extends UIEvent> {
 
         public Map(UIElement element) {
             this.element = element;
-        }
-
-        public boolean hasGroup(Class<? extends UIEvent> clazz) {
-            return lookupMap.containsKey(clazz);
         }
 
         @SuppressWarnings("unchecked")

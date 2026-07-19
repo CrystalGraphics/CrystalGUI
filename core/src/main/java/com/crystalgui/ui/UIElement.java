@@ -1,13 +1,18 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.data.CacheCell;
+import com.crystalgui.core.data.FocusableSubtreeCache;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
+import com.crystalgui.ui.event.DOMEvent;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
@@ -71,6 +76,11 @@ public class UIElement {
     @Getter @Setter
     private boolean hitTest = true;
 
+    public UIElement() {
+        onFocus.attachDefaultListener(((thisElement, event) -> style.generalGroup.overlay(new CgUiQuad(0x88FFFFFF)).color(0xFFFF8888)));
+        onBlur.attachDefaultListener(((thisElement, event) -> style.generalGroup.overlay(CgUiDrawable.EMPTY).color(0xFFFFFFFF)));
+    }
+
     public UIElement setId(String id) {
         this.id = id == null ? "" : id;
         return this;
@@ -117,12 +127,14 @@ public class UIElement {
         children.add(index, child);
         child.setAttachedWindow(this.attachedWindow);
         this.runtimeCache.sortedChildren.invalidate();
+        this.runtimeCache.focusableSubtree.invalidate();
         child.onAdded();
         return this;
     }
 
     private void onAdded() {
         children.forEach(UIElement::onAdded);
+        events.emitToGroup(new DOMEvent.ElementAdded(this));
     }
 
     private boolean hasParent() {
@@ -143,6 +155,8 @@ public class UIElement {
         child.setAttachedWindow(null);
         child.parent = null;
         this.runtimeCache.sortedChildren.invalidate();
+        this.runtimeCache.focusableSubtree.invalidate();
+        events.emitToGroup(new DOMEvent.ElementAdded(this));
         return true;
     }
 
@@ -217,6 +231,8 @@ public class UIElement {
 //            return;
 //        }
 //
+        if (style.taffyBridge.style.display == TaffyDisplay.NONE)
+            return;
         if (runtimeCache.localToWorld.isDirty()) {
             this.runtimeCache.localToWorld.set(ctx.getPoseStack().last().pose());
             this.runtimeCache.worldToLocal.invalidate();
@@ -334,11 +350,12 @@ public class UIElement {
         return (parent == null ? attachedWindow == null ? 0 : attachedWindow.getLeftPos() : getTaffyLayout().location().x);
     }
 
-    public void clicked(int detail) {
-        System.out.println(detail + "x - TESTING NEW EVENTS #" + getId());
+    public boolean focusable() {
+        return getFocusPolicy() != FocusPolicy.NONE && style.taffyBridge.style.display != TaffyDisplay.NONE;
     }
 
     public class RuntimeCache {
+        public FocusableSubtreeCache focusableSubtree = new FocusableSubtreeCache(UIElement.this);
         private float x, y;
 
         public final CacheCell<UIElement[]> sortedChildren = new CacheCell<UIElement[]>().setCalculator(ignored -> {

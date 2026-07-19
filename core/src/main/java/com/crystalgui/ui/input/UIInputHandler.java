@@ -3,20 +3,21 @@ package com.crystalgui.ui.input;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.ReadOnlyVec2f;
+import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.core.input.SystemInput.Keyboard;
 import com.crystalgui.core.input.SystemInput.Mouse;
+import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgui.core.input.keyboard.Modifiers;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.event.FocusEvent;
-import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.ui.event.PropagationPhase;
-import com.crystalgui.ui.event.UIEvent;
+import com.crystalgui.ui.event.*;
 import lombok.Getter;
 import org.joml.Vector2f;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.Mouse {
     public final static long multiClickInterval = SystemInput.multiClickInterval.get();
@@ -71,8 +72,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         event.setPhase(PropagationPhase.CAPTURE);
         for (int i = path.size()-1; i > 0; i--) {
             var eventListeners = path.get(i).events;
-            if (eventListeners.hasGroup(eventClass))
-                eventListeners.emitToGroup(event);
+            eventListeners.emitToGroup(event);
         }
 
         event.setPhase(PropagationPhase.TARGET);
@@ -82,14 +82,13 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         event.setPhase(PropagationPhase.BUBBLE);
         for (int i = 1; i < path.size(); i++) {
             var eventListeners = path.get(i).events;
-            if (eventListeners.hasGroup(eventClass))
-                eventListeners.emitToGroup(event);
+            eventListeners.emitToGroup(event);
         }
-
 
     }
 
     private void fireAccumulatedMouseEvents() {
+        if (!firstFrameOver) return;
         final var lastHover = this.lastFrameHover;
         final var currentHover = hoverFrameData.element();
         if (lastHover == currentHover){
@@ -104,7 +103,66 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     @Override
     public boolean consumeKeyboardEvent(Keyboard.Event event) {
+        if (!firstFrameOver) return false;
+        CgUiInputAdapter inputAdapter = CrystalGuiCore.getAdapter();
+        final int modifiers = inputAdapter.getCurrentModifiers();
+
+        if (focusedElement == null) {
+            findFocusableElement(event, modifiers);
+            return false;
+        }
+
+        if (event.pressed()) {
+            var propagationStopped = emitKeyboardDown(event, modifiers);
+            if (!propagationStopped) {
+                findFocusableElement(event, modifiers);
+            }
+        } else {
+            emitKeyboardUp(event, modifiers);
+        }
         return false;
+    }
+
+    private void findFocusableElement(Keyboard.Event event, int modifiers) {
+        if (event.key() != CgUiKeyCodes.KEY_TAB) {
+            return;
+        }
+        boolean reverse = Modifiers.hasShift(modifiers);
+
+        List<UIElement> orderedTree = findAcceptableSubtree();
+        if (orderedTree.isEmpty()) return;
+
+        int nextIndex;
+        if (focusedElement == null) {
+            nextIndex = reverse ? orderedTree.size() - 1 : 0;
+        } else {
+            int currentIndex = orderedTree.indexOf(focusedElement);
+
+            if (currentIndex == -1) currentIndex = reverse ? 0 : orderedTree.size() - 1;
+            nextIndex = Math.floorMod(currentIndex + (reverse ? -1 : 1), orderedTree.size());
+        }
+
+        if (focusedElement != null)
+            emitAndLoseFocus(focusedElement);
+        focusedElement = orderedTree.get(nextIndex);
+        if (focusedElement != null)
+            emitAndSetFocus(focusedElement);
+    }
+
+    private List<UIElement> findAcceptableSubtree() {
+        return window.ui.rootElement.getRuntimeCache().focusableSubtree.get();
+    }
+
+    private boolean emitKeyboardDown(Keyboard.Event event, int modifiers) {
+        KeyboardEvent.Down newEvent = new KeyboardEvent.Down(focusedElement, event.key(), event.character(), event.repeat(), modifiers, event.millis());
+        sendInputEvent(focusedElement, newEvent);
+
+        return newEvent.isPropagationStopped() || newEvent.isPhasePropagationStopped() || newEvent.isDefaultPrevented();
+    }
+
+    private void emitKeyboardUp(Keyboard.Event event, int modifiers) {
+        KeyboardEvent.Up newEvent = new KeyboardEvent.Up(focusedElement, event.key(), event.character(), event.repeat(), modifiers, event.millis());
+        sendInputEvent(focusedElement, newEvent);
     }
 
     @Override
@@ -156,7 +214,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
             if (focusedElement != null) {
                 emitAndLoseFocus(focusedElement);
             }
-            if (targetElement.getFocusPolicy() == FocusPolicy.CLICK) {
+            if (targetElement != null && targetElement.getFocusPolicy() == FocusPolicy.CLICK) {
                 emitAndSetFocus(targetElement);
             }
         }
@@ -194,11 +252,13 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
 
     private void emitAndSetFocus(UIElement target) {
+        this.focusedElement = target;
         FocusEvent.Focus event = new FocusEvent.Focus(target);
         sendInputEvent(target, event);
     }
 
     private void emitAndLoseFocus(UIElement target) {
+        this.focusedElement = null;
         FocusEvent.Blur event = new FocusEvent.Blur(target);
         sendInputEvent(target, event);
     }
