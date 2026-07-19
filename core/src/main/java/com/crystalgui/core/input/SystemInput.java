@@ -8,6 +8,7 @@ import java.awt.*;
 
 /**
  * Interface responsible for consuming <b>raw</b> System input events.<br>
+ * <h3>An instance of this interface has to be registered to {@link com.crystalgui.core.CrystalGuiCore}</h3>
  * <br>
  * This class does not dictate when the event pool is gonna be drained. <br>
  * This is just a listener for the drained events, dispatched from a parent.<br>
