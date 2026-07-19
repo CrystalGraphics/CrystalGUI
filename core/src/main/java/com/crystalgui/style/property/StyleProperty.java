@@ -1,6 +1,6 @@
 package com.crystalgui.style.property;
 
-import com.crystalgui.UIElement;
+import com.crystalgui.ui.UIElement;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;

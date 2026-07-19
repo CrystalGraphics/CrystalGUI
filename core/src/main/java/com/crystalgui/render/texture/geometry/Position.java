@@ -1,4 +1,4 @@
-package com.crystalgui.geometry;
+package com.crystalgui.render.texture.geometry;
 
 import lombok.Data;
 import org.joml.Vector2f;

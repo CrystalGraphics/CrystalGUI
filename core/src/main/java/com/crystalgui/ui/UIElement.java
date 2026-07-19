@@ -1,6 +1,6 @@
-package com.crystalgui;
+package com.crystalgui.ui;
 
-import com.crystalgui.core.CacheCell;
+import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
@@ -18,7 +18,7 @@ import javax.annotation.Nullable;
 import java.util.*;
 import java.util.function.Consumer;
 
-import static com.crystalgui.UIWindow.EMPTY_LAYOUT;
+import static com.crystalgui.ui.UIWindow.EMPTY_LAYOUT;
 
 /**
  * Base DOM node — every CgGui component extends this (a general-purpose, styleable, extensible container, conceptually

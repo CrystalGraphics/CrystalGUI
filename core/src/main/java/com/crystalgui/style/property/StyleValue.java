@@ -1,6 +1,6 @@
 package com.crystalgui.style.property;
 
-import com.crystalgui.CrystalGui;
+import com.crystalgui.core.CrystalGuiCore;
 
 import javax.annotation.Nullable;
 import java.util.Objects;
@@ -27,7 +27,7 @@ public abstract class StyleValue<T> {
             try {
                 computedValue = doCompute(rawValue);
             } catch (Exception e) {
-                CrystalGui.LOGGER.warn("Failed to parse style value '{}': {}", rawValue, e.getMessage());
+                CrystalGuiCore.LOGGER.warn("Failed to parse style value '{}': {}", rawValue, e.getMessage());
                 computedValue = null;
             }
             computed = true;
