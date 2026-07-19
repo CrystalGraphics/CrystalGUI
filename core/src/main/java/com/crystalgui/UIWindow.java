@@ -134,11 +134,6 @@ public final class UIWindow {
         this.ui.rootElement.clearLayoutCache();
     }
 
-    /** Marks a Taffy node dirty. Called by {@code UIElement.layout(...)} after a style change. */
-    void markDirty(NodeId nodeId) {
-        taffyTree.markDirty(nodeId);
-    }
-
 
     void calculateLayout() {
         TaffySize<AvailableSpace> availableSpace = new TaffySize<>(
@@ -196,10 +191,6 @@ public final class UIWindow {
         paintContext.endFrame();
     }
 
-    // TODO: Replace this BS ;9
-    public void setMouse(int mouseX, int mouseY) {
-        paintContext.mouseX = mouseX; paintContext.mouseY = mouseY;
-    }
 
     public void unregisterElement(UIElement element) {
         if (element == null) return;
