@@ -16,21 +16,22 @@ public class CacheCell<T> {
 
     private Function<T, T> calculator;
 
-    public CacheCell<T> setCalculator(Function<T, T> calc) {
-        this.calculator = calc;
-        this.isDirty = true;
-        return this;
-    }
-
     public CacheCell() {
         this(null);
     }
+
     public CacheCell(T initialValue) {
         this(initialValue, true);
     }
 
     public CacheCell(T initialValue, boolean isDirty) {
         set(initialValue, isDirty);
+    }
+
+    public CacheCell<T> setCalculator(Function<T, T> calc) {
+        this.calculator = calc;
+        this.isDirty = true;
+        return this;
     }
 
     // Call this whenever the underlying source changes
