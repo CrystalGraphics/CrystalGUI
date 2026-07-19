@@ -1,6 +1,7 @@
 package com.crystalgui.core.signal;
 
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * Unified signal namespace for CrystalGUI.
@@ -106,6 +107,22 @@ public final class Signal {
                 endEmit();
             }
         }
+
+        public void continueEmittingUnderCondition(T value, Predicate<T> condition) {
+            beginEmit();
+            try {
+                List<SlotEntry<Listener<T>>> slots = slots();
+                for (int i = 0, n = slots.size(); i < n; i++) {
+                    if (condition.test(value)) break;
+                    SlotEntry<Listener<T>> entry = slots.get(i);
+                    if (entry.connected) {
+                        entry.listener.accept(value);
+                    }
+                }
+            } finally {
+                endEmit();
+            }
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -120,6 +137,7 @@ public final class Signal {
      * @param <B> the second argument type
      */
     public static final class Pair<A, B> extends SignalBase<Pair.Listener<A, B>> {
+
 
         @FunctionalInterface
         public interface Listener<A, B> {
@@ -137,6 +155,22 @@ public final class Signal {
             try {
                 List<SlotEntry<Listener<A, B>>> slots = slots();
                 for (int i = 0, n = slots.size(); i < n; i++) {
+                    SlotEntry<Listener<A, B>> entry = slots.get(i);
+                    if (entry.connected) {
+                        entry.listener.accept(a, b);
+                    }
+                }
+            } finally {
+                endEmit();
+            }
+        }
+
+        public void continueEmittingUnderCondition(A a, B b, Predicate<B> condition) {
+            beginEmit();
+            try {
+                List<SlotEntry<Listener<A, B>>> slots = slots();
+                for (int i = 0, n = slots.size(); i < n; i++) {
+                    if (condition.test(b)) break;
                     SlotEntry<Listener<A, B>> entry = slots.get(i);
                     if (entry.connected) {
                         entry.listener.accept(a, b);
