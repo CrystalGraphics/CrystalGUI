@@ -1,5 +1,9 @@
 package com.crystalgui.core.input;
 
+import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgui.core.input.keyboard.Modifiers;
+import com.crystalgui.core.input.mouse.CgUiMouseCodes;
+
 /**
  * Interface for translating keys between platforms. <br>
  * <br>
@@ -55,6 +59,7 @@ package com.crystalgui.core.input;
  * }
  * </pre>
  */
+@SuppressWarnings("unused")
 public interface CgUiInputAdapter {
 
     /**

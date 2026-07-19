@@ -1,6 +1,8 @@
 package com.crystalgui.core.input;
 
 import com.crystalgui.core.data.CacheCell;
+import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgui.core.input.mouse.CgUiMouseCodes;
 
 import java.awt.*;
 
