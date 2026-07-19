@@ -27,4 +27,8 @@ public final class ButtonState {
             detail = 1;
         }
     }
+
+    public void resetDetail() {
+        this.detail = 0;
+    }
 }

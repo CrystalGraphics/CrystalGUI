@@ -22,6 +22,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     private final Vector2f accumulatedMouseChange = new Vector2f();
 
     private final HoverFrameData hoverFrameData = new HoverFrameData();
+    private UIElement lastPressedElement;
     private UIElement lastFrameHover;
     private UIElement focusedElement;
 
@@ -64,23 +65,23 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     private void processMouseButtons(Mouse.Event event) {
         final UIElement target = hoverFrameData.element();
-        updateButtonState(event);
-
+        updateButtonState(event, target);
         final int buttonOrdinal = event.button();
         final ButtonState buttonState = getMouseButtonState(buttonOrdinal);
         final int detail = buttonState == null ? 1 : buttonState.getDetail();
 
         if (event.state() && target != null)
-            target.clicked();
+            target.clicked(detail);
 
         // TODO Capture, target, bubble. (Update focus as well)
 
     }
 
-    private void updateButtonState(Mouse.Event event) {
+    private void updateButtonState(Mouse.Event event, UIElement target) {
         final int buttonOrdinal = event.button();
         final ButtonState buttonState = getMouseButtonState(buttonOrdinal);
         if (buttonState == null) return;
+        if (target != lastPressedElement) buttonState.resetDetail();
         buttonState.setState(event.state(), event.millis());
     }
 
