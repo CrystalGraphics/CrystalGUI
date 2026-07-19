@@ -1,12 +1,10 @@
 package com.crystalgui;
 
-import com.crystalgraphics.api.vertex.CgVertexTransformUtil;
 import com.crystalgui.core.CacheCell;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
@@ -76,6 +74,10 @@ public class UIElement {
     }
 
     public UIElement addChild(UIElement child) {
+        return addChildAt(child, children.size());
+    }
+
+    public UIElement addChildAt(UIElement child, int index) {
         if (child == null) return this;
         if (child == this) throw new IllegalArgumentException("Cannot add self as a child");
         if (hasChild(child)) throw new IllegalArgumentException("Cannot add the same child twice");
@@ -86,9 +88,15 @@ public class UIElement {
         }
 
         child.parent = this;
-        children.add(child);
+        children.add(index, child);
+        child.setAttachedWindow(this.attachedWindow);
         this.runtimeCache.sortedChildren.invalidate();
+        child.onAdded();
         return this;
+    }
+
+    private void onAdded() {
+        children.forEach(UIElement::onAdded);
     }
 
     private boolean hasParent() {
@@ -105,11 +113,15 @@ public class UIElement {
         if (!hasChild(child)) return false;
 
         children.remove(child);
-        //child.onRemoved();
+        child.onRemoved();
         child.setAttachedWindow(null);
         child.parent = null;
         this.runtimeCache.sortedChildren.invalidate();
         return true;
+    }
+
+    private void onRemoved() {
+        children.forEach(UIElement::onRemoved);
     }
 
     private boolean hasChild(UIElement child) {
@@ -155,12 +167,6 @@ public class UIElement {
     public UIElement layout(Consumer<LayoutGroup> configurator) {
         configurator.accept(this.getStyle().getLayoutGroup());
         return this;
-    }
-
-    private void markLayoutDirty() {
-        if (attachedWindow != null && taffyNodeId != null) {
-            attachedWindow.markDirty(taffyNodeId);
-        }
     }
 
     // ── Paint ────────────────────────────────────────────────────────────────
