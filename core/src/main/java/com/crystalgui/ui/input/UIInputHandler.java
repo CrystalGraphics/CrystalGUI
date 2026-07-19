@@ -1,6 +1,7 @@
 package com.crystalgui.ui.input;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.core.input.SystemInput.Keyboard;
 import com.crystalgui.core.input.SystemInput.Mouse;
@@ -18,12 +19,10 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     @Getter
     private float scrollDelta = 0;
     @Getter
-    private final Vector2f mouseFramePositionGlobal = new Vector2f();
-    @Getter
     private final Vector2f accumulatedMouseChange = new Vector2f();
 
+    private final HoverFrameData hoverFrameData = new HoverFrameData();
     private UIElement lastFrameHover;
-    private UIElement hoveredElement;
     private UIElement focusedElement;
 
     private final ButtonState[] mouseButtonStates = new ButtonState[CrystalGuiCore.getAdapter().howManyMouseButtons()];
@@ -33,12 +32,12 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     }
 
     public void beginFrame() {
-        this.lastFrameHover = hoveredElement;
+        this.lastFrameHover = hoverFrameData.element();
+        hoverFrameData.invalidate();
     }
 
 
     public void endFrame() {
-        acquireHoveredElement();
         fireAccumulatedMouseEvents();
         updateHoverState();
         accumulatedMouseChange.zero();
@@ -56,7 +55,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     @Override
     public boolean consumeMouseEvent(Mouse.Event event) {
-        mouseFramePositionGlobal.set(event.x(), event.y());
+        hoverFrameData.updatePosition(event.x(), event.y());
         accumulatedMouseChange.add(event.dx(), event.dy());
         scrollDelta += event.wheelDelta();
         if (event.button() != -1) processMouseButtons(event);
@@ -64,7 +63,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     }
 
     private void processMouseButtons(Mouse.Event event) {
-        final UIElement target = acquireHoveredElement();
+        final UIElement target = hoverFrameData.element();
         updateButtonState(event);
 
         final int buttonOrdinal = event.button();
@@ -82,14 +81,8 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         buttonState.setState(event.state(), event.millis());
     }
 
-    private UIElement acquireHoveredElement() {
-        this.hoveredElement = window.getHoveredElement(mouseFramePositionGlobal.x(), mouseFramePositionGlobal.y());
-        return hoveredElement;
-
-    }
-
     private void updateHoverState() {
-        if (this.hoveredElement == this.lastFrameHover) return;
+        if (hoverFrameData.element() == this.lastFrameHover) return;
         // TODO: Hover pseudo-state update for the old & new hover element.
     }
 
@@ -110,4 +103,22 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     }
 
+    private class HoverFrameData {
+        private final Vector2f position = new Vector2f();
+
+        private final CacheCell<UIElement> hoveredElement = new CacheCell<UIElement>().setCalculator(ignored -> UIInputHandler.this.window.getHoveredElement(position.x(), position.y()));
+
+        void updatePosition(int x, int y) {
+            if (x != position.x() || y != position.y()) hoveredElement.invalidate();
+            position.set(x, y);
+        }
+
+        UIElement element() {
+            return hoveredElement.get();
+        }
+
+        void invalidate() {
+            hoveredElement.invalidate();
+        }
+    }
 }
