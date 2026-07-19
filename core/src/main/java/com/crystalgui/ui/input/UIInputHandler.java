@@ -24,11 +24,6 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     private final UIWindow window;
 
-    /**
-     * Needed in case InputHandler starts processing mouse movements before elements cached their transforms.
-     */
-    private boolean firstFrameOver = false;
-
     @Getter
     private float scrollDelta = 0;
     @Getter
@@ -38,6 +33,8 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     private UIElement lastPressedElement;
     private UIElement lastFrameHover;
     private UIElement focusedElement;
+
+    private boolean firstFrameOver = false;
 
     private final ButtonState[] mouseButtonStates = new ButtonState[CrystalGuiCore.getAdapter().howManyMouseButtons()];
 
@@ -88,7 +85,6 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     }
 
     private void fireAccumulatedMouseEvents() {
-        if (!firstFrameOver) return;
         final var lastHover = this.lastFrameHover;
         final var currentHover = hoverFrameData.element();
         if (lastHover == currentHover){
@@ -167,6 +163,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     @Override
     public boolean consumeMouseEvent(Mouse.Event event) {
+        if (!firstFrameOver) return false;
         hoverFrameData.updatePosition(event.x(), event.y());
         accumulatedMouseChange.add(event.dx(), event.dy());
         scrollDelta += event.wheelDelta();
@@ -277,7 +274,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         }
 
         void updatePosition(int x, int y) {
-            if (UIInputHandler.this.firstFrameOver && positionChanged(x, y)) hoveredElement.invalidate();
+            if (positionChanged(x, y)) hoveredElement.invalidate();
             position.set(x, y);
         }
 
