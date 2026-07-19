@@ -66,6 +66,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     private void processMouseButtons(Mouse.Event event) {
         final UIElement target = hoverFrameData.element();
         updateButtonState(event, target);
+        lastPressedElement = target;
         final int buttonOrdinal = event.button();
         final ButtonState buttonState = getMouseButtonState(buttonOrdinal);
         final int detail = buttonState == null ? 1 : buttonState.getDetail();
