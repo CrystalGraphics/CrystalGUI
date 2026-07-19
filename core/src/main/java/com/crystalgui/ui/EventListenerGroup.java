@@ -60,6 +60,10 @@ public final class EventListenerGroup<T extends UIEvent> {
             this.element = element;
         }
 
+        public boolean hasGroup(Class<? extends UIEvent> clazz) {
+            return lookupMap.containsKey(clazz);
+        }
+
         @SuppressWarnings("unchecked")
         public <T extends UIEvent> EventListenerGroup<T> getGroup(Class<T> clazz) {
             return (EventListenerGroup<T>) lookupMap.computeIfAbsent(clazz, c -> new EventListenerGroup<T>(element));
