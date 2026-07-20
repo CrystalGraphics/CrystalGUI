@@ -15,5 +15,9 @@ public enum FocusPolicy {
     FOCUSABLE,
 
     /** Element can receive focus via click, programmatic request, or tab traversal. */
-    CLICK
+    CLICK;
+
+    public boolean isFocusable() {
+        return this != NONE;
+    }
 }

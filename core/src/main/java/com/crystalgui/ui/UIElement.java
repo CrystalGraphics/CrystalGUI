@@ -1,7 +1,6 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.data.CacheCell;
-import com.crystalgui.core.data.FocusableSubtreeCache;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiQuad;
@@ -89,9 +88,10 @@ public class UIElement {
     @Getter
     private final Set<String> classes = new LinkedHashSet<>();
 
-    public UIElement setFocusPolicy(FocusPolicy policy) {
-        if (focusPolicy == null) return this;
-        this.focusPolicy = policy;
+    public UIElement setFocusPolicy(FocusPolicy newPolicy) {
+        if (newPolicy == null) return setFocusPolicy(FocusPolicy.NONE);
+        if (this.focusPolicy.isFocusable() != newPolicy.isFocusable()) invalidateFocusableChain();
+        this.focusPolicy = newPolicy;
         return this;
     }
 
@@ -127,7 +127,7 @@ public class UIElement {
         children.add(index, child);
         child.setAttachedWindow(this.attachedWindow);
         this.runtimeCache.sortedChildren.invalidate();
-        this.runtimeCache.focusableSubtree.invalidate();
+        this.invalidateFocusableChain();
         child.onAdded();
         return this;
     }
@@ -155,7 +155,7 @@ public class UIElement {
         child.setAttachedWindow(null);
         child.parent = null;
         this.runtimeCache.sortedChildren.invalidate();
-        this.runtimeCache.focusableSubtree.invalidate();
+        this.invalidateFocusableChain();
         events.emitToGroup(new DOMEvent.ElementAdded(this));
         return true;
     }
@@ -354,8 +354,23 @@ public class UIElement {
         return getFocusPolicy() != FocusPolicy.NONE && style.taffyBridge.style.display != TaffyDisplay.NONE;
     }
 
+    private void invalidateFocusableChain() {
+        UIElement el = this;
+        while (el != null) {
+            el.getRuntimeCache().hasFocusableDescendant.invalidate();
+            el = el.getParent();
+        }
+    }
+
     public class RuntimeCache {
-        public FocusableSubtreeCache focusableSubtree = new FocusableSubtreeCache(UIElement.this);
+        public final CacheCell<Boolean> hasFocusableDescendant = new CacheCell<Boolean>().setCalculator(ignored -> {
+            UIElement element = UIElement.this;
+            if (element.focusable()) return true;
+            for (UIElement child : element.getChildren()) {
+                if (child.getRuntimeCache().hasFocusableDescendant.get()) return true;
+            }
+            return false;
+        });
         private float x, y;
 
         public final CacheCell<UIElement[]> sortedChildren = new CacheCell<UIElement[]>().setCalculator(ignored -> {
