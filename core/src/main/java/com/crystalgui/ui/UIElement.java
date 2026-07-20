@@ -35,6 +35,8 @@ import static com.crystalgui.ui.UIWindow.EMPTY_LAYOUT;
 public class UIElement {
     private static final Comparator<UIElement> Z_INDEX_DESCENDING = (a, b) -> Integer.compare(b.style.generalGroup.zIndex(), a.style.generalGroup.zIndex());
 
+    // ── Core state ───────────────────────────────────────────────────────────
+
     @Getter
     private final ElementStyle style = new ElementStyle(this);
     protected NodeId taffyNodeId;
@@ -49,7 +51,21 @@ public class UIElement {
     private final List<UIElement> children = new ArrayList<>();
 
     @Getter
+    private String id = "";
+    @Getter
+    private final Set<String> classes = new LinkedHashSet<>();
+
+    @Getter
     private FocusPolicy focusPolicy = FocusPolicy.CLICK;
+
+    @Getter @Setter
+    private boolean hitTest = true;
+
+    // Runtime only data.
+    @Getter
+    private final RuntimeCache runtimeCache = new RuntimeCache();
+
+    // ── Events ───────────────────────────────────────────────────────────────
 
     public final EventListenerGroup.Map events = new EventListenerGroup.Map(this);
 
@@ -65,33 +81,15 @@ public class UIElement {
     public final EventListenerGroup<FocusEvent.Focus> onFocus = events.getGroup(FocusEvent.Focus.class);
     public final EventListenerGroup<FocusEvent.Blur> onBlur = events.getGroup(FocusEvent.Blur.class);
 
-    @Getter
-    private String id = "";
-
-    // Runtime only data.
-    @Getter
-    private final RuntimeCache runtimeCache = new RuntimeCache();
-
-    @Getter @Setter
-    private boolean hitTest = true;
-
     public UIElement() {
         onFocus.attachDefaultListener(((thisElement, event) -> style.generalGroup.overlay(new CgUiQuad(0x88FFFFFF)).color(0xFFFF8888)));
         onBlur.attachDefaultListener(((thisElement, event) -> style.generalGroup.overlay(CgUiDrawable.EMPTY).color(0xFFFFFFFF)));
     }
 
+    // ── Identity ─────────────────────────────────────────────────────────────
+
     public UIElement setId(String id) {
         this.id = id == null ? "" : id;
-        return this;
-    }
-
-    @Getter
-    private final Set<String> classes = new LinkedHashSet<>();
-
-    public UIElement setFocusPolicy(FocusPolicy newPolicy) {
-        if (newPolicy == null) return setFocusPolicy(FocusPolicy.NONE);
-        if (this.focusPolicy.isFocusable() != newPolicy.isFocusable()) invalidateFocusableChain();
-        this.focusPolicy = newPolicy;
         return this;
     }
 
@@ -108,6 +106,8 @@ public class UIElement {
     public boolean hasClass(String cls) {
         return classes.contains(cls);
     }
+
+    // ── Tree structure ───────────────────────────────────────────────────────
 
     public UIElement addChild(UIElement child) {
         return addChildAt(child, children.size());
@@ -132,15 +132,6 @@ public class UIElement {
         return this;
     }
 
-    private void onAdded() {
-        children.forEach(UIElement::onAdded);
-        events.emitToGroup(new DOMEvent.ElementAdded(this));
-    }
-
-    private boolean hasParent() {
-        return this.parent != null;
-    }
-
     public UIElement addChildren(UIElement... elements) {
         for (UIElement e : elements) addChild(e);
         return this;
@@ -160,14 +151,6 @@ public class UIElement {
         return true;
     }
 
-    private void onRemoved() {
-        children.forEach(UIElement::onRemoved);
-    }
-
-    private boolean hasChild(UIElement child) {
-        return children.contains(child);
-    }
-
     public void removeSelf() {
         if (parent != null) parent.removeChild(this);
     }
@@ -177,6 +160,51 @@ public class UIElement {
             removeChild(child);
         }
     }
+
+    public final int getSiblingIndex() {
+        if (parent == null) return -1;
+        return parent.children.indexOf(this);
+    }
+
+    private void onAdded() {
+        children.forEach(UIElement::onAdded);
+        events.emitToGroup(new DOMEvent.ElementAdded(this));
+    }
+
+    private void onRemoved() {
+        children.forEach(UIElement::onRemoved);
+    }
+
+    private boolean hasParent() {
+        return this.parent != null;
+    }
+
+    private boolean hasChild(UIElement child) {
+        return children.contains(child);
+    }
+
+    // ── Focus ────────────────────────────────────────────────────────────────
+
+    public UIElement setFocusPolicy(FocusPolicy newPolicy) {
+        if (newPolicy == null) return setFocusPolicy(FocusPolicy.NONE);
+        if (this.focusPolicy.isFocusable() != newPolicy.isFocusable()) invalidateFocusableChain();
+        this.focusPolicy = newPolicy;
+        return this;
+    }
+
+    public boolean focusable() {
+        return getFocusPolicy() != FocusPolicy.NONE && style.taffyBridge.style.display != TaffyDisplay.NONE;
+    }
+
+    private void invalidateFocusableChain() {
+        UIElement el = this;
+        while (el != null) {
+            el.getRuntimeCache().hasFocusableDescendant.invalidate();
+            el = el.getParent();
+        }
+    }
+
+    // ── Hit-testing ──────────────────────────────────────────────────────────
 
     boolean isMouseOverElement(float localMouseX, float localMouseY) {
         return insideRectangle(localMouseX, localMouseY, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
@@ -192,7 +220,6 @@ public class UIElement {
                 contentHeight = layout.contentBoxHeight();
 
         return insideRectangle(localMouseX, localMouseY, contentX, contentY, contentWidth, contentHeight);
-
     }
 
     private boolean insideRectangle(float mouseX, float mouseY, float rectX, float rectY, float rectWidth, float rectHeight) {
@@ -207,104 +234,6 @@ public class UIElement {
     public UIElement layout(Consumer<LayoutGroup> configurator) {
         configurator.accept(this.getStyle().getLayoutGroup());
         return this;
-    }
-
-    // ── Paint ────────────────────────────────────────────────────────────────
-
-    public UIElement style(Consumer<ElementStyle> configurator) {
-        configurator.accept(this.getStyle());
-        return this;
-    }
-
-    public UIElement generalStyle(Consumer<GeneralGroup> configurator) {
-        configurator.accept(this.getStyle().getGeneralGroup());
-        return this;
-    }
-    /**
-     * Paints this element's background, then recurses into children (z-index-sorted,
-     * DOM order as tiebreak), then paints this element's overlay. Fully synchronous —
-     * every call in this chain issues real GPU draw calls immediately; nothing here
-     * defers or accumulates work for later replay.
-     */
-    public final void drawSubtree(CgUiPaintContext ctx) {
-//        if ( == TaffyDisplay.NONE || !isVisible() || opacity == 0) {
-//            return;
-//        }
-//
-        if (style.taffyBridge.style.display == TaffyDisplay.NONE)
-            return;
-        if (runtimeCache.localToWorld.isDirty()) {
-            this.runtimeCache.localToWorld.set(ctx.getPoseStack().last().pose());
-            this.runtimeCache.worldToLocal.invalidate();
-        }
-
-        paintSelf(ctx);
-
-        if (!children.isEmpty()) {
-            for (UIElement child : getChildren()) {
-                child.drawSubtree(ctx);
-            }
-        }
-        paintOverlay(ctx);
-
-
-    }
-
-    /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */
-    protected void paintSelf(CgUiPaintContext ctx) {
-        GeneralGroup styleGen = style.getGeneralGroup();
-        ctx.setColor(styleGen.color());
-        styleGen.background().draw(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
-        ctx.setColor(0xFFFFFFFF);
-    }
-
-    /** Override for custom drawing that must appear above children. Called after children paint. */
-    protected void paintOverlay(CgUiPaintContext ctx) {
-        Matrix4f worldToLocal = runtimeCache.worldToLocal.get();
-        Vector4f v = new Vector4f();
-        v.set(ctx.mouseX, ctx.mouseY, 0, 1.0f);
-        worldToLocal.transform(v);
-        final float mouseX = v.x(), mouseY = v.y();
-        final float x = runtimeCache.getX(), y = runtimeCache.getY(), width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
-
-        style.getGeneralGroup().overlay().draw(ctx, x, y, width, height);
-    }
-
-
-    public void onStyleChanged() {
-        // no-op.
-    }
-
-    @Nullable
-    public TaffyTree getTaffyTree() {
-        return attachedWindow == null ? null : attachedWindow.getTaffyTree();
-    }
-    public void markTreeDirty() {
-        var taffyTree = getTaffyTree();
-        if (taffyTree != null) {
-            taffyTree.markDirty(taffyNodeId);
-        }
-    }
-
-    protected final void setAttachedWindow(UIWindow uiWindow) {
-        if (this.attachedWindow == uiWindow) return;
-
-        var previousWindow = this.attachedWindow;
-
-        if (this.attachedWindow != null) {
-            this.attachedWindow.unregisterElement(this);
-        }
-
-        this.attachedWindow = uiWindow;
-
-        if (uiWindow != null) {
-            uiWindow.registerElement(this);
-        }
-
-        // TODO: Fire event for Window change
-
-        children.forEach(child -> child.setAttachedWindow(uiWindow));
-
     }
 
     public void initScreen(int screenWidth, int screenHeight) {
@@ -330,11 +259,6 @@ public class UIElement {
         // TODO: Fire DOM Events
     }
 
-    public final int getSiblingIndex() {
-        if (parent == null) return -1;
-        return parent.children.indexOf(this);
-    }
-
     protected Layout getTaffyLayout() {
         if (getTaffyTree() == null)
             return EMPTY_LAYOUT;
@@ -349,17 +273,103 @@ public class UIElement {
         return (parent == null ? attachedWindow == null ? 0 : attachedWindow.getLeftPos() : getTaffyLayout().location().x);
     }
 
-    public boolean focusable() {
-        return getFocusPolicy() != FocusPolicy.NONE && style.taffyBridge.style.display != TaffyDisplay.NONE;
+    // ── Style ────────────────────────────────────────────────────────────────
+
+    public UIElement style(Consumer<ElementStyle> configurator) {
+        configurator.accept(this.getStyle());
+        return this;
     }
 
-    private void invalidateFocusableChain() {
-        UIElement el = this;
-        while (el != null) {
-            el.getRuntimeCache().hasFocusableDescendant.invalidate();
-            el = el.getParent();
+    public UIElement generalStyle(Consumer<GeneralGroup> configurator) {
+        configurator.accept(this.getStyle().getGeneralGroup());
+        return this;
+    }
+
+    public void onStyleChanged() {
+        // no-op.
+    }
+
+    // ── Paint ────────────────────────────────────────────────────────────────
+
+    /**
+     * Paints this element's background, then recurses into children (z-index-sorted,
+     * DOM order as tiebreak), then paints this element's overlay. Fully synchronous —
+     * every call in this chain issues real GPU draw calls immediately; nothing here
+     * defers or accumulates work for later replay.
+     */
+    public final void drawSubtree(CgUiPaintContext ctx) {
+        if (style.taffyBridge.style.display == TaffyDisplay.NONE)
+            return;
+        if (runtimeCache.localToWorld.isDirty()) {
+            this.runtimeCache.localToWorld.set(ctx.getPoseStack().last().pose());
+            this.runtimeCache.worldToLocal.invalidate();
+        }
+
+        paintSelf(ctx);
+
+        if (!children.isEmpty()) {
+            for (UIElement child : getChildren()) {
+                child.drawSubtree(ctx);
+            }
+        }
+        paintOverlay(ctx);
+    }
+
+    /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */
+    protected void paintSelf(CgUiPaintContext ctx) {
+        GeneralGroup styleGen = style.getGeneralGroup();
+        ctx.setColor(styleGen.color());
+        styleGen.background().draw(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
+        ctx.setColor(0xFFFFFFFF);
+    }
+
+    /** Override for custom drawing that must appear above children. Called after children paint. */
+    protected void paintOverlay(CgUiPaintContext ctx) {
+        Matrix4f worldToLocal = runtimeCache.worldToLocal.get();
+        Vector4f v = new Vector4f();
+        v.set(ctx.mouseX, ctx.mouseY, 0, 1.0f);
+        worldToLocal.transform(v);
+        final float mouseX = v.x(), mouseY = v.y();
+        final float x = runtimeCache.getX(), y = runtimeCache.getY(), width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
+
+        style.getGeneralGroup().overlay().draw(ctx, x, y, width, height);
+    }
+
+    // ── Window attachment / Taffy tree ──────────────────────────────────────
+
+    @Nullable
+    public TaffyTree getTaffyTree() {
+        return attachedWindow == null ? null : attachedWindow.getTaffyTree();
+    }
+
+    public void markTreeDirty() {
+        var taffyTree = getTaffyTree();
+        if (taffyTree != null) {
+            taffyTree.markDirty(taffyNodeId);
         }
     }
+
+    protected final void setAttachedWindow(UIWindow uiWindow) {
+        if (this.attachedWindow == uiWindow) return;
+
+        var previousWindow = this.attachedWindow;
+
+        if (this.attachedWindow != null) {
+            this.attachedWindow.unregisterElement(this);
+        }
+
+        this.attachedWindow = uiWindow;
+
+        if (uiWindow != null) {
+            uiWindow.registerElement(this);
+        }
+
+        // TODO: Fire event for Window change
+
+        children.forEach(child -> child.setAttachedWindow(uiWindow));
+    }
+
+    // ── Runtime cache ────────────────────────────────────────────────────────
 
     public class RuntimeCache {
         public final CacheCell<Boolean> hasFocusableDescendant = new CacheCell<Boolean>().setCalculator(ignored -> {
@@ -370,7 +380,6 @@ public class UIElement {
             }
             return false;
         });
-        private float x, y;
 
         public final CacheCell<UIElement[]> sortedChildren = new CacheCell<UIElement[]>().setCalculator(ignored -> {
             int n = children.size();
@@ -386,19 +395,21 @@ public class UIElement {
             return sorted;
         });
 
-        public final CacheCell<Matrix4f> localToWorld = new CacheCell<>(new Matrix4f()).setCalculator( old -> {
+        public final CacheCell<Matrix4f> localToWorld = new CacheCell<>(new Matrix4f()).setCalculator(old -> {
             var element = UIElement.this;
             var parent = element.getParent();
             if (parent == null) {
                 if (element.attachedWindow == null) return old.identity();
-//                return old.set()
                 return old.identity();
             }
             old.set(parent.getRuntimeCache().localToWorld.get());
             // TODO: Style transforms
             return old;
         });
+
         public final CacheCell<Matrix4f> worldToLocal = new CacheCell<>(new Matrix4f()).setCalculator(old -> localToWorld.get().invert(old));
+
+        private float x, y;
 
         private RuntimeCache() {
             resetCache();
@@ -420,7 +431,7 @@ public class UIElement {
         }
 
         public float getX() {
-            if (Float.isNaN(x)){
+            if (Float.isNaN(x)) {
                 UIElement element = UIElement.this;
                 x = element.getLayoutX() + (element.getParent() == null ? 0 : element.getParent().getRuntimeCache().getX());
             }
@@ -428,7 +439,7 @@ public class UIElement {
         }
 
         public float getY() {
-            if (Float.isNaN(y)){
+            if (Float.isNaN(y)) {
                 UIElement element = UIElement.this;
                 y = element.getLayoutY() + (element.getParent() == null ? 0 : element.getParent().getRuntimeCache().getY());
             }
@@ -438,14 +449,13 @@ public class UIElement {
         public float getWidth() {
             return UIElement.this.getTaffyLayout().size().width;
         }
+
         public float getHeight() {
             return UIElement.this.getTaffyLayout().size().height;
         }
-
 
         public boolean isPositionDirty() {
             return Float.isNaN(x) && Float.isNaN(y);
         }
     }
-
 }
