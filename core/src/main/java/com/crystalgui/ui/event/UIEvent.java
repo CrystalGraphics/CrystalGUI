@@ -49,6 +49,10 @@ public abstract class UIEvent {
         this.defaultPrevented = true;
     }
 
+    /**
+     * Redefined {@link Signal.Pair.Listener} so you get proper hints with the IDE.
+     * @param <T>
+     */
     public interface Listener<T extends UIEvent> extends Signal.Pair.Listener<UIElement, T> {
         void accept(UIElement thisElement, T event);
     }

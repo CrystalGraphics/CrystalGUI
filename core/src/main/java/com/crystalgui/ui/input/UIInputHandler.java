@@ -120,34 +120,69 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     }
 
     private void findFocusableElement(Keyboard.Event event, int modifiers) {
-        if (event.key() != CgUiKeyCodes.KEY_TAB) {
-            return;
-        }
+        if (event.key() != CgUiKeyCodes.KEY_TAB) return;
         boolean reverse = Modifiers.hasShift(modifiers);
 
-        List<UIElement> orderedTree = findAcceptableSubtree();
-        if (orderedTree.isEmpty()) return;
-
-        int nextIndex;
+        UIElement next;
         if (focusedElement == null) {
-            nextIndex = reverse ? orderedTree.size() - 1 : 0;
+            next = reverse ? lastFocusableIn(window.ui.rootElement) : firstFocusableIn(window.ui.rootElement);
         } else {
-            int currentIndex = orderedTree.indexOf(focusedElement);
-
-            if (currentIndex == -1) currentIndex = reverse ? 0 : orderedTree.size() - 1;
-            nextIndex = Math.floorMod(currentIndex + (reverse ? -1 : 1), orderedTree.size());
+            next = reverse ? previousFocusable(focusedElement) : nextFocusable(focusedElement);
+            if (next == null) { // fell off the end — wrap around
+                next = reverse ? lastFocusableIn(window.ui.rootElement) : firstFocusableIn(window.ui.rootElement);
+            }
         }
+        if (next == null) return; // nothing focusable at all
 
-        if (focusedElement != null)
-            emitAndLoseFocus(focusedElement);
-        focusedElement = orderedTree.get(nextIndex);
-        if (focusedElement != null)
-            emitAndSetFocus(focusedElement);
+        if (focusedElement != null) emitAndLoseFocus(focusedElement);
+        focusedElement = next;
+        emitAndSetFocus(focusedElement);
     }
 
-    private List<UIElement> findAcceptableSubtree() {
-        return window.ui.rootElement.getRuntimeCache().focusableSubtree.get();
+    private UIElement firstFocusableIn(UIElement subtreeRoot) {
+        if (subtreeRoot.focusable()) return subtreeRoot;
+        for (UIElement child : subtreeRoot.getChildren()) {
+            if (child.getRuntimeCache().hasFocusableDescendant.get()) return firstFocusableIn(child);
+        }
+        return null;
     }
+
+    private UIElement lastFocusableIn(UIElement subtreeRoot) {
+        List<UIElement> children = subtreeRoot.getChildren();
+        for (int i = children.size() - 1; i >= 0; i--) {
+            if (children.get(i).getRuntimeCache().hasFocusableDescendant.get()) return lastFocusableIn(children.get(i));
+        }
+        return subtreeRoot.focusable() ? subtreeRoot : null;
+    }
+
+    private UIElement previousFocusable(UIElement current) {
+        UIElement node = current;
+        while (node.getParent() != null) {
+            List<UIElement> siblings = node.getParent().getChildren();
+            for (int i = node.getSiblingIndex() - 1; i >= 0; i--) {
+                if (siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) return lastFocusableIn(siblings.get(i));
+            }
+            if (node.getParent().focusable()) return node.getParent();
+            node = node.getParent();
+        }
+        return null;
+    }
+    private UIElement nextFocusable(UIElement current) {
+        for (UIElement child : current.getChildren()) {
+            if (child.getRuntimeCache().hasFocusableDescendant.get()) return firstFocusableIn(child);
+        }
+        UIElement node = current;
+        while (node.getParent() != null) {
+            List<UIElement> siblings = node.getParent().getChildren();
+            for (int i = node.getSiblingIndex() + 1; i < siblings.size(); i++) {
+                if (siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) return firstFocusableIn(siblings.get(i));
+            }
+            node = node.getParent();
+        }
+        return null;
+    }
+
+
 
     private boolean emitKeyboardDown(Keyboard.Event event, int modifiers) {
         KeyboardEvent.Down newEvent = new KeyboardEvent.Down(focusedElement, event.key(), event.character(), event.repeat(), modifiers, event.millis());
