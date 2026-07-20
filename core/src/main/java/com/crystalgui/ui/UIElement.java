@@ -267,8 +267,7 @@ public class UIElement {
         final float mouseX = v.x(), mouseY = v.y();
         final float x = runtimeCache.getX(), y = runtimeCache.getY(), width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
 
-        if (mouseX >= x && mouseX <= x+width && mouseY >= y && mouseY <= y+height)
-            style.getGeneralGroup().overlay().draw(ctx, x, y, width, height);
+        style.getGeneralGroup().overlay().draw(ctx, x, y, width, height);
     }
 
 
