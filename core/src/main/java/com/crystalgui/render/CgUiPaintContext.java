@@ -7,6 +7,7 @@ import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
 import com.crystalgraphics.api.text.CgTextLayout;
+import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
@@ -62,7 +63,6 @@ public final class CgUiPaintContext {
     @Getter
     private final CgTextRenderer textRenderer;
     private CgTextRenderContext textRenderContext;
-    private long textFrameCounter;
 
     // ── GL state isolation ──────────────────────────────────────────────────
     private CgGlScope glScope;
@@ -120,9 +120,6 @@ public final class CgUiPaintContext {
         // deliberately stays standalone-per-call, see docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md §2.3.
         if (textRenderContext == null) textRenderContext = CgTextRenderContext.orthographic(screenWidth, screenHeight);
         else textRenderContext.updateOrtho(screenWidth, screenHeight);
-
-        textFrameCounter++;
-        textRenderer.tickFrame(textFrameCounter);
 
         poseStack.pushPose();
         renderer.begin();
@@ -195,7 +192,7 @@ public final class CgUiPaintContext {
      * @param argb   packed color, tint already includes opacity
      */
     public void drawText(CgTextLayout layout, CgFont font, float x, float y, int argb) {
-            textRenderer.draw(layout, font, x, y, argb, textFrameCounter, textRenderContext, poseStack);
+            textRenderer.draw(layout, font, x, y, argb, CgGraphicsLifecycle.getCurrentFrame(), textRenderContext, poseStack);
     }
 
     /**
