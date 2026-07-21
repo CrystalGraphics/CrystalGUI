@@ -177,7 +177,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
         if (event.state()) {
             this.lastPressedElement = target;
-            this.lastPressedElement.setPressed(true);
+            if (this.lastPressedElement != null) this.lastPressedElement.setPressed(true);
             emitMouseDown(target, buttonOrdinal, detail);
         } else {
             this.lastPressedElement.setPressed(false);
