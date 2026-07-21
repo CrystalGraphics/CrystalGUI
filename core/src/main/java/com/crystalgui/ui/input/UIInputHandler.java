@@ -10,7 +10,7 @@ import com.crystalgui.core.input.SystemInput.Mouse;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.core.input.keyboard.Modifiers;
 import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UITreeTraversal;
+import com.crystalgui.ui.tree.UITreeTraversal;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.event.*;
 import lombok.Getter;

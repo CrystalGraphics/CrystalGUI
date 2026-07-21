@@ -1,4 +1,6 @@
-package com.crystalgui.ui;
+package com.crystalgui.ui.tree;
+
+import com.crystalgui.ui.UIElement;
 
 import java.util.List;
 
