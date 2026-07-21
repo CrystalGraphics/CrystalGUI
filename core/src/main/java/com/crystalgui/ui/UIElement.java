@@ -1,6 +1,7 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.data.CacheCell;
+import com.crystalgui.core.data.IntCacheCell;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiQuad;
@@ -61,6 +62,18 @@ public class UIElement {
     @Getter @Setter
     private boolean hitTest = true;
 
+    @Getter
+    private boolean isEnabled = true;
+
+    @Getter
+    private boolean isPressed = false;
+
+    @Getter
+    private boolean isFocused = false;
+
+    @Getter
+    private boolean isHovered = false;
+
     // Runtime only data.
     @Getter
     private final RuntimeCache runtimeCache = new RuntimeCache();
@@ -105,6 +118,40 @@ public class UIElement {
 
     public boolean hasClass(String cls) {
         return classes.contains(cls);
+    }
+
+
+    // ── State ────────────────────────────────────────────────────────────────
+    public void setEnabled(boolean enabled) {
+        if (this.isEnabled != enabled) onStyleChanged();
+        this.isEnabled = enabled;
+        onStyleChanged();
+    }
+
+    public void setPressed(boolean pressed) {
+        if (this.isPressed != pressed) onStyleChanged();
+        this.isPressed = pressed;
+        onStyleChanged();
+    }
+
+    public void setFocused(boolean focused) {
+        if (this.isFocused != focused) onStyleChanged();
+        this.isFocused = focused;
+        onStyleChanged();
+    }
+
+    public void setHovered(boolean hovered) {
+        if (this.isHovered == hovered) return;
+        this.isHovered = hovered;
+        onStyleChanged();
+    }
+
+    public boolean isChecked() {
+        return false;
+    }
+
+    public boolean isBlank() {
+        return false;
     }
 
     // ── Tree structure ───────────────────────────────────────────────────────
@@ -167,11 +214,13 @@ public class UIElement {
     }
 
     private void onAdded() {
+        this.runtimeCache.depth.invalidate().get();
         children.forEach(UIElement::onAdded);
         events.emitToGroup(new DOMEvent.ElementAdded(this));
     }
 
     private void onRemoved() {
+        this.runtimeCache.depth.invalidate();
         children.forEach(UIElement::onRemoved);
     }
 
@@ -266,11 +315,11 @@ public class UIElement {
     }
 
     protected final float getLayoutY() {
-        return (parent == null ? attachedWindow == null ? 0 : attachedWindow.getTopPos() : getTaffyLayout().location().y);
+        return (parent == null ? (attachedWindow == null ? 0 : attachedWindow.getTopPos()) : getTaffyLayout().location().y);
     }
 
     protected final float getLayoutX() {
-        return (parent == null ? attachedWindow == null ? 0 : attachedWindow.getLeftPos() : getTaffyLayout().location().x);
+        return (parent == null ? (attachedWindow == null ? 0 : attachedWindow.getLeftPos() ): getTaffyLayout().location().x);
     }
 
     // ── Style ────────────────────────────────────────────────────────────────
@@ -409,6 +458,12 @@ public class UIElement {
 
         public final CacheCell<Matrix4f> worldToLocal = new CacheCell<>(new Matrix4f()).setCalculator(old -> localToWorld.get().invert(old));
 
+        public final IntCacheCell depth = new IntCacheCell().setCalculator((old) -> {
+            UIElement parent = UIElement.this.parent;
+            if (parent == null) return 1;
+            return parent.getRuntimeCache().getDepth() + 1;
+        });
+
         private float x, y;
 
         private RuntimeCache() {
@@ -456,6 +511,10 @@ public class UIElement {
 
         public boolean isPositionDirty() {
             return Float.isNaN(x) && Float.isNaN(y);
+        }
+
+        public int getDepth() {
+            return depth.get();
         }
     }
 }

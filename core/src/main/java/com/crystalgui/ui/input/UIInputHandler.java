@@ -10,14 +10,12 @@ import com.crystalgui.core.input.SystemInput.Mouse;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.core.input.keyboard.Modifiers;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UITreeTraversal;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.event.*;
 import lombok.Getter;
 import org.joml.Vector2f;
 import org.jspecify.annotations.Nullable;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.Mouse {
     public final static long multiClickInterval = SystemInput.multiClickInterval.get();
@@ -55,21 +53,12 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     }
 
     public void sendInputEvent(UIElement element, UIEvent event) {
-        var target = element;
+        if (element == null) return;
+        UIElement[] path = UITreeTraversal.pathToRoot(element); // root-first, path[path.length - 1] == element
 
-        if (target == null) return;
-        ArrayList<UIElement> path = new ArrayList<>();
-        path.add(target);
-        while (target.getParent() != null) {
-            target = target.getParent();
-            path.add(target);
-        }
-
-        Class<? extends UIEvent> eventClass = event.getClass();
         event.setPhase(PropagationPhase.CAPTURE);
-        for (int i = path.size()-1; i > 0; i--) {
-            var eventListeners = path.get(i).events;
-            eventListeners.emitToGroup(event);
+        for (int i = 0; i < path.length - 1; i++) {
+            path[i].events.emitToGroup(event);
         }
 
         event.setPhase(PropagationPhase.TARGET);
@@ -77,24 +66,36 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
         if (!event.isBubbles()) return;
         event.setPhase(PropagationPhase.BUBBLE);
-        for (int i = 1; i < path.size(); i++) {
-            var eventListeners = path.get(i).events;
-            eventListeners.emitToGroup(event);
+        for (int i = path.length - 2; i >= 0; i--) {
+            path[i].events.emitToGroup(event);
         }
-
     }
 
     private void fireAccumulatedMouseEvents() {
         final var lastHover = this.lastFrameHover;
         final var currentHover = hoverFrameData.element();
-        if (lastHover == currentHover){
+
+        if (lastHover == currentHover) {
             emitMouseMove(lastHover);
         } else {
+            updateHoverChain(lastHover, currentHover);
             emitMouseLeave(lastHover);
             emitMouseEnter(currentHover);
         }
+
         if (scrollDelta != 0)
             emitMouseScroll(currentHover);
+    }
+
+    private void updateHoverChain(UIElement oldHover, UIElement newHover) {
+        final var commonAncestor = UITreeTraversal.commonAncestor(oldHover, newHover);
+
+        for (var e = oldHover; e != null && e != commonAncestor; e = e.getParent()) {
+            e.setHovered(false);
+        }
+        for (var e = newHover; e != null && e != commonAncestor; e = e.getParent()) {
+            e.setHovered(true);
+        }
     }
 
     @Override
@@ -125,11 +126,17 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
         UIElement next;
         if (focusedElement == null) {
-            next = reverse ? lastFocusableIn(window.ui.rootElement) : firstFocusableIn(window.ui.rootElement);
+            next = reverse
+                    ? UITreeTraversal.lastFocusableIn(window.ui.rootElement)
+                    : UITreeTraversal.firstFocusableIn(window.ui.rootElement);
         } else {
-            next = reverse ? previousFocusable(focusedElement) : nextFocusable(focusedElement);
+            next = reverse
+                    ? UITreeTraversal.previousFocusable(focusedElement)
+                    : UITreeTraversal.nextFocusable(focusedElement);
             if (next == null) { // fell off the end — wrap around
-                next = reverse ? lastFocusableIn(window.ui.rootElement) : firstFocusableIn(window.ui.rootElement);
+                next = reverse
+                        ? UITreeTraversal.lastFocusableIn(window.ui.rootElement)
+                        : UITreeTraversal.firstFocusableIn(window.ui.rootElement);
             }
         }
         if (next == null) return; // nothing focusable at all
@@ -139,55 +146,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         emitAndSetFocus(focusedElement);
     }
 
-    private UIElement firstFocusableIn(UIElement subtreeRoot) {
-        if (subtreeRoot.focusable()) return subtreeRoot;
-        for (UIElement child : subtreeRoot.getChildren()) {
-            if (child.getRuntimeCache().hasFocusableDescendant.get()) return firstFocusableIn(child);
-        }
-        return null;
-    }
-
-    private UIElement lastFocusableIn(UIElement subtreeRoot) {
-        List<UIElement> children = subtreeRoot.getChildren();
-        for (int i = children.size() - 1; i >= 0; i--) {
-            if (children.get(i).getRuntimeCache().hasFocusableDescendant.get()) return lastFocusableIn(children.get(i));
-        }
-        return subtreeRoot.focusable() ? subtreeRoot : null;
-    }
-
-    private UIElement previousFocusable(UIElement current) {
-        UIElement node = current;
-        while (node.getParent() != null) {
-            List<UIElement> siblings = node.getParent().getChildren();
-            for (int i = node.getSiblingIndex() - 1; i >= 0; i--) {
-                if (siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) return lastFocusableIn(siblings.get(i));
-            }
-            if (node.getParent().focusable()) return node.getParent();
-            node = node.getParent();
-        }
-        return null;
-    }
-    private UIElement nextFocusable(UIElement current) {
-        for (UIElement child : current.getChildren()) {
-            if (child.getRuntimeCache().hasFocusableDescendant.get()) return firstFocusableIn(child);
-        }
-        UIElement node = current;
-        while (node.getParent() != null) {
-            List<UIElement> siblings = node.getParent().getChildren();
-            for (int i = node.getSiblingIndex() + 1; i < siblings.size(); i++) {
-                if (siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) return firstFocusableIn(siblings.get(i));
-            }
-            node = node.getParent();
-        }
-        return null;
-    }
-
-
-
     private boolean emitKeyboardDown(Keyboard.Event event, int modifiers) {
         KeyboardEvent.Down newEvent = new KeyboardEvent.Down(focusedElement, event.key(), event.character(), event.repeat(), modifiers, event.millis());
         sendInputEvent(focusedElement, newEvent);
-
         return newEvent.isPropagationStopped() || newEvent.isPhasePropagationStopped() || newEvent.isDefaultPrevented();
     }
 
@@ -216,11 +177,12 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
         if (event.state()) {
             this.lastPressedElement = target;
+            this.lastPressedElement.setPressed(true);
             emitMouseDown(target, buttonOrdinal, detail);
         } else {
+            this.lastPressedElement.setPressed(false);
             emitMouseUp(target, buttonOrdinal, detail);
         }
-
     }
 
     private @Nullable ButtonState getMouseButtonState(int button) {
@@ -229,7 +191,6 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         if (mouseButtonStates[button] == null) {
             mouseButtonStates[button] = new ButtonState();
         }
-
         return mouseButtonStates[button];
     }
 
@@ -282,7 +243,6 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         sendInputEvent(target, event);
     }
 
-
     private void emitAndSetFocus(UIElement target) {
         this.focusedElement = target;
         FocusEvent.Focus event = new FocusEvent.Focus(target);
@@ -295,10 +255,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         sendInputEvent(target, event);
     }
 
-
     private class HoverFrameData {
         private final Vector2f position = new Vector2f();
-        private final ReadOnlyVec2f sealedVec2f = new ReadOnlyVec2f(position); /* GC-safe, read only representation of position. Used for mouse events */
+        private final ReadOnlyVec2f sealedVec2f = new ReadOnlyVec2f(position);
 
         private final CacheCell<UIElement> hoveredElement = new CacheCell<UIElement>()
                 .setCalculator(ignored -> UIInputHandler.this.window.getHoveredElement(position.x(), position.y()))
