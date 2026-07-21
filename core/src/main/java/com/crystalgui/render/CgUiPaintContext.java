@@ -1,14 +1,18 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.api.PoseStack;
+import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
+import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.text.render.CgTextRenderContext;
+import com.crystalgraphics.text.render.CgTextRenderer;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -23,8 +27,10 @@ import lombok.Setter;
  * at draw time when a scissor rect is active.</p>
  *
  * <p><b>Frame lifecycle</b> — call {@link #beginFrame} once before walking the UI tree,
- * then {@link #endFrame} once after. Every {@code fillRect}/{@code drawImage} call in
- * between draws immediately; there is no recording phase and nothing to flush.</p>
+ * then {@link #endFrame} once after. Every {@code fillRect}/{@code drawImage}/
+ * {@link #drawText} call in between draws immediately; there is no recording phase and
+ * nothing to flush. This is deliberate, not merely unoptimized — see {@link #drawText}'s
+ * doc for why text specifically must not defer its GPU submission.</p>
  */
 public final class CgUiPaintContext {
 
@@ -45,6 +51,18 @@ public final class CgUiPaintContext {
      */
     @Getter
     private final CgUiRenderer renderer;
+
+    // ── Text ─────────────────────────────────────────────────────────────────
+    /**
+     * Owned independently of {@link #renderer} — text uses
+     * {@link com.crystalgraphics.api.vertex.CgVertexFormat#POS2_UV2_COL4UB}, distinct from
+     * {@code CgUiRenderer}'s {@code CgVertexFormat.UI}, so it cannot share the same
+     * {@code CgBatchRenderer}. See {@code docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md} §2.1.
+     */
+    @Getter
+    private final CgTextRenderer textRenderer;
+    private CgTextRenderContext textRenderContext;
+    private long textFrameCounter;
 
     // ── GL state isolation ──────────────────────────────────────────────────
     private CgGlScope glScope;
@@ -68,6 +86,7 @@ public final class CgUiPaintContext {
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
+        this.textRenderer = CgTextRenderer.create();
     }
 
     public int mouseX, mouseY;
@@ -96,6 +115,14 @@ public final class CgUiPaintContext {
         fd.viewportW = screenWidth;
         fd.viewportH = screenHeight;
         pipeline.prepareFrame();
+
+        // Text: projection + atlas LRU frame tick. No beginBatch() here — drawText()
+        // deliberately stays standalone-per-call, see docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md §2.3.
+        if (textRenderContext == null) textRenderContext = CgTextRenderContext.orthographic(screenWidth, screenHeight);
+        else textRenderContext.updateOrtho(screenWidth, screenHeight);
+
+        textFrameCounter++;
+        textRenderer.tickFrame(textFrameCounter);
 
         poseStack.pushPose();
         renderer.begin();
@@ -148,6 +175,35 @@ public final class CgUiPaintContext {
         flush();
     }
 
+    /**
+     * Draws pre-built text immediately, same painter's-order guarantee as {@link #fillRect}/
+     * {@link #drawImage} — must not be deferred/batched across the frame (see
+     * {@code docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md} §2.3), otherwise text could render out of
+     * DOM order relative to quads drawn before/after it.
+     *
+     * <p>Wrapped in a {@link CgGlScope} because {@link CgTextRenderer} binds/unbinds its own raw
+     * shader and applies/clears its own {@code CgRenderState} internally — without this, the next
+     * {@code fillRect()}/{@code drawImage()} call in the same frame would render with no program
+     * bound (see plan §2.4). Restoring via scope (not a manual re-bind) also survives
+     * CrystalGraphics Phase 2's planned {@code CgMaterial} swap inside {@code CgTextRenderer}
+     * without needing changes here.</p>
+     *
+     * @param layout pre-built text layout (caller/widget owns layout construction and caching)
+     * @param font   the font to render with
+     * @param x      local logical X origin
+     * @param y      local logical Y origin
+     * @param argb   packed color, tint already includes opacity
+     */
+    public void drawText(CgTextLayout layout, CgFont font, float x, float y, int argb) {
+            textRenderer.draw(layout, font, x, y, argb, textFrameCounter, textRenderContext, poseStack);
+    }
+
+    /**
+     * Returns the context's text renderer object.
+     */
+    public CgTextRenderer text() {
+        return textRenderer;
+    }
 
     public void bindTexture(CgTexture2D texture) {
         if (texture == currentTexture) return;
