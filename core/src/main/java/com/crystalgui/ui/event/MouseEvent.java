@@ -39,6 +39,10 @@ public abstract class MouseEvent extends UIEvent {
 
     @Getter
     public final static class Scroll extends MouseEvent {
+        /**
+         * Mouse notches moved. <br>
+         * Unlike Windows / LWJGL 2, normalized to 1 or -1.
+         */
         private final float scroll;
 
         public Scroll(UIElement target, ReadOnlyVec2f pos, float deltaScroll) {

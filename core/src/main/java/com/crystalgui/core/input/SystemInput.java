@@ -42,17 +42,18 @@ public interface SystemInput {
     interface Mouse {
 
         /**
-         * Low-level mouse event representation
+         * Low-level mouse event representation <br>
+         * Unlike raw Windows / LWJGL 2, scroll delta has to be represented in the continuous "1.0" standard where 1 notch on your mouse = 1 scroll delta.
          * @param x Screen/Window X-coordinate of the mouse event (Top-Left origin)
          * @param y Screen/Window Y-coordinate of the mouse event (Top-Left origin)
          * @param dx Delta X
          * @param dy Delta Y
          * @param button {@link CgUiMouseCodes} button ID of the event or -1 for no click events
          * @param state state of the selected button. (True for pressed)
-         * @param wheelDelta
+         * @param wheelDelta Value in mouse wheel <b>notches!!!!</b>
          * @param millis Timestamp for click/release events, -1 for move events.
          */
-        record Event(int x, int y, int dx, int dy, int button, boolean state, int wheelDelta, long millis) {}
+        record Event(int x, int y, int dx, int dy, int button, boolean state, float wheelDelta, long millis) {}
 
         /**
          * Process event
