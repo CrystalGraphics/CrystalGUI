@@ -26,7 +26,9 @@ public class StylePropertyRegistry {
     public static final StyleProperty<CgUiDrawable> BACKGROUND = create("background", CgUiDrawable.EMPTY);
     public static final StyleProperty<CgUiDrawable> OVERLAY = create("overlay", CgUiDrawable.EMPTY);
     public static final StyleProperty<Float> OPACITY = create("opacity", 1f).setRange(0f, 1f);
-    public static final StyleProperty<Integer> COLOR = create(new ColorProperty("color", -1));
+    // Matches real CSS: `color` inherits by default. Layout/box-model properties below (z-index,
+    // clip, and everything in LayoutProperties) do not — none of them are inherited in real CSS either.
+    public static final StyleProperty<Integer> COLOR = create(new ColorProperty("color", -1)).setInheritable(true);
     public static final StyleProperty<Integer> Z_INDEX = create("z-index", 0).addListener((elem, prop, oldVal, newVal) -> {
         if (elem.getParent() != null) {
             elem.getParent().getRuntimeCache().sortedChildren.invalidate();
