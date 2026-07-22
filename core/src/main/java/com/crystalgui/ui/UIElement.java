@@ -1,10 +1,9 @@
 package com.crystalgui.ui;
 
+import com.crystalgraphics.api.text.CgTextConstraints;
 import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.IntCacheCell;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
@@ -20,7 +19,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.joml.Matrix4f;
-import org.joml.Vector4f;
 
 import javax.annotation.Nullable;
 import java.util.*;
@@ -418,6 +416,14 @@ public class UIElement {
         ctx.setColor(styleGen.color());
         styleGen.background().draw(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
         ctx.setColor(0xFFFFFFFF);
+        if (this.parent == null) {
+            ctx.text().draw()
+                    .text("Chuj ci w dupasddd asdasdasdasdasd asd asd sdaddddddddddddddddasd addddddddddddddddddddddddddddddsd as eFfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff ffffff")
+                    .color(0xFFFFFFFF)
+                    .at(runtimeCache.getX(), runtimeCache.getY())
+                    .constraints(new CgTextConstraints(runtimeCache.getWidth(), runtimeCache.getHeight()))
+                    .font(ctx.getFont()).submit();
+        }
     }
 
     /** Override for custom drawing that must appear above children. Called after children paint. */
