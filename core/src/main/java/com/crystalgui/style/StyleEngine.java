@@ -1,5 +1,6 @@
 package com.crystalgui.style;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.sheet.StyleRule;
@@ -8,6 +9,7 @@ import com.crystalgui.style.transition.TransitionEngine;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import lombok.Getter;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -84,9 +86,6 @@ public final class StyleEngine {
 
     private void rematch(UIElement element) {
         var previouslyApplied = appliedByElement.get(element);
-        if (previouslyApplied != null && !previouslyApplied.isEmpty()) {
-            element.getStyle().removeCandidates(previouslyApplied::contains);
-        }
 
         List<StyleSlot<?>> newSlots = new ArrayList<>();
         for (var sheet : sheets) {
@@ -95,23 +94,44 @@ public final class StyleEngine {
                 int specificity = rule.selector().specificity();
                 for (var decl : rule.declarations()) {
                     var origin = decl.important() ? StyleOrigin.IMPORTANT : StyleOrigin.STYLESHEET;
-                    newSlots.add(toSlot(decl, origin, specificity, rule.sourceOrder()));
+                    var slot = toSlot(decl, origin, specificity, rule.sourceOrder());
+                    if (slot != null) newSlots.add(slot);
                 }
             }
         }
 
         if (newSlots.isEmpty()) {
             appliedByElement.remove(element);
+            if (previouslyApplied != null && !previouslyApplied.isEmpty()) {
+                element.getStyle().removeCandidates(previouslyApplied::contains);
+            }
         } else {
             appliedByElement.put(element, newSlots);
-            element.getStyle().putCandidates(newSlots);
+            if (previouslyApplied != null && !previouslyApplied.isEmpty()) {
+                // Atomic remove+add — see ElementStyle.replaceCandidates()'s doc for why this must
+                // not be two separate calls (would defeat transitions via a spurious null passthrough).
+                element.getStyle().replaceCandidates(previouslyApplied::contains, newSlots);
+            } else {
+                element.getStyle().putCandidates(newSlots);
+            }
         }
     }
 
+    /**
+     * Builds a {@link StyleSlot} from a matched declaration, or {@code null} if the declaration's
+     * value failed to parse — a malformed value (e.g. {@code color: notacolor;}) must never become a
+     * cascade winner with a bogus null value, silently overriding a real lower-priority one.
+     */
+    @Nullable
     @SuppressWarnings("unchecked")
-    private static <T> StyleSlot<T> toSlot(StyleRule.Declaration decl, StyleOrigin origin, int specificity, int sourceOrder) {
+    static <T> StyleSlot<T> toSlot(StyleRule.Declaration decl, StyleOrigin origin, int specificity, int sourceOrder) {
         var property = (StyleProperty<T>) decl.property();
         T value = (T) decl.value().compute();
+        if (value == null) {
+            CrystalGuiCore.LOGGER.warn("Stylesheet declaration '{}: {}' failed to parse — skipping",
+                    property.name, decl.value().rawValue);
+            return null;
+        }
         return StyleSlot.of(property, origin, specificity, sourceOrder, value);
     }
 

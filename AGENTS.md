@@ -174,7 +174,7 @@ paintContext.beginFrame(screenW, screenH) // GL state save, ortho projection, bi
   ui.rootElement.drawSubtree(paintContext) // recursive: paintSelf → children → paintOverlay, immediate draw
   poseStack.pop()
 paintContext.endFrame()                   // GL state restore
-inputHandler.beginFrame() / endFrame()    // hover diffing + accumulated-event dispatch (see below)
+inputHandler.beginFrame() / endFrame()    // beginFrame() is a no-op; endFrame() does hover diffing + dispatch
 ```
 
 ## Style / cascade system (new — supersedes the old bare "Stylesheet support" bullet)
@@ -216,9 +216,13 @@ Three-phase (capture/target/bubble) dispatch is real and implemented, but moved 
   BUBBLE if `bubbles`). This single class merges what older notes called `UiInputManager` + `FocusManager`
   — there is no such split anymore. It implements `SystemInput.Mouse`/`SystemInput.Keyboard` directly
   (registered as the raw-event sink), tracks hover via a `CacheCell<UIElement>` diffed once per frame
-  (`beginFrame`/`endFrame`, propagating `:hover`-like state up the ancestor chain), tracks click/press state
-  per button (`ButtonState`, multi-click `detail` counting), and drives Tab-key focus traversal via
-  `ui/tree/UITreeTraversal` (`firstFocusableIn`/`lastFocusableIn`/`previousFocusable`/`nextFocusable`).
+  entirely inside `endFrame()`/`fireAccumulatedMouseEvents()` (propagating `:hover`-like state up the
+  ancestor chain) — `beginFrame()` is currently a no-op, kept as a reserved lifecycle hook; the "last
+  frame's hover" baseline is a plain field (`lastFrameHover`) snapshotted at the end of
+  `fireAccumulatedMouseEvents()`, not re-read from the live cache at the top of the next frame (that
+  used to double-invalidate the cache and silently defeat the old/new diff — fixed 2026-07-22), tracks
+  click/press state per button (`ButtonState`, multi-click `detail` counting), and drives Tab-key focus
+  traversal via `ui/tree/UITreeTraversal` (`firstFocusableIn`/`lastFocusableIn`/`previousFocusable`/`nextFocusable`).
 - **`ui/input/FocusPolicy`** (`NONE`/`FOCUSABLE`/`CLICK`) and **`ui/tree/UITreeTraversal`** (stateless
   ancestor/tab-order queries over the `UIElement` tree) round out the package.
 
@@ -226,6 +230,7 @@ Note the actual accumulate-then-dispatch model: `consumeMouseEvent`/`consumeKeyb
 input during the frame; click/focus/keyboard events dispatch immediately, but hover/enter/leave/move/scroll
 are synthesized once per frame from `UIWindow.paintFrame()`'s `inputHandler.beginFrame()`/`endFrame()` calls
 — not synchronously per raw platform event like the old `processMouseMove/Down/Up` pseudocode implied.
+`beginFrame()` does nothing; all of the hover snapshot/diff/dispatch work happens inside `endFrame()`.
 
 ## UI elements — currently empty
 

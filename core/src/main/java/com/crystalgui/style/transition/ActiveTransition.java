@@ -2,6 +2,7 @@ package com.crystalgui.style.transition;
 
 import com.crystalgui.style.easing.Easing;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.StylePropertyRegistry;
 
 /** One in-flight state transition for a single (element, property) pair. Retargeting (e.g. rapid
  * hover on/off) replaces the map entry wholesale rather than mutating in place. */

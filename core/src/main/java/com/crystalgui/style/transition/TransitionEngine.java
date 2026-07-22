@@ -24,6 +24,12 @@ public final class TransitionEngine {
      * apply {@code toValue} immediately instead.
      */
     public <T> boolean tryStart(UIElement element, StyleProperty<T> property, T fromValue, T toValue) {
+        // Nothing meaningful to interpolate to/from "unset" — decline and let the caller apply the
+        // new value (or lack of one) immediately, same as it does for a property's first-ever
+        // resolution. Most interpolators (primitive-boxed ones via auto-unboxing, object ones via
+        // direct dereference) would NPE on a null argument otherwise.
+        if (fromValue == null || toValue == null) return false;
+
         TransitionSpec spec = findApplicableSpec(element, property);
         if (spec == null || spec.durationNanos() <= 0) return false;
 

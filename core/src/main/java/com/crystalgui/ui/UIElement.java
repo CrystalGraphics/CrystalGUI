@@ -141,6 +141,7 @@ public class UIElement {
     }
 
     public void setPressed(boolean pressed) {
+        if (!this.isEnabled()) return;
         if (this.isPressed == pressed) return;
         this.isPressed = pressed;
         onStyleChanged();
