@@ -4,9 +4,11 @@ import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.api.material.CgMaterial;
+import com.crystalgraphics.api.material.CgRenderPassVariant;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
+import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.api.vertex.CgVertexFormat;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
@@ -86,12 +88,11 @@ public final class CgUiPaintContext {
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
-        this.textRenderer = CgTextRenderer.create().poseStack(this.poseStack).setBatchEndListener(this::invalidateState);
-    }
-
-    public void invalidateState() {
-        this.currentTexture = null;
-        this.boxModelMaterial.bind();
+        this.textRenderer = CgTextRenderer.create().poseStack(this.poseStack)
+            .restoreStateWith(() -> {
+                boxModelMaterial.bind();
+                currentTexture = null;
+            });
     }
 
     public int mouseX, mouseY;
