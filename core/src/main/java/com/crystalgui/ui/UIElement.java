@@ -146,10 +146,18 @@ public class UIElement {
         onStyleChanged();
     }
 
+    /**
+     * Reserved for checkboxes / on-off sliders
+     * @return Is element checked.
+     */
     public boolean isChecked() {
         return false;
     }
 
+    /**
+     * Reserved for text fields
+     * @return If the element is blank
+     */
     public boolean isBlank() {
         return false;
     }
@@ -194,7 +202,6 @@ public class UIElement {
         child.parent = null;
         this.runtimeCache.sortedChildren.invalidate();
         this.invalidateFocusableChain();
-        events.emitToGroup(new DOMEvent.ElementAdded(this));
         return true;
     }
 
@@ -222,6 +229,7 @@ public class UIElement {
     private void onRemoved() {
         this.runtimeCache.depth.invalidate();
         children.forEach(UIElement::onRemoved);
+        events.emitToGroup(new DOMEvent.ElementAdded(this));
     }
 
     private boolean hasParent() {
