@@ -84,7 +84,7 @@ public final class CgUiPaintContext {
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
-        this.textRenderer = CgTextRenderer.create();
+        this.textRenderer = CgTextRenderer.create().poseStack(this.poseStack);
     }
 
     public int mouseX, mouseY;
@@ -168,30 +168,7 @@ public final class CgUiPaintContext {
         submitQuad(x, y, width, height, u0, v0, u1, v1, argb);
         flush();
     }
-
-    /**
-     * Draws pre-built text immediately, same painter's-order guarantee as {@link #fillRect}/
-     * {@link #drawImage} — must not be deferred/batched across the frame (see
-     * {@code docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md} §2.3), otherwise text could render out of
-     * DOM order relative to quads drawn before/after it.
-     *
-     * <p>Wrapped in a {@link CgGlScope} because {@link CgTextRenderer} binds/unbinds its own raw
-     * shader and applies/clears its own {@code CgRenderState} internally — without this, the next
-     * {@code fillRect()}/{@code drawImage()} call in the same frame would render with no program
-     * bound (see plan §2.4). Restoring via scope (not a manual re-bind) also survives
-     * CrystalGraphics Phase 2's planned {@code CgMaterial} swap inside {@code CgTextRenderer}
-     * without needing changes here.</p>
-     *
-     * @param layout pre-built text layout (caller/widget owns layout construction and caching)
-     * @param font   the font to render with
-     * @param x      local logical X origin
-     * @param y      local logical Y origin
-     * @param argb   packed color, tint already includes opacity
-     */
-    public void drawText(CgTextLayout layout, CgFont font, float x, float y, int argb) {
-            textRenderer.draw().layout(layout).font(font).at(x, y).color(argb).pose(poseStack).submit();
-    }
-
+    
     /**
      * Returns the context's text renderer object.
      */
