@@ -27,10 +27,8 @@ import lombok.Setter;
  * at draw time when a scissor rect is active.</p>
  *
  * <p><b>Frame lifecycle</b> — call {@link #beginFrame} once before walking the UI tree,
- * then {@link #endFrame} once after. Every {@code fillRect}/{@code drawImage}/
- * {@link #drawText} call in between draws immediately; there is no recording phase and
- * nothing to flush. This is deliberate, not merely unoptimized — see {@link #drawText}'s
- * doc for why text specifically must not defer its GPU submission.</p>
+ * then {@link #endFrame} once after. Every {@code fillRect}/{@code drawImage} call in between draws immediately;
+ * there is no recording phase and nothing to flush. This is intentional for now, not merely unoptimized. </p>
  */
 public final class CgUiPaintContext {
 
@@ -173,7 +171,7 @@ public final class CgUiPaintContext {
      * Returns the context's text renderer object.
      *
      * <p>Its owned pose stack was wired to this context's own {@link #getPoseStack()} in
-     * the constructor, so {@link com.crystalgraphics.text.render.CgTextRenderer.Draw#pose}
+     * the constructor, so {@link CgTextRenderer.Draw#poseStack(PoseStack)}
      * may be omitted entirely — a draw with no explicit pose falls back to it.</p>
      *
      * <pre>{@code
