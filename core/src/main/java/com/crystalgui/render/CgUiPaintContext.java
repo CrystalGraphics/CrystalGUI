@@ -3,6 +3,7 @@ package com.crystalgui.render;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.material.CgMaterial;
+import com.crystalgraphics.api.material.CgRenderPassVariant;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
@@ -82,7 +83,11 @@ public final class CgUiPaintContext {
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
-        this.textRenderer = CgTextRenderer.create().poseStack(this.poseStack);
+        this.textRenderer = CgTextRenderer.create().poseStack(this.poseStack)
+            .restoreStateWith(() -> {
+                boxModelMaterial.bind();
+                currentTexture = null;
+            });
     }
 
     public int mouseX, mouseY;
