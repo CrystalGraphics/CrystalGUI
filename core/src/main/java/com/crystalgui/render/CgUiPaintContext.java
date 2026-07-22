@@ -2,11 +2,11 @@ package com.crystalgui.render;
 
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
+import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
-import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.api.vertex.CgVertexFormat;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
@@ -31,6 +31,7 @@ import lombok.Setter;
  * there is no recording phase and nothing to flush. This is intentional for now, not merely unoptimized. </p>
  */
 public final class CgUiPaintContext {
+    private static final String DEMO_FONT_PATH = "C:\\WINDOWS\\Fonts\\arial.ttf";
 
     private final CgMaterial boxModelMaterial;
 
@@ -74,6 +75,9 @@ public final class CgUiPaintContext {
     @Getter
     private boolean frameActive;
 
+    @Getter
+    private final CgFont font = CgFont.load(DEMO_FONT_PATH, CgFontStyle.REGULAR, 16);
+
     @Getter @Setter
     private int color = 0xFFFFFFFF;
 
@@ -82,7 +86,12 @@ public final class CgUiPaintContext {
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
-        this.textRenderer = CgTextRenderer.create().poseStack(this.poseStack);
+        this.textRenderer = CgTextRenderer.create().poseStack(this.poseStack).setBatchEndListener(this::invalidateState);
+    }
+
+    public void invalidateState() {
+        this.currentTexture = null;
+        this.boxModelMaterial.bind();
     }
 
     public int mouseX, mouseY;

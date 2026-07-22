@@ -41,14 +41,26 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     }
 
     /**
-     * Currently a no-op. Hover snapshotting/diffing happens entirely in {@link #endFrame()} via
-     * {@link #fireAccumulatedMouseEvents()} — reading {@code hoverFrameData} here used to corrupt the
-     * "last frame" snapshot, since ordinary mouse-move events already invalidate that cache before
-     * this method runs each frame (making the read here an eager recompute against the *new*
-     * position, not the old one). Kept as a reserved lifecycle hook, mirroring
-     * {@code CgUiPaintContext.beginFrame()}/{@code endFrame()} above it in {@code UIWindow.paintFrame()}.
+     * Forces the hover hit-test to recompute this frame, regardless of whether the mouse moved.
+     * {@code UIWindow.paintFrame()} calls this AFTER that frame's layout has already been recomputed
+     * — without it, the hover cache would only ever refresh on genuine mouse-position changes
+     * ({@link HoverFrameData#updatePosition}), so a UI reflow under a perfectly stationary cursor
+     * (an element resizing/moving via a transition, a stylesheet re-match, children added/removed)
+     * would leave the hovered element stale until the next real mouse movement happened to occur.
+     * Unconditional per-frame invalidation is simpler than only invalidating when layout genuinely
+     * changed (which would need a new signal threaded out of {@code UIWindow.calculateLayout()}) and
+     * matches this engine's existing immediate-mode philosophy of recomputing freely each frame
+     * rather than optimizing for skipped work.
+     *
+     * <p>Hover snapshotting/diffing itself still happens entirely in {@link #endFrame()} via
+     * {@link #fireAccumulatedMouseEvents()} — this method only invalidates the cache {@code endFrame()}
+     * will then read; it must not also read/snapshot it here (that was the original stuck-hover bug:
+     * ordinary mouse-move events already invalidate this same cache before this method runs each
+     * frame, so reading it here was really an eager recompute against the *new* position mislabeled
+     * as the *old* one).
      */
     public void beginFrame() {
+        hoverFrameData.invalidate();
     }
 
     public void endFrame() {
@@ -189,10 +201,10 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
         if (event.state()) {
             this.lastPressedElement = target;
-            if (this.lastPressedElement != null) this.lastPressedElement.setPressed(true);
+            if (this.lastPressedElement != null && buttonOrdinal == 0) this.lastPressedElement.setPressed(true);
             emitMouseDown(target, buttonOrdinal, detail);
         } else {
-            if (this.lastPressedElement != null) this.lastPressedElement.setPressed(false);
+            if (this.lastPressedElement != null && buttonOrdinal == 0) this.lastPressedElement.setPressed(false);
             emitMouseUp(target, buttonOrdinal, detail);
         }
     }
