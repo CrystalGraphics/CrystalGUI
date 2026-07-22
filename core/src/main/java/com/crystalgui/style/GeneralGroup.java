@@ -3,6 +3,9 @@ package com.crystalgui.style;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.property.visual.OverflowClip;
+import com.crystalgui.style.transition.TransitionSpec;
+
+import java.util.List;
 
 public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
@@ -70,6 +73,21 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     public GeneralGroup mask(CgUiDrawable overflowClip) {
         set(StylePropertyRegistry.MASK, overflowClip);
+        return this;
+    }
+
+    public List<TransitionSpec> transition() {
+        return getValueSave(StylePropertyRegistry.TRANSITION);
+    }
+
+    /** Parses a CSS-{@code transition}-shorthand string — see {@link TransitionSpec} for the grammar. */
+    public GeneralGroup transition(String raw) {
+        set(StylePropertyRegistry.TRANSITION, TransitionSpec.parse(raw));
+        return this;
+    }
+
+    public GeneralGroup transition(List<TransitionSpec> specs) {
+        set(StylePropertyRegistry.TRANSITION, specs);
         return this;
     }
 

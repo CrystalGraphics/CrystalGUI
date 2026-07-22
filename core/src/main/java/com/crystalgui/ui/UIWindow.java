@@ -3,6 +3,7 @@ package com.crystalgui.ui;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.vertex.CgVertexTransformUtil;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.input.UIInputHandler;
 import dev.vfyjxf.taffy.geometry.TaffySize;
@@ -38,6 +39,10 @@ public final class UIWindow {
 
     @Getter
     private final UIInputHandler inputHandler = new UIInputHandler(this);
+
+    @Getter
+    private final StyleEngine styleEngine = new StyleEngine(this);
+    private long lastFrameNanos = System.nanoTime();
 
     private final List<UIElement> elements = new ArrayList<>();
 
@@ -176,24 +181,19 @@ public final class UIWindow {
      * order, using bounds computed by this same call.
      */
     public void paintFrame() {
+        long now = System.nanoTime();
+        float deltaSeconds = (now - lastFrameNanos) / 1_000_000_000f;
+        lastFrameNanos = now;
+
+        styleEngine.calculateStyle(deltaSeconds);
         calculateLayout();
 
         paintContext.beginFrame(actualScreenWidth, actualScreenHeight);
-        
-        paintContext.bindTexture(paintContext.getWhitePixel());
-        paintContext.submitQuad(0,0, 1, 1, 0,0,1,1, 0xFF0000FF);
-        paintContext.submitQuad(1,0, 2, 2, 0,0,1,1, 0xFFFF0000);
-        paintContext.flush();
 
         PoseStack pose = paintContext.getPoseStack();
         pose.pushPose();
 
-        long time = System.currentTimeMillis();
-        double cycleDurationMs = 4000.0; // 2 seconds for a complete 0 -> 2 -> 0 cycle
-
-
         pose.scale(uiScale, uiScale, 1f);
-
 
         ui.rootElement.drawSubtree(paintContext);
 
@@ -223,6 +223,7 @@ public final class UIWindow {
         }
 
         elements.remove(element);
+        styleEngine.onElementDetached(element);
     }
 
     public void registerElement(UIElement element) {
@@ -238,6 +239,13 @@ public final class UIWindow {
                 taffyTree.insertChildAtIndex(parentID, element.getSiblingIndex(), element.taffyNodeId);
             }
         }
+        styleEngine.markDirty(element);
+    }
+
+    /** Every element currently attached to this window's tree. Read-only — used by {@link StyleEngine}
+     * to re-match the whole tree when a stylesheet is added or removed. */
+    public List<UIElement> getElements() {
+        return Collections.unmodifiableList(elements);
     }
 
     public UIElement getHoveredElement(float mouseX, float mouseY) {

@@ -3,7 +3,6 @@ package com.crystalgui.style;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StyleSlot;
-import com.crystalgui.style.property.StyleValue;
 import lombok.Getter;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,10 +28,6 @@ public final class ElementStyle {
 
     public final Map<StyleProperty<?>, List<StyleSlot<?>>> candidates = new HashMap<>();
     private final Map<StyleProperty<?>, StyleSlot<?>> computedSlots = new HashMap<>();
-    private final BitSet dirtyProps = new BitSet();
-
-    @Getter
-    private boolean dirty = true;
 
     public ElementStyle layout(Consumer<LayoutGroup> configurator) {
         configurator.accept(this.getLayoutGroup());
@@ -51,50 +46,11 @@ public final class ElementStyle {
         this.generalGroup = new GeneralGroup(this);
     }
 
-    public void markDirty() {
-        if (!this.dirty) {
-            this.dirty = true;
-        }
-    }
-
-//    public void compute() {
-//        if (!isDirty()) return;
-//
-//        var old = new HashMap<StyleProperty<?>, StyleSlot<?>>();
-//
-//        for (int pid = dirtyProps.nextSetBit(0); pid >= 0; pid = dirtyProps.nextSetBit(pid + 1)) {
-//            var p = StylePropertyRegistry.byId(pid);
-//            if (p == null) continue;
-//            old.put(p, computedSlots.get(p));
-//            computedSlots.put(p, computeCandidateSlot(p));
-//        }
-//
-//        dirtyProps.clear();
-//        dirty = false;
-//
-//
-//        for (var entry : old.entrySet()) {
-//            var property = entry.getKey();
-//            var oldSlot = entry.getValue();
-//            var newSlot = computedSlots.get(property);
-//            var oldValue = oldSlot == null ? null : oldSlot.value();
-//            var newValue = newSlot == null ? null : newSlot.value();
-//            if (!Objects.equals(oldValue, newValue)) {
-//                // apply transition while changes
-//                 property.notifyListeners(element, cast(oldValue), cast(newValue));
-//
-//            }
-//        }
-//    }
-
     public <T> void putCandidate(StyleProperty<T> p, StyleSlot<T> slot) {
         candidates.computeIfAbsent(p, k -> new ArrayList<>()).add(slot);
-        dirtyProps.set(p.id);
-        markDirty();
-        computedSlots.put(p, computeCandidateSlot(p));
-        p.notifyListeners(element, null, slot.value());
-        element.onStyleChanged();
+        resolveTouched(Set.of(p));
     }
+
     public <T> void replaceOrPutCandidate(StyleProperty<T> p, StyleSlot<T> slot) {
         var slots = candidates.get(p);
         if (slots != null) {
@@ -110,24 +66,19 @@ public final class ElementStyle {
         }
         putCandidate(p, slot);
     }
-    public void putCandidates(Map<StyleProperty<?>, StyleValue<?>> values,
-                              StyleOrigin origin,
-                              int specificity, int sourceOrder) {
-        if (values.isEmpty()) return;
-        for (var entry : values.entrySet()) {
-            var p = entry.getKey();
-            var v = entry.getValue();
-            candidates.computeIfAbsent(p, k -> new ArrayList<>()).add(StyleSlot.of(
-                    cast(p),
-                    origin,
-                    specificity,
-                    sourceOrder,
-                    cast(v.compute())
-            ));
-            dirtyProps.set(p.id);
+    /**
+     * Bulk-applies a heterogeneous batch of slots (each may carry its own origin/specificity/
+     * sourceOrder) — the path stylesheet rule matching uses, since different matched rules
+     * contribute different cascade metadata for the same element in one re-match pass.
+     */
+    public void putCandidates(List<StyleSlot<?>> slots) {
+        if (slots.isEmpty()) return;
+        var touched = new LinkedHashSet<StyleProperty<?>>();
+        for (var slot : slots) {
+            candidates.computeIfAbsent(slot.property(), k -> new ArrayList<>()).add(slot);
+            touched.add(slot.property());
         }
-        markDirty();
-        element.onStyleChanged();
+        resolveTouched(touched);
     }
 
     public boolean containsCandidate(StyleProperty<?> property, Predicate<StyleSlot<?>> predicate) {
@@ -137,19 +88,15 @@ public final class ElementStyle {
     }
 
     public void removeCandidates(Predicate<StyleSlot<?>> predicate) {
-        var changed = false;
+        var touched = new LinkedHashSet<StyleProperty<?>>();
         for (var entry : candidates.entrySet()) {
-            var p = entry.getKey();
-            List<StyleSlot<?>> list = entry.getValue();
-            if (list.removeIf(predicate)) {
-                dirtyProps.set(p.id);
-                markDirty();
-                changed = true;
+            if (entry.getValue().removeIf(predicate)) {
+                touched.add(entry.getKey());
             }
         }
-        if (changed) {
+        if (!touched.isEmpty()) {
             candidates.values().removeIf(List::isEmpty);
-            element.onStyleChanged();
+            resolveTouched(touched);
         }
     }
 
@@ -157,20 +104,90 @@ public final class ElementStyle {
         var slots = candidates.get(property);
         if (slots == null || slots.isEmpty()) return;
         if (slots.removeIf(predicate)) {
-            dirtyProps.set(property.id);
-            markDirty();
             candidates.values().removeIf(List::isEmpty);
-            element.onStyleChanged();
+            resolveTouched(Set.of(property));
         }
     }
 
     public void clearCandidates() {
-        for (var p : candidates.keySet()) {
-            dirtyProps.set(p.id);
-        }
+        if (candidates.isEmpty()) return;
+        var touched = new LinkedHashSet<StyleProperty<?>>(candidates.keySet());
         candidates.clear();
-        markDirty();
+        resolveTouched(touched);
+    }
+
+    /**
+     * The single write path for every cascade mutation above. Phase 1 recomputes {@link #computedSlots}
+     * for every touched property before anything is diffed, so a batch that sets both {@code transition}
+     * and a transitionable property in the same call (e.g. one stylesheet rule) sees a fully-resolved
+     * {@code transition} value regardless of {@code Map} iteration order. Phase 2 diffs old vs. new and
+     * either notifies listeners directly or hands the change to the transition engine.
+     */
+    private void resolveTouched(Set<StyleProperty<?>> touched) {
+        if (touched.isEmpty()) return;
+
+        var oldValues = new HashMap<StyleProperty<?>, Object>();
+        var wasResolved = new HashSet<StyleProperty<?>>();
+        for (var p : touched) {
+            if (computedSlots.containsKey(p)) wasResolved.add(p);
+            oldValues.put(p, getComputed(p));
+            computedSlots.put(p, computeCandidateSlot(p));
+        }
+
+        for (var p : touched) {
+            resolveOne(p, oldValues.get(p), wasResolved.contains(p));
+        }
         element.onStyleChanged();
+    }
+
+    /**
+     * Diffs one already-resolved property. If the value actually changed and the property allows
+     * transitions and this isn't the element's first-ever resolution of it, the transition engine
+     * gets first refusal (it may shadow the value with an ANIMATION-origin slot instead of applying
+     * it instantly); otherwise listeners are notified with the real old/new pair.
+     */
+    private <T> void resolveOne(StyleProperty<T> p, Object oldValueRaw, boolean wasResolved) {
+        T oldValue = cast(oldValueRaw);
+        T newValue = getComputed(p);
+        if (Objects.equals(oldValue, newValue)) return;
+
+        var window = element.getAttachedWindow();
+        if (wasResolved && p.isAllowTransition() && window != null
+                && window.getStyleEngine().getTransitionEngine().tryStart(element, p, oldValue, newValue)) {
+            return;
+        }
+        p.notifyListeners(element, oldValue, newValue);
+    }
+
+    // ── Transition-engine-internal write path (style/transition/) ─────────────────────────────
+    // Bypasses putCandidate()/resolveTouched() entirely: per-frame interpolation writes must not
+    // report fake diffs or re-enter transition-eligibility checks on their own writes.
+
+    public <T> void startAnimationSlot(StyleProperty<T> p, T startValue, int sourceOrder) {
+        replaceAnimationSlot(p, startValue, sourceOrder);
+        computedSlots.put(p, StyleSlot.of(p, StyleOrigin.ANIMATION, 0, sourceOrder, startValue));
+    }
+
+    public <T> void tickAnimationSlot(StyleProperty<T> p, T interpolatedValue, int sourceOrder) {
+        replaceAnimationSlot(p, interpolatedValue, sourceOrder);
+        computedSlots.put(p, StyleSlot.of(p, StyleOrigin.ANIMATION, 0, sourceOrder, interpolatedValue));
+    }
+
+    /** Removes the ANIMATION shadow and lets the real (non-animated) winner take back over. */
+    public <T> void endAnimationSlot(StyleProperty<T> p) {
+        var slots = candidates.get(p);
+        if (slots != null) {
+            slots.removeIf(s -> s.origin() == StyleOrigin.ANIMATION);
+            if (slots.isEmpty()) candidates.remove(p);
+        }
+        computedSlots.put(p, computeCandidateSlot(p));
+        element.onStyleChanged();
+    }
+
+    private <T> void replaceAnimationSlot(StyleProperty<T> p, T value, int sourceOrder) {
+        var slots = candidates.computeIfAbsent(p, k -> new ArrayList<>());
+        slots.removeIf(s -> s.origin() == StyleOrigin.ANIMATION);
+        slots.add(StyleSlot.of(p, StyleOrigin.ANIMATION, 0, sourceOrder, value));
     }
     public <T> StyleSlot<T> computeCandidateSlot(StyleProperty<T> p) {
         List<StyleSlot<?>> list = candidates.get(p);
