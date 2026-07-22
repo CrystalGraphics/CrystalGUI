@@ -1,6 +1,5 @@
 package com.crystalgui.ui;
 
-import com.crystalgraphics.api.text.CgTextConstraints;
 import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.IntCacheCell;
 import com.crystalgui.render.CgUiPaintContext;
@@ -417,11 +416,15 @@ public class UIElement {
         styleGen.background().draw(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
         ctx.setColor(0xFFFFFFFF);
         if (this.parent == null) {
+            //            String text = "Chuj ci w dupasddd asdasdasdasdasd asd asd sdaddddddddddddddddasd addddddddddddddddddddddddddddddsd as eFfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff ffffff";
+            //            String text = "This is a sentence, this is a long sentence. I am typing this sentence, which is quite a long sentence. Have you ever typed a sentence this long? Cause as you see this sentence is on the longer side. At this point this sentence is longer than most sentences, maybe even most long sentences. I am really typing this sentence. Have you ever typed a sentence with your life on the line?";
+            //              String text = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbb";
+            String text = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmno pqrstuvwxyzabcdefghijklmnopqrstuvwxyz ok";
             ctx.text().draw()
-                    .text("Chuj ci w dupasddd asdasdasdasdasd asd asd sdaddddddddddddddddasd addddddddddddddddddddddddddddddsd as eFfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff ffffff")
+               .text(text)
                     .color(0xFFFFFFFF)
                     .at(runtimeCache.getX(), runtimeCache.getY())
-                    .constraints(new CgTextConstraints(runtimeCache.getWidth(), runtimeCache.getHeight()))
+                    .constraints(runtimeCache.getWidth(), runtimeCache.getHeight())
                     .font(ctx.getFont()).submit();
         }
     }
