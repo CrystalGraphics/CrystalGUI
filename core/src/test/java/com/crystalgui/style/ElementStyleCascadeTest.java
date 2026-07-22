@@ -233,4 +233,134 @@ public class ElementStyleCascadeTest {
         assertEquals(List.of("a-value"), aChanges);
         assertEquals(List.of("b-value"), bChanges);
     }
+
+    // ── moveInlineAsDefault ──────────────────────────────────────────────────────────────────
+
+    @Test
+    public void moveInlineAsDefaultPreservesTheCurrentValue() {
+        var prop = newProp("default");
+        var element = new UIElement();
+
+        element.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.INLINE, 0, 0, "widget-baseline"));
+        assertEquals("widget-baseline", element.getStyle().getComputed(prop));
+
+        element.moveInlineAsDefault();
+
+        assertEquals("reclassifying to DEFAULT must not change the current value on its own",
+                "widget-baseline", element.getStyle().getComputed(prop));
+    }
+
+    @Test
+    public void moveInlineAsDefaultLetsAStylesheetOverrideAfterward() {
+        var prop = newProp("default");
+        var element = new UIElement();
+
+        element.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.INLINE, 0, 0, "widget-baseline"));
+        element.moveInlineAsDefault();
+
+        // Before the demotion this STYLESHEET candidate could never have won (INLINE always beats
+        // STYLESHEET regardless of specificity) — after it, DEFAULT correctly loses to STYLESHEET.
+        element.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.STYLESHEET, 10, 0, "sheet-override"));
+
+        assertEquals("sheet-override", element.getStyle().getComputed(prop));
+    }
+
+    @Test
+    public void moveInlineAsDefaultOnlyTouchesInlineOriginCandidates() {
+        var prop = newProp("default");
+        var element = new UIElement();
+
+        element.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.STYLESHEET, 10, 0, "sheet-value"));
+        element.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.INLINE, 0, 0, "inline-value"));
+        assertEquals("inline-value", element.getStyle().getComputed(prop));
+
+        element.moveInlineAsDefault();
+
+        // The pre-existing STYLESHEET candidate is untouched; only the (now-demoted) former INLINE
+        // one changed rank, and DEFAULT is lower priority than STYLESHEET, so the sheet value wins now.
+        assertEquals("sheet-value", element.getStyle().getComputed(prop));
+    }
+
+    @Test
+    public void moveInlineAsDefaultIsANoOpWithNoInlineCandidates() {
+        var prop = newProp("default");
+        var element = new UIElement();
+        element.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.STYLESHEET, 10, 0, "sheet-value"));
+
+        element.moveInlineAsDefault(); // must not throw or disturb anything
+
+        assertEquals("sheet-value", element.getStyle().getComputed(prop));
+    }
+
+    // ── Inheritance ──────────────────────────────────────────────────────────────────────────
+
+    private static StyleProperty<String> newInheritableProp(String defaultValue) {
+        return new StyleProperty<>("test-inheritable-prop", String.class, defaultValue, StringValue::new).setInheritable(true);
+    }
+
+    @Test
+    public void nonInheritedPropertyNeverFallsBackToParent() {
+        var prop = newProp("default"); // not inheritable
+        var parent = new UIElement();
+        var child = new UIElement();
+        parent.addChild(child);
+
+        parent.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.STYLESHEET, 0, 0, "parent-value"));
+
+        assertNull("non-inheritable property must not fall back to the parent", child.getStyle().getComputed(prop));
+    }
+
+    @Test
+    public void inheritablePropertyFallsBackToParentWhenChildHasNoCandidate() {
+        var prop = newInheritableProp("default");
+        var parent = new UIElement();
+        var child = new UIElement();
+        parent.addChild(child);
+
+        parent.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.STYLESHEET, 0, 0, "parent-value"));
+
+        assertEquals("parent-value", child.getStyle().getComputed(prop));
+    }
+
+    @Test
+    public void childsOwnCandidateAlwaysWinsOverInheritance() {
+        var prop = newInheritableProp("default");
+        var parent = new UIElement();
+        var child = new UIElement();
+        parent.addChild(child);
+
+        parent.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.STYLESHEET, 0, 0, "parent-value"));
+        // Even a DEFAULT-origin (lowest priority) local candidate beats inheritance entirely —
+        // inheritance is only a fallback for "no local candidate at all", not part of the origin chain.
+        child.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.DEFAULT, 0, 0, "child-own-value"));
+
+        assertEquals("child-own-value", child.getStyle().getComputed(prop));
+    }
+
+    @Test
+    public void inheritanceWalksUpThroughMultipleGenerations() {
+        var prop = newInheritableProp("default");
+        var grandparent = new UIElement();
+        var parent = new UIElement();
+        var child = new UIElement();
+        grandparent.addChild(parent);
+        parent.addChild(child);
+
+        grandparent.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.STYLESHEET, 0, 0, "grandparent-value"));
+
+        // Neither 'parent' nor 'child' has any local candidate — both fall back, transitively.
+        assertEquals("grandparent-value", parent.getStyle().getComputed(prop));
+        assertEquals("grandparent-value", child.getStyle().getComputed(prop));
+    }
+
+    @Test
+    public void inheritanceStopsAtTheRootWithNoCandidateAnywhere() {
+        var prop = newInheritableProp("default");
+        var root = new UIElement();
+        var child = new UIElement();
+        root.addChild(child);
+
+        // Nobody ever set this property — inheritable or not, there's nothing to inherit.
+        assertNull(child.getStyle().getComputed(prop));
+    }
 }

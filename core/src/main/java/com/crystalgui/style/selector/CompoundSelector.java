@@ -1,6 +1,6 @@
 package com.crystalgui.style.selector;
 
-import com.crystalgui.style.PsuedoClasses;
+import com.crystalgui.style.PseudoClasses;
 import com.crystalgui.ui.UIElement;
 
 import java.util.ArrayList;
@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  * One simple-selector group with no combinators, e.g. {@code .foo.bar:hover} or {@code button#id}.
  * A {@link Selector} chains these together with combinators for descendant/child matching.
  *
- * <p>Pseudo-classes are matched by delegating directly to {@link PsuedoClasses#applies(UIElement)} —
+ * <p>Pseudo-classes are matched by delegating directly to {@link PseudoClasses#applies(UIElement)} —
  * no synthetic {@code __hovered__}-style classes are added to the element.
  */
 public record CompoundSelector(List<Part> parts) {
@@ -23,7 +23,7 @@ public record CompoundSelector(List<Part> parts) {
             if (type == SelectorType.PSEUDO_CLASS) {
                 // Validate eagerly so a typo'd pseudo-class fails at stylesheet-parse time, not
                 // silently (never matching) at paint time.
-                PsuedoClasses.valueOf(identity.toUpperCase(Locale.ROOT));
+                PseudoClasses.valueOf(identity.toUpperCase(Locale.ROOT));
             }
         }
     }
@@ -41,7 +41,7 @@ public record CompoundSelector(List<Part> parts) {
             case TYPE -> element.tagName().equals(part.identity());
             case ID -> element.getId().equals(part.identity());
             case CLASS -> element.hasClass(part.identity());
-            case PSEUDO_CLASS -> PsuedoClasses.valueOf(part.identity().toUpperCase(Locale.ROOT)).applies(element);
+            case PSEUDO_CLASS -> PseudoClasses.valueOf(part.identity().toUpperCase(Locale.ROOT)).applies(element);
         };
     }
 

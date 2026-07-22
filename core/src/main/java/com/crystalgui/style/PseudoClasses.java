@@ -4,7 +4,7 @@ import com.crystalgui.ui.UIElement;
 
 import java.util.function.Predicate;
 
-public enum PsuedoClasses {
+public enum PseudoClasses {
     ENABLED(UIElement::isEnabled),
     DISABLED(el -> !el.isEnabled()),
     CHECKED(UIElement::isChecked),
@@ -14,7 +14,7 @@ public enum PsuedoClasses {
     FOCUS(UIElement::isFocused);
 
     final Predicate<UIElement> elementPredicate;
-    PsuedoClasses(Predicate<UIElement> predicate) {
+    PseudoClasses(Predicate<UIElement> predicate) {
         this.elementPredicate = predicate;
     }
 

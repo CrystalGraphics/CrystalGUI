@@ -266,7 +266,7 @@ public class UIElement {
     }
 
     public boolean focusable() {
-        return getFocusPolicy() != FocusPolicy.NONE && style.taffyBridge.style.display != TaffyDisplay.NONE;
+        return this.isEnabled() && this.getFocusPolicy() != FocusPolicy.NONE && this.style.taffyBridge.style.display != TaffyDisplay.NONE;
     }
 
     private void invalidateFocusableChain() {
@@ -355,6 +355,18 @@ public class UIElement {
 
     public UIElement generalStyle(Consumer<GeneralGroup> configurator) {
         configurator.accept(this.getStyle().getGeneralGroup());
+        return this;
+    }
+
+    /**
+     * Demotes everything set so far via {@code .layout()}/{@code .generalStyle()} (INLINE-origin by
+     * default) down to {@link com.crystalgui.style.StyleOrigin#DEFAULT}. Meant to be called once, at
+     * the end of a widget's own construction chain, so its baseline styling can be freely overridden
+     * by a stylesheet or by the widget's actual user: {@code new UiButton().layout(l ->
+     * l.width(80)).moveInlineAsDefault()}.
+     */
+    public UIElement moveInlineAsDefault() {
+        style.moveInlineAsDefault();
         return this;
     }
 

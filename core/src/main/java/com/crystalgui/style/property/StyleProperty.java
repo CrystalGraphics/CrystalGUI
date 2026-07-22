@@ -29,6 +29,12 @@ public class StyleProperty<VALUE> {
     // config
     @Setter @Getter
     private boolean allowTransition = false;
+    /** Whether an element with no candidate at any origin for this property falls back to its
+     * parent's computed value instead of {@link #initialValue} — e.g. {@code color} in real CSS.
+     * Most properties (anything box-model/layout: width, margin, display, position, ...) do not
+     * inherit and should leave this false. */
+    @Setter @Getter
+    private boolean inheritable = false;
 
     public StyleProperty(String name, Class<VALUE> type, VALUE initialValue, ValueParser<VALUE> valueParser) {
         this.id = ID_COUNTER.getAndIncrement();

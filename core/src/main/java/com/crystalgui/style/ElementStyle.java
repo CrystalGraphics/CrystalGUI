@@ -141,6 +141,34 @@ public final class ElementStyle {
         resolveTouched(touched);
     }
 
+    /**
+     * Bulk-reclassifies every candidate currently at {@link StyleOrigin#INLINE} to
+     * {@link StyleOrigin#DEFAULT}, in one atomic pass (via {@link #replaceCandidates}, so no
+     * transient-null intermediate is ever visible). Meant for widget authors: write a widget's own
+     * baseline styling with completely ordinary {@code .layout()}/{@code .generalStyle()} calls
+     * (which default to INLINE, same as any other call site), then call this once at the end of
+     * construction — e.g. {@code new UiButton().layout(l -> l.width(80)).moveInlineAsDefault()} — so
+     * a stylesheet, or the widget's actual user calling {@code .layout()} again (INLINE, now
+     * correctly outranking the demoted DEFAULT-origin baseline), can freely override it.
+     */
+    public void moveInlineAsDefault() {
+        List<StyleSlot<?>> reclassified = new ArrayList<>();
+        for (var slots : candidates.values()) {
+            for (var slot : slots) {
+                if (slot.origin() == StyleOrigin.INLINE) {
+                    reclassified.add(reorigin(slot));
+                }
+            }
+        }
+        if (reclassified.isEmpty()) return;
+        replaceCandidates(slot -> slot.origin() == StyleOrigin.INLINE, reclassified);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> StyleSlot<T> reorigin(StyleSlot<?> slot) {
+        return StyleSlot.of((StyleProperty<T>) slot.property(), StyleOrigin.DEFAULT, slot.specificity(), slot.sourceOrder(), (T) slot.value());
+    }
+
     public boolean containsCandidate(StyleProperty<?> property, Predicate<StyleSlot<?>> predicate) {
         var slots = candidates.get(property);
         if (slots == null || slots.isEmpty()) return false;
@@ -277,11 +305,32 @@ public final class ElementStyle {
         if (slot != null) return slot.value();
         return null;
     }
+    /**
+     * The effective value for {@code p}: this element's own cascade winner if it has one, otherwise
+     * the parent's effective value if {@code p} is {@link StyleProperty#isInheritable()} (walking up
+     * recursively — a grandparent with no local candidate either falls back further still), otherwise
+     * {@code null} (callers needing a guaranteed non-null value use {@code StyleGroup.getValueSave},
+     * which falls back to {@code p.initialValue} beyond this).
+     *
+     * <p>Deliberately lazy/pull-based, not push-invalidated: an inheriting descendant is simply
+     * recomputed fresh on every read rather than being proactively notified when an ancestor's real
+     * value changes. That's sufficient for every currently-inheritable property (just {@code color},
+     * read fresh every paint via {@code getValueSave}) but means an inherited value change does NOT
+     * fire this property's {@code StyleChangeListener}s on the inheriting element, and does NOT make
+     * it transition-eligible — only an element's own real candidate changing does that. A property
+     * that needed push-based side effects (the way layout properties push into TaffyBridge) while
+     * also being inheritable would need real invalidation propagation, which this does not provide.
+     */
     @SuppressWarnings("unchecked")
     @Nullable
     public <T> T getComputed(StyleProperty<T> p) {
         var computedSlot = computedSlots.get(p);
-        return computedSlot == null ? null : (T) computedSlot.value();
+        if (computedSlot != null) return (T) computedSlot.value();
+        if (p.isInheritable()) {
+            var parent = element.getParent();
+            if (parent != null) return parent.getStyle().getComputed(p);
+        }
+        return null;
     }
 
 
