@@ -52,73 +52,203 @@ The only tool use that touches another agent is asking Sisyphus (the orchestrato
 
 The idea of this mod is to be UI engine similar to a lightweight web browser.
 
-## Core library
-The core of CrystalGUI can be written in versions of Java newer than 8 and depends on CrystalGraphics.
-- DOM-style component tree 
-- It uses Taffy as a layout backend (already included as a dependency)
-- The renderer is supposed to be platform agnostic 
-- Supports DOM-style three-phase events (capture/target/bubble)
-- Mouse/Keyboard/Input events. (Signal/Slot design pattern? I heard EventBus is unrecommended to use. If you know of any better design patterns for a web-browser like layout engine lemme know) 
-- Data-Driven Reactivity (Property Binding)
-- RPC Events
-- XML-based GUI creation (Delegate to V2)
-  - need a component registry for that in the future though
-- Code based GUI creation
-- Stylesheet support
+> ⚠️ The section below reflects the actual code in `core/src/main/java/com/crystalgui/` as of 2026-07-22.
+> No `AGENTS.md`/`package-info.java` files exist yet inside any `core/` package — this section is
+> currently the only package-level guidance. If you add one, link it here.
 
-## UI Render Architecture (V3.1 Draw-List)
+## Module layout (as actually wired in Gradle)
 
-The primary UI rendering model uses a **painter's-order draw list** instead of typed layers.
+`settings.gradle.kts` at repo root currently includes only **`core`** and **`gl-debug-harness`** as
+subprojects; `includeBuild("mc1710")` / `includeBuild("mc1201")` are commented out. So:
 
-### Key concepts
-- `CgUiDrawList` — packed `int[]` command pool recording draw commands in DOM traversal order
-- `CgUiPaintContext` — paint surface passed through UI traversal (recording side)
-- `CgUiDrawListExecutor` — stateless sequential replay
-- `CgUiDrawState` — cached command-local draw state (reference-identity merge)
-- `CgUiBatchSlots` — `Map<CgVertexFormat, CgBatchRenderer>` with stable slot indices
-- `ScissorStack` — allocation-free nested clips (dual-mode: logical + GL apply)
-- `CgScissorRect` — lives in CrystalGraphics `api/state/`, pooled by ScissorStack
+- **`core/`** — the platform-agnostic UI engine (`com.crystalgui.core`, `com.crystalgui.render`,
+  `com.crystalgui.style`, `com.crystalgui.ui`). Java 21 authored (Jabel-desugared toward Java 8 bytecode
+  target), depends on CrystalGraphics `core`/`platform` (`compileOnly`) + Taffy + JOML. A `doLast` hook on
+  `compileJava` fails the build if any source line imports `net.minecraft.*`, `cpw.mods.fml.*`,
+  `net.minecraftforge.*`, or `org.lwjgl.*` — this is enforced, not aspirational.
+- **`mc1710/`** — MC 1.7.10/Forge loader. Has its own `build.gradle.kts` but is **not currently included**
+  in the root build. Its only source file, `CrystalGUI.java`, is a bare `@Mod` stub (`preInit`/`init`/
+  `postInit` that only log) — no rendering hook, no input forwarding, no CrystalGUI integration yet.
+- **`mc1201/`** (`common/`, `forge/`, `neoforge/`, `fabric/`) — present on disk with real subproject
+  structure but likewise not wired into the root `settings.gradle.kts` yet.
+- **`gl-debug-harness/`** — a submodule (branch `crystalgui`) for GL testing without Minecraft, same tool
+  as CrystalGraphics' harness.
 
-### Source package guide
-- `src/main/java/com/crystalgui/core/render/AGENTS.md` — authoritative package guide
+**Practical implication:** right now the only thing you can actually compile/test end-to-end is `core/`
+in isolation (`./gradlew :core:compileJava`, `./gradlew :core:test`). There is no working Minecraft
+integration to run the UI in-game yet — don't claim otherwise.
 
-### UI element and test packages
-- `ui/elements/` — reusable `UIElement` subclasses (`UiPanel`: filled rectangle via draw-list)
-- `ui/test/` — reusable demo/test UI factories (`CguiTestUi`: static factory building a test `UIContainer`)
+## Core library — actual package map
 
-### Interaction & reactivity packages (Phases 0–3)
-- `core/signal/` — unified signal/slot primitives (`Signal.Action`, `Signal.Value<T>`, `Signal.Pair<A,B>`, `SignalBase`, `Connection`, `ConnectionGroup`); see `core/signal/AGENTS.md`
-- `core/property/` — observable `Property<T>` with equality-suppressing change notification, one-way and bidirectional binding; see `core/property/AGENTS.md`
-- `core/input/` — container-scoped interaction layer (`UiInputManager`, `FocusManager`, `FocusPolicy`); see `core/input/AGENTS.md`
-- `core/event/` — DOM-style three-phase event dispatch, typed event hierarchy (`UiMouseEvent`, `UiKeyEvent`, `CgUiKeyCodes`, `Modifiers`), verbose debug logging (`CgUiDebug`); see `core/event/AGENTS.md`
-- `ui/elements/UiButton` — first interactive widget: click signal, hover signal, `FocusPolicy.CLICK`; see `ui/elements/AGENTS.md`
-- `ui/elements/UiLabel` — property-backed text label with Taffy `MeasureFunc` for intrinsic sizing
-- `ui/elements/UiTextbox` — single-line text input widget: `textChanged` signal, `submitted` signal, caret navigation, backspace/delete, `FocusPolicy.CLICK`
+```
+com.crystalgui.core            CrystalGuiCore (global LOGGER + CgUiInputAdapter registry)
+  .data                        CacheCell/IntCacheCell/LongCacheCell (dirty-flag memoization), ReadOnlyVec2f
+  .input                       CgUiInputAdapter (SPI), SystemInput (raw Mouse.Event/Keyboard.Event records)
+    .keyboard                  CgUiKeyCodes (LWJGL2-shaped constants), Modifiers (bitmask, no LWJGL import)
+    .mouse                     CgUiMouseCodes
+  .property                    Property<T> (binding)
+  .signal                      Signal.Action/Value/Pair, SignalBase, Connection, ConnectionGroup
+com.crystalgui.render          CgUiPaintContext, CgUiRenderer, ScissorStack
+  .texture                     CgUiDrawable (SPI), CgUiQuad, CgUiSprite (9-slice), CgUiTransformDrawable (stub)
+  .texture.geometry            Position, Size (small int value types)
+com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGroup, StyleOrigin, TaffyBridge, PsuedoClasses [sic]
+  .property                    StyleProperty<T>, StylePropertyRegistry, StyleSlot, StyleValue, IValueInterpolator
+    .general.{bools,enums,floats,ints,strings}   scalar StyleValue/StyleProperty flavors
+    .layout.{dimension,grid,length}              LayoutProperties + Taffy-shaped value types
+    .visual.{color,texture}                      OverflowClip, ColorProperty, TextureProperty
+com.crystalgui.ui              UIElement, UIWindow, Ui, EventListenerGroup
+  .tree                        UITreeTraversal (stateless ancestor/tab-order queries)
+  .event                       UIEvent, PropagationPhase, DOMEvent, FocusEvent, KeyboardEvent, MouseEvent
+  .input                       UIInputHandler, FocusPolicy, ButtonState
+  .elements                    (empty — no widgets implemented yet)
+```
 
-### Minecraft adapter package
-- `mc/` — decoupled LWJGL 2 adapter utilities: `CgUiInputAdapater` (stateless input forwarding with caller-supplied coordinate transform/key filter), `CgUiRenderAdapter` (layout + render invocation), `CgUiForgeEventHandler` (ready-to-use `@SubscribeEvent` handler for `InputEvent.MouseInputEvent`/`KeyInputEvent`/`RenderGameOverlayEvent.Post`), `LwjglKeyTranslator` (LWJGL 2 → CgUiKeyCodes translation); see `mc/AGENTS.md`
+**Important naming/location corrections vs. older notes:** `render/` is a top-level package
+(`com.crystalgui.render`), **not** nested under `core/`. `core/input/` is now the *raw platform I/O*
+layer only (key/mouse codes, modifiers, the `CgUiInputAdapter` SPI) — the dispatch/focus logic that used
+to be described as living there is in `ui/input/`. The three-phase event types live in `ui/event/`, not
+`core/event/` (there is no `core/event/` package). `CgUiKeyCodes`/`Modifiers` live in `core/input/keyboard/`.
+
+### DOM tree — no `UIContainer`
+
+There is **no `UIContainer` class**. `UIElement` alone is both leaf and container, exactly like a real DOM
+`Element` (its own Javadoc: "a general-purpose, styleable, extensible container, conceptually like an HTML
+`<div>`"). Key pieces:
+- **`UIElement`** — tree (`parent`/`children`, `addChild`/`removeChild`/reparenting), identity (`id`,
+  `classes`), state flags (`isEnabled`/`isPressed`/`isFocused`/`isHovered`), `focusPolicy`, one owned
+  `ElementStyle`, pre-bound `EventListenerGroup<T>` fields for the common event types
+  (`onMouseDown`/`onMouseUp`/`onMouseMove`/`onMouseEnter`/`onMouseLeave`/`onMouseScroll`/`onFocus`/`onBlur`),
+  hit-testing (`isMouseOverElement`/`isMouseOverContent`), `drawSubtree(CgUiPaintContext)` (final —
+  `paintSelf`/`paintOverlay` are the overridable extension points), and an inner `RuntimeCache` of
+  `CacheCell`s (sorted children by z-index, local↔world matrix, depth).
+- **`UIWindow`** — the runtime engine: owns the live Taffy tree, a `CgUiPaintContext`, a `UIInputHandler`,
+  screen/layout dimensions. `init(w,h)` attaches the root `UIElement`; `calculateLayout()` drives
+  `taffyTree.computeLayout(...)`; `paintFrame()` is the per-frame entry point (layout → paint → input
+  begin/end frame); `getHoveredElement(x,y)` does the z-order/clip-aware hit test. Its own Javadoc: it
+  "deliberately does NOT implement any platform (LWJGL2/LWJGL3/MC) widget or Screen interface itself" —
+  MC-side adapters are still future work.
+- **`Ui`** — trivial immutable `{ rootElement }` holder; a minimal seed for a future declarative
+  description layer, no runtime/layout/GL state of its own.
+
+### Signals, properties, caching (`core/signal`, `core/property`, `core/data`)
+
+- `core/signal/` and `core/property/` match the original design intent closely: `Signal.Action` (0-arg),
+  `Signal.Value<T>` (1-arg), `Signal.Pair<A,B>` (2-arg) all extend `SignalBase` (slot list, deferred
+  disconnect-during-emit, optional `DebugHook`). `Property<T>` is one `Signal.Pair<T,T> changed` field
+  plus equality-suppressing `set()`, `bindTo()` (one-way), `bindBidirectional()` (two-way, reentrancy-guarded)
+  — both return `Connection`s.
+- `core/data/` is new, undocumented-until-now plumbing used pervasively by `UIElement`/`ElementStyle`:
+  `CacheCell<T>`/`IntCacheCell`/`LongCacheCell` are dirty-flag memoization cells (`set`/`invalidate`/
+  `get(Function)`), and `ReadOnlyVec2f` is an immutable view over a mutable JOML `Vector2f` (used for
+  `MouseEvent.position`).
+
+## UI Render Architecture — immediate-mode (the old "V3.1 Draw-List" design is gone)
+
+There is no draw-list/executor/batch-slots layer anymore. `CgUiDrawList`, `CgUiDrawListExecutor`,
+`CgUiDrawState`, `CgUiBatchSlots`, and `CgScissorRect` do not exist in the current codebase — do not
+reference them. Rendering is now **fully synchronous immediate-mode**, built directly on CrystalGraphics:
+
+- **`CgUiPaintContext`** — per-frame 2D paint surface. Its own Javadoc is explicit that every
+  `fillRect`/`drawImage` call draws immediately; there is no recording phase to flush. `beginFrame(w,h)`/
+  `endFrame()` save/restore GL state via CrystalGraphics' `CgGlScope`, set up an ortho projection, bind a
+  shared `crystalgui:shaders/gui_quad.shader` material, reset the `ScissorStack`. Public draw API:
+  `fillRect`, `drawImage`, `submitQuad`+`flush` (used by 9-slice sprites), `bindTexture` (elides redundant
+  rebinds), `text()` → a CrystalGraphics `CgTextRenderer` wired to this context's `PoseStack`.
+- **`CgUiRenderer`** — thin wrapper around CrystalGraphics' `CgBatchRenderer` (`CgVertexFormat.UI`);
+  `begin`/`end`/`flush`/`submitQuad`; its nested `VertexWriter` is `PoseStack`-aware (transforms vertices
+  through the current matrix before delegating to `CgVertexWriter`).
+- **`ScissorStack`** — allocation-free nested clip stack (`int[64]`, 16 levels × 4 ints), same shape as
+  before, but now applies via CrystalGraphics' `CgGL` facade, not raw LWJGL.
+- **`render/texture/`** (new) — `CgUiDrawable` is the pluggable "paint yourself into a rect" SPI
+  (`draw(ctx, mouseX, mouseY, x, y, w, h)`; static `EMPTY` instance). `CgUiQuad` is a flat solid-color fill.
+  `CgUiSprite` is a full 9-slice textured sprite (`setTexture`/`setSprite`/`setBorder`, lazy UV/border cache).
+  `CgUiTransformDrawable` is currently an empty marker class for future transform-aware drawables.
+- **`render/texture/geometry/`** (new) — `Position`/`Size`, small Lombok `@Data(staticConstructor="of")`
+  int value types used by `CgUiSprite`.
+
+### Frame lifecycle (current)
+```
+window.calculateLayout()                 // drives taffyTree.computeLayout() while dirty
+paintContext.beginFrame(screenW, screenH) // GL state save, ortho projection, bind gui_quad material
+  poseStack.push(); scale(uiScale)
+  ui.rootElement.drawSubtree(paintContext) // recursive: paintSelf → children → paintOverlay, immediate draw
+  poseStack.pop()
+paintContext.endFrame()                   // GL state restore
+inputHandler.beginFrame() / endFrame()    // hover diffing + accumulated-event dispatch (see below)
+```
+
+## Style / cascade system (new — supersedes the old bare "Stylesheet support" bullet)
+
+There is now a real CSS-cascade-shaped architecture wired into Taffy layout:
+- **`StyleOrigin`** — priority-ordered enum `DEFAULT(0) < STYLESHEET(2) < INLINE(3) < ANIMATION(4) <
+  IMPORTANT(5)`.
+- **`StyleSlot<T>`** — `record(property, origin, specificity, sourceOrder, value)` with full CSS-cascade
+  `compareTo` (origin → specificity → source order).
+- **`ElementStyle`** — per-`UIElement` cascade: `candidates` (every value ever set, by origin) →
+  `computeCandidateSlot` picks the winner → `computedSlots` cache, `dirtyProps` bitset.
+- **`StyleGroup<TYPE>`** (base) / **`GeneralGroup`** (background/overlay/opacity/color/zIndex/overflow/mask)
+  / **`LayoutGroup`** (~150-method fluent CSS box-model/flex/grid API) — fluent setters that ultimately call
+  `StyleGroup.set(property, value)`.
+- **`TaffyBridge`** — mutates the live Taffy `TaffyStyle` and marks the tree dirty; `style/property/layout/
+  LayoutProperties.init()` wires a `TaffyBridge`-calling listener onto every layout `StyleProperty`, so
+  `LayoutGroup.width(100)` flows straight into the live layout.
+- **`PsuedoClasses`** *(sic, misspelled in source — preserve spelling when referencing the file)* — enum of
+  state predicates (`HOVER`/`ACTIVE`/`FOCUS`/etc.) bound to real `UIElement` getters, ready for a future
+  selector engine.
+
+**Caveat — don't overclaim:** `StyleOrigin.STYLESHEET` exists only as a priority level. There is **no
+stylesheet text parser and no CSS-selector matcher anywhere in the codebase yet.** The cascade
+infrastructure is stylesheet-ready, but "stylesheet support" itself is not implemented.
+
+## Events, input, and focus
+
+Three-phase (capture/target/bubble) dispatch is real and implemented, but moved and renamed:
+- **`ui/event/`** — `UIEvent` (abstract base: `target`, `phase`, `stopPropagation`/`stopPhasePropagation`/
+  `preventDefault`), `PropagationPhase` (`CAPTURE`/`TARGET`/`BUBBLE`), `DOMEvent` (`ElementAdded`/
+  `ElementRemoved`, non-bubbling), `FocusEvent` (`Focus`/`Blur`, bubbling), `KeyboardEvent` (`Down`/`Up`,
+  bubbling), `MouseEvent` (`Click`→`Down`/`Up`, `Scroll`, `Move` bubbling; `Enter`/`Leave` non-bubbling,
+  matching real DOM semantics).
+- **`EventListenerGroup<T>`** (in `com.crystalgui.ui`) — per-(element, event-type) bundle of three
+  `Signal.Pair` (`capture`/`target`/`bubble`) plus a `defaultEvents` signal for built-in behavior. Nested
+  `EventListenerGroup.Map` lazily creates one group per concrete event class.
+- **`ui/input/UIInputHandler`** — the actual three-phase walker (`sendInputEvent`: build
+  `UITreeTraversal.pathToRoot`, walk root→target for CAPTURE, fire once for TARGET, walk target→root for
+  BUBBLE if `bubbles`). This single class merges what older notes called `UiInputManager` + `FocusManager`
+  — there is no such split anymore. It implements `SystemInput.Mouse`/`SystemInput.Keyboard` directly
+  (registered as the raw-event sink), tracks hover via a `CacheCell<UIElement>` diffed once per frame
+  (`beginFrame`/`endFrame`, propagating `:hover`-like state up the ancestor chain), tracks click/press state
+  per button (`ButtonState`, multi-click `detail` counting), and drives Tab-key focus traversal via
+  `ui/tree/UITreeTraversal` (`firstFocusableIn`/`lastFocusableIn`/`previousFocusable`/`nextFocusable`).
+- **`ui/input/FocusPolicy`** (`NONE`/`FOCUSABLE`/`CLICK`) and **`ui/tree/UITreeTraversal`** (stateless
+  ancestor/tab-order queries over the `UIElement` tree) round out the package.
+
+Note the actual accumulate-then-dispatch model: `consumeMouseEvent`/`consumeKeyboardEvent` accumulate raw
+input during the frame; click/focus/keyboard events dispatch immediately, but hover/enter/leave/move/scroll
+are synthesized once per frame from `UIWindow.paintFrame()`'s `inputHandler.beginFrame()`/`endFrame()` calls
+— not synchronously per raw platform event like the old `processMouseMove/Down/Up` pseudocode implied.
+
+## UI elements — currently empty
+
+`ui/elements/` exists as a package but **contains zero classes**. `UiPanel`, `UiButton`, `UiLabel`,
+`UiTextbox` are not implemented yet — don't reference them as existing. `ui/test/` (previously described as
+holding a `CguiTestUi` demo factory) does not exist at all. The only thing usable to build a UI today is the
+base `UIElement` itself (background/overlay painting, style, events, focus — everything a generic styleable
+"div" needs), plus whatever you subclass from it.
+
+## Minecraft adapter package — not yet implemented
+
+There is no `mc/` package anywhere under `core/`, and `mc1710/src` has no CrystalGUI integration code (see
+"Module layout" above — it's a bare `@Mod` stub). None of `CgUiInputAdapater` (concrete impl), `CgUiRenderAdapter`,
+`CgUiForgeEventHandler`, or `LwjglKeyTranslator` exist. Only the **interface** side of the seam exists:
+`core/input/CgUiInputAdapter` (the SPI a platform integration must implement) and
+`CrystalGuiCore.getAdapter()/setAdapter()` (where it gets registered). Building the actual MC 1.7.10
+adapter is future work, not a relocated/renamed existing feature.
 
 ### Documentation
 - `docs/DOM_UI_FUNDAMENTALS V2.md` — learning document: theory and mental models for DOM-based UI frameworks
 - `docs/CRYSTALGUI_BACKEND_ROADMAP.md` — phased development plan (signal/slot, LDLib2 analysis, Phases 0–8)
 - `docs/PHASES_0_3_IMPLEMENTATION_GUIDE.md` — deep walkthrough of what Phases 0–3 actually built, how the pieces connect, and where the implementation diverged from the roadmap
-
-### Frame lifecycle
-```
-paintContext.beginRecord()
-  root.drawSubtree(paintContext)   // DOM traversal, painter's order
-paintContext.endRecord()
-executor.execute(drawList, slots, projection)  // replay
-```
-
-### Interaction lifecycle
-```
-UiInputManager.processMouseMove(x, y, mods)  // one hit-test → hover enter/leave → move dispatch
-UiInputManager.processMouseDown(x, y, btn, mods)  // hit-test → MOUSE_DOWN → click-to-focus
-UiInputManager.processMouseUp(x, y, btn, mods)  // MOUSE_UP → click/double-click synthesis
-FocusManager.dispatchKeyEvent(keyEvent)  // Tab traversal or routed key dispatch
-UIContainer.computeLayout(w, h)  // → validateFocus() after layout
-```
+- These roadmap docs predate the style/cascade system and the render rewrite described above; treat them as historical, not current-state.
 
 ## CrystalGraphics Ownership Boundary (Critical)
 
@@ -177,10 +307,14 @@ Lombok generates Java 8-compatible bytecode. All annotations listed above work c
 
 
 ## 1.7.10 Module
-The main module for now. other modules will come in the future, but we must ensure all code added is fully cross-platform applicable, 
-and thats also where the future abstraction layer comes in.
-The 1.7.10 module of CrystalGUI contains the version-specific implementations, uses JVMDowngrader to make CrystalGUI & its dependencies run in Java 8.
-Most of the logic should be handled in the core. 
+The 1.7.10 module (`mc1710/`) is meant to hold the version-specific implementations (uses JVMDowngrader to
+make CrystalGUI & its dependencies run in Java 8) and eventually the MC-side adapter described above. Most
+of the logic should be handled in the core. **As of 2026-07-22 it is not wired into `settings.gradle.kts`**
+(`includeBuild("mc1710")` is commented out) and contains only a bare `@Mod` stub with no CrystalGUI
+integration — treat it as scaffolding, not a working module, until that changes. `mc1201/` (Forge/NeoForge/
+Fabric loaders) exists on disk with real subproject structure but is likewise not included in the build yet.
+We must ensure all code added to `core/` stays fully cross-platform applicable — that's what the platform
+abstraction layer (the not-yet-built `mc/` adapter seam) is for.
 
 
 LDLib2 Source: `research_repos/LDLib2/`
