@@ -27,11 +27,18 @@ public final class TransitionEngine {
         // Nothing meaningful to interpolate to/from "unset" — decline and let the caller apply the
         // new value (or lack of one) immediately, same as it does for a property's first-ever
         // resolution. Most interpolators (primitive-boxed ones via auto-unboxing, object ones via
-        // direct dereference) would NPE on a null argument otherwise.
-        if (fromValue == null || toValue == null) return false;
+        // direct dereference) would NPE on a null argument otherwise. Cancel any stale in-flight
+        // transition rather than leaving it to keep ticking toward a target the cascade abandoned.
+        if (fromValue == null || toValue == null) {
+            cancelIfActive(element, property);
+            return false;
+        }
 
         TransitionSpec spec = findApplicableSpec(element, property);
-        if (spec == null || spec.durationNanos() <= 0) return false;
+        if (spec == null || spec.durationNanos() <= 0) {
+            cancelIfActive(element, property);
+            return false;
+        }
 
         long now = System.nanoTime();
         T animateFrom = fromValue;
@@ -51,6 +58,22 @@ public final class TransitionEngine {
         active.computeIfAbsent(element, e -> new HashMap<>()).put(property, transition);
         element.getStyle().startAnimationSlot(property, animateFrom, 0);
         return true;
+    }
+
+    /**
+     * Cancels and cleans up any in-flight transition for {@code (element, property)} that
+     * {@link #tryStart} is declining to continue — otherwise the stale ANIMATION-origin candidate
+     * would keep shadowing the real cascade winner (blocking it from ever being displayed or
+     * notified) until its own unrelated duration happened to elapse, or forever if nothing ever
+     * ticks it again.
+     */
+    private <T> void cancelIfActive(UIElement element, StyleProperty<T> property) {
+        var byProperty = active.get(element);
+        if (byProperty == null) return;
+        if (byProperty.remove(property) != null) {
+            element.getStyle().endAnimationSlot(property);
+            if (byProperty.isEmpty()) active.remove(element);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -105,8 +128,19 @@ public final class TransitionEngine {
         }
     }
 
-    /** Drops any active transitions owned by an element that just left the tree. */
+    /**
+     * Drops any active transitions owned by an element that just left the tree — and, critically,
+     * removes their ANIMATION-origin candidates too. Just discarding the {@code active} tracking
+     * entry (without calling {@code endAnimationSlot}) would orphan the candidate: it stays in
+     * {@code ElementStyle.candidates} forever, permanently outranking every real value (ANIMATION is
+     * the highest-priority origin) with no ticker left to ever finish or update it — a leak that
+     * shows up as the element looking permanently stuck if it's ever reattached/reused.
+     */
     public void onElementDetached(UIElement element) {
-        active.remove(element);
+        var byProperty = active.remove(element);
+        if (byProperty == null) return;
+        for (var property : byProperty.keySet()) {
+            element.getStyle().endAnimationSlot(property);
+        }
     }
 }
