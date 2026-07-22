@@ -7,11 +7,11 @@ import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
 import com.crystalgraphics.api.text.CgTextLayout;
+import com.crystalgraphics.api.vertex.CgVertexFormat;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
-import com.crystalgraphics.text.render.CgTextRenderContext;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import lombok.Getter;
 import lombok.Setter;
@@ -55,13 +55,12 @@ public final class CgUiPaintContext {
     // ── Text ─────────────────────────────────────────────────────────────────
     /**
      * Owned independently of {@link #renderer} — text uses
-     * {@link com.crystalgraphics.api.vertex.CgVertexFormat#POS2_UV2_COL4UB}, distinct from
+     * {@link CgVertexFormat#POS2_UV2_COL4UB}, distinct from
      * {@code CgUiRenderer}'s {@code CgVertexFormat.UI}, so it cannot share the same
      * {@code CgBatchRenderer}. See {@code docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md} §2.1.
      */
     @Getter
     private final CgTextRenderer textRenderer;
-    private CgTextRenderContext textRenderContext;
 
     // ── GL state isolation ──────────────────────────────────────────────────
     private CgGlScope glScope;
@@ -117,8 +116,7 @@ public final class CgUiPaintContext {
 
         // Text: projection + atlas LRU frame tick. No beginBatch() here — drawText()
         // deliberately stays standalone-per-call, see docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md §2.3.
-        if (textRenderContext == null) textRenderContext = CgTextRenderContext.orthographic(screenWidth, screenHeight);
-        else textRenderContext.updateOrtho(screenWidth, screenHeight);
+        textRenderer.context().updateOrtho(screenWidth, screenHeight);
 
         poseStack.pushPose();
         renderer.begin();
@@ -191,7 +189,7 @@ public final class CgUiPaintContext {
      * @param argb   packed color, tint already includes opacity
      */
     public void drawText(CgTextLayout layout, CgFont font, float x, float y, int argb) {
-            textRenderer.draw(layout, font, x, y, argb, textRenderContext, poseStack);
+            textRenderer.draw(layout, font, x, y, argb, poseStack);
     }
 
     /**
