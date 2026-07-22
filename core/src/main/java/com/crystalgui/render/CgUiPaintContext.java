@@ -7,7 +7,6 @@ import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
 import com.crystalgraphics.api.text.CgTextLayout;
-import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
@@ -192,7 +191,7 @@ public final class CgUiPaintContext {
      * @param argb   packed color, tint already includes opacity
      */
     public void drawText(CgTextLayout layout, CgFont font, float x, float y, int argb) {
-            textRenderer.draw(layout, font, x, y, argb, CgGraphicsLifecycle.getCurrentFrame(), textRenderContext, poseStack);
+            textRenderer.draw(layout, font, x, y, argb, textRenderContext, poseStack);
     }
 
     /**
