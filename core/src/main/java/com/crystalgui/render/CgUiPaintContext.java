@@ -171,6 +171,35 @@ public final class CgUiPaintContext {
     
     /**
      * Returns the context's text renderer object.
+     *
+     * <p>Its owned pose stack was wired to this context's own {@link #getPoseStack()} in
+     * the constructor, so {@link com.crystalgraphics.text.render.CgTextRenderer.Draw#pose}
+     * may be omitted entirely — a draw with no explicit pose falls back to it.</p>
+     *
+     * <pre>{@code
+     * // One-shot: build and submit in the same expression. No .pose(...) call needed —
+     * // falls back to this context's own poseStack automatically.
+     * ctx.text().draw()
+     *         .text("Hello world")
+     *         .font(myFont)
+     *         .at(20.0f, 40.0f)
+     *         .color(0xFFFFFFFF)
+     *         .submit();
+     *
+     * // Retained: held across frames (e.g. a widget's cached label draw), only the
+     * // text changes each tick. Independent of draw()'s shared immediate-mode scratch instance.
+     * CgTextRenderer.Draw labelDraw = ctx.text().retainedDraw()
+     *         .font(myFont).at(20.0f, 40.0f).color(0xFFFFFFFF);
+     * // ... later, once per frame:
+     * labelDraw.text(currentLabel).submit();
+     *
+     * // Manually-batched: several draws sharing one upload+draw. submit() returns the
+     * // owning CgTextRenderer, so the last call in the batch can chain into endBatch().
+     * ctx.text().beginBatch();
+     * ctx.text().draw().text(line1).font(myFont).at(20.0f, 20.0f).color(0xFFFFFFFF).submit();
+     * ctx.text().draw().text(line2).font(myFont).at(20.0f, 40.0f).color(0xFFFFFFFF)
+     *         .submit().endBatch();
+     * }</pre>
      */
     public CgTextRenderer text() {
         return textRenderer;
