@@ -189,7 +189,7 @@ public final class CgUiPaintContext {
      * @param argb   packed color, tint already includes opacity
      */
     public void drawText(CgTextLayout layout, CgFont font, float x, float y, int argb) {
-            textRenderer.draw(layout, font, x, y, argb, poseStack);
+            textRenderer.draw().layout(layout).font(font).at(x, y).color(argb).pose(poseStack).submit();
     }
 
     /**
