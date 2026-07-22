@@ -112,6 +112,69 @@ public class ElementStyleCascadeTest {
     }
 
     @Test
+    public void replaceCandidatesDiffsDirectlyWithoutANullIntermediate() {
+        // This is the exact shape StyleEngine.rematch() needs: swapping out one origin's candidates
+        // for a fresh set (e.g. re-matching stylesheet rules on a class/pseudo-class change) must
+        // read as ONE old->new diff, not remove-then-null-then-add. If it went through as two
+        // separate mutations (removeCandidates() then putCandidates()), a transition-eligible
+        // property would see (real -> null) then (null -> real) instead of (real -> real), and the
+        // transition engine would correctly-but-wrongly decline to animate through the spurious null.
+        var prop = newProp("default");
+        var element = new UIElement();
+        var style = element.getStyle();
+
+        var oldSlot = StyleSlot.of(prop, StyleOrigin.STYLESHEET, 10, 0, "old-value");
+        style.putCandidate(prop, oldSlot);
+        assertEquals("old-value", style.getComputed(prop));
+
+        List<String> oldSeen = new ArrayList<>();
+        List<String> newSeen = new ArrayList<>();
+        prop.addListener((el, p, oldVal, newVal) -> {
+            oldSeen.add(oldVal);
+            newSeen.add(newVal);
+        });
+
+        var newSlot = StyleSlot.of(prop, StyleOrigin.STYLESHEET, 20, 0, "new-value");
+        style.replaceCandidates(slot -> slot == oldSlot, List.of(newSlot));
+
+        assertEquals("new-value", style.getComputed(prop));
+        assertEquals("exactly one notification, not a remove-then-add pair", List.of("new-value"), newSeen);
+        assertEquals("the diff must see the real prior value, never an intermediate null",
+                List.of("old-value"), oldSeen);
+    }
+
+    @Test
+    public void putCandidateRejectsNullValuedSlot() {
+        var prop = newProp("default");
+        var element = new UIElement();
+        var style = element.getStyle();
+
+        style.putCandidate(prop, StyleSlot.of(prop, StyleOrigin.STYLESHEET, 0, 0, "real-value"));
+        assertEquals("real-value", style.getComputed(prop));
+
+        // A null-valued slot (never legitimately produced today, but defended against regardless)
+        // must be silently rejected, not overwrite the real candidate with null.
+        style.putCandidate(prop, StyleSlot.of(prop, StyleOrigin.INLINE, 0, 0, null));
+
+        assertEquals("real-value", style.getComputed(prop));
+    }
+
+    @Test
+    public void putCandidatesFiltersNullValuedSlotsFromABatch() {
+        var propA = newProp("a-default");
+        var propB = newProp("b-default");
+        var element = new UIElement();
+
+        element.getStyle().putCandidates(List.of(
+                StyleSlot.of(propA, StyleOrigin.STYLESHEET, 10, 0, "a-value"),
+                StyleSlot.of(propB, StyleOrigin.STYLESHEET, 10, 0, null)
+        ));
+
+        assertEquals("a-value", element.getStyle().getComputed(propA));
+        assertNull(element.getStyle().getComputed(propB));
+    }
+
+    @Test
     public void bulkPutCandidatesUpdatesComputedSlotsAndNotifies() {
         var propA = newProp("a-default");
         var propB = newProp("b-default");

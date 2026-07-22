@@ -40,9 +40,15 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         this.window = window;
     }
 
+    /**
+     * Currently a no-op. Hover snapshotting/diffing happens entirely in {@link #endFrame()} via
+     * {@link #fireAccumulatedMouseEvents()} — reading {@code hoverFrameData} here used to corrupt the
+     * "last frame" snapshot, since ordinary mouse-move events already invalidate that cache before
+     * this method runs each frame (making the read here an eager recompute against the *new*
+     * position, not the old one). Kept as a reserved lifecycle hook, mirroring
+     * {@code CgUiPaintContext.beginFrame()}/{@code endFrame()} above it in {@code UIWindow.paintFrame()}.
+     */
     public void beginFrame() {
-        this.lastFrameHover = hoverFrameData.element();
-        hoverFrameData.invalidate();
     }
 
     public void endFrame() {
@@ -85,6 +91,12 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
         if (scrollDelta != 0)
             emitMouseScroll(currentHover);
+
+        // Snapshot for next frame's diff — must happen after use above, and must be a plain field
+        // write here (not a read of the live hoverFrameData cache at the top of the next frame),
+        // otherwise a mouse-move event that arrives before beginFrame() next frame would invalidate
+        // the cache first and silently corrupt this "old" value into the "new" one.
+        this.lastFrameHover = currentHover;
     }
 
     private void updateHoverChain(UIElement oldHover, UIElement newHover) {

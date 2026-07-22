@@ -1,5 +1,6 @@
 package com.crystalgui.style;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StyleSlot;
@@ -46,7 +47,17 @@ public final class ElementStyle {
         this.generalGroup = new GeneralGroup(this);
     }
 
+    /**
+     * @implNote Rejects a null-valued slot rather than storing it — every known producer (Java-code
+     * {@code StyleGroup.set()}, stylesheet application, the transition engine) already avoids
+     * producing one, so this is a backstop against a future producer doing so by accident, not the
+     * primary null-prevention mechanism. Don't remove it as "dead code."
+     */
     public <T> void putCandidate(StyleProperty<T> p, StyleSlot<T> slot) {
+        if (slot.value() == null) {
+            CrystalGuiCore.LOGGER.warn("Refusing to add a null-valued candidate for '{}' (origin={})", p.name, slot.origin());
+            return;
+        }
         candidates.computeIfAbsent(p, k -> new ArrayList<>()).add(slot);
         resolveTouched(Set.of(p));
     }
@@ -75,9 +86,48 @@ public final class ElementStyle {
         if (slots.isEmpty()) return;
         var touched = new LinkedHashSet<StyleProperty<?>>();
         for (var slot : slots) {
+            if (slot.value() == null) {
+                // Backstop — see putCandidate()'s @implNote.
+                CrystalGuiCore.LOGGER.warn("Refusing to add a null-valued candidate for '{}' (origin={})",
+                        slot.property().name, slot.origin());
+                continue;
+            }
             candidates.computeIfAbsent(slot.property(), k -> new ArrayList<>()).add(slot);
             touched.add(slot.property());
         }
+        resolveTouched(touched);
+    }
+
+    /**
+     * Atomically replaces every candidate matching {@code toRemove} with {@code newSlots}, in a
+     * single {@link #resolveTouched} pass — critical for stylesheet re-matching, where removing the
+     * stale candidates and adding the fresh ones as two separate calls (two separate
+     * {@code resolveTouched} passes) would transiently resolve every touched property to {@code null}
+     * in between. That spurious null intermediate defeats transitions: the transition engine sees
+     * {@code fromValue == null} (the real old value having already been diffed away against the
+     * transient null) and correctly declines to animate through it, so the real old→new change never
+     * gets a chance to transition — it snaps instead. Doing both halves as one batch means
+     * {@code resolveOne} only ever sees the real old value and the real new value.
+     */
+    public void replaceCandidates(Predicate<StyleSlot<?>> toRemove, List<StyleSlot<?>> newSlots) {
+        var touched = new LinkedHashSet<StyleProperty<?>>();
+        for (var entry : candidates.entrySet()) {
+            if (entry.getValue().removeIf(toRemove)) {
+                touched.add(entry.getKey());
+            }
+        }
+        candidates.values().removeIf(List::isEmpty);
+
+        for (var slot : newSlots) {
+            if (slot.value() == null) {
+                CrystalGuiCore.LOGGER.warn("Refusing to add a null-valued candidate for '{}' (origin={})",
+                        slot.property().name, slot.origin());
+                continue;
+            }
+            candidates.computeIfAbsent(slot.property(), k -> new ArrayList<>()).add(slot);
+            touched.add(slot.property());
+        }
+
         resolveTouched(touched);
     }
 

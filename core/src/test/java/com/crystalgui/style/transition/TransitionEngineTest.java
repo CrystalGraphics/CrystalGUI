@@ -74,6 +74,57 @@ public class TransitionEngineTest {
     }
 
     @Test
+    public void declinesGracefullyOnNullFromValue() {
+        var property = new FloatProperty("test-float-null-a", 0f);
+        var element = new UIElement();
+        element.getStyle().getGeneralGroup().transition(property.name + " 10s");
+
+        var engine = new TransitionEngine();
+        assertFalse(engine.tryStart(element, property, null, 100f));
+    }
+
+    @Test
+    public void declinesGracefullyOnNullToValue() {
+        var property = new FloatProperty("test-float-null-b", 0f);
+        var element = new UIElement();
+        element.getStyle().getGeneralGroup().transition(property.name + " 10s");
+
+        var engine = new TransitionEngine();
+        assertFalse(engine.tryStart(element, property, 0f, null));
+    }
+
+    @Test
+    public void declinesGracefullyWhenBothValuesAreNull() {
+        var property = new FloatProperty("test-float-null-c", 0f);
+        var element = new UIElement();
+        element.getStyle().getGeneralGroup().transition(property.name + " 10s");
+
+        var engine = new TransitionEngine();
+        assertFalse(engine.tryStart(element, property, null, null));
+    }
+
+    @Test
+    public void inlineOriginPermanentlyBlocksAStylesheetOverrideRegardlessOfSpecificity() {
+        // Not an engine bug — real CSS cascade semantics: an INLINE-origin value (e.g. set via
+        // UIElement's normal .layout()/.generalStyle() Java construction API) always outranks a
+        // plain STYLESHEET-origin value regardless of selector specificity, matching how a real
+        // `style=""` attribute outranks any non-!important stylesheet rule. If a property was set
+        // via inline Java code, a stylesheet rule targeting the same property (even a highly
+        // specific one, e.g. an #id:hover match) can never win — so its computed value never
+        // changes, and no transition ever triggers, because resolveOne() never sees a diff.
+        var property = new FloatProperty("test-float-inline-blocks-stylesheet", 0f);
+        var element = new UIElement();
+
+        element.getStyle().putCandidate(property, StyleSlot.of(property, StyleOrigin.INLINE, 0, 0, 32f));
+        assertEquals(32f, element.getStyle().getComputed(property), 0.001f);
+
+        // High-specificity STYLESHEET candidate — still loses to INLINE's higher origin priority.
+        element.getStyle().putCandidate(property, StyleSlot.of(property, StyleOrigin.STYLESHEET, 100, 0, 60f));
+
+        assertEquals("INLINE wins regardless of STYLESHEET specificity", 32f, element.getStyle().getComputed(property), 0.001f);
+    }
+
+    @Test
     public void onElementDetachedDropsActiveTransitions() {
         var property = new FloatProperty("test-float-f", 0f);
         var element = new UIElement();
