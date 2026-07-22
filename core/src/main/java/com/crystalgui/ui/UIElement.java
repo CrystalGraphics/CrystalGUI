@@ -95,24 +95,27 @@ public class UIElement {
     public final EventListenerGroup<FocusEvent.Blur> onBlur = events.getGroup(FocusEvent.Blur.class);
 
     public UIElement() {
-        onFocus.attachDefaultListener(((thisElement, event) -> style.generalGroup.overlay(new CgUiQuad(0x88FFFFFF)).color(0xFFFF8888)));
-        onBlur.attachDefaultListener(((thisElement, event) -> style.generalGroup.overlay(CgUiDrawable.EMPTY).color(0xFFFFFFFF)));
+//        onFocus.attachDefaultListener(((thisElement, event) -> style.generalGroup.overlay(CgUiDrawable.EMPTY).color(0xFFFF8888)));
+//        onBlur.attachDefaultListener(((thisElement, event) -> style.generalGroup.overlay(CgUiDrawable.EMPTY).color(0xFFFFFFFF)));
     }
 
     // ── Identity ─────────────────────────────────────────────────────────────
 
     public UIElement setId(String id) {
-        this.id = id == null ? "" : id;
+        String newId = id == null ? "" : id;
+        if (this.id.equals(newId)) return this;
+        this.id = newId;
+        invalidateStyleMatch();
         return this;
     }
 
     public UIElement addClass(String cls) {
-        classes.add(cls);
+        if (classes.add(cls)) invalidateStyleMatch();
         return this;
     }
 
     public UIElement removeClass(String cls) {
-        classes.remove(cls);
+        if (classes.remove(cls)) invalidateStyleMatch();
         return this;
     }
 
@@ -120,30 +123,42 @@ public class UIElement {
         return classes.contains(cls);
     }
 
+    /**
+     * Lowercase tag/type used by selector-engine type selectors (e.g. {@code button { ... }}).
+     * Defaults to the simple class name; widget subclasses may override to a stable public name.
+     */
+    public String tagName() {
+        return getClass().getSimpleName().toLowerCase(Locale.ROOT);
+    }
+
 
     // ── State ────────────────────────────────────────────────────────────────
     public void setEnabled(boolean enabled) {
-        if (this.isEnabled != enabled) onStyleChanged();
+        if (this.isEnabled == enabled) return;
         this.isEnabled = enabled;
         onStyleChanged();
+        invalidateStyleMatch();
     }
 
     public void setPressed(boolean pressed) {
-        if (this.isPressed != pressed) onStyleChanged();
+        if (this.isPressed == pressed) return;
         this.isPressed = pressed;
         onStyleChanged();
+        invalidateStyleMatch();
     }
 
     public void setFocused(boolean focused) {
-        if (this.isFocused != focused) onStyleChanged();
+        if (this.isFocused == focused) return;
         this.isFocused = focused;
         onStyleChanged();
+        invalidateStyleMatch();
     }
 
     public void setHovered(boolean hovered) {
         if (this.isHovered == hovered) return;
         this.isHovered = hovered;
         onStyleChanged();
+        invalidateStyleMatch();
     }
 
     /**
@@ -346,6 +361,18 @@ public class UIElement {
         // no-op.
     }
 
+    /**
+     * Marks this element as needing its stylesheet selectors re-matched (id/class/pseudo-class
+     * state changed). Deliberately separate from {@link #onStyleChanged()} — that hook fires on
+     * every candidate-value push (including the ones a re-match itself produces), so folding this
+     * into it would re-trigger selector matching on every single style write.
+     */
+    protected void invalidateStyleMatch() {
+        if (attachedWindow != null) {
+            attachedWindow.getStyleEngine().markDirty(this);
+        }
+    }
+
     // ── Paint ────────────────────────────────────────────────────────────────
 
     /**
@@ -382,11 +409,6 @@ public class UIElement {
 
     /** Override for custom drawing that must appear above children. Called after children paint. */
     protected void paintOverlay(CgUiPaintContext ctx) {
-        Matrix4f worldToLocal = runtimeCache.worldToLocal.get();
-        Vector4f v = new Vector4f();
-        v.set(ctx.mouseX, ctx.mouseY, 0, 1.0f);
-        worldToLocal.transform(v);
-        final float mouseX = v.x(), mouseY = v.y();
         final float x = runtimeCache.getX(), y = runtimeCache.getY(), width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
 
         style.getGeneralGroup().overlay().draw(ctx, x, y, width, height);

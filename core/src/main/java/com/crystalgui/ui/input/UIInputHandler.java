@@ -180,7 +180,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
             if (this.lastPressedElement != null) this.lastPressedElement.setPressed(true);
             emitMouseDown(target, buttonOrdinal, detail);
         } else {
-            this.lastPressedElement.setPressed(false);
+            if (this.lastPressedElement != null) this.lastPressedElement.setPressed(false);
             emitMouseUp(target, buttonOrdinal, detail);
         }
     }
@@ -245,12 +245,14 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     private void emitAndSetFocus(UIElement target) {
         this.focusedElement = target;
+        if (target != null) target.setFocused(true);
         FocusEvent.Focus event = new FocusEvent.Focus(target);
         sendInputEvent(target, event);
     }
 
     private void emitAndLoseFocus(UIElement target) {
         this.focusedElement = null;
+        if (target != null) target.setFocused(false);
         FocusEvent.Blur event = new FocusEvent.Blur(target);
         sendInputEvent(target, event);
     }

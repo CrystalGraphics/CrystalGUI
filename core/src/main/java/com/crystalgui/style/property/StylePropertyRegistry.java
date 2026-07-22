@@ -9,6 +9,8 @@ import com.crystalgui.style.property.visual.OverflowClip;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.texture.TextureProperty;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.style.transition.TransitionSpec;
+import com.crystalgui.style.transition.TransitionValue;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
@@ -32,7 +34,8 @@ public class StylePropertyRegistry {
     });
     public static final StyleProperty<OverflowClip> CLIP = create("clip", OverflowClip.class, OverflowClip.NONE);
     public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
-//    public static final StyleProperty<Transition> TRANSITION = create("transition", Transition.EMPTY);
+    public static final StyleProperty<List<TransitionSpec>> TRANSITION =
+            create("transition", List.<TransitionSpec>of(), TransitionValue::new);
 //    public static final StyleProperty<Tooltips> TOOLTIPS = create("tooltips", Tooltips.empty());
 //    public static final StyleProperty<Transform2D> TRANSFORM_2D = create("transform", Transform2D.identity());
 
