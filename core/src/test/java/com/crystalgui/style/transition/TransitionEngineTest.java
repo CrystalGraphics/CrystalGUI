@@ -125,17 +125,43 @@ public class TransitionEngineTest {
     }
 
     @Test
-    public void onElementDetachedDropsActiveTransitions() {
+    public void onElementDetachedDropsActiveTransitionsAndClearsTheAnimationCandidate() {
         var property = new FloatProperty("test-float-f", 0f);
         var element = new UIElement();
         element.getStyle().getGeneralGroup().transition(property.name + " 10s");
 
         var engine = new TransitionEngine();
         engine.tryStart(element, property, 0f, 100f);
+        assertEquals(0f, element.getStyle().getComputed(property), 0.001f); // animation shadow active
+
         engine.onElementDetached(element);
 
         // Ticking after detach must not throw and must not keep animating the detached element.
         engine.tick(0f);
-        assertEquals(0f, element.getStyle().getComputed(property), 5f); // unchanged since detach
+        // The ANIMATION-origin candidate must actually be removed, not just dropped from tracking —
+        // this test never gave the property any other (real) candidate, so once the animation shadow
+        // is gone there's nothing left to compute at all. Leaving it orphaned (the bug this guards
+        // against) would instead leave getComputed() permanently frozen at the stale shadow value.
+        assertNull(element.getStyle().getComputed(property));
+    }
+
+    @Test
+    public void decliningANullTargetCancelsAnyStaleInFlightTransition() {
+        var property = new FloatProperty("test-float-g", 0f);
+        var element = new UIElement();
+        element.getStyle().getGeneralGroup().transition(property.name + " 10s"); // won't finish mid-test
+
+        var engine = new TransitionEngine();
+        assertTrue(engine.tryStart(element, property, 0f, 100f));
+        assertEquals(0f, element.getStyle().getComputed(property), 0.001f); // animation shadow active
+
+        // The real target disappeared entirely (e.g. the matching rule stopped applying, nothing
+        // else claims the property) — tryStart must decline (null toValue) AND clean up the stale
+        // shadow, not leave it ticking forever toward the old target.
+        assertFalse(engine.tryStart(element, property, 0f, null));
+
+        engine.tick(0f);
+        assertNull("the stale ANIMATION candidate must be gone, not stuck at its last value",
+                element.getStyle().getComputed(property));
     }
 }

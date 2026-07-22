@@ -93,6 +93,44 @@ public class ElementStyleCascadeTest {
     }
 
     @Test
+    public void realCascadeChangeIsDetectedEvenWhileAnAnimationShadowIsActive() {
+        // The masking bug this guards against: computeCandidateSlot always prefers an ANIMATION
+        // candidate (highest priority) once one exists. If diffing compared against the DISPLAYED
+        // value (which includes that shadow), a real STYLESHEET/INLINE change happening while a
+        // transition is in flight would always look like "no change" — silently defeating both
+        // mid-flight retargeting and any listener (e.g. TaffyBridge) ever finding out. Diffing must
+        // use the REAL (non-animated) winner instead, so this is detected regardless.
+        var prop = newProp("default");
+        var element = new UIElement();
+        var style = element.getStyle();
+
+        var oldSlot = StyleSlot.of(prop, StyleOrigin.STYLESHEET, 10, 0, "real-old");
+        style.putCandidate(prop, oldSlot);
+        assertEquals("real-old", style.getComputed(prop));
+
+        // Shadow it with an active "animation" (as TransitionEngine.startAnimationSlot would).
+        style.startAnimationSlot(prop, "mid-animation", 0);
+        assertEquals("mid-animation", style.getComputed(prop)); // display shows the shadow
+
+        List<String> oldSeen = new ArrayList<>();
+        List<String> newSeen = new ArrayList<>();
+        prop.addListener((el, p, oldVal, newVal) -> {
+            oldSeen.add(oldVal);
+            newSeen.add(newVal);
+        });
+
+        // The REAL underlying candidate changes while the animation is still shadowing it.
+        var newSlot = StyleSlot.of(prop, StyleOrigin.STYLESHEET, 10, 1, "real-new");
+        style.replaceCandidates(slot -> slot == oldSlot, List.of(newSlot));
+
+        // Display still shows the (unrelated, still-ticking) animation shadow — unaffected.
+        assertEquals("mid-animation", style.getComputed(prop));
+        // But the diff must have seen the REAL change, not "no change" (the old masking bug).
+        assertEquals(List.of("real-old"), oldSeen);
+        assertEquals(List.of("real-new"), newSeen);
+    }
+
+    @Test
     public void animationSlotShadowsRealWinnerUntilEnded() {
         var prop = newProp("default");
         var element = new UIElement();

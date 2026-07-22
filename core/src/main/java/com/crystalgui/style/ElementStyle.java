@@ -28,7 +28,17 @@ public final class ElementStyle {
     public final GeneralGroup generalGroup;
 
     public final Map<StyleProperty<?>, List<StyleSlot<?>>> candidates = new HashMap<>();
+    /** The DISPLAYED winner per property — what {@link #getComputed} returns. Includes an
+     * ANIMATION-origin candidate when one is active (so paint shows the interpolated value). */
     private final Map<StyleProperty<?>, StyleSlot<?>> computedSlots = new HashMap<>();
+    /** The REAL underlying winner per property, ignoring any ANIMATION-origin candidate — i.e. what
+     * the property should be settling toward. Diffed against on every {@link #resolveTouched} pass
+     * instead of {@link #computedSlots}, because an ANIMATION candidate always wins the priority
+     * comparison in {@link #computeCandidateSlot}: if the diff compared against the displayed value
+     * while a transition was in flight, it would always see "no change" (the animation's own last
+     * tick, unchanged), even when the STYLESHEET/INLINE/etc. target underneath had genuinely moved —
+     * silently defeating both mid-flight retargeting and cleanup. */
+    private final Map<StyleProperty<?>, StyleSlot<?>> realSlots = new HashMap<>();
 
     public ElementStyle layout(Consumer<LayoutGroup> configurator) {
         configurator.accept(this.getLayoutGroup());
@@ -176,29 +186,34 @@ public final class ElementStyle {
     private void resolveTouched(Set<StyleProperty<?>> touched) {
         if (touched.isEmpty()) return;
 
-        var oldValues = new HashMap<StyleProperty<?>, Object>();
+        var oldRealValues = new HashMap<StyleProperty<?>, Object>();
         var wasResolved = new HashSet<StyleProperty<?>>();
         for (var p : touched) {
-            if (computedSlots.containsKey(p)) wasResolved.add(p);
-            oldValues.put(p, getComputed(p));
-            computedSlots.put(p, computeCandidateSlot(p));
+            if (realSlots.containsKey(p)) wasResolved.add(p);
+            var oldRealSlot = realSlots.get(p);
+            oldRealValues.put(p, oldRealSlot == null ? null : oldRealSlot.value());
+
+            realSlots.put(p, computeCandidateSlot(p, true));
+            computedSlots.put(p, computeCandidateSlot(p, false));
         }
 
         for (var p : touched) {
-            resolveOne(p, oldValues.get(p), wasResolved.contains(p));
+            resolveOne(p, oldRealValues.get(p), wasResolved.contains(p));
         }
         element.onStyleChanged();
     }
 
     /**
-     * Diffs one already-resolved property. If the value actually changed and the property allows
-     * transitions and this isn't the element's first-ever resolution of it, the transition engine
-     * gets first refusal (it may shadow the value with an ANIMATION-origin slot instead of applying
-     * it instantly); otherwise listeners are notified with the real old/new pair.
+     * Diffs one already-resolved property against its REAL (non-animated) prior value. If it
+     * actually changed and the property allows transitions and this isn't the element's first-ever
+     * resolution of it, the transition engine gets first refusal (it may shadow the value with an
+     * ANIMATION-origin slot instead of applying it instantly, or retarget an in-flight one);
+     * otherwise listeners are notified with the real old/new pair.
      */
-    private <T> void resolveOne(StyleProperty<T> p, Object oldValueRaw, boolean wasResolved) {
-        T oldValue = cast(oldValueRaw);
-        T newValue = getComputed(p);
+    private <T> void resolveOne(StyleProperty<T> p, Object oldRealValueRaw, boolean wasResolved) {
+        T oldValue = cast(oldRealValueRaw);
+        var newRealSlot = realSlots.get(p);
+        T newValue = newRealSlot == null ? null : cast(newRealSlot.value());
         if (Objects.equals(oldValue, newValue)) return;
 
         var window = element.getAttachedWindow();
@@ -240,18 +255,22 @@ public final class ElementStyle {
         slots.add(StyleSlot.of(p, StyleOrigin.ANIMATION, 0, sourceOrder, value));
     }
     public <T> StyleSlot<T> computeCandidateSlot(StyleProperty<T> p) {
+        return computeCandidateSlot(p, false);
+    }
+
+    /** @param excludeAnimation when {@code true}, skips ANIMATION-origin candidates — used to find
+     * the "real" target a transition should be heading toward, independent of its own current shadow. */
+    private <T> StyleSlot<T> computeCandidateSlot(StyleProperty<T> p, boolean excludeAnimation) {
         List<StyleSlot<?>> list = candidates.get(p);
-        if (list != null && !list.isEmpty()) {
-            var best = list.getFirst();
-            for (int i = 1; i < list.size(); i++) {
-                StyleSlot<?> cur = list.get(i);
-                if (StyleSlot.compare(best, cur) < 0) {
-                    best = cur;
-                }
+        if (list == null || list.isEmpty()) return null;
+        StyleSlot<?> best = null;
+        for (var slot : list) {
+            if (excludeAnimation && slot.origin() == StyleOrigin.ANIMATION) continue;
+            if (best == null || StyleSlot.compare(best, slot) < 0) {
+                best = slot;
             }
-            return cast(best);
         }
-        return null;
+        return cast(best);
     }
     public <T> T computeCandidate(StyleProperty<T> p) {
         var slot = computeCandidateSlot(p);
