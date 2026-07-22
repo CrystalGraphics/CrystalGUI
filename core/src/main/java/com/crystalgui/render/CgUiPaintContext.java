@@ -1,14 +1,18 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.api.PoseStack;
+import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.state.CgGlSlot;
+import com.crystalgraphics.api.text.CgTextLayout;
+import com.crystalgraphics.api.vertex.CgVertexFormat;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.text.render.CgTextRenderer;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -23,8 +27,8 @@ import lombok.Setter;
  * at draw time when a scissor rect is active.</p>
  *
  * <p><b>Frame lifecycle</b> — call {@link #beginFrame} once before walking the UI tree,
- * then {@link #endFrame} once after. Every {@code fillRect}/{@code drawImage} call in
- * between draws immediately; there is no recording phase and nothing to flush.</p>
+ * then {@link #endFrame} once after. Every {@code fillRect}/{@code drawImage} call in between draws immediately;
+ * there is no recording phase and nothing to flush. This is intentional for now, not merely unoptimized. </p>
  */
 public final class CgUiPaintContext {
 
@@ -45,6 +49,16 @@ public final class CgUiPaintContext {
      */
     @Getter
     private final CgUiRenderer renderer;
+
+    // ── Text ─────────────────────────────────────────────────────────────────
+    /**
+     * Owned independently of {@link #renderer} — text uses
+     * {@link CgVertexFormat#POS2_UV2_COL4UB}, distinct from
+     * {@code CgUiRenderer}'s {@code CgVertexFormat.UI}, so it cannot share the same
+     * {@code CgBatchRenderer}. See {@code docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md} §2.1.
+     */
+    @Getter
+    private final CgTextRenderer textRenderer;
 
     // ── GL state isolation ──────────────────────────────────────────────────
     private CgGlScope glScope;
@@ -68,6 +82,7 @@ public final class CgUiPaintContext {
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
+        this.textRenderer = CgTextRenderer.create().poseStack(this.poseStack);
     }
 
     public int mouseX, mouseY;
@@ -96,6 +111,10 @@ public final class CgUiPaintContext {
         fd.viewportW = screenWidth;
         fd.viewportH = screenHeight;
         pipeline.prepareFrame();
+
+        // Text: projection + atlas LRU frame tick. No beginBatch() here — drawText()
+        // deliberately stays standalone-per-call, see docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md §2.3.
+        textRenderer.context().updateOrtho(screenWidth, screenHeight);
 
         poseStack.pushPose();
         renderer.begin();
@@ -147,7 +166,42 @@ public final class CgUiPaintContext {
         submitQuad(x, y, width, height, u0, v0, u1, v1, argb);
         flush();
     }
-
+    
+    /**
+     * Returns the context's text renderer object.
+     *
+     * <p>Its owned pose stack was wired to this context's own {@link #getPoseStack()} in
+     * the constructor, so {@link CgTextRenderer.Draw#poseStack(PoseStack)}
+     * may be omitted entirely — a draw with no explicit pose falls back to it.</p>
+     *
+     * <pre>{@code
+     * // One-shot: build and submit in the same expression. No .pose(...) call needed —
+     * // falls back to this context's own poseStack automatically.
+     * ctx.text().draw()
+     *         .text("Hello world")
+     *         .font(myFont)
+     *         .at(20.0f, 40.0f)
+     *         .color(0xFFFFFFFF)
+     *         .submit();
+     *
+     * // Retained: held across frames (e.g. a widget's cached label draw), only the
+     * // text changes each tick. Independent of draw()'s shared immediate-mode scratch instance.
+     * CgTextRenderer.Draw labelDraw = ctx.text().retainedDraw()
+     *         .font(myFont).at(20.0f, 40.0f).color(0xFFFFFFFF);
+     * // ... later, once per frame:
+     * labelDraw.text(currentLabel).submit();
+     *
+     * // Manually-batched: several draws sharing one upload+draw. submit() returns the
+     * // owning CgTextRenderer, so the last call in the batch can chain into endBatch().
+     * ctx.text().beginBatch();
+     * ctx.text().draw().text(line1).font(myFont).at(20.0f, 20.0f).color(0xFFFFFFFF).submit();
+     * ctx.text().draw().text(line2).font(myFont).at(20.0f, 40.0f).color(0xFFFFFFFF)
+     *         .submit().endBatch();
+     * }</pre>
+     */
+    public CgTextRenderer text() {
+        return textRenderer;
+    }
 
     public void bindTexture(CgTexture2D texture) {
         if (texture == currentTexture) return;
