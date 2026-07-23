@@ -2,6 +2,7 @@ package com.crystalgui.style.transition;
 
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.layout.BoxEdgeShorthands;
 import com.crystalgui.ui.UIElement;
 
 import java.util.HashMap;
@@ -83,6 +84,11 @@ public final class TransitionEngine {
         TransitionSpec fallbackAll = null;
         for (var spec : specs) {
             if (spec.propertyNameOrAll().equals(property.name)) return spec;
+            // `transition: margin ...` must animate all four margin longhands together, matching
+            // real CSS's shorthand transition-property behavior — margin/padding/border-width
+            // themselves aren't registered StyleProperty instances (see BoxEdgeShorthands), so this
+            // can't be caught by the exact-name check above.
+            if (BoxEdgeShorthands.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
             if (spec.propertyNameOrAll().equals(TransitionSpec.ALL)) fallbackAll = spec;
         }
         return fallbackAll;

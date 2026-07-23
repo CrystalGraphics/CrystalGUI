@@ -18,6 +18,10 @@ public final class CgUiQuad implements CgUiDrawable {
         this.colorArgb = colorArgb;
     }
 
+    public int getColorArgb() {
+        return colorArgb;
+    }
+
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         ctx.fillRect(x, y, width, height, ArgbMath.multiply(colorArgb, ctx.getColor()));

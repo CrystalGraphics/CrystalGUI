@@ -84,6 +84,14 @@ public final class StyleEngine {
         }
     }
 
+    /** Declarations within one rule share the rule's own {@code sourceOrder} — this multiplier
+     * folds each declaration's position within the rule into that same int, so a later declaration
+     * for the same target property (e.g. an explicit {@code margin-left:} after a {@code margin:}
+     * shorthand expansion in the same rule) still correctly outranks the earlier one via ordinary
+     * {@link StyleSlot#compare}, instead of tying and falling back to insertion order. No realistic
+     * rule has anywhere near this many declarations. */
+    private static final int DECLARATION_ORDER_MULTIPLIER = 100_000;
+
     private void rematch(UIElement element) {
         var previouslyApplied = appliedByElement.get(element);
 
@@ -92,9 +100,12 @@ public final class StyleEngine {
             for (var rule : sheet.candidatesFor(element)) {
                 if (!rule.selector().matches(element)) continue;
                 int specificity = rule.selector().specificity();
-                for (var decl : rule.declarations()) {
+                var decls = rule.declarations();
+                for (int i = 0; i < decls.size(); i++) {
+                    var decl = decls.get(i);
                     var origin = decl.important() ? StyleOrigin.IMPORTANT : StyleOrigin.STYLESHEET;
-                    var slot = toSlot(decl, origin, specificity, rule.sourceOrder());
+                    int sourceOrder = rule.sourceOrder() * DECLARATION_ORDER_MULTIPLIER + i;
+                    var slot = toSlot(decl, origin, specificity, sourceOrder);
                     if (slot != null) newSlots.add(slot);
                 }
             }

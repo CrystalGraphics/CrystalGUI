@@ -254,10 +254,11 @@ There is no `mc/` package anywhere under `core/`, and `mc1710/src` has no Crysta
 adapter is future work, not a relocated/renamed existing feature.
 
 ### Documentation
+- `docs/CGUI_STYLE_RENDER_PIPELINE.md` — current-state doc: cascade, selectors/stylesheets, transitions, frame lifecycle, drawable system (tint vs. layer-opacity compositing channels), `background:` CSS grammar reference, SDF rounded rects (per-corner radii, morphing vs. cross-fading), known gaps vs. the web, file map
 - `docs/DOM_UI_FUNDAMENTALS V2.md` — learning document: theory and mental models for DOM-based UI frameworks
 - `docs/CRYSTALGUI_BACKEND_ROADMAP.md` — phased development plan (signal/slot, LDLib2 analysis, Phases 0–8)
 - `docs/PHASES_0_3_IMPLEMENTATION_GUIDE.md` — deep walkthrough of what Phases 0–3 actually built, how the pieces connect, and where the implementation diverged from the roadmap
-- These roadmap docs predate the style/cascade system and the render rewrite described above; treat them as historical, not current-state.
+- These roadmap docs predate the style/cascade system and the render rewrite described above; treat them as historical, not current-state. `docs/CGUI_STYLE_RENDER_PIPELINE.md` is the current-state reference for everything they predate.
 
 ## CrystalGraphics Ownership Boundary (Critical)
 

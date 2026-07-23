@@ -8,6 +8,7 @@ import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.event.DOMEvent;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.MouseEvent;
@@ -341,8 +342,13 @@ public class UIElement {
     }
 
     public void clearLayoutCache() {
+        // No early-return here: UIWindow.calculateLayout() invalidates nodesWithNewLayout in
+        // arbitrary HashSet order, so a node can already be NaN-marked (from an earlier, unrelated
+        // call this same pass) without its children ever having been walked — an early-return
+        // "already dirty, skip" guard here would leave those children's cached positions stale for
+        // this frame's hit-testing. Redundant re-invalidation within one frame is cheap; a stale
+        // cached position feeding into hit-testing is not.
         runtimeCache.resetPoseCache();
-        if (runtimeCache.isPositionDirty()) return;
         runtimeCache.resetLayoutCache();
         children.forEach(UIElement::clearLayoutCache);
     }
@@ -465,15 +471,17 @@ public class UIElement {
         // transparent), so background-color instead paints as a flat fill directly.
         CgUiDrawable background = styleGen.background();
         int backgroundColor = styleGen.backgroundColor();
-        boolean hasBackgroundColor = (backgroundColor >>> 24) != 0;
 
         if (background == CgUiDrawable.EMPTY) {
             ctx.setColor(0xFFFFFFFF);
-            if (hasBackgroundColor) {
+            // background-color now defaults to white (a no-op tint) — so whether to paint a flat
+            // fill here can't be decided from the resolved value anymore (it's white either way when
+            // unset). Check for an explicit candidate instead.
+            if (style.containsCandidate(StylePropertyRegistry.BACKGROUND_COLOR, slot -> true)) {
                 ctx.fillRect(x, y, width, height, backgroundColor);
             }
         } else {
-            ctx.setColor(hasBackgroundColor ? backgroundColor : 0xFFFFFFFF);
+            ctx.setColor(backgroundColor);
             background.draw(ctx, x, y, width, height);
         }
 //        if (this.parent == null) {
