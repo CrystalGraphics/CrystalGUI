@@ -3,10 +3,10 @@
 // SDF-based rounded-rectangle "canvas": interior filled by _FillColor or a sampled _MainTex
 // (WITH_TEXTURE_FILL), with an optional _BorderColor stroke band (WITH_BORDER) along the
 // outer edge. Both bands share one rounded-box SDF, so corners clip fill and border
-// consistently. _CornerRadius holds four independent OUTER radii (TL,TR,BR,BL, CSS order) —
-// UIElement's rounded-corner hit-test (Phase 5) still uses a single uniform border-radius style
-// property, not these per-corner values, so hit-testing against a per-corner shape is only an
-// approximation at the corners (documented gap, see docs/CGUI_STYLE_RENDER_PIPELINE.md).
+// consistently. _CornerRadiusX/_CornerRadiusY each hold four independent per-corner radii
+// (TL,TR,BR,BL, CSS order) — elliptical corners (rx != ry). UIElement's rounded-corner hit-test
+// uses the same per-corner (rx,ry) values and the same approximate elliptical SDF technique, so
+// rendering and hit-testing stay consistent.
 //
 // Not part of CgUiPaintContext's shared box-model batch (see gui_quad.shader) — drawn via
 // CgUiPaintContext.withMaterial(...) since it needs its own per-instance uniforms (corner
@@ -26,7 +26,8 @@ Properties {
     _MainTex      ("Main Texture", sampler2D) = "white"
     _FillColor    ("Fill Color",   color)     = (1.0, 1.0, 1.0, 1.0)
     _BorderColor  ("Border Color", color)     = (0.0, 0.0, 0.0, 1.0)
-    _CornerRadius ("Corner Radii (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
+    _CornerRadiusX ("Corner Radii X (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
+    _CornerRadiusY ("Corner Radii Y (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
     _BorderWidth  ("Border Width", float)     = 0.0
     _BoxSize      ("Box Size (px)", vec2)     = (0.0, 0.0)
     _LayerOpacity ("Layer Opacity", float)    = 1.0
@@ -56,7 +57,7 @@ Pass {
     void fragment(in v2f i, out vec4 fragColor) {
         vec2 halfSize = _BoxSize * 0.5;
         vec2 localPos = (i.uv - 0.5) * _BoxSize;
-        float dist = sdf_rounded_box(localPos, halfSize, _CornerRadius);
+        float dist = sdf_rounded_box(localPos, halfSize, _CornerRadiusX, _CornerRadiusY);
         float coverage = sdf_coverage(dist);
 
 #ifdef WITH_TEXTURE_FILL

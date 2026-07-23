@@ -1,9 +1,7 @@
 package com.crystalgui.style.property.visual.texture;
 
-import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiQuad;
-import com.crystalgui.render.texture.CgUiRoundedRect;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
 import com.crystalgui.style.CssParsingUtil;
@@ -30,15 +28,12 @@ import java.util.Locale;
  *   <li>{@code sprite("path", "sx sy sw sh", "bl bt br bb")} — a 9-slice sprite defined directly in
  *       CSS, no asset file needed. An optional 4th {@code "refW refH"} arg overrides the texture-size
  *       reference the same way as {@code image(...)}.</li>
- *   <li>{@code asset("namespace:path")} — named 9-slice lookup via {@link CgUiSpriteRegistry}.</li>
- *   <li>{@code roundedrect(radius, borderWidth, borderColor, fill)} — an SDF rounded rect
- *       ({@link CgUiRoundedRect}). {@code radius} is either a bare number (uniform, all corners) or
- *       a quoted 4-number {@code "topLeft topRight bottomRight bottomLeft"} list — CSS
- *       {@code border-radius} order — for independent per-corner rounding (e.g. {@code 0} on two
- *       corners for a square edge). {@code fill} reuses this same grammar recursively (any form
- *       above producing a {@link CgUiQuad} or {@link CgUiSprite} is accepted) — so a rounded rect can
- *       be filled with e.g. a cropped/tinted {@code image(...)}, not just a bare color or path.</li>
+ *   <li>{@code asset("namespace:path", "element")} — named 9-slice lookup via {@link CgUiSpriteRegistry}.</li>
  * </ul>
+ *
+ * <p>Rounding/border is a separate, universal wrapping layer ({@code border-radius}/
+ * {@code border-width}/{@code border-color}), not a {@code background:} value type — it applies on
+ * top of whatever {@code background:} resolves to (see {@code UIElement.paintSelf}).</p>
  */
 public class TextureValue extends StyleValue<CgUiDrawable> {
 
@@ -51,8 +46,6 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         return parseDrawable(rawValue);
     }
 
-    /** The full {@code background:} grammar dispatch, exposed so {@link #parseRoundedRect} can reuse
-     * it for its {@code fill} argument instead of duplicating a narrower subset. */
     private static @Nullable CgUiDrawable parseDrawable(String rawValue) {
         String value = rawValue.trim();
         if (value.isEmpty()) return null;
@@ -70,9 +63,6 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         }
         if (lower.startsWith("asset(") && value.endsWith(")")) {
             return parseAsset(value.substring("asset(".length(), value.length() - 1));
-        }
-        if (lower.startsWith("roundedrect(") && value.endsWith(")")) {
-            return parseRoundedRect(value.substring("roundedrect(".length(), value.length() - 1));
         }
         return null;
     }
@@ -106,51 +96,6 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         return sprite;
     }
 
-    private static @Nullable CgUiDrawable parseRoundedRect(String args) {
-        List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
-        if (parts.size() != 4) return null;
-
-        String radiusRaw = unquote(parts.get(0).trim());
-        Float borderWidth = parseFloat(parts.get(1).trim());
-        if (borderWidth == null) return null;
-
-        CgUiRoundedRect rect = new CgUiRoundedRect();
-        Float uniformRadius = parseFloat(radiusRaw);
-        if (uniformRadius != null) {
-            rect.setCornerRadius(uniformRadius);
-        } else {
-            float[] corners = parseFloatQuad(radiusRaw);
-            if (corners == null) return null;
-            rect.setCornerRadius(corners[0], corners[1], corners[2], corners[3]);
-        }
-
-        if (borderWidth > 0f) {
-            Integer borderColor = ColorValue.parseColor(parts.get(2).trim());
-            if (borderColor == null) return null;
-            rect.setBorder(borderWidth, borderColor);
-        }
-
-        CgUiDrawable fillDrawable = parseDrawable(parts.get(3).trim());
-        if (fillDrawable instanceof CgUiQuad quad) {
-            rect.setFillColor(quad.getColorArgb());
-        } else if (fillDrawable instanceof CgUiSprite sprite) {
-            CgTexture2D texture = sprite.getTexture();
-            if (texture == null) return null;
-            rect.setFillTexture(texture);
-        } else {
-            return null; // e.g. a nested roundedrect() as fill, or a failed asset() lookup — no mapping
-        }
-        return rect;
-    }
-
-    private static @Nullable Float parseFloat(String s) {
-        try {
-            return Float.parseFloat(s);
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
     private static @Nullable CgUiDrawable parseSprite(String args) {
         List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
         if (parts.size() != 3 && parts.size() != 4) return null;
@@ -171,9 +116,12 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
     }
 
     private static @Nullable CgUiDrawable parseAsset(String args) {
-        String path = unquote(args.trim());
-        if (path.isEmpty()) return null;
-        return CgUiSpriteRegistry.get(path);
+        List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
+        if (parts.size() != 2) return null;
+        String packPath = unquote(parts.get(0).trim());
+        String elementName = unquote(parts.get(1).trim());
+        if (packPath.isEmpty() || elementName.isEmpty()) return null;
+        return CgUiSpriteRegistry.get(packPath, elementName);
     }
 
     private static @Nullable int[] parseIntQuad(String raw) {
@@ -183,19 +131,6 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
             return new int[]{
                     Integer.parseInt(tokens[0]), Integer.parseInt(tokens[1]),
                     Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3])
-            };
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    private static @Nullable float[] parseFloatQuad(String raw) {
-        String[] tokens = raw.trim().split("\\s+");
-        if (tokens.length != 4) return null;
-        try {
-            return new float[]{
-                    Float.parseFloat(tokens[0]), Float.parseFloat(tokens[1]),
-                    Float.parseFloat(tokens[2]), Float.parseFloat(tokens[3])
             };
         } catch (NumberFormatException e) {
             return null;

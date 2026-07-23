@@ -97,6 +97,11 @@ public final class StyleSheet {
                 continue;
             }
 
+            if (com.crystalgui.style.property.visual.border.BorderRadiusShorthand.isBorderRadius(name)) {
+                com.crystalgui.style.property.visual.border.BorderRadiusShorthand.expand(declarations, rawValue, important);
+                continue;
+            }
+
             StyleProperty<?> property = StylePropertyRegistry.byName(name);
             if (property == null) {
                 CrystalGuiCore.LOGGER.warn("Unknown style property '{}' in stylesheet — skipping declaration", name);

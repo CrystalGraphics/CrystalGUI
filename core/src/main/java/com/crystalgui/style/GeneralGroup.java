@@ -85,12 +85,19 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    public float borderRadius() {
-        return getValueSave(StylePropertyRegistry.BORDER_RADIUS);
-    }
-
-    public GeneralGroup borderRadius(float radius) {
-        set(StylePropertyRegistry.BORDER_RADIUS, radius);
+    /** Uniform circular radius on all 4 corners (px) — the common case. For per-corner/elliptical
+     * control, set the 8 {@link com.crystalgui.style.property.visual.border.BorderRadiusProperties}
+     * longhands directly, or use the {@code border-radius:} stylesheet shorthand. */
+    public GeneralGroup borderRadius(float radiusPx) {
+        var px = com.crystalgui.style.property.visual.border.LengthPercent.px(radiusPx);
+        set(com.crystalgui.style.property.visual.border.BorderRadiusProperties.TOP_LEFT_X, px);
+        set(com.crystalgui.style.property.visual.border.BorderRadiusProperties.TOP_LEFT_Y, px);
+        set(com.crystalgui.style.property.visual.border.BorderRadiusProperties.TOP_RIGHT_X, px);
+        set(com.crystalgui.style.property.visual.border.BorderRadiusProperties.TOP_RIGHT_Y, px);
+        set(com.crystalgui.style.property.visual.border.BorderRadiusProperties.BOTTOM_RIGHT_X, px);
+        set(com.crystalgui.style.property.visual.border.BorderRadiusProperties.BOTTOM_RIGHT_Y, px);
+        set(com.crystalgui.style.property.visual.border.BorderRadiusProperties.BOTTOM_LEFT_X, px);
+        set(com.crystalgui.style.property.visual.border.BorderRadiusProperties.BOTTOM_LEFT_Y, px);
         return this;
     }
 
