@@ -30,6 +30,21 @@ public final class CgUiCrossFade implements CgUiDrawable {
         this.t = t;
     }
 
+    /** Exposed so callers that need to reproduce this blend through a different rendering path
+     * (e.g. {@code UIElement}'s rounded-background wrapper, which draws each side through a shared
+     * {@code CgUiRoundedRect} shape instead of raw) can inspect the two sides and blend factor. */
+    public CgUiDrawable getFrom() {
+        return from;
+    }
+
+    public CgUiDrawable getTo() {
+        return to;
+    }
+
+    public float getT() {
+        return t;
+    }
+
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         ctx.withLayerOpacity(1f - t, () -> from.draw(ctx, mouseX, mouseY, x, y, width, height));

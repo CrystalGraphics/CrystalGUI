@@ -177,30 +177,55 @@ returns `null`, same as any malformed CSS value).
 | `#RRGGBB` / `#RGB` / `#RRGGBBAA` / `rgb(...)` / `rgba(...)` | `CgUiQuad` | 8-hex form is CSS-standard `#RRGGBBAA` (alpha last), not the engine's internal `0xAARRGGBB` int packing |
 | `image("path")` | `CgUiSprite`, unsliced | Optional trailing args, type-sniffed, order-independent: quoted `"x y w h"` crop rect, quoted `"refW refH"` texture-size-reference override, or a color literal (tint) |
 | `sprite("path", "sx sy sw sh", "bl bt br bb")` | `CgUiSprite`, 9-slice | Optional 4th `"refW refH"` arg, same override as `image(...)` |
-| `asset("ns:path")` | `CgUiSprite` (cached template, `.copy()`d) | Named 9-slice from `assets/{ns}/ui/sprites/{path}.json`, via `CgUiSpriteRegistry` |
-| `roundedrect(radius, borderWidth, borderColor, fill)` | `CgUiRoundedRect` | `radius`: bare number (uniform) or quoted `"tl tr br bl"` (CSS `border-radius` order, per-corner). `fill` recursively reuses this entire grammar (any form above producing a `CgUiQuad` or `CgUiSprite`) — so a rounded rect can be filled with e.g. a cropped/tinted `image(...)`, not just a bare color or path |
+| `asset("ns:path", "element")` | `CgUiSprite` (cached template, `.copy()`d) | Named 9-slice element from a pack at `assets/{ns}/ui/sprites/{path}.json`, via `CgUiSpriteRegistry`. One pack file holds multiple named elements; each may override the pack's own `texture`/`textureSize` |
 
 `CssParsingUtil.splitTopLevelCommas` (paren-aware comma split) backs every multi-arg form here.
 
+There is no `roundedrect(...)` background function — rounding/border is a separate, universal
+wrapping layer (§7 below), applied on top of whatever `background:` resolves to, not a background
+value type of its own.
+
 ---
 
-## 7. SDF Rounded Rects
+## 7. Universal Border-Radius/Border-Width/Border-Color Layer
 
 `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl`,
 `core/src/main/resources/assets/crystalgui/shaders/gui_rounded_rect.shader`,
-`core/src/main/java/com/crystalgui/render/texture/CgUiRoundedRect.java`
+`core/src/main/java/com/crystalgui/render/texture/CgUiRoundedRect.java`,
+`core/src/main/java/com/crystalgui/style/property/visual/border/`, `UIElement.paintSelf`
 
-`sdf.glsl` has two `sdf_rounded_box` overloads: uniform `float radius`, and per-corner `vec4 radii`
-(`top-left, top-right, bottom-right, bottom-left` — CSS order; corner selection is quadrant-based on
-the fragment's local position, adapted for this engine's Y-down local space). `sdf_coverage` turns a
-signed distance into an antialiased 0–1 mask via `fwidth`.
+`border-radius`/`border-width`/`border-color` apply on top of *whatever* `background:` produces —
+matching real CSS (rounding/border is orthogonal to what the background *is*, not tied to one special
+drawable). `UIElement.paintSelf` resolves all three once per paint; if any are set, it branches on the
+resolved `background` drawable's concrete type: a flat color or a non-9-slice `CgUiSprite` gets wrapped
+in a freshly-built `CgUiRoundedRect` (clipped + stroked by the shared SDF shader); a 9-slice sprite
+falls through to the plain unclipped path (border-radius/border-width still resolve for hit-testing and
+layout growth, just without visual clipping of the sprite — see the known gap in §8).
+
+`border-radius` is elliptical per corner (independent rx/ry, not a single scalar) — real CSS syntax,
+`border-radius: <h-list> [ / <v-list> ]`, each list a 1/2/3/4-value TL/TR/BR/BL corner shorthand,
+expanded at parse time into 8 real longhands (`BorderRadiusProperties`) by `BorderRadiusShorthand`,
+mirroring `BoxEdgeShorthands`'s architecture. Percentages resolve against the element's own width (rx)
+/ height (ry) at paint/hit-test time — not via Taffy, since corner radius isn't a layout quantity.
+`border-width` is the real per-edge `border-width-*` longhand (already existed, already grows Taffy's
+box under `CONTENT_BOX`) — sourced from `getTaffyLayout().border()`'s already-resolved pixels, not
+reparsed independently, so it can never drift from what actually grew the layout. The SDF's own stroke
+width stays a single scalar for now (asymmetric per-edge visual stroke rendering is an explicitly
+deferred gap — not requested, and orthogonal to border-width actually growing the box, which is fixed).
+
+`sdf.glsl` has three `sdf_rounded_box` overloads: uniform `float radius`, per-corner `vec4 radii`
+(circular), and per-corner elliptical (`vec4 radiiX, vec4 radiiY`) — all CSS TL/TR/BR/BL order,
+quadrant-selected on the fragment's local position (Y-down local space). The elliptical overload
+normalizes the corner-region offset by (rx,ry) before a circular distance evaluation, then scales the
+result back by `min(rx,ry)` — approximate (exact only when rx==ry) but visually correct, matching this
+codebase's existing SDF approximation style. `UIElement`'s Java-side hit-test (`isMouseOverElement`)
+uses the identical technique against the same resolved per-corner values, so rendering and hit-testing
+never disagree about the element's shape. `sdf_coverage` turns a signed distance into an antialiased
+0–1 mask via `fwidth`.
 
 The shader is a genuine "canvas": interior filled by `_FillColor` or a sampled `_MainTex`
 (`WITH_TEXTURE_FILL` keyword), an optional `_BorderColor` stroke band (`WITH_BORDER` keyword) along the
-outer edge, both masked by the same distance field so corners clip fill and border consistently. Border
-width grows the element outward like a real CSS content-box border — Taffy's native `border` field is
-wired through `TaffyBridge`/`LayoutGroup`, and `box-sizing` is defaulted to `CONTENT_BOX` (Taffy's own
-default is `BORDER_BOX`) to match.
+outer edge, both masked by the same distance field so corners clip fill and border consistently.
 
 **`CgUiPaintContext.withMaterial(material, drawBody)`** — used because an SDF rect needs its own
 shader/program, not the shared box-model batch. **`bind()` must run after `drawBody`, not before** —
@@ -208,19 +233,15 @@ shader/program, not the shared box-model batch. **`bind()` must run after `drawB
 own dirty-check), and `drawBody` is exactly where the caller sets its per-instance properties. Binding
 first uploads whatever was dirty from the *previous* draw call — one draw stale, invisible for a static
 shape re-drawing identical values every frame, badly broken for two different instances alternating
-every frame (a fixed bug from this session).
+every frame (a fixed bug from an earlier session).
 
-**Morphing vs. cross-fading**: `TextureProperty`'s interpolator special-cases `CgUiRoundedRect` pairs —
-`CgUiRoundedRect.morph(from, to, t)` true-lerps corner radii, border width, and border color (a single
-draw of one intermediate shape, zero compositing artifacts), because two SDF rects are the same
-procedural shape family and their parameters interpolate meaningfully — unlike two unrelated 9-slice
-sprites, where there's no shared parameter space to lerp between. Fill is the one part that can't
-always be a pure lerp: flat-color↔flat-color lerps the color too; if either side has a texture fill,
-the morphed shape is drawn twice (once per fill, blended via `withLayerOpacity`) — the shape/border are
-identical both times now, so only the fill visibly cross-fades, avoiding the geometry-mismatch problem
-9-slice↔9-slice has. Every other drawable pairing still uses `CgUiCrossFade` (draw both, blend layer
-opacity — the same "two stacked layers, both opacities animating" technique real browsers use for
-image crossfades, since CSS has no native one either).
+**Transitions, not morphing**: `CgUiRoundedRect` is built fresh every frame by `paintSelf` from
+whatever the currently-interpolated style values are — it is never itself held inside the `background`
+cascade (there's no `roundedrect(...)` background value anymore), so `TransitionEngine` never
+interpolates between two `CgUiRoundedRect` instances directly. Instead, each of the 8 radius longhands,
+the border-width longhands, and border-color animate independently as ordinary scalar/color
+`StyleProperty` transitions — `TextureProperty.interpolate` (for `background` itself) always falls
+through to `CgUiCrossFade` now, since `background` can only ever hold a `CgUiQuad`/`CgUiSprite`.
 
 ---
 
@@ -237,13 +258,17 @@ image crossfades, since CSS has no native one either).
   the engine's analog is baked-in crop rects on `image()`/`sprite()` at parse time.
 - **No text styling** — `color` is wired and inheritable in anticipation, but no text elements exist
   yet, so `font-*`, `text-align`, etc. don't either.
-- **Per-corner radius hit-testing gap** — `UIElement`'s rounded-corner hit-test (and the standalone
-  `border-radius` style property it reads) is still single-float. Hit-testing against a per-corner
-  `roundedrect(...)` background is only an approximation at the corners; widening `BORDER_RADIUS`/
-  `GeneralGroup`/the CPU-side SDF hit-test port to per-corner is real, separate scope, not done here.
-- **No true per-pixel texture blending** for texture↔texture cross-fades or mixed-fill SDF morphs — a
-  dedicated 2-sampler pixel-blend shader, restricted to matching-geometry drawables, is deliberately
-  deferred.
+- **9-slice backgrounds can't be visually rounded/bordered** — `border-radius`/`border-width` still
+  resolve for hit-testing and Taffy box growth when `background` is a 9-slice `CgUiSprite`, but
+  `UIElement.paintSelf` falls through to the plain unclipped draw for that case rather than clipping
+  the sprite's pixels to the SDF shape. 9-slice textures are typically pre-baked with their own rounded
+  corners already, so this is a lower-priority gap than it might first appear.
+- **SDF border stroke width is a single scalar**, even though real `border-width` is independently
+  per-edge — a stylesheet with 4 different edge widths still grows the layout box correctly per edge,
+  but the visual SDF stroke uses one representative value. True asymmetric per-edge SDF stroke
+  rendering is deliberately deferred (not requested; orthogonal to the box-growth fix).
+- **No true per-pixel texture blending** for texture↔texture `CgUiCrossFade`s — a dedicated 2-sampler
+  pixel-blend shader, restricted to matching-geometry drawables, is deliberately deferred.
 - **Visual Layers (FBO-based subtree compositing) — entirely deferred**, scoped as its own future plan.
   This is the single biggest missing piece relative to what a real browser's compositor does.
 
@@ -260,6 +285,7 @@ image crossfades, since CSS has no native one either).
 | Transitions | `core/src/main/java/com/crystalgui/style/transition/` |
 | Property registry | `core/src/main/java/com/crystalgui/style/property/StylePropertyRegistry.java` |
 | Box-model shorthand expansion | `core/src/main/java/com/crystalgui/style/property/layout/BoxEdgeShorthands.java` |
+| Border-radius shorthand expansion + value type | `core/src/main/java/com/crystalgui/style/property/visual/border/` (`BorderRadiusShorthand`, `BorderRadiusProperties`, `LengthPercent`) |
 | Frame lifecycle | `core/src/main/java/com/crystalgui/ui/UIWindow.java` |
 | Paint entry points | `core/src/main/java/com/crystalgui/ui/UIElement.java` (`paintSelf`/`paintOverlay`/`drawSubtree`) |
 | Paint context | `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java` |

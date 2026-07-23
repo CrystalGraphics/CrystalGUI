@@ -43,9 +43,9 @@ public class StylePropertyRegistry {
     });
     public static final StyleProperty<OverflowClip> CLIP = create("clip", OverflowClip.class, OverflowClip.NONE);
     public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
-    // Outer corner radius for SDF rounded rects (also read by rounded-corner hit-testing) — not
-    // inherited, matches real CSS border-radius.
-    public static final StyleProperty<Float> BORDER_RADIUS = create("border-radius", 0f).setRange(0f, Float.MAX_VALUE);
+    // border-radius itself is pure parse-time shorthand syntax expanding to the 8 real longhands in
+    // BorderRadiusProperties (see BorderRadiusShorthand) — not a registered property here, matching
+    // how margin/padding/border-width work (BoxEdgeShorthands).
     public static final StyleProperty<Integer> BORDER_COLOR = create(new ColorProperty("border-color", 0xFF000000));
     public static final StyleProperty<List<TransitionSpec>> TRANSITION =
             create("transition", List.of(), TransitionValue::new);

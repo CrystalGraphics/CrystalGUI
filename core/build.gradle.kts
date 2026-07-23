@@ -48,6 +48,11 @@ dependencies {
     // @Nullable / @NonNull annotations — javax.annotation not on module path in JDK 11+
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")
 
+    // Real Gson (not shaded) — core must run standalone (tests, gl-debug-harness), so this can't be
+    // compileOnly on the assumption a loader/Minecraft provides it at runtime.
+    implementation("com.google.code.gson:gson:2.11.0")
+    testImplementation("com.google.code.gson:gson:2.11.0")
+
     // LWJGL 2 — needed for ScissorStack.java (V3.x legacy, scheduled for deletion in Phase 2).
     // ScissorStack uses raw GL11 calls; this compileOnly dep lets it compile without an import
     // guard violation (ScissorStack is in the exemption list).
