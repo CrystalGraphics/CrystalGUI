@@ -3,8 +3,10 @@ package com.crystalgui.style.sheet;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.layout.BoxEdgeShorthands;
 import com.crystalgui.style.selector.Selector;
 import com.crystalgui.ui.UIElement;
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -84,6 +86,17 @@ public final class StyleSheet {
                 rawValue = rawValue.substring(0, importantMatcher.start()).trim();
             }
 
+            // margin/padding/border-width (and their -all/-horizontal/-vertical aliases) are pure
+            // shorthand syntax, never registered StyleProperty instances — expand into the real
+            // longhand declarations here, at parse time, so normal cascade resolution (origin/
+            // specificity/source-order — all shared with this declaration) decides ties, exactly
+            // like a real browser's shorthand-to-longhand expansion. See BoxEdgeShorthands.
+            BoxEdgeShorthands.Match shorthand = BoxEdgeShorthands.lookup(name);
+            if (shorthand != null) {
+                expandBoxEdgeShorthand(declarations, shorthand, rawValue, important);
+                continue;
+            }
+
             StyleProperty<?> property = StylePropertyRegistry.byName(name);
             if (property == null) {
                 CrystalGuiCore.LOGGER.warn("Unknown style property '{}' in stylesheet — skipping declaration", name);
@@ -93,6 +106,52 @@ public final class StyleSheet {
             declarations.add(new StyleRule.Declaration(property, value, important));
         }
         return declarations;
+    }
+
+    private static void expandBoxEdgeShorthand(List<StyleRule.Declaration> out, BoxEdgeShorthands.Match match,
+                                                String rawValue, boolean important) {
+        BoxEdgeShorthands.Group group = match.group();
+        switch (match.kind()) {
+            case ALL -> {
+                out.add(edgeDeclaration(group.left(), rawValue, important));
+                out.add(edgeDeclaration(group.top(), rawValue, important));
+                out.add(edgeDeclaration(group.right(), rawValue, important));
+                out.add(edgeDeclaration(group.bottom(), rawValue, important));
+            }
+            case HORIZONTAL -> {
+                out.add(edgeDeclaration(group.left(), rawValue, important));
+                out.add(edgeDeclaration(group.right(), rawValue, important));
+            }
+            case VERTICAL -> {
+                out.add(edgeDeclaration(group.top(), rawValue, important));
+                out.add(edgeDeclaration(group.bottom(), rawValue, important));
+            }
+            case COMPOSITE -> {
+                // Real CSS 1/2/3/4-value shorthand rule (clockwise from top for the 4-value form).
+                String[] tokens = rawValue.trim().split("\\s+");
+                String top, right, bottom, left;
+                switch (tokens.length) {
+                    case 1 -> { top = right = bottom = left = tokens[0]; }
+                    case 2 -> { top = bottom = tokens[0]; left = right = tokens[1]; }
+                    case 3 -> { top = tokens[0]; left = right = tokens[1]; bottom = tokens[2]; }
+                    case 4 -> { top = tokens[0]; right = tokens[1]; bottom = tokens[2]; left = tokens[3]; }
+                    default -> {
+                        CrystalGuiCore.LOGGER.warn("Invalid {}-value shorthand '{}' for '{}' — expected 1-4 values",
+                                tokens.length, rawValue, group.prefix());
+                        return;
+                    }
+                }
+                out.add(edgeDeclaration(group.left(), left, important));
+                out.add(edgeDeclaration(group.top(), top, important));
+                out.add(edgeDeclaration(group.right(), right, important));
+                out.add(edgeDeclaration(group.bottom(), bottom, important));
+            }
+        }
+    }
+
+    private static StyleRule.Declaration edgeDeclaration(StyleProperty<LengthPercentageAuto> property,
+                                                           String rawValue, boolean important) {
+        return new StyleRule.Declaration(property, property.valueParser.parse(rawValue), important);
     }
 
     private void index(StyleRule rule) {

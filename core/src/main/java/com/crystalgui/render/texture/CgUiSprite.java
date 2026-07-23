@@ -42,6 +42,10 @@ public final class CgUiSprite implements CgUiDrawable {
     private float borderSumX = 0f;
     private float borderSumY = 0f;
 
+    public CgTexture2D getTexture() {
+        return texture;
+    }
+
     public CgUiSprite copy() {
         CgUiSprite copied = new CgUiSprite();
         copied.texture = texture;

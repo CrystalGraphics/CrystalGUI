@@ -2,7 +2,6 @@ package com.crystalgui.style;
 
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.layout.grid.*;
-import com.crystalgui.style.property.layout.length.LPARect;
 import com.crystalgui.style.property.layout.length.LPSize;
 import dev.vfyjxf.taffy.geometry.TaffyRect;
 import dev.vfyjxf.taffy.geometry.TaffySize;
@@ -284,18 +283,15 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     public LayoutGroup marginHorizontal(float margin) {
-        set(LayoutProperties.MARGIN_HORIZONTAL, LengthPercentageAuto.length(margin));
-        return this;
+        return marginLeft(margin).marginRight(margin);
     }
 
     public LayoutGroup marginVertical(float margin) {
-        set(LayoutProperties.MARGIN_VERTICAL, LengthPercentageAuto.length(margin));
-        return this;
+        return marginTop(margin).marginBottom(margin);
     }
 
     public LayoutGroup marginAll(float margin) {
-        set(LayoutProperties.MARGIN_ALL, LengthPercentageAuto.length(margin));
-        return this;
+        return marginLeft(margin).marginTop(margin).marginRight(margin).marginBottom(margin);
     }
 
     public LayoutGroup marginLeftPercent(float margin) {
@@ -319,18 +315,15 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     public LayoutGroup marginHorizontalPercent(float margin) {
-        set(LayoutProperties.MARGIN_HORIZONTAL, LengthPercentageAuto.percent(margin / 100f));
-        return this;
+        return marginLeftPercent(margin).marginRightPercent(margin);
     }
 
     public LayoutGroup marginVerticalPercent(float margin) {
-        set(LayoutProperties.MARGIN_VERTICAL, LengthPercentageAuto.percent(margin / 100f));
-        return this;
+        return marginTopPercent(margin).marginBottomPercent(margin);
     }
 
     public LayoutGroup marginAllPercent(float margin) {
-        set(LayoutProperties.MARGIN_ALL, LengthPercentageAuto.percent(margin / 100f));
-        return this;
+        return marginLeftPercent(margin).marginTopPercent(margin).marginRightPercent(margin).marginBottomPercent(margin);
     }
 
     public LayoutGroup marginLeftAuto() {
@@ -354,18 +347,15 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     public LayoutGroup marginHorizontalAuto() {
-        set(LayoutProperties.MARGIN_HORIZONTAL, LengthPercentageAuto.auto());
-        return this;
+        return marginLeftAuto().marginRightAuto();
     }
 
     public LayoutGroup marginVerticalAuto() {
-        set(LayoutProperties.MARGIN_VERTICAL, LengthPercentageAuto.auto());
-        return this;
+        return marginTopAuto().marginBottomAuto();
     }
 
     public LayoutGroup marginAllAuto() {
-        set(LayoutProperties.MARGIN_ALL, LengthPercentageAuto.auto());
-        return this;
+        return marginLeftAuto().marginTopAuto().marginRightAuto().marginBottomAuto();
     }
 
     /* Padding properties */
@@ -390,18 +380,15 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     public LayoutGroup paddingHorizontal(float padding) {
-        set(LayoutProperties.PADDING_HORIZONTAL, LengthPercentageAuto.length(padding));
-        return this;
+        return paddingLeft(padding).paddingRight(padding);
     }
 
     public LayoutGroup paddingVertical(float padding) {
-        set(LayoutProperties.PADDING_VERTICAL, LengthPercentageAuto.length(padding));
-        return this;
+        return paddingTop(padding).paddingBottom(padding);
     }
 
     public LayoutGroup paddingAll(float padding) {
-        set(LayoutProperties.PADDING_ALL, LengthPercentageAuto.length(padding));
-        return this;
+        return paddingLeft(padding).paddingTop(padding).paddingRight(padding).paddingBottom(padding);
     }
 
     public LayoutGroup paddingLeftPercent(float padding) {
@@ -425,18 +412,15 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     public LayoutGroup paddingHorizontalPercent(float padding) {
-        set(LayoutProperties.PADDING_HORIZONTAL, LengthPercentageAuto.percent(padding / 100f));
-        return this;
+        return paddingLeftPercent(padding).paddingRightPercent(padding);
     }
 
     public LayoutGroup paddingVerticalPercent(float padding) {
-        set(LayoutProperties.PADDING_VERTICAL, LengthPercentageAuto.percent(padding / 100f));
-        return this;
+        return paddingTopPercent(padding).paddingBottomPercent(padding);
     }
 
     public LayoutGroup paddingAllPercent(float padding) {
-        set(LayoutProperties.PADDING_ALL, LengthPercentageAuto.percent(padding / 100f));
-        return this;
+        return paddingLeftPercent(padding).paddingTopPercent(padding).paddingRightPercent(padding).paddingBottomPercent(padding);
     }
 
     /* Border-width properties (box-model — grows the element like a real CSS content-box border) */
@@ -461,18 +445,15 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     public LayoutGroup borderHorizontal(float border) {
-        set(LayoutProperties.BORDER_HORIZONTAL, LengthPercentageAuto.length(border));
-        return this;
+        return borderLeft(border).borderRight(border);
     }
 
     public LayoutGroup borderVertical(float border) {
-        set(LayoutProperties.BORDER_VERTICAL, LengthPercentageAuto.length(border));
-        return this;
+        return borderTop(border).borderBottom(border);
     }
 
     public LayoutGroup borderAll(float border) {
-        set(LayoutProperties.BORDER_ALL, LengthPercentageAuto.length(border));
-        return this;
+        return borderLeft(border).borderTop(border).borderRight(border).borderBottom(border);
     }
 
     /* Position properties */

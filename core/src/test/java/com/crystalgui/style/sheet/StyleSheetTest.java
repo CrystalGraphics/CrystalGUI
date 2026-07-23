@@ -1,7 +1,9 @@
 package com.crystalgui.style.sheet;
 
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.UIElement;
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -72,5 +74,65 @@ public class StyleSheetTest {
         assertEquals(1, rules.get(1).sourceOrder()); // .b
         assertEquals(1, rules.get(2).sourceOrder()); // .c (shares block with .b)
         assertEquals(2, rules.get(3).sourceOrder()); // .d
+    }
+
+    @Test
+    public void marginShorthandExpandsIntoFourRealLonghands() {
+        var sheet = StyleSheet.parse(".a { margin: 10px 5px; }");
+        var decls = sheet.getRules().get(0).declarations();
+        assertEquals(4, decls.size());
+        for (var decl : decls) {
+            assertTrue("declaration should target a real longhand, not a shorthand",
+                    decl.property() == LayoutProperties.MARGIN_LEFT
+                            || decl.property() == LayoutProperties.MARGIN_TOP
+                            || decl.property() == LayoutProperties.MARGIN_RIGHT
+                            || decl.property() == LayoutProperties.MARGIN_BOTTOM);
+        }
+        assertEquals(LengthPercentageAuto.length(10), findValue(decls, LayoutProperties.MARGIN_TOP));
+        assertEquals(LengthPercentageAuto.length(10), findValue(decls, LayoutProperties.MARGIN_BOTTOM));
+        assertEquals(LengthPercentageAuto.length(5), findValue(decls, LayoutProperties.MARGIN_LEFT));
+        assertEquals(LengthPercentageAuto.length(5), findValue(decls, LayoutProperties.MARGIN_RIGHT));
+    }
+
+    @Test
+    public void marginAllHorizontalVerticalAliasesExpandCorrectly() {
+        var all = StyleSheet.parse(".a { margin-all: 3px; }").getRules().get(0).declarations();
+        assertEquals(4, all.size());
+
+        var horizontal = StyleSheet.parse(".a { margin-horizontal: 7px; }").getRules().get(0).declarations();
+        assertEquals(2, horizontal.size());
+        assertEquals(LengthPercentageAuto.length(7), findValue(horizontal, LayoutProperties.MARGIN_LEFT));
+        assertEquals(LengthPercentageAuto.length(7), findValue(horizontal, LayoutProperties.MARGIN_RIGHT));
+
+        var vertical = StyleSheet.parse(".a { margin-vertical: 9px; }").getRules().get(0).declarations();
+        assertEquals(2, vertical.size());
+        assertEquals(LengthPercentageAuto.length(9), findValue(vertical, LayoutProperties.MARGIN_TOP));
+        assertEquals(LengthPercentageAuto.length(9), findValue(vertical, LayoutProperties.MARGIN_BOTTOM));
+    }
+
+    @Test
+    public void borderWidthShorthandExpandsIntoRealLonghands() {
+        var decls = StyleSheet.parse(".a { border-width: 2px; }").getRules().get(0).declarations();
+        assertEquals(4, decls.size());
+        assertEquals(LengthPercentageAuto.length(2), findValue(decls, LayoutProperties.BORDER_LEFT));
+        assertEquals(LengthPercentageAuto.length(2), findValue(decls, LayoutProperties.BORDER_TOP));
+        assertEquals(LengthPercentageAuto.length(2), findValue(decls, LayoutProperties.BORDER_RIGHT));
+        assertEquals(LengthPercentageAuto.length(2), findValue(decls, LayoutProperties.BORDER_BOTTOM));
+    }
+
+    @Test
+    public void shorthandExpansionPreservesImportantFlag() {
+        var decls = StyleSheet.parse(".a { margin: 10px !important; }").getRules().get(0).declarations();
+        assertEquals(4, decls.size());
+        for (var decl : decls) {
+            assertTrue(decl.important());
+        }
+    }
+
+    private static Object findValue(java.util.List<StyleRule.Declaration> decls, com.crystalgui.style.property.StyleProperty<?> property) {
+        for (var decl : decls) {
+            if (decl.property() == property) return decl.value().compute();
+        }
+        throw new AssertionError("No declaration found for " + property);
     }
 }

@@ -39,32 +39,24 @@ public class LayoutProperties {
     public static final StyleProperty<LengthPercentageAuto> RIGHT = create("right", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> BOTTOM = create("bottom", LengthPercentageAuto.AUTO);
 
+    // margin/padding/border-width are 4 real longhand properties each — the composite name and its
+    // -all/-horizontal/-vertical aliases are pure parse-time shorthand syntax (see
+    // BoxEdgeShorthands), expanded into these longhands before the cascade ever runs; they are not
+    // separately-registered StyleProperty instances.
     public static final StyleProperty<LengthPercentageAuto> MARGIN_LEFT = create("margin-left", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> MARGIN_TOP = create("margin-top", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> MARGIN_RIGHT = create("margin-right", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> MARGIN_BOTTOM = create("margin-bottom", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> MARGIN_VERTICAL = create("margin-vertical", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> MARGIN_HORIZONTAL = create("margin-horizontal", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> MARGIN_ALL = create("margin-all", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LPARect> MARGIN = create("margin", LPARect.ZERO);
 
     public static final StyleProperty<LengthPercentageAuto> PADDING_LEFT = create("padding-left", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> PADDING_TOP = create("padding-top", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> PADDING_RIGHT = create("padding-right", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> PADDING_BOTTOM = create("padding-bottom", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> PADDING_VERTICAL = create("padding-vertical", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> PADDING_HORIZONTAL = create("padding-horizontal", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> PADDING_ALL = create("padding-all", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LPARect> PADDING = create("padding", LPARect.ZERO);
 
     public static final StyleProperty<LengthPercentageAuto> BORDER_LEFT = create("border-width-left", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> BORDER_TOP = create("border-width-top", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> BORDER_RIGHT = create("border-width-right", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> BORDER_BOTTOM = create("border-width-bottom", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> BORDER_VERTICAL = create("border-width-vertical", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> BORDER_HORIZONTAL = create("border-width-horizontal", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> BORDER_ALL = create("border-width-all", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LPARect> BORDER = create("border-width", LPARect.ZERO);
 
     public static final StyleProperty<LengthPercentageAuto> GAP_ROW = create("gap-row", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> GAP_COLUMN = create("gap-column", LengthPercentageAuto.AUTO);
@@ -132,32 +124,20 @@ public class LayoutProperties {
         createSetter(LayoutProperties.MIN_HEIGHT, TaffyBridge::setMinHeight);
         createSetter(LayoutProperties.MAX_HEIGHT, TaffyBridge::setMaxHeight);
 
-        createSetter(LayoutProperties.MARGIN_LEFT, (style, value) -> style.margin.setLeft(value));
-        createSetter(LayoutProperties.MARGIN_TOP, (style, value) -> style.margin.setTop(value));
-        createSetter(LayoutProperties.MARGIN_RIGHT, (style, value) -> style.margin.setRight(value));
-        createSetter(LayoutProperties.MARGIN_BOTTOM, (style, value) -> style.margin.setBottom(value));
-        createSetter(LayoutProperties.MARGIN_VERTICAL, (style, value) -> style.margin.setVertical(value));
-        createSetter(LayoutProperties.MARGIN_HORIZONTAL, (style, value) -> style.margin.setHorizontal(value));
-        createSetter(LayoutProperties.MARGIN_ALL, (style, value) -> style.margin.setAll(value));
-        createSetter(LayoutProperties.MARGIN, (style, value) -> style.margin.setRect(value));
+        createSetter(LayoutProperties.MARGIN_LEFT, TaffyBridge::setMarginLeft);
+        createSetter(LayoutProperties.MARGIN_TOP, TaffyBridge::setMarginTop);
+        createSetter(LayoutProperties.MARGIN_RIGHT, TaffyBridge::setMarginRight);
+        createSetter(LayoutProperties.MARGIN_BOTTOM, TaffyBridge::setMarginBottom);
 
-        createSetter(LayoutProperties.PADDING_LEFT, (style, value) -> style.padding.setLeft(value));
-        createSetter(LayoutProperties.PADDING_TOP, (style, value) -> style.padding.setTop(value));
-        createSetter(LayoutProperties.PADDING_RIGHT, (style, value) -> style.padding.setRight(value));
-        createSetter(LayoutProperties.PADDING_BOTTOM, (style, value) -> style.padding.setBottom(value));
-        createSetter(LayoutProperties.PADDING_VERTICAL, (style, value) -> style.padding.setVertical(value));
-        createSetter(LayoutProperties.PADDING_HORIZONTAL, (style, value) -> style.padding.setHorizontal(value));
-        createSetter(LayoutProperties.PADDING_ALL, (style, value) -> style.padding.setAll(value));
-        createSetter(LayoutProperties.PADDING, (style, value) -> style.padding.setRect(value));
+        createSetter(LayoutProperties.PADDING_LEFT, TaffyBridge::setPaddingLeft);
+        createSetter(LayoutProperties.PADDING_TOP, TaffyBridge::setPaddingTop);
+        createSetter(LayoutProperties.PADDING_RIGHT, TaffyBridge::setPaddingRight);
+        createSetter(LayoutProperties.PADDING_BOTTOM, TaffyBridge::setPaddingBottom);
 
-        createSetter(LayoutProperties.BORDER_LEFT, (style, value) -> style.border.setLeft(value));
-        createSetter(LayoutProperties.BORDER_TOP, (style, value) -> style.border.setTop(value));
-        createSetter(LayoutProperties.BORDER_RIGHT, (style, value) -> style.border.setRight(value));
-        createSetter(LayoutProperties.BORDER_BOTTOM, (style, value) -> style.border.setBottom(value));
-        createSetter(LayoutProperties.BORDER_VERTICAL, (style, value) -> style.border.setVertical(value));
-        createSetter(LayoutProperties.BORDER_HORIZONTAL, (style, value) -> style.border.setHorizontal(value));
-        createSetter(LayoutProperties.BORDER_ALL, (style, value) -> style.border.setAll(value));
-        createSetter(LayoutProperties.BORDER, (style, value) -> style.border.setRect(value));
+        createSetter(LayoutProperties.BORDER_LEFT, TaffyBridge::setBorderLeft);
+        createSetter(LayoutProperties.BORDER_TOP, TaffyBridge::setBorderTop);
+        createSetter(LayoutProperties.BORDER_RIGHT, TaffyBridge::setBorderRight);
+        createSetter(LayoutProperties.BORDER_BOTTOM, TaffyBridge::setBorderBottom);
 
         createSetter(LayoutProperties.GAP_ROW, (style, value) -> style.gap.setVertical(value));
         createSetter(LayoutProperties.GAP_COLUMN, (style, value) -> style.gap.setHorizontal(value));
@@ -177,10 +157,6 @@ public class LayoutProperties {
 
     public static StyleProperty<LengthPercentageAuto> create(String name, LengthPercentageAuto initialValue) {
         return StylePropertyRegistry.create(new LPAProperty(name, initialValue));
-    }
-
-    public static StyleProperty<LPARect> create(String name, LPARect initialValue) {
-        return StylePropertyRegistry.create(new LPARectProperty(name, initialValue));
     }
 
     public static StyleProperty<LPSize> create(String name, LPSize initialValue) {

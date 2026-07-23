@@ -283,17 +283,29 @@ public final class CgUiPaintContext {
      * previously active — so the switch back to {@link #boxModelMaterial} is explicit here, not
      * automatic. {@link #currentTexture} is invalidated on both sides of the switch since a different
      * material may wire its sampler differently even for what looks like "the same" texture reference.</p>
+     *
+     * <p><b>{@code bind()} must run AFTER {@code drawBody}, not before.</b> {@code applyProperties(...)}
+     * is CPU-only — it marks a dirty flag but doesn't upload anything; the GPU-side upload only
+     * happens inside {@code bind()}'s own dirty-check. {@code drawBody} (e.g. {@code CgUiRoundedRect}'s
+     * lambda) is exactly where the caller sets its own per-instance properties (corner radius, border,
+     * fill, ...) — binding before that ran would upload whatever was dirty from the *previous* draw
+     * call on this material, one draw stale. Invisible for a single static drawable re-drawing the
+     * same values every frame; badly broken for two different instances of the same drawable
+     * alternating every frame (e.g. a cross-fade), where each draw would render with the other's
+     * properties. `bind()` is safe to call unconditionally here (not just on a material switch) —
+     * its own `ProgramKey`/`wiredPrograms` caching makes a repeat bind of an already-current variant
+     * just a dirty re-check, not a recompile.</p>
      */
     public void withMaterial(CgMaterial material, Runnable drawBody) {
         flush();
-        if (currentMaterial != material) {
-            if (currentMaterial != null) currentMaterial.unbind();
-            material.bind();
-            currentMaterial = material;
-            currentTexture = null;
+        if (currentMaterial != material && currentMaterial != null) {
+            currentMaterial.unbind();
         }
+        currentMaterial = material;
+        currentTexture = null;
         material.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
         drawBody.run();
+        material.bind();
         flush();
         material.unbind();
         boxModelMaterial.bind();
@@ -316,7 +328,12 @@ public final class CgUiPaintContext {
     public void withLayerOpacity(float opacity, Runnable drawBody) {
         flush();
         float previous = layerOpacity;
-        layerOpacity = opacity;
+        // Compose with the enclosing scope rather than overwriting it — a retargeted texture-valued
+        // transition can nest a drawable (e.g. a CgUiCrossFade or mixed-fill CgUiRoundedRect) inside
+        // another one; an absolute overwrite here would let the innermost call silently discard
+        // every enclosing opacity, leaving the outer transition's own progress with zero visual
+        // effect on whatever it wraps.
+        layerOpacity = previous * opacity;
         currentMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
         currentMaterial.bind();
         drawBody.run();

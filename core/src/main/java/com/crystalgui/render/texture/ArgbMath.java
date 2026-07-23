@@ -19,4 +19,17 @@ public final class ArgbMath {
     private static int mulChannel(int a, int b) {
         return (a * b) / 255;
     }
+
+    /** Channel-wise ARGB lerp (each 0-255 channel interpolated independently, then repacked). */
+    public static int lerp(int from, int to, float t) {
+        int a = lerpChannel((from >>> 24) & 0xFF, (to >>> 24) & 0xFF, t);
+        int r = lerpChannel((from >>> 16) & 0xFF, (to >>> 16) & 0xFF, t);
+        int g = lerpChannel((from >>> 8) & 0xFF, (to >>> 8) & 0xFF, t);
+        int b = lerpChannel(from & 0xFF, to & 0xFF, t);
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int lerpChannel(int from, int to, float t) {
+        return Math.round(from + (to - from) * t);
+    }
 }
