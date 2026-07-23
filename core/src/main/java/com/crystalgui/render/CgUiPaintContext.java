@@ -77,6 +77,19 @@ public final class CgUiPaintContext {
     @Getter
     private boolean frameActive;
 
+    // ── Material switching ──────────────────────────────────────────────────
+    @Getter
+    private CgMaterial currentMaterial;
+
+    /**
+     * Current layer-compositing opacity (distinct from {@link #color}'s tint — see
+     * {@code gui_quad.shader}'s doc comment). Every UI-facing material declares a
+     * {@code _LayerOpacity} property; {@link #withMaterial} keeps whichever material is
+     * currently bound in sync with this value on every switch.
+     */
+    @Getter
+    private float layerOpacity = 1f;
+
     @Getter
     private final CgFont font = CgFont.load(DEMO_FONT_PATH, CgFontStyle.REGULAR, 16);
 
@@ -129,6 +142,7 @@ public final class CgUiPaintContext {
         poseStack.pushPose();
         renderer.begin();
         boxModelMaterial.bind();
+        currentMaterial = boxModelMaterial;
         currentTexture = null;
         scissorStack.reset();
         frameActive = true;
@@ -143,6 +157,7 @@ public final class CgUiPaintContext {
         if (!frameActive) return;
 
         boxModelMaterial.unbind();
+        currentMaterial = null;
         currentTexture = null;
         frameActive = false;
         renderer.end();
@@ -233,5 +248,81 @@ public final class CgUiPaintContext {
      */
     public void flush() {
         renderer.flush();
+    }
+
+    /**
+     * Pushes a new clip rect (screen-space), intersected with whatever scissor is already active,
+     * and enables {@code GL_SCISSOR_TEST} against it. Pair with {@link #popScissor()}.
+     */
+    public void pushScissor(int x, int y, int w, int h) {
+        flush();
+        scissorStack.pushScissor(x, y, w, h);
+        scissorStack.applyScissorIfNeeded();
+    }
+
+    /**
+     * Pops the topmost clip rect, restoring the parent scissor (if any) or disabling
+     * {@code GL_SCISSOR_TEST} entirely once the stack is empty.
+     */
+    public void popScissor() {
+        flush();
+        scissorStack.popScissor();
+        if (scissorStack.hasScissor()) {
+            scissorStack.applyScissorIfNeeded();
+        } else {
+            scissorStack.clearScissorIfNeeded();
+        }
+    }
+
+    /**
+     * Switches to {@code material} for the duration of {@code drawBody}, then eagerly restores
+     * {@link #boxModelMaterial}. Used for drawables (e.g. an SDF rounded rect) that need their own
+     * shader/program rather than the shared box-model one.
+     *
+     * <p>{@code material.unbind()} restores GL state flags but does NOT rebind whatever program was
+     * previously active — so the switch back to {@link #boxModelMaterial} is explicit here, not
+     * automatic. {@link #currentTexture} is invalidated on both sides of the switch since a different
+     * material may wire its sampler differently even for what looks like "the same" texture reference.</p>
+     */
+    public void withMaterial(CgMaterial material, Runnable drawBody) {
+        flush();
+        if (currentMaterial != material) {
+            if (currentMaterial != null) currentMaterial.unbind();
+            material.bind();
+            currentMaterial = material;
+            currentTexture = null;
+        }
+        material.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+        drawBody.run();
+        flush();
+        material.unbind();
+        boxModelMaterial.bind();
+        currentMaterial = boxModelMaterial;
+        currentTexture = null;
+        boxModelMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+    }
+
+    /**
+     * Runs {@code drawBody} with the layer-compositing opacity temporarily set to {@code opacity},
+     * then restores the previous value. Syncs the new value into {@link #currentMaterial} immediately
+     * (covering draws that call {@code fillRect}/{@code drawImage} directly against the already-bound
+     * material without going through {@link #withMaterial}) — any nested {@link #withMaterial} call
+     * inside {@code drawBody} re-syncs it again on its own switches, so this composes correctly with
+     * drawables that own their own material (e.g. an SDF rounded rect).
+     *
+     * <p>Used by {@code CgUiCrossFade} to draw its "to" drawable at a fractional opacity without
+     * touching that drawable's own ambient tint/alpha.</p>
+     */
+    public void withLayerOpacity(float opacity, Runnable drawBody) {
+        flush();
+        float previous = layerOpacity;
+        layerOpacity = opacity;
+        currentMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+        currentMaterial.bind();
+        drawBody.run();
+        flush();
+        layerOpacity = previous;
+        currentMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+        currentMaterial.bind();
     }
 }

@@ -4,6 +4,7 @@ import com.crystalgraphics.api.text.CgTextConstraints;
 import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.IntCacheCell;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
@@ -278,7 +279,34 @@ public class UIElement {
     // ── Hit-testing ──────────────────────────────────────────────────────────
 
     boolean isMouseOverElement(float localMouseX, float localMouseY) {
-        return insideRectangle(localMouseX, localMouseY, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
+        float rectX = runtimeCache.getX(), rectY = runtimeCache.getY();
+        float rectWidth = runtimeCache.getWidth(), rectHeight = runtimeCache.getHeight();
+
+        // Cheap AABB early-reject first — Taffy's Layout.size() is always the full outer
+        // (content + padding + border) box regardless of box-sizing, so this rect already
+        // matches the "outer" box CgUiRoundedRect renders/border-radius describes.
+        if (!insideRectangle(localMouseX, localMouseY, rectX, rectY, rectWidth, rectHeight)) return false;
+
+        float radius = style.getGeneralGroup().borderRadius();
+        if (radius <= 0f) return true;
+
+        // Only when actually rounded: same rounded-box SDF as gui_rounded_rect.shader's
+        // sdf_rounded_box (crystalgraphics:shaders/lib/sdf.glsl), evaluated in plain Java —
+        // rendering and hit-testing must never disagree about the element's shape.
+        float halfW = rectWidth * 0.5f, halfH = rectHeight * 0.5f;
+        float localX = localMouseX - (rectX + halfW);
+        float localY = localMouseY - (rectY + halfH);
+        return sdfRoundedBox(localX, localY, halfW, halfH, radius) <= 0f;
+    }
+
+    private static float sdfRoundedBox(float px, float py, float halfW, float halfH, float radius) {
+        radius = Math.min(radius, Math.min(halfW, halfH));
+        float qx = Math.abs(px) - halfW + radius;
+        float qy = Math.abs(py) - halfH + radius;
+        float outsideX = Math.max(qx, 0f);
+        float outsideY = Math.max(qy, 0f);
+        float outsideLen = (float) Math.sqrt(outsideX * outsideX + outsideY * outsideY);
+        return outsideLen + Math.min(Math.max(qx, qy), 0f) - radius;
     }
 
     boolean isMouseOverContent(float localMouseX, float localMouseY) {
@@ -403,9 +431,21 @@ public class UIElement {
         paintSelf(ctx);
 
         if (!children.isEmpty()) {
+            boolean scissored = style.getGeneralGroup().overflow().isScissor();
+            if (scissored) {
+                var layout = getTaffyLayout();
+                int contentX = Math.round(runtimeCache.getX() + layout.border().left + layout.padding().left);
+                int contentY = Math.round(runtimeCache.getY() + layout.border().top + layout.padding().top);
+                int contentWidth = Math.round(layout.contentBoxWidth());
+                int contentHeight = Math.round(layout.contentBoxHeight());
+                ctx.pushScissor(contentX, contentY, contentWidth, contentHeight);
+            }
+
             for (UIElement child : getChildren()) {
                 child.drawSubtree(ctx);
             }
+
+            if (scissored) ctx.popScissor();
         }
         paintOverlay(ctx);
     }
@@ -413,22 +453,44 @@ public class UIElement {
     /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */
     protected void paintSelf(CgUiPaintContext ctx) {
         GeneralGroup styleGen = style.getGeneralGroup();
-        ctx.setColor(styleGen.color());
-        styleGen.background().draw(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
-        ctx.setColor(0xFFFFFFFF);
-        if (this.parent == null) {
-            ctx.text().draw()
-                    .text("Chuj ci w dupasddd asdasdasdasdasd asd asd sdaddddddddddddddddasd addddddddddddddddddddddddddddddsd as eFfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff ffffff")
-                    .color(0xFFFFFFFF)
-                    .at(runtimeCache.getX(), runtimeCache.getY())
-                    .constraints(new CgTextConstraints(runtimeCache.getWidth(), runtimeCache.getHeight()))
-                    .font(ctx.getFont()).submit();
+        final float x = runtimeCache.getX(), y = runtimeCache.getY(), width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
+
+        // `color` is text-only (inheritable, meant for glyph tint) — it must NOT tint the background
+        // drawable. background-color instead acts as the ambient tint the background drawable is
+        // painted with (every CgUiDrawable already multiplies ctx.getColor() into its own output),
+        // so it visibly recolors whatever background is set — a plain color, a sprite/9-slice's own
+        // shading, an SDF rounded rect's fill+border — rather than being silently invisible behind
+        // an opaque drawable the way a literal underlay-fill layer would be. When there is no real
+        // background drawable set at all, tinting has nothing to multiply against (EMPTY is fully
+        // transparent), so background-color instead paints as a flat fill directly.
+        CgUiDrawable background = styleGen.background();
+        int backgroundColor = styleGen.backgroundColor();
+        boolean hasBackgroundColor = (backgroundColor >>> 24) != 0;
+
+        if (background == CgUiDrawable.EMPTY) {
+            ctx.setColor(0xFFFFFFFF);
+            if (hasBackgroundColor) {
+                ctx.fillRect(x, y, width, height, backgroundColor);
+            }
+        } else {
+            ctx.setColor(hasBackgroundColor ? backgroundColor : 0xFFFFFFFF);
+            background.draw(ctx, x, y, width, height);
         }
+//        if (this.parent == null) {
+//            ctx.text().draw()
+//                    .text("Chuj ci w dupasddd asdasdasdasdasd asd asd sdaddddddddddddddddasd addddddddddddddddddddddddddddddsd as eFfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff ffffff")
+//                    .color(0xFFFFFFFF)
+//                    .at(runtimeCache.getX(), runtimeCache.getY())
+//                    .constraints(new CgTextConstraints(runtimeCache.getWidth(), runtimeCache.getHeight()))
+//                    .font(ctx.getFont()).submit();
+//        }
     }
 
     /** Override for custom drawing that must appear above children. Called after children paint. */
     protected void paintOverlay(CgUiPaintContext ctx) {
         final float x = runtimeCache.getX(), y = runtimeCache.getY(), width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
+        // Reset ambient tint — a descendant's own paintSelf/paintOverlay may have left it non-white.
+        ctx.setColor(0xFFFFFFFF);
 
         style.getGeneralGroup().overlay().draw(ctx, x, y, width, height);
     }

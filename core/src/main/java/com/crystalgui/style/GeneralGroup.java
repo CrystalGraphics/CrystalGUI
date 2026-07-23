@@ -31,6 +31,15 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
+    public int backgroundColor() {
+        return getValueSave(StylePropertyRegistry.BACKGROUND_COLOR);
+    }
+
+    public GeneralGroup backgroundColor(int colorArgb) {
+        set(StylePropertyRegistry.BACKGROUND_COLOR, colorArgb);
+        return this;
+    }
+
     public float opacity() {
         return getValueSave(StylePropertyRegistry.OPACITY);
     }
@@ -73,6 +82,24 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     public GeneralGroup mask(CgUiDrawable overflowClip) {
         set(StylePropertyRegistry.MASK, overflowClip);
+        return this;
+    }
+
+    public float borderRadius() {
+        return getValueSave(StylePropertyRegistry.BORDER_RADIUS);
+    }
+
+    public GeneralGroup borderRadius(float radius) {
+        set(StylePropertyRegistry.BORDER_RADIUS, radius);
+        return this;
+    }
+
+    public int borderColor() {
+        return getValueSave(StylePropertyRegistry.BORDER_COLOR);
+    }
+
+    public GeneralGroup borderColor(int colorArgb) {
+        set(StylePropertyRegistry.BORDER_COLOR, colorArgb);
         return this;
     }
 

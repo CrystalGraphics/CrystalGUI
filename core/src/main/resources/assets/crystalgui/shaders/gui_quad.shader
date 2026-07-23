@@ -9,6 +9,10 @@
 // in CgUiPaintContext, since only the bound texture (or material, for non-box-model
 // elements) needs to change, never a property re-apply.
 //
+// _LayerOpacity IS a material property (deliberately, unlike per-vertex tint above) —
+// it represents a whole draw's compositing opacity (e.g. one side of a CgUiCrossFade),
+// not a per-pixel/per-vertex color channel. See CgUiPaintContext.withLayerOpacity().
+//
 // Pure screen-space 2D: intentionally does NOT reference CG_OBJECT_TO_WORLD /
 // CG_MATRIX_MVP, so no per-instance object-buffer record is required before drawing —
 // gl_Position comes straight from cg_ProjMatrix (set to an ortho matrix once per frame
@@ -21,6 +25,7 @@ Queue = "Overlay"
 
 Properties {
     _MainTex ("Main Texture", sampler2D) = "white"
+    _LayerOpacity ("Layer Opacity", float) = 1.0
 }
 
 struct v2f {
@@ -46,5 +51,6 @@ Pass {
 
     void fragment(in v2f i, out vec4 fragColor) {
         fragColor = texture(_MainTex, i.uv) * i.color;
+        fragColor.a *= _LayerOpacity;
     }
 }

@@ -24,6 +24,15 @@ public final class CgUiSprite implements CgUiDrawable {
     private Position spritePosition = Position.of(0, 0);
     private Position borderLeftTop = Position.of(0, 0);
     private Position borderRightBottom = Position.of(0, 0);
+    /** Fixed multiplicative tint baked into this sprite (e.g. {@code background: image(path, #tint)}),
+     * folded together with the paint context's ambient tint at draw time — distinct from
+     * {@code background-color}, which layers an independent fill rather than multiplying the image. */
+    private int tintArgb = 0xFFFFFFFF;
+    /** Whether {@link #setSprite} has ever been called explicitly — until then, {@link #setTexture}/
+     * {@link #setTextureSizeReference} keep the sprite rect defaulted to the full texture, so an
+     * unsliced "whole image" sprite (no explicit sub-rect) actually has a non-degenerate UV rect
+     * instead of the zero-size {@code Size.of(0, 0)} default rendering nothing. */
+    private boolean spriteRectExplicit = false;
 
     // Cached derived data, recomputed only when setup data changes (not per-draw).
     private boolean uvDirty = true;
@@ -41,7 +50,14 @@ public final class CgUiSprite implements CgUiDrawable {
         copied.spritePosition = this.spritePosition.add(0,0);
         copied.borderLeftTop = this.borderLeftTop.add(0,0);
         copied.borderRightBottom = this.borderRightBottom.add(0,0);
+        copied.tintArgb = this.tintArgb;
+        copied.spriteRectExplicit = this.spriteRectExplicit;
         return copied;
+    }
+
+    public CgUiSprite setTint(int tintArgb) {
+        this.tintArgb = tintArgb;
+        return this;
     }
 
     public CgUiSprite setTexture(CgTexture2D texture) {
@@ -65,11 +81,16 @@ public final class CgUiSprite implements CgUiDrawable {
      */
     public CgUiSprite setTextureSizeReference(int width, int height) {
         this.textureSize = Size.of(width, height);
+        if (!spriteRectExplicit) {
+            this.spritePosition = Position.of(0, 0);
+            this.spriteSize = Size.of(width, height);
+        }
         uvDirty = true;
         return this;
     }
 
     public CgUiSprite setSprite(int x, int y, int width, int height) {
+        this.spriteRectExplicit = true;
         this.spritePosition = Position.of(x, y);
         this.spriteSize = Size.of(width, height);
         uvDirty = true;
@@ -131,13 +152,31 @@ public final class CgUiSprite implements CgUiDrawable {
         uvDirty = false;
     }
 
+    /** Sum of left+right 9-slice border widths, in the same units as {@link #setBorder}. */
+    public float borderSumX() {
+        updateUvCacheIfNeeded();
+        return borderSumX;
+    }
+
+    /** Sum of top+bottom 9-slice border widths, in the same units as {@link #setBorder}. */
+    public float borderSumY() {
+        updateUvCacheIfNeeded();
+        return borderSumY;
+    }
+
+    /** Whether this sprite has a real (non-zero) 9-slice border. */
+    public boolean hasBorder() {
+        updateUvCacheIfNeeded();
+        return hasBorder;
+    }
+
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         if (texture == null || textureSize.width <= 0 || textureSize.height <= 0) return;
 
         updateUvCacheIfNeeded();
 
-        final int tintArgb = ctx.getColor();
+        final int tintArgb = ArgbMath.multiply(this.tintArgb, ctx.getColor());
         ctx.bindTexture(texture);
 
         if (!hasBorder) {

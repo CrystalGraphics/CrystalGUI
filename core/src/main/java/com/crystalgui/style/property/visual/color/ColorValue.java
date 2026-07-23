@@ -31,8 +31,12 @@ public class ColorValue extends StyleValue<Integer> {
                         return 0xFF000000 | (r << 16) | (g << 8) | b;
                     case 6: // #RRGGBB
                         return 0xFF000000 | Integer.parseInt(hex, 16);
-                    case 8: // #AARRGGBB
-                        return (int) (Long.parseLong(hex, 16) & 0xFFFFFFFFL);
+                    case 8: { // #RRGGBBAA (CSS-standard order, alpha last)
+                        long rgba = Long.parseLong(hex, 16) & 0xFFFFFFFFL;
+                        long rgb = rgba >>> 8;
+                        long a = rgba & 0xFF;
+                        return (int) ((a << 24) | rgb);
+                    }
                     default:
                         return null;
                 }
@@ -60,6 +64,9 @@ public class ColorValue extends StyleValue<Integer> {
 
                 int a = Math.round(alpha * 255);
                 return (a << 24) | (r << 16) | (g << 8) | b;
+            } else {
+                // Plain decimal ARGB literal, e.g. "background-color: -1;" for opaque white.
+                return Integer.parseInt(value);
             }
         } catch (NumberFormatException ignored) {
         }

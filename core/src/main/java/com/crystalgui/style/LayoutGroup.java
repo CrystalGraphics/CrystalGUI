@@ -439,6 +439,42 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
         return this;
     }
 
+    /* Border-width properties (box-model — grows the element like a real CSS content-box border) */
+    public LayoutGroup borderLeft(float border) {
+        set(LayoutProperties.BORDER_LEFT, LengthPercentageAuto.length(border));
+        return this;
+    }
+
+    public LayoutGroup borderTop(float border) {
+        set(LayoutProperties.BORDER_TOP, LengthPercentageAuto.length(border));
+        return this;
+    }
+
+    public LayoutGroup borderRight(float border) {
+        set(LayoutProperties.BORDER_RIGHT, LengthPercentageAuto.length(border));
+        return this;
+    }
+
+    public LayoutGroup borderBottom(float border) {
+        set(LayoutProperties.BORDER_BOTTOM, LengthPercentageAuto.length(border));
+        return this;
+    }
+
+    public LayoutGroup borderHorizontal(float border) {
+        set(LayoutProperties.BORDER_HORIZONTAL, LengthPercentageAuto.length(border));
+        return this;
+    }
+
+    public LayoutGroup borderVertical(float border) {
+        set(LayoutProperties.BORDER_VERTICAL, LengthPercentageAuto.length(border));
+        return this;
+    }
+
+    public LayoutGroup borderAll(float border) {
+        set(LayoutProperties.BORDER_ALL, LengthPercentageAuto.length(border));
+        return this;
+    }
+
     /* Position properties */
     public LayoutGroup positionType(TaffyPosition positionType) {
         set(LayoutProperties.POSITION, positionType);

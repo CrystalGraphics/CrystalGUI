@@ -114,8 +114,9 @@ public final class ScissorStack {
         }
     }
 
+    /** Disables {@code GL_SCISSOR_TEST} once no scissor rect remains active (stack fully popped). */
     public void clearScissorIfNeeded() {
-        if (this.hasScissor()) {
+        if (!this.hasScissor()) {
             CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
         }
     }
