@@ -22,12 +22,18 @@ public class TaffyBridge {
         DEFAULT_TAFFY_STYLE.flexShrink = 0;
         DEFAULT_TAFFY_STYLE.minSize = TaffySize.all(TaffyDimension.ZERO);
         DEFAULT_TAFFY_STYLE.alignContent = AlignContent.FLEX_START;
+        // Taffy itself defaults to BORDER_BOX (border+padding absorbed inside the given size).
+        // Real CSS's initial box-sizing value is content-box — border/padding grow the outer
+        // box instead of eating into it — which is also what makes an SDF rect's border-width
+        // actually increase the element's effective size. Override to match the CSS default.
+        DEFAULT_TAFFY_STYLE.boxSizing = BoxSizing.CONTENT_BOX;
     }
 
     public final TaffyStyle style;
     // runtime
     public final LPARectData margin;
     public final LPRectData padding;
+    public final LPRectData border;
     public final LPSizeData gap;
     
     @Getter
@@ -43,6 +49,10 @@ public class TaffyBridge {
         });
         this.padding = new LPRectData(() -> style.padding, padding -> {
             style.padding = padding;
+            styleList.markTaffyStyleDirty();
+        });
+        this.border = new LPRectData(() -> style.border, border -> {
+            style.border = border;
             styleList.markTaffyStyleDirty();
         });
         this.gap = new LPSizeData(() -> style.gap, gap -> {

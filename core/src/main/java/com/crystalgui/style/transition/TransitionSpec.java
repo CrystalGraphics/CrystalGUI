@@ -1,5 +1,6 @@
 package com.crystalgui.style.transition;
 
+import com.crystalgui.style.CssParsingUtil;
 import com.crystalgui.style.easing.Easing;
 import com.crystalgui.style.easing.ProgressFunctions;
 
@@ -30,7 +31,7 @@ public record TransitionSpec(String propertyNameOrAll, long durationNanos, long 
      */
     public static List<TransitionSpec> parse(String raw) {
         List<TransitionSpec> specs = new ArrayList<>();
-        for (String entry : splitTopLevelCommas(raw)) {
+        for (String entry : CssParsingUtil.splitTopLevelCommas(raw)) {
             String trimmed = entry.trim();
             if (trimmed.isEmpty()) continue;
             specs.add(parseEntry(trimmed));
@@ -100,22 +101,5 @@ public record TransitionSpec(String propertyNameOrAll, long durationNanos, long 
             case "ease-in-out" -> ProgressFunctions.cubicBezier(0.42, 0.0, 0.58, 1.0);
             default -> throw new IllegalArgumentException("Unknown transition-timing-function '" + token + "'");
         };
-    }
-
-    private static List<String> splitTopLevelCommas(String raw) {
-        List<String> parts = new ArrayList<>();
-        int depth = 0;
-        int start = 0;
-        for (int i = 0; i < raw.length(); i++) {
-            char c = raw.charAt(i);
-            if (c == '(') depth++;
-            else if (c == ')') depth--;
-            else if (c == ',' && depth == 0) {
-                parts.add(raw.substring(start, i));
-                start = i + 1;
-            }
-        }
-        parts.add(raw.substring(start));
-        return parts;
     }
 }

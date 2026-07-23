@@ -57,6 +57,15 @@ public class LayoutProperties {
     public static final StyleProperty<LengthPercentageAuto> PADDING_ALL = create("padding-all", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LPARect> PADDING = create("padding", LPARect.ZERO);
 
+    public static final StyleProperty<LengthPercentageAuto> BORDER_LEFT = create("border-width-left", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> BORDER_TOP = create("border-width-top", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> BORDER_RIGHT = create("border-width-right", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> BORDER_BOTTOM = create("border-width-bottom", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> BORDER_VERTICAL = create("border-width-vertical", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> BORDER_HORIZONTAL = create("border-width-horizontal", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> BORDER_ALL = create("border-width-all", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LPARect> BORDER = create("border-width", LPARect.ZERO);
+
     public static final StyleProperty<LengthPercentageAuto> GAP_ROW = create("gap-row", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> GAP_COLUMN = create("gap-column", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> GAP_ALL = create("gap-all", LengthPercentageAuto.AUTO);
@@ -140,6 +149,15 @@ public class LayoutProperties {
         createSetter(LayoutProperties.PADDING_HORIZONTAL, (style, value) -> style.padding.setHorizontal(value));
         createSetter(LayoutProperties.PADDING_ALL, (style, value) -> style.padding.setAll(value));
         createSetter(LayoutProperties.PADDING, (style, value) -> style.padding.setRect(value));
+
+        createSetter(LayoutProperties.BORDER_LEFT, (style, value) -> style.border.setLeft(value));
+        createSetter(LayoutProperties.BORDER_TOP, (style, value) -> style.border.setTop(value));
+        createSetter(LayoutProperties.BORDER_RIGHT, (style, value) -> style.border.setRight(value));
+        createSetter(LayoutProperties.BORDER_BOTTOM, (style, value) -> style.border.setBottom(value));
+        createSetter(LayoutProperties.BORDER_VERTICAL, (style, value) -> style.border.setVertical(value));
+        createSetter(LayoutProperties.BORDER_HORIZONTAL, (style, value) -> style.border.setHorizontal(value));
+        createSetter(LayoutProperties.BORDER_ALL, (style, value) -> style.border.setAll(value));
+        createSetter(LayoutProperties.BORDER, (style, value) -> style.border.setRect(value));
 
         createSetter(LayoutProperties.GAP_ROW, (style, value) -> style.gap.setVertical(value));
         createSetter(LayoutProperties.GAP_COLUMN, (style, value) -> style.gap.setHorizontal(value));

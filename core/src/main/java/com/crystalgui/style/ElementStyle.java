@@ -245,9 +245,18 @@ public final class ElementStyle {
         if (Objects.equals(oldValue, newValue)) return;
 
         var window = element.getAttachedWindow();
-        if (wasResolved && p.isAllowTransition() && window != null
-                && window.getStyleEngine().getTransitionEngine().tryStart(element, p, oldValue, newValue)) {
-            return;
+        if (wasResolved && p.isAllowTransition() && window != null) {
+            // "No candidate left at all" (e.g. a :focus-only rule's candidate removed, with no base
+            // rule beneath it) resolves to the property's own initial value once actually displayed
+            // — see StyleGroup.getValueSave's identical fallback. Substitute it here so reverting to
+            // "unset" has a real target to animate toward, instead of TransitionEngine's null-guard
+            // (there to prevent NPEs on a genuine first-ever resolution) declining and snapping
+            // straight to the unset display value.
+            T transitionFrom = oldValue != null ? oldValue : p.initialValue;
+            T transitionTo = newValue != null ? newValue : p.initialValue;
+            if (window.getStyleEngine().getTransitionEngine().tryStart(element, p, transitionFrom, transitionTo)) {
+                return;
+            }
         }
         p.notifyListeners(element, oldValue, newValue);
     }
