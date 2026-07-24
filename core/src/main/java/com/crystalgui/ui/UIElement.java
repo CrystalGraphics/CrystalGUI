@@ -1,6 +1,7 @@
 package com.crystalgui.ui;
 
 import com.crystalgraphics.api.text.CgTextConstraints;
+import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.IntCacheCell;
@@ -14,6 +15,7 @@ import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.OverflowClip;
 import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.event.DOMEvent;
@@ -474,35 +476,96 @@ public class UIElement {
      * DOM order as tiebreak), then paints this element's overlay. Fully synchronous —
      * every call in this chain issues real GPU draw calls immediately; nothing here
      * defers or accumulates work for later replay.
+     *
+     * <p>When {@code opacity} is fractional or {@code clip: mask} is set, background/children/
+     * overlay instead paint into an offscreen "visual layer" (a screen-sized FBO from
+     * {@link CgUiPaintContext}'s pool) so overlapping translucent children blend as one unit before
+     * opacity applies, and/or so a mask can be composited over just this subtree's own output — see
+     * {@link CgUiPaintContext#beginLayerFbo()}/{@code compositeMask}/{@code blitLayer}. Ordinary
+     * elements (opacity 1, no mask) skip all of this — same direct-draw path as before.</p>
      */
     public final void drawSubtree(CgUiPaintContext ctx) {
-        if (style.taffyBridge.style.display == TaffyDisplay.NONE)
+        if (style.taffyBridge.style.display == TaffyDisplay.NONE || style.generalGroup.opacity() == 0)
             return;
         if (runtimeCache.localToWorld.isDirty()) {
             this.runtimeCache.localToWorld.set(ctx.getPoseStack().last().pose());
             this.runtimeCache.worldToLocal.invalidate();
         }
 
+        GeneralGroup styleGen = style.getGeneralGroup();
+        float opacity = styleGen.opacity();
+        OverflowClip overflow = styleGen.overflow();
+        boolean needsLayer = opacity < 1f || overflow.isMask();
+
+        if (!needsLayer) {
+            paintSelf(ctx);
+            paintChildren(ctx, overflow);
+            paintOverlay(ctx);
+            return;
+        }
+
+        System.out.println("DEBUGLAYER begin needsLayer=" + needsLayer + " opacity=" + opacity
+                + " mask=" + overflow.isMask() + " x=" + runtimeCache.getX() + " y=" + runtimeCache.getY()
+                + " w=" + runtimeCache.getWidth() + " h=" + runtimeCache.getHeight());
+        CgFrameBuffer subtreeFbo = ctx.beginLayerFbo();
+        System.out.println("DEBUGLAYER subtreeFbo=" + subtreeFbo.getId() + " " + subtreeFbo.getWidth() + "x" + subtreeFbo.getHeight());
         paintSelf(ctx);
-
-        if (!children.isEmpty()) {
-            boolean scissored = style.getGeneralGroup().overflow().isScissor();
-            if (scissored) {
-                var layout = getTaffyLayout();
-                int contentX = Math.round(runtimeCache.getX() + layout.border().left + layout.padding().left);
-                int contentY = Math.round(runtimeCache.getY() + layout.border().top + layout.padding().top);
-                int contentWidth = Math.round(layout.contentBoxWidth());
-                int contentHeight = Math.round(layout.contentBoxHeight());
-                ctx.pushScissor(contentX, contentY, contentWidth, contentHeight);
-            }
-
-            for (UIElement child : getChildren()) {
-                child.drawSubtree(ctx);
-            }
-
-            if (scissored) ctx.popScissor();
+        paintChildren(ctx, overflow);
+        if (overflow.isMask()) {
+            CgUiRoundedRect mask = buildDefaultMask();
+            CgFrameBuffer maskFbo = ctx.beginLayerFbo();
+            System.out.println("DEBUGLAYER maskFbo=" + maskFbo.getId());
+            ctx.setColor(0xFFFFFFFF);
+            mask.draw(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
+            ctx.endLayerFbo();
+            ctx.compositeMask(subtreeFbo, maskFbo);
+            System.out.println("DEBUGLAYER compositeMask done");
         }
         paintOverlay(ctx);
+        ctx.endLayerFbo();
+        System.out.println("DEBUGLAYER endLayerFbo done, blitting with opacity=" + opacity);
+        ctx.blitLayer(subtreeFbo, opacity);
+        System.out.println("DEBUGLAYER blitLayer done");
+    }
+
+    private void paintChildren(CgUiPaintContext ctx, OverflowClip overflow) {
+        if (children.isEmpty()) return;
+        boolean scissored = overflow.isScissor();
+        if (scissored) {
+            var layout = getTaffyLayout();
+            int contentX = Math.round(runtimeCache.getX() + layout.border().left + layout.padding().left);
+            int contentY = Math.round(runtimeCache.getY() + layout.border().top + layout.padding().top);
+            int contentWidth = Math.round(layout.contentBoxWidth());
+            int contentHeight = Math.round(layout.contentBoxHeight());
+            ctx.pushScissor(contentX, contentY, contentWidth, contentHeight);
+        }
+
+        for (UIElement child : getChildren()) {
+            child.drawSubtree(ctx);
+        }
+
+        if (scissored) ctx.popScissor();
+    }
+
+    /** Default {@code clip: mask} shape — this element's own resolved rounded-rect shape, with
+     * the border band's alpha forced to 0 so only the inner (content) region masks anything in —
+     * matches the same "border color to #00000000" idea directly, no new shader/coverage variant
+     * needed: {@code CgUiRoundedRect} already blends {@code mix(borderColor, fillColor, innerCoverage)}
+     * then multiplies the whole shape by {@code coverage}, so a transparent border color alone
+     * already zeroes alpha across the border band while staying opaque across the inner region. */
+    private CgUiRoundedRect buildDefaultMask() {
+        float width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
+        CornerRadii radii = resolveCornerRadii(width, height);
+        float borderWidthPx = getTaffyLayout().border().left;
+
+        CgUiRoundedRect mask = new CgUiRoundedRect();
+        mask.setCornerRadius(radii.rxTL(), radii.ryTL(), radii.rxTR(), radii.ryTR(),
+                radii.rxBR(), radii.ryBR(), radii.rxBL(), radii.ryBL());
+        if (borderWidthPx > 0f) {
+            mask.setBorder(borderWidthPx, 0x00000000);
+        }
+        mask.setFillColor(0xFFFFFFFF);
+        return mask;
     }
 
     /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */

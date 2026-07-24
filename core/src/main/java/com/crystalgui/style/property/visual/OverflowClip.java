@@ -10,7 +10,7 @@ public enum OverflowClip {
      */
     SCISSOR,
     /**
-     * Mask the element with the given mask {@link com.lowdragmc.lowdraglib2.gui.ui.style.PropertyRegistry#MASK}.
+     * Mask the element with the background.
      */
     MASK;
 
