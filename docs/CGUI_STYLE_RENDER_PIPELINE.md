@@ -245,15 +245,62 @@ through to `CgUiCrossFade` now, since `background` can only ever hold a `CgUiQua
 
 ---
 
-## 8. Known Gaps vs. the Web
+## 8. Visual Layers (Opacity Isolation + Masking)
+
+`opacity < 1` and `clip: mask` both route through an offscreen "visual layer" — a screen-sized
+FBO from a small pool `CgUiPaintContext` owns (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/
+`compositeMask`, `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`). Ordinary elements
+(opacity 1, no mask) skip this entirely — same direct-draw path as always, zero overhead.
+
+**Why an offscreen layer at all**: without one, overlapping translucent children blend against
+whatever's already drawn one at a time, then each gets faded independently — the classic
+double-blend seam at the overlap. Isolating the whole subtree in its own buffer first, then fading
+the *result* as one unit, avoids that (the same reason real browsers isolate `opacity`-bearing
+stacking contexts).
+
+**Why the layer is screen-sized, not element-sized**: background/children/overlay all draw using
+the same absolute screen coordinates (`runtimeCache.getX()/getY()`) they always do — no translation
+math needed — because the layer FBO spans the whole screen and starts fully transparent; only the
+element's own footprint ends up with real pixels in it. Matches LDLib2's own `PictureInPictureState`-based
+visual-layers implementation (`research_repos/LDLib2/.../gui/ui/rendering/`), which uses the same
+technique for the same reason on top of Minecraft's `PictureInPictureRenderer`.
+
+**`clip: mask`** (`UIElement.drawSubtree`, `OverflowClip.MASK` — previously a declared-but-dead
+enum value, now the trigger for this) composites a mask onto the subtree's own layer via
+`CgBlendState.MASK_ALPHA_MULTIPLY` (`(ZERO, SRC_ALPHA)` blend func for both RGB and alpha) — **not**
+a stencil test. The mask is rendered into its *own* offscreen layer first, then blended onto the
+subtree layer, multiplying the subtree's existing color+alpha by the mask's alpha; wherever the
+mask's alpha is 0, the subtree's output is zeroed too. This mirrors LDLib2's `VisualLayerPipRenderer`
+exactly (`renderMaskAndComposite`) — no `CgStencilState`/stencil buffer involved anywhere.
+
+**Default mask shape** (`UIElement.buildDefaultMask`) is the element's own resolved `CgUiRoundedRect`
+shape (same radii/border-width resolution `paintRoundedBackground` already does) with the border
+band's *color* forced to `#00000000` instead of its real color — since the shader already computes
+`color = mix(borderColor, fillColor, innerCoverage)` then multiplies the whole shape by the outer
+`coverage`, a transparent border color alone already zeroes alpha across the border band while
+staying opaque across the inner region. No shader changes needed for this — the exact "border color
+to `#00000000`" framing the feature was originally specified with.
+
+**Ordering** (background → children → mask composite → overlay → blit-with-opacity): the mask
+composites *after* children (so it clips both background and children together) but *before*
+overlay, so the overlay always draws over full, unclipped content — matching how a 9-slice frame
+graphic typically sits on top of whatever it frames.
+
+**Not built**: masking with a *custom* (non-self) drawable — today the mask is always the element's
+own shape; a `mask-source:` (or similar) property to point at an arbitrary drawable is a natural
+follow-up but wasn't requested for this round. Per-element FBO pooling is currently unbounded (grows
+to the deepest nesting ever seen, never shrinks) — fine for typical UI depths, a real concern only if
+something creates very deep transient nesting.
+
+---
+
+## 9. Known Gaps vs. the Web
 
 - **No general `opacity` property.** `_LayerOpacity` only exists as cross-fade/morph plumbing, not a
   real cascading `opacity` on arbitrary elements/subtrees.
 - **No external stylesheets** — `StyleSheet.parse(String)` only; no file loading, `@import`, media
   queries, or CSS custom properties (`--var`/`var()`).
 - **No `:nth-child`, attribute selectors, or `~`/`+` sibling combinators** — only `>` and descendant.
-- **`overflow: mask` is unimplemented** — only `scissor` is wired to a real clip; `MASK` is a declared
-  enum value with no stencil-based implementation.
 - **No `background-position`/`-size`/`-repeat`** as independent, cascadable/animatable properties —
   the engine's analog is baked-in crop rects on `image()`/`sprite()` at parse time.
 - **No text styling** — `color` is wired and inheritable in anticipation, but no text elements exist
@@ -269,12 +316,10 @@ through to `CgUiCrossFade` now, since `background` can only ever hold a `CgUiQua
   rendering is deliberately deferred (not requested; orthogonal to the box-growth fix).
 - **No true per-pixel texture blending** for texture↔texture `CgUiCrossFade`s — a dedicated 2-sampler
   pixel-blend shader, restricted to matching-geometry drawables, is deliberately deferred.
-- **Visual Layers (FBO-based subtree compositing) — entirely deferred**, scoped as its own future plan.
-  This is the single biggest missing piece relative to what a real browser's compositor does.
 
 ---
 
-## 9. File Map
+## 10. File Map
 
 | Concept | Path |
 |---|---|
@@ -289,6 +334,7 @@ through to `CgUiCrossFade` now, since `background` can only ever hold a `CgUiQua
 | Frame lifecycle | `core/src/main/java/com/crystalgui/ui/UIWindow.java` |
 | Paint entry points | `core/src/main/java/com/crystalgui/ui/UIElement.java` (`paintSelf`/`paintOverlay`/`drawSubtree`) |
 | Paint context | `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java` |
+| Visual layers (opacity isolation + masking) | `CgUiPaintContext` (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`), `UIElement.drawSubtree`/`buildDefaultMask`, `CrystalGraphics/.../gl/framebuffer/CgFrameBuffer.java` (`createOwned`), `CrystalGraphics/.../api/state/CgBlendState.java` (`MASK_ALPHA_MULTIPLY`) |
 | Drawables | `core/src/main/java/com/crystalgui/render/texture/` |
 | `background:` parsing | `core/src/main/java/com/crystalgui/style/property/visual/texture/TextureValue.java` |
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |
