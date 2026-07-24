@@ -51,7 +51,7 @@ public final class UIWindow {
 
     @Getter
     @Setter
-    private float uiScale = 1;
+    private float uiScale = 2;
     @Getter
     private float leftPos, topPos, width, height;
     @Getter
