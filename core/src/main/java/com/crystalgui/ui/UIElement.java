@@ -504,28 +504,28 @@ public class UIElement {
             return;
         }
 
-        System.out.println("DEBUGLAYER begin needsLayer=" + needsLayer + " opacity=" + opacity
-                + " mask=" + overflow.isMask() + " x=" + runtimeCache.getX() + " y=" + runtimeCache.getY()
-                + " w=" + runtimeCache.getWidth() + " h=" + runtimeCache.getHeight());
+//        System.out.println("DEBUGLAYER begin needsLayer=" + needsLayer + " opacity=" + opacity
+//                + " mask=" + overflow.isMask() + " x=" + runtimeCache.getX() + " y=" + runtimeCache.getY()
+//                + " w=" + runtimeCache.getWidth() + " h=" + runtimeCache.getHeight());
         CgFrameBuffer subtreeFbo = ctx.beginLayerFbo();
-        System.out.println("DEBUGLAYER subtreeFbo=" + subtreeFbo.getId() + " " + subtreeFbo.getWidth() + "x" + subtreeFbo.getHeight());
+//        System.out.println("DEBUGLAYER subtreeFbo=" + subtreeFbo.getId() + " " + subtreeFbo.getWidth() + "x" + subtreeFbo.getHeight());
         paintSelf(ctx);
         paintChildren(ctx, overflow);
         if (overflow.isMask()) {
             CgUiRoundedRect mask = buildDefaultMask();
             CgFrameBuffer maskFbo = ctx.beginLayerFbo();
-            System.out.println("DEBUGLAYER maskFbo=" + maskFbo.getId());
+//            System.out.println("DEBUGLAYER maskFbo=" + maskFbo.getId());
             ctx.setColor(0xFFFFFFFF);
             mask.draw(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
             ctx.endLayerFbo();
             ctx.compositeMask(subtreeFbo, maskFbo);
-            System.out.println("DEBUGLAYER compositeMask done");
+//            System.out.println("DEBUGLAYER compositeMask done");
         }
         paintOverlay(ctx);
         ctx.endLayerFbo();
-        System.out.println("DEBUGLAYER endLayerFbo done, blitting with opacity=" + opacity);
+//        System.out.println("DEBUGLAYER endLayerFbo done, blitting with opacity=" + opacity);
         ctx.blitLayer(subtreeFbo, opacity);
-        System.out.println("DEBUGLAYER blitLayer done");
+//        System.out.println("DEBUGLAYER blitLayer done");
     }
 
     private void paintChildren(CgUiPaintContext ctx, OverflowClip overflow) {
