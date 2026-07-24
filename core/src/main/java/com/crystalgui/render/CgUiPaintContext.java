@@ -7,16 +7,27 @@ import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.material.CgRenderPassVariant;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
+import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
+import com.crystalgraphics.api.state.CgBlendState;
 import com.crystalgraphics.api.state.CgGlSlot;
 import com.crystalgraphics.api.text.CgTextLayout;
+import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.api.vertex.CgVertexFormat;
+import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import lombok.Getter;
 import lombok.Setter;
+import org.joml.Matrix4f;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
 
 /**
  * True immediate-mode 2D paint context for CrystalGUI's box-model layer.
@@ -65,6 +76,21 @@ public final class CgUiPaintContext {
 
     // ── GL state isolation ──────────────────────────────────────────────────
     private CgGlScope glScope;
+
+    // ── Visual layers (offscreen FBO compositing) ───────────────────────────
+    // Screen-sized, not element-sized: draws inside a layer use the same absolute screen
+    // coordinates (runtimeCache.getX()/getY()) as the normal path, so nothing needs translating —
+    // matches LDLib2's own "off-target spans the full window" approach for the same reason.
+    private int screenWidth, screenHeight;
+    private final List<CgFrameBuffer> layerFboPool = new ArrayList<>();
+    /** One saved frame per nested {@link #beginLayerFbo}/{@link #endLayerFbo} pair. */
+    private final Deque<LayerFrame> layerStack = new ArrayDeque<>();
+    private static final CgFrameBufferFormat LAYER_FORMAT =
+            CgFrameBufferFormat.builder("cgui_layer").color(0, CgTextureType.RGBA8).build();
+
+    private record LayerFrame(CgFrameBuffer fbo, CgGlScope glScope, Matrix4f savedProjMatrix,
+                               int savedViewportW, int savedViewportH) {
+    }
 
 
     // ── Scissor ─────────────────────────────────────────────────────────────
@@ -119,6 +145,8 @@ public final class CgUiPaintContext {
      */
     public void beginFrame(int screenWidth, int screenHeight) {
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
+        this.screenWidth = screenWidth;
+        this.screenHeight = screenHeight;
 
         // Save GL state before UI rendering
         glScope = CgGlState.save(
@@ -341,5 +369,121 @@ public final class CgUiPaintContext {
         layerOpacity = previous;
         currentMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
         currentMaterial.bind();
+    }
+
+    // ── Visual layers ────────────────────────────────────────────────────────
+
+    /** Acquires (creating on first use) the pooled screen-sized layer FBO for the given nesting depth. */
+    private CgFrameBuffer acquireLayerFbo(int depth) {
+        while (layerFboPool.size() <= depth) {
+            String name = "cgui_layer_" + layerFboPool.size();
+            layerFboPool.add(CgFrameBuffer.createOwned(name, Math.max(1, screenWidth), Math.max(1, screenHeight), LAYER_FORMAT));
+        }
+        CgFrameBuffer fbo = layerFboPool.get(depth);
+        if (fbo.getWidth() != screenWidth || fbo.getHeight() != screenHeight) {
+            fbo.resize(Math.max(1, screenWidth), Math.max(1, screenHeight));
+        }
+        return fbo;
+    }
+
+    /**
+     * Pushes a new screen-sized offscreen target and redirects subsequent drawing into it —
+     * cleared fully transparent, same screen-space ortho convention {@link #beginFrame} sets up
+     * for the real screen (just retargeted), so draws made while a layer is active use the exact
+     * same absolute coordinates they always do. Nests correctly (a layered element containing
+     * another layered element) via a small per-depth FBO pool. Pair with {@link #endLayerFbo}.
+     *
+     * @return the acquired FBO, for the caller to composite/blit once painting into it is done
+     */
+    public CgFrameBuffer beginLayerFbo() {
+        flush();
+        CgFrameBuffer fbo = acquireLayerFbo(layerStack.size());
+        CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
+        layerStack.push(new LayerFrame(fbo, CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT),
+                new Matrix4f(fd.projMatrix), fd.viewportW, fd.viewportH));
+
+        fbo.bind();
+        CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
+        fbo.clearColor(0f, 0f, 0f, 0f);
+
+        fd.projMatrix.identity().ortho(0, fbo.getWidth(), fbo.getHeight(), 0, -1, 1);
+        fd.viewportW = fbo.getWidth();
+        fd.viewportH = fbo.getHeight();
+        CgRenderPipeline.getInstance().prepareFrame();
+        currentTexture = null;
+        return fbo;
+    }
+
+    /** Pops the innermost {@link #beginLayerFbo}, restoring the saved GL state and projection so
+     * subsequent draws land back on whatever was active before it (the parent target, or an
+     * enclosing layer). Does not composite/draw anything itself — see {@link #blitLayer} and
+     * {@link #compositeMask} for what to do with the finished FBO. */
+    public void endLayerFbo() {
+        flush();
+        LayerFrame frame = layerStack.pop();
+        CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
+        fd.projMatrix.set(frame.savedProjMatrix());
+        fd.viewportW = frame.savedViewportW();
+        fd.viewportH = frame.savedViewportH();
+        CgRenderPipeline.getInstance().prepareFrame();
+        frame.glScope().close();
+        currentTexture = null;
+    }
+
+    /** Blits a finished layer FBO (from {@link #beginLayerFbo}/{@link #endLayerFbo}) back into
+     * whatever's currently bound, full-screen, tinted by {@code opacity} via {@link #withLayerOpacity}
+     * — everywhere the layer's own content didn't draw stayed transparent from the initial clear,
+     * so this is safe to blit full-screen regardless of the originating element's own bounds.
+     *
+     * <p>V is sampled flipped ({@code v0=1, v1=0}): content drawn at screen-space y=0 (our top-left
+     * origin convention) lands at NDC y=+1, which is texture row/{@code v=1} under OpenGL's own
+     * bottom-left-origin texture convention — the opposite of a normal loaded-from-disk texture
+     * (pre-flipped at decode time). Same correction {@code PictureInPictureRenderer.blitTexture}
+     * applies in vanilla Minecraft/LDLib2 for the identical reason.</p>
+     *
+     * <p>{@code fbo}'s dimensions are real physical screen pixels (that's what it was allocated
+     * with), but every vertex submitted through {@link #submitQuad} is run through the active
+     * {@link PoseStack} transform — which, mid-frame, still carries {@code UIWindow}'s own
+     * {@code uiScale} scale meant for logical-space element coordinates. Submitting an
+     * already-physical-sized quad through that same scale would double-apply it. Temporarily
+     * resetting the pose to identity for just this quad avoids that.</p> */
+    public void blitLayer(CgFrameBuffer fbo, float opacity) {
+        CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
+        withLayerOpacity(opacity, () -> {
+            bindTexture(colorTex);
+            poseStack.pushPose();
+            poseStack.setIdentity();
+            submitQuad(0, 0, fbo.getWidth(), fbo.getHeight(), 0f, 1f, 1f, 0f, getColor());
+            flush();
+            poseStack.popPose();
+        });
+    }
+
+    /**
+     * Composites a mask onto an already-rendered subtree layer: multiplies {@code subtreeFbo}'s
+     * existing color+alpha by {@code maskFbo}'s alpha channel via {@link CgBlendState#MASK_ALPHA_MULTIPLY}
+     * — wherever the mask's alpha is 0, the subtree's output is zeroed out too. Both FBOs are the
+     * pool's screen-sized instances, so they're always the same size. Leaves GL FBO/viewport/blend
+     * state restored to whatever it was before this call (caller is responsible for re-binding
+     * {@code subtreeFbo} itself if it needs to keep drawing into it afterward).
+     */
+    public void compositeMask(CgFrameBuffer subtreeFbo, CgFrameBuffer maskFbo) {
+        flush();
+        try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.BLEND)) {
+            subtreeFbo.bind();
+            CgGL.glViewport(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight());
+            CgTexture2D maskTex = (CgTexture2D) maskFbo.getColorTexture(0);
+            bindTexture(maskTex);
+            CgBlendState.MASK_ALPHA_MULTIPLY.apply();
+            // Same v-flip as blitLayer — maskTex is another FBO color attachment, same OpenGL
+            // bottom-left-origin storage vs. our top-left screen-space convention. Same
+            // identity-pose bypass as blitLayer too — this quad is already physical-pixel-sized.
+            poseStack.pushPose();
+            poseStack.setIdentity();
+            submitQuad(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight(), 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+            flush();
+            poseStack.popPose();
+        }
+        currentTexture = null;
     }
 }
