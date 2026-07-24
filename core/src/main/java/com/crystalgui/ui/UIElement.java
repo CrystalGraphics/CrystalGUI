@@ -507,8 +507,8 @@ public class UIElement {
 //        System.out.println("DEBUGLAYER begin needsLayer=" + needsLayer + " opacity=" + opacity
 //                + " mask=" + overflow.isMask() + " x=" + runtimeCache.getX() + " y=" + runtimeCache.getY()
 //                + " w=" + runtimeCache.getWidth() + " h=" + runtimeCache.getHeight());
-        CgFrameBuffer subtreeFbo = ctx.beginLayerFbo();
 //        System.out.println("DEBUGLAYER subtreeFbo=" + subtreeFbo.getId() + " " + subtreeFbo.getWidth() + "x" + subtreeFbo.getHeight());
+        CgFrameBuffer subtreeFbo = ctx.beginLayerFbo();
         paintSelf(ctx);
         paintChildren(ctx, overflow);
         if (overflow.isMask()) {
@@ -619,6 +619,13 @@ public class UIElement {
 //                    .constraints(new CgTextConstraints(runtimeCache.getWidth(), runtimeCache.getHeight()))
 //                    .font(ctx.getFont()).submit();
 //        }
+        if (this.hasClass("mask-child")) {
+            ctx.text().draw()
+                    .text("Testing testing")
+                    .color(-1)
+                    .at(runtimeCache.getX(), runtimeCache.getY())
+                    .font(ctx.getFont()).submit();
+        }
     }
 
     /** Builds and draws a {@link CgUiRoundedRect} wrapping the resolved background, when possible.
