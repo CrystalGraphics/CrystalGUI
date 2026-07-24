@@ -63,9 +63,9 @@ public final class CgUiRoundedRect implements CgUiDrawable {
 
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
-        setKeyword("WITH_BORDER", borderWidth > 0f);
+        MATERIAL.toggleKeyword("WITH_BORDER", borderWidth > 0f);
         boolean withTextureFill = fillTexture != null;
-        setKeyword("WITH_TEXTURE_FILL", withTextureFill);
+        MATERIAL.toggleKeyword("WITH_TEXTURE_FILL", withTextureFill);
 
         ctx.withMaterial(MATERIAL, () -> {
             MATERIAL.applyProperties(b -> {
@@ -81,13 +81,5 @@ public final class CgUiRoundedRect implements CgUiDrawable {
             });
             ctx.submitQuad(x, y, width, height, 0f, 0f, 1f, 1f, ctx.getColor());
         });
-    }
-
-    private static void setKeyword(String name, boolean enabled) {
-        if (enabled) {
-            if (!MATERIAL.isKeywordEnabled(name)) MATERIAL.enableKeyword(name);
-        } else {
-            if (MATERIAL.isKeywordEnabled(name)) MATERIAL.disableKeyword(name);
-        }
     }
 }
