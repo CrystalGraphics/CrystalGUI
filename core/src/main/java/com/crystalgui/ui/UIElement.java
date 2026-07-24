@@ -480,7 +480,10 @@ public class UIElement {
      * <p>When {@code opacity} is fractional or {@code clip: mask} is set, background/children/
      * overlay instead paint into an offscreen "visual layer" (a screen-sized FBO from
      * {@link CgUiPaintContext}'s pool) so overlapping translucent children blend as one unit before
-     * opacity applies, and/or so a mask can be composited over just this subtree's own output — see
+     * opacity applies. When masked, only the children get a further nested layer that's actually
+     * multiplied by the mask — this element's own background (painted by {@link #paintSelf}) is
+     * composited into the outer layer unmasked, then the masked children are composited over it, so
+     * {@code clip: mask} only ever clips descendants, never this element's own background — see
      * {@link CgUiPaintContext#beginLayerFbo()}/{@code compositeMask}/{@code blitLayer}. Ordinary
      * elements (opacity 1, no mask) skip all of this — same direct-draw path as before.</p>
      */
@@ -504,28 +507,31 @@ public class UIElement {
             return;
         }
 
-//        System.out.println("DEBUGLAYER begin needsLayer=" + needsLayer + " opacity=" + opacity
-//                + " mask=" + overflow.isMask() + " x=" + runtimeCache.getX() + " y=" + runtimeCache.getY()
-//                + " w=" + runtimeCache.getWidth() + " h=" + runtimeCache.getHeight());
-//        System.out.println("DEBUGLAYER subtreeFbo=" + subtreeFbo.getId() + " " + subtreeFbo.getWidth() + "x" + subtreeFbo.getHeight());
         CgFrameBuffer subtreeFbo = ctx.beginLayerFbo();
-        paintSelf(ctx);
-        paintChildren(ctx, overflow);
-        if (overflow.isMask()) {
+        paintSelf(ctx); // background — must NOT go through the mask below
+
+        if (overflow.isMask() && !children.isEmpty()) {
+            // Children get their own nested layer so the mask multiplies only THEM, not the
+            // background already painted into subtreeFbo above.
+            CgFrameBuffer childrenFbo = ctx.beginLayerFbo();
+            paintChildren(ctx, overflow);
+
             CgUiRoundedRect mask = buildDefaultMask();
             CgFrameBuffer maskFbo = ctx.beginLayerFbo();
-//            System.out.println("DEBUGLAYER maskFbo=" + maskFbo.getId());
             ctx.setColor(0xFFFFFFFF);
             mask.draw(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
             ctx.endLayerFbo();
-            ctx.compositeMask(subtreeFbo, maskFbo);
-//            System.out.println("DEBUGLAYER compositeMask done");
+
+            ctx.compositeMask(childrenFbo, maskFbo); // multiply children-layer by mask alpha, in place
+            ctx.endLayerFbo(); // back to subtreeFbo bound
+            ctx.blitLayer(childrenFbo, 1f); // composite masked children OVER the unmasked background
+        } else {
+            paintChildren(ctx, overflow);
         }
+
         paintOverlay(ctx);
         ctx.endLayerFbo();
-//        System.out.println("DEBUGLAYER endLayerFbo done, blitting with opacity=" + opacity);
         ctx.blitLayer(subtreeFbo, opacity);
-//        System.out.println("DEBUGLAYER blitLayer done");
     }
 
     private void paintChildren(CgUiPaintContext ctx, OverflowClip overflow) {
