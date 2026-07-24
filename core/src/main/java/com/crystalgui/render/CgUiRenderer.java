@@ -103,7 +103,7 @@ public final class CgUiRenderer {
         public CgVertexConsumer vertex(float x, float y) {
             Matrix4f pose = poseStack.last().pose();
             Vector4f vec = CgVertexTransformUtil.transformPosition(pose, x, y);
-            this.getDelegate().vertex(vec.x(), vec.y());
+            this.getDelegate().vertex(Math.round(vec.x()), Math.round(vec.y()));
             return this;
         }
 
