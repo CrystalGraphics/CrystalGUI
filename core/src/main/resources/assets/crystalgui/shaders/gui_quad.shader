@@ -44,9 +44,9 @@ Pass {
     }
 
     void vertex(out v2f o) {
-        gl_Position = cg_ProjMatrix * vec4(a_pos, 0.0, 1.0);
-        o.uv = a_uv;
-        o.color = a_color;
+        gl_Position = cg_ProjMatrix * vec4(cg_Position, 0.0, 1.0);
+        o.uv    = cg_TexCoord0;
+        o.color = cg_Color;
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
