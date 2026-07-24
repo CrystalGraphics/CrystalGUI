@@ -48,6 +48,16 @@ public final class CgUiPaintContext {
 
     private final CgMaterial boxModelMaterial;
 
+    /**
+     * Dedicated material for {@link #blitLayer}, distinct from {@link #boxModelMaterial}.
+     * A visual-layer FBO is always cleared fully transparent before anything paints into it, so
+     * at every partially-covered pixel its stored color ends up premultiplied by its own alpha —
+     * compositing that back onto the screen needs premultiplied blend (@{@code srcRGB=ONE}), not
+     * {@link #boxModelMaterial}'s straight-alpha blend (which is correct for its other, much more
+     * common use: painting straight-alpha colors directly onto an already-opaque destination).
+     */
+    private final CgMaterial layerBlitMaterial;
+
     /** 1×1 fully opaque white ({@code RGBA = 255, 255, 255, 255}). */
     @Getter
     private final CgTexture2D whitePixel;
@@ -126,6 +136,7 @@ public final class CgUiPaintContext {
         this.poseStack = new PoseStack();
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
+        this.layerBlitMaterial = CgMaterial.load("crystalgui:shaders/gui_layer_blit.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
         this.textRenderer = CgTextRenderer.create().poseStack(this.poseStack)
             .restoreStateWith(() -> {
@@ -279,12 +290,31 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Pushes a new clip rect (screen-space), intersected with whatever scissor is already active,
-     * and enables {@code GL_SCISSOR_TEST} against it. Pair with {@link #popScissor()}.
+     * Pushes a new clip rect, intersected with whatever scissor is already active, and enables
+     * {@code GL_SCISSOR_TEST} against it. Pair with {@link #popScissor()}.
+     *
+     * <p>{@code x}/{@code y}/{@code w}/{@code h} are in the same logical, top-left-origin,
+     * pre-{@code uiScale} layout space as everything else this context draws (e.g.
+     * {@link #fillRect}) — <b>not</b> physical screen pixels. This method converts internally
+     * via the current {@link #poseStack} transform before touching {@link ScissorStack}, since
+     * {@code glScissor} needs real physical framebuffer pixels in GL's bottom-left-origin
+     * convention, and the inverted-ortho projection {@link #beginFrame} sets up for vertex
+     * rendering has no effect on the separate scissor-test raster stage.</p>
      */
     public void pushScissor(int x, int y, int w, int h) {
         flush();
-        scissorStack.pushScissor(x, y, w, h);
+        Matrix4f m = poseStack.last().pose();
+        float physX0 = m.m00() * x + m.m10() * y + m.m30();
+        float physY0 = m.m01() * x + m.m11() * y + m.m31();
+        float physX1 = m.m00() * (x + w) + m.m10() * (y + h) + m.m30();
+        float physY1 = m.m01() * (x + w) + m.m11() * (y + h) + m.m31();
+        int physX = Math.round(Math.min(physX0, physX1));
+        int physY = Math.round(Math.min(physY0, physY1));
+        int physW = Math.round(Math.abs(physX1 - physX0));
+        int physH = Math.round(Math.abs(physY1 - physY0));
+        // Top-left-origin logical space -> GL's bottom-left-origin glScissor space.
+        int glY = screenHeight - (physY + physH);
+        scissorStack.pushScissor(physX, glY, physW, physH);
         scissorStack.applyScissorIfNeeded();
     }
 
@@ -435,6 +465,13 @@ public final class CgUiPaintContext {
      * — everywhere the layer's own content didn't draw stayed transparent from the initial clear,
      * so this is safe to blit full-screen regardless of the originating element's own bounds.
      *
+     * <p>Uses {@link #layerBlitMaterial}, not {@link #boxModelMaterial} — {@code fbo}'s contents are
+     * premultiplied alpha (every partially-covered pixel was painted starting from a transparent
+     * clear), so compositing it back needs premultiplied blend, not {@code boxModelMaterial}'s
+     * straight-alpha blend. See {@code gui_layer_blit.shader}'s own doc comment for the full
+     * derivation — using the wrong one reproduces exactly the "AA edges/translucent content look
+     * different once behind a mask or fractional opacity" symptom this material fixes.</p>
+     *
      * <p>V is sampled flipped ({@code v0=1, v1=0}): content drawn at screen-space y=0 (our top-left
      * origin convention) lands at NDC y=+1, which is texture row/{@code v=1} under OpenGL's own
      * bottom-left-origin texture convention — the opposite of a normal loaded-from-disk texture
@@ -449,14 +486,14 @@ public final class CgUiPaintContext {
      * resetting the pose to identity for just this quad avoids that.</p> */
     public void blitLayer(CgFrameBuffer fbo, float opacity) {
         CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
-        withLayerOpacity(opacity, () -> {
+        withMaterial(layerBlitMaterial, () -> withLayerOpacity(opacity, () -> {
             bindTexture(colorTex);
             poseStack.pushPose();
             poseStack.setIdentity();
             submitQuad(0, 0, fbo.getWidth(), fbo.getHeight(), 0f, 1f, 1f, 0f, getColor());
             flush();
             poseStack.popPose();
-        });
+        }));
     }
 
     /**

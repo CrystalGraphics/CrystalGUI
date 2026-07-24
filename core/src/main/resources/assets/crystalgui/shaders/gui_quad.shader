@@ -37,7 +37,7 @@ Pass {
     Tags { "LightMode" = "Forward" }
 
     RenderState {
-        Blend SRC_ALPHA ONE_MINUS_SRC_ALPHA
+        Blend SRC_ALPHA ONE_MINUS_SRC_ALPHA, ONE ONE_MINUS_SRC_ALPHA
         DepthTest ALWAYS
         DepthWrite OFF
         Cull OFF
