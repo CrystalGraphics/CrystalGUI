@@ -5,6 +5,8 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -33,7 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * }</pre>
  *
  * <p>Loads and caches one parsed pack (all its elements) per path; callers get their own
- * {@link CgUiSprite} instance per lookup. Safe to hold the underlying {@link CgTexture2D} reference
+ * {@link CgUiSprite} instance per lookup (or a visible fallback drawable on a missing pack/element —
+ * see {@link #get}). Safe to hold the underlying {@link CgTexture2D} reference
  * indefinitely across resource-pack reloads — {@code CgTextureManager} mutates the same texture
  * object in place on reload rather than replacing it — but each element's sprite still reads
  * {@code texture.getWidth()/getHeight()} fresh on every {@link #get} call (not cached at load time),
@@ -44,18 +47,26 @@ public final class CgUiSpriteRegistry {
     private static final Gson GSON = new Gson();
     private static final ConcurrentHashMap<String, ParsedPack> CACHE = new ConcurrentHashMap<>();
 
+    /** Bright, unmistakably-wrong magenta — the standard "missing asset" indicator color, same
+     * purpose as {@code CgFallbackTextures}' checkerboard for failed texture loads. Returned in
+     * place of silently rendering nothing, so a broken {@code asset(...)} reference is visually
+     * obvious during development instead of an invisible element that's easy to miss entirely. */
+    private static final CgUiDrawable FALLBACK = new CgUiQuad(0xFFFF00FF);
+
     private CgUiSpriteRegistry() {
     }
 
     /** Returns a fresh, independent {@link CgUiSprite} instance for the named element within the
-     * given pack, or {@code null} if the pack file is missing/malformed or the element doesn't exist. */
-    public static CgUiSprite get(String packPath, String elementName) {
+     * given pack, or a visible fallback drawable if the pack file is missing/malformed or the
+     * element doesn't exist — never {@code null}, so a broken reference degrades visibly rather
+     * than silently rendering nothing. */
+    public static CgUiDrawable get(String packPath, String elementName) {
         ParsedPack pack = CACHE.computeIfAbsent(packPath, CgUiSpriteRegistry::load);
-        if (pack == null) return null;
+        if (pack == null) return FALLBACK;
         ParsedElement element = pack.elements.get(elementName);
         if (element == null) {
             CrystalGuiCore.LOGGER.warn("CgUiSpriteRegistry: no element '{}' in asset pack '{}'", elementName, packPath);
-            return null;
+            return FALLBACK;
         }
         return element.toSprite(pack);
     }

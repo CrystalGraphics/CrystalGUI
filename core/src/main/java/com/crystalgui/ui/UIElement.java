@@ -14,6 +14,7 @@ import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.OverflowClip;
 import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
@@ -367,33 +368,92 @@ public class UIElement {
         );
     }
 
-    boolean isMouseOverContent(float localMouseX, float localMouseY) {
+    /** Resolves the CSS-facing {@code overflow: visible|hidden} value into the actual clip
+     * mechanism to render/hit-test with. {@code VISIBLE} is always {@link OverflowClip#NONE}.
+     * {@code HIDDEN} auto-detects {@link OverflowClip#MASK} vs {@link OverflowClip#SCISSOR} from
+     * this element's own resolved shape — real CSS never lets an author pick the clip mechanism
+     * directly, only whether clipping happens at all. Requires layout to have run (reads the
+     * outer box size to resolve percent corner radii), so this can't live in {@code GeneralGroup}
+     * alone. */
+    OverflowClip resolveOverflowClip() {
+        GeneralGroup styleGen = style.getGeneralGroup();
+        if (styleGen.overflow() == Overflow.VISIBLE) return OverflowClip.NONE;
+
+        CornerRadii radii = resolveCornerRadii(runtimeCache.getWidth(), runtimeCache.getHeight());
+        boolean hasRadius = !radii.isZero();
+        boolean hasExplicitMask = styleGen.mask() != CgUiDrawable.EMPTY;
+        boolean isSpriteBackground = isOrTransitionsToSprite(styleGen.background());
+        return (hasRadius || hasExplicitMask || isSpriteBackground) ? OverflowClip.MASK : OverflowClip.SCISSOR;
+    }
+
+    /** Whether {@code d} is (or, mid-{@link CgUiCrossFade}, transitions to/from) a sprite —
+     * checked on both legs of a crossfade so a {@code background} transition targeting a sprite
+     * resolves to {@link OverflowClip#MASK} for its whole duration, not just once the transition
+     * finishes and {@code background()} stops returning a {@link CgUiCrossFade} wrapper. */
+    private static boolean isOrTransitionsToSprite(CgUiDrawable d) {
+        if (d instanceof CgUiCrossFade cf) {
+            return isOrTransitionsToSprite(cf.getFrom()) || isOrTransitionsToSprite(cf.getTo());
+        }
+        return d instanceof CgUiSprite;
+    }
+
+    /**
+     * Clippable-region hit test, used by {@link com.crystalgui.ui.UIWindow#getHoveredElement} as the
+     * gate for recursing into a clipping element's children — {@code overflow} decides which shape
+     * that gate should test against, since the {@link OverflowClip#SCISSOR}/{@link OverflowClip#MASK}
+     * mechanisms (auto-detected from {@code overflow: hidden} — see {@link #resolveOverflowClip()})
+     * don't clip the same way. Despite the name, this tests the <strong>padding box</strong> (border excluded,
+     * padding included) rather than the literal CSS content box — that's deliberate: it's what
+     * {@link #paintChildren}'s real scissor rect and {@code paintDefaultMask}'s real mask reveal
+     * region both actually clip to (standard CSS {@code overflow} semantics clip at the padding edge,
+     * not the content edge — padding is part of the visible/scrollable area). Gating on the tighter
+     * literal content box here previously left a dead zone in the padding gap where content was
+     * visibly rendered (revealed by the real clip) but unreachably by hover.
+     * <ul>
+     *   <li>{@link OverflowClip#SCISSOR}: {@link #paintChildren}'s real scissor rect is a plain
+     *       axis-aligned rectangle — never rounded, regardless of {@code border-radius} — so this
+     *       tests a plain AABB, matching the real clip exactly.</li>
+     *   <li>{@link OverflowClip#MASK}: tests a rounded-rectangle approximation (padding-box radii
+     *       inset from the outer radii by border only). This is only an <strong>approximation</strong>
+     *       — the real mask shape (see {@code paintDefaultMask}) can be an arbitrary sprite/9-slice
+     *       alpha shape (a custom {@code mask:} override, or a 9-slice background with transparent
+     *       regions), which this rounded-rect test cannot represent exactly. Exact per-mask-shape hit
+     *       testing would need CPU-side sampling of the rendered mask's alpha — not implemented; this
+     *       approximation is still meaningfully better than a plain AABB for the common case (solid
+     *       color / single-texture backgrounds, which really do render as a rounded rect).</li>
+     * </ul>
+     */
+    boolean isMouseOverContent(float localMouseX, float localMouseY, OverflowClip overflow) {
         var layout = getTaffyLayout();
-
-        final float
-                contentX = runtimeCache.getX() + layout.border().left + layout.padding().left,
-                contentY = runtimeCache.getY() + layout.border().top + layout.padding().top,
-                contentWidth = layout.contentBoxWidth(),
-                contentHeight = layout.contentBoxHeight();
-
-        // Content-box corners are inset from the outer radii by border+padding — e.g. an element
-        // with border-radius:20 and border+padding summing to 8 has an effective ~12px radius at
-        // the content box. Without this, the content box was a plain AABB with no corner-radius
-        // awareness at all, unlike isMouseOverElement's outer-box test — near a rounded corner it
-        // could register "inside content" (and so reach/hover children) in an area that's visually
-        // outside the element's actual rounded shape. Border width is simplified to one scalar per
-        // axis here, same simplification already used elsewhere (buildDefaultMask/paintSelf/paintOverlay
-        // all read a single layout.border().left) — asymmetric border widths aren't fully modeled,
-        // a pre-existing latent limitation, not something introduced here.
+        float borderWidthPx = layout.border().left;
         float outerWidth = runtimeCache.getWidth(), outerHeight = runtimeCache.getHeight();
+
+        // Padding box: border excluded, padding included — matches paintChildren's real scissor rect
+        // and paintDefaultMask's real border-only mask band, not Taffy's literal (border+padding
+        // excluded) content box.
+        final float
+                contentX = runtimeCache.getX() + borderWidthPx,
+                contentY = runtimeCache.getY() + borderWidthPx,
+                contentWidth = outerWidth - 2f * borderWidthPx,
+                contentHeight = outerHeight - 2f * borderWidthPx;
+
+        if (overflow.isScissor()) {
+            return insideRectangle(localMouseX, localMouseY, contentX, contentY, contentWidth, contentHeight);
+        }
+
+        // MASK (or no clip at all, though this method is only ever called when clipped): approximate
+        // with a rounded rect. Padding-box corners are inset from the outer radii by border only —
+        // e.g. an element with border-radius:20 and a 3px border has an effective ~17px radius at the
+        // padding box. Border width is simplified to one scalar per axis here, same simplification
+        // already used elsewhere (paintDefaultMask/paintSelf/paintOverlay all read a single
+        // layout.border().left) — asymmetric border widths aren't fully modeled, a pre-existing latent
+        // limitation, not something introduced here.
         CornerRadii outerRadii = resolveCornerRadii(outerWidth, outerHeight);
-        float insetX = layout.border().left + layout.padding().left;
-        float insetY = layout.border().top + layout.padding().top;
         CornerRadii contentRadii = new CornerRadii(
-                Math.max(0f, outerRadii.rxTL() - insetX), Math.max(0f, outerRadii.ryTL() - insetY),
-                Math.max(0f, outerRadii.rxTR() - insetX), Math.max(0f, outerRadii.ryTR() - insetY),
-                Math.max(0f, outerRadii.rxBR() - insetX), Math.max(0f, outerRadii.ryBR() - insetY),
-                Math.max(0f, outerRadii.rxBL() - insetX), Math.max(0f, outerRadii.ryBL() - insetY)
+                Math.max(0f, outerRadii.rxTL() - borderWidthPx), Math.max(0f, outerRadii.ryTL() - borderWidthPx),
+                Math.max(0f, outerRadii.rxTR() - borderWidthPx), Math.max(0f, outerRadii.ryTR() - borderWidthPx),
+                Math.max(0f, outerRadii.rxBR() - borderWidthPx), Math.max(0f, outerRadii.ryBR() - borderWidthPx),
+                Math.max(0f, outerRadii.rxBL() - borderWidthPx), Math.max(0f, outerRadii.ryBL() - borderWidthPx)
         );
 
         return isInsideRoundedBox(localMouseX, localMouseY, contentX, contentY, contentWidth, contentHeight, contentRadii);
@@ -504,13 +564,14 @@ public class UIElement {
      * then paints this element's overlay. Fully synchronous — every call in this chain issues real
      * GPU draw calls immediately; nothing here defers or accumulates work for later replay.
      *
-     * <p>When {@code opacity} is fractional or {@code clip: mask} is set, background/children/
+     * <p>When {@code opacity} is fractional or {@code overflow: hidden} auto-detects to
+     * {@link OverflowClip#MASK} (see {@link #resolveOverflowClip()}), background/children/
      * overlay instead paint into an offscreen "visual layer" (a screen-sized FBO from
      * {@link CgUiPaintContext}'s pool) so overlapping translucent children blend as one unit before
      * opacity applies. When masked, only the children get a further nested layer that's actually
      * multiplied by the mask — this element's own background (painted by {@link #paintSelf}) is
      * composited into the outer layer unmasked, then the masked children are composited over it, so
-     * {@code clip: mask} only ever clips descendants, never this element's own background/border —
+     * masking only ever clips descendants, never this element's own background/border —
      * see {@link CgUiPaintContext#beginLayerFbo()}/{@code compositeMask}/{@code blitLayer}. Ordinary
      * elements (opacity 1, no mask) skip all of this — same direct-draw path as before.</p>
      */
@@ -524,7 +585,7 @@ public class UIElement {
 
         GeneralGroup styleGen = style.getGeneralGroup();
         float opacity = styleGen.opacity();
-        OverflowClip overflow = styleGen.overflow();
+        OverflowClip overflow = resolveOverflowClip();
         boolean needsLayer = opacity < 1f || overflow.isMask();
 
         if (!needsLayer) {
@@ -543,10 +604,8 @@ public class UIElement {
             CgFrameBuffer childrenFbo = ctx.beginLayerFbo();
             paintChildren(ctx, overflow);
 
-            CgUiRoundedRect mask = buildDefaultMask();
             CgFrameBuffer maskFbo = ctx.beginLayerFbo();
-            ctx.setColor(0xFFFFFFFF);
-            mask.draw(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
+            paintDefaultMask(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
             ctx.endLayerFbo();
 
             ctx.compositeMask(childrenFbo, maskFbo); // multiply children-layer by mask alpha, in place
@@ -565,50 +624,82 @@ public class UIElement {
         if (children.isEmpty()) return;
         boolean scissored = overflow.isScissor();
         if (scissored) {
-            var layout = getTaffyLayout();
-            int contentX = Math.round(runtimeCache.getX() + layout.border().left + layout.padding().left);
-            int contentY = Math.round(runtimeCache.getY() + layout.border().top + layout.padding().top);
-            int contentWidth = Math.round(layout.contentBoxWidth());
-            int contentHeight = Math.round(layout.contentBoxHeight());
+            // Padding box (border excluded, padding included) — matches real CSS overflow:hidden
+            // semantics (clips at the padding edge, not the content edge) and paintDefaultMask's
+            // real border-only mask band. Previously insetting by border+padding (the literal content
+            // box) clipped away the padding gap, one box-model layer too tight — see isMouseOverContent.
+            float borderWidthPx = getTaffyLayout().border().left;
+            int contentX = Math.round(runtimeCache.getX() + borderWidthPx);
+            int contentY = Math.round(runtimeCache.getY() + borderWidthPx);
+            int contentWidth = Math.round(runtimeCache.getWidth() - 2f * borderWidthPx);
+            int contentHeight = Math.round(runtimeCache.getHeight() - 2f * borderWidthPx);
             ctx.pushScissor(contentX, contentY, contentWidth, contentHeight);
         }
 
-        for (UIElement child : getChildren()) {
-            child.drawSubtree(ctx);
+        // Paint in the reverse of hit-test order (UIWindow.elementHitTest walks sortedChildren
+        // highest-z-index-first and returns the first hit) — lowest z-index first, highest last, so
+        // the highest-z-index child ends up visually on top, matching which child hit-testing
+        // prioritizes. Previously this painted in plain DOM order regardless of z-index, so a
+        // non-default z-index could make hit-testing and visual stacking disagree about which
+        // overlapping sibling is "on top".
+        UIElement[] sorted = runtimeCache.sortedChildren.get();
+        for (int i = sorted.length - 1; i >= 0; i--) {
+            sorted[i].drawSubtree(ctx);
         }
 
         if (scissored) ctx.popScissor();
     }
 
-    /** Default {@code clip: mask} shape — this element's own resolved rounded-rect shape, with the
-     * border band's alpha forced to 0 so only the inner (content) region masks anything in (matches
-     * how a rounded {@code overflow: hidden} normally clips at the border's inner edge). Follows the
-     * {@code mask:} style property when explicitly set (an authored override — a different
-     * texture/shape from the actual background); otherwise defaults to <strong>re-rendering this
-     * element's own resolved background fill</strong> (color, texture, or 9-slice sprite) rather
-     * than a synthesized solid rounded rect — so a texture/sprite background's own transparency
-     * (rounded/notched art baked into the image, not just {@code border-radius}) naturally becomes
-     * part of the mask with zero extra authoring. Falls back to a solid-white shape only when
-     * neither the mask override nor the background resolves to a paintable fill (the same
-     * "documented gap" cases {@link #canPaintRounded} already covers — e.g. an unresolvable
-     * {@link CgUiCrossFade} leaf). */
-    private CgUiRoundedRect buildDefaultMask() {
-        float width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
+    /** Paints the default {@code overflow: hidden} mask shape directly into whatever's currently bound (the
+     * transient mask FBO {@code drawSubtree} sets up) — this element's own resolved rounded-rect
+     * shape, with the border band's alpha forced to 0 so only the inner (content) region masks
+     * anything in (matches how a rounded {@code overflow: hidden} normally clips at the border's
+     * inner edge). Follows the {@code mask:} style property when explicitly set (an authored
+     * override — a different texture/shape from the actual background); otherwise defaults to
+     * <strong>re-rendering this element's own resolved background fill</strong> (color, texture, or
+     * 9-slice sprite) rather than a synthesized solid rounded rect — so a texture/sprite background's
+     * own transparency (rounded/notched art baked into the image, not just {@code border-radius})
+     * naturally becomes part of the mask with zero extra authoring.
+     *
+     * <p>Draws (not builds-and-returns) specifically so a {@link CgUiCrossFade} mask/background — a
+     * background transition mid-flight — can be handled the same way {@link #paintRoundedLayer}
+     * already handles it for the visual layer: both sides of the fade drawn into the SAME target at
+     * complementary {@link CgUiPaintContext#withLayerOpacity} weights, so the mask tracks the
+     * transition continuously instead of falling back to solid white for its whole duration and only
+     * picking up the real end shape once the transition fully completes.</p> */
+    private void paintDefaultMask(CgUiPaintContext ctx, float x, float y, float width, float height) {
         CornerRadii radii = resolveCornerRadii(width, height);
         float borderWidthPx = getTaffyLayout().border().left;
         GeneralGroup styleGen = style.getGeneralGroup();
-
         CgUiDrawable maskDrawable = styleGen.mask();
-        RectFill fill = maskDrawable != CgUiDrawable.EMPTY
-                ? resolveRoundedFill(maskDrawable)
-                : resolveRoundedFill(styleGen.background());
+        CgUiDrawable maskSource = maskDrawable != CgUiDrawable.EMPTY ? maskDrawable : styleGen.background();
+
+        ctx.setColor(0xFFFFFFFF);
+        paintDefaultMaskShape(ctx, maskSource, x, y, width, height, radii, borderWidthPx);
+    }
+
+    /** Only called from {@link #paintDefaultMask}; recurses into {@link CgUiCrossFade} the same way
+     * {@link #paintRoundedLayer} does — falls back to a solid-white fill for whichever leaf(ves)
+     * don't resolve to a paintable fill (same "documented gap" cases {@link #canPaintRounded}
+     * already covers, e.g. an unresolvable {@link CgUiCrossFade} leaf). */
+    private static void paintDefaultMaskShape(CgUiPaintContext ctx, CgUiDrawable d, float x, float y, float width, float height,
+                                               CornerRadii radii, float borderWidthPx) {
+        if (d instanceof CgUiCrossFade cf) {
+            ctx.withLayerOpacity(1f - cf.getT(), () ->
+                    paintDefaultMaskShape(ctx, cf.getFrom(), x, y, width, height, radii, borderWidthPx));
+            ctx.withLayerOpacity(cf.getT(), () ->
+                    paintDefaultMaskShape(ctx, cf.getTo(), x, y, width, height, radii, borderWidthPx));
+            return;
+        }
+
+        RectFill fill = resolveRoundedFill(d);
         if (fill == null) fill = new ColorFill(0xFFFFFFFF);
 
         CgUiRoundedRect mask = buildFillOnlyRoundedRect(radii, fill);
         if (borderWidthPx > 0f) {
             mask.setBorder(borderWidthPx, 0x00000000);
         }
-        return mask;
+        mask.draw(ctx, x, y, width, height);
     }
 
     /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons).
@@ -724,7 +815,7 @@ public class UIElement {
         return null;
     }
 
-    /** Builds a fill-only {@link CgUiRoundedRect} (no border) — used for the {@code clip: mask}
+    /** Builds a fill-only {@link CgUiRoundedRect} (no border) — used for the mask
      * shape, which handles its own border-band alpha separately (see {@link #buildDefaultMask}). */
     private static CgUiRoundedRect buildFillOnlyRoundedRect(CornerRadii radii, RectFill fill) {
         CgUiRoundedRect rect = new CgUiRoundedRect();

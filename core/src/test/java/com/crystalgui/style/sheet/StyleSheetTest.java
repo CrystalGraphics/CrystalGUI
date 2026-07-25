@@ -129,6 +129,39 @@ public class StyleSheetTest {
         }
     }
 
+    @Test
+    public void cssVariableSubstitutesInDeclarationValue() {
+        // .vars's own rule has zero real declarations (only --gap, which isn't one) so it's
+        // dropped entirely (see parse()'s declarations.isEmpty() -> continue) — .a's rule is the
+        // only one that ends up in getRules().
+        var sheet = StyleSheet.parse(".vars { --gap: 10px; } .a { margin-top: var(--gap); }");
+        assertEquals(1, sheet.getRules().size());
+        var decls = sheet.getRules().get(0).declarations();
+        assertEquals(1, decls.size());
+        assertEquals(LengthPercentageAuto.length(10), findValue(decls, LayoutProperties.MARGIN_TOP));
+    }
+
+    @Test
+    public void cssVariableForwardReferenceWorks() {
+        // Referenced by a rule declared BEFORE the rule that defines it — real CSS custom
+        // properties don't care about declaration order within their scope, and the two-pass
+        // parse (collectVariables runs over the whole sheet before any rule is parsed) must not
+        // either.
+        var sheet = StyleSheet.parse(".a { z-index: var(--my-z); } .vars { --my-z: 7; }");
+        assertEquals(1, sheet.getRules().size());
+        var decls = sheet.getRules().get(0).declarations();
+        assertEquals(1, decls.size());
+        assertEquals((Integer) 7, decls.get(0).value().compute());
+    }
+
+    @Test
+    public void cssVariableDeclarationItselfIsNotEmittedAsARealDeclaration() {
+        var sheet = StyleSheet.parse(".a { --gap: 10px; z-index: 5; }");
+        var decls = sheet.getRules().get(0).declarations();
+        assertEquals(1, decls.size());
+        assertEquals(StylePropertyRegistry.Z_INDEX, decls.get(0).property());
+    }
+
     private static Object findValue(java.util.List<StyleRule.Declaration> decls, com.crystalgui.style.property.StyleProperty<?> property) {
         for (var decl : decls) {
             if (decl.property() == property) return decl.value().compute();
