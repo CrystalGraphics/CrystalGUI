@@ -184,7 +184,29 @@ public final class CgUiPaintContext {
         currentMaterial = boxModelMaterial;
         currentTexture = null;
         scissorStack.reset();
-        frameActive = true;
+        frameActive = true; // must be set before warmUp() — submitQuad()/vertex() require an active frame
+
+        if (!warmedUp) {
+            warmUp();
+            warmedUp = true;
+        }
+    }
+
+    private boolean warmedUp = false;
+
+    /**
+     * Eagerly creates (and cold-draws into) the layer-FBO pool slots a masked element with children
+     * commonly needs, once, on the first frame — see {@link #warmUpLayerFbo} for why. Depth 0 covers
+     * the element's own background layer; depth 1 covers its children's nested layer; depth 2
+     * covers the transient mask-shape FBO. Deeper nesting (an element whose child is *also* masked)
+     * isn't pre-warmed here — it's covered automatically by {@link #acquireLayerFbo}'s own per-slot
+     * warm-up whenever that depth is first reached, so this is a head start for the common case, not
+     * the load-bearing part of the fix.
+     */
+    private void warmUp() {
+        acquireLayerFbo(0);
+        acquireLayerFbo(1);
+        acquireLayerFbo(2);
     }
 
     /**
@@ -407,13 +429,54 @@ public final class CgUiPaintContext {
     private CgFrameBuffer acquireLayerFbo(int depth) {
         while (layerFboPool.size() <= depth) {
             String name = "cgui_layer_" + layerFboPool.size();
-            layerFboPool.add(CgFrameBuffer.createOwned(name, Math.max(1, screenWidth), Math.max(1, screenHeight), LAYER_FORMAT));
+            CgFrameBuffer newFbo = CgFrameBuffer.createOwned(name, Math.max(1, screenWidth), Math.max(1, screenHeight), LAYER_FORMAT);
+            layerFboPool.add(newFbo);
+            warmUpLayerFbo(newFbo);
         }
         CgFrameBuffer fbo = layerFboPool.get(depth);
         if (fbo.getWidth() != screenWidth || fbo.getHeight() != screenHeight) {
             fbo.resize(Math.max(1, screenWidth), Math.max(1, screenHeight));
         }
         return fbo;
+    }
+
+    /**
+     * Cold-draws a fully transparent, immediately-discarded quad into a freshly-created layer FBO
+     * via {@link #layerBlitMaterial}, once, right when that FBO is created.
+     *
+     * <p>Root cause this works around: the very first masked/opacity element painted anywhere in
+     * the process's life is also the first point {@link #layerBlitMaterial} (compiled lazily, on
+     * its own first {@code bind()}) ever draws into a brand-new, never-drawn-to FBO — on at least
+     * one NVIDIA driver, that specific "cold program's first draw into a cold FBO, same frame"
+     * coincidence has been observed to silently produce nothing (verified via frame-by-frame
+     * capture: the masked content is simply missing on frame 1, then permanently correct from frame
+     * 2 onward). Forcing that same coincidence to happen here — right when the slot is created,
+     * against throwaway content nobody reads — means whatever real content later reuses this exact
+     * pool slot never hits a truly first-ever draw again, on any frame.</p>
+     *
+     * <p>Self-scaling by construction: this runs from {@link #acquireLayerFbo} itself, so it covers
+     * every nesting depth the UI tree ever actually reaches, not just whatever depth
+     * {@link #warmUp()} eagerly primes at startup.</p>
+     */
+    private void warmUpLayerFbo(CgFrameBuffer fbo) {
+        flush();
+        CgMaterial previousMaterial = currentMaterial;
+        CgTexture2D previousTexture = currentTexture;
+        try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND)) {
+            fbo.bind();
+            CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
+            fbo.clearColor(0f, 0f, 0f, 0f);
+            withMaterial(layerBlitMaterial, () -> {
+                bindTexture(whitePixel);
+                submitQuad(0, 0, fbo.getWidth(), fbo.getHeight(), 0f, 0f, 1f, 1f, 0x00000000);
+                flush();
+            });
+        }
+        // CgGlScope already restored the real GL FBO/program/texture bindings to whatever was active
+        // before — resync the CPU-side bookkeeping fields withMaterial() left pointing at
+        // boxModelMaterial back to match, rather than leaving them stale relative to the real GL state.
+        currentMaterial = previousMaterial;
+        currentTexture = previousTexture;
     }
 
     /**
