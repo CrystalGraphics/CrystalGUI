@@ -20,10 +20,14 @@ import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.util.io.CgIO;
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Matrix4f;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -32,8 +36,18 @@ import java.util.List;
 /**
  * True immediate-mode 2D paint context for CrystalGUI's box-model layer.
  *
- * <p>Per-instance (not static) — each {@code UiRuntime} owns its own paint context.
- * Wraps frame lifecycle in {@link CgGlScope} for GL state isolation and saves/restores
+ * <p><b>A true process-wide singleton</b> — one paint context for the whole client, accessed via
+ * {@link #getInstance()}, lazily constructed on first use. This reflects reality, not an
+ * aspiration: nothing in this codebase ever constructs more than one {@link com.crystalgui.ui.UIWindow}
+ * at a time (no split-screen/multi-window support exists anywhere), and {@link #beginFrame} is not
+ * reentrant (throws if called without a matching {@link #endFrame}) — a second concurrent
+ * {@code UIWindow} painting at the "same time" could not actually be served by a shared instance.
+ * Lazy construction matters beyond avoiding needless work: it means simply constructing/using a
+ * {@code UIWindow} for pure layout/tree logic (no {@link #beginFrame}/paint call) never eagerly
+ * triggers GL material/font loads — a real, if small, step toward running CrystalGUI's tree/layout
+ * logic headlessly (e.g. server-side) without a GL context.</p>
+ *
+ * <p>Wraps frame lifecycle in {@link CgGlScope} for GL state isolation and saves/restores
  * {@link CgFrameData} so UI rendering does not corrupt the 3D pipeline state.</p>
  *
  * <p>Integrates {@link ScissorStack} for nested clip regions — GL scissor is applied
@@ -44,7 +58,20 @@ import java.util.List;
  * there is no recording phase and nothing to flush. This is intentional for now, not merely unoptimized. </p>
  */
 public final class CgUiPaintContext {
-    private static final String DEMO_FONT_PATH = "C:\\WINDOWS\\Fonts\\arial.ttf";
+    /** {@code namespace:path} resolved through {@link CgIO}'s waterfall (filesystem override →
+     * MC resource manager → classpath) — works identically in-game and in the harness/tests,
+     * unlike the hardcoded absolute Windows path this replaced ({@code C:\WINDOWS\Fonts\arial.ttf},
+     * which only ever worked on the original dev's machine). Reuses a font CrystalGraphics already
+     * bundles rather than shipping a duplicate. */
+    private static final String DEFAULT_FONT_ASSET = "crystalgraphics:IBMPlexSans-Regular.ttf";
+
+    private static CgUiPaintContext instance;
+
+    /** Lazily constructs the singleton on first use. See the class doc for why this must stay lazy. */
+    public static CgUiPaintContext getInstance() {
+        if (instance == null) instance = new CgUiPaintContext();
+        return instance;
+    }
 
     private final CgMaterial boxModelMaterial;
 
@@ -127,12 +154,12 @@ public final class CgUiPaintContext {
     private float layerOpacity = 1f;
 
     @Getter
-    private final CgFont font = CgFont.load(DEMO_FONT_PATH, CgFontStyle.REGULAR, 16);
+    private final CgFont font = loadDefaultFont();
 
     @Getter @Setter
     private int color = 0xFFFFFFFF;
 
-    public CgUiPaintContext() {
+    private CgUiPaintContext() {
         this.poseStack = new PoseStack();
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
@@ -143,6 +170,36 @@ public final class CgUiPaintContext {
                 boxModelMaterial.bind();
                 currentTexture = null;
             });
+    }
+
+    private static CgFont loadDefaultFont() {
+        InputStream in = CgIO.openStream(DEFAULT_FONT_ASSET);
+        if (in == null) {
+            throw new IllegalStateException("CgUiPaintContext: default font asset not found: " + DEFAULT_FONT_ASSET);
+        }
+        try {
+            byte[] data = readAllBytes(in);
+            return CgFont.load(data, DEFAULT_FONT_ASSET, CgFontStyle.REGULAR, 16);
+        } catch (IOException e) {
+            throw new IllegalStateException("CgUiPaintContext: failed to read default font asset: " + DEFAULT_FONT_ASSET, e);
+        } finally {
+            try {
+                in.close();
+            } catch (IOException ignored) {
+                // Nothing meaningful to do — the font either loaded successfully above or we're
+                // already throwing; a close failure on a read-only stream isn't actionable.
+            }
+        }
+    }
+
+    private static byte[] readAllBytes(InputStream in) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            bos.write(buf, 0, n);
+        }
+        return bos.toByteArray();
     }
 
     public int mouseX, mouseY;

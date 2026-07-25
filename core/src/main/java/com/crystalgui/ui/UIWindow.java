@@ -31,7 +31,6 @@ public final class UIWindow {
     public static final Layout EMPTY_LAYOUT = new Layout();
 
     public final Ui ui;
-    private static final CgUiPaintContext paintContext = new CgUiPaintContext();
 
     @Getter
     private final TaffyTree taffyTree;
@@ -188,6 +187,7 @@ public final class UIWindow {
         styleEngine.calculateStyle(deltaSeconds);
         calculateLayout();
 
+        CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
         paintContext.beginFrame(actualScreenWidth, actualScreenHeight);
 
         PoseStack pose = paintContext.getPoseStack();
@@ -258,8 +258,9 @@ public final class UIWindow {
         Matrix4f transform = element.getRuntimeCache().worldToLocal.get();
         var local = CgVertexTransformUtil.transformPosition(transform, mouseX, mouseY);
         float localX = local.x(), localY = local.y();
-        boolean contentCanClipOut = element.getStyle().generalGroup.overflow().isClipped();
-        if (!contentCanClipOut || element.isMouseOverContent(localX, localY)) {
+        var overflow = element.resolveOverflowClip();
+        boolean contentCanClipOut = overflow.isClipped();
+        if (!contentCanClipOut || element.isMouseOverContent(localX, localY, overflow)) {
             for (var child : element.getRuntimeCache().sortedChildren.get()) {
                 var result = elementHitTest(child, mouseX, mouseY);
                 if (result != null) {

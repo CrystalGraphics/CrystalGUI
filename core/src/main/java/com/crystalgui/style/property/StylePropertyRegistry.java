@@ -5,7 +5,7 @@ import com.crystalgui.style.property.general.enums.EnumProperty;
 import com.crystalgui.style.property.general.floats.FloatProperty;
 import com.crystalgui.style.property.general.ints.IntProperty;
 import com.crystalgui.style.property.general.strings.StringValue;
-import com.crystalgui.style.property.visual.OverflowClip;
+import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.texture.TextureProperty;
 import com.crystalgui.render.texture.CgUiDrawable;
@@ -41,7 +41,10 @@ public class StylePropertyRegistry {
             elem.getParent().getRuntimeCache().sortedChildren.invalidate();
         }
     });
-    public static final StyleProperty<OverflowClip> CLIP = create("clip", OverflowClip.class, OverflowClip.NONE);
+    // CSS-facing only: whether clipping happens at all. The clip *mechanism* (scissor vs mask) is
+    // auto-detected from the element's resolved shape — see UIElement#resolveOverflowClip(). Replaces
+    // the old `clip: none|scissor|mask` property, which let authors pick the mechanism directly.
+    public static final StyleProperty<Overflow> OVERFLOW = create("overflow", Overflow.class, Overflow.VISIBLE);
     public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
     // border-radius itself is pure parse-time shorthand syntax expanding to the 8 real longhands in
     // BorderRadiusProperties (see BorderRadiusShorthand) — not a registered property here, matching

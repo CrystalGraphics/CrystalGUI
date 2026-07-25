@@ -177,7 +177,7 @@ returns `null`, same as any malformed CSS value).
 | `#RRGGBB` / `#RGB` / `#RRGGBBAA` / `rgb(...)` / `rgba(...)` | `CgUiQuad` | 8-hex form is CSS-standard `#RRGGBBAA` (alpha last), not the engine's internal `0xAARRGGBB` int packing |
 | `image("path")` | `CgUiSprite`, unsliced | Optional trailing args, type-sniffed, order-independent: quoted `"x y w h"` crop rect, quoted `"refW refH"` texture-size-reference override, or a color literal (tint) |
 | `sprite("path", "sx sy sw sh", "bl bt br bb")` | `CgUiSprite`, 9-slice | Optional 4th `"refW refH"` arg, same override as `image(...)` |
-| `asset("ns:path", "element")` | `CgUiSprite` (cached template, `.copy()`d) | Named 9-slice element from a pack at `assets/{ns}/ui/sprites/{path}.json`, via `CgUiSpriteRegistry`. One pack file holds multiple named elements; each may override the pack's own `texture`/`textureSize` |
+| `asset("ns:path", "element")` | `CgUiSprite`, fresh instance per lookup | Named 9-slice element from a pack at `assets/{ns}/ui/sprites/{path}.json`, via `CgUiSpriteRegistry`. The parsed pack JSON is cached, but each `get()` call rebuilds a new `CgUiSprite` from it (not a `.copy()` of a cached template) — safer against cross-call mutation. One pack file holds multiple named elements; each may override the pack's own `texture`/`textureSize`. On a missing pack/element, returns a visible fallback drawable rather than silently rendering nothing |
 
 `CssParsingUtil.splitTopLevelCommas` (paren-aware comma split) backs every multi-arg form here.
 
@@ -247,7 +247,8 @@ through to `CgUiCrossFade` now, since `background` can only ever hold a `CgUiQua
 
 ## 8. Visual Layers (Opacity Isolation + Masking)
 
-`opacity < 1` and `clip: mask` both route through an offscreen "visual layer" — a screen-sized
+`opacity < 1` and `overflow: hidden` (when auto-detected to `OverflowClip.MASK` — see
+`UIElement.resolveOverflowClip()`) both route through an offscreen "visual layer" — a screen-sized
 FBO from a small pool `CgUiPaintContext` owns (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/
 `compositeMask`, `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`). Ordinary elements
 (opacity 1, no mask) skip this entirely — same direct-draw path as always, zero overhead.
@@ -265,8 +266,9 @@ element's own footprint ends up with real pixels in it. Matches LDLib2's own `Pi
 visual-layers implementation (`research_repos/LDLib2/.../gui/ui/rendering/`), which uses the same
 technique for the same reason on top of Minecraft's `PictureInPictureRenderer`.
 
-**`clip: mask`** (`UIElement.drawSubtree`, `OverflowClip.MASK` — previously a declared-but-dead
-enum value, now the trigger for this) composites a mask onto the subtree's own layer via
+**`OverflowClip.MASK`** (`UIElement.drawSubtree` — reached via `overflow: hidden` auto-detecting
+to mask, not an author-chosen `clip:` value anymore; see `UIElement.resolveOverflowClip()`)
+composites a mask onto the subtree's own layer via
 `CgBlendState.MASK_ALPHA_MULTIPLY` (`(ZERO, SRC_ALPHA)` blend func for both RGB and alpha) — **not**
 a stencil test. The mask is rendered into its *own* offscreen layer first, then blended onto the
 subtree layer, multiplying the subtree's existing color+alpha by the mask's alpha; wherever the

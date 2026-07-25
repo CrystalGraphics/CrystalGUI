@@ -37,6 +37,7 @@ public final class StyleSheet {
     private static final Pattern RULE_PATTERN = Pattern.compile("(?s)([^{}]+)\\{([^{}]*)}");
     private static final Pattern DECL_PATTERN = Pattern.compile("(?m)\\s*([\\w-]+)\\s*:\\s*([^;]+)\\s*;?");
     private static final Pattern IMPORTANT_SUFFIX = Pattern.compile("(?i)!\\s*important\\s*$");
+    private static final Pattern VAR_REF = Pattern.compile("var\\(\\s*(--[\\w-]+)\\s*\\)");
 
     private final List<StyleRule> rules;
     private final Map<String, List<StyleRule>> byId = new HashMap<>();
@@ -51,6 +52,7 @@ public final class StyleSheet {
 
     public static StyleSheet parse(String source) {
         String stripped = BLOCK_COMMENT.matcher(LINE_COMMENT.matcher(source).replaceAll("")).replaceAll("");
+        Map<String, String> variables = collectVariables(stripped);
 
         List<StyleRule> rules = new ArrayList<>();
         int sourceOrder = 0;
@@ -59,7 +61,7 @@ public final class StyleSheet {
             String selectorList = ruleMatcher.group(1).trim();
             if (selectorList.isEmpty()) continue;
 
-            List<StyleRule.Declaration> declarations = parseDeclarations(ruleMatcher.group(2));
+            List<StyleRule.Declaration> declarations = parseDeclarations(ruleMatcher.group(2), variables);
             if (declarations.isEmpty()) continue;
 
             for (String selectorText : selectorList.split(",")) {
@@ -72,11 +74,67 @@ public final class StyleSheet {
         return new StyleSheet(rules);
     }
 
-    private static List<StyleRule.Declaration> parseDeclarations(String block) {
+    /**
+     * First pass over the whole (comment-stripped) sheet collecting every {@code --name: value;}
+     * declaration into a flat, sheet-wide map — flat because this codebase has no {@code :root}
+     * scoping concept (v1 simplification, same spirit as {@code sourceOrder}'s own per-sheet-only
+     * tie-breaking above). A separate pass (rather than resolving inline during the main
+     * rule-by-rule walk below) so a variable can be referenced by a rule declared <em>before</em>
+     * the rule that defines it — real CSS custom properties don't care about declaration order
+     * within their scope, and neither should this.
+     */
+    private static Map<String, String> collectVariables(String stripped) {
+        Map<String, String> variables = new HashMap<>();
+        Matcher ruleMatcher = RULE_PATTERN.matcher(stripped);
+        while (ruleMatcher.find()) {
+            Matcher declMatcher = DECL_PATTERN.matcher(ruleMatcher.group(2));
+            while (declMatcher.find()) {
+                String name = declMatcher.group(1);
+                if (!name.startsWith("--")) continue;
+                String rawValue = declMatcher.group(2).trim();
+                Matcher importantMatcher = IMPORTANT_SUFFIX.matcher(rawValue);
+                if (importantMatcher.find()) {
+                    rawValue = rawValue.substring(0, importantMatcher.start()).trim();
+                }
+                variables.put(name, rawValue);
+            }
+        }
+        return variables;
+    }
+
+    /** Substitutes every {@code var(--name)} reference in {@code rawValue} with the variable's raw
+     * (unparsed) text — no recursive re-substitution of the replacement text, and no
+     * {@code var(--name, fallback)} two-arg form; both are natural follow-ups if a real need shows
+     * up, not built speculatively. An undefined variable is left as literal {@code var(...)} text
+     * and warned about — it will then fail in whatever type-specific parser it reaches next, the
+     * same failure mode as any other malformed value. */
+    private static String substituteVariables(String rawValue, Map<String, String> variables) {
+        if (!rawValue.contains("var(")) return rawValue;
+        Matcher matcher = VAR_REF.matcher(rawValue);
+        StringBuilder out = new StringBuilder();
+        int last = 0;
+        while (matcher.find()) {
+            String varName = matcher.group(1);
+            String resolved = variables.get(varName);
+            out.append(rawValue, last, matcher.start());
+            if (resolved != null) {
+                out.append(resolved);
+            } else {
+                CrystalGuiCore.LOGGER.warn("Undefined CSS variable '{}' referenced via var(...) — leaving as-is", varName);
+                out.append(matcher.group());
+            }
+            last = matcher.end();
+        }
+        out.append(rawValue, last, rawValue.length());
+        return out.toString();
+    }
+
+    private static List<StyleRule.Declaration> parseDeclarations(String block, Map<String, String> variables) {
         List<StyleRule.Declaration> declarations = new ArrayList<>();
         Matcher declMatcher = DECL_PATTERN.matcher(block);
         while (declMatcher.find()) {
             String name = declMatcher.group(1);
+            if (name.startsWith("--")) continue; // already collected by collectVariables — not a real declaration
             String rawValue = declMatcher.group(2).trim();
 
             boolean important = false;
@@ -85,6 +143,7 @@ public final class StyleSheet {
                 important = true;
                 rawValue = rawValue.substring(0, importantMatcher.start()).trim();
             }
+            rawValue = substituteVariables(rawValue, variables);
 
             // margin/padding/border-width (and their -all/-horizontal/-vertical aliases) are pure
             // shorthand syntax, never registered StyleProperty instances — expand into the real

@@ -2,7 +2,7 @@ package com.crystalgui.style;
 
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.style.property.visual.OverflowClip;
+import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.transition.TransitionSpec;
 
 import java.util.List;
@@ -67,12 +67,15 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    public OverflowClip overflow() {
-        return getValueSave(StylePropertyRegistry.CLIP);
+    /** Raw {@code overflow:} value — whether clipping happens at all. This is NOT the clip
+     * mechanism to render/hit-test with; use {@code UIElement#resolveOverflowClip()} for that
+     * (it auto-detects scissor vs mask from the element's actual resolved shape). */
+    public Overflow overflow() {
+        return getValueSave(StylePropertyRegistry.OVERFLOW);
     }
 
-    public GeneralGroup overflow(OverflowClip clip) {
-        set(StylePropertyRegistry.CLIP, clip);
+    public GeneralGroup overflow(Overflow overflow) {
+        set(StylePropertyRegistry.OVERFLOW, overflow);
         return this;
     }
 
