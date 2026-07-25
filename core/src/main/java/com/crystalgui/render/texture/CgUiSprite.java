@@ -174,6 +174,38 @@ public final class CgUiSprite implements CgUiDrawable {
         return hasBorder;
     }
 
+    /** Left 9-slice border width, in the same units as {@link #setBorder}. */
+    public float getBorderLeft() {
+        return borderLeftTop.x;
+    }
+
+    /** Top 9-slice border width, in the same units as {@link #setBorder}. */
+    public float getBorderTop() {
+        return borderLeftTop.y;
+    }
+
+    /** Right 9-slice border width, in the same units as {@link #setBorder}. */
+    public float getBorderRight() {
+        return borderRightBottom.x;
+    }
+
+    /** Bottom 9-slice border width, in the same units as {@link #setBorder}. */
+    public float getBorderBottom() {
+        return borderRightBottom.y;
+    }
+
+    /** Cached outer/inner atlas UV breakpoints — see {@link #updateUvCacheIfNeeded()} for how these
+     * are derived from {@code spritePosition}/{@code spriteSize}/border insets. Recomputed lazily,
+     * same as {@link #hasBorder()}/{@link #borderSumX()}. */
+    public float getU0() { updateUvCacheIfNeeded(); return u0; }
+    public float getU1() { updateUvCacheIfNeeded(); return u1; }
+    public float getU2() { updateUvCacheIfNeeded(); return u2; }
+    public float getU3() { updateUvCacheIfNeeded(); return u3; }
+    public float getV0() { updateUvCacheIfNeeded(); return v0; }
+    public float getV1() { updateUvCacheIfNeeded(); return v1; }
+    public float getV2() { updateUvCacheIfNeeded(); return v2; }
+    public float getV3() { updateUvCacheIfNeeded(); return v3; }
+
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         if (texture == null || textureSize.width <= 0 || textureSize.height <= 0) return;

@@ -1,6 +1,5 @@
 package com.crystalgui.ui;
 
-import com.crystalgraphics.api.text.CgTextConstraints;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.core.data.CacheCell;
@@ -291,21 +290,28 @@ public class UIElement {
     boolean isMouseOverElement(float localMouseX, float localMouseY) {
         float rectX = runtimeCache.getX(), rectY = runtimeCache.getY();
         float rectWidth = runtimeCache.getWidth(), rectHeight = runtimeCache.getHeight();
-
-        // Cheap AABB early-reject first — Taffy's Layout.size() is always the full outer
-        // (content + padding + border) box regardless of box-sizing, so this rect already
-        // matches the "outer" box CgUiRoundedRect renders/border-radius describes.
-        if (!insideRectangle(localMouseX, localMouseY, rectX, rectY, rectWidth, rectHeight)) return false;
-
+        // Taffy's Layout.size() is always the full outer (content + padding + border) box
+        // regardless of box-sizing, so this rect already matches the "outer" box
+        // CgUiRoundedRect renders/border-radius describes.
         CornerRadii radii = resolveCornerRadii(rectWidth, rectHeight);
+        return isInsideRoundedBox(localMouseX, localMouseY, rectX, rectY, rectWidth, rectHeight, radii);
+    }
+
+    /** Shared AABB-early-reject + per-corner elliptical-SDF hit test, used by both
+     * {@link #isMouseOverElement} (outer box) and {@link #isMouseOverContent} (content box) so
+     * rounded corners are never clipped by one and not the other. */
+    private static boolean isInsideRoundedBox(float mouseX, float mouseY, float rectX, float rectY,
+                                               float rectWidth, float rectHeight, CornerRadii radii) {
+        // Cheap AABB early-reject first.
+        if (!insideRectangle(mouseX, mouseY, rectX, rectY, rectWidth, rectHeight)) return false;
         if (radii.isZero()) return true;
 
         // Only when actually rounded: same elliptical rounded-box SDF as gui_rounded_rect.shader's
         // sdf_rounded_box (crystalgraphics:shaders/lib/sdf.glsl), evaluated in plain Java —
         // rendering and hit-testing must never disagree about the element's shape.
         float halfW = rectWidth * 0.5f, halfH = rectHeight * 0.5f;
-        float localX = localMouseX - (rectX + halfW);
-        float localY = localMouseY - (rectY + halfH);
+        float localX = mouseX - (rectX + halfW);
+        float localY = mouseY - (rectY + halfH);
 
         // Y-down local space (matches gui_rounded_rect.shader's UV convention): localY < 0 is "top".
         float rx, ry;
@@ -370,10 +376,30 @@ public class UIElement {
                 contentWidth = layout.contentBoxWidth(),
                 contentHeight = layout.contentBoxHeight();
 
-        return insideRectangle(localMouseX, localMouseY, contentX, contentY, contentWidth, contentHeight);
+        // Content-box corners are inset from the outer radii by border+padding — e.g. an element
+        // with border-radius:20 and border+padding summing to 8 has an effective ~12px radius at
+        // the content box. Without this, the content box was a plain AABB with no corner-radius
+        // awareness at all, unlike isMouseOverElement's outer-box test — near a rounded corner it
+        // could register "inside content" (and so reach/hover children) in an area that's visually
+        // outside the element's actual rounded shape. Border width is simplified to one scalar per
+        // axis here, same simplification already used elsewhere (buildDefaultMask/paintSelf/paintOverlay
+        // all read a single layout.border().left) — asymmetric border widths aren't fully modeled,
+        // a pre-existing latent limitation, not something introduced here.
+        float outerWidth = runtimeCache.getWidth(), outerHeight = runtimeCache.getHeight();
+        CornerRadii outerRadii = resolveCornerRadii(outerWidth, outerHeight);
+        float insetX = layout.border().left + layout.padding().left;
+        float insetY = layout.border().top + layout.padding().top;
+        CornerRadii contentRadii = new CornerRadii(
+                Math.max(0f, outerRadii.rxTL() - insetX), Math.max(0f, outerRadii.ryTL() - insetY),
+                Math.max(0f, outerRadii.rxTR() - insetX), Math.max(0f, outerRadii.ryTR() - insetY),
+                Math.max(0f, outerRadii.rxBR() - insetX), Math.max(0f, outerRadii.ryBR() - insetY),
+                Math.max(0f, outerRadii.rxBL() - insetX), Math.max(0f, outerRadii.ryBL() - insetY)
+        );
+
+        return isInsideRoundedBox(localMouseX, localMouseY, contentX, contentY, contentWidth, contentHeight, contentRadii);
     }
 
-    private boolean insideRectangle(float mouseX, float mouseY, float rectX, float rectY, float rectWidth, float rectHeight) {
+    private static boolean insideRectangle(float mouseX, float mouseY, float rectX, float rectY, float rectWidth, float rectHeight) {
         return mouseX >= rectX
                 && mouseY >= rectY
                 && rectX + rectWidth >= mouseX
@@ -472,10 +498,11 @@ public class UIElement {
     // ── Paint ────────────────────────────────────────────────────────────────
 
     /**
-     * Paints this element's background, then recurses into children (z-index-sorted,
-     * DOM order as tiebreak), then paints this element's overlay. Fully synchronous —
-     * every call in this chain issues real GPU draw calls immediately; nothing here
-     * defers or accumulates work for later replay.
+     * Paints this element's background (fill + border together, matching normal CSS stacking —
+     * border stays under/before children so an overlapping child still visually covers it, exactly
+     * like a real browser), then recurses into children (z-index-sorted, DOM order as tiebreak),
+     * then paints this element's overlay. Fully synchronous — every call in this chain issues real
+     * GPU draw calls immediately; nothing here defers or accumulates work for later replay.
      *
      * <p>When {@code opacity} is fractional or {@code clip: mask} is set, background/children/
      * overlay instead paint into an offscreen "visual layer" (a screen-sized FBO from
@@ -483,8 +510,8 @@ public class UIElement {
      * opacity applies. When masked, only the children get a further nested layer that's actually
      * multiplied by the mask — this element's own background (painted by {@link #paintSelf}) is
      * composited into the outer layer unmasked, then the masked children are composited over it, so
-     * {@code clip: mask} only ever clips descendants, never this element's own background — see
-     * {@link CgUiPaintContext#beginLayerFbo()}/{@code compositeMask}/{@code blitLayer}. Ordinary
+     * {@code clip: mask} only ever clips descendants, never this element's own background/border —
+     * see {@link CgUiPaintContext#beginLayerFbo()}/{@code compositeMask}/{@code blitLayer}. Ordinary
      * elements (opacity 1, no mask) skip all of this — same direct-draw path as before.</p>
      */
     public final void drawSubtree(CgUiPaintContext ctx) {
@@ -508,7 +535,7 @@ public class UIElement {
         }
 
         CgFrameBuffer subtreeFbo = ctx.beginLayerFbo();
-        paintSelf(ctx); // background — must NOT go through the mask below
+        paintSelf(ctx); // background (fill + border) — must NOT go through the mask below
 
         if (overflow.isMask() && !children.isEmpty()) {
             // Children get their own nested layer so the mask multiplies only THEM, not the
@@ -529,7 +556,7 @@ public class UIElement {
             paintChildren(ctx, overflow);
         }
 
-        paintOverlay(ctx);
+        paintOverlay(ctx); // unchanged: unmasked, drawn after children composite
         ctx.endLayerFbo();
         ctx.blitLayer(subtreeFbo, opacity);
     }
@@ -553,28 +580,40 @@ public class UIElement {
         if (scissored) ctx.popScissor();
     }
 
-    /** Default {@code clip: mask} shape — this element's own resolved rounded-rect shape, with
-     * the border band's alpha forced to 0 so only the inner (content) region masks anything in —
-     * matches the same "border color to #00000000" idea directly, no new shader/coverage variant
-     * needed: {@code CgUiRoundedRect} already blends {@code mix(borderColor, fillColor, innerCoverage)}
-     * then multiplies the whole shape by {@code coverage}, so a transparent border color alone
-     * already zeroes alpha across the border band while staying opaque across the inner region. */
+    /** Default {@code clip: mask} shape — this element's own resolved rounded-rect shape, with the
+     * border band's alpha forced to 0 so only the inner (content) region masks anything in (matches
+     * how a rounded {@code overflow: hidden} normally clips at the border's inner edge). Follows the
+     * {@code mask:} style property when explicitly set (an authored override — a different
+     * texture/shape from the actual background); otherwise defaults to <strong>re-rendering this
+     * element's own resolved background fill</strong> (color, texture, or 9-slice sprite) rather
+     * than a synthesized solid rounded rect — so a texture/sprite background's own transparency
+     * (rounded/notched art baked into the image, not just {@code border-radius}) naturally becomes
+     * part of the mask with zero extra authoring. Falls back to a solid-white shape only when
+     * neither the mask override nor the background resolves to a paintable fill (the same
+     * "documented gap" cases {@link #canPaintRounded} already covers — e.g. an unresolvable
+     * {@link CgUiCrossFade} leaf). */
     private CgUiRoundedRect buildDefaultMask() {
         float width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
         CornerRadii radii = resolveCornerRadii(width, height);
         float borderWidthPx = getTaffyLayout().border().left;
+        GeneralGroup styleGen = style.getGeneralGroup();
 
-        CgUiRoundedRect mask = new CgUiRoundedRect();
-        mask.setCornerRadius(radii.rxTL(), radii.ryTL(), radii.rxTR(), radii.ryTR(),
-                radii.rxBR(), radii.ryBR(), radii.rxBL(), radii.ryBL());
+        CgUiDrawable maskDrawable = styleGen.mask();
+        RectFill fill = maskDrawable != CgUiDrawable.EMPTY
+                ? resolveRoundedFill(maskDrawable)
+                : resolveRoundedFill(styleGen.background());
+        if (fill == null) fill = new ColorFill(0xFFFFFFFF);
+
+        CgUiRoundedRect mask = buildFillOnlyRoundedRect(radii, fill);
         if (borderWidthPx > 0f) {
             mask.setBorder(borderWidthPx, 0x00000000);
         }
-        mask.setFillColor(0xFFFFFFFF);
         return mask;
     }
 
-    /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons). Called before children paint. */
+    /** Override for custom drawing beyond the generic box model (e.g. text glyphs, item icons).
+     * Called before children paint. Paints the background — fill and border together, matching
+     * normal CSS stacking (border stays under/before children). */
     protected void paintSelf(CgUiPaintContext ctx) {
         GeneralGroup styleGen = style.getGeneralGroup();
         final float x = runtimeCache.getX(), y = runtimeCache.getY(), width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
@@ -594,10 +633,7 @@ public class UIElement {
         // whatever `background` resolves to, matching real CSS (rounding/border is orthogonal to
         // what the background *is*, not a special background value type). Border-width is sourced
         // straight from Taffy's already-resolved layout (same pipeline width/height come from),
-        // not reparsed independently. Only a flat color or a non-9-slice sprite can actually be
-        // clipped/stroked this way today — a 9-slice background falls through to the plain path
-        // below (border-radius/border-width still grow the layout box and resolve for hit-testing,
-        // just without visually clipping the sprite — documented gap).
+        // not reparsed independently.
         CornerRadii radii = resolveCornerRadii(width, height);
         float borderWidthPx = getTaffyLayout().border().left;
         boolean needsRoundedWrap = !radii.isZero() || borderWidthPx > 0f;
@@ -617,29 +653,14 @@ public class UIElement {
             ctx.setColor(backgroundColor);
             background.draw(ctx, x, y, width, height);
         }
-//        if (this.parent == null) {
-//            ctx.text().draw()
-//                    .text("Chuj ci w dupasddd asdasdasdasdasd asd asd sdaddddddddddddddddasd addddddddddddddddddddddddddddddsd as eFfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff ffffff")
-//                    .color(0xFFFFFFFF)
-//                    .at(runtimeCache.getX(), runtimeCache.getY())
-//                    .constraints(new CgTextConstraints(runtimeCache.getWidth(), runtimeCache.getHeight()))
-//                    .font(ctx.getFont()).submit();
-//        }
-        if (this.hasClass("mask-child")) {
-            ctx.text().draw()
-                    .text("Testing testing")
-                    .color(-1)
-                    .at(runtimeCache.getX(), runtimeCache.getY())
-                    .font(ctx.getFont()).submit();
-        }
     }
 
     /** Builds and draws a {@link CgUiRoundedRect} wrapping the resolved background, when possible.
      * @return {@code true} if it painted (caller must not also run the plain background path);
-     *         {@code false} if {@code background} isn't a type this layer can clip/stroke (e.g. a
-     *         9-slice sprite, or a {@link CgUiCrossFade} tree with an unresolvable leaf) —
-     *         border-radius/border-width still resolve for hit-testing/layout growth in that case,
-     *         just without visual clipping (documented gap). */
+     *         {@code false} if {@code background} isn't a type this layer can clip/stroke (a
+     *         {@link CgUiCrossFade} tree with an unresolvable leaf) — border-radius/border-width
+     *         still resolve for hit-testing/layout growth in that case, just without visual clipping
+     *         (documented gap). */
     private boolean paintRoundedBackground(CgUiPaintContext ctx, float x, float y, float width, float height,
                                             CornerRadii radii, float borderWidthPx,
                                             CgUiDrawable background, int backgroundColor) {
@@ -676,33 +697,51 @@ public class UIElement {
         buildRoundedRect(radii, borderWidthPx, borderColor, resolveRoundedFill(d)).draw(ctx, x, y, width, height);
     }
 
-    /** A resolved fill for the rounded-wrap layer — either a flat color or a texture, never both. */
-    private record RectFill(int colorArgb, CgTexture2D texture) {
+    /** A resolved fill for the rounded-wrap layer — a flat color, a single stretched texture, or a
+     * 9-slice sprite (never more than one at once). */
+    private sealed interface RectFill permits ColorFill, TextureFill, NineSliceFill {
+    }
+
+    private record ColorFill(int colorArgb) implements RectFill {
+    }
+
+    private record TextureFill(CgTexture2D texture) implements RectFill {
+    }
+
+    private record NineSliceFill(CgUiSprite sprite) implements RectFill {
     }
 
     /** @return the fill this drawable would paint as, or {@code null} if it isn't a type the
-     * rounded-wrap layer can clip/stroke (a 9-slice sprite, or anything else unrecognized). */
+     * rounded-wrap layer can clip (anything unrecognized, or a sprite with no texture set). */
     private static @Nullable RectFill resolveRoundedFill(CgUiDrawable drawable) {
-        if (drawable == CgUiDrawable.EMPTY) return new RectFill(0xFFFFFFFF, null);
-        if (drawable instanceof CgUiQuad quad) return new RectFill(quad.getColorArgb(), null);
-        if (drawable instanceof CgUiSprite sprite && !sprite.hasBorder()) {
+        if (drawable == CgUiDrawable.EMPTY) return new ColorFill(0xFFFFFFFF);
+        if (drawable instanceof CgUiQuad quad) return new ColorFill(quad.getColorArgb());
+        if (drawable instanceof CgUiSprite sprite) {
             var texture = sprite.getTexture();
-            return texture == null ? null : new RectFill(0xFFFFFFFF, texture);
+            if (texture == null) return null;
+            return sprite.hasBorder() ? new NineSliceFill(sprite) : new TextureFill(texture);
         }
         return null;
     }
 
-    private static CgUiRoundedRect buildRoundedRect(CornerRadii radii, float borderWidthPx, int borderColor, RectFill fill) {
+    /** Builds a fill-only {@link CgUiRoundedRect} (no border) — used for the {@code clip: mask}
+     * shape, which handles its own border-band alpha separately (see {@link #buildDefaultMask}). */
+    private static CgUiRoundedRect buildFillOnlyRoundedRect(CornerRadii radii, RectFill fill) {
         CgUiRoundedRect rect = new CgUiRoundedRect();
         rect.setCornerRadius(radii.rxTL(), radii.ryTL(), radii.rxTR(), radii.ryTR(),
                 radii.rxBR(), radii.ryBR(), radii.rxBL(), radii.ryBL());
+        switch (fill) {
+            case ColorFill(int colorArgb) -> rect.setFillColor(colorArgb);
+            case TextureFill(CgTexture2D texture) -> rect.setFillTexture(texture);
+            case NineSliceFill(CgUiSprite sprite) -> rect.setFillSprite(sprite);
+        }
+        return rect;
+    }
+
+    private static CgUiRoundedRect buildRoundedRect(CornerRadii radii, float borderWidthPx, int borderColor, RectFill fill) {
+        CgUiRoundedRect rect = buildFillOnlyRoundedRect(radii, fill);
         if (borderWidthPx > 0f) {
             rect.setBorder(borderWidthPx, borderColor);
-        }
-        if (fill.texture() != null) {
-            rect.setFillTexture(fill.texture());
-        } else {
-            rect.setFillColor(fill.colorArgb());
         }
         return rect;
     }

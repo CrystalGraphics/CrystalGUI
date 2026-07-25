@@ -28,6 +28,10 @@ public final class CgUiRoundedRect implements CgUiDrawable {
     private int borderColorArgb = 0xFF000000;
     private int fillColorArgb = 0xFFFFFFFF;
     private CgTexture2D fillTexture;
+    /** Non-null when the fill is a 9-slice sprite — mutually exclusive with {@link #fillTexture}
+     * (single stretched texture) and a plain {@link #fillColorArgb}. Reuses {@link CgUiSprite}'s
+     * own cached UV-breakpoint/border math directly rather than duplicating it. */
+    private CgUiSprite fillSprite;
 
     public CgUiRoundedRect setCornerRadius(float rx, float ry) {
         return setCornerRadius(rx, ry, rx, ry, rx, ry, rx, ry);
@@ -53,19 +57,32 @@ public final class CgUiRoundedRect implements CgUiDrawable {
     public CgUiRoundedRect setFillColor(int colorArgb) {
         this.fillColorArgb = colorArgb;
         this.fillTexture = null;
+        this.fillSprite = null;
         return this;
     }
 
     public CgUiRoundedRect setFillTexture(CgTexture2D texture) {
         this.fillTexture = texture;
+        this.fillSprite = null;
+        return this;
+    }
+
+    /** Fills with a 9-slice sprite, clipped/stroked by the same corner-radius/border SDF as any
+     * other fill — the sprite's own alpha (including any transparency baked into its art, not just
+     * what {@code border-radius} carves out) is what actually renders. */
+    public CgUiRoundedRect setFillSprite(CgUiSprite sprite) {
+        this.fillSprite = sprite;
+        this.fillTexture = null;
         return this;
     }
 
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         MATERIAL.toggleKeyword("WITH_BORDER", borderWidth > 0f);
-        boolean withTextureFill = fillTexture != null;
+        boolean with9SliceFill = fillSprite != null;
+        boolean withTextureFill = !with9SliceFill && fillTexture != null;
         MATERIAL.toggleKeyword("WITH_TEXTURE_FILL", withTextureFill);
+        MATERIAL.toggleKeyword("WITH_9SLICE_FILL", with9SliceFill);
 
         ctx.withMaterial(MATERIAL, () -> {
             MATERIAL.applyProperties(b -> {
@@ -75,7 +92,15 @@ public final class CgUiRoundedRect implements CgUiDrawable {
                 b.colorARGB("_BorderColor", borderColorArgb);
                 b.colorARGB("_FillColor", fillColorArgb);
                 b.vec2("_BoxSize", width, height);
-                if (withTextureFill) {
+                if (with9SliceFill) {
+                    b.sampler("_MainTex", 0, fillSprite.getTexture());
+                    b.vec4("_NineSliceBorder", fillSprite.getBorderLeft(), fillSprite.getBorderTop(),
+                            fillSprite.getBorderRight(), fillSprite.getBorderBottom());
+                    b.vec4("_NineSliceOuterUV", fillSprite.getU0(), fillSprite.getV0(),
+                            fillSprite.getU3(), fillSprite.getV3());
+                    b.vec4("_NineSliceInnerUV", fillSprite.getU1(), fillSprite.getV1(),
+                            fillSprite.getU2(), fillSprite.getV2());
+                } else if (withTextureFill) {
                     b.sampler("_MainTex", 0, fillTexture);
                 }
             });
