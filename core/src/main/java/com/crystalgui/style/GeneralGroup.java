@@ -58,6 +58,25 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
+    public float fontSize() {
+        return getValueSave(StylePropertyRegistry.FONT_SIZE);
+    }
+
+    public GeneralGroup fontSize(float fontSize) {
+        set(StylePropertyRegistry.FONT_SIZE, fontSize);
+        return this;
+    }
+
+    /** Fallback stack of font asset paths, primary first. */
+    public List<String> fontFamily() {
+        return getValueSave(StylePropertyRegistry.FONT_FAMILY);
+    }
+
+    public GeneralGroup fontFamily(List<String> paths) {
+        set(StylePropertyRegistry.FONT_FAMILY, paths);
+        return this;
+    }
+
     public int zIndex() {
         return getValueSave(StylePropertyRegistry.Z_INDEX);
     }

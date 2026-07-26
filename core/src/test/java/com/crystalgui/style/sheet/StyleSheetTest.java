@@ -187,6 +187,40 @@ public class StyleSheetTest {
         assertEquals(BoxSizing.CONTENT_BOX, decls.get(0).value().compute());
     }
 
+    @Test
+    public void fontSizeParsesToFloat() {
+        var sheet = StyleSheet.parse(".a { font-size: 20; }");
+        var decls = sheet.getRules().get(0).declarations();
+        assertEquals(1, decls.size());
+        assertEquals(StylePropertyRegistry.FONT_SIZE, decls.get(0).property());
+        assertEquals((Float) 20f, decls.get(0).value().compute());
+    }
+
+    @Test
+    public void fontFamilySingleParsesToOneElementList() {
+        var sheet = StyleSheet.parse(".a { font-family: \"crystalgraphics:fonts/A.ttf\"; }");
+        var decls = sheet.getRules().get(0).declarations();
+        assertEquals(1, decls.size());
+        assertEquals(java.util.List.of("crystalgraphics:fonts/A.ttf"), decls.get(0).value().compute());
+    }
+
+    @Test
+    public void fontFamilyFallbackStackParsesToOrderedList() {
+        var sheet = StyleSheet.parse(".a { font-family: \"crystalgraphics:fonts/A.ttf\", \"crystalgraphics:fonts/B.ttf\"; }");
+        var decls = sheet.getRules().get(0).declarations();
+        assertEquals(1, decls.size());
+        assertEquals(java.util.List.of("crystalgraphics:fonts/A.ttf", "crystalgraphics:fonts/B.ttf"),
+                decls.get(0).value().compute());
+    }
+
+    @Test
+    public void fontSizeAndFontFamilyDefaultsAreInheritable() {
+        assertTrue(StylePropertyRegistry.FONT_SIZE.isInheritable());
+        assertTrue(StylePropertyRegistry.FONT_FAMILY.isInheritable());
+        assertEquals((Float) 16f, StylePropertyRegistry.FONT_SIZE.initialValue);
+        assertEquals(java.util.List.of("crystalgraphics:IBMPlexSans-Regular.ttf"), StylePropertyRegistry.FONT_FAMILY.initialValue);
+    }
+
     private static Object findValue(java.util.List<StyleRule.Declaration> decls, com.crystalgui.style.property.StyleProperty<?> property) {
         for (var decl : decls) {
             if (decl.property() == property) return decl.value().compute();

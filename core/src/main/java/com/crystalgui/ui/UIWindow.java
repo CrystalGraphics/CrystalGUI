@@ -50,7 +50,7 @@ public final class UIWindow {
 
     @Getter
     @Setter
-    private float uiScale = 4;
+    private float uiScale = 2;
     @Getter
     private float leftPos, topPos, width, height;
     @Getter
@@ -232,6 +232,10 @@ public final class UIWindow {
         elements.add(element);
 
         element.taffyNodeId = taffyTree.newLeaf(element.getStyle().getTaffyBridge().style);
+        var measureFunc = element.measureFunc();
+        if (measureFunc != null) {
+            taffyTree.setMeasureFunc(element.taffyNodeId, measureFunc);
+        }
         elementByNode.put(element.taffyNodeId, element);
         if (element.getParent() != null) {
             var parentID = element.getParent().taffyNodeId;
