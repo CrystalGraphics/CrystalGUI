@@ -21,11 +21,14 @@ public class TaffyBridge {
         DEFAULT_TAFFY_STYLE.flexShrink = 0;
         DEFAULT_TAFFY_STYLE.minSize = TaffySize.all(TaffyDimension.ZERO);
         DEFAULT_TAFFY_STYLE.alignContent = AlignContent.FLEX_START;
-        // Taffy itself defaults to BORDER_BOX (border+padding absorbed inside the given size).
-        // Real CSS's initial box-sizing value is content-box — border/padding grow the outer
-        // box instead of eating into it — which is also what makes an SDF rect's border-width
-        // actually increase the element's effective size. Override to match the CSS default.
-        DEFAULT_TAFFY_STYLE.boxSizing = BoxSizing.CONTENT_BOX;
+        // Deliberately BORDER_BOX, NOT real CSS's actual initial value (content-box) — a project
+        // choice, matching the common UI-framework convention (Bootstrap et al.) of defaulting to
+        // the more intuitive box model where a declared width/height already includes padding+border
+        // instead of growing past it. This happens to already match Taffy's own native default, but
+        // is kept as an explicit assignment rather than relying on that implicitly, so the intended
+        // default stays self-documented and isn't silently at the mercy of a future Taffy version
+        // changing its own default.
+        DEFAULT_TAFFY_STYLE.boxSizing = BoxSizing.BORDER_BOX;
     }
 
     public final TaffyStyle style;
@@ -107,6 +110,13 @@ public class TaffyBridge {
     public void setPosition(TaffyPosition position) {
         if (style.position != position) {
             style.position = position;
+            styleList.markTaffyStyleDirty();
+        }
+    }
+
+    public void setBoxSizing(BoxSizing boxSizing) {
+        if (style.boxSizing != boxSizing) {
+            style.boxSizing = boxSizing;
             styleList.markTaffyStyleDirty();
         }
     }

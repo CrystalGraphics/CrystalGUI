@@ -6,7 +6,6 @@ import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -47,12 +46,6 @@ public final class CgUiSpriteRegistry {
     private static final Gson GSON = new Gson();
     private static final ConcurrentHashMap<String, ParsedPack> CACHE = new ConcurrentHashMap<>();
 
-    /** Bright, unmistakably-wrong magenta — the standard "missing asset" indicator color, same
-     * purpose as {@code CgFallbackTextures}' checkerboard for failed texture loads. Returned in
-     * place of silently rendering nothing, so a broken {@code asset(...)} reference is visually
-     * obvious during development instead of an invisible element that's easy to miss entirely. */
-    private static final CgUiDrawable FALLBACK = new CgUiQuad(0xFFFF00FF);
-
     private CgUiSpriteRegistry() {
     }
 
@@ -62,13 +55,34 @@ public final class CgUiSpriteRegistry {
      * than silently rendering nothing. */
     public static CgUiDrawable get(String packPath, String elementName) {
         ParsedPack pack = CACHE.computeIfAbsent(packPath, CgUiSpriteRegistry::load);
-        if (pack == null) return FALLBACK;
+        if (pack == null) return fallback();
         ParsedElement element = pack.elements.get(elementName);
         if (element == null) {
             CrystalGuiCore.LOGGER.warn("CgUiSpriteRegistry: no element '{}' in asset pack '{}'", elementName, packPath);
-            return FALLBACK;
+            return fallback();
         }
         return element.toSprite(pack);
+    }
+
+    /** Same fallback texture the rest of the engine already uses for a broken texture load
+     * ({@code CgUiRenderer}/{@code CgUiSprite} both reference {@code CgTextureManager.get().getFallback()}
+     * directly) — wrapped in a fresh {@link CgUiSprite} since {@link CgTextureManager#getFallback()}
+     * returns a raw {@link CgTexture2D}, not a {@link CgUiDrawable}. Deliberately a method, not a
+     * cached static field: {@code getFallback()} lazily creates a real GPU texture on first use,
+     * which needs a live GL context — evaluating it eagerly at class-load time would risk the same
+     * "forces GL work before it's safe" bug already fixed for {@code CgUiPaintContext}'s font
+     * loading. {@code CgTextureManager.getFallback()} is already cached internally, so repeated
+     * calls here are cheap; failures should be rare/dev-time-only anyway.
+     *
+     * <p>Must call {@link CgUiSprite#setTextureSizeReference} explicitly — {@link CgUiSprite#setTexture}
+     * deliberately skips auto-deriving it specifically when the texture passed in is the fallback
+     * texture (see its own {@code texture != CgTextureManager.get().getFallback()} guard), which
+     * otherwise leaves the sprite's texture size at its zero default and makes {@code draw()}
+     * silently no-op — confirmed live via the harness before adding this line, the fallback sprite
+     * rendered nothing at all rather than the visible checkerboard.</p> */
+    private static CgUiDrawable fallback() {
+        CgTexture2D tex = CgTextureManager.get().getFallback();
+        return new CgUiSprite().setTexture(tex).setTextureSizeReference(tex.getWidth(), tex.getHeight());
     }
 
     private static ParsedPack load(String namespacedPath) {

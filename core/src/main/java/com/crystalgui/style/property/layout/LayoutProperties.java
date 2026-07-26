@@ -33,6 +33,10 @@ public class LayoutProperties {
     public static final StyleProperty<FlexDirection> FLEX_DIRECTION = StylePropertyRegistry.create("flex-direction", FlexDirection.class, FlexDirection.COLUMN);//;//.setIconProvider(FlexIcons::getFlexDirectionIcon);
     public static final StyleProperty<FlexWrap> FLEX_WRAP = StylePropertyRegistry.create("flex-wrap", FlexWrap.class, FlexWrap.NO_WRAP);//;//.setIconProvider(FlexIcons::getFlexWrapIcon);
     public static final StyleProperty<TaffyPosition> POSITION = StylePropertyRegistry.create("position", TaffyPosition.class, TaffyPosition.RELATIVE);
+    // BORDER_BOX is a deliberate project default, NOT real CSS's actual initial value
+    // (content-box) — see TaffyBridge.DEFAULT_TAFFY_STYLE's own explicit assignment, which this
+    // property's default value stays consistent with.
+    public static final StyleProperty<BoxSizing> BOX_SIZING = StylePropertyRegistry.create("box-sizing", BoxSizing.class, BoxSizing.BORDER_BOX);
 
     public static final StyleProperty<LengthPercentageAuto> LEFT = create("left", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> TOP = create("top", LengthPercentageAuto.AUTO);
@@ -104,6 +108,7 @@ public class LayoutProperties {
         createSetter(LayoutProperties.FLEX_DIRECTION, TaffyBridge::setFlexDirection);
         createSetter(LayoutProperties.FLEX_WRAP, TaffyBridge::setFlexWrap);
         createSetter(LayoutProperties.POSITION, TaffyBridge::setPosition);
+        createSetter(LayoutProperties.BOX_SIZING, TaffyBridge::setBoxSizing);
         createSetter(LayoutProperties.ALIGN_ITEMS, TaffyBridge::setAlignItems);
         createSetter(LayoutProperties.JUSTIFY_CONTENT, TaffyBridge::setJustifyContent);
         createSetter(LayoutProperties.JUSTIFY_ITEMS, TaffyBridge::setJustifyItems);
