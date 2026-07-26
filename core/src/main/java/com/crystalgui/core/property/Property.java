@@ -4,6 +4,7 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 
 import java.util.Objects;
+import java.util.function.Function;
 
 /**
  * Observable property with synchronous equality-suppressing change notification.
@@ -68,6 +69,23 @@ public final class Property<T> {
         if (source == null) throw new IllegalArgumentException("source must not be null");
         set(source.get());
         return source.changed.connect((oldVal, newVal) -> set(newVal));
+    }
+
+    /**
+     * One-way binding with a transform: this property mirrors {@code source}, but through
+     * {@code transform} rather than a straight same-type copy — the plain {@link #bindTo(Property)}
+     * overload has no way to map/convert between differently-typed properties. The current value is
+     * set immediately to {@code transform.apply(source.get())}.
+     *
+     * @param source    the source property to follow
+     * @param transform maps the source's value type to this property's value type
+     * @return a connection that can be disconnected to stop following
+     */
+    public <S> Connection bindTo(final Property<S> source, final Function<S, T> transform) {
+        if (source == null) throw new IllegalArgumentException("source must not be null");
+        if (transform == null) throw new IllegalArgumentException("transform must not be null");
+        set(transform.apply(source.get()));
+        return source.changed.connect((oldVal, newVal) -> set(transform.apply(newVal)));
     }
 
     /**

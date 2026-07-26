@@ -375,6 +375,14 @@ public class UIElement {
      * directly, only whether clipping happens at all. Requires layout to have run (reads the
      * outer box size to resolve percent corner radii), so this can't live in {@code GeneralGroup}
      * alone. */
+    /** A sprite/9-slice background alone does NOT trigger {@link OverflowClip#MASK} — most sprites
+     * are fine with a plain rectangular {@link OverflowClip#SCISSOR} clip (cheap, no FBO
+     * compositing), including mid-{@code background}-transition: a scissor clip doesn't consult
+     * the sprite's alpha at all, so it behaves exactly as if masked by a full opaque rectangle
+     * around the padding box, without the compositing cost. {@code MASK} stays reserved for when
+     * the shape genuinely isn't a rectangle (nonzero corner radius) or the author explicitly opts
+     * in via {@code mask:} (which also correctly triggers mid-crossfade — a {@link CgUiCrossFade}
+     * instance is never {@code == CgUiDrawable.EMPTY}). */
     OverflowClip resolveOverflowClip() {
         GeneralGroup styleGen = style.getGeneralGroup();
         if (styleGen.overflow() == Overflow.VISIBLE) return OverflowClip.NONE;
@@ -382,19 +390,7 @@ public class UIElement {
         CornerRadii radii = resolveCornerRadii(runtimeCache.getWidth(), runtimeCache.getHeight());
         boolean hasRadius = !radii.isZero();
         boolean hasExplicitMask = styleGen.mask() != CgUiDrawable.EMPTY;
-        boolean isSpriteBackground = isOrTransitionsToSprite(styleGen.background());
-        return (hasRadius || hasExplicitMask || isSpriteBackground) ? OverflowClip.MASK : OverflowClip.SCISSOR;
-    }
-
-    /** Whether {@code d} is (or, mid-{@link CgUiCrossFade}, transitions to/from) a sprite —
-     * checked on both legs of a crossfade so a {@code background} transition targeting a sprite
-     * resolves to {@link OverflowClip#MASK} for its whole duration, not just once the transition
-     * finishes and {@code background()} stops returning a {@link CgUiCrossFade} wrapper. */
-    private static boolean isOrTransitionsToSprite(CgUiDrawable d) {
-        if (d instanceof CgUiCrossFade cf) {
-            return isOrTransitionsToSprite(cf.getFrom()) || isOrTransitionsToSprite(cf.getTo());
-        }
-        return d instanceof CgUiSprite;
+        return (hasRadius || hasExplicitMask) ? OverflowClip.MASK : OverflowClip.SCISSOR;
     }
 
     /**

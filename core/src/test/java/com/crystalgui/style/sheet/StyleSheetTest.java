@@ -3,6 +3,7 @@ package com.crystalgui.style.sheet;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.UIElement;
+import dev.vfyjxf.taffy.style.BoxSizing;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import org.junit.Test;
 
@@ -160,6 +161,30 @@ public class StyleSheetTest {
         var decls = sheet.getRules().get(0).declarations();
         assertEquals(1, decls.size());
         assertEquals(StylePropertyRegistry.Z_INDEX, decls.get(0).property());
+    }
+
+    @Test
+    public void boxSizingPropertyParsesToBorderBox() {
+        var sheet = StyleSheet.parse(".a { box-sizing: border-box; }");
+        var decls = sheet.getRules().get(0).declarations();
+        assertEquals(1, decls.size());
+        assertEquals(LayoutProperties.BOX_SIZING, decls.get(0).property());
+        assertEquals(BoxSizing.BORDER_BOX, decls.get(0).value().compute());
+    }
+
+    @Test
+    public void boxSizingDefaultsToBorderBoxWhenUnset() {
+        // Deliberate project default, not real CSS's actual initial value (content-box) — see
+        // LayoutProperties.BOX_SIZING / TaffyBridge.DEFAULT_TAFFY_STYLE.
+        assertEquals(BoxSizing.BORDER_BOX, LayoutProperties.BOX_SIZING.initialValue);
+    }
+
+    @Test
+    public void boxSizingCanBeSetToContentBoxExplicitly() {
+        var sheet = StyleSheet.parse(".a { box-sizing: content-box; }");
+        var decls = sheet.getRules().get(0).declarations();
+        assertEquals(1, decls.size());
+        assertEquals(BoxSizing.CONTENT_BOX, decls.get(0).value().compute());
     }
 
     private static Object findValue(java.util.List<StyleRule.Declaration> decls, com.crystalgui.style.property.StyleProperty<?> property) {
