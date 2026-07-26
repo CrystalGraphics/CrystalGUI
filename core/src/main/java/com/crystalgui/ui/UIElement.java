@@ -26,6 +26,7 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
+import dev.vfyjxf.taffy.util.MeasureFunc;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -840,6 +841,15 @@ public class UIElement {
         ctx.setColor(0xFFFFFFFF);
 
         style.getGeneralGroup().overlay().draw(ctx, x, y, width, height);
+    }
+
+    /** Non-null for elements whose size depends on their content (e.g. text) — Taffy calls this
+     * during layout to resolve intrinsic size. Ordinary elements return {@code null} (pure CSS
+     * sizing, the default) and are registered as plain leaves; see {@link UIWindow#registerElement}.
+     * Mixed trees (some leaves measured, most not) are fully supported by Taffy itself — no
+     * special-casing needed here beyond returning non-null when an override wants one. */
+    protected MeasureFunc measureFunc() {
+        return null;
     }
 
     // ── Window attachment / Taffy tree ──────────────────────────────────────

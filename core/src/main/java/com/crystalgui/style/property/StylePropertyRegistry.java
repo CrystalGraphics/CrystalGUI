@@ -7,6 +7,7 @@ import com.crystalgui.style.property.general.ints.IntProperty;
 import com.crystalgui.style.property.general.strings.StringValue;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.color.ColorProperty;
+import com.crystalgui.style.property.visual.text.FontFamilyValue;
 import com.crystalgui.style.property.visual.texture.TextureProperty;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.transition.TransitionSpec;
@@ -36,6 +37,13 @@ public class StylePropertyRegistry {
     // Matches real CSS: `color` inherits by default. Layout/box-model properties below (z-index,
     // clip, and everything in LayoutProperties) do not — none of them are inherited in real CSS either.
     public static final StyleProperty<Integer> COLOR = create(new ColorProperty("color", -1)).setInheritable(true);
+    // Matches real CSS: font-size/font-family both inherit by default. Default font-family points
+    // at the same default font CgUiPaintContext already loads, so an element with no font-family
+    // anywhere in its ancestor chain still resolves to something that works.
+    public static final StyleProperty<Float> FONT_SIZE = create("font-size", 16f).setInheritable(true);
+    public static final StyleProperty<List<String>> FONT_FAMILY = create(
+            "font-family", List.of("crystalgraphics:IBMPlexSans-Regular.ttf"), FontFamilyValue::new
+    ).setInheritable(true);
     public static final StyleProperty<Integer> Z_INDEX = create("z-index", 0).addListener((elem, prop, oldVal, newVal) -> {
         if (elem.getParent() != null) {
             elem.getParent().getRuntimeCache().sortedChildren.invalidate();
