@@ -2,9 +2,11 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
+import dev.vfyjxf.taffy.style.FlexDirection;
 
 /**
  * Clickable button with an internal text label and optional pre/post icon slots.
@@ -44,6 +46,10 @@ public class Button extends UIElement {
     private UIElement postIcon;
 
     public Button(String label) {
+        // DEFAULT origin — lowest cascade priority, so any stylesheet rule targeting `button`/a
+        // class still wins over this without needing `!important`.
+        StyleGroup.defaultPipeline(getStyle().getLayoutGroup(), l -> l.flexDirection(FlexDirection.ROW));
+
         this.label = new UIText(label == null ? "" : label);
         addInternalChild(this.label);
         this.label.setHitTest(false);
