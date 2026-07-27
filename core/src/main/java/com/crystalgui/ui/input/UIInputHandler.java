@@ -313,7 +313,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     private void emitAndLoseFocus(UIElement target) {
         this.focusedElement = null;
-        if (target != null) target.setFocused(false);
+        if (target == null) return;
+        target.setFocused(false);
+        target.setPressed(false);
         FocusEvent.Blur event = new FocusEvent.Blur(target);
         sendInputEvent(target, event);
     }
