@@ -21,9 +21,10 @@ public abstract class UIEvent {
     @Getter
     private PropagationPhase phase = PropagationPhase.CAPTURE;
 
-    public void setPhase(PropagationPhase newPhase) {
-        if (newPhase == null) return;
+    public UIEvent setPhase(PropagationPhase newPhase) {
+        if (newPhase == null) return this;
         this.phase = newPhase;
+        return this;
     }
 
     protected UIEvent(UIElement target, boolean bubbles) {
