@@ -50,7 +50,14 @@ public final class UIText extends UIElement {
 
     public UIText(String initialText) {
         text.set(initialText == null ? "" : initialText);
-        text.changed.connect((oldVal, newVal) -> shapedParagraph = null);
+        text.changed.connect((oldVal, newVal) -> {
+            shapedParagraph = null;
+            // A content-only change never touches a StyleProperty, so nothing else marks the Taffy
+            // node dirty (see TaffyBridge/ElementStyle.markTaffyStyleDirty — that chain only fires on
+            // style writes). Without this, isDirty() stays false forever and measureFunc() is never
+            // re-invoked after the text changes, silently freezing the box at its old size.
+            markTreeDirty();
+        });
     }
 
     public String getText() {
@@ -98,13 +105,23 @@ public final class UIText extends UIElement {
         };
     }
 
+    /** Forced probe width for {@code MIN_CONTENT} queries — see {@link #resolveMaxWidth}. */
+    private static final float MIN_CONTENT_PROBE_WIDTH = 1f;
+
     /** Maps Taffy's constraint for this axis to a {@code maxWidth} for
-     * {@link CgShapedParagraph#layout}. {@code MIN_CONTENT}/{@code MAX_CONTENT} are both treated as
-     * unbounded — a known v1 simplification; true min-content (wrap at the narrowest unbreakable
-     * word) would need a measurement mode {@code CgShapedParagraph} doesn't expose today, and matters
-     * far more for table-column-style sizing than typical flex/UI text. */
+     * {@link CgShapedParagraph#layout}. {@code MAX_CONTENT} maps to {@code 0f} (unbounded — the
+     * natural single-line width). {@code MIN_CONTENT} must NOT reuse that same unbounded value: real
+     * CSS min-content for text is the width of the longest unbreakable token, and Taffy's flex
+     * algorithm uses exactly that (its automatic-minimum-size pass, the {@code min-width:auto}
+     * equivalent) to decide how far a flex item is allowed to shrink before overflowing — answering
+     * it with the full natural width instead corrupts flex-shrink/wrap space distribution across
+     * sibling rows. Forcing an extremely narrow probe width here makes the line-breaker place every
+     * unbreakable token on its own line (nothing fits within {@link #MIN_CONTENT_PROBE_WIDTH}), so
+     * the resulting {@code totalWidth} — the widest of those forced single-token lines — is exactly
+     * the true min-content width, by construction. */
     private static float resolveMaxWidth(float knownWidth, AvailableSpace availableSpaceWidth) {
         if (!Float.isNaN(knownWidth)) return knownWidth;
+        if (availableSpaceWidth.isMinContent()) return MIN_CONTENT_PROBE_WIDTH;
         if (availableSpaceWidth.isDefinite()) return availableSpaceWidth.getValue();
         return 0f;
     }
@@ -117,10 +134,19 @@ public final class UIText extends UIElement {
         float contentX = getRuntimeCache().getX() + layout.border().left + layout.padding().left;
         float contentY = getRuntimeCache().getY() + layout.border().top + layout.padding().top;
         float contentWidth = layout.contentBoxWidth();
-        float contentHeight = layout.contentBoxHeight();
 
         CgFontFamily family = resolveFamily();
-        CgTextLayout textLayout = ensureShaped().layout(contentWidth, contentHeight);
+        // Deliberately 0f (unbounded), matching measureFunc()'s call — NOT layout.contentBoxHeight().
+        // UIText has no max-height/max-lines feature yet, so there's no legitimate bounded height to
+        // constrain against; passing the measured content height back in as maxHeight is a no-op when
+        // CgLineBreaker's height accounting agrees with itself, but CgLineBreaker's line-fitting budget
+        // (a single uniform per-paragraph lineHeight) can disagree with the real per-line combined
+        // metrics that produced this contentHeight in the first place — e.g. a multi-font-family line
+        // (fallback glyphs) followed by a plain line. When that happens the budget check trips early
+        // and CgLineBreaker.breakLines returns before appending the trailing line at all — not
+        // clipped, just silently dropped. Known upstream CrystalGraphics issue; revisit once UIText
+        // actually needs a bounded maxHeight (max-lines/ellipsis support).
+        CgTextLayout textLayout = ensureShaped().layout(contentWidth, 0f);
 
         ctx.setColor(0xFFFFFFFF);
         ctx.text().draw().layout(textLayout).family(family)
