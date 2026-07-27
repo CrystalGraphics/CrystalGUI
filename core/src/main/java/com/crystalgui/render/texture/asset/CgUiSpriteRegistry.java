@@ -6,6 +6,7 @@ import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiRepeat;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -122,7 +123,11 @@ public final class CgUiSpriteRegistry {
                 int[] textureSize = optIntArray(el, "textureSize");
                 int[] sprite = optIntArray(el, "sprite");
                 int[] border = optIntArray(el, "border");
-                elements.put(entry.getKey(), new ParsedElement(texture, textureSize, sprite, border));
+                String repeat = optString(el, "repeat");
+                Boolean fillCenter = optBoolean(el, "fillCenter");
+                Float borderScale = optFloat(el, "borderScale");
+                elements.put(entry.getKey(),
+                        new ParsedElement(texture, textureSize, sprite, border, repeat, fillCenter, borderScale));
             }
         }
         if (packTexture == null && elements.values().stream().allMatch(e -> e.texture == null)) {
@@ -134,7 +139,8 @@ public final class CgUiSpriteRegistry {
     private record ParsedPack(String texture, int[] textureSize, Map<String, ParsedElement> elements) {
     }
 
-    private record ParsedElement(String texture, int[] textureSize, int[] sprite, int[] border) {
+    private record ParsedElement(String texture, int[] textureSize, int[] sprite, int[] border,
+                                 String repeat, Boolean fillCenter, Float borderScale) {
         CgUiSprite toSprite(ParsedPack pack) {
             String resolvedTexture = texture != null ? texture : pack.texture;
             int[] resolvedTextureSize = textureSize != null ? textureSize : pack.textureSize;
@@ -151,8 +157,42 @@ public final class CgUiSpriteRegistry {
             }
             if (sprite != null && sprite.length == 4) sprite2.setSprite(sprite[0], sprite[1], sprite[2], sprite[3]);
             if (border != null && border.length == 4) sprite2.setBorder(border[0], border[1], border[2], border[3]);
+
+            if (fillCenter != null) sprite2.setFillCenter(fillCenter);
+            if (borderScale != null) sprite2.setBorderScale(borderScale);
+            if (repeat != null) {
+                CgUiRepeat[] modes = parseRepeat(repeat);
+                if (modes != null) {
+                    sprite2.setRepeat(modes[0], modes[1]);
+                } else {
+                    // Warn and stretch rather than throw: parsePack's exceptions are swallowed by
+                    // load(), which would discard the entire pack over one bad keyword.
+                    CrystalGuiCore.LOGGER.warn("CgUiSpriteRegistry: unknown repeat mode '{}' — using stretch. "
+                            + "Expected one or two of: stretch, repeat, round, space", repeat);
+                }
+            }
             return sprite2;
         }
+    }
+
+    /** {@code "repeat"} or {@code "repeat round"} — second axis defaults to the first, matching CSS
+     * {@code border-image-repeat}. {@code null} when unrecognised. */
+    private static CgUiRepeat[] parseRepeat(String raw) {
+        String[] words = raw.trim().split("\\s+");
+        if (words.length == 0 || words.length > 2) return null;
+        CgUiRepeat x = CgUiRepeat.parse(words[0]);
+        if (x == null) return null;
+        CgUiRepeat y = words.length == 2 ? CgUiRepeat.parse(words[1]) : x;
+        if (y == null) return null;
+        return new CgUiRepeat[]{x, y};
+    }
+
+    private static Boolean optBoolean(JsonObject obj, String field) {
+        return obj.has(field) ? obj.get(field).getAsBoolean() : null;
+    }
+
+    private static Float optFloat(JsonObject obj, String field) {
+        return obj.has(field) ? obj.get(field).getAsFloat() : null;
     }
 
     private static String optString(JsonObject obj, String field) {

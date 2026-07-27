@@ -5,7 +5,12 @@ import com.crystalgui.style.property.general.enums.EnumProperty;
 import com.crystalgui.style.property.general.floats.FloatProperty;
 import com.crystalgui.style.property.general.ints.IntProperty;
 import com.crystalgui.style.property.general.strings.StringValue;
+import com.crystalgui.style.property.visual.BoxOrigin;
+import com.crystalgui.style.property.visual.DrawableAlign;
+import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.border.LengthPercent;
+import com.crystalgui.style.property.visual.border.LengthPercentProperty;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.text.FontFamilyValue;
 import com.crystalgui.style.property.visual.texture.TextureProperty;
@@ -28,6 +33,18 @@ public class StylePropertyRegistry {
 
     public static final StyleProperty<CgUiDrawable> BACKGROUND = create("background", CgUiDrawable.EMPTY);
     public static final StyleProperty<CgUiDrawable> OVERLAY = create("overlay", CgUiDrawable.EMPTY);
+    // Geometry longhands for the `overlay` layer, mirroring CSS background-origin / object-fit /
+    // object-position. Defaults reproduce the engine's pre-existing behaviour exactly (stretch to
+    // the full border box), so adding them changes nothing until a stylesheet opts in. Deliberately
+    // NOT transition-enabled — enums don't interpolate.
+    // `background` has no equivalents yet: its rect doubles as CgUiRoundedRect's _BoxSize and as the
+    // basis for percentage border-radius, so it can't be re-boxed without redefining border-radius.
+    public static final StyleProperty<BoxOrigin> OVERLAY_ORIGIN =
+            create("overlay-origin", BoxOrigin.class, BoxOrigin.BORDER_BOX);
+    public static final StyleProperty<DrawableFit> OVERLAY_FIT =
+            create("overlay-fit", DrawableFit.class, DrawableFit.FILL);
+    public static final StyleProperty<DrawableAlign> OVERLAY_POSITION =
+            create("overlay-position", DrawableAlign.class, DrawableAlign.CENTER);
     // Distinct from BACKGROUND (a drawable) and COLOR (inherited, meant for text) — matches real CSS,
     // where `background-color` is its own independent fill layer. Not inherited.
     // Unset = white, a multiplicative identity for the tint model in UIElement.paintSelf — "no
@@ -42,8 +59,13 @@ public class StylePropertyRegistry {
     // anywhere in its ancestor chain still resolves to something that works.
     public static final StyleProperty<Float> FONT_SIZE = create("font-size", 16f).setInheritable(true);
     public static final StyleProperty<List<String>> FONT_FAMILY = create(
-            "font-family", List.of("crystalgraphics:IBMPlexSans-Regular.ttf"), FontFamilyValue::new
+            "font-family", List.of("crystalgui:ui/fonts/mojangles.ttf"), FontFamilyValue::new
     ).setInheritable(true);
+    // TODO: no-op. Parsed and cascaded so stylesheets can declare it without a warning, but nothing
+    // consumes it yet — CgTextRenderer/UIText have no drop-shadow support. Defaults false to match
+    // what actually renders today (no shadow is ever drawn). Inheritable, like the other text
+    // properties above.
+    public static final StyleProperty<Boolean> TEXT_SHADOW = create("text-shadow", false).setInheritable(true);
     public static final StyleProperty<Integer> Z_INDEX = create("z-index", 0).addListener((elem, prop, oldVal, newVal) -> {
         if (elem.getParent() != null) {
             elem.getParent().getRuntimeCache().sortedChildren.invalidate();
@@ -58,6 +80,28 @@ public class StylePropertyRegistry {
     // BorderRadiusProperties (see BorderRadiusShorthand) — not a registered property here, matching
     // how margin/padding/border-width work (BoxEdgeShorthands).
     public static final StyleProperty<Integer> BORDER_COLOR = create(new ColorProperty("border-color", 0xFF000000));
+    // A third drawable layer, drawn last (above `overlay`) and — unlike `border-width`, which feeds
+    // Taffy — completely layout-free. That's exactly why CSS has `outline`: it's the standard way to
+    // mark focus without resizing the element. Also frees `overlay` to stay a widget's own
+    // decoration (e.g. a checkbox's check mark) instead of being fought over for focus rings.
+    public static final StyleProperty<CgUiDrawable> OUTLINE = create("outline", CgUiDrawable.EMPTY);
+    // Positive expands the ring outward, negative insets it. Defaults to 0 (drawn exactly at the
+    // border box) — both because that's what every LDLib2 `focus-overlay` does, and because an
+    // outward ring is clipped by any ancestor with `overflow: hidden` (the scissor is real
+    // GL_SCISSOR_TEST and survives into nested layer FBOs). LengthPercent, not a bare float, so
+    // `2px` parses and so it can transition.
+    public static final StyleProperty<LengthPercent> OUTLINE_OFFSET =
+            create(new LengthPercentProperty("outline-offset", LengthPercent.ZERO));
+    // Stroke form of the outline, drawn as an SDF ring that follows border-radius. Used only when
+    // OUTLINE (the drawable) is EMPTY — same precedence CSS gives border-image over border.
+    // LengthPercent, not Taffy's LengthPercentageAuto: like border-radius, this is a paint-time
+    // quantity Taffy must never see (an outline is layout-free by definition).
+    public static final StyleProperty<LengthPercent> OUTLINE_WIDTH =
+            create(new LengthPercentProperty("outline-width", LengthPercent.ZERO));
+    // CSS's real default is `currentColor`; there's no currentColor mechanism here, so opaque white
+    // stands in. Rarely observable — outline-width defaults to 0, so nothing draws until both are set.
+    public static final StyleProperty<Integer> OUTLINE_COLOR =
+            create(new ColorProperty("outline-color", 0xFFFFFFFF));
     public static final StyleProperty<List<TransitionSpec>> TRANSITION =
             create("transition", List.of(), TransitionValue::new);
 

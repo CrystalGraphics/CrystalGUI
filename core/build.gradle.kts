@@ -34,9 +34,13 @@ dependencies {
     // CrystalGraphics API — resolved via composite build substitution to CG's mc1710 subproject
 //    compileOnly("com.crystalgraphics:crystalgraphics:1.0.0")
     compileOnly("com.crystalgraphics:core:1.0.0")
-    testCompileOnly("com.crystalgraphics:core:1.0.0")
     compileOnly("com.crystalgraphics:platform:1.0.0")
-    testCompileOnly("com.crystalgraphics:platform:1.0.0")
+    // testImplementation, not testCompileOnly: tests need CG on the RUNTIME classpath too, or
+    // anything that touches a CG type (e.g. CgUiSprite.setTexture -> CgTextureManager) dies with
+    // NoClassDefFoundError instead of running. Note this only makes the classes loadable — calls
+    // that actually allocate GL objects still need a live context and remain harness-only.
+    testImplementation("com.crystalgraphics:core:1.0.0")
+    testImplementation("com.crystalgraphics:platform:1.0.0")
     implementation("org.apache.logging.log4j:log4j-core:2.26.1")
 
     // Taffy layout engine + JOML (consumed from CG at runtime; needed here for compile)

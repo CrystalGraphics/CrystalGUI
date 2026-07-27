@@ -2,6 +2,7 @@ package com.crystalgui.style.property.visual.texture;
 
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiRepeat;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
 import com.crystalgui.style.CssParsingUtil;
@@ -98,21 +99,47 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
 
     private static @Nullable CgUiDrawable parseSprite(String args) {
         List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
-        if (parts.size() != 3 && parts.size() != 4) return null;
+        if (parts.size() < 3) return null;
         String path = unquote(parts.get(0).trim());
         int[] spriteRect = parseIntQuad(unquote(parts.get(1).trim()));
         int[] borderRect = parseIntQuad(unquote(parts.get(2).trim()));
         if (spriteRect == null || borderRect == null) return null;
 
         CgUiSprite sprite = new CgUiSprite().setTexture(path);
-        if (parts.size() == 4) {
-            int[] refSize = parseIntPair(unquote(parts.get(3).trim()));
-            if (refSize == null) return null;
-            sprite.setTextureSizeReference(refSize[0], refSize[1]);
+        // Trailing args are order-independent and type-sniffed, matching image()'s existing style:
+        // an int pair is the texture-size reference, a keyword (or keyword pair) is the tiling mode.
+        for (int i = 3; i < parts.size(); i++) {
+            String arg = unquote(parts.get(i).trim());
+
+            int[] refSize = parseIntPair(arg);
+            if (refSize != null) {
+                sprite.setTextureSizeReference(refSize[0], refSize[1]);
+                continue;
+            }
+            CgUiRepeat[] repeat = parseRepeatPair(arg);
+            if (repeat != null) {
+                sprite.setRepeat(repeat[0], repeat[1]);
+                continue;
+            }
+            return null; // unrecognized trailing arg
         }
         return sprite
                 .setSprite(spriteRect[0], spriteRect[1], spriteRect[2], spriteRect[3])
                 .setBorder(borderRect[0], borderRect[1], borderRect[2], borderRect[3]);
+    }
+
+    /** {@code "repeat"} or {@code "repeat round"} — CSS {@code border-image-repeat}'s 1-or-2 value
+     * form, second axis defaulting to the first. {@code null} when the token isn't a repeat keyword
+     * at all, which is what lets the caller sniff argument types. */
+    static @Nullable CgUiRepeat[] parseRepeatPair(String raw) {
+        if (raw == null) return null;
+        String[] words = raw.trim().split("\\s+");
+        if (words.length == 0 || words.length > 2) return null;
+        CgUiRepeat x = CgUiRepeat.parse(words[0]);
+        if (x == null) return null;
+        CgUiRepeat y = words.length == 2 ? CgUiRepeat.parse(words[1]) : x;
+        if (y == null) return null;
+        return new CgUiRepeat[]{x, y};
     }
 
     private static @Nullable CgUiDrawable parseAsset(String args) {

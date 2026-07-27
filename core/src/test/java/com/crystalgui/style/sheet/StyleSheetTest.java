@@ -218,7 +218,159 @@ public class StyleSheetTest {
         assertTrue(StylePropertyRegistry.FONT_SIZE.isInheritable());
         assertTrue(StylePropertyRegistry.FONT_FAMILY.isInheritable());
         assertEquals((Float) 16f, StylePropertyRegistry.FONT_SIZE.initialValue);
-        assertEquals(java.util.List.of("crystalgraphics:IBMPlexSans-Regular.ttf"), StylePropertyRegistry.FONT_FAMILY.initialValue);
+        assertEquals(java.util.List.of("crystalgui:ui/fonts/mojangles.ttf"), StylePropertyRegistry.FONT_FAMILY.initialValue);
+    }
+
+    // ── `outline` shorthand disambiguation ──────────────────────────────────────────────────────
+    // `outline` is polymorphic: a drawable slot OR a width/color shorthand, decided by the value's
+    // shape. These pin each branch, since a mis-dispatch is silent (you just get the wrong property).
+
+    private static java.util.List<StyleRule.Declaration> outlineDecls(String value) {
+        return StyleSheet.parse(".a { outline: " + value + "; }").getRules().get(0).declarations();
+    }
+
+    private static boolean declares(java.util.List<StyleRule.Declaration> decls,
+                                    com.crystalgui.style.property.StyleProperty<?> property) {
+        return decls.stream().anyMatch(d -> d.property() == property);
+    }
+
+    @Test
+    public void outlineWithFunctionValueResolvesToTheDrawableSlot() {
+        var decls = outlineDecls("asset(\"crystalgui:ore\", \"focus-ring\")");
+        assertEquals(1, decls.size());
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE));
+    }
+
+    @Test
+    public void outlineWithWidthAndColorExpandsToBothLonghands() {
+        var decls = outlineDecls("2px #4488ff");
+        assertEquals(2, decls.size());
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
+        assertFalse(declares(decls, StylePropertyRegistry.OUTLINE));
+    }
+
+    @Test
+    public void outlineShorthandIsOrderIndependent() {
+        var decls = outlineDecls("#4488ff 2px");
+        assertEquals(2, decls.size());
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
+    }
+
+    @Test
+    public void outlineWidthOnlyExpandsToWidth() {
+        var decls = outlineDecls("1px");
+        assertEquals(1, decls.size());
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+    }
+
+    /** A bare color means outline-color, never a solid-fill drawable — a solid drawable outline
+     * would just cover the element, so it's never what an author meant. */
+    @Test
+    public void outlineBareColorExpandsToColorNotDrawable() {
+        var decls = outlineDecls("#4488ff");
+        assertEquals(1, decls.size());
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
+        assertFalse(declares(decls, StylePropertyRegistry.OUTLINE));
+    }
+
+    /** rgb()/rgba() are colors, not drawable functions, despite having parens. */
+    @Test
+    public void outlineRgbFunctionIsTreatedAsColorNotDrawable() {
+        var decls = outlineDecls("2px rgb(68, 136, 255)");
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+        assertFalse(declares(decls, StylePropertyRegistry.OUTLINE));
+    }
+
+    @Test
+    public void outlineNoneExpandsToZeroWidth() {
+        var decls = outlineDecls("none");
+        assertEquals(1, decls.size());
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+    }
+
+    @Test
+    public void outlineOffsetAndWidthAreSeparateRegisteredProperties() {
+        var decls = StyleSheet.parse(".a { outline-offset: 2px; outline-width: 3px; outline-color: #fff; }")
+                .getRules().get(0).declarations();
+        assertEquals(3, decls.size());
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_OFFSET));
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
+    }
+
+    // ── sprite() tiling args, end-to-end through the stylesheet parser ──────────────────────────
+
+    private static com.crystalgui.render.texture.CgUiSprite parseSpriteValue(String extraArgs) {
+        var decls = StyleSheet.parse(".a { background: sprite(\"t.png\", \"0 0 16 16\", \"4 4 4 4\""
+                + extraArgs + "); }").getRules().get(0).declarations();
+        assertEquals(1, decls.size());
+        Object value = decls.get(0).value().compute();
+        assertTrue("expected a CgUiSprite, got " + value,
+                value instanceof com.crystalgui.render.texture.CgUiSprite);
+        return (com.crystalgui.render.texture.CgUiSprite) value;
+    }
+
+    @Test
+    public void spriteDefaultsToStretchOnBothAxes() {
+        var sprite = parseSpriteValue("");
+        assertEquals(com.crystalgui.render.texture.CgUiRepeat.STRETCH, sprite.getRepeatX());
+        assertEquals(com.crystalgui.render.texture.CgUiRepeat.STRETCH, sprite.getRepeatY());
+    }
+
+    /** One keyword sets both axes, matching CSS border-image-repeat's shorthand. */
+    @Test
+    public void spriteSingleRepeatKeywordAppliesToBothAxes() {
+        var sprite = parseSpriteValue(", \"round\"");
+        assertEquals(com.crystalgui.render.texture.CgUiRepeat.ROUND, sprite.getRepeatX());
+        assertEquals(com.crystalgui.render.texture.CgUiRepeat.ROUND, sprite.getRepeatY());
+    }
+
+    @Test
+    public void spriteTwoRepeatKeywordsSetAxesIndependently() {
+        var sprite = parseSpriteValue(", \"repeat space\"");
+        assertEquals(com.crystalgui.render.texture.CgUiRepeat.REPEAT, sprite.getRepeatX());
+        assertEquals(com.crystalgui.render.texture.CgUiRepeat.SPACE, sprite.getRepeatY());
+    }
+
+    /** Trailing args are type-sniffed, so the size reference and the tiling keyword may appear in
+     * either order — the same contract image() already had. */
+    @Test
+    public void spriteTrailingArgsAreOrderIndependent() {
+        var a = parseSpriteValue(", \"64 64\", \"round\"");
+        assertEquals(com.crystalgui.render.texture.CgUiRepeat.ROUND, a.getRepeatX());
+        var b = parseSpriteValue(", \"round\", \"64 64\"");
+        assertEquals(com.crystalgui.render.texture.CgUiRepeat.ROUND, b.getRepeatX());
+    }
+
+    @Test
+    public void spriteRejectsAnUnknownTrailingArg() {
+        var decls = StyleSheet.parse(
+                        ".a { background: sprite(\"t.png\", \"0 0 16 16\", \"4 4 4 4\", \"wobble\"); }")
+                .getRules().get(0).declarations();
+        assertTrue("an unparseable sprite() must not yield a drawable",
+                decls.isEmpty() || decls.get(0).value().compute() == null);
+    }
+
+    /** Border/slice geometry survives the widened trailing-arg loop. */
+    @Test
+    public void spriteBorderAndSizeReferenceStillParse() {
+        var sprite = parseSpriteValue(", \"64 64\"");
+        assertEquals(4f, sprite.getBorderLeft(), 0.001f);
+        assertEquals(4f, sprite.getBorderBottom(), 0.001f);
+        // 16x16 sprite with a 4px border on each side -> 8x8 centre, the horizontal tile size.
+        assertEquals(8f, sprite.centerSourceWidth(), 0.001f);
+        assertEquals(8f, sprite.centerSourceHeight(), 0.001f);
+    }
+
+    /** borderScale multiplies the tile size, so a 2x scale doubles it (Unity's PPU multiplier). */
+    @Test
+    public void borderScaleScalesTheCentreTileSize() {
+        var sprite = parseSpriteValue("");
+        sprite.setBorderScale(2f);
+        assertEquals(16f, sprite.centerSourceWidth(), 0.001f);
     }
 
     private static Object findValue(java.util.List<StyleRule.Declaration> decls, com.crystalgui.style.property.StyleProperty<?> property) {

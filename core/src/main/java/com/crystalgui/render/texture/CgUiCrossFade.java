@@ -50,4 +50,24 @@ public final class CgUiCrossFade implements CgUiDrawable {
         ctx.withLayerOpacity(1f - t, () -> from.draw(ctx, mouseX, mouseY, x, y, width, height));
         ctx.withLayerOpacity(t, () -> to.draw(ctx, mouseX, mouseY, x, y, width, height));
     }
+
+    /** Interpolates the two sides' natural sizes so a fitted layer ({@code overlay-fit: none} etc.)
+     * animates smoothly between them instead of snapping. Reports -1 (unknown) unless BOTH sides
+     * have a natural size — a fade between a sized icon and a plain colour has no meaningful
+     * intermediate size, and degrading that whole transition to {@code fill} is steadier than
+     * having it pop when the fade starts or ends. */
+    @Override
+    public float intrinsicWidth() {
+        return lerpIntrinsic(from.intrinsicWidth(), to.intrinsicWidth());
+    }
+
+    @Override
+    public float intrinsicHeight() {
+        return lerpIntrinsic(from.intrinsicHeight(), to.intrinsicHeight());
+    }
+
+    private float lerpIntrinsic(float fromValue, float toValue) {
+        if (fromValue <= 0f || toValue <= 0f) return -1f;
+        return fromValue + (toValue - fromValue) * t;
+    }
 }

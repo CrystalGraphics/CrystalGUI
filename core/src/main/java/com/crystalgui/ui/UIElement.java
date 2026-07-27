@@ -7,6 +7,7 @@ import com.crystalgui.core.data.IntCacheCell;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.CgUiCrossFade;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiLayerBox;
 import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiRoundedRect;
 import com.crystalgui.render.texture.CgUiSprite;
@@ -14,6 +15,7 @@ import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.OverflowClip;
 import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
@@ -152,6 +154,23 @@ public class UIElement {
     public void setEnabled(boolean enabled) {
         if (this.isEnabled == enabled) return;
         this.isEnabled = enabled;
+        // focusable() reads isEnabled, so the cached focus chain is now stale. Without this, tab
+        // traversal keeps believing a disabled element is focusable and can walk into a subtree
+        // with nothing focusable left in it.
+        invalidateFocusableChain();
+        if (!enabled) {
+            // setPressed() bails on !isEnabled(), so a press held at the moment of disabling would
+            // otherwise latch :active on permanently with no way to ever clear it. Clear before the
+            // flag can trap it.
+            if (this.isPressed) {
+                this.isPressed = false;
+            }
+            // A disabled element must not keep keyboard focus — it would go on receiving key events
+            // and Space/Enter-synthesised mouse events, and Tab would resume from a dead node.
+            if (this.isFocused && attachedWindow != null) {
+                attachedWindow.getInputHandler().blurIfFocused(this);
+            }
+        }
         onStyleChanged();
         invalidateStyleMatch();
     }
@@ -319,8 +338,13 @@ public class UIElement {
 
     private void onRemoved() {
         this.runtimeCache.depth.invalidate();
+        // Drop focus before detaching — otherwise UIInputHandler keeps a reference into a subtree
+        // that's no longer in the tree, and tab traversal from it silently restarts from the top.
+        if (this.isFocused && attachedWindow != null) {
+            attachedWindow.getInputHandler().blurIfFocused(this);
+        }
         children.forEach(UIElement::onRemoved);
-        events.emitToGroup(new DOMEvent.ElementAdded(this));
+        events.emitToGroup(new DOMEvent.ElementRemoved(this));
     }
 
     private boolean hasParent() {
@@ -344,7 +368,11 @@ public class UIElement {
         return this.isEnabled() && this.getFocusPolicy() != FocusPolicy.NONE && this.style.taffyBridge.style.display != TaffyDisplay.NONE;
     }
 
-    private void invalidateFocusableChain() {
+    /** Marks this element and every ancestor as needing their cached "is anything here focusable"
+     * answer recomputed. Must be called by anything that can change {@link #focusable()} — enabled
+     * state, focus policy, or {@code display}. Public because {@code display} is driven from the
+     * style layer ({@code LayoutProperties}), outside this package. */
+    public void invalidateFocusableChain() {
         UIElement el = this;
         while (el != null) {
             el.getRuntimeCache().hasFocusableDescendant.invalidate();
@@ -421,6 +449,17 @@ public class UIElement {
         boolean isZero() {
             return rxTL == 0f && ryTL == 0f && rxTR == 0f && ryTR == 0f
                     && rxBR == 0f && ryBR == 0f && rxBL == 0f && ryBL == 0f;
+        }
+
+        /** Grows every non-zero radius outward, for a shape drawn around this one (an outline ring).
+         * Per-axis because the caller's inset already resolves per-axis. A zero radius stays zero —
+         * a square corner offset outward is still square, matching CSS. */
+        CornerRadii expand(float dx, float dy) {
+            return new CornerRadii(
+                    rxTL > 0f ? rxTL + dx : 0f, ryTL > 0f ? ryTL + dy : 0f,
+                    rxTR > 0f ? rxTR + dx : 0f, ryTR > 0f ? ryTR + dy : 0f,
+                    rxBR > 0f ? rxBR + dx : 0f, ryBR > 0f ? ryBR + dy : 0f,
+                    rxBL > 0f ? rxBL + dx : 0f, ryBL > 0f ? ryBL + dy : 0f);
         }
     }
 
@@ -616,9 +655,14 @@ public class UIElement {
      * into it would re-trigger selector matching on every single style write.
      */
     protected void invalidateStyleMatch() {
-        if (attachedWindow != null) {
-            attachedWindow.getStyleEngine().markDirty(this);
-        }
+        if (attachedWindow == null) return;
+        attachedWindow.getStyleEngine().markDirty(this);
+        // Descendants must be re-matched too: a descendant selector can key off THIS element's
+        // state (e.g. `checkbox:checked .__mark__`, `button:hover .__icon__`), so a change here
+        // can change which rules apply further down. Without this, a composite widget's internal
+        // children keep a stale match forever and never visually react to the root's
+        // hover/press/checked state.
+        for (UIElement child : children) child.invalidateStyleMatch();
     }
 
     // ── Paint ────────────────────────────────────────────────────────────────
@@ -658,6 +702,7 @@ public class UIElement {
             paintSelf(ctx);
             paintChildren(ctx, overflow);
             paintOverlay(ctx);
+            paintOutline(ctx);
             return;
         }
 
@@ -682,6 +727,11 @@ public class UIElement {
         }
 
         paintOverlay(ctx); // unchanged: unmasked, drawn after children composite
+        // Inside the layer, so the outline is multiplied by this element's own opacity in the blit
+        // below — matching CSS, where an outline belongs to the element's opacity group. (Drawing it
+        // after blitLayer instead would keep a focus ring fully legible on a faded element; that's a
+        // deliberate non-choice, since it would break `opacity` as a uniform whole-subtree fade.)
+        paintOutline(ctx);
         ctx.endLayerFbo();
         ctx.blitLayer(subtreeFbo, opacity);
     }
@@ -905,11 +955,110 @@ public class UIElement {
 
     /** Override for custom drawing that must appear above children. Called after children paint. */
     protected void paintOverlay(CgUiPaintContext ctx) {
-        final float x = runtimeCache.getX(), y = runtimeCache.getY(), width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
         // Reset ambient tint — a descendant's own paintSelf/paintOverlay may have left it non-white.
         ctx.setColor(0xFFFFFFFF);
 
-        style.getGeneralGroup().overlay().draw(ctx, x, y, width, height);
+        GeneralGroup styleGen = style.getGeneralGroup();
+        CgUiDrawable overlay = styleGen.overlay();
+        if (overlay == CgUiDrawable.EMPTY) return;
+
+        // `overlay-origin` picks which box the layer is laid into, then `overlay-fit`/`-position`
+        // size and place the drawable inside it. Defaults (border-box + fill) reproduce the
+        // pre-longhand behaviour of stretching across the element's whole outer box exactly.
+        CgUiLayerBox originBox = resolveOriginBox(styleGen.overlayOrigin());
+        CgUiLayerBox box = CgUiLayerBox.resolve(overlay,
+                originBox.x(), originBox.y(), originBox.width(), originBox.height(),
+                styleGen.overlayFit(), styleGen.overlayPosition());
+
+        overlay.draw(ctx, box.x(), box.y(), box.width(), box.height());
+    }
+
+    /**
+     * Paints the {@code outline} layer — drawn last, above {@code overlay} and above all children.
+     *
+     * <p>Deliberately layout-free: the rect comes from the already-resolved border box expanded by
+     * {@code outline-offset}, and nothing here feeds Taffy. That's the whole reason this layer
+     * exists — {@code border-width} <em>does</em> feed layout, so it can't be used to mark focus
+     * without resizing the element, and {@code overlay} is typically already spoken for by a
+     * widget's own decoration (a checkbox's check mark, say).</p>
+     *
+     * <p>Not clipped by this element's own {@code overflow: hidden} (its scissor is popped inside
+     * {@code paintChildren}, and the mask only multiplies the children layer). It IS clipped by an
+     * <em>ancestor</em>'s scissor/mask, so a positive {@code outline-offset} inside a scroll view
+     * will be cut — real CSS behaves the same way, which is why the offset defaults to 0.</p>
+     */
+    protected void paintOutline(CgUiPaintContext ctx) {
+        GeneralGroup styleGen = style.getGeneralGroup();
+        CgUiDrawable outline = styleGen.outline();
+        float strokeWidth = styleGen.outlineWidth().resolve(runtimeCache.getWidth());
+        boolean hasDrawable = outline != CgUiDrawable.EMPTY;
+        if (!hasDrawable && strokeWidth <= 0f) return;
+
+        // Reset ambient tint — children painted arbitrary things before we got here.
+        ctx.setColor(0xFFFFFFFF);
+
+        final float x = runtimeCache.getX(), y = runtimeCache.getY();
+        final float width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
+        // Percent offsets resolve per-axis against the element's own box, same convention as
+        // border-radius (CSS itself only allows <length> here, so a percent is an author error we
+        // interpret rather than reject).
+        LengthPercent offset = styleGen.outlineOffset();
+        float offsetX = offset.resolve(width);
+        float offsetY = offset.resolve(height);
+
+        if (hasDrawable) {
+            // Drawable wins when both are set — same precedence CSS gives border-image over border.
+            outline.draw(ctx, x - offsetX, y - offsetY,
+                    Math.max(0f, width + 2f * offsetX), Math.max(0f, height + 2f * offsetY));
+            return;
+        }
+
+        // SDF stroke form. The shader measures _BorderWidth INWARD from the shape's outer edge,
+        // while a CSS outline grows OUTWARD from the offset edge — so inflate by offset+width and
+        // let the inward stroke land exactly in the band between offset and offset+width.
+        float insetX = offsetX + strokeWidth;
+        float insetY = offsetY + strokeWidth;
+        // Resolve radii against the element's OWN box, then expand. Resolving against the inflated
+        // box instead would re-scale percentage radii and produce a visibly over-curved ring.
+        CornerRadii radii = resolveCornerRadii(width, height).expand(insetX, insetY);
+
+        int color = styleGen.outlineColor();
+        // Transparent fill that keeps the stroke's RGB: the shader mixes border->fill on straight
+        // (non-premultiplied) alpha, so a plain 0x00000000 fill would drag the inner anti-aliased
+        // edge toward black and leave a dark fringe. Same RGB, zero alpha = a clean alpha ramp.
+        CgUiRoundedRect ring = buildFillOnlyRoundedRect(radii, new ColorFill(color & 0x00FFFFFF));
+        ring.setBorder(strokeWidth, color);
+        ring.draw(ctx, x - insetX, y - insetY, width + 2f * insetX, height + 2f * insetY);
+    }
+
+    /** Absolute-screen rect for one of the CSS box-model boxes.
+     *
+     * <p>Uses the real per-edge {@code border()}/{@code padding()} values rather than the
+     * {@code border().left}-for-every-edge shortcut taken elsewhere in this class, so an asymmetric
+     * box resolves correctly. Note Taffy's own {@code Layout.contentBoxX()/contentBoxY()} are
+     * <em>parent-relative</em> and unusable here — hence accumulating from
+     * {@code runtimeCache.getX()/getY()}, matching what {@code UIText.paintOverlay} already does. */
+    private CgUiLayerBox resolveOriginBox(BoxOrigin origin) {
+        final float x = runtimeCache.getX(), y = runtimeCache.getY();
+        final float width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
+        if (origin == BoxOrigin.BORDER_BOX) {
+            return new CgUiLayerBox(x, y, width, height);
+        }
+
+        var layout = getTaffyLayout();
+        var border = layout.border();
+        float insetLeft = border.left, insetTop = border.top;
+        float insetRight = border.right, insetBottom = border.bottom;
+        if (origin == BoxOrigin.CONTENT_BOX) {
+            var padding = layout.padding();
+            insetLeft += padding.left;
+            insetTop += padding.top;
+            insetRight += padding.right;
+            insetBottom += padding.bottom;
+        }
+        return new CgUiLayerBox(x + insetLeft, y + insetTop,
+                Math.max(0f, width - insetLeft - insetRight),
+                Math.max(0f, height - insetTop - insetBottom));
     }
 
     /** Non-null for elements whose size depends on their content (e.g. text) — Taffy calls this

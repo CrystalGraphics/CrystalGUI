@@ -163,7 +163,108 @@ properties, matching real CSS's separation:
   paints as a flat fill directly — gated on **candidate existence**
   (`ElementStyle.containsCandidate`), not on the resolved value, since the resolved value defaults to
   opaque white either way.
-- `color` — inheritable, reserved for text once text elements exist; must never tint `background`.
+- `color` — inheritable, used for text glyph color; must never tint `background`.
+
+### 9-slice tiling
+
+A `sprite(...)` with a non-zero border is drawn as a 9-slice. By default every region **stretches**;
+CSS `border-image-repeat`'s modes are available as a trailing keyword (one value, or two for
+per-axis). Corners never tile, matching CSS.
+
+| mode | behaviour |
+|---|---|
+| `stretch` | one copy smeared across the span (default) |
+| `repeat` | whole tiles at natural size; the last one is clipped |
+| `round` | tile size adjusted so a whole number fits exactly — no clipped tile |
+| `space` | whole tiles at natural size, leftover split into equal gaps (not drawn) |
+
+```css
+background: sprite("tex.png", "0 0 16 16", "4 4 4 4", "round");        /* both axes */
+background: sprite("tex.png", "0 0 16 16", "4 4 4 4", "repeat space"); /* x, then y */
+```
+
+Trailing args are type-sniffed and order-independent, so the optional `"refW refH"` size reference
+and the tiling keyword can appear in either order.
+
+Sprite-pack JSON additionally supports two Unity-derived options that have no `sprite(...)` syntax
+(a bare number or extra keyword there would be too obscure to read):
+
+- **`fillCenter`** (bool, default `true`) — Unity's *Fill Center*; `false` draws the frame with a
+  see-through middle.
+- **`borderScale`** (number, default `1`) — Unity's *Pixels Per Unit Multiplier*; scales the slice
+  widths *and* tile sizes, so a 4px source border can render chunky at 8px.
+
+**Both renderers implement this**, and must stay in agreement: `CgUiSprite`'s CPU quad loop, and the
+`WITH_9SLICE_FILL` shader branch used whenever the element has a `border-radius`/`border-width`.
+Since routing depends on an unrelated style property, a divergence would show up as "adding a
+border-radius changed my tiling". They agree by construction — `CgUiRepeat.tileCount` runs **once in
+Java** and the count is handed to the shader as a uniform rather than recomputed there.
+
+Two deliberate deviations, both verified: `space` with no room for a whole tile falls back to
+`stretch` (CSS draws nothing), and tile *positions* can differ between the two paths by up to 1
+logical px under `round`, because the CPU path snaps vertex positions to integers while the shader
+is continuous. `repeat` matches exactly, since its tile size is the integer source size.
+
+**Texture resolution is lazy.** `CgUiSprite.setTexture(String)` records the path and only resolves it
+to a real GL texture on first `getTexture()`/`draw()`. Creating a texture is a GL operation, but
+style values are computed whenever a stylesheet is parsed — potentially before a GL context exists,
+and always without one under unit test. Eager resolution made a `sprite(...)` value silently compute
+to `null` in those cases, because `StyleValue.compute()` catches and swallows the failure. An
+author-supplied `"refW refH"` survives the later resolution (tracked separately), since overriding
+the real texture's dimensions is exactly what that argument is for.
+
+**Three drawable layers**, all `TextureProperty` and all costing zero layout nodes — decoration is a
+paint concern here, not a tree concern (contrast LDLib2, which nests a real child element per
+decorative visual because its style system lacks background geometry controls):
+
+| Layer | Painted | Clipped by own mask/scissor? | Geometry longhands |
+|---|---|---|---|
+| `background` | before children | no | *(none — see §9)* |
+| `overlay` | after children | no | `overlay-origin`, `overlay-fit`, `overlay-position` |
+| `outline` | after overlay, last | no | `outline-offset`, `outline-width`, `outline-color` |
+
+- **`overlay-origin`** (`border-box`\|`padding-box`\|`content-box`, default `border-box`) — CSS
+  `background-origin`. Which box the layer is laid into.
+- **`overlay-fit`** (`fill`\|`contain`\|`cover`\|`none`, default `fill`) — CSS `object-fit`, the
+  honest analogue since this engine fits *one* drawable into a box rather than tiling. `contain`/
+  `cover`/`none` need the drawable's natural size (`CgUiDrawable.intrinsicWidth()/intrinsicHeight()`,
+  `-1` when it has none); every mode degrades to `fill` when unknown, so solid colours and SDF shapes
+  keep filling as before. `CgUiSprite` reports its source-rect size, interpreted 1:1 as logical px.
+- **`overlay-position`** (9 keywords, default `center`) — CSS `object-position`, keyword subset.
+- **`outline`** — a layout-free ring drawn above everything, at the border box expanded by
+  `outline-offset` (a `LengthPercent`, so `2px`/`2`/`%` all parse; default `0`). This exists because
+  `border-width` feeds Taffy and therefore *resizes* the element, making it unusable for focus
+  indication — exactly why CSS has `outline`. It also frees `overlay` to stay a widget's own
+  decoration (e.g. `checkbox:checked .__mark__ { overlay: <check glyph> }`) instead of being fought
+  over for focus rings.
+
+  It comes in **two forms**, with the drawable winning when both are set (the precedence CSS gives
+  `border-image` over `border`):
+
+  1. **Drawable** — `outline: asset("crystalgui:ore", "focus-ring")`. A 9-slice ring texture.
+  2. **SDF stroke** — `outline: 2px #4488ff`, i.e. `outline-width` + `outline-color`. Rendered as a
+     `CgUiRoundedRect` with a transparent fill, so it **follows `border-radius` for free** and needs
+     no texture. The fill is `outlineColor & 0x00FFFFFF` (same RGB, zero alpha) rather than
+     `0x00000000`: the shader mixes border→fill on straight alpha, so a black-transparent fill
+     drags the inner AA edge toward black and leaves a visible dark fringe.
+
+  `outline` is therefore **polymorphic at parse time** (`OutlineShorthand`), dispatching on the
+  value's shape: a non-color function call (`asset(…)`/`image(…)`/`sprite(…)`) → the drawable slot;
+  `none` → `outline-width: 0`; otherwise `<length>` and/or `<color>` tokens, order-independent, →
+  the two longhands. A **bare color means `outline-color`**, not a solid-fill drawable — a solid
+  drawable outline would just cover the element. `rgb()`/`rgba()` are recognised as colors, not
+  drawable functions, despite having parens.
+
+  Geometry note: the SDF shader strokes *inward* from a shape's outer edge, while a CSS outline
+  grows *outward*, so `paintOutline` inflates by `offset + width` and lets the inward stroke land in
+  the band between them. Corner radii are resolved against the element's **own** box and then
+  expanded (`CornerRadii.expand`) — re-resolving them against the inflated box would re-scale
+  percentage radii into a visibly over-curved ring.
+
+Defaults across all three reproduce pre-longhand behaviour exactly (stretch to the full border box,
+no outline), so none of this changes rendering until a stylesheet opts in. The fit math lives in the
+reusable `CgUiLayerBox.resolve(...)`, deliberately standalone so `background` can adopt it if the
+`border-radius` coupling above is ever resolved.
 
 ---
 
@@ -283,10 +384,12 @@ band's *color* forced to `#00000000` instead of its real color — since the sha
 staying opaque across the inner region. No shader changes needed for this — the exact "border color
 to `#00000000`" framing the feature was originally specified with.
 
-**Ordering** (background → children → mask composite → overlay → blit-with-opacity): the mask
-composites *after* children (so it clips both background and children together) but *before*
-overlay, so the overlay always draws over full, unclipped content — matching how a 9-slice frame
-graphic typically sits on top of whatever it frames.
+**Ordering** (background → children → mask composite → overlay → outline → blit-with-opacity): the
+mask composites *after* children but *before* overlay. It clips **only the children** — `paintSelf`
+draws the background straight into `subtreeFbo` while the mask multiplies a separate nested
+`childrenFbo`, so the background is never masked (see the explicit comment on `paintSelf`'s call in
+`UIElement.drawSubtree`). Overlay and outline likewise draw over full, unclipped content — matching
+how a 9-slice frame graphic typically sits on top of whatever it frames.
 
 **Not built**: masking with a *custom* (non-self) drawable — today the mask is always the element's
 own shape; a `mask-source:` (or similar) property to point at an arbitrary drawable is a natural
@@ -298,15 +401,49 @@ something creates very deep transient nesting.
 
 ## 9. Known Gaps vs. the Web
 
-- **No general `opacity` property.** `_LayerOpacity` only exists as cross-fade/morph plumbing, not a
-  real cascading `opacity` on arbitrary elements/subtrees.
-- **No external stylesheets** — `StyleSheet.parse(String)` only; no file loading, `@import`, media
-  queries, or CSS custom properties (`--var`/`var()`).
+- **No `@import` or media queries.** External stylesheets *are* supported now —
+  `StyleSheetRegistry.of("ns:path")` loads `assets/{ns}/ui/styles/{path}.css` through `CgIO`, so a
+  resource pack ships a theme just by placing a file at that path. CSS custom properties
+  (`--var`/`var()`) are implemented too.
 - **No `:nth-child`, attribute selectors, or `~`/`+` sibling combinators** — only `>` and descendant.
-- **No `background-position`/`-size`/`-repeat`** as independent, cascadable/animatable properties —
-  the engine's analog is baked-in crop rects on `image()`/`sprite()` at parse time.
-- **No text styling** — `color` is wired and inheritable in anticipation, but no text elements exist
-  yet, so `font-*`, `text-align`, etc. don't either.
+- **No pseudo-elements** (`::before`/`::after`) — decorative sub-visuals use the `overlay`/`outline`
+  paint layers (§5) or a real internal child with a fixed class, not generated content.
+- **No `background-position`/`-size`/`-origin`** as independent properties — the analog is
+  baked-in crop rects on `image()`/`sprite()` at parse time. **`overlay` and `outline` are not
+  subject to this** (see §5): `overlay` has real `-origin`/`-fit`/`-position` longhands, and
+  `outline` has `-offset`. `background` can't get equivalents without design work, because its rect
+  doubles as `CgUiRoundedRect`'s `_BoxSize` *and* as the basis percentage `border-radius` resolves
+  against — re-boxing it would silently redefine what `border-radius` means.
+- **Tiling is a property of the sprite value, not the element.** CSS `border-image-repeat`'s four
+  modes exist as a trailing `sprite(…)` keyword / JSON field (see §5), not as a cascading
+  `background-repeat` property. Consequently it can't be varied per state (`:hover` etc.) without
+  declaring a second sprite value. Tiling also only applies to **9-slice** sprites — a borderless
+  `image()` still stretches, since it never enters the slicing path.
+- **No Unity-style "adaptive" tiling** (stretch below a size threshold, tile above). `round` covers
+  the main motivation, avoiding a clipped final tile.
+- **No `outline-clip`/`background-clip`** — the outline is clipped by neither the element's own
+  `border-radius` nor its `overflow: hidden`. It *is* clipped by an **ancestor's** scissor/mask
+  (`pushScissor` drives real `GL_SCISSOR_TEST` and survives into nested layer FBOs), so a positive
+  `outline-offset` inside a scroll view gets cut — real CSS behaves the same way.
+- **No `overlay-color`** — `paintOverlay`/`paintOutline` reset the ambient tint to white, so those
+  layers can only be tinted via a tint baked into the value (`image(path, #tint)`), unlike
+  `background`, which `background-color` multiplies. (The SDF outline stroke is deliberately immune
+  to ambient tint — the shader applies the vertex tint to `fillColor` only, so a focus ring can't be
+  dimmed by a parent's `background-color`. Its color comes from `outline-color`.)
+- **No `outline-style`** — solid only; no `dashed`/`dotted`/`auto`.
+- **No `currentColor`** — CSS defaults `outline-color` to `currentColor`; there's no such mechanism
+  here, so it defaults to opaque white. Rarely observable, since `outline-width` defaults to 0.
+- **No automatic (UA-stylesheet) focus ring.** Browsers ship `:focus { outline: auto }` in their user
+  agent stylesheet; here a theme must opt in explicitly (see `ore.css`). `StyleEngine` holds a flat
+  per-window sheet list with every declaration slotted at `StyleOrigin.STYLESHEET`, so there's no
+  origin that loses to author CSS. Note `StyleOrigin`'s priority `1` is deliberately vacant
+  (`DEFAULT(0)`, `STYLESHEET(2)`, …), so a `USER_AGENT(1)` could be added without renumbering if this
+  is ever wanted.
+- **Partial text styling** — `color`, `font-size`, `font-family` are wired and inheritable, and
+  `UIText` consumes them. Still missing: `text-align`, and `text-shadow` parses/cascades but is a
+  registered **no-op** (nothing renders a shadow yet — see its `TODO` in `StylePropertyRegistry`).
+  Note `font-size` takes a bare number: `10`, not `10px` — its parser is `Float.parseFloat` and
+  *throws* on a unit suffix, unlike `width`/`height`/`outline-offset`, which do accept `px`.
 - **9-slice backgrounds can't be visually rounded/bordered** — `border-radius`/`border-width` still
   resolve for hit-testing and Taffy box growth when `background` is a 9-slice `CgUiSprite`, but
   `UIElement.paintSelf` falls through to the plain unclipped draw for that case rather than clipping
