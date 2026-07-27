@@ -100,6 +100,9 @@ public class LayoutProperties {
 
     public static void init() {
         createSetter(LayoutProperties.DISPLAY, TaffyBridge::setDisplay);
+        // display:none makes an element unfocusable (see UIElement.focusable()), so the cached focus
+        // chain has to be rebuilt — otherwise tab traversal keeps routing into a hidden subtree.
+        LayoutProperties.DISPLAY.addListener((el, prop, oldVal, newVal) -> el.invalidateFocusableChain());
         createSetter(LayoutProperties.LAYOUT_DIRECTION, TaffyBridge::setDirection);
         createSetter(LayoutProperties.FLEX_BASIS, TaffyBridge::setFlexBasis);
         createSetter(LayoutProperties.FLEX, TaffyBridge::setFlex);

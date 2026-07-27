@@ -29,4 +29,21 @@ public interface CgUiDrawable {
     }
 
     void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height);
+
+    /**
+     * Natural (unscaled) width in pixels, or {@code -1} when this drawable has no inherent size —
+     * solid colours and SDF shapes are defined by whatever rect they're handed, so they report -1.
+     *
+     * <p>Consumed by {@code overlay-fit: contain|cover|none} via {@link CgUiLayerBox#resolve}, which
+     * degrades to {@code fill} when the size is unknown. Texture-backed drawables report their
+     * source-rect size, interpreted 1:1 as logical UI pixels.</p>
+     */
+    default float intrinsicWidth() {
+        return -1f;
+    }
+
+    /** Natural (unscaled) height in pixels, or {@code -1}. See {@link #intrinsicWidth()}. */
+    default float intrinsicHeight() {
+        return -1f;
+    }
 }

@@ -1,0 +1,166 @@
+/* CrystalGUI port of LDLib2's "Ore" theme (assets/crystalgui/textures/gui/ore_styles.png +
+ * assets/crystalgui/ui/sprites/ore.json). Scoped to widgets CrystalGUI actually has today
+ * (Button, Checkbox) plus a generic .panel class for container backgrounds — not a port of
+ * LDLib2's full ore.lss (tabs/switches/slots/node-graph editor don't exist here yet).
+ *
+ * Faithful to LDLib2's real ore.lss rules (button:host / .__toggle_button__ / toggle:on):
+ *   - :hover swaps to a DIFFERENT sprite (BTN_PRESSED), it is not a tint.
+ *   - The #dddddd tint belongs to :active (LDLib2's `pressed-background: BTN_PRESSED color(#dddddd)`),
+ *     applied here via background-color, which UIElement.paintSelf multiplies into the background
+ *     drawable (ctx.setColor(backgroundColor) -> CgUiSprite folds it into every quad).
+ *   - Asymmetric padding (2/2/2/4) matches the sprites' 4px bottom 9-slice inset.
+ *   - Checking a checkbox swaps the BOX sprite to the green variant AND reveals the check glyph.
+ *
+ * Structural note: LDLib2's Toggle nests its mark icon inside an inner toggle-button element.
+ * CrystalGUI's Checkbox is flat (__mark__ and the label are siblings), so here __mark__ IS the box,
+ * and the check glyph rides on it as an `overlay:` (drawn after/on top of the background), sized by
+ * `overlay-fit: none` to its natural 10x10 and centered in the 12x12 box. Same geometry LDLib2
+ * gets from a nested child element, with no extra layout node.
+ *
+ * Deliberate deviation: LDLib2 leaves the toggle label at engine-default white; we set color on the
+ * checkbox root instead (color is inheritable here, so it reaches the label), matching the button
+ * and reading correctly against the light panel.
+ *
+ * Padding is always written as longhands, never `padding-all` + a `padding-bottom` override in the
+ * same rule — both would land at identical origin/specificity/source-order, making the winner
+ * ambiguous in this cascade.
+ *
+ * Apply via: uiWindow.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+ */
+
+button {
+    background: asset("crystalgui:ore", "button");
+    color: #222222;
+    text-shadow: false;
+    font-size: 10;
+    height: 14px;
+    padding-left: 2px;
+    padding-top: 1px;
+    padding-right: 2px;
+    padding-bottom: 4px;
+    justify-content: center;
+    align-items: center;
+}
+button:hover {
+    background: asset("crystalgui:ore", "button-pressed");
+}
+button:active {
+    background: asset("crystalgui:ore", "button-pressed");
+    /* 6-digit = opaque. NOTE: 8-digit hex here is #RRGGBBAA (alpha LAST, CSS-standard), so
+     * "#FFDDDDDD" would be light RED at 87% alpha, not a gray tint. */
+    background-color: #DDDDDD;
+}
+button:disabled {
+    background: asset("crystalgui:ore", "button-disabled");
+    color: #666666;
+}
+/* `outline` is layout-free — unlike border-width, which feeds Taffy and would resize the button.
+ * Ore's WHITE_BORDER hairline, the same sprite LDLib2 uses for its own focus-overlay. */
+button:focus {
+    outline: asset("crystalgui:ore", "focus-ring");
+}
+
+/* Root carries NO background — the box texture belongs to __mark__ alone.
+ *
+ * align-self: flex-start is load-bearing, not cosmetic. A checkbox in a column-flex parent would
+ * otherwise be stretched to the parent's full width by the default `align-items: stretch`. Because
+ * the root paints nothing, that stretched region is INVISIBLE but still hit-tests — so clicking
+ * empty space far to the right of the label would toggle the checkbox. Hugging the content keeps
+ * the clickable area equal to what's actually drawn (box + gap + label). */
+checkbox {
+    align-self: flex-start;
+    height: 14px;
+    padding-all: 1px;
+    gap-all: 2px;
+    align-items: center;
+    color: #222222;
+    text-shadow: false;
+    font-size: 10;
+}
+checkbox .__mark__ {
+    width: 12px;
+    height: 12px;
+    background: asset("crystalgui:ore", "checkbox-box");
+}
+checkbox:hover .__mark__ {
+    background: asset("crystalgui:ore", "checkbox-box-hover");
+}
+checkbox:active .__mark__ {
+    background: asset("crystalgui:ore", "checkbox-box-pressed");
+}
+
+checkbox:checked .__mark__ {
+    background: asset("crystalgui:ore", "checkbox-box-green");
+    overlay: asset("crystalgui:ore", "checkbox-check");
+    /* Natural 10x10, centered in the 12x12 box (overlay-position defaults to center) — matching
+     * LDLib2's 10x10 mark inside a 12x12 toggle button, without the extra child element it uses. */
+    overlay-fit: none;
+}
+checkbox:checked:hover .__mark__ {
+    background: asset("crystalgui:ore", "checkbox-box-green-hover");
+}
+checkbox:checked:active .__mark__ {
+    background: asset("crystalgui:ore", "checkbox-box-green-pressed");
+}
+
+/* Ring the 12x12 box rather than the whole checkbox row — reads better, and matches the actual
+ * click target. Depends on ancestor-state descendant matching (`checkbox:focus .__mark__`). */
+checkbox:focus .__mark__ {
+    outline: asset("crystalgui:ore", "focus-ring");
+}
+
+checkbox:disabled {
+    color: #666666;
+}
+checkbox:disabled .__mark__ {
+    background: asset("crystalgui:ore", "checkbox-box-disabled");
+}
+
+.panel {
+    background: asset("crystalgui:ore", "panel");
+    padding-left: 5px;
+    padding-top: 5px;
+    padding-right: 5px;
+    padding-bottom: 7px;
+    gap-all: 4px;
+    /* Inheritable, so anything inside the panel that doesn't set its own picks this up. */
+    font-size: 10;
+}
+
+/* --- Forward-prep: TextField/SplitView/ScrollerView don't exist as real widgets yet (next up on
+ * the roadmap) — these selectors match nothing today and are pure no-ops until those classes are
+ * built. Verify the exact tag/class names below against tagName()/internal-class conventions once
+ * each widget actually exists (they follow Button/Checkbox's established pattern: lowercase tag
+ * name, __internal-class__ for structural children). --- */
+
+textfield {
+    background: asset("crystalgui:ore", "textfield");
+    color: #222222;
+    font-size: 10;
+    padding-all: 3px;
+}
+textfield:focus {
+    /* Was border-color/border-width, which feeds Taffy and would resize the field on focus.
+     * `outline` is the layout-free equivalent. */
+    outline: asset("crystalgui:ore", "focus-ring");
+}
+
+.splitview .__divider__ {
+    background-color: #777777;
+}
+.splitview .__divider__:hover {
+    background-color: #DDDDDD;
+}
+
+.scrollerview .__track__ {
+    background: asset("crystalgui:ore", "scroller-track");
+}
+.scrollerview .__thumb__ {
+    background: asset("crystalgui:ore", "scroller-thumb");
+}
+.scrollerview .__thumb__:hover {
+    background: asset("crystalgui:ore", "scroller-thumb-hover");
+}
+.scrollerview .__thumb__:active {
+    background: asset("crystalgui:ore", "scroller-thumb-pressed");
+}

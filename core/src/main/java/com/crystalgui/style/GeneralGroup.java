@@ -2,7 +2,11 @@ package com.crystalgui.style;
 
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.style.property.visual.BoxOrigin;
+import com.crystalgui.style.property.visual.DrawableAlign;
+import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.TransitionSpec;
 
 import java.util.List;
@@ -28,6 +32,73 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     public GeneralGroup overlay(CgUiDrawable drawable) {
         set(StylePropertyRegistry.OVERLAY, drawable);
+        return this;
+    }
+
+    // ── overlay geometry longhands (CSS background-origin / object-fit / object-position) ────────
+
+    public BoxOrigin overlayOrigin() {
+        return getValueSave(StylePropertyRegistry.OVERLAY_ORIGIN);
+    }
+
+    public GeneralGroup overlayOrigin(BoxOrigin origin) {
+        set(StylePropertyRegistry.OVERLAY_ORIGIN, origin);
+        return this;
+    }
+
+    public DrawableFit overlayFit() {
+        return getValueSave(StylePropertyRegistry.OVERLAY_FIT);
+    }
+
+    public GeneralGroup overlayFit(DrawableFit fit) {
+        set(StylePropertyRegistry.OVERLAY_FIT, fit);
+        return this;
+    }
+
+    public DrawableAlign overlayPosition() {
+        return getValueSave(StylePropertyRegistry.OVERLAY_POSITION);
+    }
+
+    public GeneralGroup overlayPosition(DrawableAlign position) {
+        set(StylePropertyRegistry.OVERLAY_POSITION, position);
+        return this;
+    }
+
+    // ── outline: layout-free focus/decoration ring, drawn above overlay ──────────────────────────
+
+    public CgUiDrawable outline() {
+        return getValueSave(StylePropertyRegistry.OUTLINE);
+    }
+
+    public GeneralGroup outline(CgUiDrawable drawable) {
+        set(StylePropertyRegistry.OUTLINE, drawable);
+        return this;
+    }
+
+    public LengthPercent outlineOffset() {
+        return getValueSave(StylePropertyRegistry.OUTLINE_OFFSET);
+    }
+
+    public GeneralGroup outlineOffset(LengthPercent offset) {
+        set(StylePropertyRegistry.OUTLINE_OFFSET, offset);
+        return this;
+    }
+
+    public LengthPercent outlineWidth() {
+        return getValueSave(StylePropertyRegistry.OUTLINE_WIDTH);
+    }
+
+    public GeneralGroup outlineWidth(LengthPercent width) {
+        set(StylePropertyRegistry.OUTLINE_WIDTH, width);
+        return this;
+    }
+
+    public int outlineColor() {
+        return getValueSave(StylePropertyRegistry.OUTLINE_COLOR);
+    }
+
+    public GeneralGroup outlineColor(int argb) {
+        set(StylePropertyRegistry.OUTLINE_COLOR, argb);
         return this;
     }
 

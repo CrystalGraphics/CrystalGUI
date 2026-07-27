@@ -161,6 +161,14 @@ public final class StyleSheet {
                 continue;
             }
 
+            // `outline` is polymorphic: a drawable slot OR a width/color shorthand, decided by the
+            // value's shape. Must run before the registry lookup below, which would otherwise always
+            // resolve it to the drawable property.
+            if (com.crystalgui.style.property.visual.OutlineShorthand.isOutline(name)) {
+                com.crystalgui.style.property.visual.OutlineShorthand.expand(declarations, rawValue, important);
+                continue;
+            }
+
             StyleProperty<?> property = StylePropertyRegistry.byName(name);
             if (property == null) {
                 CrystalGuiCore.LOGGER.warn("Unknown style property '{}' in stylesheet — skipping declaration", name);

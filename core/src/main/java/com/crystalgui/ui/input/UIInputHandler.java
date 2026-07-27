@@ -28,8 +28,12 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     private final Vector2f accumulatedMouseChange = new Vector2f();
 
     private final HoverFrameData hoverFrameData = new HoverFrameData();
+    @Getter
+    private final UIDragController dragController = new UIDragController();
     private UIElement lastPressedElement;
     private UIElement lastFrameHover;
+    /** The element currently holding keyboard focus, or {@code null}. */
+    @Getter
     private UIElement focusedElement;
     /** Tracks which element a Space-key hold is acting on, so releasing Space always resets that
      * element's pressed state — even if focus moved elsewhere mid-hold — and so the synthesized
@@ -70,6 +74,10 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     public void endFrame() {
         fireAccumulatedMouseEvents();
+        if (dragController.isDragging()) {
+            var pos = hoverFrameData.eventPosition();
+            dragController.tick(pos.x(), pos.y());
+        }
         accumulatedMouseChange.zero();
         scrollDelta = 0;
         firstFrameOver = true;
@@ -243,6 +251,10 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
             boolean wasPressTarget = target == lastPressedElement;
             if (this.lastPressedElement != null && buttonOrdinal == 0) this.lastPressedElement.setPressed(false);
             emitMouseUp(target, buttonOrdinal, detail, wasPressTarget);
+            if (buttonOrdinal == 0 && dragController.isDragging()) {
+                var pos = hoverFrameData.eventPosition();
+                dragController.endDrag(pos.x(), pos.y());
+            }
         }
     }
 
@@ -309,6 +321,16 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         if (target != null) target.setFocused(true);
         FocusEvent.Focus event = new FocusEvent.Focus(target);
         sendInputEvent(target, event);
+    }
+
+    /** Drops focus if — and only if — {@code element} currently holds it. Called when an element
+     * stops being a legitimate focus target (disabled, or detached from the tree) so focus can't
+     * linger on something that no longer accepts input. No-op otherwise, so callers don't need to
+     * check first. */
+    public void blurIfFocused(UIElement element) {
+        if (element != null && focusedElement == element) {
+            emitAndLoseFocus(element);
+        }
     }
 
     private void emitAndLoseFocus(UIElement target) {

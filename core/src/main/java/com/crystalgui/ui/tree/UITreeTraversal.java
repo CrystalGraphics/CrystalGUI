@@ -46,10 +46,26 @@ public final class UITreeTraversal {
 
     // ── Focus order (tab traversal) ─────────────────────────────────────
 
+    /*
+     * On the `hasFocusableDescendant` guards below: that cache is only a fast-path filter, never a
+     * commitment. Every recursive descent keeps searching the remaining siblings when it comes back
+     * empty, rather than returning the null straight out.
+     *
+     * This matters because the flag can legitimately be stale — `focusable()` depends on
+     * enabled/focus-policy/display, and not every path that changes those invalidates the chain
+     * (display in particular is written straight through the Taffy bridge). Before this, a single
+     * stale-true bit made a walk descend into a subtree with nothing focusable, return null, and
+     * never try the next sibling — which killed the Tab key outright rather than skipping one
+     * element. Correct behaviour with a fresh cache is unchanged; this only bounds the blast radius
+     * when it isn't.
+     */
+
     public static UIElement firstFocusableIn(UIElement subtreeRoot) {
         if (subtreeRoot.focusable()) return subtreeRoot;
         for (UIElement child : subtreeRoot.getChildren()) {
-            if (child.getRuntimeCache().hasFocusableDescendant.get()) return firstFocusableIn(child);
+            if (!child.getRuntimeCache().hasFocusableDescendant.get()) continue;
+            UIElement found = firstFocusableIn(child);
+            if (found != null) return found;
         }
         return null;
     }
@@ -57,7 +73,9 @@ public final class UITreeTraversal {
     public static UIElement lastFocusableIn(UIElement subtreeRoot) {
         List<UIElement> children = subtreeRoot.getChildren();
         for (int i = children.size() - 1; i >= 0; i--) {
-            if (children.get(i).getRuntimeCache().hasFocusableDescendant.get()) return lastFocusableIn(children.get(i));
+            if (!children.get(i).getRuntimeCache().hasFocusableDescendant.get()) continue;
+            UIElement found = lastFocusableIn(children.get(i));
+            if (found != null) return found;
         }
         return subtreeRoot.focusable() ? subtreeRoot : null;
     }
@@ -67,7 +85,9 @@ public final class UITreeTraversal {
         while (node.getParent() != null) {
             List<UIElement> siblings = node.getParent().getChildren();
             for (int i = node.getSiblingIndex() - 1; i >= 0; i--) {
-                if (siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) return lastFocusableIn(siblings.get(i));
+                if (!siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) continue;
+                UIElement found = lastFocusableIn(siblings.get(i));
+                if (found != null) return found;
             }
             if (node.getParent().focusable()) return node.getParent();
             node = node.getParent();
@@ -77,13 +97,17 @@ public final class UITreeTraversal {
 
     public static UIElement nextFocusable(UIElement current) {
         for (UIElement child : current.getChildren()) {
-            if (child.getRuntimeCache().hasFocusableDescendant.get()) return firstFocusableIn(child);
+            if (!child.getRuntimeCache().hasFocusableDescendant.get()) continue;
+            UIElement found = firstFocusableIn(child);
+            if (found != null) return found;
         }
         UIElement node = current;
         while (node.getParent() != null) {
             List<UIElement> siblings = node.getParent().getChildren();
             for (int i = node.getSiblingIndex() + 1; i < siblings.size(); i++) {
-                if (siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) return firstFocusableIn(siblings.get(i));
+                if (!siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) continue;
+                UIElement found = firstFocusableIn(siblings.get(i));
+                if (found != null) return found;
             }
             node = node.getParent();
         }

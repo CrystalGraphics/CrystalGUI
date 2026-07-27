@@ -94,12 +94,28 @@ public final class CgUiRoundedRect implements CgUiDrawable {
                 b.vec2("_BoxSize", width, height);
                 if (with9SliceFill) {
                     b.sampler("_MainTex", 0, fillSprite.getTexture());
-                    b.vec4("_NineSliceBorder", fillSprite.getBorderLeft(), fillSprite.getBorderTop(),
-                            fillSprite.getBorderRight(), fillSprite.getBorderBottom());
+                    float scale = fillSprite.getBorderScale();
+                    float bL = fillSprite.getBorderLeft() * scale, bT = fillSprite.getBorderTop() * scale;
+                    float bR = fillSprite.getBorderRight() * scale, bB = fillSprite.getBorderBottom() * scale;
+                    b.vec4("_NineSliceBorder", bL, bT, bR, bB);
                     b.vec4("_NineSliceOuterUV", fillSprite.getU0(), fillSprite.getV0(),
                             fillSprite.getU3(), fillSprite.getV3());
                     b.vec4("_NineSliceInnerUV", fillSprite.getU1(), fillSprite.getV1(),
                             fillSprite.getU2(), fillSprite.getV2());
+
+                    // Tile counts are computed HERE, in Java, and handed to the shader — rather than
+                    // letting the shader derive them from source sizes. That's what makes this path
+                    // and CgUiSprite's CPU quad loop agree by construction: they can't round
+                    // differently because only one of them does the rounding.
+                    float centerSpanX = Math.max(0f, width - bL - bR);
+                    float centerSpanY = Math.max(0f, height - bT - bB);
+                    float srcW = fillSprite.centerSourceWidth();
+                    float srcH = fillSprite.centerSourceHeight();
+                    float nx = fillSprite.getRepeatX().tileCount(centerSpanX, srcW);
+                    float ny = fillSprite.getRepeatY().tileCount(centerSpanY, srcH);
+                    b.vec4("_NineSliceTiles", nx, ny, srcW, srcH);
+                    b.vec2("_NineSliceRepeat", fillSprite.getRepeatX().ordinal(), fillSprite.getRepeatY().ordinal());
+                    b.vec2("_NineSliceFlags", fillSprite.isFillCenter() ? 1f : 0f, 0f);
                 } else if (withTextureFill) {
                     b.sampler("_MainTex", 0, fillTexture);
                 }
