@@ -31,6 +31,11 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     private UIElement lastPressedElement;
     private UIElement lastFrameHover;
     private UIElement focusedElement;
+    /** Tracks which element a Space-key hold is acting on, so releasing Space always resets that
+     * element's pressed state — even if focus moved elsewhere mid-hold — and so the synthesized
+     * mouse-up's wasPressTarget can tell "space held over this element, released while still
+     * focused here" apart from "focus moved away mid-hold." */
+    private UIElement keyboardPressTarget;
 
     private boolean firstFrameOver = false;
 
@@ -141,7 +146,37 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         } else {
             emitKeyboardUp(event, modifiers);
         }
+        handleActivationKey(event);
         return false;
+    }
+
+    /**
+     * Web-standard keyboard activation: while an element is focused, Space/Enter act like a mouse
+     * press over it. Deliberately generic (lives here, not on Button) — it synthesizes the same
+     * {@link MouseEvent.Down}/{@link MouseEvent.Up} (with {@code wasPressTarget} correctly computed)
+     * that a real mouse click would, so any focusable widget listening for mouse activation (Button's
+     * {@code onMouseUp}-based decorator, and later Checkbox's) gets keyboard activation for free with
+     * zero widget-specific keyboard code.
+     *
+     * <p>Enter activates immediately on key-down with no hold state, matching real browsers — Space
+     * has press-and-hold semantics mirroring an actual mouse press, so it needs the held-until-release
+     * tracking in {@link #keyboardPressTarget}.
+     */
+    private void handleActivationKey(Keyboard.Event event) {
+        if (focusedElement == null) return;
+        if (event.key() != CgUiKeyCodes.KEY_SPACE && event.key() != CgUiKeyCodes.KEY_RETURN) return;
+
+        if (event.pressed() && !event.repeat()) {
+            keyboardPressTarget = focusedElement;
+            focusedElement.setPressed(true);
+            sendInputEvent(focusedElement, new MouseEvent.Down(focusedElement, hoverFrameData.eventPosition(), 0, 1));
+        } else if (!event.pressed()) {
+            boolean wasPressTarget = focusedElement == keyboardPressTarget; // false if focus moved mid-hold
+            if (keyboardPressTarget != null) keyboardPressTarget.setPressed(false);
+            sendInputEvent(focusedElement, new MouseEvent.Up(focusedElement, hoverFrameData.eventPosition(), 0, 1, wasPressTarget));
+            keyboardPressTarget = null;
+        }
+
     }
 
     private void findFocusableElement(Keyboard.Event event, int modifiers) {
@@ -204,8 +239,10 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
             if (this.lastPressedElement != null && buttonOrdinal == 0) this.lastPressedElement.setPressed(true);
             emitMouseDown(target, buttonOrdinal, detail);
         } else {
+            // Capture before lastPressedElement's pressed flag resets below.
+            boolean wasPressTarget = target == lastPressedElement;
             if (this.lastPressedElement != null && buttonOrdinal == 0) this.lastPressedElement.setPressed(false);
-            emitMouseUp(target, buttonOrdinal, detail);
+            emitMouseUp(target, buttonOrdinal, detail, wasPressTarget);
         }
     }
 
@@ -240,8 +277,8 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         sendInputEvent(targetElement, event);
     }
 
-    private void emitMouseUp(UIElement target, int buttonId, int detail) {
-        MouseEvent.Up event = new MouseEvent.Up(target, hoverFrameData.eventPosition(), buttonId, detail);
+    private void emitMouseUp(UIElement target, int buttonId, int detail, boolean wasPressTarget) {
+        MouseEvent.Up event = new MouseEvent.Up(target, hoverFrameData.eventPosition(), buttonId, detail, wasPressTarget);
         sendInputEvent(target, event);
     }
 

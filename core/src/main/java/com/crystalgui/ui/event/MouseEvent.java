@@ -31,9 +31,16 @@ public abstract class MouseEvent extends UIEvent {
         }
     }
 
+    @Getter
     public final static class Up extends Click {
-        public Up(UIElement target, ReadOnlyVec2f pos, int buttonId, int detail) {
+        /** True iff this Up's target is the same element that received the matching Down — lets a
+         * "click"-style decorator (e.g. Button's {@code ButtonEvent.Pressed}) tell a press-then-release
+         * over the same element apart from a press that was released elsewhere. */
+        private final boolean wasPressTarget;
+
+        public Up(UIElement target, ReadOnlyVec2f pos, int buttonId, int detail, boolean wasPressTarget) {
             super(target, pos, buttonId, detail);
+            this.wasPressTarget = wasPressTarget;
         }
     }
 

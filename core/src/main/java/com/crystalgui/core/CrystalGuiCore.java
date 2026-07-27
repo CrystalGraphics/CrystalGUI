@@ -2,6 +2,7 @@ package com.crystalgui.core;
 
 
 import com.crystalgui.core.input.CgUiInputAdapter;
+import com.crystalgui.core.sound.UISoundSystem;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.logging.log4j.LogManager;
@@ -13,6 +14,9 @@ public class CrystalGuiCore {
 
     @Getter @Setter
     private static CgUiInputAdapter adapter;
+
+    @Getter @Setter
+    private static UISoundSystem soundSystem = UISoundSystem.NOOP;
 
 
 }

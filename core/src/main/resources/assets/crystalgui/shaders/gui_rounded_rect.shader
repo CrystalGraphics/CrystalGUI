@@ -111,6 +111,10 @@ Pass {
         vec4 fillColor = _FillColor;
 #endif
 
+        // Ambient background-color tint — scoped to the fill/background region only, so it never
+        // bleeds into _BorderColor's own independently-resolved alpha below.
+        fillColor *= i.color;
+
 #ifdef WITH_BORDER
         float innerCoverage = sdf_coverage(dist + _BorderWidth);
         vec4 color = mix(_BorderColor, fillColor, innerCoverage);
@@ -118,7 +122,6 @@ Pass {
         vec4 color = fillColor;
 #endif
 
-        color *= i.color;
         color.a *= coverage * _LayerOpacity;
         fragColor = color;
     }

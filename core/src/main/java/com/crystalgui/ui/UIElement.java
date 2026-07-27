@@ -21,6 +21,7 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.event.DOMEvent;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.ui.event.UIEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.tree.Layout;
@@ -67,7 +68,7 @@ public class UIElement {
     private final Set<String> classes = new LinkedHashSet<>();
 
     @Getter
-    private FocusPolicy focusPolicy = FocusPolicy.CLICK;
+    private FocusPolicy focusPolicy = FocusPolicy.NONE;
 
     @Getter @Setter
     private boolean hitTest = true;
@@ -83,6 +84,11 @@ public class UIElement {
 
     @Getter
     private boolean isHovered = false;
+
+    /** True once {@link #markAsInternal()} has run — structural content owned by a composite widget,
+     * excluded from the public child-mutation API ({@link #removeChild}/{@link #clearAllChildren}). */
+    @Getter
+    private boolean isInternalUI = false;
 
     // Runtime only data.
     @Getter
@@ -195,6 +201,14 @@ public class UIElement {
     }
 
     public UIElement addChildAt(UIElement child, int index) {
+        if (!acceptsPublicChildren()) {
+            throw new UnsupportedOperationException(
+                    getClass().getSimpleName() + " does not accept public children — see its typed accessor methods instead");
+        }
+        return addChildAtInternal(child, index);
+    }
+
+    private UIElement addChildAtInternal(UIElement child, int index) {
         if (child == null) return this;
         if (child == this) throw new IllegalArgumentException("Cannot add self as a child");
         if (hasChild(child)) throw new IllegalArgumentException("Cannot add the same child twice");
@@ -218,10 +232,42 @@ public class UIElement {
         return this;
     }
 
+    /** Whether this element accepts children through the public {@link #addChild}/{@link #addChildAt}
+     * API. Ordinary elements accept public children exactly as before; composite widgets (Button,
+     * Checkbox, ...) that own private structural children override this to return {@code false} and
+     * build their internals via {@link #addInternalChild} instead. Widgets that legitimately host
+     * external content alongside internal structure (e.g. a future ScrollerView) leave this {@code true}
+     * at their own root and expose a separate typed accessor that delegates into a real content-host
+     * child. */
+    protected boolean acceptsPublicChildren() {
+        return true;
+    }
+
+    /** Marks this element (and its current subtree) as internal — structural content owned by a
+     * composite widget, not addressable via the public child-mutation API ({@link #removeChild}/
+     * {@link #clearAllChildren} silently refuse to touch it). */
+    public final void markAsInternal() {
+        this.isInternalUI = true;
+        for (UIElement child : children) child.markAsInternal();
+    }
+
+    /** Adds {@code child} bypassing the {@link #acceptsPublicChildren()} guard, then marks it internal.
+     * Composite widgets call this (never {@code addChild}/{@code addChildAt}) to build their own
+     * privately-owned structural children. */
+    protected final UIElement addInternalChild(UIElement child) {
+        addChildAtInternal(child, children.size());
+        child.markAsInternal();
+        return this;
+    }
+
     public boolean removeChild(UIElement child) {
         if (child == null) return false;
         if (!hasChild(child)) return false;
+        if (child.isInternalUI()) return false;
+        return removeChildInternal(child);
+    }
 
+    private boolean removeChildInternal(UIElement child) {
         children.remove(child);
         child.onRemoved();
         child.setAttachedWindow(null);
@@ -237,8 +283,27 @@ public class UIElement {
 
     public void clearAllChildren() {
         for (UIElement child : new ArrayList<>(children)) {
+            if (child.isInternalUI()) continue;
             removeChild(child);
         }
+    }
+
+    /** Inserts {@code child} at {@code index}, bypassing {@link #acceptsPublicChildren()}, then marks
+     * it internal — the indexed counterpart to {@link #addInternalChild}. */
+    protected final UIElement insertInternalChildAt(UIElement child, int index) {
+        addChildAtInternal(child, index);
+        child.markAsInternal();
+        return this;
+    }
+
+    /** Removes a previously-{@link #markAsInternal() internal} child that this element itself owns,
+     * bypassing the internal-child guard in {@link #removeChild}. Clears the child's internal flag on
+     * the way out, since it's no longer owned by this widget once detached. */
+    protected final boolean removeInternalChild(UIElement child) {
+        if (child == null || !hasChild(child)) return false;
+        boolean removed = removeChildInternal(child);
+        if (removed) child.isInternalUI = false;
+        return removed;
     }
 
     public final int getSiblingIndex() {
@@ -345,6 +410,10 @@ public class UIElement {
         float ny = Math.max(qy, 0f) / ry;
         float outsideLen = (float) Math.sqrt(nx * nx + ny * ny);
         return (outsideLen - 1f) * Math.min(rx, ry) + Math.min(Math.max(qx, qy), 0f);
+    }
+
+    protected <T extends UIEvent> void attachDefaultListener(EventListenerGroup<T> handler, UIEvent.Listener<T> defaultAction) {
+        handler.attachDefaultListener(defaultAction);
     }
 
     private record CornerRadii(float rxTL, float ryTL, float rxTR, float ryTR,
