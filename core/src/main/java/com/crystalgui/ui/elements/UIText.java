@@ -3,7 +3,6 @@ package com.crystalgui.ui.elements;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgShapedParagraph;
 import com.crystalgraphics.api.text.CgTextLayout;
-import com.crystalgraphics.api.text.CgTextLayoutRequest;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.CgUiPaintContext;
@@ -46,7 +45,7 @@ import com.crystalgui.ui.UIElement;
  * re-running until nothing's dirty).
  *
  * <h3>Shaping/layout reuse</h3>
- * <p>Holds a retained {@link CgShapedParagraph} (from {@link CgTextLayoutRequest#shape()}),
+ * <p>Holds a retained {@link CgShapedParagraph} (from {@link CgTextLayout.Request#shape()}),
  * rebuilt only when {@link #text} or the resolved {@link CgFontFamily} actually changes — never on
  * a pure width/height change. {@link CgShapedParagraph#layout(float, float)} already memoizes the
  * last {@code (maxWidth, maxHeight)} pair internally, so {@link #recompute()} and
@@ -114,7 +113,7 @@ public final class UIText extends UIElement {
         String currentText = text.get();
         CgFontFamily currentFamily = resolveFamily();
         if (shapedParagraph == null || !currentText.equals(shapedForText) || currentFamily != shapedForFamily) {
-            shapedParagraph = CgTextLayoutRequest.of(currentText, currentFamily).shape();
+            shapedParagraph = CgTextLayout.of(currentText, currentFamily).shape();
             shapedForText = currentText;
             shapedForFamily = currentFamily;
         }
