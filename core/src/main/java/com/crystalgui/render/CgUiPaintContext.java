@@ -4,13 +4,11 @@ import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.api.material.CgMaterial;
-import com.crystalgraphics.api.material.CgRenderPassVariant;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
 import com.crystalgraphics.api.state.CgGlSlot;
-import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.api.vertex.CgVertexFormat;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
@@ -165,8 +163,8 @@ public final class CgUiPaintContext {
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.layerBlitMaterial = CgMaterial.load("crystalgui:shaders/gui_layer_blit.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
-        this.textRenderer = CgTextRenderer.create().poseStack(this.poseStack)
-            .restoreStateWith(() -> {
+        this.textRenderer = CgTextRenderer.createManualSized().poseStack(this.poseStack)
+                                          .restoreStateWith(() -> {
                 boxModelMaterial.bind();
                 currentTexture = null;
             });
