@@ -2,6 +2,7 @@ package com.crystalgui.core;
 
 
 import com.crystalgui.core.input.CgUiInputAdapter;
+import com.crystalgui.core.input.UIClipboard;
 import com.crystalgui.core.sound.UISoundSystem;
 import lombok.Getter;
 import lombok.Setter;
@@ -17,6 +18,9 @@ public class CrystalGuiCore {
 
     @Getter @Setter
     private static UISoundSystem soundSystem = UISoundSystem.NOOP;
+
+    @Getter @Setter
+    private static UIClipboard clipboard = UIClipboard.NOOP;
 
 
 }

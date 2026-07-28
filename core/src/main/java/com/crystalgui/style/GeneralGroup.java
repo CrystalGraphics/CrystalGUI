@@ -6,6 +6,7 @@ import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.TransitionSpec;
 
@@ -166,6 +167,24 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     public GeneralGroup overflow(Overflow overflow) {
         set(StylePropertyRegistry.OVERFLOW, overflow);
+        return this;
+    }
+
+    public ScrollBehavior scrollBehavior() {
+        return getValueSave(StylePropertyRegistry.SCROLL_BEHAVIOR);
+    }
+
+    public GeneralGroup scrollBehavior(ScrollBehavior behavior) {
+        set(StylePropertyRegistry.SCROLL_BEHAVIOR, behavior);
+        return this;
+    }
+
+    public float scrollDuration() {
+        return getValueSave(StylePropertyRegistry.SCROLL_DURATION);
+    }
+
+    public GeneralGroup scrollDuration(float seconds) {
+        set(StylePropertyRegistry.SCROLL_DURATION, seconds);
         return this;
     }
 

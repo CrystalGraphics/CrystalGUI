@@ -287,33 +287,148 @@ splitview.__vertical__ .__divider__ {
     height: 4px;
 }
 
-/* --- Forward-prep: TextField/ScrollerView don't exist as real widgets yet (next up on the roadmap)
- * — these selectors match nothing today and are pure no-ops until those classes are built. Verify
- * the exact tag/class names below against tagName()/internal-class conventions once each widget
- * actually exists (they follow Button/Checkbox's established pattern: lowercase tag name,
- * __internal-class__ for structural children). --- */
-
+/* TextField. The forward-prep names above turned out correct — `textfield` is the tag and the widget
+ * has no internal children, since caret/selection/placeholder are painted rather than nested. */
+/* Ore's `textfield` sprite is a DARK inset groove, not a light panel like `button` — so this needs
+ * light text. It was copied from the button rule's #222222, which came out near-black on near-black
+ * and was barely legible. */
 textfield {
     background: asset("crystalgui:ore", "textfield");
-    color: #222222;
+    color: #E0E0E0;
     font-size: 10;
+    height: 14px;
     padding-all: 3px;
+    align-items: center;
 }
 textfield:focus {
     /* Was border-color/border-width, which feeds Taffy and would resize the field on focus.
      * `outline` is the layout-free equivalent. */
     outline: asset("crystalgui:ore", "focus-ring");
 }
+/* Placeholder — :blank comes free from TextField.isBlank(), and the placeholder reuses `color`. */
+textfield:blank {
+    color: #7A7A7A;
+}
+/* Ore has no error sprite, so invalid is a red tint over the normal field texture — the same
+ * multiply-a-tint-over-the-sprite idiom `button:active` uses. */
+textfield:invalid {
+    background-color: #FFB0B0;
+    color: #FF9A9A;
+}
+textfield:disabled {
+    background: asset("crystalgui:ore", "textfield");
+    color: #888888;
+}
 
-.scrollerview .__track__ {
+/* ── TabView ────────────────────────────────────────────────────────────────────────────────────
+ * Ported from LDLib2's ore.lss:282-313. The sprites were always in our atlas (it is byte-identical
+ * to LDLib's ore_styles.png); ore.json just never declared them.
+ *
+ * TWO SPRITES, NOT ONE RECOLOUR. `tab-off` keeps 4px of border at the BOTTOM because an unselected
+ * tab draws its own bottom edge; `tab-on` keeps 4px at the TOP because a selected tab's bottom is
+ * meant to dissolve into the pane below it. Swap them and everything looks right until you select
+ * something. */
+
+tabview .__panes__ {
+    background: asset("crystalgui:ore", "rect");
+}
+
+tab {
+    background: asset("crystalgui:ore", "tab-off");
+    height: 18px;
+    padding-all: 3px;
+    padding-bottom: 5px;
+    /* ore.lss writes `tab:host:not(tab:selected) label { text-color: #222 }`. We have no `:not()`,
+     * so the same result comes from darkening every tab here and lightening the selected one below. */
+    color: #222222;
+    text-shadow: false;
+}
+tab:hover {
+    background: asset("crystalgui:ore", "tab-off-hover");
+}
+tab:checked {
+    background: asset("crystalgui:ore", "tab-on");
+    /* The raised look is a PADDING SHIFT, not a height change: 3/5 becomes 5/3 while the height stays
+     * 18, so the label rises and the tab's bottom edge meets the pane. Ore's own idiom, and it
+     * overrides default.css's height-based fallback since this sheet outranks the UA one.
+     *
+     * ore.lss also pulls its strip down with `margin-bottom: -4` to overlap the content container.
+     * Not needed here — the padding shift closes the seam on its own, and a negative margin would
+     * fight the 3px the strip reserves for its hairline scrollbar. */
+    padding-top: 5px;
+    padding-bottom: 3px;
+    color: #FFFFFF;
+}
+tab:checked:hover {
+    background: asset("crystalgui:ore", "tab-on-hover");
+}
+/* The green set has no disabled row in the atlas (y=21/y=28 are blank), so disabled reuses the
+ * unselected sprite and says so with the label colour alone. */
+tab:disabled {
+    background: asset("crystalgui:ore", "tab-off");
+    color: #888888;
+}
+
+/* The strip's hairline gets FLAT COLOURS, not Ore's scroller sprites. At 3px a 5x5 nine-slice with
+ * 2px borders is nothing but border — the centre never gets drawn — so the sprited thumb renders as
+ * a solid white line. This is a size limit of nine-slicing, not a bug to chase.
+ *
+ * Deliberately scoped to `.__strip__`, so a theme that thickens the bar and turns the step buttons
+ * back on gets Ore's real scroller sprites for free by dropping these two rules. */
+tabview .__strip-bar__ .__track__ {
+    background: #1A1A1A;
+}
+tabview .__strip-bar__ .__thumb__ {
+    background: #8C8C8C;
+}
+tabview .__strip-bar__ .__thumb__:hover {
+    background: #B4B4B4;
+}
+
+/* Scrollbars. LDLib2's ore.lss DOES style these, and its idiom for the draggable bar is the same
+ * default -> pressed-sprite -> pressed-sprite-plus-#ddd triple used for buttons and (here) the
+ * SplitView divider:
+ *     scroller-* .__scroller_scroll_bar__ {
+ *         base-background: BTN_DEFAULT; hover-background: BTN_PRESSED;
+ *         pressed-background: BTN_PRESSED color(#ddd);
+ *     }
+ * The track is Ore's RECT2 groove; `scroller-track` maps to it.
+ *
+ * Only the CROSS axis is set — the thumb's length and position along the bar are runtime state
+ * written from Java at IMPORTANT origin. */
+scroller .__track__ {
     background: asset("crystalgui:ore", "scroller-track");
 }
-.scrollerview .__thumb__ {
+/* Ore hides the step buttons (its own ore.lss does the same via
+ * `.__scroller_head_button__ { display: none }`); default.css already hides them, so this is a
+ * deliberate non-override rather than an omission. */
+scroller .__thumb__ {
+    height: 100%;
     background: asset("crystalgui:ore", "scroller-thumb");
 }
-.scrollerview .__thumb__:hover {
+scroller.__vertical__ .__thumb__ {
+    width: 100%;
+}
+scroller .__thumb__:hover {
     background: asset("crystalgui:ore", "scroller-thumb-hover");
 }
-.scrollerview .__thumb__:active {
+scroller .__thumb__:active {
     background: asset("crystalgui:ore", "scroller-thumb-pressed");
+    background-color: #DDDDDD;
+}
+
+/* Bar thickness and pinning. 8px — which is also what LDLib2's ore.lss uses for the scrollers
+ * embedded in its text area (it reserves 14px for a standalone one). An overlay bar sits on top of
+ * the content rather than displacing it, so the slimmer of the two is the right pick. */
+scrollerview .__v-scroller__ {
+    width: 8px;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+scrollerview .__h-scroller__ {
+    height: 8px;
+    left: 0;
+    right: 0;
+    bottom: 0;
 }

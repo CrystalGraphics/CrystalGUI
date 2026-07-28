@@ -19,6 +19,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.OverflowClip;
+import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.event.DOMEvent;
@@ -216,6 +217,28 @@ public class UIElement {
         return false;
     }
 
+    /**
+     * Whether this element's current value fails its own validation — CSS's {@code :invalid}.
+     *
+     * @return {@code false} for everything that has no notion of validity.
+     */
+    public boolean isInvalid() {
+        return false;
+    }
+
+    /**
+     * Whether this element edits text, and so must receive Space and Enter as characters rather than
+     * as activation.
+     *
+     * <p>{@code UIInputHandler} turns Space/Enter on a focused element into a synthesized mouse
+     * press, which is how a Button gains keyboard activation for free. A text field has to opt out,
+     * or every space typed would fire its press handlers — and the synthesized event carries the
+     * physical cursor position, so it would also act wherever the mouse happened to be.</p>
+     */
+    public boolean consumesTextInput() {
+        return false;
+    }
+
     // ── Tree structure ───────────────────────────────────────────────────────
 
     public UIElement addChild(UIElement child) {
@@ -381,6 +404,220 @@ public class UIElement {
             el.getRuntimeCache().hasFocusableDescendant.invalidate();
             el = el.getParent();
         }
+    }
+
+    // ── Scrolling ────────────────────────────────────────────────────────────
+
+    /**
+     * Scroll offset, in logical px, exactly like the DOM's {@code element.scrollTop}/
+     * {@code scrollLeft}: state on the element, applied when painting its descendants. There is no
+     * viewport or content wrapper — children of a scroll container are ordinary direct children.
+     */
+    @Getter
+    private float scrollLeft, scrollTop;
+
+    /** @see #setScrollExempt(boolean) */
+    @Getter
+    private boolean scrollExempt = false;
+
+    /**
+     * Exempts this element from its parent's scroll offset — it stays pinned while siblings scroll,
+     * and is excluded from the parent's {@code scrollWidth}/{@code scrollHeight}.
+     *
+     * <p>For a scroll container's own chrome: its scrollbars must not scroll away with the content,
+     * and must not themselves count as content to scroll to. Browsers get this free by not making
+     * scrollbars DOM nodes at all; ours are real elements (so they stay CSS-styleable with real
+     * {@code :hover}) and opt out explicitly instead.</p>
+     *
+     * <p>Not something ordinary content should set.</p>
+     */
+    public UIElement setScrollExempt(boolean scrollExempt) {
+        if (this.scrollExempt == scrollExempt) return this;
+        this.scrollExempt = scrollExempt;
+        runtimeCache.resetPoseCache();
+        return this;
+    }
+
+    /** Whether {@code overflow} makes this a scroll container ({@code hidden}/{@code scroll}/
+     * {@code auto} — not {@code clip}, and not {@code visible}). */
+    public boolean isScrollContainer() {
+        return style.getGeneralGroup().overflow().isScrollContainer();
+    }
+
+    /** Whether the <em>user</em> may scroll this with the wheel. Narrower than
+     * {@link #isScrollContainer()} — see {@link Overflow#allowsUserScrolling()}. */
+    public boolean allowsUserScrolling() {
+        return style.getGeneralGroup().overflow().allowsUserScrolling();
+    }
+
+    /** Total width of the content, i.e. the furthest right edge any child reaches. DOM's
+     * {@code scrollWidth}. Excludes scroll-exempt children — a scrollbar pinned to the right edge
+     * must not itself count as content to scroll to. */
+    public float getScrollWidth() {
+        float max = 0f;
+        for (UIElement child : children) {
+            if (child.scrollExempt) continue;
+            max = Math.max(max, child.getLayoutX() + child.getRuntimeCache().getWidth());
+        }
+        return max;
+    }
+
+    /** Total height of the content. DOM's {@code scrollHeight}. */
+    public float getScrollHeight() {
+        float max = 0f;
+        for (UIElement child : children) {
+            if (child.scrollExempt) continue;
+            max = Math.max(max, child.getLayoutY() + child.getRuntimeCache().getHeight());
+        }
+        return max;
+    }
+
+    /** Visible content width — the padding box, which is what the clip actually clips to. */
+    public float getClientWidth() {
+        return Math.max(0f, runtimeCache.getWidth() - 2f * getTaffyLayout().border().left);
+    }
+
+    public float getClientHeight() {
+        return Math.max(0f, runtimeCache.getHeight() - 2f * getTaffyLayout().border().left);
+    }
+
+    /** How far this can scroll before hitting the end; 0 when the content fits. */
+    public float getMaxScrollLeft() {
+        return Math.max(0f, getScrollWidth() - getClientWidth());
+    }
+
+    public float getMaxScrollTop() {
+        return Math.max(0f, getScrollHeight() - getClientHeight());
+    }
+
+    /** Where the scroll is heading. Equal to {@link #getScrollTop()} unless a smooth scroll is in
+     * flight — {@code scroll-behavior: smooth} eases the rendered offset toward this. */
+    @Getter
+    private float targetScrollLeft, targetScrollTop;
+
+    /** Clamped to {@code [0, maxScrollLeft]}, and a no-op on a non-scroll-container — matching the DOM,
+     * where assigning {@code scrollTop} to an unscrollable element silently does nothing. Honours
+     * {@code scroll-behavior}. */
+    public UIElement setScrollLeft(float value) {
+        return setScroll(value, targetScrollTop);
+    }
+
+    public UIElement setScrollTop(float value) {
+        return setScroll(targetScrollLeft, value);
+    }
+
+    public UIElement setScroll(float left, float top) {
+        if (!isScrollContainer()) return this;
+        this.targetScrollLeft = Math.max(0f, Math.min(getMaxScrollLeft(), left));
+        this.targetScrollTop = Math.max(0f, Math.min(getMaxScrollTop(), top));
+
+        if (style.getGeneralGroup().scrollBehavior() == ScrollBehavior.SMOOTH && attachedWindow != null) {
+            attachedWindow.registerScrollAnimation(this);
+            return this;               // the tick eases the rendered offset toward the target
+        }
+        return applyScrollOffset(targetScrollLeft, targetScrollTop);
+    }
+
+    /**
+     * Jumps straight to an offset, ignoring {@code scroll-behavior}.
+     *
+     * <p>For dragging a scrollbar thumb: the thumb must stay under the cursor, so easing toward it
+     * would make it lag by the animation's duration — the same reason {@code Slider} and
+     * {@code SplitView} refuse to animate their drags.</p>
+     */
+    public UIElement setScrollImmediate(float left, float top) {
+        if (!isScrollContainer()) return this;
+        this.targetScrollLeft = Math.max(0f, Math.min(getMaxScrollLeft(), left));
+        this.targetScrollTop = Math.max(0f, Math.min(getMaxScrollTop(), top));
+        return applyScrollOffset(targetScrollLeft, targetScrollTop);
+    }
+
+    /**
+     * Advances a smooth scroll. Returns true while still animating.
+     *
+     * <p>Exponential ease rather than a fixed-duration curve so it is frame-rate independent: the
+     * same wall-clock time produces the same motion at 30fps or 200fps, and a new target mid-flight
+     * simply re-aims from wherever it currently is instead of restarting.</p>
+     */
+    boolean tickScrollAnimation(float deltaSeconds) {
+        float duration = Math.max(0.01f, style.getGeneralGroup().scrollDuration());
+        // Time constant chosen so ~95% of the distance is covered within `duration`.
+        float t = 1f - (float) Math.exp(-deltaSeconds * 3f / duration);
+        float nextLeft = scrollLeft + (targetScrollLeft - scrollLeft) * t;
+        float nextTop = scrollTop + (targetScrollTop - scrollTop) * t;
+
+        // Snap and finish once sub-pixel, otherwise it creeps forever and never releases the tick.
+        if (Math.abs(targetScrollLeft - nextLeft) < 0.5f && Math.abs(targetScrollTop - nextTop) < 0.5f) {
+            applyScrollOffset(targetScrollLeft, targetScrollTop);
+            return false;
+        }
+        applyScrollOffset(nextLeft, nextTop);
+        return true;
+    }
+
+    private UIElement applyScrollOffset(float clampedLeft, float clampedTop) {
+        if (clampedLeft == scrollLeft && clampedTop == scrollTop) return this;
+        this.scrollLeft = clampedLeft;
+        this.scrollTop = clampedTop;
+        // Descendants' world transforms are derived from this offset, so they're now stale. Without
+        // this, hit-testing would keep resolving against the pre-scroll positions.
+        for (UIElement child : children) invalidateSubtreeTransforms(child);
+        // Position only — no relayout. The offset never reaches Taffy; it lives purely in the
+        // transform chain, which is what makes scrolling free of any wrapper element.
+        onStyleChanged();
+        return this;
+    }
+
+    private static void invalidateSubtreeTransforms(UIElement element) {
+        element.getRuntimeCache().resetPoseCache();
+        for (UIElement child : element.getChildren()) invalidateSubtreeTransforms(child);
+    }
+
+    /** Re-applies the clamp against current content/box sizes. Call after the content changes, so a
+     * shrinking child can't leave the view scrolled past the end. Instant — a clamp is a correction,
+     * not a scroll the user asked for, so it shouldn't animate. */
+    public void clampScroll() {
+        setScrollImmediate(scrollLeft, scrollTop);
+    }
+
+    /**
+     * Scrolls every ancestor so this element is visible — the DOM's {@code scrollIntoView}.
+     *
+     * <p>Instant, never eased, even under {@code scroll-behavior: smooth}: this runs when focus lands
+     * somewhere off-screen, and the element needs to be <em>there</em> by the time the user looks,
+     * not gliding into place afterwards.</p>
+     *
+     * <p>Scrolls the minimum distance — an element already in view doesn't move, and one just off the
+     * edge is brought flush to that edge rather than centred. Walking outward is safe because
+     * {@code RuntimeCache} positions are scroll-independent layout coordinates (the offset lives in
+     * the transform chain), so scrolling an outer container doesn't invalidate the inner numbers.</p>
+     */
+    public void scrollIntoView() {
+        var self = getRuntimeCache();
+        for (UIElement ancestor = getParent(); ancestor != null; ancestor = ancestor.getParent()) {
+            if (!ancestor.isScrollContainer()) continue;
+
+            var box = ancestor.getRuntimeCache();
+            float border = ancestor.getTaffyLayout().border().left;
+
+            float relLeft = self.getX() - box.getX() - border;
+            float relTop = self.getY() - box.getY() - border;
+
+            ancestor.setScrollImmediate(
+                    minimalScroll(ancestor.getScrollLeft(), ancestor.getClientWidth(),
+                            relLeft, self.getWidth()),
+                    minimalScroll(ancestor.getScrollTop(), ancestor.getClientHeight(),
+                            relTop, self.getHeight()));
+        }
+    }
+
+    /** The nearest scroll offset that brings {@code [start, start+length]} fully inside the view.
+     * Returns {@code current} unchanged when it already is. */
+    private static float minimalScroll(float current, float viewLength, float start, float length) {
+        float end = start + length;
+        if (start < current) return start;                       // off the near edge
+        if (end > current + viewLength) return end - viewLength; // off the far edge
+        return current;
     }
 
     // ── Tree queries ─────────────────────────────────────────────────────────
@@ -555,7 +792,7 @@ public class UIElement {
      * instance is never {@code == CgUiDrawable.EMPTY}). */
     OverflowClip resolveOverflowClip() {
         GeneralGroup styleGen = style.getGeneralGroup();
-        if (styleGen.overflow() == Overflow.VISIBLE) return OverflowClip.NONE;
+        if (!styleGen.overflow().clips()) return OverflowClip.NONE;
 
         CornerRadii radii = resolveCornerRadii(runtimeCache.getWidth(), runtimeCache.getHeight());
         boolean hasRadius = !radii.isZero();
@@ -820,8 +1057,29 @@ public class UIElement {
         // non-default z-index could make hit-testing and visual stacking disagree about which
         // overlapping sibling is "on top".
         UIElement[] sorted = runtimeCache.sortedChildren.get();
+
+        // Scrolling, the whole of it. Translating the pose here is enough for INPUT as well as paint:
+        // drawSubtree snapshots the live pose into each child's localToWorld, and
+        // UIWindow.elementHitTest inverts that same matrix — so hit-testing picks the offset up with
+        // no second code path. This is why scrolling needs no wrapper element the way LDLib's does.
+        boolean scrolled = scrollLeft != 0f || scrollTop != 0f;
+        if (scrolled) {
+            ctx.getPoseStack().pushPose();
+            ctx.getPoseStack().translate(-scrollLeft, -scrollTop, 0f);
+        }
+
         for (int i = sorted.length - 1; i >= 0; i--) {
+            // Scroll-exempt children (a scroll container's own scrollbars) are painted after the
+            // translate is popped, below — otherwise they would scroll away with the content.
+            if (scrolled && sorted[i].scrollExempt) continue;
             sorted[i].drawSubtree(ctx);
+        }
+
+        if (scrolled) {
+            ctx.getPoseStack().popPose();
+            for (int i = sorted.length - 1; i >= 0; i--) {
+                if (sorted[i].scrollExempt) sorted[i].drawSubtree(ctx);
+            }
         }
 
         if (scissored) ctx.popScissor();
@@ -1195,6 +1453,12 @@ public class UIElement {
     public class RuntimeCache {
         public final CacheCell<Boolean> hasFocusableDescendant = new CacheCell<Boolean>().setCalculator(ignored -> {
             UIElement element = UIElement.this;
+            // A `display: none` subtree is unreachable IN ITS ENTIRETY, not just at its root — the
+            // same rule HTML applies. focusable() only consults an element's OWN display, so without
+            // this the visible children of a hidden parent stay keyboard-reachable and Tab lands on
+            // something nobody can see. Found via TabView, whose inactive panes are hidden exactly
+            // this way while their content stays display:flex.
+            if (element.style.taffyBridge.style.display == TaffyDisplay.NONE) return false;
             if (element.focusable()) return true;
             for (UIElement child : element.getChildren()) {
                 if (child.getRuntimeCache().hasFocusableDescendant.get()) return true;
@@ -1229,6 +1493,14 @@ public class UIElement {
                 return old.set(element.attachedWindow.getRootTransform());
             }
             old.set(parent.getRuntimeCache().localToWorld.get());
+            // A scroll container offsets its children here, in the transform chain itself, rather
+            // than only via the PoseStack at paint time. That matters for correctness, not tidiness:
+            // UIWindow.elementHitTest inverts this matrix, so input follows the scroll immediately
+            // and without a paint having happened. Deriving it from the pose alone would leave
+            // hit-testing a frame stale and unverifiable headlessly.
+            if (!element.scrollExempt && (parent.scrollLeft != 0f || parent.scrollTop != 0f)) {
+                old.translate(-parent.scrollLeft, -parent.scrollTop, 0f);
+            }
             // TODO: Style transforms
             return old;
         });

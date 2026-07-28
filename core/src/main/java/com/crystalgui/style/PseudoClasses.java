@@ -9,6 +9,7 @@ public enum PseudoClasses {
     DISABLED(el -> !el.isEnabled()),
     CHECKED(UIElement::isChecked),
     BLANK(UIElement::isBlank),
+    INVALID(UIElement::isInvalid),
     HOVER(UIElement::isHovered),
     ACTIVE(UIElement::isPressed),
     FOCUS(UIElement::isFocused);

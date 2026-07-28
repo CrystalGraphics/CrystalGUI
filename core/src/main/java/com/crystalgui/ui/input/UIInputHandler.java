@@ -173,6 +173,11 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     private void handleActivationKey(Keyboard.Event event) {
         if (focusedElement == null) return;
         if (event.key() != CgUiKeyCodes.KEY_SPACE && event.key() != CgUiKeyCodes.KEY_RETURN) return;
+        // A text-editing element gets Space as a character, not as activation — synthesizing a click
+        // for it would fire the element's press handlers every time somebody typed a space, and the
+        // synthesized Down carries the physical cursor position, so it would also land wherever the
+        // mouse happened to be.
+        if (focusedElement.consumesTextInput()) return;
 
         if (event.pressed() && !event.repeat()) {
             keyboardPressTarget = focusedElement;
@@ -210,7 +215,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
         if (focusedElement != null) emitAndLoseFocus(focusedElement);
         focusedElement = next;
-        emitAndSetFocus(focusedElement);
+        // Tab traversal scrolls the new target into view — it is keyboard-driven, not a click, and
+        // tabbing to something below the fold must reveal it, exactly as a browser does.
+        emitAndSetFocus(focusedElement, true);
     }
 
     private boolean emitKeyboardDown(Keyboard.Event event, int modifiers) {
@@ -281,7 +288,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
                 emitAndLoseFocus(focusedElement);
             }
             if (targetElement != null && targetElement.getFocusPolicy() == FocusPolicy.CLICK) {
-                emitAndSetFocus(targetElement);
+                // Deliberately no scroll: you clicked what you could already see, and scrolling
+                // here would pull the content out from under the cursor.
+                emitAndSetFocus(targetElement, false);
             }
         }
 
@@ -294,6 +303,15 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         sendInputEvent(target, event);
     }
 
+    /**
+     * Dispatches the wheel and stops there.
+     *
+     * <p>Deliberately no built-in "scroll the nearest container" behaviour. A bare {@link UIElement}
+     * is scrollable only <em>programmatically</em> — via {@code scrollTop}/{@code scrollLeft} — and
+     * never by the wheel, however its {@code overflow} is set. Wheel handling belongs to a widget
+     * that opts into it ({@code ScrollerView} does), which keeps a stray clipped element from
+     * silently swallowing scroll input.</p>
+     */
     private void emitMouseScroll(UIElement target) {
         MouseEvent.Scroll event = new MouseEvent.Scroll(target, hoverFrameData.eventPosition(), scrollDelta);
         sendInputEvent(target, event);
@@ -316,9 +334,34 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         sendInputEvent(target, event);
     }
 
-    private void emitAndSetFocus(UIElement target) {
+    /**
+     * Moves focus to {@code element} from code, scrolling it into view if it's off-screen — the DOM's
+     * {@code element.focus()}.
+     *
+     * <p>Scrolling is the whole point of having this separate from the click path: focus that lands
+     * somewhere invisible is focus the user can't see, so anything that isn't a click reveals its
+     * target. A click can't need it (you clicked what you could see) and scrolling on click would
+     * yank the page under the cursor.</p>
+     *
+     * <p>No-op for an element that can't take focus, so callers don't have to check.</p>
+     */
+    public void requestFocus(UIElement element) {
+        if (element == null || !element.focusable()) return;
+        if (focusedElement == element) {
+            element.scrollIntoView(); // already focused, but may have been scrolled away since
+            return;
+        }
+        if (focusedElement != null) emitAndLoseFocus(focusedElement);
+        emitAndSetFocus(element, true);
+    }
+
+    private void emitAndSetFocus(UIElement target, boolean scrollIntoView) {
         this.focusedElement = target;
-        if (target != null) target.setFocused(true);
+        if (target != null) {
+            target.setFocused(true);
+            // Instant, never eased — see UIElement.scrollIntoView.
+            if (scrollIntoView) target.scrollIntoView();
+        }
         FocusEvent.Focus event = new FocusEvent.Focus(target);
         sendInputEvent(target, event);
     }

@@ -10,6 +10,8 @@ public final class CgUiKeyCodes {
 
     private CgUiKeyCodes() {}
 
+    /** No key. LWJGL2's {@code Keyboard.KEY_NONE} — what a character-only event carries. */
+    public static final int KEY_NONE            = 0x00;
     public static final int KEY_ESCAPE          = 0x01;
     public static final int KEY_1               = 0x02;
     public static final int KEY_2               = 0x03;

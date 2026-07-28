@@ -9,6 +9,7 @@ import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.border.LengthPercentProperty;
 import com.crystalgui.style.property.visual.color.ColorProperty;
@@ -80,10 +81,27 @@ public class StylePropertyRegistry {
     // own content. Without this listener `overflow: hidden` was purely cosmetic and oversized content
     // still forced every ancestor wider, leaving callers to write `min-width: 0` by hand.
     public static final StyleProperty<Overflow> OVERFLOW = create("overflow", Overflow.class, Overflow.VISIBLE)
-            .addListener((elem, prop, oldVal, newVal) -> elem.getStyle().taffyBridge.setOverflow(
-                    newVal == Overflow.HIDDEN
-                            ? dev.vfyjxf.taffy.style.Overflow.HIDDEN
-                            : dev.vfyjxf.taffy.style.Overflow.VISIBLE));
+            .addListener((elem, prop, oldVal, newVal) ->
+                    elem.getStyle().taffyBridge.setOverflow(toTaffyOverflow(newVal)));
+
+    /** Our CSS-facing set onto Taffy's smaller layout-facing one — the entire cost of keeping our own
+     * enum. {@code AUTO} collapses to {@code HIDDEN} rather than {@code SCROLL} because Taffy reserves
+     * a scrollbar gutter only for {@code SCROLL}, and our scrollbars overlay the content instead of
+     * displacing it. */
+    private static dev.vfyjxf.taffy.style.Overflow toTaffyOverflow(Overflow overflow) {
+        return switch (overflow) {
+            case VISIBLE -> dev.vfyjxf.taffy.style.Overflow.VISIBLE;
+            case CLIP -> dev.vfyjxf.taffy.style.Overflow.CLIP;
+            case HIDDEN, AUTO -> dev.vfyjxf.taffy.style.Overflow.HIDDEN;
+            case SCROLL -> dev.vfyjxf.taffy.style.Overflow.SCROLL;
+        };
+    }
+    // CSS `scroll-behavior`. Purely a paint/animation concern, so no Taffy listener.
+    public static final StyleProperty<ScrollBehavior> SCROLL_BEHAVIOR =
+            create("scroll-behavior", ScrollBehavior.class, ScrollBehavior.AUTO);
+    /** Seconds for a smooth scroll to substantially settle. CSS has no knob for this; browsers hard-code
+     * their own curve, and this is ours — exposed so a theme can tune the feel. */
+    public static final StyleProperty<Float> SCROLL_DURATION = create("scroll-duration", 0.18f);
     public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
     // Geometry longhands for the `mask` layer, exactly mirroring the `overlay-*` trio above (same
     // types, same defaults, same CgUiLayerBox.resolve path). Defaults reproduce the previous
