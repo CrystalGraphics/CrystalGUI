@@ -6,6 +6,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.Ui;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.TextField;
 import org.junit.Before;
 import org.junit.Test;
@@ -107,5 +108,41 @@ public class TextStylePropertiesCssTest {
         assertEquals(1.2f, style.lineHeight(), 0.0001f);
         assertEquals(1f, style.caretWidth(), 0.0001f);
         assertEquals(0x803C8527, style.selectionColor());
+        assertEquals("no nudge by default", 0f, style.textOffsetY().value, 0.0001f);
+        assertEquals(0f, style.textOffsetX().value, 0.0001f);
+    }
+
+    /**
+     * The whole point of {@code text-offset-*} being inheritable: a theme writes it once on a widget
+     * root (or on {@code *}) and it reaches that widget's internal label, which no author selector
+     * can name. Same mechanism {@code color} already relies on.
+     */
+    @Test
+    public void textOffsetInheritsToAnInternalLabel() {
+        UIElement root = new UIElement();
+        root.setId("host");
+        Button button = new Button("hi");
+        root.addChild(button);
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.parse("#host { text-offset-y: 1px; }"));
+        window.init(800, 600);
+        window.getStyleEngine().calculateStyle(0f);
+
+        UIElement label = button.getChildren().stream()
+                .filter(UIElement::isInternalUI)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Button has no internal label"));
+        assertEquals("the label the theme cannot select directly",
+                1f, label.getStyle().getGeneralGroup().textOffsetY().value, 0.0001f);
+    }
+
+    /** Percent and px both parse, matching outline-offset / mask-offset's LengthPercent grammar. */
+    @Test
+    public void textOffsetAcceptsPxAndPercent() {
+        GeneralGroup style = styled("textfield { text-offset-x: 2px; text-offset-y: 50%; }");
+        assertFalse(style.textOffsetX().percent);
+        assertEquals(2f, style.textOffsetX().value, 0.0001f);
+        assertTrue(style.textOffsetY().percent);
+        assertEquals(0.5f, style.textOffsetY().value, 0.0001f);
     }
 }

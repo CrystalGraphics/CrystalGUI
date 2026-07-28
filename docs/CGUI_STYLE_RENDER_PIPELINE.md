@@ -265,6 +265,17 @@ decorative visual because its style system lacks background geometry controls):
   decoration (e.g. `checkbox:checked .__mark__ { overlay: <check glyph> }`) instead of being fought
   over for focus rings.
 
+  **`outline-offset` is per-edge here, unlike CSS's single scalar.** The real cascading properties
+  are `outline-offset-top`/`-right`/`-bottom`/`-left`; `outline-offset` is 1–4 value shorthand over
+  them, clockwise from the top exactly like `margin` (see `OutlineOffsetShorthand`, which mirrors
+  `BoxEdgeShorthands`). The reason is 9-slice rings: a sprite's transparent padding need not be
+  symmetric, and a single scalar can only trade a gap on one edge for a gap on the other three. Ore's
+  selected tab is the live case — `tab-on` keeps two transparent texel rows along its top edge to make
+  a selected tab sit raised, so `tab:checked:focus { outline-offset: -2px 0 0 0; }` tightens only that
+  edge. On the SDF path the corner-radius expansion takes one amount per axis, so asymmetric offsets
+  use the mean of the two edges on that axis — a rounded corner joining two differently-offset edges
+  has no single correct radius, and the 9-slice case that motivates per-edge never reaches that branch.
+
   It comes in **two forms**, with the drawable winning when both are set (the precedence CSS gives
   `border-image` over `border`):
 

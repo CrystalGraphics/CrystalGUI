@@ -1489,28 +1489,42 @@ public class UIElement {
 
         final float x = runtimeCache.getX(), y = runtimeCache.getY();
         final float width = runtimeCache.getWidth(), height = runtimeCache.getHeight();
-        // Percent offsets resolve per-axis against the element's own box, same convention as
+        // Percent offsets resolve against the element's own box on their own axis, same convention as
         // border-radius (CSS itself only allows <length> here, so a percent is an author error we
         // interpret rather than reject).
-        LengthPercent offset = styleGen.outlineOffset();
-        float offsetX = offset.resolve(width);
-        float offsetY = offset.resolve(height);
+        //
+        // Per-edge, unlike CSS's single scalar — see OutlineOffsetShorthand. A 9-slice ring has to hug
+        // a sprite whose transparent padding need not be symmetric.
+        float offsetTop = styleGen.outlineOffsetTop().resolve(height);
+        float offsetBottom = styleGen.outlineOffsetBottom().resolve(height);
+        float offsetLeft = styleGen.outlineOffsetLeft().resolve(width);
+        float offsetRight = styleGen.outlineOffsetRight().resolve(width);
 
         if (hasDrawable) {
             // Drawable wins when both are set — same precedence CSS gives border-image over border.
-            outline.draw(ctx, x - offsetX, y - offsetY,
-                    Math.max(0f, width + 2f * offsetX), Math.max(0f, height + 2f * offsetY));
+            outline.draw(ctx, x - offsetLeft, y - offsetTop,
+                    Math.max(0f, width + offsetLeft + offsetRight),
+                    Math.max(0f, height + offsetTop + offsetBottom));
             return;
         }
 
         // SDF stroke form. The shader measures _BorderWidth INWARD from the shape's outer edge,
         // while a CSS outline grows OUTWARD from the offset edge — so inflate by offset+width and
         // let the inward stroke land exactly in the band between offset and offset+width.
-        float insetX = offsetX + strokeWidth;
-        float insetY = offsetY + strokeWidth;
+        float insetTop = offsetTop + strokeWidth;
+        float insetBottom = offsetBottom + strokeWidth;
+        float insetLeft = offsetLeft + strokeWidth;
+        float insetRight = offsetRight + strokeWidth;
         // Resolve radii against the element's OWN box, then expand. Resolving against the inflated
         // box instead would re-scale percentage radii and produce a visibly over-curved ring.
-        CornerRadii radii = resolveCornerRadii(width, height).expand(insetX, insetY);
+        //
+        // The radii expansion takes one amount per axis, so asymmetric offsets use the mean of the
+        // two edges on that axis. Deliberate: a rounded corner joins two edges that have been pushed
+        // out by different amounts, so there is no single correct radius for it — and the case this
+        // per-edge support exists for (a 9-slice sprite ring) never reaches this branch at all, since
+        // a drawable outline returns above.
+        CornerRadii radii = resolveCornerRadii(width, height)
+                .expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
 
         int color = styleGen.outlineColor();
         // Transparent fill that keeps the stroke's RGB: the shader mixes border->fill on straight
@@ -1518,7 +1532,8 @@ public class UIElement {
         // edge toward black and leave a dark fringe. Same RGB, zero alpha = a clean alpha ramp.
         CgUiRoundedRect ring = buildFillOnlyRoundedRect(radii, new ColorFill(color & 0x00FFFFFF));
         ring.setBorder(strokeWidth, color);
-        ring.draw(ctx, x - insetX, y - insetY, width + 2f * insetX, height + 2f * insetY);
+        ring.draw(ctx, x - insetLeft, y - insetTop,
+                width + insetLeft + insetRight, height + insetTop + insetBottom);
     }
 
     /** Absolute-screen rect for one of the CSS box-model boxes.

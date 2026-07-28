@@ -94,6 +94,24 @@ public class StylePropertyRegistry {
     // literal to IntProperty and silently give a non-interpolating, non-colour-parsing property.
     public static final StyleProperty<Integer> SELECTION_COLOR =
             create(new ColorProperty("selection-color", 0x803C8527)).setInheritable(true);
+    // A paint-time nudge of the glyphs inside whatever box layout already gave them. Not CSS — CSS
+    // has no equivalent, and deliberately so, because the web solves this by choosing webfonts with
+    // sane vertical metrics.
+    //
+    // Needed here because a UI theme does NOT get to choose its font: a pixel font shipped with a
+    // resource pack declares whatever ascender/descender/lineGap its author felt like, and those are
+    // routinely lopsided. Vertical centring centres the font's LINE BOX, so a font carrying (say) 1px
+    // of space above the ink and 3px below renders every centred label 1px high — in every widget at
+    // once, since they all centre the same way. Padding can't fix it: padding moves the box, and the
+    // box is what is already correct.
+    //
+    // Layout-free by design, exactly like `outline`: it moves pixels, never geometry, so a nudge can
+    // never reflow a widget or change what a click hits. Inheritable, so a theme writes it once on
+    // `*` (or on a widget root, reaching that widget's internal label) rather than per label.
+    public static final StyleProperty<LengthPercent> TEXT_OFFSET_X =
+            create(new LengthPercentProperty("text-offset-x", LengthPercent.ZERO)).setInheritable(true);
+    public static final StyleProperty<LengthPercent> TEXT_OFFSET_Y =
+            create(new LengthPercentProperty("text-offset-y", LengthPercent.ZERO)).setInheritable(true);
     public static final StyleProperty<Integer> Z_INDEX = create("z-index", 0).addListener((elem, prop, oldVal, newVal) -> {
         if (elem.getParent() != null) {
             elem.getParent().getRuntimeCache().sortedChildren.invalidate();
@@ -160,8 +178,21 @@ public class StylePropertyRegistry {
     // outward ring is clipped by any ancestor with `overflow: hidden` (the scissor is real
     // GL_SCISSOR_TEST and survives into nested layer FBOs). LengthPercent, not a bare float, so
     // `2px` parses and so it can transition.
-    public static final StyleProperty<LengthPercent> OUTLINE_OFFSET =
-            create(new LengthPercentProperty("outline-offset", LengthPercent.ZERO));
+    //
+    // PER-EDGE, unlike real CSS, where `outline-offset` is a single scalar. The four edges are the
+    // real cascading properties and `outline-offset` is 1-4 value shorthand syntax over them (see
+    // OutlineOffsetShorthand), exactly as margin/padding work. Needed because a 9-slice focus ring
+    // has to hug a sprite whose own transparent padding is asymmetric — Ore's selected `tab-on` keeps
+    // two empty texel rows at the top to make the tab sit raised, so a symmetric ring floats in that
+    // band along one edge while hugging the other three.
+    public static final StyleProperty<LengthPercent> OUTLINE_OFFSET_TOP =
+            create(new LengthPercentProperty("outline-offset-top", LengthPercent.ZERO));
+    public static final StyleProperty<LengthPercent> OUTLINE_OFFSET_RIGHT =
+            create(new LengthPercentProperty("outline-offset-right", LengthPercent.ZERO));
+    public static final StyleProperty<LengthPercent> OUTLINE_OFFSET_BOTTOM =
+            create(new LengthPercentProperty("outline-offset-bottom", LengthPercent.ZERO));
+    public static final StyleProperty<LengthPercent> OUTLINE_OFFSET_LEFT =
+            create(new LengthPercentProperty("outline-offset-left", LengthPercent.ZERO));
     // Stroke form of the outline, drawn as an SDF ring that follows border-radius. Used only when
     // OUTLINE (the drawable) is EMPTY — same precedence CSS gives border-image over border.
     // LengthPercent, not Taffy's LengthPercentageAuto: like border-radius, this is a paint-time

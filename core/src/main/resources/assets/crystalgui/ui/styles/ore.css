@@ -28,18 +28,28 @@
  * Apply via: uiWindow.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
  */
 
+/* Font and its vertical correction belong together — the second only makes sense for the first.
+ *
+ * Minecraft.otf declares a line box with roughly 1px of space above the ink and 3px below at these
+ * sizes. Vertical centring centres that BOX, so the ink lands ~1px high in every widget that centres
+ * a label — which is all of them. `text-offset-y` nudges the glyphs back down at paint time without
+ * touching layout, so nothing reflows and no click target moves.
+ *
+ * Measured, not guessed: in a 14px button the ink sat 1px from the top of the visible face and 5px
+ * (physical, at uiScale 2) from the bottom. Swap the font and this number changes with it. */
 * {
-    font-family: "crystalgui:ui/fonts/Minecraft.otf";
+    font-family: "crystalgui:ui/fonts/MinecraftRegular.otf";
+    font-size: 10;
+    text-offset-y: 1px;
 }
 
 button {
     background: asset("crystalgui:ore", "button");
     color: #222222;
     text-shadow: false;
-    font-size: 10;
     height: 14px;
     padding-left: 2px;
-    padding-top: 1px;
+    padding-top: 2px;
     padding-right: 2px;
     padding-bottom: 4px;
     justify-content: center;
@@ -75,11 +85,11 @@ checkbox {
     align-self: flex-start;
     height: 14px;
     padding-all: 1px;
+    padding-bottom: 0px;
     gap-all: 2px;
     align-items: center;
     color: #222222;
     text-shadow: false;
-    font-size: 10;
 }
 checkbox .__mark__ {
     width: 12px;
@@ -240,8 +250,6 @@ slider:disabled .__thumb__ {
     padding-right: 5px;
     padding-bottom: 7px;
     gap-all: 4px;
-    /* Inheritable, so anything inside the panel that doesn't set its own picks this up. */
-    font-size: 10;
 }
 
 /* Split view. The two panes carry no styling of their own — they're content hosts, and whatever a
@@ -288,6 +296,17 @@ splitview .__divider__:active {
     /* 6-digit = opaque; see the note on button:active about 8-digit hex being #RRGGBBAA. */
     background-color: #DDDDDD;
 }
+/* The divider IS focusable (SplitView gives it FocusPolicy.FOCUSABLE so the arrow keys can move the
+ * split), so Tab-traversal lands on it and needs to say so.
+ *
+ * A sprite swap rather than an `outline:` ring like every other widget here, because the divider is
+ * 4px: `focus-ring` is a nine-slice with 2px borders, and at 4px it is nothing but border — the
+ * centre never gets drawn and it renders as a solid block. Same nine-slicing size limit called out
+ * for the tab strip's hairline scrollbar below. */
+splitview .__divider__:focus {
+    background: asset("crystalgui:ore", "divider-hover");
+    background-color: #AACCFF;
+}
 /* SplitView adds `__vertical__` to itself when the orientation flips, purely so this rule can match. */
 splitview.__vertical__ .__divider__ {
     width: auto;
@@ -310,7 +329,6 @@ textfield {
      * was Ore's green, so until now every theme inherited Ore's accent whether it wanted it or not.
      * Declaring it here is what lets the other themes stop doing that. */
     selection-color: #43912C80;
-    font-size: 10;
     height: 14px;
     padding-all: 3px;
     align-items: center;
@@ -382,6 +400,28 @@ tab:checked:hover {
 tab:disabled {
     background: asset("crystalgui:ore", "tab-off");
     color: #888888;
+}
+/* `Tab extends Button` in Java, but CSS type selectors match `tagName()` — and Tab's tag is `tab`,
+ * not `button`. So `button:focus` above never reaches a tab, and the ring has to be repeated here.
+ * Same reason `tab` re-declares colour and text-shadow rather than inheriting the button rule.
+ *
+ * Layout-free, like every other ring in this sheet: `border-width` feeds Taffy and would resize the
+ * tab, fighting the `:checked` padding shift above. */
+tab:focus {
+    outline: asset("crystalgui:ore", "focus-ring");
+}
+/* The selected tab needs the ring pulled IN by a pixel, because `tab-on`'s top 2 texel rows are
+ * transparent — that is what makes a selected tab sit higher without changing its height. Its border
+ * box therefore starts 2px above anything visible, and a zero-offset ring floats in that empty band
+ * along the top edge while hugging every other side. `tab-off` is fully opaque, so the unselected
+ * ring above is already flush and must NOT get this.
+ *
+ * TOP EDGE ONLY. `outline-offset` here takes 1-4 values like `margin` (top/right/bottom/left) — a
+ * deliberate divergence from CSS's single scalar, which exists for exactly this: the other three
+ * edges are already flush, and pulling them in too would just trade a gap at the top for a gap
+ * everywhere else. */
+tab:checked:focus {
+    outline-offset: -2px 0 0 0;
 }
 
 /* The strip's hairline gets FLAT COLOURS, not Ore's scroller sprites. At 3px a 5x5 nine-slice with

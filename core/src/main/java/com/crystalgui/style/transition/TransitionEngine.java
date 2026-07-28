@@ -90,6 +90,7 @@ public final class TransitionEngine {
             // can't be caught by the exact-name check above.
             if (BoxEdgeShorthands.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
             if (com.crystalgui.style.property.visual.border.BorderRadiusShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
+            if (com.crystalgui.style.property.visual.OutlineOffsetShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
             if (spec.propertyNameOrAll().equals(TransitionSpec.ALL)) fallbackAll = spec;
         }
         return fallbackAll;
