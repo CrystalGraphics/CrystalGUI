@@ -178,6 +178,44 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
+    // ── mask geometry longhands — same trio as overlay above, same semantics ─────────────────────
+
+    public BoxOrigin maskOrigin() {
+        return getValueSave(StylePropertyRegistry.MASK_ORIGIN);
+    }
+
+    public GeneralGroup maskOrigin(BoxOrigin origin) {
+        set(StylePropertyRegistry.MASK_ORIGIN, origin);
+        return this;
+    }
+
+    public DrawableFit maskFit() {
+        return getValueSave(StylePropertyRegistry.MASK_FIT);
+    }
+
+    public GeneralGroup maskFit(DrawableFit fit) {
+        set(StylePropertyRegistry.MASK_FIT, fit);
+        return this;
+    }
+
+    public DrawableAlign maskPosition() {
+        return getValueSave(StylePropertyRegistry.MASK_POSITION);
+    }
+
+    public GeneralGroup maskPosition(DrawableAlign position) {
+        set(StylePropertyRegistry.MASK_POSITION, position);
+        return this;
+    }
+
+    public LengthPercent maskOffset() {
+        return getValueSave(StylePropertyRegistry.MASK_OFFSET);
+    }
+
+    public GeneralGroup maskOffset(LengthPercent offset) {
+        set(StylePropertyRegistry.MASK_OFFSET, offset);
+        return this;
+    }
+
     /** Uniform circular radius on all 4 corners (px) — the common case. For per-corner/elliptical
      * control, set the 8 {@link com.crystalgui.style.property.visual.border.BorderRadiusProperties}
      * longhands directly, or use the {@code border-radius:} stylesheet shorthand. */

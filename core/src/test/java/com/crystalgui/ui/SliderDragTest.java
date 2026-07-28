@@ -57,37 +57,20 @@ public class SliderDragTest {
         return slider;
     }
 
-    /** One full frame's worth of style + layout + input bookkeeping, minus the painting. */
+    /**
+     * One full frame's worth of style + layout + input bookkeeping, minus the painting.
+     *
+     * <p>Note there is no transform-seeding step here. Hit-testing works without ever painting
+     * because {@code RuntimeCache.localToWorld} falls back to {@link UIWindow#getRootTransform()},
+     * the same matrix {@code paintFrame} seeds the {@code PoseStack} from. It used to fall back to
+     * identity — wrong by exactly {@code uiScale} — and these tests had to reproduce the scale matrix
+     * by hand to compensate. That hack being unnecessary is the check that the fallback is right.</p>
+     */
     private void frame() {
         window.getStyleEngine().calculateStyle(0.016f);
         window.calculateLayout();
-        seedWorldTransforms();
         window.getInputHandler().beginFrame();
         window.getInputHandler().endFrame();
-    }
-
-    /**
-     * Stands in for the one thing painting does that hit-testing depends on.
-     *
-     * <p>{@code UIElement.drawSubtree} snapshots the live {@code PoseStack} into each element's
-     * {@code localToWorld}, and {@code UIWindow.paintFrame} has already pushed
-     * {@code pose.scale(uiScale)} by then — so the element transform chain only carries the UI scale
-     * <em>after a paint has happened</em>. Its calculator otherwise falls back to identity, which is
-     * silently wrong by exactly a factor of {@code uiScale}. These tests can't paint (no GL context),
-     * so they reproduce that same scale matrix directly. Per-element style transforms don't exist
-     * yet, so every element shares one world matrix.
-     */
-    private void seedWorldTransforms() {
-        Matrix4f world = new Matrix4f().scale(window.getUiScale(), window.getUiScale(), 1f);
-        seedWorldTransforms(slider, world); // the slider is the root in these tests
-    }
-
-    private void seedWorldTransforms(UIElement element, Matrix4f world) {
-        element.getRuntimeCache().localToWorld.set(new Matrix4f(world));
-        element.getRuntimeCache().worldToLocal.invalidate();
-        for (UIElement child : element.getChildren()) {
-            seedWorldTransforms(child, world);
-        }
     }
 
     private void mouseTo(int physX, int physY) {
@@ -201,6 +184,29 @@ public class SliderDragTest {
         mouseTo(grabX + Math.round(travel * 0.25f * uiScale), physY);
         frame();
         return slider.getValue();
+    }
+
+    /**
+     * Changing {@code uiScale} on a live window must re-point hit-testing, which means invalidating
+     * every cached transform — they all derive from the root transform. Lombok's generated setter
+     * didn't, so the tree kept resolving pointers at the old scale.
+     */
+    @Test
+    public void changingUiScaleAtRuntimeUpdatesHitTesting() {
+        setUp(2f);
+        var cache = slider.getRuntimeCache();
+        float localCentreX = cache.getX() + cache.getWidth() / 2f;
+        float localCentreY = cache.getY() + cache.getHeight() / 2f;
+
+        assertTrue(slider.containsScreenPoint(localCentreX * 2f, localCentreY * 2f));
+
+        window.setUiScale(1f);
+        frame();
+
+        assertTrue("hit-testing did not follow the new scale",
+                slider.containsScreenPoint(localCentreX, localCentreY));
+        assertFalse("hit-testing still resolving at the old scale",
+                slider.containsScreenPoint(localCentreX * 2f, localCentreY * 2f));
     }
 
     /** The thumb must stay inside the root at both extremes — hit-testing uses the root, so a thumb
