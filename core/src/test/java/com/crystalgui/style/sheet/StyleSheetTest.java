@@ -218,7 +218,7 @@ public class StyleSheetTest {
         assertTrue(StylePropertyRegistry.FONT_SIZE.isInheritable());
         assertTrue(StylePropertyRegistry.FONT_FAMILY.isInheritable());
         assertEquals((Float) 16f, StylePropertyRegistry.FONT_SIZE.initialValue);
-        assertEquals(java.util.List.of("crystalgui:ui/fonts/mojangles.ttf"), StylePropertyRegistry.FONT_FAMILY.initialValue);
+        assertEquals(java.util.List.of("crystalgui:ui/fonts/Minecraft.otf"), StylePropertyRegistry.FONT_FAMILY.initialValue);
     }
 
     // ── `outline` shorthand disambiguation ──────────────────────────────────────────────────────
