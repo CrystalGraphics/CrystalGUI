@@ -41,6 +41,9 @@ dependencies {
     // that actually allocate GL objects still need a live context and remain harness-only.
     testImplementation("com.crystalgraphics:core:1.0.0")
     testImplementation("com.crystalgraphics:platform:1.0.0")
+    // CG declares commons-io compileOnly (Minecraft ships it at runtime), so it isn't inherited
+    // transitively. Tests that load a resource go through CgIO -> IOUtils, so they need it directly.
+    testImplementation("commons-io:commons-io:2.4")
     implementation("org.apache.logging.log4j:log4j-core:2.26.1")
 
     // Taffy layout engine + JOML (consumed from CG at runtime; needed here for compile)

@@ -49,8 +49,9 @@ public final class UIWindow {
     private int actualScreenHeight;
 
     @Getter
-    @Setter
     private float uiScale = 2;
+    /** @see #getRootTransform() */
+    private final Matrix4f rootTransform = new Matrix4f().scale(2, 2, 1f);
     @Getter
     private float leftPos, topPos, width, height;
     @Getter
