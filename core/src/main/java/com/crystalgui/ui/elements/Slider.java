@@ -56,20 +56,6 @@ public class Slider extends UIElement {
     public static final String THUMB_CLASS = "__thumb__";
     public static final String SPACER_CLASS = "__spacer__";
 
-    /**
-     * Present on the root exactly while {@link #setStep} is non-zero, so a stylesheet can give
-     * discrete sliders a different look via {@code slider.__stepped__ …} with no engine support.
-     *
-     * <p>This is the whole of the "discrete render mode": the bar is deliberately <em>not</em> drawn
-     * segmented. Equal-width segments and the fill/thumb/spacer flex row are structurally
-     * incompatible — segments would have to live inside both {@code __fill__} and {@code __spacer__}
-     * (the thumb splits the bar), so whichever segment the thumb currently sits on would be cut in
-     * half. Avoiding that means positioning the thumb absolutely, which would give up the property
-     * the flex structure exists for: the thumb is never half-off the end at the extremes. At the
-     * sizes these themes render at the separators also all but vanish. So the value snaps and the
-     * bar doesn't change, and a theme that wants more writes its own rules off this class.</p>
-     */
-    public static final String STEPPED_CLASS = "__stepped__";
 
     /** Fires whenever the value actually changes, from any source. */
     public final Signal.Value<Float> onValueChanged = new Signal.Value<>();
@@ -177,13 +163,6 @@ public class Slider extends UIElement {
     /** {@code 0} for continuous. A positive value snaps to multiples of it from {@code min}. */
     public Slider setStep(float step) {
         this.step = Math.max(0f, step);
-        // addClass/removeClass already invalidate the style match (recursively), so descendant rules
-        // like `slider.__stepped__ .__fill__` re-match without any extra prodding here.
-        if (this.step > 0f) {
-            addClass(STEPPED_CLASS);
-        } else {
-            removeClass(STEPPED_CLASS);
-        }
         setValue(this.value);
         return this;
     }
