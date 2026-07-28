@@ -863,7 +863,10 @@ public class TextField extends UIElement implements UIFrameTicker {
      */
     public int indexAt(float localX) {
         ensureMeasured();
-        float target = localX - textOriginX() + displayOffset;
+        // Must subtract the same nudge paintOverlay adds, or click-to-caret lands off by it.
+        float target = localX - textOriginX()
+                - getStyle().getGeneralGroup().textOffsetX().resolve(getRuntimeCache().getWidth())
+                + displayOffset;
         int best = 0;
         float bestDistance = Float.MAX_VALUE;
         for (int i = 0; i <= text.length(); i = (i >= text.length()) ? i + 1 : step(i, 1)) {
@@ -904,15 +907,22 @@ public class TextField extends UIElement implements UIFrameTicker {
 
         var styleGen = getStyle().getGeneralGroup();
         float fontSize = styleGen.fontSize();
-        float originX = textOriginX() - displayOffset;
-
         var box = getRuntimeCache();
         var layout = getTaffyLayout();
+
+        // `text-offset-*` applies to the text, the caret and the selection band together — they are
+        // one visual unit, and nudging only the glyphs would leave the caret sitting beside them.
+        // Not applied to the scissor below, which clips the field, not its contents.
+        float offsetX = styleGen.textOffsetX().resolve(box.getWidth());
+        float offsetY = styleGen.textOffsetY().resolve(box.getHeight());
+
+        float originX = textOriginX() - displayOffset + offsetX;
+
         float lineHeight = fontSize * styleGen.lineHeight();
         // Vertically centred in the whole field rather than pinned to the content box's top: a
         // single-line field is almost always shorter than its font's line box once padding is taken
         // out, so top-aligning would push the text against the border.
-        float originY = box.getY() + (box.getHeight() - lineHeight) / 2f;
+        float originY = box.getY() + (box.getHeight() - lineHeight) / 2f + offsetY;
 
         // Clip HORIZONTALLY ONLY. The point of the clip is to stop a long string spilling past the
         // field's sides; clipping vertically to the content box would slice the glyphs, because that

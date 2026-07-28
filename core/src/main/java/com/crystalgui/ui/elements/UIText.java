@@ -193,9 +193,15 @@ public final class UIText extends UIElement {
         super.paintOverlay(ctx); // still draws the `overlay:` CSS drawable, unchanged from any other element
 
         var layout = getTaffyLayout();
-        float contentX = getRuntimeCache().getX() + layout.border().left + layout.padding().left;
-        float contentY = getRuntimeCache().getY() + layout.border().top + layout.padding().top;
+        var general = getStyle().getGeneralGroup();
         float contentWidth = layout.contentBoxWidth();
+        // Paint-time only, and applied AFTER contentWidth is read so it can never affect wrapping —
+        // `text-offset-*` moves glyphs, never geometry. Percentages resolve per-axis against this
+        // element's own box, the same convention outline-offset and mask-offset use.
+        float contentX = getRuntimeCache().getX() + layout.border().left + layout.padding().left
+                + general.textOffsetX().resolve(getRuntimeCache().getWidth());
+        float contentY = getRuntimeCache().getY() + layout.border().top + layout.padding().top
+                + general.textOffsetY().resolve(getRuntimeCache().getHeight());
 
         CgFontFamily family = resolveFamily();
         // Deliberately 0f (unbounded) maxHeight, matching recompute()'s call — NOT

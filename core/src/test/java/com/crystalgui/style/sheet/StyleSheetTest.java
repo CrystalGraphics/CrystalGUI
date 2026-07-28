@@ -2,6 +2,7 @@ package com.crystalgui.style.sheet;
 
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.BoxSizing;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
@@ -291,14 +292,45 @@ public class StyleSheetTest {
         assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
     }
 
+    /** {@code outline-offset} is edge shorthand (4 longhands); width/colour are single properties. */
     @Test
-    public void outlineOffsetAndWidthAreSeparateRegisteredProperties() {
+    public void outlineOffsetAndWidthAreSeparateProperties() {
         var decls = StyleSheet.parse(".a { outline-offset: 2px; outline-width: 3px; outline-color: #fff; }")
                 .getRules().get(0).declarations();
-        assertEquals(3, decls.size());
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_OFFSET));
+        assertEquals(6, decls.size());
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_OFFSET_TOP));
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_OFFSET_RIGHT));
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_OFFSET_BOTTOM));
+        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_OFFSET_LEFT));
         assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
         assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
+    }
+
+    /** One value hits all four edges; four values are top/right/bottom/left, clockwise like margin. */
+    @Test
+    public void outlineOffsetExpandsPerEdge() {
+        assertEquals(2f, offsetEdge("2px", StylePropertyRegistry.OUTLINE_OFFSET_LEFT), 0.0001f);
+
+        // The case this exists for: tighten one edge, leave the other three flush.
+        assertEquals(-2f, offsetEdge("-2px 0 0 0", StylePropertyRegistry.OUTLINE_OFFSET_TOP), 0.0001f);
+        assertEquals(0f, offsetEdge("-2px 0 0 0", StylePropertyRegistry.OUTLINE_OFFSET_RIGHT), 0.0001f);
+        assertEquals(0f, offsetEdge("-2px 0 0 0", StylePropertyRegistry.OUTLINE_OFFSET_BOTTOM), 0.0001f);
+        assertEquals(0f, offsetEdge("-2px 0 0 0", StylePropertyRegistry.OUTLINE_OFFSET_LEFT), 0.0001f);
+
+        // Two values are vertical/horizontal, so `left` must come from the SECOND token.
+        assertEquals(4f, offsetEdge("1px 4px", StylePropertyRegistry.OUTLINE_OFFSET_LEFT), 0.0001f);
+        assertEquals(1f, offsetEdge("1px 4px", StylePropertyRegistry.OUTLINE_OFFSET_BOTTOM), 0.0001f);
+    }
+
+    private static float offsetEdge(String shorthandValue,
+                                    com.crystalgui.style.property.StyleProperty<LengthPercent> edge) {
+        var decls = StyleSheet.parse(".a { outline-offset: " + shorthandValue + "; }")
+                .getRules().get(0).declarations();
+        return decls.stream()
+                .filter(d -> d.property() == edge)
+                .map(d -> ((LengthPercent) d.value().compute()).value)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no declaration for " + edge.name));
     }
 
     /**

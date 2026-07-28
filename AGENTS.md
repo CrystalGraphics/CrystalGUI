@@ -136,7 +136,8 @@ com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGro
     .general.{bools,enums,floats,ints,strings}   scalar StyleValue/StyleProperty flavors
     .layout.{dimension,grid,length}              LayoutProperties + Taffy-shaped value types
     .visual                                      Overflow/OverflowClip, ScrollBehavior, BoxOrigin,
-                                                 DrawableAlign/DrawableFit, OutlineShorthand
+                                                 DrawableAlign/DrawableFit, OutlineShorthand,
+                                                 OutlineOffsetShorthand (per-edge, unlike CSS)
     .visual.{border,color,text,texture}          BorderRadius*, ColorProperty, FontFamilyValue, TextureProperty
 com.crystalgui.ui              UIElement, UIWindow, Ui, EventListenerGroup, ElementRegistry (tag <-> class),
                                UIFrameTicker (per-frame callback SPI), UITreeObserver (change tracking)

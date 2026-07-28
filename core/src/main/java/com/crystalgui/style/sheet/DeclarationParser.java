@@ -4,6 +4,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.BoxEdgeShorthands;
+import com.crystalgui.style.property.visual.OutlineOffsetShorthand;
 import com.crystalgui.style.property.visual.OutlineShorthand;
 import com.crystalgui.style.property.visual.border.BorderRadiusShorthand;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
@@ -81,6 +82,13 @@ public final class DeclarationParser {
 
             if (BorderRadiusShorthand.isBorderRadius(name)) {
                 BorderRadiusShorthand.expand(declarations, rawValue, important);
+                continue;
+            }
+
+            // Also a 1-4 value edge shorthand, and — unlike CSS's single-scalar version — the four
+            // edges are the real properties. See OutlineOffsetShorthand for why per-edge.
+            if (OutlineOffsetShorthand.isOutlineOffset(name)) {
+                OutlineOffsetShorthand.expand(declarations, rawValue, important);
                 continue;
             }
 

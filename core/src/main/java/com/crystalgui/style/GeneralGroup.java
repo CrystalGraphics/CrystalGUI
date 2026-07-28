@@ -76,12 +76,37 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    public LengthPercent outlineOffset() {
-        return getValueSave(StylePropertyRegistry.OUTLINE_OFFSET);
+    public LengthPercent outlineOffsetTop() {
+        return getValueSave(StylePropertyRegistry.OUTLINE_OFFSET_TOP);
     }
 
+    public LengthPercent outlineOffsetRight() {
+        return getValueSave(StylePropertyRegistry.OUTLINE_OFFSET_RIGHT);
+    }
+
+    public LengthPercent outlineOffsetBottom() {
+        return getValueSave(StylePropertyRegistry.OUTLINE_OFFSET_BOTTOM);
+    }
+
+    public LengthPercent outlineOffsetLeft() {
+        return getValueSave(StylePropertyRegistry.OUTLINE_OFFSET_LEFT);
+    }
+
+    /** Sets all four edges — the Java equivalent of the one-value {@code outline-offset} shorthand. */
     public GeneralGroup outlineOffset(LengthPercent offset) {
-        set(StylePropertyRegistry.OUTLINE_OFFSET, offset);
+        set(StylePropertyRegistry.OUTLINE_OFFSET_TOP, offset);
+        set(StylePropertyRegistry.OUTLINE_OFFSET_RIGHT, offset);
+        set(StylePropertyRegistry.OUTLINE_OFFSET_BOTTOM, offset);
+        set(StylePropertyRegistry.OUTLINE_OFFSET_LEFT, offset);
+        return this;
+    }
+
+    public GeneralGroup outlineOffset(LengthPercent top, LengthPercent right,
+                                      LengthPercent bottom, LengthPercent left) {
+        set(StylePropertyRegistry.OUTLINE_OFFSET_TOP, top);
+        set(StylePropertyRegistry.OUTLINE_OFFSET_RIGHT, right);
+        set(StylePropertyRegistry.OUTLINE_OFFSET_BOTTOM, bottom);
+        set(StylePropertyRegistry.OUTLINE_OFFSET_LEFT, left);
         return this;
     }
 
@@ -166,6 +191,26 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     public GeneralGroup selectionColor(int selectionColor) {
         set(StylePropertyRegistry.SELECTION_COLOR, selectionColor);
+        return this;
+    }
+
+    /** Paint-time nudge of the glyphs within their already-computed box. Never affects layout. */
+    public LengthPercent textOffsetX() {
+        return getValueSave(StylePropertyRegistry.TEXT_OFFSET_X);
+    }
+
+    public GeneralGroup textOffsetX(LengthPercent offset) {
+        set(StylePropertyRegistry.TEXT_OFFSET_X, offset);
+        return this;
+    }
+
+    /** @see #textOffsetX() */
+    public LengthPercent textOffsetY() {
+        return getValueSave(StylePropertyRegistry.TEXT_OFFSET_Y);
+    }
+
+    public GeneralGroup textOffsetY(LengthPercent offset) {
+        set(StylePropertyRegistry.TEXT_OFFSET_Y, offset);
         return this;
     }
 
