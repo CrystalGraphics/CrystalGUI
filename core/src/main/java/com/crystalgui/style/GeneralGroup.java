@@ -139,6 +139,36 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
+    /** Line box height as a multiple of {@link #fontSize()}, as CSS's unitless line-height is. */
+    public float lineHeight() {
+        return getValueSave(StylePropertyRegistry.LINE_HEIGHT);
+    }
+
+    public GeneralGroup lineHeight(float lineHeight) {
+        set(StylePropertyRegistry.LINE_HEIGHT, lineHeight);
+        return this;
+    }
+
+    /** Text-insertion caret thickness, in logical px. */
+    public float caretWidth() {
+        return getValueSave(StylePropertyRegistry.CARET_WIDTH);
+    }
+
+    public GeneralGroup caretWidth(float caretWidth) {
+        set(StylePropertyRegistry.CARET_WIDTH, caretWidth);
+        return this;
+    }
+
+    /** Fill behind selected text — CSS's {@code ::selection { background-color }}. */
+    public int selectionColor() {
+        return getValueSave(StylePropertyRegistry.SELECTION_COLOR);
+    }
+
+    public GeneralGroup selectionColor(int selectionColor) {
+        set(StylePropertyRegistry.SELECTION_COLOR, selectionColor);
+        return this;
+    }
+
     /** Fallback stack of font asset paths, primary first. */
     public List<String> fontFamily() {
         return getValueSave(StylePropertyRegistry.FONT_FAMILY);

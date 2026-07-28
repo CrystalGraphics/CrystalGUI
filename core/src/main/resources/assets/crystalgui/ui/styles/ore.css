@@ -28,6 +28,10 @@
  * Apply via: uiWindow.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
  */
 
+* {
+    font-family: "crystalgui:ui/fonts/mojangles.ttf";
+}
+
 button {
     background: asset("crystalgui:ore", "button");
     color: #222222;
@@ -295,6 +299,14 @@ splitview.__vertical__ .__divider__ {
 textfield {
     background: asset("crystalgui:ore", "textfield");
     color: #E0E0E0;
+    /* Ore's accent green, half-opaque. Sampled from the atlas rather than guessed: the `tab-on`
+     * sprite's body is #43912C with a #73B460 highlight row above it, and the same pair is what the
+     * green buttons use. Half alpha so the glyphs stay readable through the fill.
+     *
+     * This was a private constant in TextField until it became a property — and the constant's value
+     * was Ore's green, so until now every theme inherited Ore's accent whether it wanted it or not.
+     * Declaring it here is what lets the other themes stop doing that. */
+    selection-color: #43912C80;
     font-size: 10;
     height: 14px;
     padding-all: 3px;

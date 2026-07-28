@@ -16,7 +16,7 @@ import java.util.Map;
  * Codecs for the value types style properties actually hold, keyed by type.
  *
  * <h3>Why by type rather than by property</h3>
- * <p>There are 75 registered properties but only about twenty distinct value <em>types</em>, and they
+ * <p>There are 78 registered properties but only about twenty distinct value <em>types</em>, and they
  * collapse further than that: fourteen are enums, four are scalars, and
  * {@link LengthPercentageAuto} alone covers twenty-five properties. So roughly eight codecs reach
  * about sixty-five of the seventy-five — one table, not seventy-five hand-written writers.</p>
