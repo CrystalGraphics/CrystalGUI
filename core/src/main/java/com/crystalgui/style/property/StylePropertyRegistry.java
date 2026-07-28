@@ -60,13 +60,40 @@ public class StylePropertyRegistry {
     // anywhere in its ancestor chain still resolves to something that works.
     public static final StyleProperty<Float> FONT_SIZE = create("font-size", 16f).setInheritable(true);
     public static final StyleProperty<List<String>> FONT_FAMILY = create(
-            "font-family", List.of("crystalgui:ui/fonts/mojangles.ttf"), FontFamilyValue::new
+            "font-family", List.of("crystalgraphics:IBMPlexSans-Regular.ttf"), FontFamilyValue::new
     ).setInheritable(true);
     // TODO: no-op. Parsed and cascaded so stylesheets can declare it without a warning, but nothing
     // consumes it yet — CgTextRenderer/UIText have no drop-shadow support. Defaults false to match
     // what actually renders today (no shadow is ever drawn). Inheritable, like the other text
     // properties above.
     public static final StyleProperty<Boolean> TEXT_SHADOW = create("text-shadow", false).setInheritable(true);
+    // A unitless multiple of font-size, as CSS's unitless line-height is. Inheritable alongside the
+    // other text properties, so a theme sets it once on a root.
+    //
+    // The 1.2 default is a convention, not a derivation. Real CSS defaults to `normal`, which comes
+    // from the font's own ascender + descender + lineGap — CgFontFamily.getLayoutMetrics() exposes
+    // exactly that, and CgTextLayout.lineHeightOverride is the hook to feed it. Doing it properly
+    // needs a `normal | <number>` union value type, which has no codec yet and would break inline
+    // style serialization; deferred rather than faked.
+    //
+    // Consumed by TextField (caret height, selection rect, vertical centring). UIText still wraps at
+    // the font's own metrics and ignores this — a pre-existing inconsistency, not one introduced
+    // here, and the reason this is named generally rather than as a TextField knob.
+    public static final StyleProperty<Float> LINE_HEIGHT = create("line-height", 1.2f).setInheritable(true);
+    // Not standard CSS — browsers derive caret width and expose only `caret-color`. Needed here
+    // because nothing else can express it, and inheritable to match how `caret-color` behaves.
+    //
+    // There is deliberately no `caret-color`: the caret already paints with `color`, which is a real
+    // inheritable property, so it is styleable today. A separate one would need to mean "same as
+    // `color` unless set", and with no `currentColor` mechanism that could only be a sentinel value.
+    public static final StyleProperty<Float> CARET_WIDTH = create("caret-width", 1f).setInheritable(true);
+    // CSS spells this `::selection { background-color }`; there are no pseudo-elements here, so it is
+    // a plain inheritable property instead. Fill only — text inside a selection keeps its `color`.
+    //
+    // Must be `create(new ColorProperty(...))`: the create(String, int) overload would bind this int
+    // literal to IntProperty and silently give a non-interpolating, non-colour-parsing property.
+    public static final StyleProperty<Integer> SELECTION_COLOR =
+            create(new ColorProperty("selection-color", 0x803C8527)).setInheritable(true);
     public static final StyleProperty<Integer> Z_INDEX = create("z-index", 0).addListener((elem, prop, oldVal, newVal) -> {
         if (elem.getParent() != null) {
             elem.getParent().getRuntimeCache().sortedChildren.invalidate();

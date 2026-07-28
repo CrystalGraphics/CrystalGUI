@@ -586,6 +586,22 @@ public class TextField extends UIElement implements UIFrameTicker {
         return caret != selectionAnchor;
     }
 
+    /** Selects everything, as Ctrl+A does. The keyboard path existed; a programmatic one did not. */
+    public TextField selectAll() {
+        selectionAnchor = 0;
+        caret = text.length();
+        resetBlink();
+        onStyleChanged();
+        return this;
+    }
+
+    /** Drops any selection, leaving the caret where it is. */
+    public TextField clearSelection() {
+        selectionAnchor = caret;
+        onStyleChanged();
+        return this;
+    }
+
     public int getSelectionStart() {
         return Math.min(caret, selectionAnchor);
     }
@@ -892,7 +908,7 @@ public class TextField extends UIElement implements UIFrameTicker {
 
         var box = getRuntimeCache();
         var layout = getTaffyLayout();
-        float lineHeight = fontSize * SELECTION_HEIGHT_FACTOR;
+        float lineHeight = fontSize * styleGen.lineHeight();
         // Vertically centred in the whole field rather than pinned to the content box's top: a
         // single-line field is almost always shorter than its font's line box once padding is taken
         // out, so top-aligning would push the text against the border.
@@ -909,7 +925,7 @@ public class TextField extends UIElement implements UIFrameTicker {
         if (hasSelection()) {
             float from = originX + prefixWidths[getSelectionStart()];
             float to = originX + prefixWidths[getSelectionEnd()];
-            ctx.fillRect(from, originY, to - from, fontSize * SELECTION_HEIGHT_FACTOR, SELECTION_ARGB);
+            ctx.fillRect(from, originY, to - from, lineHeight, styleGen.selectionColor());
         }
 
         String shown = text.isEmpty() ? placeholder : text;
@@ -926,14 +942,9 @@ public class TextField extends UIElement implements UIFrameTicker {
         // blink. No invalidation needed: the tree repaints every frame and tickAnimations runs first.
         if (isFocused() && !hasSelection() && caretVisible) {
             float x = originX + prefixWidths[caret];
-            ctx.fillRect(x, originY, CARET_WIDTH, fontSize * SELECTION_HEIGHT_FACTOR, styleGen.color());
+            ctx.fillRect(x, originY, styleGen.caretWidth(), lineHeight, styleGen.color());
         }
 
         ctx.popScissor();
     }
-
-    private static final float CARET_WIDTH = 1f;
-    /** Selection/caret height as a multiple of font size — roughly one line box. */
-    private static final float SELECTION_HEIGHT_FACTOR = 1.2f;
-    private static final int SELECTION_ARGB = 0x803C8527;
 }
