@@ -22,6 +22,9 @@
     "slider-track":   { "sprite": [56, 0, 5, 5], "border": [2, 2, 2, 2] },
     "slider-fill":    { "sprite": [64, 0, 5, 5], "border": [2, 2, 2, 2] },
 
+    "divider":        { "sprite": [46, 0, 5, 5], "border": [2, 2, 2, 2] },
+    "divider-hover":  { "sprite": [56, 0, 5, 5], "border": [2, 2, 2, 2] },
+
     "textfield":              { "sprite": [21, 0, 3, 4], "border": [1, 1, 1, 2] },
     "scroller-track":         { "sprite": [24, 0, 3, 5], "border": [1, 3, 1, 1] },
     "scroller-thumb":         { "sprite": [46, 0, 5, 5], "border": [2, 2, 2, 2] },

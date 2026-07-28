@@ -4,8 +4,10 @@ import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.vertex.CgVertexTransformUtil;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleEngine;
+import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.ui.tree.UITreeTraversal;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.AvailableSpace;
 import dev.vfyjxf.taffy.style.TaffyDimension;
@@ -87,66 +89,81 @@ public final class UIWindow {
         this.screenHeight = Math.round(actualScreenHeight / uiScale);
 
         final var rootElement = ui.rootElement;
-        final var rootStyle = rootElement.getStyle();
-
-        var isRelative = Optional.ofNullable(rootStyle.computeCandidate(LayoutProperties.POSITION))
-                .orElse(TaffyPosition.RELATIVE) != TaffyPosition.ABSOLUTE;
-
-        var width = Optional.ofNullable(rootStyle.computeCandidate(LayoutProperties.WIDTH))
-                .orElseGet(TaffyDimension::auto);
-        var height = Optional.ofNullable(rootStyle.computeCandidate(LayoutProperties.HEIGHT))
-                .orElseGet(TaffyDimension::auto);
-
-        this.width = switch (width.getType()) {
-            case PERCENT -> width.getValue() * this.screenWidth;
-            case LENGTH -> width.getValue();
-            default -> 0;
-        };
-        this.height = switch (height.getType()) {
-            case PERCENT -> height.getValue() * this.screenHeight;
-            case LENGTH -> height.getValue();
-            default -> 0;
-        };
-        if (width.isPercent()) {
-            this.layoutWidth = this.screenWidth;
-        } else {
-            this.layoutWidth = Float.NaN;
-        }
-        if (height.isPercent()) {
-            this.layoutHeight = this.screenHeight;
-        } else {
-            this.layoutHeight = Float.NaN;
-        }
 
         if (rootElement.getAttachedWindow() != this)
             rootElement.setAttachedWindow(this);
 
         rootElement.initScreen(this.screenWidth, this.screenHeight);
-        rootStyle.markTaffyStyleDirty();
+        rootElement.getStyle().markTaffyStyleDirty();
         calculateLayout();
-
-        var rootTaffyLocation = rootElement.getTaffyLayout().location();
-        var elementBounds = rootElement.getRuntimeCache();
-        if (width.isAuto()) {
-            this.width = elementBounds.getWidth();
-            this.leftPos = isRelative ? (this.screenWidth - this.width) / 2 : rootTaffyLocation.x;
-        } else {
-            this.leftPos = isRelative ? (this.screenWidth - this.width) / 2 : rootTaffyLocation.x;
-        }
-        if (height.isAuto()) {
-            this.height = elementBounds.getHeight();
-            this.topPos = isRelative ? (this.screenHeight - this.height) / 2 : rootTaffyLocation.y;
-        } else {
-            this.topPos = isRelative ? (this.screenHeight - this.height) / 2 : rootTaffyLocation.y;
-        }
-
-        this.leftPos = Math.round(this.leftPos);
-        this.topPos = Math.round(this.topPos);
-        this.ui.rootElement.clearLayoutCache();
     }
 
+    /** The root's declared width/height, or {@code auto} when unset. */
+    private TaffyDimension rootDimension(StyleProperty<TaffyDimension> property) {
+        return Optional.ofNullable(ui.rootElement.getStyle().computeCandidate(property))
+                .orElseGet(TaffyDimension::auto);
+    }
+
+    /**
+     * Refreshes the available space handed to Taffy from the root's <em>current</em> declared size.
+     *
+     * <p>Only a percentage root gets definite available space; anything else sizes to content. This
+     * has to be re-read per layout rather than once at {@link #init}, because {@code init} runs before
+     * any stylesheet has been applied (scenes call {@code init} then {@code paintFrame}, and
+     * {@code drainDirtyMatch} only runs inside {@code calculateStyle}) and then early-returns forever
+     * after. A root that becomes percentage-sized via CSS would otherwise keep {@code MAX_CONTENT}
+     * available space for the rest of the run and size to its content instead.</p>
+     */
+    private void resolveRootAvailableSpace() {
+        this.layoutWidth = rootDimension(LayoutProperties.WIDTH).isPercent() ? this.screenWidth : Float.NaN;
+        this.layoutHeight = rootDimension(LayoutProperties.HEIGHT).isPercent() ? this.screenHeight : Float.NaN;
+    }
+
+    /**
+     * Recomputes the root's on-screen box and centring offset from its <em>resolved</em> layout.
+     *
+     * <p>Must run per layout, not once per screen resize. {@link UIElement#getLayoutX()} returns
+     * {@link #getLeftPos()} for the root and every other element's absolute position accumulates from
+     * there, so a stale offset here silently mis-positions the entire tree — which is exactly what
+     * happened to any window whose root was sized from a stylesheet rather than from Java.</p>
+     */
+    private void resolveRootPlacement() {
+        final var rootElement = ui.rootElement;
+        var width = rootDimension(LayoutProperties.WIDTH);
+        var height = rootDimension(LayoutProperties.HEIGHT);
+
+        boolean isRelative = Optional.ofNullable(
+                        rootElement.getStyle().computeCandidate(LayoutProperties.POSITION))
+                .orElse(TaffyPosition.RELATIVE) != TaffyPosition.ABSOLUTE;
+
+        var bounds = rootElement.getRuntimeCache();
+        this.width = switch (width.getType()) {
+            case PERCENT -> width.getValue() * this.screenWidth;
+            case LENGTH -> width.getValue();
+            default -> bounds.getWidth(); // auto — take whatever the layout resolved to
+        };
+        this.height = switch (height.getType()) {
+            case PERCENT -> height.getValue() * this.screenHeight;
+            case LENGTH -> height.getValue();
+            default -> bounds.getHeight();
+        };
+
+        var rootTaffyLocation = rootElement.getTaffyLayout().location();
+        float newLeft = Math.round(isRelative ? (this.screenWidth - this.width) / 2 : rootTaffyLocation.x);
+        float newTop = Math.round(isRelative ? (this.screenHeight - this.height) / 2 : rootTaffyLocation.y);
+
+        // Only invalidate on a real change: every element's cached absolute position derives from
+        // these, so clearing unconditionally would throw the whole tree's layout cache away each frame.
+        if (newLeft != this.leftPos || newTop != this.topPos) {
+            this.leftPos = newLeft;
+            this.topPos = newTop;
+            rootElement.clearLayoutCache();
+        }
+    }
 
     void calculateLayout() {
+        resolveRootAvailableSpace();
+
         TaffySize<AvailableSpace> availableSpace = new TaffySize<>(
                 Float.isNaN(layoutWidth) ? AvailableSpace.MAX_CONTENT : AvailableSpace.definite(layoutWidth),
                 Float.isNaN(layoutHeight) ? AvailableSpace.MAX_CONTENT : AvailableSpace.definite(layoutHeight)
@@ -167,6 +184,8 @@ public final class UIWindow {
             }
 
         }
+
+        resolveRootPlacement();
     }
 
     public boolean isLayoutDirty() {
@@ -294,6 +313,35 @@ public final class UIWindow {
         for (UIElement child : element.getChildren()) {
             invalidatePoseCaches(child);
         }
+    }
+
+    // ── Tree queries ────────────────────────────────────────────────────────
+
+    /**
+     * First element in the window matching {@code selector}, in document order, or {@code null}.
+     *
+     * <p>Unlike {@link UIElement#querySelector}, the root element <em>is</em> a candidate — it plays
+     * the part of the document here, so a window-level query considering it matches
+     * {@code document.querySelector}. Same selector subset and same live-tree combinator semantics;
+     * see {@link UITreeTraversal#querySelector}.</p>
+     */
+    public UIElement querySelector(String selector) {
+        return UITreeTraversal.querySelector(ui.rootElement, selector, true);
+    }
+
+    /** Every match in the window, in document order, root included. */
+    public List<UIElement> querySelectorAll(String selector) {
+        return UITreeTraversal.querySelectorAll(ui.rootElement, selector, true);
+    }
+
+    /** First element in the window with this id, or {@code null}. Root included. */
+    public UIElement getElementById(String id) {
+        return UITreeTraversal.getElementById(ui.rootElement, id, true);
+    }
+
+    /** Every element in the window carrying this class, in document order. Root included. */
+    public List<UIElement> getElementsByClassName(String className) {
+        return UITreeTraversal.getElementsByClassName(ui.rootElement, className, true);
     }
 
     public UIElement getHoveredElement(float mouseX, float mouseY) {

@@ -257,9 +257,8 @@ public class SliderDragTest {
     }
 
     private UIElement.RuntimeCache childWithClass(String cssClass) {
-        for (UIElement child : slider.getChildren()) {
-            if (child.hasClass(cssClass)) return child.getRuntimeCache();
-        }
-        throw new AssertionError("no child with class " + cssClass);
+        UIElement found = slider.querySelector("." + cssClass);
+        if (found == null) throw new AssertionError("no child with class " + cssClass);
+        return found.getRuntimeCache();
     }
 }

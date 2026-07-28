@@ -71,10 +71,19 @@ public class StylePropertyRegistry {
             elem.getParent().getRuntimeCache().sortedChildren.invalidate();
         }
     });
-    // CSS-facing only: whether clipping happens at all. The clip *mechanism* (scissor vs mask) is
-    // auto-detected from the element's resolved shape — see UIElement#resolveOverflowClip(). Replaces
-    // the old `clip: none|scissor|mask` property, which let authors pick the mechanism directly.
-    public static final StyleProperty<Overflow> OVERFLOW = create("overflow", Overflow.class, Overflow.VISIBLE);
+    // Whether clipping happens at all. The clip *mechanism* (scissor vs mask) is auto-detected from
+    // the element's resolved shape — see UIElement#resolveOverflowClip(). Replaces the old
+    // `clip: none|scissor|mask` property, which let authors pick the mechanism directly.
+    //
+    // Lives in the visual group but ALSO feeds layout, exactly as in CSS: a non-visible overflow
+    // zeroes an item's automatic minimum size, which is what allows a flex item to shrink below its
+    // own content. Without this listener `overflow: hidden` was purely cosmetic and oversized content
+    // still forced every ancestor wider, leaving callers to write `min-width: 0` by hand.
+    public static final StyleProperty<Overflow> OVERFLOW = create("overflow", Overflow.class, Overflow.VISIBLE)
+            .addListener((elem, prop, oldVal, newVal) -> elem.getStyle().taffyBridge.setOverflow(
+                    newVal == Overflow.HIDDEN
+                            ? dev.vfyjxf.taffy.style.Overflow.HIDDEN
+                            : dev.vfyjxf.taffy.style.Overflow.VISIBLE));
     public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
     // Geometry longhands for the `mask` layer, exactly mirroring the `overlay-*` trio above (same
     // types, same defaults, same CgUiLayerBox.resolve path). Defaults reproduce the previous

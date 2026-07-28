@@ -1,0 +1,212 @@
+/* CrystalGUI's user-agent stylesheet — the browser analogue.
+ *
+ * WHY THIS EXISTS: no widget sets any size in Java (only UIText, from measured text). Slider's
+ * 150x20, Switch's 25x14, Checkbox's 12x12 mark, SplitView's 4px divider — all of it lived only in
+ * a theme. Without one, a Slider is 0x0, a Switch is invisible and a SplitView's divider is 0px wide
+ * and literally ungrabbable. Everything below is what a widget needs to FUNCTION, not to look good.
+ *
+ * Apply it explicitly — it is never injected automatically:
+ *     window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+ *
+ * CASCADE: this sheet is applied at StyleOrigin.USER_AGENT, one step below STYLESHEET. Origin is the
+ * first thing StyleSlot.compareTo weighs, so ANY author rule beats anything here at ANY specificity,
+ * and the order you register the sheets in doesn't matter.
+ *
+ * THREE RULES FOR EDITING THIS FILE:
+ *   1. Never use !important. It escalates to StyleOrigin.IMPORTANT, jumping above every author sheet
+ *      and defeating the point of the file.
+ *   2. Never reference asset()/sprite(). This must stand alone with no texture pack loaded, so
+ *      backgrounds here are flat colours only. Themes supply the art.
+ *   3. Fill with `background:`, NEVER `background-color:`. They are not interchangeable here:
+ *      `background:` is the drawable (a theme's `background: asset(...)` replaces it outright),
+ *      while `background-color:` is a multiplicative TINT over whatever drawable is present, whose
+ *      unset value is white — the identity. Setting a grey background-color here therefore does not
+ *      paint grey over a theme, it MULTIPLIES the theme's sprite darker. Caught exactly that way:
+ *      the first draft used background-color and visibly darkened every Ore sprite in cgui-ore-theme.
+ */
+
+/* ── Text ──────────────────────────────────────────────────────────────────────────────────────
+ * font-size defaults to 16 in the property registry, which is huge next to Minecraft's own UI.
+ * These are inheritable, so setting them on the widgets reaches their labels. */
+
+button, checkbox, switch, slider, splitview, textfield {
+    font-size: 10;
+}
+
+/* ── Button ─────────────────────────────────────────────────────────────────────────────────── */
+
+button {
+    height: 14px;
+    padding-left: 2px;
+    padding-top: 1px;
+    padding-right: 2px;
+    padding-bottom: 2px;
+    justify-content: center;
+    align-items: center;
+    background: #9A9A9A;
+    color: #222222;
+    text-shadow: false;
+}
+button:hover {
+    background: #B4B4B4;
+}
+button:active {
+    background: #7A7A7A;
+}
+button:disabled {
+    background: #6E6E6E;
+    color: #4A4A4A;
+}
+
+/* ── Checkbox ───────────────────────────────────────────────────────────────────────────────────
+ * align-self: flex-start is load-bearing, not cosmetic — see the matching note in ore.css. The root
+ * paints nothing, so a stretched root would hit-test far to the right of the visible content. */
+
+checkbox {
+    align-self: flex-start;
+    height: 14px;
+    padding-all: 1px;
+    gap-all: 2px;
+    align-items: center;
+    text-shadow: false;
+}
+checkbox .__mark__ {
+    width: 12px;
+    height: 12px;
+    background: #9A9A9A;
+}
+checkbox:hover .__mark__ {
+    background: #B4B4B4;
+}
+checkbox:checked .__mark__ {
+    background: #3C8527;
+}
+checkbox:disabled .__mark__ {
+    background: #6E6E6E;
+}
+
+/* ── Switch ─────────────────────────────────────────────────────────────────────────────────────
+ * The knob is pushed across by __spacer__'s flex-grow, so the transition below is what makes it
+ * SLIDE. Without it a themeless switch teleports between states. Both endpoints must be plain
+ * numbers: the interpolator binary-snaps at the halfway point when the two differ in unit. */
+
+switch {
+    width: 25px;
+    height: 14px;
+    padding-all: 0;
+    align-items: center;
+    background: #6E6E6E;
+}
+switch:checked {
+    background: #3C8527;
+}
+switch .__spacer__ {
+    flex-grow: 0;
+    transition: flex-grow 150ms ease;
+}
+switch:checked .__spacer__ {
+    flex-grow: 1;
+}
+switch .__knob__ {
+    height: 100%;
+    aspect-rate: 1;
+    background: #D0D1D4;
+}
+switch:disabled .__knob__ {
+    background: #8C8C8C;
+}
+
+/* ── Slider ─────────────────────────────────────────────────────────────────────────────────────
+ * The horizontal padding must equal HALF the thumb's width, and the thumb's negative margins must be
+ * its exact negation — that pairing is what puts the thumb's centre on the value and hides the bar's
+ * ends underneath it. Change the thumb width and all three numbers move together. Full reasoning is
+ * in ore.css. No transition here on purpose: during a drag the thumb must track the cursor exactly. */
+
+slider {
+    width: 150px;
+    height: 20px;
+    padding-left: 10px;
+    padding-right: 10px;
+    align-items: center;
+}
+slider .__fill__ {
+    height: 6px;
+    background: #3C8527;
+}
+slider .__spacer__ {
+    height: 6px;
+    background: #6E6E6E;
+}
+slider .__thumb__ {
+    width: 20px;
+    height: 20px;
+    margin-left: -10px;
+    margin-right: -10px;
+    /* Required: painter's order is insertion order, so __spacer__ would otherwise draw over the half
+     * of the thumb its negative right margin pulls underneath. */
+    z-index: 1;
+    background: #D0D1D4;
+}
+slider:hover .__thumb__ {
+    background: #E4E5E8;
+}
+slider:disabled .__fill__ {
+    background: #5A6E5A;
+}
+slider:disabled .__thumb__ {
+    background: #8C8C8C;
+}
+
+/* ── SplitView ──────────────────────────────────────────────────────────────────────────────────
+ * The divider needs a real thickness here or it is 0px wide and cannot be grabbed at all. The cross
+ * axis stretches for free (flex default align-items: stretch), so each orientation only sets its own
+ * thickness — hence `width: auto` in the vertical rule, undoing the horizontal width. */
+
+splitview {
+    width: 100%;
+    height: 100%;
+}
+splitview .__divider__ {
+    width: 4px;
+    background: #777777;
+}
+splitview .__divider__:hover {
+    background: #AAAAAA;
+}
+splitview .__divider__:active {
+    background: #DDDDDD;
+}
+splitview.__vertical__ .__divider__ {
+    width: auto;
+    height: 4px;
+}
+
+/* ── TextField (widget not built yet; geometry reserved) ───────────────────────────────────────── */
+
+textfield {
+    padding-all: 3px;
+    background: #2A2A2A;
+    color: #EEEEEE;
+}
+
+/* ── Generic layout helpers ─────────────────────────────────────────────────────────────────────
+ * NOT a browser concept — these are a deliberate convenience so callers (and every harness scene)
+ * stop re-declaring the same three rules. Note that shipping them claims these class names for every
+ * consumer of the library, which is why the list is kept short and generic. */
+
+.row {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 8px;
+}
+.column {
+    flex-direction: column;
+    gap-all: 8px;
+}
+.label {
+    color: #FFFFFF;
+}
+/* Eats the leftover space in a row/column — the usual "push the rest to the far end" trick. */
+.spacer {
+    flex-grow: 1;
+}
