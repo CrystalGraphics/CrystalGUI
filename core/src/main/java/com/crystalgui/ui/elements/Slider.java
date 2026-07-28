@@ -4,6 +4,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -130,14 +131,40 @@ public class Slider extends UIElement {
     }
 
     @Override
-    protected boolean acceptsPublicChildren() {
+    public boolean acceptsPublicChildren() {
         return false;
     }
 
     // ── Value ───────────────────────────────────────────────────────────────
 
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        // Range and step before value, because readState has to apply them in that order.
+        out.putFloat("min", min);
+        out.putFloat("max", max);
+        out.putFloat("step", getStep());
+        out.putFloat("value", getValue());
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        // Order matters: setValue clamps and snaps against the current range and step, so restoring
+        // the value first would clamp it against the defaults (0..1) and silently lose it.
+        setRange(in.getFloat("min", 0f), in.getFloat("max", 1f));
+        setStep(in.getFloat("step", 0f));
+        setValue(in.getFloat("value", 0f));
+    }
+
     public float getValue() {
         return value;
+    }
+
+    public float getMin() {
+        return min;
+    }
+
+    public float getMax() {
+        return max;
     }
 
     /** Clamps to the range, snaps to {@link #setStep}, and signals only on a real change. */
@@ -147,6 +174,7 @@ public class Slider extends UIElement {
         this.value = snapped;
         applyFraction();
         onStyleChanged();
+        notifyStateChanged();
         onValueChanged.emit(snapped);
         return this;
     }
@@ -156,6 +184,7 @@ public class Slider extends UIElement {
         this.max = max;
         setValue(this.value); // re-clamp into the new range
         applyFraction();
+        notifyStateChanged();
         return this;
     }
 
@@ -163,6 +192,7 @@ public class Slider extends UIElement {
     public Slider setStep(float step) {
         this.step = Math.max(0f, step);
         setValue(this.value);
+        notifyStateChanged();
         return this;
     }
 

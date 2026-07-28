@@ -40,11 +40,11 @@ import java.util.List;
  * strip too long for the widget pans on the wheel.</p>
  *
  * <h3>Serialization</h3>
- * <p><b>Does not round-trip through {@code UIElementCodec}</b>, in common with {@link SplitView} and
- * {@link Button}: the codec's decode path calls the public {@code addChild}, which every widget with
- * constructor-built internals refuses, and encode writes those internals out so a decode would
- * duplicate them. Pre-existing and not specific to this class; teaching the codec about
- * constructor-built structure is its own piece of work.</p>
+ * <p>The root round-trips through {@code UIDescriptionCodec} — internals are excluded and rebuilt by
+ * this constructor — but <b>its tabs and their content do not</b>. A TabView's tabs live in the rail
+ * and its panes in the panes container, both of which are internal, so a decoded TabView comes back
+ * empty. Restoring them needs a TabView-specific {@code writeState}/{@code readState} pair that
+ * records the tab list; deliberately not in the first serialization milestone.</p>
  */
 public class TabView extends UIElement {
 
@@ -187,7 +187,7 @@ public class TabView extends UIElement {
 
     /** Structure is fixed; content goes into {@link Tab#content()}. */
     @Override
-    protected boolean acceptsPublicChildren() {
+    public boolean acceptsPublicChildren() {
         return false;
     }
 

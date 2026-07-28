@@ -135,7 +135,7 @@ public class SplitView extends UIElement {
     /** The root owns a fixed three-child structure; content goes into {@link #first()}/
      * {@link #second()}, which are ordinary elements and accept children normally. */
     @Override
-    protected boolean acceptsPublicChildren() {
+    public boolean acceptsPublicChildren() {
         return false;
     }
 

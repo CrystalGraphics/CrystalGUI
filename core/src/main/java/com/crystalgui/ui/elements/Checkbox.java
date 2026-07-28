@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -66,8 +67,22 @@ public class Checkbox extends UIElement {
     }
 
     @Override
-    protected boolean acceptsPublicChildren() {
+    public boolean acceptsPublicChildren() {
         return false;
+    }
+
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        out.putBoolIfNot("checked", isChecked(), false);
+        out.putStringIfNot("label", getLabel(), "");
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        setLabel(in.getString("label", ""));
+        // Through setChecked, not the field: it fires onCheckedChanged and invalidateStyleMatch, so
+        // :checked re-matches and the mark repaints. Assigning the field looks right and renders wrong.
+        setChecked(in.getBool("checked", false));
     }
 
     @Override
@@ -80,6 +95,7 @@ public class Checkbox extends UIElement {
         this.checked = value;
         onStyleChanged();
         invalidateStyleMatch();
+        notifyStateChanged();
         onCheckedChanged.emit(value);
         return this;
     }
@@ -89,6 +105,9 @@ public class Checkbox extends UIElement {
     }
 
     public Checkbox setLabel(String value) {
+        // No notifyStateChanged here — label.setText fires UIText's own, which walks up past the
+        // internal label and lands on this Checkbox. Doing both would be harmless (the dirty set
+        // dedups) but would imply the wiring is per-widget when it isn't.
         label.setText(value);
         return this;
     }

@@ -1,7 +1,7 @@
 package com.crystalgui.ui;
 
 import com.crystalgraphics.api.PoseStack;
-import com.crystalgraphics.api.vertex.CgVertexTransformUtil;
+import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.property.StyleProperty;
@@ -393,7 +393,7 @@ public final class UIWindow {
         if (element.getStyle().taffyBridge.style.display == TaffyDisplay.NONE) return null;
 
         Matrix4f transform = element.getRuntimeCache().worldToLocal.get();
-        var local = CgVertexTransformUtil.transformPosition(transform, mouseX, mouseY);
+        var local = Transform2D.apply(transform, mouseX, mouseY);
         float localX = local.x(), localY = local.y();
         var overflow = element.resolveOverflowClip();
         boolean contentCanClipOut = overflow.isClipped();

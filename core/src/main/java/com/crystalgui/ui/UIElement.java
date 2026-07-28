@@ -1,6 +1,6 @@
 package com.crystalgui.ui;
 
-import com.crystalgraphics.api.vertex.CgVertexTransformUtil;
+import com.crystalgui.core.data.Transform2D;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.core.data.CacheCell;
@@ -8,6 +8,7 @@ import com.crystalgui.core.data.IntCacheCell;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.CgUiCrossFade;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.render.texture.CgUiLayerBox;
 import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiRoundedRect;
@@ -76,7 +77,7 @@ public class UIElement {
     @Getter
     private FocusPolicy focusPolicy = FocusPolicy.NONE;
 
-    @Getter @Setter
+    @Getter
     private boolean hitTest = true;
 
     @Getter
@@ -128,16 +129,23 @@ public class UIElement {
         if (this.id.equals(newId)) return this;
         this.id = newId;
         invalidateStyleMatch();
+        notifyIdentityChanged();
         return this;
     }
 
     public UIElement addClass(String cls) {
-        if (classes.add(cls)) invalidateStyleMatch();
+        if (classes.add(cls)) {
+            invalidateStyleMatch();
+            notifyIdentityChanged();
+        }
         return this;
     }
 
     public UIElement removeClass(String cls) {
-        if (classes.remove(cls)) invalidateStyleMatch();
+        if (classes.remove(cls)) {
+            invalidateStyleMatch();
+            notifyIdentityChanged();
+        }
         return this;
     }
 
@@ -168,6 +176,7 @@ public class UIElement {
     public void setEnabled(boolean enabled) {
         if (this.isEnabled == enabled) return;
         this.isEnabled = enabled;
+        notifyIdentityChanged();
         // focusable() reads isEnabled, so the cached focus chain is now stale. Without this, tab
         // traversal keeps believing a disabled element is focusable and can walk into a subtree
         // with nothing focusable left in it.
@@ -276,6 +285,7 @@ public class UIElement {
         child.parent = this;
         children.add(index, child);
         child.setAttachedWindow(this.attachedWindow);
+        child.setObserver(this.observer);
         this.runtimeCache.sortedChildren.invalidate();
         this.invalidateFocusableChain();
         child.onAdded();
@@ -294,8 +304,95 @@ public class UIElement {
      * external content alongside internal structure (e.g. a future ScrollerView) leave this {@code true}
      * at their own root and expose a separate typed accessor that delegates into a real content-host
      * child. */
-    protected boolean acceptsPublicChildren() {
+    public boolean acceptsPublicChildren() {
         return true;
+    }
+
+    // ── Serializable state ───────────────────────────────────────────────────
+
+    /**
+     * Writes this widget's own serializable state — content and configuration.
+     *
+     * <p>Exists so the element codec never has to know about individual widgets: it asks each
+     * element what it wants preserved and gets a flat bag back. A widget adding state adds it here,
+     * and nothing in {@code serialization} changes.</p>
+     *
+     * <p><b>Authored state only.</b> Never write runtime input state — pressed, hovered, focused,
+     * caret position, scroll offset. Those belong to whichever side the user's pointer is on, and a
+     * server pushing them would fight the person using the UI.</p>
+     *
+     * <p>Must be symmetric with {@link #readState}, and every key should be written conditionally
+     * (see {@code StateMap.putBoolIfNot}) so a default-valued widget carries nothing.</p>
+     */
+    protected <T> void writeState(StateMap<T> out) {
+    }
+
+    /**
+     * Restores what {@link #writeState} wrote.
+     *
+     * <p><b>Go through the public mutators</b> — {@code setChecked}, {@code setText} — rather than
+     * assigning fields. Their side effects (pane visibility, {@code IMPORTANT}-origin style writes,
+     * {@code invalidateStyleMatch}) are exactly what has to happen on the receiving side, and
+     * bypassing them produces a widget that holds the right value while looking wrong.</p>
+     *
+     * <p>Every read takes a default, so a description written before a key existed still decodes.</p>
+     */
+    protected <T> void readState(StateMap<T> in) {
+    }
+
+    /** Codec-facing entry points — {@link #writeState}/{@link #readState} stay protected so they
+     * read as widget-authoring hooks rather than public API. */
+    public final <T> void writeStateTo(StateMap<T> out) {
+        writeState(out);
+    }
+
+    public final <T> void readStateFrom(StateMap<T> in) {
+        readState(in);
+    }
+
+    // ── Tree observation ─────────────────────────────────────────────────────
+
+    /** Null for every element in a purely client-side UI, which is the common case. */
+    @Nullable
+    private UITreeObserver observer;
+
+    @Nullable
+    public UITreeObserver getObserver() {
+        return observer;
+    }
+
+    /**
+     * Installs {@code observer} on this element and its whole subtree.
+     *
+     * <p>Propagated exactly like {@link #attachedWindow}: set when an element is added, cleared when
+     * it is removed. That symmetry is what makes a grafted subtree report itself correctly without
+     * the session ever walking the tree.</p>
+     */
+    public final void setObserver(@Nullable UITreeObserver observer) {
+        if (this.observer == observer) return;
+        if (this.observer != null) this.observer.onDetached(this);
+        this.observer = observer;
+        if (observer != null) observer.onAttached(this);
+        for (UIElement child : children) child.setObserver(observer);
+    }
+
+    /**
+     * Reports that this widget's serializable state changed.
+     *
+     * <p>Attributed to the nearest <b>non-internal</b> ancestor. A Button's label is an internal
+     * {@code UIText} that never travels as an element of its own, so {@code button.setText(...)} has
+     * to dirty the Button — whose {@code writeState} carries the text — rather than a child the far
+     * side has never heard of.</p>
+     */
+    protected final void notifyStateChanged() {
+        UIElement target = this;
+        while (target.isInternalUI() && target.parent != null) target = target.parent;
+        if (target.observer != null) target.observer.onStateDirty(target);
+    }
+
+    /** Reports an id/class/enabled/focus change — the inputs to the far side's selector matching. */
+    private void notifyIdentityChanged() {
+        if (observer != null) observer.onIdentityDirty(this);
     }
 
     /** Marks this element (and its current subtree) as internal — structural content owned by a
@@ -325,6 +422,8 @@ public class UIElement {
     private boolean removeChildInternal(UIElement child) {
         children.remove(child);
         child.onRemoved();
+        // Before the parent link is cleared, so an observer can still see where it was.
+        child.setObserver(null);
         child.setAttachedWindow(null);
         child.parent = null;
         this.runtimeCache.sortedChildren.invalidate();
@@ -395,8 +494,18 @@ public class UIElement {
 
     public UIElement setFocusPolicy(FocusPolicy newPolicy) {
         if (newPolicy == null) return setFocusPolicy(FocusPolicy.NONE);
+        if (this.focusPolicy == newPolicy) return this;
         if (this.focusPolicy.isFocusable() != newPolicy.isFocusable()) invalidateFocusableChain();
         this.focusPolicy = newPolicy;
+        notifyIdentityChanged();
+        return this;
+    }
+
+    /** Hand-written rather than Lombok's {@code @Setter} so a real change can be reported. */
+    public UIElement setHitTest(boolean hitTest) {
+        if (this.hitTest == hitTest) return this;
+        this.hitTest = hitTest;
+        notifyIdentityChanged();
         return this;
     }
 
@@ -676,8 +785,7 @@ public class UIElement {
      * so it stays correct under any transform rather than only a uniform scale.</p>
      */
     public Vector2f screenToLocal(float screenX, float screenY) {
-        var local = CgVertexTransformUtil.transformPosition(runtimeCache.worldToLocal.get(), screenX, screenY);
-        return new Vector2f(local.x(), local.y());
+        return Transform2D.apply(runtimeCache.worldToLocal.get(), screenX, screenY);
     }
 
     /**

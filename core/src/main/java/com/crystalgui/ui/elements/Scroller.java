@@ -164,7 +164,7 @@ public class Scroller extends UIElement implements com.crystalgui.ui.UIFrameTick
 
     /** The bar owns a fixed structure; there is no content to host. */
     @Override
-    protected boolean acceptsPublicChildren() {
+    public boolean acceptsPublicChildren() {
         return false;
     }
 
