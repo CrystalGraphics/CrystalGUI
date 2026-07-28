@@ -4,7 +4,6 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.input.keyboard.Modifiers;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -35,10 +34,6 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * {@code isInternalUI()} shows just {@code scrollerview > your content}.</p>
  */
 public class ScrollerView extends UIElement implements com.crystalgui.ui.UIFrameTicker {
-
-    static {
-        ElementRegistry.register("scrollerview", () -> new ScrollerView());
-    }
 
     public static final String V_SCROLLER_CLASS = "__v-scroller__";
     public static final String H_SCROLLER_CLASS = "__h-scroller__";

@@ -4,7 +4,6 @@ import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
@@ -45,10 +44,6 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * not add one.</p>
  */
 public class SplitView extends UIElement {
-
-    static {
-        ElementRegistry.register("splitview", () -> new SplitView());
-    }
 
     public enum Orientation {
         HORIZONTAL,

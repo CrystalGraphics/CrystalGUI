@@ -3,7 +3,6 @@ package com.crystalgui.ui.elements;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.AlignItems;
@@ -37,10 +36,6 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * {@code switch:checked} style it directly.</p>
  */
 public class Switch extends UIElement {
-
-    static {
-        ElementRegistry.register("switch", () -> new Switch());
-    }
 
     public static final String SPACER_CLASS = "__spacer__";
     public static final String KNOB_CLASS = "__knob__";

@@ -4,7 +4,6 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.input.mouse.CgUiMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -40,10 +39,6 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * TextArea needs exactly this), which is why it isn't buried inside {@code ScrollerView}.</p>
  */
 public class Scroller extends UIElement implements com.crystalgui.ui.UIFrameTicker {
-
-    static {
-        ElementRegistry.register("scroller", () -> new Scroller());
-    }
 
     public enum Orientation {
         HORIZONTAL,

@@ -2,7 +2,6 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
@@ -26,10 +25,6 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
  * attached to anything until a TabView adopts it.</p>
  */
 public class Tab extends Button {
-
-    static {
-        ElementRegistry.register("tab", () -> new Tab(""));
-    }
 
     /** On the content pane, not on the tab itself. */
     public static final String PANE_CLASS = "__pane__";

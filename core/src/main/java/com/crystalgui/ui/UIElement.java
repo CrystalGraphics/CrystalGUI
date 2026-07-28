@@ -146,11 +146,21 @@ public class UIElement {
     }
 
     /**
-     * Lowercase tag/type used by selector-engine type selectors (e.g. {@code button { ... }}).
-     * Defaults to the simple class name; widget subclasses may override to a stable public name.
+     * Lowercase tag/type used by selector-engine type selectors (e.g. {@code button { ... }}) and by
+     * serialization.
+     *
+     * <p>Comes from {@link ElementRegistry}, keyed by class, so an element built with
+     * {@code new Button(...)} reports exactly what {@code ElementRegistry.create("button")} would.
+     * Falls back to the simple class name for an unregistered type.</p>
+     *
+     * <p>This used to be the simple class name unconditionally, which quietly broke {@code UIText}:
+     * it registers as {@code "text"} but reported {@code "uitext"}, so a {@code text { }} rule had
+     * never matched anything. Shipped sheets use neither name, so nothing visible changes today —
+     * but a downstream sheet targeting {@code uitext} would.</p>
      */
     public String tagName() {
-        return getClass().getSimpleName().toLowerCase(Locale.ROOT);
+        String registered = ElementRegistry.tagOf(getClass());
+        return registered != null ? registered : getClass().getSimpleName().toLowerCase(Locale.ROOT);
     }
 
 

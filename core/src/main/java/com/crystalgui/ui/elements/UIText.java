@@ -10,7 +10,6 @@ import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.layout.LayoutProperties;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 
 /**
@@ -52,10 +51,6 @@ import com.crystalgui.ui.UIElement;
  * {@link #paintOverlay} calling it with the same width re-runs no real line-breaking work.</p>
  */
 public final class UIText extends UIElement {
-
-    static {
-        ElementRegistry.register("text", () -> new UIText(""));
-    }
 
     /** Text content — bindable via {@link #bindTextTo(Property)}, reusing the same data-binding
      * infrastructure the rest of CrystalGUI uses (see {@code Property.bindTo}). */

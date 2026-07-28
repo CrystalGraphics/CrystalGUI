@@ -4,7 +4,6 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -47,10 +46,6 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * ({@code Scroller} and {@code ColorSelector} respectively) — it has no slider of its own.</p>
  */
 public class Slider extends UIElement {
-
-    static {
-        ElementRegistry.register("slider", () -> new Slider());
-    }
 
     public static final String FILL_CLASS = "__fill__";
     public static final String THUMB_CLASS = "__thumb__";

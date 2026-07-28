@@ -3,7 +3,6 @@ package com.crystalgui.ui.elements;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -30,10 +29,6 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * returns {@code false}: a Button has no legitimate public content slot of its own.</p>
  */
 public class Button extends UIElement {
-
-    static {
-        ElementRegistry.register("button", () -> new Button(""));
-    }
 
     public static final String PRE_ICON_CLASS = "__pre-icon__";
     public static final String POST_ICON_CLASS = "__post-icon__";
