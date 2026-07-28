@@ -199,7 +199,24 @@ public final class UIWindow {
      * returns, every visible element's GPU draw calls have already been issued in painter's
      * order, using bounds computed by this same call.
      */
-    public void paintFrame() {
+    /**
+     * Everything {@link #paintFrame()} does <em>except</em> painting: advance the frame clock,
+     * resolve styles, tick animations, and run layout.
+     *
+     * <p>Exists so layout can be driven without a GL surface or a draw — headless tests, and
+     * benchmarks that need to isolate layout/shaping cost from rendering cost. A UI with many text
+     * elements pays a per-element material bind at draw time that can dwarf everything else, and
+     * measuring layout through {@code paintFrame()} therefore measures mostly the renderer.
+     *
+     * <p>Deliberately does not touch the input handler: no frame was presented, so there is nothing
+     * for hover/click state to be relative to.
+     */
+    public void updateWithoutPainting() {
+        advanceFrame();
+    }
+
+    /** Shared prologue of {@link #paintFrame()} and {@link #updateWithoutPainting()}. */
+    private float advanceFrame() {
         long now = System.nanoTime();
         float deltaSeconds = (now - lastFrameNanos) / 1_000_000_000f;
         lastFrameNanos = now;
@@ -207,6 +224,11 @@ public final class UIWindow {
         styleEngine.calculateStyle(deltaSeconds);
         tickAnimations(deltaSeconds);
         calculateLayout();
+        return deltaSeconds;
+    }
+
+    public void paintFrame() {
+        advanceFrame();
 
         CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
         paintContext.beginFrame(actualScreenWidth, actualScreenHeight);
