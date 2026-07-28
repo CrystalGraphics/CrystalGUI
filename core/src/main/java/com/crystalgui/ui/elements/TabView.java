@@ -4,7 +4,6 @@ import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -48,10 +47,6 @@ import java.util.List;
  * constructor-built structure is its own piece of work.</p>
  */
 public class TabView extends UIElement {
-
-    static {
-        ElementRegistry.register("tabview", () -> new TabView());
-    }
 
     /** Which edge the header strip sits on. */
     public enum TabSide {

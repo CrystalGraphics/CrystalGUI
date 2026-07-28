@@ -3,7 +3,6 @@ package com.crystalgui.ui.elements;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -27,10 +26,6 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * styling in Java — it only ever sets/reads {@link #isChecked()}.</p>
  */
 public class Checkbox extends UIElement {
-
-    static {
-        ElementRegistry.register("checkbox", () -> new Checkbox());
-    }
 
     public static final String MARK_CLASS = "__mark__";
 

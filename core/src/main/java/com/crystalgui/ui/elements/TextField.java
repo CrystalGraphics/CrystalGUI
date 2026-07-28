@@ -10,7 +10,6 @@ import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.event.FocusEvent;
@@ -62,10 +61,6 @@ import java.util.regex.Pattern;
  * complete control uses {@link Mode#STRING}.</p>
  */
 public class TextField extends UIElement implements UIFrameTicker {
-
-    static {
-        ElementRegistry.register("textfield", () -> new TextField());
-    }
 
     /** What the content is expected to be. Drives parsing, the auto-constraints and {@code :invalid}. */
     public enum Mode {

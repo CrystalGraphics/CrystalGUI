@@ -29,10 +29,20 @@ public class SelectorTest {
         assertFalse(Selector.parse(".foo.baz").matches(el));
     }
 
+    /**
+     * The plain div's type selector is {@code element}, from {@link com.crystalgui.ui.ElementRegistry}.
+     *
+     * <p>It used to be {@code uielement} — the lowercased Java class name — because {@code tagName()}
+     * derived from the class rather than the registry. That leaked an implementation detail into the
+     * CSS surface, and it was the same mechanism that made {@code UIText} report {@code uitext} while
+     * registering as {@code text}, so a {@code text { }} rule never matched anything.</p>
+     */
     @Test
-    public void typeSelectorMatchesDefaultTagName() {
+    public void typeSelectorMatchesTheRegisteredTagName() {
         UIElement el = new UIElement();
-        assertTrue(Selector.parse("uielement").matches(el));
+        assertTrue(Selector.parse("element").matches(el));
+        assertFalse("the Java class name must no longer be a selectable tag",
+                Selector.parse("uielement").matches(el));
         assertFalse(Selector.parse("button").matches(el));
     }
 
