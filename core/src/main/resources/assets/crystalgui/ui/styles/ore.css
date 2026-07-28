@@ -237,11 +237,61 @@ slider:disabled .__thumb__ {
     font-size: 10;
 }
 
-/* --- Forward-prep: TextField/SplitView/ScrollerView don't exist as real widgets yet (next up on
- * the roadmap) — these selectors match nothing today and are pure no-ops until those classes are
- * built. Verify the exact tag/class names below against tagName()/internal-class conventions once
- * each widget actually exists (they follow Button/Checkbox's established pattern: lowercase tag
- * name, __internal-class__ for structural children). --- */
+/* Split view. The two panes carry no styling of their own — they're content hosts, and whatever a
+ * caller puts inside them brings its own look. Only the divider is themed, matching LDLib2, whose
+ * `__split_view_first__`/`__split_view_second__` are likewise never styled by any of its themes.
+ *
+ * SOURCING NOTE: LDLib2's ore.lss has NO split-view rules at all — its divider is a virtual band
+ * drawn in Java with a hover-only arrow cursor sprite, so there was nothing to port directly. These
+ * rules instead follow Ore's own idiom for a draggable grab handle, taken from the one element that
+ * genuinely is one, its scroll bar:
+ *     scroller-* .__scroller_scroll_bar__ {
+ *         base-background:    BTN_DEFAULT;
+ *         hover-background:   BTN_PRESSED;
+ *         pressed-background: BTN_PRESSED color(#ddd);
+ *     }
+ * — i.e. the same default -> pressed-sprite -> pressed-sprite-plus-#ddd-tint triple the buttons above
+ * use. `divider`/`divider-hover` are Ore's BTN_DEFAULT_SMALL/BTN_PRESSED_SMALL: the SMALL variants
+ * specifically, because they're symmetric (border 2 on all sides) and so 9-slice correctly at
+ * divider thickness in BOTH orientations. The full-size BTN_DEFAULT has a 4px bottom inset, which
+ * needs at least 6px of height and would collapse on a horizontal divider.
+ *
+ * LDLib2's `borderSize` default is 2, but 2px can't 9-slice a border-2 sprite (2+2 > 2) and is a
+ * painfully thin grab target without their hover cursor to advertise it, so this uses 4.
+ *
+ * The divider stretches on the cross axis for free (flex default `align-items: stretch`), so each
+ * orientation only sets its own thickness — hence `width: auto` in the vertical rule, undoing the
+ * horizontal width rather than leaving both applied. */
+splitview {
+    width: 100%;
+    height: 100%;
+    /* LDLib2 also sets flex(1) here, but deliberately omitted: combined with width/height 100% it
+     * makes a split view fight its host for size, and 100% already fills a sized parent. A caller
+     * who wants it to flex can add flex-grow themselves. */
+}
+splitview .__divider__ {
+    width: 4px;
+    background: asset("crystalgui:ore", "divider");
+}
+splitview .__divider__:hover {
+    background: asset("crystalgui:ore", "divider-hover");
+}
+splitview .__divider__:active {
+    background: asset("crystalgui:ore", "divider-hover");
+    /* 6-digit = opaque; see the note on button:active about 8-digit hex being #RRGGBBAA. */
+    background-color: #DDDDDD;
+}
+/* SplitView adds `__vertical__` to itself when the orientation flips, purely so this rule can match. */
+splitview.__vertical__ .__divider__ {
+    width: auto;
+    height: 4px;
+}
+
+/* --- Forward-prep: TextField/ScrollerView don't exist as real widgets yet (next up on the roadmap)
+ * — these selectors match nothing today and are pure no-ops until those classes are built. Verify
+ * the exact tag/class names below against tagName()/internal-class conventions once each widget
+ * actually exists (they follow Button/Checkbox's established pattern: lowercase tag name,
+ * __internal-class__ for structural children). --- */
 
 textfield {
     background: asset("crystalgui:ore", "textfield");
@@ -253,13 +303,6 @@ textfield:focus {
     /* Was border-color/border-width, which feeds Taffy and would resize the field on focus.
      * `outline` is the layout-free equivalent. */
     outline: asset("crystalgui:ore", "focus-ring");
-}
-
-.splitview .__divider__ {
-    background-color: #777777;
-}
-.splitview .__divider__:hover {
-    background-color: #DDDDDD;
 }
 
 .scrollerview .__track__ {

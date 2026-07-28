@@ -55,6 +55,24 @@ public class TaffyBridge {
         }
     }
 
+    /**
+     * Feeds {@code overflow} into layout, on both axes.
+     *
+     * <p>Not merely cosmetic bookkeeping: a non-visible overflow makes an item's <em>automatic
+     * minimum size</em> zero (CSS 2.1 / css-overflow-3), which is what lets a flex item shrink below
+     * its own content. Taffy implements this — {@code FlexboxComputer} reads
+     * {@code Overflow.isScrollContainer()} and treats the automatic min as 0 — so without this call
+     * an element with {@code overflow: hidden} still shoves its full min-content size up the
+     * ancestor chain, and every caller has to write {@code min-width: 0} by hand to compensate.</p>
+     */
+    public void setOverflow(dev.vfyjxf.taffy.style.Overflow overflow) {
+        if (style.overflow.x != overflow || style.overflow.y != overflow) {
+            style.overflow.x = overflow;
+            style.overflow.y = overflow;
+            styleList.markTaffyStyleDirty();
+        }
+    }
+
     public void setDirection(TaffyDirection direction) {
         if (style.direction != direction) {
             style.direction = direction;

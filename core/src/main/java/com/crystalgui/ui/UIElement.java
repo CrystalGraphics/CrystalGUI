@@ -26,6 +26,7 @@ import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.UIEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.tree.UITreeTraversal;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
@@ -353,7 +354,7 @@ public class UIElement {
         return this.parent != null;
     }
 
-    private boolean hasChild(UIElement child) {
+    public boolean hasChild(UIElement child) {
         return children.contains(child);
     }
 
@@ -380,6 +381,36 @@ public class UIElement {
             el.getRuntimeCache().hasFocusableDescendant.invalidate();
             el = el.getParent();
         }
+    }
+
+    // ── Tree queries ─────────────────────────────────────────────────────────
+
+    /**
+     * First <em>descendant</em> matching {@code selector}, in document order, or {@code null}.
+     *
+     * <p>Excludes this element, matching {@code Element.querySelector} in the DOM. Backed by the same
+     * {@link com.crystalgui.style.selector.Selector} the stylesheet cascade uses, so only that subset
+     * of selector syntax works — and combinators are resolved against the <em>live tree</em>, meaning
+     * {@code ".a .b"} can match here via an ancestor above this element. See
+     * {@link UITreeTraversal#querySelector} for the full contract.</p>
+     */
+    public UIElement querySelector(String selector) {
+        return UITreeTraversal.querySelector(this, selector, false);
+    }
+
+    /** Every matching descendant, in document order. Excludes this element. */
+    public List<UIElement> querySelectorAll(String selector) {
+        return UITreeTraversal.querySelectorAll(this, selector, false);
+    }
+
+    /** First descendant with this id, or {@code null}. Excludes this element. */
+    public UIElement getElementById(String id) {
+        return UITreeTraversal.getElementById(this, id, false);
+    }
+
+    /** Every descendant carrying this class, in document order. Excludes this element. */
+    public List<UIElement> getElementsByClassName(String className) {
+        return UITreeTraversal.getElementsByClassName(this, className, false);
     }
 
     // ── Hit-testing ──────────────────────────────────────────────────────────

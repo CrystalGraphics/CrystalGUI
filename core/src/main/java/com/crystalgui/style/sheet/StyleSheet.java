@@ -1,6 +1,8 @@
 package com.crystalgui.style.sheet;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.style.StyleEngine;
+import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.BoxEdgeShorthands;
@@ -39,14 +41,33 @@ public final class StyleSheet {
     private static final Pattern IMPORTANT_SUFFIX = Pattern.compile("(?i)!\\s*important\\s*$");
     private static final Pattern VAR_REF = Pattern.compile("var\\(\\s*(--[\\w-]+)\\s*\\)");
 
+    /**
+     * The engine's user-agent stylesheet: {@code assets/crystalgui/ui/styles/default.css}.
+     *
+     * <p>Gives every widget functional (deliberately unthemed) geometry, plus a few generic layout
+     * helpers. <b>Not applied automatically</b> — hand it to the engine like any other sheet:</p>
+     * <pre>{@code window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);}</pre>
+     *
+     * <p>It carries {@link StyleOrigin#USER_AGENT}, so any author sheet added alongside it wins at
+     * any specificity. Add it before or after a theme — the ordering genuinely doesn't matter.</p>
+     */
+    public static final StyleSheet DEFAULT = loadUserAgentSheet();
+
     private final List<StyleRule> rules;
+    /** Cascade origin every declaration in this sheet is applied at — see {@link StyleEngine}. */
+    private final StyleOrigin origin;
     private final Map<String, List<StyleRule>> byId = new HashMap<>();
     private final Map<String, List<StyleRule>> byClass = new HashMap<>();
     private final Map<String, List<StyleRule>> byType = new HashMap<>();
     private final List<StyleRule> universal = new ArrayList<>();
 
     private StyleSheet(List<StyleRule> rules) {
+        this(rules, StyleOrigin.STYLESHEET);
+    }
+
+    private StyleSheet(List<StyleRule> rules, StyleOrigin origin) {
         this.rules = rules;
+        this.origin = origin;
         for (var rule : rules) index(rule);
     }
 
@@ -264,6 +285,27 @@ public final class StyleSheet {
         }
         candidates.addAll(byType.getOrDefault(element.tagName(), List.of()));
         return new ArrayList<>(candidates);
+    }
+
+    /** Cascade origin every non-{@code !important} declaration in this sheet is applied at. */
+    public StyleOrigin getOrigin() {
+        return origin;
+    }
+
+    /** Re-reads {@code default.css} at {@link StyleOrigin#USER_AGENT}.
+     *
+     * <p>Shouts if it comes back empty rather than failing quietly: {@code StyleSheetRegistry.of}
+     * returns an empty sheet for a missing resource, and because {@link #DEFAULT} holds the result
+     * forever, a packaging slip would otherwise surface only as every widget silently laying out at
+     * 0x0 — which is precisely the failure this file exists to prevent. */
+    private static StyleSheet loadUserAgentSheet() {
+        StyleSheet sheet = StyleSheetRegistry.of("crystalgui:default");
+        if (sheet.getRules().isEmpty()) {
+            CrystalGuiCore.LOGGER.error(
+                    "StyleSheet.DEFAULT is EMPTY — 'assets/crystalgui/ui/styles/default.css' is missing or "
+                            + "failed to parse. Widgets have no default geometry and will lay out at zero size.");
+        }
+        return new StyleSheet(sheet.getRules(), StyleOrigin.USER_AGENT);
     }
 
     public List<StyleRule> getRules() {

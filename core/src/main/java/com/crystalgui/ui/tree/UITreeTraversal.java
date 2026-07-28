@@ -2,7 +2,12 @@ package com.crystalgui.ui.tree;
 
 import com.crystalgui.ui.UIElement;
 
+import com.crystalgui.style.selector.Selector;
+
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Pure, stateless queries over the UIElement tree structure.
@@ -59,6 +64,86 @@ public final class UITreeTraversal {
      * element. Correct behaviour with a fresh cache is unchanged; this only bounds the blast radius
      * when it isn't.
      */
+
+    // ── Selector queries (DOM-shaped) ────────────────────────────────────
+
+    /**
+     * Parsed-selector cache. Queries are expected inside per-frame code, and re-parsing the same
+     * string every frame would be pure waste. Same lazy-cache convention as
+     * {@code StyleSheetRegistry}.
+     */
+    private static final Map<String, Selector> SELECTOR_CACHE = new ConcurrentHashMap<>();
+
+    private static Selector selector(String raw) {
+        return SELECTOR_CACHE.computeIfAbsent(raw, Selector::parse);
+    }
+
+    /**
+     * First element in {@code scope}'s subtree matching {@code selector}, in document order, or
+     * {@code null}.
+     *
+     * <p>Uses the same {@link Selector} the stylesheet cascade uses — there is deliberately no second
+     * matcher — so only the supported subset applies (id/class/type/pseudo-class, descendant and child
+     * combinators; no {@code :not()}, attribute selectors, sibling combinators or pseudo-elements —
+     * see {@code StyleSheet}'s class javadoc).</p>
+     *
+     * <p><b>Combinators are evaluated against the live tree, not the scope.</b>
+     * {@link Selector#matches} walks real parents, so {@code ".a .b"} can match inside this subtree by
+     * virtue of an ancestor <em>outside</em> it. That is what the DOM does too, and it surprises
+     * people often enough to be worth stating.</p>
+     *
+     * @param includeScope whether {@code scope} itself is a candidate. Element-level queries pass
+     *                     {@code false} (DOM semantics: descendants only); window-level queries pass
+     *                     {@code true}, since the root element is the document here.
+     */
+    public static UIElement querySelector(UIElement scope, String selector, boolean includeScope) {
+        Selector parsed = selector(selector);
+        if (includeScope && parsed.matches(scope)) return scope;
+        for (UIElement child : scope.getChildren()) {
+            UIElement found = querySelector(child, selector, true);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    /** Every match in {@code scope}'s subtree, in document order (depth-first pre-order). */
+    public static List<UIElement> querySelectorAll(UIElement scope, String selector, boolean includeScope) {
+        List<UIElement> out = new ArrayList<>();
+        collectMatches(scope, selector(selector), includeScope, out);
+        return out;
+    }
+
+    private static void collectMatches(UIElement scope, Selector parsed, boolean includeScope, List<UIElement> out) {
+        if (includeScope && parsed.matches(scope)) out.add(scope);
+        for (UIElement child : scope.getChildren()) {
+            collectMatches(child, parsed, true, out);
+        }
+    }
+
+    /** First element with this exact id, or {@code null}. Plain walk rather than a selector, so an id
+     * containing selector punctuation can still be looked up. */
+    public static UIElement getElementById(UIElement scope, String id, boolean includeScope) {
+        if (includeScope && scope.getId().equals(id)) return scope;
+        for (UIElement child : scope.getChildren()) {
+            UIElement found = getElementById(child, id, true);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    /** Every element carrying this class, in document order. */
+    public static List<UIElement> getElementsByClassName(UIElement scope, String className, boolean includeScope) {
+        List<UIElement> out = new ArrayList<>();
+        collectByClass(scope, className, includeScope, out);
+        return out;
+    }
+
+    private static void collectByClass(UIElement scope, String className, boolean includeScope, List<UIElement> out) {
+        if (includeScope && scope.hasClass(className)) out.add(scope);
+        for (UIElement child : scope.getChildren()) {
+            collectByClass(child, className, true, out);
+        }
+    }
 
     public static UIElement firstFocusableIn(UIElement subtreeRoot) {
         if (subtreeRoot.focusable()) return subtreeRoot;

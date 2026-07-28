@@ -92,19 +92,35 @@ public final class StyleEngine {
      * rule has anywhere near this many declarations. */
     private static final int DECLARATION_ORDER_MULTIPLIER = 100_000;
 
+    /** Stride between registered stylesheets in the packed {@code sourceOrder}. Sized to clear any
+     * realistic sheet (a sheet would need ~10 million rules to reach it) and comfortably within a
+     * {@code long} — which is exactly why {@link StyleSlot#sourceOrder()} is a {@code long}: an
+     * {@code int} would cap this at roughly twenty sheets before wrapping. */
+    private static final long SHEET_ORDER_STRIDE = 1_000_000_000_000L;
+
     private void rematch(UIElement element) {
         var previouslyApplied = appliedByElement.get(element);
 
         List<StyleSlot<?>> newSlots = new ArrayList<>();
-        for (var sheet : sheets) {
+        for (int sheetIndex = 0; sheetIndex < sheets.size(); sheetIndex++) {
+            var sheet = sheets.get(sheetIndex);
             for (var rule : sheet.candidatesFor(element)) {
                 if (!rule.selector().matches(element)) continue;
                 int specificity = rule.selector().specificity();
                 var decls = rule.declarations();
                 for (int i = 0; i < decls.size(); i++) {
                     var decl = decls.get(i);
-                    var origin = decl.important() ? StyleOrigin.IMPORTANT : StyleOrigin.STYLESHEET;
-                    int sourceOrder = rule.sourceOrder() * DECLARATION_ORDER_MULTIPLIER + i;
+                    // The sheet's own origin, so a USER_AGENT sheet (StyleSheet.DEFAULT) can never
+                    // out-rank an author one. `!important` still escalates to IMPORTANT regardless —
+                    // which is why default.css must not use it: doing so would jump it above every
+                    // author sheet and defeat the whole point.
+                    var origin = decl.important() ? StyleOrigin.IMPORTANT : sheet.getOrigin();
+                    // Registration index packed ABOVE the rule index, so a later-registered sheet
+                    // outranks an earlier one at equal specificity — CSS's "later sheet wins".
+                    // StyleSheet.parse restarts sourceOrder at 0 for every sheet, so without this a
+                    // big sheet's rule #40 beat a later sheet's rule #2 purely by rule count.
+                    long sourceOrder = (long) sheetIndex * SHEET_ORDER_STRIDE
+                            + (long) rule.sourceOrder() * DECLARATION_ORDER_MULTIPLIER + i;
                     var slot = toSlot(decl, origin, specificity, sourceOrder);
                     if (slot != null) newSlots.add(slot);
                 }
@@ -135,7 +151,7 @@ public final class StyleEngine {
      */
     @Nullable
     @SuppressWarnings("unchecked")
-    static <T> StyleSlot<T> toSlot(StyleRule.Declaration decl, StyleOrigin origin, int specificity, int sourceOrder) {
+    static <T> StyleSlot<T> toSlot(StyleRule.Declaration decl, StyleOrigin origin, int specificity, long sourceOrder) {
         var property = (StyleProperty<T>) decl.property();
         T value = (T) decl.value().compute();
         if (value == null) {
