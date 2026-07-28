@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgraphics.api.vertex.CgVertexTransformUtil;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.core.data.CacheCell;
@@ -34,6 +35,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.joml.Matrix4f;
+import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
 import java.util.*;
@@ -381,6 +383,34 @@ public class UIElement {
     }
 
     // ── Hit-testing ──────────────────────────────────────────────────────────
+
+    /**
+     * Converts a raw pointer position into this element's local space.
+     *
+     * <p><b>Widgets doing their own pointer arithmetic must call this first.</b> Raw input — and
+     * therefore {@link com.crystalgui.ui.event.MouseEvent#getPosition()}, which hands the untouched
+     * platform position straight through — arrives in <em>physical</em> pixels, while all element
+     * geometry ({@link RuntimeCache#getX()}, {@code getTaffyLayout()}, …) is in <em>logical</em>
+     * units. At the default {@code uiScale} of 2 those differ by a factor of two, so comparing one
+     * against the other silently misses over most of the screen.</p>
+     *
+     * <p>This runs the same {@code worldToLocal} transform {@link UIWindow#getHoveredElement} uses,
+     * so it stays correct under any transform rather than only a uniform scale.</p>
+     */
+    public Vector2f screenToLocal(float screenX, float screenY) {
+        var local = CgVertexTransformUtil.transformPosition(runtimeCache.worldToLocal.get(), screenX, screenY);
+        return new Vector2f(local.x(), local.y());
+    }
+
+    /**
+     * Whether a raw (physical) pointer position falls inside this element's outer box — the public
+     * counterpart to {@link #isMouseOverElement}, which is package-private and takes local
+     * coordinates. Corner-radius aware, so it agrees with the real hit-tester.
+     */
+    public boolean containsScreenPoint(float screenX, float screenY) {
+        Vector2f local = screenToLocal(screenX, screenY);
+        return isMouseOverElement(local.x(), local.y());
+    }
 
     boolean isMouseOverElement(float localMouseX, float localMouseY) {
         float rectX = runtimeCache.getX(), rectY = runtimeCache.getY();

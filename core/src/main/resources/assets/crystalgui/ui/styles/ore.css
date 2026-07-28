@@ -116,6 +116,116 @@ checkbox:disabled .__mark__ {
     background: asset("crystalgui:ore", "checkbox-box-disabled");
 }
 
+/* Switch. The knob is pushed by __spacer__'s flex-grow rather than positioned, so the slide is
+ * pure layout — and its timing lives here, in `transition:`, not in Switch.java.
+ * Both flex-grow endpoints must be explicit numbers: the interpolator binary-snaps at the halfway
+ * point when the two values differ in unit (e.g. auto vs a length), which reads as a jump. */
+switch {
+    width: 25px;
+    height: 14px;
+    /* Zero, not the 2px LDLib2 sets in Java — its own ore.lss overrides that to 0, which is what
+     * makes the knob fill the switch's full height instead of sitting inset. */
+    padding-all: 0;
+    align-items: center;
+    background: asset("crystalgui:ore", "switch-off");
+}
+switch:checked {
+    background: asset("crystalgui:ore", "switch-on");
+}
+switch .__spacer__ {
+    flex-grow: 0;
+    transition: flex-grow 150ms ease;
+}
+switch:checked .__spacer__ {
+    flex-grow: 1;
+}
+switch .__knob__ {
+    height: 100%;
+    aspect-rate: 1;
+    background: asset("crystalgui:ore", "button");
+}
+switch:checked .__knob__ {
+    background: asset("crystalgui:ore", "button-pressed");
+}
+switch:disabled .__knob__ {
+    background: asset("crystalgui:ore", "button-disabled");
+}
+/* Layout-free, so the ring can't resize the knob and disturb the slide. */
+switch:focus .__knob__ {
+    outline: asset("crystalgui:ore", "focus-ring");
+}
+
+/* Slider. The root is deliberately as tall as the THUMB, not as the bar, and carries no background:
+ * __fill__ and __spacer__ draw the thin bar themselves. If the root were bar-height instead, the
+ * taller thumb would overhang it and clicks on the overhanging part would miss the slider entirely,
+ * since hit-testing uses the root's box.
+ *
+ * No `transition` here on purpose — see Slider's javadoc. During a drag the thumb has to sit exactly
+ * under the cursor, and a transition on the flex weights would make it lag behind by the duration.
+ *
+ * Discrete sliders: Slider tags itself with `__stepped__` when step > 0, so a theme that wants them
+ * to read differently writes `slider.__stepped__ …` rules. Ore deliberately ships NONE — at this
+ * scale a ~150px track split into a handful of segments gives ~1px separators that vanish at
+ * uiScale 1 and shimmer at 2. Stepped sliders here look identical to continuous ones and only the
+ * value snaps, which is the intended result, not an omission. */
+/* THEME CONVENTION, load-bearing: the horizontal padding here must equal HALF the thumb's width,
+ * and the thumb's negative margins must be its exact negation. That pairing is what makes the thumb
+ * overhang the content box by half its width at each end, so:
+ *   - the thumb's CENTRE sweeps the full content box (Slider.travelLength() assumes exactly this);
+ *   - __fill__ ends and __spacer__ begins at that centre, putting both 9-slice end caps underneath
+ *     the thumb instead of leaving them visible either side of it;
+ *   - at both extremes the thumb is flush with the root's border box and never outside it, which
+ *     matters because hit-testing uses the root — an overhanging thumb would have dead edges.
+ * Change the thumb's width and you must change all three numbers together. */
+slider {
+    width: 150px;
+    height: 20px;
+    padding-left: 10px;
+    padding-right: 10px;
+    align-items: center;
+}
+/* The bar is real atlas art, not flat hex — these are Ore's own BTN_DEFAULT_SMALL_GREEN (#3C8527)
+ * and BTN_PRESSED_SMALL (#B1B2B5), so the slider carries the same bevel as every other control. */
+slider .__fill__ {
+    height: 6px;
+    background: asset("crystalgui:ore", "slider-fill");
+}
+slider .__spacer__ {
+    height: 6px;
+    background: asset("crystalgui:ore", "slider-track");
+}
+/* Square, and exactly the root's height — the root is sized to the thumb precisely so the whole
+ * thumb stays inside the hit box. The negative margins pull it half a thumb-width over each
+ * neighbour, burying their end caps; see the convention note on `slider` above. */
+slider .__thumb__ {
+    width: 20px;
+    height: 20px;
+    margin-left: -10px;
+    margin-right: -10px;
+    /* Required, not cosmetic: painter's order is insertion order, so __spacer__ (added last) would
+     * otherwise draw over the half of the thumb the negative right margin pulls underneath it. */
+    z-index: 1;
+    background: asset("crystalgui:ore", "button");
+}
+slider:hover .__thumb__ {
+    background: asset("crystalgui:ore", "button-pressed");
+}
+slider:active .__thumb__ {
+    background: asset("crystalgui:ore", "button-pressed");
+    background-color: #DDDDDD;
+}
+slider:focus .__thumb__ {
+    outline: asset("crystalgui:ore", "focus-ring");
+}
+/* A tint multiplied over the sprite (the `button:active` idiom above), not a flat colour replacing
+ * it — that would drop the bevel and make the disabled bar the only flat thing on the panel. */
+slider:disabled .__fill__ {
+    background-color: #8C8C8C;
+}
+slider:disabled .__thumb__ {
+    background: asset("crystalgui:ore", "button-disabled");
+}
+
 .panel {
     background: asset("crystalgui:ore", "panel");
     padding-left: 5px;
