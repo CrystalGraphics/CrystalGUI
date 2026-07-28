@@ -1,4 +1,6 @@
 {
+  "_comment": "Coordinates come from LDLib2's OreSprites.java. Our ore_styles.png is byte-identical to theirs, so any region named there is already present here and only needs declaring — no artwork required. Note: only unknown ROOT keys are ignored by the loader; a comment inside 'elements' would be parsed as an element and throw.",
+  "_comment_tabs": "Two tab sets exist in the atlas. The GREEN set (x=72 light / x=83 green) is the one Ore actually uses and the one LDLib's ore.lss selects — it has real contrast between states. The GREY set (x=50 / x=61) is nearly useless: sampling the art shows selected and unselected are the SAME grey (90,91,92), so a theme built on it has no visible selection. The green set only has default and hover rows (y=7, y=14); y=21 and y=28 are blank, hence no green disabled sprite.",
   "texture": "crystalgui:textures/gui/ore_styles.png",
   "textureSize": [256, 256],
   "elements": {
@@ -26,6 +28,20 @@
     "divider-hover":  { "sprite": [56, 0, 5, 5], "border": [2, 2, 2, 2] },
 
     "textfield":              { "sprite": [21, 0, 3, 4], "border": [1, 1, 1, 2] },
+
+    "tab-off":                { "sprite": [72, 7, 11, 7],  "border": [2, 2, 2, 4] },
+    "tab-off-hover":          { "sprite": [72, 14, 11, 7], "border": [2, 2, 2, 4] },
+    "tab-on":                 { "sprite": [83, 7, 11, 7],  "border": [2, 4, 2, 2] },
+    "tab-on-hover":           { "sprite": [83, 14, 11, 7], "border": [2, 4, 2, 2] },
+
+    "tab-grey-off":           { "sprite": [50, 7, 11, 7],  "border": [2, 2, 2, 4] },
+    "tab-grey-off-hover":     { "sprite": [50, 14, 11, 7], "border": [2, 2, 2, 4] },
+    "tab-grey-off-disabled":  { "sprite": [50, 28, 11, 7], "border": [2, 2, 2, 4] },
+    "tab-grey-on":            { "sprite": [61, 7, 11, 7],  "border": [2, 4, 2, 2] },
+    "tab-grey-on-hover":      { "sprite": [61, 14, 11, 7], "border": [2, 4, 2, 2] },
+    "tab-grey-on-disabled":   { "sprite": [61, 28, 11, 7], "border": [2, 4, 2, 2] },
+
+    "rect":                   { "sprite": [21, 0, 3, 4], "border": [1, 1, 1, 2] },
     "scroller-track":         { "sprite": [24, 0, 3, 5], "border": [1, 3, 1, 1] },
     "scroller-thumb":         { "sprite": [46, 0, 5, 5], "border": [2, 2, 2, 2] },
     "scroller-thumb-hover":   { "sprite": [51, 0, 5, 5], "border": [2, 2, 2, 2] },

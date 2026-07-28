@@ -29,7 +29,7 @@
  * font-size defaults to 16 in the property registry, which is huge next to Minecraft's own UI.
  * These are inheritable, so setting them on the widgets reaches their labels. */
 
-button, checkbox, switch, slider, splitview, textfield {
+button, checkbox, switch, slider, splitview, textfield, tabview, tab {
     font-size: 10;
 }
 
@@ -181,12 +181,201 @@ splitview.__vertical__ .__divider__ {
     height: 4px;
 }
 
-/* ── TextField (widget not built yet; geometry reserved) ───────────────────────────────────────── */
+/* ── TabView ────────────────────────────────────────────────────────────────────────────────────
+ * The panes container gets its flex-grow from Java (this engine's flex-shrink/min-width defaults
+ * mean it would otherwise collapse to content size); everything here is thickness and colour.
+ *
+ * Selection is `tab:checked`, driven by Tab.isChecked() through the existing CHECKED pseudo-class —
+ * there is no `:selected` and no marker class to keep in sync. */
 
+tabview {
+    width: 100%;
+    height: 100%;
+}
+/* The strip must not stretch to fill: it takes the tabs' thickness and the panes take the rest.
+ *
+ * NOTE the alignment lives on the RAIL, not the strip. The strip is a COLUMN (rail above bar), so
+ * its cross axis is horizontal and an `align-items: flex-end` here would right-align the rail —
+ * which shrinks it to its content, so nothing ever overflows it, the bar hides itself and the wheel
+ * has nothing to scroll. The rail is the row of tabs, and there flex-end means what's intended:
+ * tabs sit on their bottom edge, at natural size, even when a raised :checked tab makes the rail
+ * taller than they are. */
+tabview .__strip__ {
+    flex-grow: 0;
+    background: #2A2A2A;
+}
+tabview .__rail__ {
+    align-items: flex-end;
+}
+tabview.__left__ .__rail__,
+tabview.__right__ .__rail__ {
+    align-items: stretch;
+}
+/* The strip's scrollbar is a REAL FLEX ITEM (see TabView), sitting after the rail — beneath a row of
+ * tabs, beside a column of them. That is why there is no reserved padding here and no absolute
+ * positioning to undo: it takes its own 2px and the tabs keep their edge against the panes.
+ *
+ * 2px is deliberately below the size at which step buttons are usable; they stay `display: none`
+ * from the scroller rules above. A theme wanting them thickens the bar and turns them on together. */
+tabview .__strip-bar__ {
+    height: 2px;
+}
+tabview.__left__ .__strip-bar__,
+tabview.__right__ .__strip-bar__ {
+    width: 2px;
+    height: auto;
+}
+
+tabview .__panes__ {
+    background: #3A3A3A;
+}
+tabview .__pane__ {
+    padding-all: 4px;
+}
+
+/* A tab is a Button, so it inherits nothing from `button` (type selectors don't cascade by
+ * inheritance) — it needs its own box. */
+tab {
+    height: 14px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 1px;
+    padding-bottom: 2px;
+    justify-content: center;
+    align-items: center;
+    background: #6E6E6E;
+    color: #DDDDDD;
+    text-shadow: false;
+}
+tab:hover {
+    background: #8C8C8C;
+}
+/* The selected tab reads as raised into the pane below it: taller, and the same colour as the pane
+ * so the seam between them disappears. LDLib's ore theme does the same with a padding shift. */
+tab:checked {
+    height: 16px;
+    background: #3A3A3A;
+    color: #FFFFFF;
+}
+tab:disabled {
+    background: #4A4A4A;
+    color: #6E6E6E;
+}
+
+/* ── Scroller / ScrollerView ────────────────────────────────────────────────────────────────────
+ * The bar's ROOT is the track — no separate track element. The thumb's length and position come from
+ * Java at IMPORTANT origin (they're runtime state), so a theme only sets thickness and colours here.
+ *
+ * The bars are absolutely positioned by ScrollerView so they overlay content rather than taking a
+ * slice of the layout; these rules pin them to the trailing edges. */
+
+/* Wheel and programmatic scrolls ease instead of jumping. CSS's own default is `auto` (instant), but
+ * a jump-per-notch reads as broken in a UI at this scale — this is the engine making a nicer default,
+ * and any consumer can put it back with `scroll-behavior: auto`. Dragging a thumb stays instant
+ * regardless; see ScrollerView. `scroll-duration` is ours, not CSS — browsers hard-code their curve. */
+scrollerview {
+    scroll-behavior: smooth;
+    scroll-duration: 0.18;
+}
+
+scroller .__track__ {
+    background: #2A2A2A;
+}
+/* Only the CROSS axis is set here. The main axis (length + position) is written from Java at
+ * IMPORTANT origin, since it's runtime state, and would override anything declared here anyway.
+ * A horizontal bar's thumb fills the bar's height; a vertical bar's fills its width. */
+scroller .__thumb__ {
+    height: 100%;
+    background: #6E6E6E;
+}
+scroller.__vertical__ .__thumb__ {
+    width: 100%;
+}
+scroller .__thumb__:hover {
+    background: #8C8C8C;
+}
+scroller .__thumb__:active {
+    background: #B4B4B4;
+}
+
+/* Step buttons. Hidden by default — that's what every modern desktop UI does, and it's what Ore
+ * chose too (`.__scroller_head_button__ { display: none }`). They are fully wired regardless, so a
+ * theme turns them on with nothing but CSS:
+ *     scroller .__head__, scroller .__tail__ { display: flex; }
+ * Because they're flex items, hiding them lets __track__ take the whole bar, so the geometry with
+ * buttons off is identical to not having them at all. */
+scroller .__head__,
+scroller .__tail__ {
+    display: none;
+    background: #4A4A4A;
+    /* Sized along the bar's MAIN axis, filling the cross axis. A horizontal bar's buttons are 8px
+     * WIDE and full height; the vertical rule below swaps that. Getting this wrong is why a
+     * `height`-only rule collapses the horizontal bar's buttons to nothing. Kept here rather than in
+     * a theme so enabling them stays a pure `display: flex`.
+     * 8 matches the bar's thickness, so a button comes out square. */
+    width: 8px;
+    height: 100%;
+}
+scroller.__vertical__ .__head__,
+scroller.__vertical__ .__tail__ {
+    width: 100%;
+    height: 8px;
+}
+scroller .__head__:hover,
+scroller .__tail__:hover {
+    background: #6E6E6E;
+}
+
+/* The little square where the two bars meet — `::-webkit-scrollbar-corner` in a browser. Shown only
+ * when both bars are visible; ScrollerView sizes it from their measured thicknesses. */
+scrollerview .__corner__ {
+    background: #2A2A2A;
+}
+
+scrollerview .__v-scroller__ {
+    width: 8px;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+scrollerview .__h-scroller__ {
+    height: 8px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+/* ── TextField ──────────────────────────────────────────────────────────────────────────────────
+ * No internal children — caret, selection and placeholder are all painted, so `color` does double
+ * duty as the text and caret colour. Height is set here because a field with no content would
+ * otherwise collapse to nothing.
+ *
+ * Note the padding does NOT have to leave room for the text vertically: the field paints its text
+ * centred on the BORDER box and clips only horizontally, precisely because a one-line field is
+ * routinely shorter than its font's line box once padding comes out (Ore's 14px field with 3px
+ * padding leaves 8px for 10px text). The padding here positions the text's left edge and nothing
+ * more. */
 textfield {
+    height: 16px;
     padding-all: 3px;
+    align-items: center;
     background: #2A2A2A;
     color: #EEEEEE;
+}
+/* :blank is driven by TextField.isBlank(), already wired into PseudoClasses — so the placeholder,
+ * which reuses `color`, dims itself with no widget-specific support. */
+textfield:blank {
+    color: #7A7A7A;
+}
+/* :invalid comes from TextField.isInvalid() — content that fails its validator, or a number outside
+ * its range. The value stays editable; only the styling changes. */
+textfield:invalid {
+    background: #4A2A2A;
+    color: #FF9A9A;
+}
+textfield:disabled {
+    background: #232323;
+    color: #6E6E6E;
 }
 
 /* ── Generic layout helpers ─────────────────────────────────────────────────────────────────────

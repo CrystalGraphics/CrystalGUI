@@ -205,6 +205,7 @@ public final class UIWindow {
         lastFrameNanos = now;
 
         styleEngine.calculateStyle(deltaSeconds);
+        tickAnimations(deltaSeconds);
         calculateLayout();
 
         CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
@@ -312,6 +313,46 @@ public final class UIWindow {
         element.getRuntimeCache().resetPoseCache();
         for (UIElement child : element.getChildren()) {
             invalidatePoseCaches(child);
+        }
+    }
+
+    // ── Smooth scrolling ────────────────────────────────────────────────────
+
+    /** Elements with a smooth scroll in flight. Only these are ticked, so the cost is zero on a
+     * window with nothing animating. */
+    private final Set<UIElement> scrollAnimations = new HashSet<>();
+
+    void registerScrollAnimation(UIElement element) {
+        scrollAnimations.add(element);
+    }
+
+    /**
+     * Advances every in-flight smooth scroll. Driven from {@link #paintFrame()}; call it directly if
+     * you drive layout yourself (as the headless tests do).
+     */
+    public void tickScrollAnimations(float deltaSeconds) {
+        if (scrollAnimations.isEmpty()) return;
+        scrollAnimations.removeIf(element ->
+                element.getAttachedWindow() != this || !element.tickScrollAnimation(deltaSeconds));
+    }
+
+    /** Per-frame callbacks that aren't scroll animations — press-and-hold repeats, blinking carets. */
+    private final Set<UIFrameTicker> tickers = new HashSet<>();
+
+    /** Registers a per-frame callback; it is dropped as soon as it reports it's done. */
+    public void registerTicker(UIFrameTicker ticker) {
+        tickers.add(ticker);
+    }
+
+    /** Everything that wants a per-frame callback: smooth scrolls plus registered tickers. Driven
+     * from {@link #paintFrame()}; call it directly if you drive frames yourself. */
+    public void tickAnimations(float deltaSeconds) {
+        tickScrollAnimations(deltaSeconds);
+        if (!tickers.isEmpty()) {
+            // Snapshot: a ticker may register another (or itself) while running.
+            for (UIFrameTicker ticker : new ArrayList<>(tickers)) {
+                if (!ticker.tickFrame(deltaSeconds)) tickers.remove(ticker);
+            }
         }
     }
 

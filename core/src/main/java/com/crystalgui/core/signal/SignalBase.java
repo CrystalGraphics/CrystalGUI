@@ -70,6 +70,12 @@ public abstract class SignalBase<L> {
         return slots;
     }
 
+    /** Whether anything is connected. Lets an emitter fall back to a local default when nobody is
+     * listening, rather than emitting into the void. */
+    public final boolean hasListeners() {
+        return !slots.isEmpty();
+    }
+
     /** Marks emission as started. Must be called before iterating slots. */
     protected final void beginEmit() {
         emitting = true;

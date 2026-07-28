@@ -104,6 +104,10 @@ public class Slider extends UIElement {
         this.attachDefaultListener(this.onMouseScroll, (el, event) -> {
             if (!isEnabled() || !isFocused()) return;
             setValue(value + event.getScroll() * stepOrDefault());
+            // We consumed the wheel, so suppress the default "scroll the nearest scroll container"
+            // behaviour — otherwise a focused slider inside a scrolling list would move AND scroll
+            // the list out from under the cursor.
+            event.preventDefault();
         });
 
         this.events.getGroup(KeyboardEvent.Down.class).attachListener((el, event) -> {

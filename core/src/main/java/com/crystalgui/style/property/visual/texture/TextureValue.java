@@ -47,11 +47,21 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         return parseDrawable(rawValue);
     }
 
-    private static @Nullable CgUiDrawable parseDrawable(String rawValue) {
+    /** Package-private so the keyword handling can be tested without a GL context, as
+     * {@link #parseRepeatPair} already is. */
+    static @Nullable CgUiDrawable parseDrawable(String rawValue) {
         String value = rawValue.trim();
         if (value.isEmpty()) return null;
 
         String lower = value.toLowerCase(Locale.ROOT);
+        // `none` is CSS's own spelling for "no layer here"; `empty` is accepted because LDLib2's LSS
+        // uses that word and the two dialects otherwise read the same. Both resolve to the shared
+        // EMPTY drawable rather than to null — null is how this method reports a PARSE FAILURE, so
+        // returning it for a deliberate "nothing" would be indistinguishable from a typo. A fully
+        // transparent colour (`#00000000`) also works but still allocates and draws a quad.
+        if (lower.equals("none") || lower.equals("empty")) {
+            return CgUiDrawable.EMPTY;
+        }
         if (value.startsWith("#") || lower.startsWith("rgb(") || lower.startsWith("rgba(")) {
             Integer color = ColorValue.parseColor(value);
             return color == null ? null : new CgUiQuad(color);
