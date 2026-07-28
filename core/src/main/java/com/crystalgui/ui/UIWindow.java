@@ -194,7 +194,10 @@ public final class UIWindow {
         PoseStack pose = paintContext.getPoseStack();
         pose.pushPose();
 
-        pose.scale(uiScale, uiScale, 1f);
+        // Same matrix RuntimeCache.localToWorld falls back to, so painted and not-yet-painted
+        // frames agree on what uiScale means. Don't inline a scale() here — that's how the two
+        // definitions drifted before.
+        pose.mulPoseMatrix(rootTransform);
 
         ui.rootElement.drawSubtree(paintContext);
 
@@ -251,6 +254,46 @@ public final class UIWindow {
      * to re-match the whole tree when a stylesheet is added or removed. */
     public List<UIElement> getElements() {
         return Collections.unmodifiableList(elements);
+    }
+
+    /**
+     * The transform every element's {@code localToWorld} chain hangs off: physical pixels per
+     * logical layout unit.
+     *
+     * <p><b>Single source of truth for what {@code uiScale} means.</b> {@link #paintFrame} seeds the
+     * {@code PoseStack} from this, and {@link UIElement.RuntimeCache#localToWorld} falls back to it
+     * for the root — so hit-testing is correct <em>before</em> anything has ever been painted.
+     * Previously the two were defined independently (the pose scaled itself, the cache fell back to
+     * identity) and disagreed by exactly {@code uiScale} until the first paint installed the real
+     * matrix, which made pointer maths silently wrong in that window.</p>
+     *
+     * <p>The scale deliberately lives here and in the {@code PoseStack} rather than in the ortho
+     * projection: {@code CgTextRenderer} picks its glyph raster size from the pose scale
+     * ({@code baseTargetPx * extractMaxScale(pose)}), so moving it would rasterize glyphs at logical
+     * size and let the projection magnify them — blurry text. {@code CgUiPaintContext.pushScissor}
+     * also reads this matrix to reach physical {@code glScissor} pixels, which the projection has no
+     * effect on.</p>
+     *
+     * @return the live internal matrix — treat as read-only.
+     */
+    public Matrix4f getRootTransform() {
+        return rootTransform;
+    }
+
+    /** Rescales the whole tree. Invalidates every cached transform, since they all derive from
+     * {@link #getRootTransform()} — without that, hit-testing would keep using the old scale. */
+    public void setUiScale(float uiScale) {
+        if (this.uiScale == uiScale) return;
+        this.uiScale = uiScale;
+        this.rootTransform.identity().scale(uiScale, uiScale, 1f);
+        invalidatePoseCaches(ui.rootElement);
+    }
+
+    private static void invalidatePoseCaches(UIElement element) {
+        element.getRuntimeCache().resetPoseCache();
+        for (UIElement child : element.getChildren()) {
+            invalidatePoseCaches(child);
+        }
     }
 
     public UIElement getHoveredElement(float mouseX, float mouseY) {

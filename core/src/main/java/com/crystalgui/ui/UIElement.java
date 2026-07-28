@@ -746,7 +746,7 @@ public class UIElement {
             paintChildren(ctx, overflow);
 
             CgFrameBuffer maskFbo = ctx.beginLayerFbo();
-            paintDefaultMask(ctx, runtimeCache.getX(), runtimeCache.getY(), runtimeCache.getWidth(), runtimeCache.getHeight());
+            paintDefaultMask(ctx);
             ctx.endLayerFbo();
 
             ctx.compositeMask(childrenFbo, maskFbo); // multiply children-layer by mask alpha, in place
@@ -813,15 +813,40 @@ public class UIElement {
      * complementary {@link CgUiPaintContext#withLayerOpacity} weights, so the mask tracks the
      * transition continuously instead of falling back to solid white for its whole duration and only
      * picking up the real end shape once the transition fully completes.</p> */
-    private void paintDefaultMask(CgUiPaintContext ctx, float x, float y, float width, float height) {
-        CornerRadii radii = resolveCornerRadii(width, height);
+    private void paintDefaultMask(CgUiPaintContext ctx) {
         float borderWidthPx = getTaffyLayout().border().left;
         GeneralGroup styleGen = style.getGeneralGroup();
         CgUiDrawable maskDrawable = styleGen.mask();
         CgUiDrawable maskSource = maskDrawable != CgUiDrawable.EMPTY ? maskDrawable : styleGen.background();
 
+        // `mask-origin`/`-fit`/`-position`, resolved exactly like the `overlay-*` trio in
+        // paintOverlay. Because the mask's alpha is what compositeMask multiplies the children layer
+        // by, re-boxing the mask directly moves and resizes the clip region — which is the point:
+        // the reveal area no longer has to be the element's own border box.
+        //
+        // Defaults (border-box + fill + center) resolve to precisely the rect this used to be called
+        // with — runtimeCache's x/y/width/height — so nothing changes until a stylesheet opts in.
+        CgUiLayerBox originBox = resolveOriginBox(styleGen.maskOrigin());
+
+        // `mask-offset` grows the origin box on all four sides before fit/position run, so a
+        // positive value reveals a margin beyond the element and a negative one insets the clip.
+        // Percent resolves per-axis against the origin box, matching outline-offset's convention.
+        LengthPercent offset = styleGen.maskOffset();
+        float offsetX = offset.resolve(originBox.width());
+        float offsetY = offset.resolve(originBox.height());
+
+        CgUiLayerBox box = CgUiLayerBox.resolve(maskSource,
+                originBox.x() - offsetX, originBox.y() - offsetY,
+                Math.max(0f, originBox.width() + 2f * offsetX),
+                Math.max(0f, originBox.height() + 2f * offsetY),
+                styleGen.maskFit(), styleGen.maskPosition());
+
+        // Radii resolve against the mask's own box, not the element's, so percentage radii stay
+        // proportional to the shape actually being drawn once it's been re-boxed.
+        CornerRadii radii = resolveCornerRadii(box.width(), box.height());
+
         ctx.setColor(0xFFFFFFFF);
-        paintDefaultMaskShape(ctx, maskSource, x, y, width, height, radii, borderWidthPx);
+        paintDefaultMaskShape(ctx, maskSource, box.x(), box.y(), box.width(), box.height(), radii, borderWidthPx);
     }
 
     /** Only called from {@link #paintDefaultMask}; recurses into {@link CgUiCrossFade} the same way
@@ -1164,8 +1189,13 @@ public class UIElement {
             var element = UIElement.this;
             var parent = element.getParent();
             if (parent == null) {
+                // The window's scale, NOT identity. drawSubtree overwrites this from the live
+                // PoseStack, which UIWindow.paintFrame seeds from the very same matrix — so the two
+                // agree. Returning identity here (as this did) left every transform wrong by exactly
+                // uiScale until the first paint, which silently broke hit-testing for anything that
+                // did pointer maths before then (and permanently, in headless/layout-only use).
                 if (element.attachedWindow == null) return old.identity();
-                return old.identity();
+                return old.set(element.attachedWindow.getRootTransform());
             }
             old.set(parent.getRuntimeCache().localToWorld.get());
             // TODO: Style transforms

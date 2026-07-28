@@ -301,6 +301,34 @@ public class StyleSheetTest {
         assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
     }
 
+    /**
+     * The {@code mask} layer gets the same geometry longhands the other paint layers have —
+     * {@code -origin}/{@code -fit}/{@code -position} mirroring {@code overlay-*}, plus
+     * {@code -offset} mirroring {@code outline-offset}. Since the mask's alpha is what the children
+     * layer is multiplied by, re-boxing it is what moves the actual clip region.
+     */
+    @Test
+    public void maskGeometryLonghandsAreSeparateRegisteredProperties() {
+        var decls = StyleSheet.parse(".a { mask-origin: padding-box; mask-fit: contain;"
+                        + " mask-position: top-left; mask-offset: 4px; }")
+                .getRules().get(0).declarations();
+        assertEquals(4, decls.size());
+        assertTrue(declares(decls, StylePropertyRegistry.MASK_ORIGIN));
+        assertTrue(declares(decls, StylePropertyRegistry.MASK_FIT));
+        assertTrue(declares(decls, StylePropertyRegistry.MASK_POSITION));
+        assertTrue(declares(decls, StylePropertyRegistry.MASK_OFFSET));
+    }
+
+    /** The longhands must not collide with the {@code mask} drawable shorthand itself. */
+    @Test
+    public void maskShorthandStillParsesAlongsideItsLonghands() {
+        var decls = StyleSheet.parse(".a { mask: #FFFFFF; mask-offset: -2px; }")
+                .getRules().get(0).declarations();
+        assertEquals(2, decls.size());
+        assertTrue(declares(decls, StylePropertyRegistry.MASK));
+        assertTrue(declares(decls, StylePropertyRegistry.MASK_OFFSET));
+    }
+
     // ── sprite() tiling args, end-to-end through the stylesheet parser ──────────────────────────
 
     private static com.crystalgui.render.texture.CgUiSprite parseSpriteValue(String extraArgs) {

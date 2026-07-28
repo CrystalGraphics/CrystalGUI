@@ -76,6 +76,22 @@ public class StylePropertyRegistry {
     // the old `clip: none|scissor|mask` property, which let authors pick the mechanism directly.
     public static final StyleProperty<Overflow> OVERFLOW = create("overflow", Overflow.class, Overflow.VISIBLE);
     public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
+    // Geometry longhands for the `mask` layer, exactly mirroring the `overlay-*` trio above (same
+    // types, same defaults, same CgUiLayerBox.resolve path). Defaults reproduce the previous
+    // behaviour — the mask stretched to the full border box — so this changes nothing until a
+    // stylesheet opts in. Like the overlay set, deliberately NOT transition-enabled: enums don't
+    // interpolate.
+    public static final StyleProperty<BoxOrigin> MASK_ORIGIN =
+            create("mask-origin", BoxOrigin.class, BoxOrigin.BORDER_BOX);
+    public static final StyleProperty<DrawableFit> MASK_FIT =
+            create("mask-fit", DrawableFit.class, DrawableFit.FILL);
+    public static final StyleProperty<DrawableAlign> MASK_POSITION =
+            create("mask-position", DrawableAlign.class, DrawableAlign.CENTER);
+    // Grows (or, when negative, shrinks) the resolved mask box on all four sides — same shape and
+    // LengthPercent model as `outline-offset`. Unlike the enum longhands above this IS transitionable,
+    // since a length interpolates: animating it opens/closes the reveal region smoothly.
+    public static final StyleProperty<LengthPercent> MASK_OFFSET =
+            create(new LengthPercentProperty("mask-offset", LengthPercent.ZERO));
     // border-radius itself is pure parse-time shorthand syntax expanding to the 8 real longhands in
     // BorderRadiusProperties (see BorderRadiusShorthand) — not a registered property here, matching
     // how margin/padding/border-width work (BoxEdgeShorthands).
