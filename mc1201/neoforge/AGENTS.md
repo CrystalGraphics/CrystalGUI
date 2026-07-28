@@ -1,5 +1,8 @@
 # mc1201/neoforge — Agent Knowledge Base
 
+> ⚠️ **Not in the build.** `includeBuild("mc1201")` is commented out in the root
+> `settings.gradle.kts`, so the Gradle commands below do not run until it is uncommented.
+
 ## Target Versions
 
 **IMPORTANT**: Despite the `mc1201/` directory name, this module targets **MC 1.20.4 / NeoForge 20.4.x**.

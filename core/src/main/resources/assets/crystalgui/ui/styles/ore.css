@@ -167,11 +167,14 @@ switch:focus .__knob__ {
  * No `transition` here on purpose — see Slider's javadoc. During a drag the thumb has to sit exactly
  * under the cursor, and a transition on the flex weights would make it lag behind by the duration.
  *
- * Discrete sliders: Slider tags itself with `__stepped__` when step > 0, so a theme that wants them
- * to read differently writes `slider.__stepped__ …` rules. Ore deliberately ships NONE — at this
- * scale a ~150px track split into a handful of segments gives ~1px separators that vanish at
- * uiScale 1 and shimmer at 2. Stepped sliders here look identical to continuous ones and only the
- * value snaps, which is the intended result, not an omission. */
+ * Discrete sliders read identically to continuous ones — only the value snaps. That is intended at
+ * this scale, not an omission: a ~150px track split into a handful of segments gives ~1px separators
+ * that vanish at uiScale 1 and shimmer at 2.
+ *
+ * NOTE: there is no CSS hook to change that even if a theme wanted one. An earlier version of this
+ * comment claimed `Slider` tags itself `__stepped__` when step > 0 — it does not, and nothing else
+ * does either. A theme needing `slider.__stepped__` would have to add the class in `Slider.setStep`
+ * first. */
 /* THEME CONVENTION, load-bearing: the horizontal padding here must equal HALF the thumb's width,
  * and the thumb's negative margins must be its exact negation. That pairing is what makes the thumb
  * overhang the content box by half its width at each end, so:

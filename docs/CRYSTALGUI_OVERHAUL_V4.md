@@ -1,12 +1,34 @@
-# CrystalGUI V4 — Architecture Overhaul
+# CrystalGUI V4 — Architecture Overhaul  ⟨HISTORICAL⟩
 
-> Supersedes all prior render architecture documents (`CRYSTALGUI_BACKEND_ROADMAP.md`,
-> `PHASES_0_3_IMPLEMENTATION_GUIDE.md`, V3.x render notes). Those documents describe a
-> dead architecture. This document is the new ground truth.
+> ## ⚠️ This is a decision record, not a description of the code.
 >
-> **V4.1 revision**: `#type CgVertexFormat` is now dynamically attachable — `#type UI` resolves
-> entirely from `CgVertexFormat.UI`'s descriptor. `ui_env.glsl` is eliminated. CrystalGUI
-> restructures into `core/` + `mc1710/` + `mc1201/` subprojects mirroring CrystalGraphics.
+> **Current-state references live elsewhere:**
+> `CGUI_STYLE_RENDER_PIPELINE.md` (cascade, stylesheets, painting) ·
+> `CGUI_WIDGETS.md` (the twelve widgets) ·
+> `CGUI_SERVER_AND_SERIALIZATION.md` (codecs, packets, sessions) ·
+> `../AGENTS.md` (package map).
+>
+> **What is still true here** is the *premise*: V3.x had CrystalGUI owning GL infrastructure, that
+> was wrong, and CrystalGraphics owns the rendering backend. That boundary is still the governing
+> constraint of the project, and this document is the record of why.
+>
+> **What is not true** is the design that follows from it. V4 specified a `CgRenderCommand` / `CgUiPass`
+> render-queue architecture; the codebase went the other way and rendering is **fully synchronous
+> immediate-mode** through `CgUiPaintContext`. Per-part status:
+>
+> | Part | Status |
+> |---|---|
+> | Core Problem · V4 Principle | ✅ still the governing rationale |
+> | Part 1.1 Tear Down | ⚠️ mostly landed — but `ScissorStack` was **not** deleted and is still in use |
+> | Part 1.2 – Part 4 (`CgUiPass`, scissor-on-command, `CgUiPaintContext` V4, `UiMaterials`, `UiMeshCache`, `UiCommandTextSink`, the `ui_*.shader` set) | ❌ **abandoned** — none of it exists; the shipped materials are `gui_quad`, `gui_rounded_rect`, `gui_layer_blit` |
+> | Part 5.1 Module structure (`core/` + `mc1710/` + `mc1201/`) | ✅ landed |
+> | Part 6 "What is Preserved" | ❌ **struck** — see the note in place of that section |
+> | Part 7 Harness scene | ⚠️ a scene exists (`cgui-test`), built from different classes than described; there are now fifteen |
+>
+> Read this document for the *why*. Never for the *what*.
+>
+> (The two files its original banner claimed to supersede — `CRYSTALGUI_BACKEND_ROADMAP.md` and
+> `PHASES_0_3_IMPLEMENTATION_GUIDE.md` — have never existed in this repository's history.)
 
 ---
 
@@ -755,24 +777,24 @@ All rendering flows through CrystalGraphics' `CgUiPass`. No rendering code in `m
 
 ---
 
-## Part 6: What is Preserved (Unchanged)
+## Part 6: What is Preserved (Unchanged)  ⟨STRUCK⟩
 
-These packages are architecturally sound and have zero rendering coupling. Do not touch them
-as part of this overhaul.
-
-| Package / Class | Status |
-|---|---|
-| `core/signal/` — `Signal`, `SignalBase`, `Connection`, `ConnectionGroup` | ✅ Keep as-is |
-| `core/property/` — `Property<T>` with binding | ✅ Keep as-is |
-| `core/event/` — `UiEventDispatcher`, `UiMouseEvent`, `UiKeyEvent`, `UiEventType`, phases | ✅ Keep as-is |
-| `core/input/` — `UiInputManager`, `FocusManager`, `FocusPolicy` | ✅ Keep as-is |
-| `core/layout/` — `LayoutContext`, `LayoutNodeState` | ✅ Keep as-is |
-| `core/geometry/` — `UiRect` | ✅ Keep as-is |
-| `core/tree/` — `TreeTraversal` | ✅ Keep as-is |
-| `ui/UIElement`, `ui/UIContainer`, `ui/UIDocument` | ✅ Keep — `render()` signature change only |
-| `ui/CgUiDrawable` | ✅ Keep interface, `draw(CgUiPaintContext)` signature unchanged |
-| `ui/elements/UiPanel`, `UiButton`, `UiLabel`, `UiTextbox` | ✅ Keep — `draw()` call sites largely unchanged |
-| `mc/LwjglKeyTranslator` | ✅ Keep as-is — still needed for 1.7.10 input translation |
+> **This section has been removed rather than corrected.** It listed roughly fifteen classes and
+> packages as "architecturally sound, keep as-is" — `core/event/UiEventDispatcher`,
+> `core/input/UiInputManager` + `FocusManager`, `core/layout/LayoutContext`, `core/geometry/UiRect`,
+> `core/tree/TreeTraversal`, `ui/UIContainer`, `ui/UIDocument`, `ui/elements/UiPanel`/`UiButton`/
+> `UiLabel`/`UiTextbox`, `mc/LwjglKeyTranslator` — **none of which have ever existed in this
+> repository.** It reads as a factual inventory and is not one; leaving it in place with a caveat
+> would have kept it quotable.
+>
+> The real equivalents, all documented in `../AGENTS.md`: `ui/event/` (the three-phase `UIEvent`
+> hierarchy), `ui/input/UIInputHandler` (which merges what this section called `UiInputManager` +
+> `FocusManager` — there is no such split), `ui/tree/UITreeTraversal`, and no `UIContainer` /
+> `UIDocument` at all: `UIElement` is both leaf and container by design. The widgets are `Button`,
+> `UIText`, `TextField` and nine others — see `CGUI_WIDGETS.md`.
+>
+> What this section was *right* about, and what has genuinely survived the whole overhaul untouched:
+> **`core/signal/` and `core/property/`**.
 
 ---
 
@@ -840,4 +862,7 @@ CrystalGraphics' own harness model.
 ---
 
 *Document version: V4.1 — `#type CgVertexFormat` dynamic attachment, `ui_env.glsl` eliminated, module restructure added.*
-*Prior documents (`CRYSTALGUI_BACKEND_ROADMAP.md`, `PHASES_0_3_IMPLEMENTATION_GUIDE.md`) are superseded.*
+
+*Status: **HISTORICAL**. The ownership boundary this document argues for still governs the project; the
+render-queue design it specifies was abandoned for immediate-mode. See the banner at the top for the
+per-part breakdown and the current-state documents.*

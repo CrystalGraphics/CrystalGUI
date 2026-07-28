@@ -82,8 +82,8 @@ public class Tab extends Button {
         this.selected = selected;
         applyPaneVisibility();
         onStyleChanged();
-        // Re-matches descendants too, which is what makes `tab:checked .__label__` work — the same
-        // pair Checkbox.setChecked uses.
+        // Re-matches descendants too, so a descendant rule like `tab:checked text` restyles with the
+        // selection and not just the tab itself — the same pair Checkbox.setChecked uses.
         invalidateStyleMatch();
     }
 
