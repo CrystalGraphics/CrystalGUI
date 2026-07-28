@@ -1,5 +1,8 @@
 # mc1201/fabric — Agent Knowledge Base
 
+> ⚠️ **Not in the build.** `includeBuild("mc1201")` is commented out in the root
+> `settings.gradle.kts`, so the Gradle commands below do not run until it is uncommented.
+
 ## Target Versions
 
 **MC 1.20.1 / Fabric**

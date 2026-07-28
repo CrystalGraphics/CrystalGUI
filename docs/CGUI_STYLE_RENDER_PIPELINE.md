@@ -1,10 +1,16 @@
 # CrystalGUI Style & Render Pipeline
 
-> Supplements `CRYSTALGUI_OVERHAUL_V4.md` — that document covers the render-architecture *rewrite
-> decision* (CrystalGraphics owns rendering infrastructure, CrystalGUI is a thin paint surface). This
-> document covers how the style/cascade/paint pipeline actually works end to end, as built on top of
-> that decision. Ground truth as of the session that built the stylesheet/transition/SDF system —
-> re-verify against the code before trusting a specific line number.
+> **Current-state reference** for the style/cascade/paint pipeline, end to end.
+>
+> Supplements `CRYSTALGUI_OVERHAUL_V4.md`, which is **historical**: it records the *decision* that
+> CrystalGraphics owns rendering infrastructure and CrystalGUI is a thin paint surface — but the
+> render-queue design it goes on to specify was abandoned in favour of immediate-mode. Read that one
+> for the *why*; this one for the *what*.
+>
+> Companions: `CGUI_WIDGETS.md` (the twelve widgets and their CSS surface) and
+> `CGUI_SERVER_AND_SERIALIZATION.md` (how styles travel to a client).
+>
+> Re-verify against the code before trusting a specific line number.
 
 ---
 
@@ -15,9 +21,17 @@
 Every element owns one `ElementStyle`, which holds `candidates: Map<StyleProperty<?>, List<StyleSlot<?>>>`
 — every value ever set for that property, from every source, tagged with where it came from.
 
-**`StyleOrigin`** (priority, low → high): `DEFAULT(0) < STYLESHEET(2) < INLINE(3) < IMPORTANT(4) <
-ANIMATION(5)`. `ANIMATION` outranks everything deliberately — an in-flight transition must visually
-win regardless of what set the underlying target value.
+**`StyleOrigin`** (priority, low → high): `DEFAULT(0) < USER_AGENT(1) < STYLESHEET(2) < INLINE(3) <
+IMPORTANT(4) < ANIMATION(5)`. Two of these are deliberate and easy to get backwards:
+
+- **`ANIMATION` outranks everything**, including `IMPORTANT` — an in-flight transition must visually win
+  regardless of what set the underlying target value, matching CSS Cascade L4/5. Without it, a transition
+  triggered by an `!important` change would tick every frame producing values `computeCandidateSlot`
+  never selects.
+- **`USER_AGENT` sits below author sheets.** `StyleSheet.DEFAULT` (`default.css`) is loaded at this
+  origin, so an author rule beats it at *any* specificity — the browser UA-sheet behaviour. Sharing
+  `STYLESHEET` would lose twice: `sourceOrder` restarts per sheet, and specificity is weighed before
+  source order, so a specific UA rule would beat a general theme rule.
 
 **`StyleSlot<T>`** — `record(property, origin, specificity, sourceOrder, value)`. Cascade winner is
 picked by `StyleSlot.compareTo`: origin first, then specificity, then source order — the same
@@ -62,11 +76,24 @@ descendant combinators, comma-separated selector lists, `!important`. Specificit
 weights (id=100, class/pseudo-class=10, type=1, universal=0).
 
 **Not supported** (see §9 for the full gap list): `:nth-child`/attribute selectors, `~`/`+` sibling
-combinators, `@media`/`@import`, external `.css` files, CSS custom properties (`--var`/`var()`).
+combinators, `@media`/`@import`.
 
-`StyleSheet.parse(String)` regex-parses declarations, buckets rules by id/class/type/universal for fast
-candidate lookup, and `StyleEngine.rematch(element)` re-evaluates only the buckets relevant to that
-element on every dirty pass.
+**Two ways in.** `StyleSheet.parse(String)` for inline CSS text; `StyleSheetRegistry.of("crystalgui:ore")`
+for an external file at `assets/{namespace}/ui/styles/{path}.css`. The registry is lazy and
+`ConcurrentHashMap`-cached, so repeated calls return the *same* `StyleSheet` instance — which is what
+makes `StyleEngine.removeStylesheet` usable for a runtime theme switch. A missing file logs a warning and
+yields an empty sheet, and is deliberately **not** cached, so it is retried once the owning resource pack
+loads. Two sheets ship today: `default.css` (user-agent) and `ore.css` (theme).
+
+`StyleSheet.parse` buckets rules by id/class/type/universal for fast candidate lookup and delegates
+declaration-level parsing to **`sheet/DeclarationParser`**, which also implements CSS custom properties —
+`collectVariables` gathers `--name: value` declarations and `substituteVars` resolves `var(--name)`
+references. `StyleEngine.rematch(element)` re-evaluates only the buckets relevant to that element on
+every dirty pass.
+
+**Sheet order is registration order**, and `sourceOrder` packs the sheet index above the rule index
+(`SHEET_ORDER_STRIDE`). So re-adding a previously removed sheet puts it back at the **highest** priority,
+not its original position. Anything that toggles sheets at runtime must re-add in the order it wants.
 
 **Box-model shorthands (`margin`/`padding`/`border-width`) expand into their real longhands at parse
 time**, not at cascade time. `margin`/`padding`/`border-width` themselves, and their `-all`/
@@ -364,8 +391,9 @@ stacking contexts).
 the same absolute screen coordinates (`runtimeCache.getX()/getY()`) they always do — no translation
 math needed — because the layer FBO spans the whole screen and starts fully transparent; only the
 element's own footprint ends up with real pixels in it. Matches LDLib2's own `PictureInPictureState`-based
-visual-layers implementation (`research_repos/LDLib2/.../gui/ui/rendering/`), which uses the same
-technique for the same reason on top of Minecraft's `PictureInPictureRenderer`.
+visual-layers implementation (sibling checkout at `../LDLib2`, under
+`src/main/java/.../gui/ui/rendering/`), which uses the same technique for the same reason on top of
+Minecraft's `PictureInPictureRenderer`.
 
 **`OverflowClip.MASK`** (`UIElement.drawSubtree` — reached via `overflow: hidden` auto-detecting
 to mask, not an author-chosen `clip:` value anymore; see `UIElement.resolveOverflowClip()`)
@@ -433,15 +461,18 @@ something creates very deep transient nesting.
 - **No `outline-style`** — solid only; no `dashed`/`dotted`/`auto`.
 - **No `currentColor`** — CSS defaults `outline-color` to `currentColor`; there's no such mechanism
   here, so it defaults to opaque white. Rarely observable, since `outline-width` defaults to 0.
-- **No automatic (UA-stylesheet) focus ring.** Browsers ship `:focus { outline: auto }` in their user
-  agent stylesheet; here a theme must opt in explicitly (see `ore.css`). `StyleEngine` holds a flat
-  per-window sheet list with every declaration slotted at `StyleOrigin.STYLESHEET`, so there's no
-  origin that loses to author CSS. Note `StyleOrigin`'s priority `1` is deliberately vacant
-  (`DEFAULT(0)`, `STYLESHEET(2)`, …), so a `USER_AGENT(1)` could be added without renumbering if this
-  is ever wanted.
-- **Partial text styling** — `color`, `font-size`, `font-family` are wired and inheritable, and
-  `UIText` consumes them. Still missing: `text-align`, and `text-shadow` parses/cascades but is a
-  registered **no-op** (nothing renders a shadow yet — see its `TODO` in `StylePropertyRegistry`).
+- ~~**No automatic (UA-stylesheet) focus ring**, because there is no origin that loses to author
+  CSS.~~ **Resolved.** `StyleOrigin.USER_AGENT(1)` exists and `StyleSheet.DEFAULT` loads `default.css`
+  at that origin, so the engine now ships baseline rules that any theme can override at any
+  specificity. A theme still opts into the focus *ring* explicitly (see `ore.css`), but the mechanism
+  it would need is no longer missing.
+- **Partial text styling** — `color`, `font-size`, `font-family`, `line-height`, `caret-width` and
+  `selection-color` are wired and inheritable. `UIText` consumes the first three; `TextField` consumes
+  all six (`line-height` drives its caret height, selection rect and vertical centring). Still missing:
+  `text-align`; `text-shadow` parses/cascades but is a registered **no-op** (nothing renders a shadow
+  yet — see its `TODO` in `StylePropertyRegistry`); `line-height` takes only a unitless multiplier, not
+  CSS's font-derived `normal`, which would need a `normal | <number>` union value type and a codec for
+  it; and `UIText` still wraps at the font's own metrics rather than honouring `line-height`.
   Note `font-size` takes a bare number: `10`, not `10px` — its parser is `Float.parseFloat` and
   *throws* on a unit suffix, unlike `width`/`height`/`outline-offset`, which do accept `px`.
 - **9-slice backgrounds can't be visually rounded/bordered** — `border-radius`/`border-width` still
@@ -464,9 +495,10 @@ something creates very deep transient nesting.
 |---|---|
 | Cascade / `ElementStyle` | `core/src/main/java/com/crystalgui/style/ElementStyle.java` |
 | Style origins/slots | `core/src/main/java/com/crystalgui/style/StyleOrigin.java`, `.../property/StyleSlot.java` |
-| Selectors | `core/src/main/java/com/crystalgui/style/selector/` |
-| Stylesheets | `core/src/main/java/com/crystalgui/style/sheet/`, `.../style/StyleEngine.java` |
-| Transitions | `core/src/main/java/com/crystalgui/style/transition/` |
+| Selectors | `core/src/main/java/com/crystalgui/style/selector/` (`Selector`, `CompoundSelector`, `SelectorType`) |
+| Stylesheets | `core/src/main/java/com/crystalgui/style/sheet/` (`StyleSheet`, `StyleRule`, `DeclarationParser`, `StyleSheetRegistry`), `.../style/StyleEngine.java` |
+| Shipped stylesheets | `core/src/main/resources/assets/crystalgui/ui/styles/default.css` (user-agent), `ore.css` (theme) |
+| Transitions / easing | `core/src/main/java/com/crystalgui/style/transition/`, `.../style/easing/` |
 | Property registry | `core/src/main/java/com/crystalgui/style/property/StylePropertyRegistry.java` |
 | Box-model shorthand expansion | `core/src/main/java/com/crystalgui/style/property/layout/BoxEdgeShorthands.java` |
 | Border-radius shorthand expansion + value type | `core/src/main/java/com/crystalgui/style/property/visual/border/` (`BorderRadiusShorthand`, `BorderRadiusProperties`, `LengthPercent`) |
@@ -479,4 +511,4 @@ something creates very deep transient nesting.
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |
 | SDF material | `core/src/main/resources/assets/crystalgui/shaders/gui_rounded_rect.shader` |
 | Named 9-slice assets | `core/src/main/java/com/crystalgui/render/texture/asset/CgUiSpriteRegistry.java` |
-| Demo scene | `gl-debug-harness/src/main/java/io/github/somehussar/crystalgraphics/harness/scene/ui/CgUiStylingScene.java` |
+| Demo scenes | `gl-debug-harness/src/main/java/io/github/somehussar/crystalgraphics/harness/scene/ui/` — `CgUiStylingScene` (selectors/cascade/transitions), `CgUiVisualLayersScene` (opacity isolation + masking), `CgUiNineSliceScene` (tiling modes, CPU vs SDF path), `CgUiOreThemeScene` (the theme + forced-state matrices), `CgUiGalleryScene` (everything, with a live theme toggle). Full list in `CGUI_WIDGETS.md`. |
