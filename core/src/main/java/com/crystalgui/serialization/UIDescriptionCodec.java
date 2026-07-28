@@ -65,6 +65,10 @@ public final class UIDescriptionCodec {
             input.writeStateTo(state);
             if (!state.isEmpty()) out.raw("state", state.encode());
 
+            // Which interactions the far side should report back. The handler itself never travels —
+            // it stays a lambda on the session that declared it.
+            out.optionalList("events", Codecs.STRING, List.copyOf(input.getReportedEvents()));
+
             List<UIElement> children = publicChildrenOf(input);
             if (!children.isEmpty()) {
                 List<T> encoded = new ArrayList<>(children.size());
@@ -100,6 +104,8 @@ public final class UIDescriptionCodec {
 
             T state = in.raw("state");
             if (state != null) element.readStateFrom(new StateMap<>(ops, state));
+
+            for (String kind : in.optionalList("events", Codecs.STRING)) element.addReportedEvent(kind);
 
             T children = in.raw("children");
             if (children != null) {
