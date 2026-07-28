@@ -10,6 +10,7 @@ import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.event.FocusEvent;
@@ -233,7 +234,7 @@ public class TextField extends UIElement implements UIFrameTicker {
     }
 
     @Override
-    protected boolean acceptsPublicChildren() {
+    public boolean acceptsPublicChildren() {
         return false;
     }
 
@@ -250,6 +251,26 @@ public class TextField extends UIElement implements UIFrameTicker {
     }
 
     // ── Value ───────────────────────────────────────────────────────────────
+
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        // Both strings: they legitimately differ mid-edit, and sending only the published value
+        // would discard whatever the user has half-typed.
+        out.putStringIfNot("text", getText(), "");
+        out.putStringIfNot("value", getValue(), "");
+        out.putStringIfNot("placeholder", getPlaceholder(), "");
+        out.putEnum("mode", getMode());
+        out.putEnum("updateMode", getUpdateMode());
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        // Configuration before content, so the constraints are in place when the text is validated.
+        setMode(in.getEnum("mode", Mode.class, Mode.STRING));
+        setUpdateMode(in.getEnum("updateMode", UpdateMode.class, UpdateMode.ON_COMMIT));
+        setPlaceholder(in.getString("placeholder", ""));
+        setText(in.getString("text", ""));
+    }
 
     /** Exactly what's in the box, including content that doesn't currently validate. */
     public String getText() {
@@ -697,6 +718,7 @@ public class TextField extends UIElement implements UIFrameTicker {
         resetBlink();
         onStyleChanged();
         invalidateStyleMatch();     // :blank / :invalid may have flipped
+        notifyStateChanged();
     }
 
     private int currentModifiers() {
@@ -789,6 +811,11 @@ public class TextField extends UIElement implements UIFrameTicker {
      * position, done once, so interaction never re-shapes.
      */
     private void ensureMeasured() {
+        // Same reasoning as UIText.recompute: measuring needs a font stack, which a detached tree
+        // has no use for and a dedicated server does not have at all. prefixWidths keeps its
+        // single-element default, so caretX/indexAt answer 0 rather than throwing.
+        if (getAttachedWindow() == null) return;
+
         float fontSize = getStyle().getGeneralGroup().fontSize();
         if (text.equals(measuredText) && fontSize == measuredFontSize) return;
 

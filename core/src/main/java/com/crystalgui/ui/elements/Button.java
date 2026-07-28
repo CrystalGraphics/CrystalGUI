@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -59,8 +60,20 @@ public class Button extends UIElement {
     }
 
     @Override
-    protected boolean acceptsPublicChildren() {
+    public boolean acceptsPublicChildren() {
         return false;
+    }
+
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        // The label is an internal child, so it never travels as an element of its own — but its
+        // content is authored state and must.
+        out.putStringIfNot("text", getText(), "");
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        setText(in.getString("text", ""));
     }
 
     public String getText() {

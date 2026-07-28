@@ -10,6 +10,7 @@ import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 
 /**
@@ -76,7 +77,21 @@ public final class UIText extends UIElement {
             // own importantPipeline write already triggers the normal style-dirty chain when the
             // pushed value actually changes, so no separate markTreeDirty() call is needed here.
             recompute();
+            // Covers Button, Checkbox and Tab too: their labels are internal UIText children, and
+            // notifyStateChanged attributes the change to the nearest non-internal ancestor — the
+            // composite whose own writeState actually carries the text.
+            notifyStateChanged();
         });
+    }
+
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        out.putStringIfNot("text", getText(), "");
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        setText(in.getString("text", ""));
     }
 
     public String getText() {
@@ -139,9 +154,16 @@ public final class UIText extends UIElement {
      * cleaned up exactly once, right when that first real determination concludes we're not actually
      * self-sizing after all — not on every subsequent pass. */
     private void recompute() {
+        // Detached means there is no layout to feed and — on a dedicated server — no font stack to
+        // measure with: FontFamilyCache goes straight to CgFont.load, and CrystalGraphics isn't on
+        // the runtime classpath there at all. Bailing is also simply correct, because the !important
+        // width/height this pushes only means anything once a Taffy node exists; attaching to a
+        // window re-drives it. Without this, `setText` on a detached tree is a NoClassDefFoundError.
+        if (getAttachedWindow() == null) return;
+
         var layout = getTaffyLayout();
 
-        if (getAttachedWindow() != null && selfSizesWidth == null) {
+        if (selfSizesWidth == null) {
             selfSizesWidth = layout.contentBoxWidth() <= 0f;
             if (!selfSizesWidth) {
                 getStyle().removeCandidates(LayoutProperties.WIDTH, slot -> slot.origin() == StyleOrigin.IMPORTANT);

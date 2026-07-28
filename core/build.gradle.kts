@@ -80,6 +80,43 @@ dependencies {
 }
 
 
+// -- Headless (server-side) test source set -----------------------------------
+// CrystalGraphics is DELIBERATELY absent here, at compile AND runtime. That absence IS the
+// assertion: on a dedicated Minecraft server there is no GL context, no fonts, and no CG jar, so
+// anything in core/ that reaches a CG type outside a paint method body fails here with
+// NoClassDefFoundError rather than in production.
+//
+// JOML and Taffy must stay. UIElement and ElementStyle have *fields* of those types (Matrix4f,
+// NodeId, TaffyStyle), and field descriptors resolve at class load — unlike method-body references,
+// which don't. A server deployment therefore needs both on its classpath even though it never lays
+// anything out. Non-obvious, and someone will eventually try to strip them.
+val headlessTest: SourceSet by sourceSets.creating {
+    compileClasspath += sourceSets["main"].output
+    runtimeClasspath += sourceSets["main"].output
+}
+
+dependencies {
+    "headlessTestImplementation"("junit:junit:4.13.2")
+    "headlessTestImplementation"("org.apache.logging.log4j:log4j-core:2.26.1")
+    "headlessTestImplementation"("com.google.code.gson:gson:2.11.0")
+    "headlessTestImplementation"("dev.vfyjxf:taffy:${rootProject.properties["taffy_version"]}")
+    "headlessTestImplementation"("org.joml:joml:${rootProject.properties["jomlVersion"]}")
+    "headlessTestCompileOnly"("com.google.code.findbugs:jsr305:3.0.2")
+    "headlessTestCompileOnly"("org.projectlombok:lombok:1.18.44")
+    "headlessTestAnnotationProcessor"("org.projectlombok:lombok:1.18.44")
+}
+
+val headlessTestTask = tasks.register<Test>("headlessTest") {
+    description = "Server-side tests. CrystalGraphics is NOT on the classpath — that is the assertion."
+    group = "verification"
+    testClassesDirs = headlessTest.output.classesDirs
+    classpath = headlessTest.runtimeClasspath
+    useJUnit()
+}
+
+tasks.named("check") { dependsOn(headlessTestTask) }
+
+
 // -- Import guard -------------------------------------------------------------
 // Fails the build if any core/ source imports MC, Forge, or LWJGL classes.
 // Runs as a doLast hook on compileJava — same pattern as CrystalGraphics/core/.

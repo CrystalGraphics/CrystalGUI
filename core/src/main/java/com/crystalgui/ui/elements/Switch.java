@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.AlignItems;
@@ -74,8 +75,18 @@ public class Switch extends UIElement {
     }
 
     @Override
-    protected boolean acceptsPublicChildren() {
+    public boolean acceptsPublicChildren() {
         return false;
+    }
+
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        out.putBoolIfNot("checked", isChecked(), false);
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        setChecked(in.getBool("checked", false));
     }
 
     /** Drives the {@code :checked} pseudo-class — {@code UIElement}'s hook is documented as reserved
@@ -90,6 +101,7 @@ public class Switch extends UIElement {
         this.checked = value;
         onStyleChanged();
         invalidateStyleMatch();
+        notifyStateChanged();
         onCheckedChanged.emit(value);
         return this;
     }

@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
@@ -49,6 +50,21 @@ public class Tab extends Button {
     /** The content pane. An ordinary element — it accepts children normally. */
     public UIElement content() {
         return pane;
+    }
+
+    /**
+     * Only the label. Selection is deliberately absent: it is a TabView-wide invariant (exactly one
+     * tab), so it belongs to the TabView's own state, and a Tab restoring {@code selected} on its own
+     * could leave two tabs checked at once.
+     */
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        out.putStringIfNot("text", getText(), "");
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        setText(in.getString("text", ""));
     }
 
     /** Drives {@code tab:checked}. */
