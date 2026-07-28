@@ -350,6 +350,34 @@ public class UIElement {
         readState(in);
     }
 
+    // ── Networking ───────────────────────────────────────────────────────────
+
+    /** Assigned by a session in document order; {@code -1} until then. See {@code NetworkIds}. */
+    @Getter @Setter
+    private int networkId = -1;
+
+    /** Null on every element in a local UI. Lazily created — most elements report nothing. */
+    @Nullable
+    private Set<String> reportedEvents;
+
+    /**
+     * Declares that this element's {@code kind} interactions should be reported to whoever owns the
+     * session — the client half installs a listener for each of these when it rebuilds the tree.
+     *
+     * <p>Only the <em>name</em> lives here. The handler itself stays on the server session, which is
+     * what lets behaviour be a lambda that never leaves the JVM it was written in.</p>
+     */
+    public UIElement addReportedEvent(String kind) {
+        if (reportedEvents == null) reportedEvents = new LinkedHashSet<>();
+        reportedEvents.add(kind);
+        return this;
+    }
+
+    /** Unmodifiable, and empty for the overwhelming majority of elements. */
+    public Set<String> getReportedEvents() {
+        return reportedEvents == null ? Set.of() : Collections.unmodifiableSet(reportedEvents);
+    }
+
     // ── Tree observation ─────────────────────────────────────────────────────
 
     /** Null for every element in a purely client-side UI, which is the common case. */
