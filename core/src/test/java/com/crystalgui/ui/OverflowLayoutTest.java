@@ -1,11 +1,9 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import dev.vfyjxf.taffy.style.FlexDirection;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -39,22 +37,11 @@ import static org.junit.Assert.*;
  * Without that half, the {@code HIDDEN} assertion would still pass if the engine simply ignored
  * content sizing, and would prove nothing.</p>
  */
-public class OverflowLayoutTest {
+public class OverflowLayoutTest extends UiTestBase {
 
     /** Content far wider than any container it's put in below. */
     private static final float OVERSIZED = 2000f;
     private static final float CONTAINER = 400f;
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
 
     @Test
     public void visibleOverflowRefusesToShrinkBelowItsContent() {

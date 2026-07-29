@@ -1,9 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.ui.elements.UIText;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -21,20 +19,9 @@ import static org.junit.Assert.*;
  * that owns the wrap decision, and a test one layer up would pass or fail for reasons that have
  * nothing to do with it.</p>
  */
-public class UITextMaxWidthTest {
+public class UITextMaxWidthTest extends UiTestBase {
 
     private static final String LONG = "Long enough that it has to wrap onto several lines instead of one.";
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
 
     /** Root is wide and the text is a free-standing child, so nothing but max-width can bound it. */
     private UIText textIn(UIElement root, java.util.function.Consumer<UIText> configure) {

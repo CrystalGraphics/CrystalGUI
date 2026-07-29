@@ -1,9 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.style.sheet.StyleSheet;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -20,22 +18,11 @@ import static org.junit.Assert.*;
  * the root and every other element's absolute position accumulates from it, so the whole tree moves.
  * That's why harness scenes had to size their roots in Java.</p>
  */
-public class RootPlacementTest {
+public class RootPlacementTest extends UiTestBase {
 
     private static final int SCREEN_W = 800, SCREEN_H = 600;
     /** uiScale defaults to 2, so logical space is half the physical screen. */
     private static final float LOGICAL_W = SCREEN_W / 2f, LOGICAL_H = SCREEN_H / 2f;
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
 
     /** The regression. A stylesheet sizes the root, and the stylesheet is only applied on the first
      * {@code calculateStyle} — i.e. strictly after {@code init} has already run and latched. */

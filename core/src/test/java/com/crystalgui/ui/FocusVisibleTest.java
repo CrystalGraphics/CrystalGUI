@@ -1,14 +1,12 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Slider;
 import com.crystalgui.ui.elements.TextField;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -25,21 +23,10 @@ import static org.junit.Assert.*;
  * CrystalGraphics, since its {@code DEFAULT} field reads {@code default.css} through {@code CgIO} at
  * class-init.</p>
  */
-public class FocusVisibleTest {
+public class FocusVisibleTest extends UiTestBase {
 
     private UIWindow window;
     private UIElement root;
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
 
     /** uiScale 1 so logical == physical and the click coordinates below need no conversion. */
     private void setUp(UIElement... children) {

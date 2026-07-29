@@ -1,10 +1,8 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.core.input.mouse.CgUiMouseCodes;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -26,18 +24,7 @@ import static org.junit.Assert.*;
  * <p>The {@code :hover} pseudo-class already walked this same chain, so before this the two
  * disagreed about what "hovered" meant — CSS said one thing, listeners another.</p>
  */
-public class HoverChainTest {
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
+public class HoverChainTest extends UiTestBase {
 
     private UIWindow window;
     private UIElement root, outer, inner;

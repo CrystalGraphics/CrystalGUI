@@ -1,11 +1,10 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.ui.elements.Slider;
 import org.joml.Matrix4f;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -25,7 +24,7 @@ import static org.junit.Assert.*;
  * <p>Runs headless: layout and input need no GL context, only painting does, so these drive
  * {@code calculateStyle} + {@code calculateLayout} directly instead of {@code paintFrame()}.</p>
  */
-public class SliderDragTest {
+public class SliderDragTest extends UiTestBase {
 
     private static final float EPS = 0.001f;
 
@@ -35,17 +34,6 @@ public class SliderDragTest {
     /** {@code UIInputHandler}'s constructor asks the adapter how many mouse buttons the platform
      * has, so one has to be registered before any {@code UIWindow} exists. Nothing here needs real
      * platform state — the tests synthesize events directly rather than polling. */
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
-
     /** Builds a real window/stylesheet/layout at the given scale and returns the laid-out slider. */
     private Slider setUp(float uiScale) {
         slider = new Slider();

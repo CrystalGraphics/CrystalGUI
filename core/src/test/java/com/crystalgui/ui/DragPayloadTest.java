@@ -1,12 +1,11 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.input.UIDragController;
 import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -28,18 +27,7 @@ import static org.junit.Assert.*;
  * geometric answer separately. If those two ever get conflated, every drop lands on the thing being
  * dragged.</p>
  */
-public class DragPayloadTest {
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
+public class DragPayloadTest extends UiTestBase {
 
     private static final Object PAYLOAD = "the-dragged-thing";
 

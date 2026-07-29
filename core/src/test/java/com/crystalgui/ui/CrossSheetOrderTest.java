@@ -1,13 +1,11 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 
 
 
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -20,18 +18,7 @@ import static org.junit.Assert.*;
  * packed each sheet's registration index above the rule index, a big sheet's rule #40 beat a
  * later sheet's rule #2 purely because it had more rules in front of it — the exact opposite.</p>
  */
-public class CrossSheetOrderTest {
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
+public class CrossSheetOrderTest extends UiTestBase {
 
     /**
      * The regression this exists for. The first sheet's matching rule sits at a high rule index

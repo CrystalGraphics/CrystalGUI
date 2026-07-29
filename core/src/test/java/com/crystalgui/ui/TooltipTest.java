@@ -1,10 +1,8 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.elements.Tooltip;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -16,21 +14,10 @@ import static org.junit.Assert.*;
  * <em>placement logic</em> and don't turn red the moment someone re-tunes the user-agent sheet's
  * tooltip padding.</p>
  */
-public class TooltipTest {
+public class TooltipTest extends UiTestBase {
 
     private static final float ROOT_W = 800f, ROOT_H = 600f;
     private static final float TIP_W = 60f, TIP_H = 20f;
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
 
     private UIElement root;
     private UIWindow window;
