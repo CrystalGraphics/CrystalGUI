@@ -18,6 +18,37 @@ public final class UITreeTraversal {
 
     private UITreeTraversal() {} // non-instantiable
 
+    // ── Boundary chains ──────────────────────────────────────────────────
+
+    /**
+     * Walks every element being <b>left</b> — {@code from} up to but excluding {@code common} —
+     * innermost first.
+     *
+     * <p>Lives here, and paired with {@link #forEachEntered}, because the ordering <em>is</em> the
+     * contract and it was written twice: once for {@code mouseenter}/{@code mouseleave} and again for
+     * drag enter/leave. Two hand-rolled copies of a subtle order is how they drift apart, and a drag
+     * that fired its boundary events in a different order from the pointer's would be a genuinely
+     * horrible bug to find.</p>
+     *
+     * <p>Passing {@code null} for {@code common} walks all the way to the root, which is what a
+     * cancelled interaction wants.</p>
+     */
+    public static void forEachLeft(UIElement from, UIElement common, java.util.function.Consumer<UIElement> action) {
+        for (var e = from; e != null && e != common; e = e.getParent()) action.accept(e);
+    }
+
+    /** Walks every element being <b>entered</b> — {@code common} (exclusive) down to {@code to} —
+     * outermost first, so an ancestor learns of the arrival before its child. @see #forEachLeft */
+    public static void forEachEntered(UIElement to, UIElement common, java.util.function.Consumer<UIElement> action) {
+        int depth = 0;
+        for (var e = to; e != null && e != common; e = e.getParent()) depth++;
+        if (depth == 0) return;
+        UIElement[] chain = new UIElement[depth];
+        int i = depth;
+        for (var e = to; e != null && e != common; e = e.getParent()) chain[--i] = e;
+        for (UIElement e : chain) action.accept(e);
+    }
+
     // ── Ancestry ─────────────────────────────────────────────────────────
 
     public static UIElement commonAncestor(UIElement a, UIElement b) {

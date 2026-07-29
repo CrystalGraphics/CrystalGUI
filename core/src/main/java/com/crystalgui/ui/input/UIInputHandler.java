@@ -125,6 +125,99 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         this.lastFrameHover = currentHover;
     }
 
+    /** Current pointer position in physical pixels. Read-only view of the live vector, so callers
+     * must not retain it across frames. */
+    public ReadOnlyVec2f pointerPosition() {
+        return hoverFrameData.eventPosition();
+    }
+
+    // ── Pointer capture ─────────────────────────────────────────────────────
+
+    @Nullable
+    private UIElement pointerCaptureTarget;
+
+    /**
+     * The element every pointer event is currently routed to regardless of what is underneath, or
+     * {@code null}.
+     *
+     * <p>Pointer Events Level 3's {@code setPointerCapture} — the primitive that pointer-based
+     * dragging is built on, and the reason this engine does not implement HTML5 drag-and-drop.</p>
+     */
+    @Nullable
+    public UIElement getPointerCaptureTarget() {
+        return pointerCaptureTarget;
+    }
+
+    public boolean hasPointerCapture() {
+        return pointerCaptureTarget != null;
+    }
+
+    /**
+     * Routes all subsequent pointer events to {@code element} until capture is released.
+     *
+     * <p>Per spec: "the capturing target will substitute the normal hit testing result <b>as if the
+     * pointer is always over the capturing target</b>, and they MUST always be targeted at this
+     * element until capture is released."</p>
+     *
+     * <p><b>Boundary events fall out of that for free</b>, which is why this is one field and not a
+     * second mechanism. The spec also says "when an element receives the pointer capture all the
+     * following events for that pointer are considered to be inside the boundary of the capturing
+     * element" — and because {@link #resolveHitTarget} makes the hover cache resolve to the capture
+     * target for the whole capture, the per-frame hover diff sees no change and fires no
+     * enter/leave to anything else. {@code :hover} stays pinned to the captured chain too.</p>
+     *
+     * <p>Before this existed, dragging a slider ran the ordinary hover diff every frame: {@code :hover}
+     * flickered on and {@code mouseenter}/{@code mouseleave} fired on every element the cursor
+     * crossed mid-drag.</p>
+     *
+     * <p><b>Fails silently when no button is down</b>, matching the spec's "only when the pointer is in
+     * its active buttons state … otherwise fails silently". Capture with no button held could never be
+     * released by a button release, so it would wedge input permanently.</p>
+     */
+    public void setPointerCapture(UIElement element) {
+        if (element == null || element.getAttachedWindow() != window) return;
+        if (!isAnyMouseButtonDown()) return; // spec: fails silently outside the active buttons state
+        pointerCaptureTarget = element;
+        hoverFrameData.invalidate();
+    }
+
+    /** Ends capture; subsequent events follow normal hit testing again. No-op if not captured. */
+    public void releasePointerCapture() {
+        if (pointerCaptureTarget == null) return;
+        pointerCaptureTarget = null;
+        // The next hit test must be a real one — without this the stale target survives until the
+        // pointer happens to move.
+        hoverFrameData.invalidate();
+    }
+
+    private boolean isAnyMouseButtonDown() {
+        for (ButtonState state : mouseButtonStates) {
+            if (state != null && state.isPressed()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * What the pointer is considered to be over: the capture target while captured, the real
+     * hit-test result otherwise.
+     *
+     * <p>Every consumer in this class reads the pointer's target through the hover cache, so
+     * substituting here is what makes capture total rather than something each call site has to
+     * remember.</p>
+     *
+     * <p>A capture target that has left the tree is dropped rather than honoured. Holding it would
+     * route every pointer event to a detached element — input would look completely dead, with no
+     * error, until something happened to release it.</p>
+     */
+    private UIElement resolveHitTarget(float x, float y) {
+        UIElement captured = pointerCaptureTarget;
+        if (captured != null) {
+            if (captured.getAttachedWindow() == window) return captured;
+            pointerCaptureTarget = null;
+        }
+        return window.getHoveredElement(x, y);
+    }
+
     private void updateHoverChain(UIElement oldHover, UIElement newHover, UIElement commonAncestor) {
         for (var e = oldHover; e != null && e != commonAncestor; e = e.getParent()) {
             e.setHovered(false);
@@ -149,9 +242,8 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     private void emitMouseLeaveChain(UIElement from, UIElement commonAncestor) {
         if (from == null) return;
         emitMouseMove(from);
-        for (var e = from; e != null && e != commonAncestor; e = e.getParent()) {
-            sendInputEvent(e, new MouseEvent.Leave(e, hoverFrameData.eventPosition()));
-        }
+        UITreeTraversal.forEachLeft(from, commonAncestor,
+                e -> sendInputEvent(e, new MouseEvent.Leave(e, hoverFrameData.eventPosition())));
     }
 
     /** Counterpart to {@link #emitMouseLeaveChain}, outermost first — the DOM's entry order, so an
@@ -159,19 +251,24 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     private void emitMouseEnterChain(UIElement to, UIElement commonAncestor) {
         if (to == null) return;
         emitMouseMove(to);
-        int depth = 0;
-        for (var e = to; e != null && e != commonAncestor; e = e.getParent()) depth++;
-        UIElement[] chain = new UIElement[depth];
-        int i = depth;
-        for (var e = to; e != null && e != commonAncestor; e = e.getParent()) chain[--i] = e;
-        for (UIElement e : chain) {
-            sendInputEvent(e, new MouseEvent.Enter(e, hoverFrameData.eventPosition()));
-        }
+        UITreeTraversal.forEachEntered(to, commonAncestor,
+                e -> sendInputEvent(e, new MouseEvent.Enter(e, hoverFrameData.eventPosition())));
     }
 
     @Override
     public boolean consumeKeyboardEvent(Keyboard.Event event) {
         if (!firstFrameOver) return false;
+
+        // Escape aborts a drag, ahead of focus routing and before anything else can consume it.
+        // A drag is a modal interaction — while one is running it is what Escape means, regardless of
+        // what holds focus (which during a drag is usually not the drag source at all). Deliberately
+        // ahead of the focusedElement == null branch, or a drag started from a non-focusable element
+        // would be uncancellable.
+        if (event.pressed() && event.key() == CgUiKeyCodes.KEY_ESCAPE && dragController.isDragging()) {
+            dragController.cancelDrag();
+            return true;
+        }
+
         CgUiInputAdapter inputAdapter = CrystalGuiCore.getAdapter();
         final int modifiers = inputAdapter.getCurrentModifiers();
 
@@ -297,6 +394,10 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
                 var pos = hoverFrameData.eventPosition();
                 dragController.endDrag(pos.x(), pos.y());
             }
+            // Implicit release, after the up event has been delivered — the spec's ordering, and it
+            // matters: the up must still reach the capturing element, which is the whole reason a
+            // drag can end anywhere on screen rather than only over its source.
+            if (!isAnyMouseButtonDown()) releasePointerCapture();
         }
     }
 
@@ -418,7 +519,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         private final ReadOnlyVec2f sealedVec2f = new ReadOnlyVec2f(position);
 
         private final CacheCell<UIElement> hoveredElement = new CacheCell<UIElement>()
-                .setCalculator(ignored -> UIInputHandler.this.window.getHoveredElement(position.x(), position.y()))
+                .setCalculator(ignored -> UIInputHandler.this.resolveHitTarget(position.x(), position.y()))
                 .set(null);
 
         boolean positionChanged(int x, int y) {

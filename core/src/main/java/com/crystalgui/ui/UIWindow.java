@@ -441,6 +441,17 @@ public final class UIWindow {
 
     UIElement elementHitTest(UIElement element, float mouseX, float mouseY) {
         if (element.getStyle().taffyBridge.style.display == TaffyDisplay.NONE) return null;
+        // Hit-testing off takes the whole SUBTREE with it, matching CSS `pointer-events: none`, which
+        // applies to an element and its descendants alike.
+        //
+        // This used to only skip the element itself, so children of a "transparent" element were
+        // still hittable — and since children are tested BEFORE the parent's own flag is consulted, a
+        // pointer-transparent container with any content at all was transparent everywhere except
+        // exactly where its content was. It surfaced on the drag ghost, whose text label stayed
+        // hittable: the ghost sits under the cursor by construction, so drop targeting rejected every
+        // position where the label happened to be and accepted the rest — hit testing that looked
+        // random. Every widget using this before was a childless leaf, which is why it went unnoticed.
+        if (!element.isHitTest()) return null;
 
         Matrix4f transform = element.getRuntimeCache().worldToLocal.get();
         var local = Transform2D.apply(transform, mouseX, mouseY);
@@ -460,7 +471,7 @@ public final class UIWindow {
                 }
             }
         }
-        if (element.isHitTest() && element.isMouseOverElement(localX, localY)) {
+        if (element.isMouseOverElement(localX, localY)) {
             return element;
         }
         return null;

@@ -25,6 +25,7 @@ import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.event.DOMEvent;
 import com.crystalgui.ui.event.FocusEvent;
+import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.UIEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -119,6 +120,16 @@ public class UIElement {
     public final EventListenerGroup<MouseEvent.Move> onMouseMove = events.getGroup(MouseEvent.Move.class);
     public final EventListenerGroup<MouseEvent.Enter> onMouseEnter = events.getGroup(MouseEvent.Enter.class);
     public final EventListenerGroup<MouseEvent.Leave> onMouseLeave = events.getGroup(MouseEvent.Leave.class);
+
+    /** Drag-and-drop, dispatched to whatever is under the pointer — <b>not</b> to the drag source,
+     * which pointer capture keeps every {@link MouseEvent} pinned to. See {@link DragEvent}. */
+    public final EventListenerGroup<DragEvent.Enter> onDragEnter = events.getGroup(DragEvent.Enter.class);
+    public final EventListenerGroup<DragEvent.Leave> onDragLeave = events.getGroup(DragEvent.Leave.class);
+    /** Fired every frame the drag stays over this element. {@code preventDefault()} accepts the drop. */
+    public final EventListenerGroup<DragEvent.Over> onDragOver = events.getGroup(DragEvent.Over.class);
+    public final EventListenerGroup<DragEvent.Drop> onDrop = events.getGroup(DragEvent.Drop.class);
+    /** Fired on the drag <em>source</em> when a drag is aborted rather than dropped. */
+    public final EventListenerGroup<DragEvent.Cancel> onDragCancel = events.getGroup(DragEvent.Cancel.class);
 
     // Focus
     public final EventListenerGroup<FocusEvent.Focus> onFocus = events.getGroup(FocusEvent.Focus.class);
