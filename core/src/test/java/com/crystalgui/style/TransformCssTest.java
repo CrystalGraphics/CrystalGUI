@@ -198,8 +198,13 @@ public class TransformCssTest {
         GeneralGroup style = target.getStyle().getGeneralGroup();
         assertEquals(LengthPercent.px(1f), style.outlineWidth());
         assertEquals("Firefox's accent", 0xFF0060DF, style.outlineColor());
-        assertEquals("no outward offset — an ancestor's scissor would clip it",
-                LengthPercent.ZERO, style.outlineOffsetTop());
+        // Inward, from `* { outline-offset: -1px }` in default.css — NOT zero, and deliberately not
+        // positive. An outward offset draws beyond the border box, where any ancestor with
+        // `overflow: hidden` scissors it away (a focused row inside a ScrollerView would lose the
+        // edge of its own ring); it also let adjacent checkboxes' rings collide. Pulling the stroke
+        // inside the border box instead means it always survives the clip.
+        assertEquals("must not be outward — an ancestor's scissor would clip it",
+                LengthPercent.px(-1f), style.outlineOffsetTop());
     }
 
     /** A theme turns the ring off with `outline: none`, which outranks the UA sheet by origin alone. */

@@ -53,14 +53,17 @@
  * switch, slider, textfield, and SplitView's divider. A theme that rings a widget's CHILD instead must
  * turn this off on the root with `outline: none`, or both rings draw — see ore.css.
  *
- * 1px and NO outline-offset, where the web's default ring is 2px and often offset. Both were measured
- * in cgui-gallery at uiScale 2 rather than assumed, and both were worse: a 2px ring is proportionally
- * enormous against this engine's 10px default text (same reason font-size is set to 10 above), and an
- * outward offset made adjacent checkboxes' rings collide. An offset also draws OUTSIDE the border box,
- * where any ancestor with `overflow: hidden` scissors it away — a focused row inside a ScrollerView
- * would lose the edge of its own ring. At 0 the stroke sits on the border box and always survives. */
+ * 1px, where the web's default ring is 2px: measured in cgui-gallery at uiScale 2 rather than
+ * assumed, and 2px was proportionally enormous against this engine's 10px default text (same reason
+ * font-size is set to 10 above).
+ *
+ * The offset is INWARD (-1px), set once on `*` at the top of this file rather than here. The web's
+ * ring is often offset outward; that was worse twice over — it made adjacent checkboxes' rings
+ * collide, and it draws beyond the border box, where any ancestor with `overflow: hidden` scissors
+ * it away (a focused row inside a ScrollerView would lose the edge of its own ring). Pulling the
+ * stroke inside the border box instead means it always survives the clip. */
 :focus {
-    outline: 1.5px #0060df;
+    outline: 1px #0060df;
 }
 
 /* ── Button ─────────────────────────────────────────────────────────────────────────────────── */
