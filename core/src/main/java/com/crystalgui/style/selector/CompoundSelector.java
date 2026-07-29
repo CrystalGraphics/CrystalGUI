@@ -22,8 +22,9 @@ public record CompoundSelector(List<Part> parts) {
         public Part {
             if (type == SelectorType.PSEUDO_CLASS) {
                 // Validate eagerly so a typo'd pseudo-class fails at stylesheet-parse time, not
-                // silently (never matching) at paint time.
-                PseudoClasses.valueOf(identity.toUpperCase(Locale.ROOT));
+                // silently (never matching) at paint time. Via lookup(), not valueOf(): hyphenated
+                // names like `focus-visible` are not legal Java identifiers.
+                PseudoClasses.lookup(identity);
             }
         }
     }
@@ -41,7 +42,7 @@ public record CompoundSelector(List<Part> parts) {
             case TYPE -> element.tagName().equals(part.identity());
             case ID -> element.getId().equals(part.identity());
             case CLASS -> element.hasClass(part.identity());
-            case PSEUDO_CLASS -> PseudoClasses.valueOf(part.identity().toUpperCase(Locale.ROOT)).applies(element);
+            case PSEUDO_CLASS -> PseudoClasses.lookup(part.identity()).applies(element);
         };
     }
 

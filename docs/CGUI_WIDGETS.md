@@ -85,9 +85,16 @@ retroactively, but no widget uses it; prefer `defaultPipeline`.)
 | `:hover` | `isHovered()` |
 | `:active` | `isPressed()` |
 | `:focus` | `isFocused()` |
+| `:focus-visible` | `isFocusVisible()` |
 
 A widget gets a pseudo-class for free by overriding the getter — `Tab.isChecked()` returning its
 selected flag is the whole of how `tab:checked` works.
+
+`:focus-visible` is the web's rule and the one a focus ring should hang off: true for keyboard and
+programmatic focus, false after a mouse click — except on elements that take text input
+(`consumesTextInput()`), which always ring. `UIInputHandler` decides it from `FocusSource`; see
+`CGUI_STYLE_RENDER_PIPELINE.md` §2. Note hyphenated names resolve via `PseudoClasses.lookup`, not
+`valueOf`.
 
 ### Listeners, tickers, tags
 
@@ -119,7 +126,7 @@ b.setEnabled(false);                        // inherited from UIElement
 Activates on press-then-release **over the same element** (dragging off cancels), and on Space/Enter
 when focused. Fires `UISoundSystem` with `button_click` if a platform registered one.
 
-- Tag `button` · internal `__pre-icon__`, `__post-icon__` · pseudo `:hover :active :focus :disabled`
+- Tag `button` · internal `__pre-icon__`, `__post-icon__` · pseudo `:hover :active :focus :focus-visible :disabled`
 - Scenes: `cgui-button`, `cgui-ore-theme` (forced-state matrix), `cgui-gallery`
 
 ## 2. `Checkbox` + `CheckboxGroup`
@@ -141,7 +148,7 @@ semantics.
 The mark is drawn entirely by CSS — `checkbox:checked .__mark__ { … }`. There is no Java-side
 "draw a tick".
 
-- Tag `checkbox` · internal `__mark__` · pseudo `:checked :hover :active :focus :disabled`
+- Tag `checkbox` · internal `__mark__` · pseudo `:checked :hover :active :focus :focus-visible :disabled`
 - Scenes: `cgui-checkbox`, `cgui-ore-theme`, `cgui-gallery`
 
 ## 3. `Switch`
@@ -156,7 +163,7 @@ The knob slides by animating an invisible `__spacer__`'s `flex-grow` between 0 a
 CSS** — `switch .__spacer__ { transition: flex-grow 150ms ease-out; }`. There is no duration, easing or
 size anywhere in `Switch.java`.
 
-- Tag `switch` · internal `__spacer__`, `__knob__` · pseudo `:checked :hover :active :focus :disabled`
+- Tag `switch` · internal `__spacer__`, `__knob__` · pseudo `:checked :hover :active :focus :focus-visible :disabled`
 - Scenes: `cgui-switch` (captures four frames mid-slide to prove it interpolates), `cgui-gallery`
 
 ## 4. `Slider`
@@ -170,7 +177,7 @@ float f = sl.getFraction();                    // 0..1
 
 Drag-by-delta, click-to-jump, Left/Right arrows, Home/End, and the wheel. Focus policy is `CLICK`.
 
-- Tag `slider` · internal `__fill__`, `__thumb__`, `__spacer__` · pseudo `:hover :active :focus :disabled`
+- Tag `slider` · internal `__fill__`, `__thumb__`, `__spacer__` · pseudo `:hover :active :focus :focus-visible :disabled`
 - Scenes: `cgui-slider`, `cgui-gallery`
 
 ## 5. `TextField`
@@ -209,10 +216,16 @@ Also: caret blink (`setCaretBlinkSeconds`, `isCaretVisible`, via `UIFrameTicker`
 (`selectAll`, `clearSelection`, `getSelectedText`, `getSelectionStart/End`), clipboard through
 `CrystalGuiCore.getClipboard()`, wheel-steps-the-value (`stepBy(notches)`), and Escape to revert.
 
-Six style properties drive its text: `color`, `font-size`, `font-family`, `line-height` (caret height,
-selection rect and vertical centring), `caret-width`, `selection-color`.
+Six style properties drive its text: `color`, `font-size`, `font-family`, `line-height` (vertical
+centring only), `caret-width`, `selection-color`.
 
-- Tag `textfield` · pseudo `:blank :invalid :hover :active :focus :disabled`
+`line-height` defaults to CSS's `normal` — the font's own line box. **Neither the caret nor the
+selection band is taken from it**: both are `ascender + descender`, excluding the `lineGap` a line box
+also carries, because that gap is leading *between* lines and this field is single-line. The selection
+also paints only while focused — blurring hides the band but keeps the range, as browsers do. See
+`CGUI_STYLE_RENDER_PIPELINE.md` §8c.
+
+- Tag `textfield` · pseudo `:blank :invalid :hover :active :focus :focus-visible :disabled`
 - Scenes: `cgui-textfield`, `cgui-gallery`
 
 ## 6. `UIText`

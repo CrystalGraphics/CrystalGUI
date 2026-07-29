@@ -14,6 +14,8 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.border.LengthPercentProperty;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.text.FontFamilyValue;
+import com.crystalgui.style.property.visual.text.LineHeightProperty;
+import com.crystalgui.style.property.visual.text.LineHeightValue;
 import com.crystalgui.style.property.visual.texture.TextureProperty;
 import com.crystalgui.style.property.visual.transform.TransformOriginShorthand;
 import com.crystalgui.style.property.visual.transform.TransformProperty;
@@ -70,19 +72,26 @@ public class StylePropertyRegistry {
     // what actually renders today (no shadow is ever drawn). Inheritable, like the other text
     // properties above.
     public static final StyleProperty<Boolean> TEXT_SHADOW = create("text-shadow", false).setInheritable(true);
-    // A unitless multiple of font-size, as CSS's unitless line-height is. Inheritable alongside the
-    // other text properties, so a theme sets it once on a root.
+    // `normal | <number>`, matching CSS — the font's own line box, or a unitless multiple of
+    // font-size. Inheritable alongside the other text properties, so a theme sets it once on a root.
     //
-    // The 1.2 default is a convention, not a derivation. Real CSS defaults to `normal`, which comes
-    // from the font's own ascender + descender + lineGap — CgFontFamily.getLayoutMetrics() exposes
-    // exactly that, and CgTextLayout.lineHeightOverride is the hook to feed it. Doing it properly
-    // needs a `normal | <number>` union value type, which has no codec yet and would break inline
-    // style serialization; deferred rather than faked.
+    // The default is `normal` (Float.NaN — see LineHeightValue), which is CSS's real initial value and
+    // means ascender + descender + lineGap as the font declares them. It replaced a 1.2 convention
+    // that was a derivation of nothing. TextField.paintOverlay is the ONLY place the sentinel becomes
+    // pixels, deliberately — resolving it here or in GeneralGroup would drag CgFontFamily into cascade
+    // resolution, which a dedicated server runs with no CrystalGraphics on the classpath at all.
     //
-    // Consumed by TextField (caret height, selection rect, vertical centring). UIText still wraps at
-    // the font's own metrics and ignores this — a pre-existing inconsistency, not one introduced
-    // here, and the reason this is named generally rather than as a TextField knob.
-    public static final StyleProperty<Float> LINE_HEIGHT = create("line-height", 1.2f).setInheritable(true);
+    // NaN rather than a union value type so the property stays a Float: Float already has a codec, so
+    // inline line-height still crosses the wire. A union type would return null from
+    // StyleValueCodecs.forProperty and make InlineStyleCodec throw. AutoFloatProperty established the
+    // same idiom for `flex`/`aspect-rate`.
+    //
+    // Consumed by TextField for vertical centring. It does NOT size the caret or the selection band —
+    // those come from ascender + descender, excluding the lineGap that is leading between lines and
+    // has no business inside a text cursor. UIText ignores this and always measures from the font,
+    // which `normal` now agrees with by default.
+    public static final StyleProperty<Float> LINE_HEIGHT =
+            create(new LineHeightProperty("line-height", LineHeightValue.NORMAL)).setInheritable(true);
     // Not standard CSS — browsers derive caret width and expose only `caret-color`. Needed here
     // because nothing else can express it, and inheritable to match how `caret-color` behaves.
     //

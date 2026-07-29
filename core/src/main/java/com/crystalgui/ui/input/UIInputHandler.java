@@ -216,8 +216,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         if (focusedElement != null) emitAndLoseFocus(focusedElement);
         focusedElement = next;
         // Tab traversal scrolls the new target into view — it is keyboard-driven, not a click, and
-        // tabbing to something below the fold must reveal it, exactly as a browser does.
-        emitAndSetFocus(focusedElement, true);
+        // tabbing to something below the fold must reveal it, exactly as a browser does. Keyboard focus
+        // is also the case `:focus-visible` exists for: this is the path that rings.
+        emitAndSetFocus(focusedElement, FocusSource.KEYBOARD);
     }
 
     private boolean emitKeyboardDown(Keyboard.Event event, int modifiers) {
@@ -289,8 +290,9 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
             }
             if (targetElement != null && targetElement.getFocusPolicy() == FocusPolicy.CLICK) {
                 // Deliberately no scroll: you clicked what you could already see, and scrolling
-                // here would pull the content out from under the cursor.
-                emitAndSetFocus(targetElement, false);
+                // here would pull the content out from under the cursor. Nor a focus ring, unless
+                // this is a text field — see emitAndSetFocus.
+                emitAndSetFocus(targetElement, FocusSource.POINTER);
             }
         }
 
@@ -352,15 +354,19 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
             return;
         }
         if (focusedElement != null) emitAndLoseFocus(focusedElement);
-        emitAndSetFocus(element, true);
+        emitAndSetFocus(element, FocusSource.PROGRAMMATIC);
     }
 
-    private void emitAndSetFocus(UIElement target, boolean scrollIntoView) {
+    private void emitAndSetFocus(UIElement target, FocusSource source) {
         this.focusedElement = target;
         if (target != null) {
-            target.setFocused(true);
+            // The text-input carve-out: browsers ring a focused text field however it was focused,
+            // because a caret alone is a weak affordance and the field is where typing goes. Every
+            // other widget stays unringed after a click — you already know what you clicked.
+            boolean ring = source.ringsByDefault() || target.consumesTextInput();
+            target.setFocused(true, ring);
             // Instant, never eased — see UIElement.scrollIntoView.
-            if (scrollIntoView) target.scrollIntoView();
+            if (source.scrollsIntoView()) target.scrollIntoView();
         }
         FocusEvent.Focus event = new FocusEvent.Focus(target);
         sendInputEvent(target, event);

@@ -54,10 +54,12 @@ underneath an in-flight transition would look unchanged, silently defeating reta
 this substitution is what caused an early bug: reverting `background-color` away from an explicit
 value fell straight through `TransitionEngine.tryStart`'s null-guard and snapped instead of animating.
 
-**Inheritance** (`color` only, so far) is lazy/pull-based: `ElementStyle.getComputed` walks to the
-parent's `getComputed` when there's no local candidate and the property `isInheritable()`. Not
-push-invalidated — an inherited value changing does **not** fire the inheriting element's own
-`StyleChangeListener`s or make it transition-eligible, only a genuine local candidate change does that.
+**Inheritance** is lazy/pull-based: `ElementStyle.getComputed` walks to the parent's `getComputed` when
+there's no local candidate and the property `isInheritable()`. Not push-invalidated — an inherited value
+changing does **not** fire the inheriting element's own `StyleChangeListener`s or make it
+transition-eligible, only a genuine local candidate change does that. Inheritable today: `color`,
+`font-size`, `font-family`, `line-height`, `caret-width`, `selection-color`, `text-shadow`,
+`text-offset-x`/`-y`.
 
 `moveInlineAsDefault()` bulk-reclassifies every `INLINE`-origin candidate on an element down to
 `DEFAULT` in one atomic pass — meant for widget authors: write baseline styling with ordinary
@@ -76,6 +78,30 @@ weights (id=100, class/pseudo-class=10, type=1, universal=0).
 
 **Not supported** (see §9 for the full gap list): `:nth-child`/attribute selectors, `~`/`+` sibling
 combinators, `@media`/`@import`.
+
+**Pseudo-class names are resolved through `PseudoClasses.lookup(String)`**, which case-folds and swaps
+`-` for `_` — so `:focus-visible` finds `FOCUS_VISIBLE`. Both the eager parse-time validation and the
+match-time lookup go through it. That validation is why the mapping matters more than it looks: an
+unknown pseudo-class throws out of `StyleSheet.parse`, taking the **entire sheet** with it rather than
+skipping one rule, which surfaces as a silently unstyled theme.
+
+### `:focus` vs `:focus-visible`
+
+Both exist and mean different things, matching the web:
+
+| | true when |
+|---|---|
+| `:focus` | the element holds focus, however it got there |
+| `:focus-visible` | focus arrived by keyboard (Tab) or programmatically — **not** from a pointer click, unless the element takes text input |
+
+`UIInputHandler` decides this via `ui/input/FocusSource` (`KEYBOARD` / `POINTER` / `PROGRAMMATIC`), and
+applies the text-input carve-out through `UIElement.consumesTextInput()` — the same predicate the
+keyboard handler already uses. `UIElement.setFocused(boolean)` treats forced focus as *visible*; the
+two-arg `setFocused(boolean, boolean)` is what the handler calls to say otherwise.
+
+`default.css` hangs its ring off `:focus-visible`, so tabbing to a slider rings it and clicking it does
+not, while a text field rings either way. Theme opt-outs should stay on the broader `:focus` — see the
+comment on Ore's `outline: none` block.
 
 **Two ways in.** `StyleSheet.parse(String)` for inline CSS text; `StyleSheetRegistry.of("crystalgui:ore")`
 for an external file at `assets/{namespace}/ui/styles/{path}.css`. The registry is lazy and
@@ -121,7 +147,8 @@ resolver duplication also hid a real bug (`gap`'s height read `this.horizontal` 
 
 `transition: <prop|all> <duration>[ms|s] [<delay>] [<timing-function>]`, comma-separated multiple
 entries. `TransitionSpec.parse` splits entries on top-level commas only (`CssParsingUtil.splitTopLevelCommas`
-— paren-aware, so `cubic-bezier(a,b,c,d)`'s internal commas don't split entries).
+— paren-aware, so `cubic-bezier(a,b,c,d)`'s internal commas don't split entries), then tokenises each
+entry with `CssParsingUtil.splitFunctionList`, which keeps a whole `name(...)` call as one token.
 
 `TransitionEngine.tryStart(element, property, fromValue, toValue)` is offered first refusal on every
 transition-eligible cascade change (from `ElementStyle.resolveOne`). If accepted, it shadows the real
@@ -286,10 +313,11 @@ decorative visual because its style system lacks background geometry controls):
   `BoxEdgeShorthands`). The reason is 9-slice rings: a sprite's transparent padding need not be
   symmetric, and a single scalar can only trade a gap on one edge for a gap on the other three. Ore's
   selected tab is the live case — `tab-on` keeps two transparent texel rows along its top edge to make
-  a selected tab sit raised, so `tab:checked:focus { outline-offset: -2px 0 0 0; }` tightens only that
-  edge. On the SDF path the corner-radius expansion takes one amount per axis, so asymmetric offsets
-  use the mean of the two edges on that axis — a rounded corner joining two differently-offset edges
-  has no single correct radius, and the 9-slice case that motivates per-edge never reaches that branch.
+  a selected tab sit raised, so `tab:checked:focus-visible { outline-offset: -2px 0 0 0; }` tightens
+  only that edge. On the SDF path the corner-radius expansion takes one amount per axis, so asymmetric
+  offsets use the mean of the two edges on that axis — a rounded corner joining two differently-offset
+  edges has no single correct radius, and the 9-slice case that motivates per-edge never reaches that
+  branch.
 
   It comes in **two forms**, with the drawable winning when both are set (the precedence CSS gives
   `border-image` over `border`):
@@ -312,7 +340,9 @@ decorative visual because its style system lacks background geometry controls):
   grows *outward*, so `paintOutline` inflates by `offset + width` and lets the inward stroke land in
   the band between them. Corner radii are resolved against the element's **own** box and then
   expanded (`CornerRadii.expand`) — re-resolving them against the inflated box would re-scale
-  percentage radii into a visibly over-curved ring.
+  percentage radii into a visibly over-curved ring. Note this means a `border-radius` shapes an
+  element's focus ring even when the element paints no background at all, which is why `default.css`
+  gives the slider root a radius it has nothing to fill.
 
 Defaults across all three reproduce pre-longhand behaviour exactly (stretch to the full border box,
 no outline), so none of this changes rendering until a stylesheet opts in. The fit math lives in the
@@ -354,7 +384,51 @@ drawable). `UIElement.paintSelf` resolves all three once per paint; if any are s
 resolved `background` drawable's concrete type: a flat color or a non-9-slice `CgUiSprite` gets wrapped
 in a freshly-built `CgUiRoundedRect` (clipped + stroked by the shared SDF shader); a 9-slice sprite
 falls through to the plain unclipped path (border-radius/border-width still resolve for hit-testing and
-layout growth, just without visual clipping of the sprite — see the known gap in §8).
+layout growth, just without visual clipping of the sprite — see the known gap in §9).
+
+**An absent background is not a colour.** When `background` is `CgUiDrawable.EMPTY` the rounded layer
+has nothing to fill with, and `resolveRoundedFill` returns `null` rather than inventing a fill.
+`paintRoundedBackground` then makes the same three-way distinction the plain path makes: an explicit
+`background-color` becomes the fill (with a white vertex tint, since the shader multiplies
+`fillColor *= i.color` and tinting by the colour again would square it); a border with no fill gets a
+transparent interior carrying the *border's* rgb at zero alpha (a mismatched rgb fringes along
+`mix(_BorderColor, fillColor, innerCoverage)`); and an element with neither falls through and paints
+nothing.
+
+That `EMPTY → null` used to be `EMPTY → opaque white`, which was the bug behind "any `border-radius`
+turns the whole UI white": most containers set no `background:` at all, so a single universal radius
+painted a white slab over the root and everything structural under it. The correct guard already existed
+in `paintSelf` but sat *after* the rounded branch's early return, so the rounded path never reached it.
+Note `paintDefaultMaskShape` still falls back to opaque white on a `null` fill, and must — it builds a
+**mask**, where white means "fully reveal".
+
+### Theme anti-bleed
+
+`default.css` is a user-agent sheet: it paints flat colours so a themeless UI works. A theme paints art
+over the same widgets — so every appearance value the UA sheet sets and the theme does *not* override
+stays underneath, showing as a grey rectangle behind a sprite or an SDF stroke carved into one.
+
+The shipped policy, at the top of `ore.css` in one labelled block: **the only user-agent declaration
+allowed to reach a themed element is `:focus-visible`'s outline.** Everything else the theme neutralises
+explicitly, grouped by property so the block copies wholesale as the starting point for a new theme.
+
+Three traps worth knowing before writing one:
+
+- **`border-width` is not just paint.** It feeds Taffy *and* flips the element onto the SDF rounded-rect
+  path, where the border **replaces** the outer pixels of a 9-slice sprite rather than sitting on it —
+  and where `background-color` tints only the fill and the sprite's own tint is dropped entirely. A
+  stray UA `border-width` over a themed sprite is a different render path, not a stray outline.
+- **Reset element-specific, not `*`.** A universal reset also squashes values a *consumer* set on its
+  own elements. Name only what the theme actually paints.
+- **Generic helper classes are not the theme's to claim.** `.label` is deliberately exempt: a consumer
+  puts it on *its* backgrounds, which a theme cannot know, so forcing a colour there is worse than the
+  bleed. Widget-internal labels are covered anyway, since `color` inherits from the widget roots.
+
+**Rounding is applied per widget in `default.css`, never on `*`** — see the "Corners" comment there.
+A `*` radius drags every clipping element onto the FBO mask path (§8) for corners nobody can see, and
+claims the property in every consumer's tree. `ore.css` resets it on exactly the widgets it has sprites
+for (corners are drawn into the texture), rather than blanket-resetting `*` and squashing radii an app
+set on its own elements.
 
 `border-radius` is elliptical per corner (independent rx/ry, not a single scalar) — real CSS syntax,
 `border-radius: <h-list> [ / <v-list> ]`, each list a 1/2/3/4-value TL/TR/BR/BL corner shorthand,
@@ -494,6 +568,50 @@ which is the very mechanism that dirties the subtree's matrices.
 **Set from Java** with `element.setTransform(UITransform…)` (sugar writing `transform` at `INLINE`
 origin) or `style(s -> s.general(g -> g.transformOrigin(x, y)))`.
 
+---
+
+## 8c. `line-height: normal`, and why the caret ignores it
+
+`line-height` takes CSS's `normal | <number>`, and **`normal` is the default**, as in CSS: the line box
+comes from the font's own `ascender + descender + lineGap` via `CgFontFamily.getLayoutMetrics()`.
+
+`normal` is carried as **`Float.NaN`** rather than a union value type. That keeps the property a plain
+`Float`, so it still has a codec and inline `line-height` still crosses the wire — a union type would
+return `null` from `StyleValueCodecs.forProperty` and make `InlineStyleCodec` throw. The interpolator is
+guarded so a transition into or out of `normal` snaps instead of blending `NaN` through every frame.
+`AutoFloatProperty` established the same idiom for `flex`/`aspect-rate`.
+
+**The sentinel becomes pixels in exactly one place — `TextField.paintOverlay`.** Resolving it in
+`GeneralGroup`, in a `StyleValue`, or anywhere in the cascade would drag `CgFontFamily` into style
+resolution, which a dedicated server performs with no CrystalGraphics on the classpath at all.
+`core/src/headlessTest` exists to catch precisely that.
+
+**The caret and the selection band are sized independently of `line-height`**, from
+`ascender + descender` only. A line box also carries `lineGap` — leading *between* lines — which
+neither a text cursor nor a selection has any business drawing. Measured on MinecraftRegular at size
+10: ascender 8 + descender 2 + lineGap 2 = a 12px line box, which is exactly what the old
+`font-size × 1.2` convention produced — so switching to `normal` alone changed nothing for that font.
+Dropping the lineGap is what took both from 12px to 10px and stopped them hanging past the descender
+into the field sprite's bevel.
+
+A browser's selection *does* span the full line box, but only so consecutive lines leave no gap between
+them. **`TextField` is single-line**, so that reason does not apply and the extra lineGap was simply
+overhang. `line-height` is therefore left driving one thing only: where the line box sits vertically
+inside the field.
+
+**The selection is painted only while the field is focused** (`isFocused() && hasSelection()`).
+Blurring does **not** clear the range — browsers keep it so refocusing restores it, and `TextField`'s
+Blur listener deliberately does only `commit(); resetBlink();`. The fix for a blurred field showing a
+live-looking highlight is in the paint guard, not in the blur handler; reaching for `clearSelection()`
+there would lose the range rather than just stop drawing it.
+
+Both are only observable in `cgui-textfield`, which forces two rows into states that cannot coexist
+through real input — one focused with a selection, one focused without and with the blink disabled for
+a deterministic capture. Nothing else in the harness shows either, which is why both being 2px too tall
+went unnoticed.
+
+---
+
 ## 9. Known Gaps vs. the Web
 
 - **No `@import` or media queries.** External stylesheets *are* supported now —
@@ -501,10 +619,8 @@ origin) or `style(s -> s.general(g -> g.transformOrigin(x, y)))`.
   resource pack ships a theme just by placing a file at that path. CSS custom properties
   (`--var`/`var()`) are implemented too.
 - **No `:nth-child`, attribute selectors, or `~`/`+` sibling combinators** — only `>` and descendant.
-- **No `:focus-visible`.** Only `:focus`, which is also what `default.css`'s ring hangs off — so the
-  ring shows after a mouse click, where a browser would suppress it. Deliberate: the distinction exists
-  on the web to hide rings from mouse users, and this is a mouse-first UI. Cheap to add later —
-  `UIInputHandler` already separates the keyboard/programmatic focus path from the click path.
+- **No pseudo-class arguments** — `:focus-visible` and the rest are bare names; `:not(…)`, `:is(…)`
+  and `:has(…)` have no equivalent.
 - **`transform` has no `matrix()`**, and mismatched function lists **snap** where CSS decomposes both
   ends into matrices and interpolates those. Matching lists (same length, same kinds in the same
   order) interpolate component-wise as CSS does, which covers the case authors are told to write
@@ -545,16 +661,16 @@ origin) or `style(s -> s.general(g -> g.transformOrigin(x, y)))`.
 - ~~**No automatic (UA-stylesheet) focus ring**, because there is no origin that loses to author
   CSS.~~ **Resolved.** `StyleOrigin.USER_AGENT(1)` exists and `StyleSheet.DEFAULT` loads `default.css`
   at that origin, so the engine now ships baseline rules that any theme can override at any
-  specificity. A theme still opts into the focus *ring* explicitly (see `ore.css`), but the mechanism
-  it would need is no longer missing.
+  specificity — including the `:focus-visible` ring it now draws by default (§2).
 - **Partial text styling** — `color`, `font-size`, `font-family`, `line-height`, `caret-width` and
-  `selection-color` are wired and inheritable. `UIText` consumes the first three (plus the
-  non-inheritable `text-offset-x`/`-y`); `TextField` consumes
-  all six (`line-height` drives its caret height, selection rect and vertical centring). Still missing:
-  `text-align`; `text-shadow` parses/cascades but is a registered **no-op** (nothing renders a shadow
-  yet — see its `TODO` in `StylePropertyRegistry`); `line-height` takes only a unitless multiplier, not
-  CSS's font-derived `normal`, which would need a `normal | <number>` union value type and a codec for
-  it; and `UIText` still wraps at the font's own metrics rather than honouring `line-height`.
+  `selection-color` are wired and inheritable. `UIText` consumes the first three plus
+  `text-offset-x`/`-y` (also inheritable — Ore sets `text-offset-y` once on `*` and relies on it
+  reaching every widget's internal label, which no author selector can name); `TextField` consumes all
+  six, with `line-height` driving its selection rect and vertical centring — its caret is sized from
+  font metrics instead, see §8c. Still missing: `text-align`; `text-shadow` parses/cascades but is a
+  registered **no-op** (nothing renders a shadow yet — see its `TODO` in `StylePropertyRegistry`); and
+  `UIText` measures at the font's own metrics rather than honouring `line-height` — though with
+  `normal` as the default the two now agree unless a sheet says otherwise.
   Note `font-size` takes a bare number: `10`, not `10px` — its parser is `Float.parseFloat` and
   *throws* on a unit suffix, unlike `width`/`height`/`outline-offset`, which do accept `px`.
 - **9-slice backgrounds can't be visually rounded/bordered** — `border-radius`/`border-width` still
@@ -578,17 +694,19 @@ origin) or `style(s -> s.general(g -> g.transformOrigin(x, y)))`.
 | Cascade / `ElementStyle` | `core/src/main/java/com/crystalgui/style/ElementStyle.java` |
 | Style origins/slots | `core/src/main/java/com/crystalgui/style/StyleOrigin.java`, `.../property/StyleSlot.java` |
 | Selectors | `core/src/main/java/com/crystalgui/style/selector/` (`Selector`, `CompoundSelector`, `SelectorType`) |
+| Pseudo-classes | `core/src/main/java/com/crystalgui/style/PseudoClasses.java` (`lookup` does the `-`→`_` mapping), `.../ui/input/FocusSource.java` |
 | Stylesheets | `core/src/main/java/com/crystalgui/style/sheet/` (`StyleSheet`, `StyleRule`, `DeclarationParser`, `StyleSheetRegistry`), `.../style/StyleEngine.java` |
-| Shipped stylesheets | `core/src/main/resources/assets/crystalgui/ui/styles/default.css` (user-agent), `ore.css` (theme) |
+| Shipped stylesheets | `core/src/main/resources/assets/crystalgui/ui/styles/default.css` (user-agent), `ore.css` (theme, with the anti-bleed block at its top) |
 | Transitions / easing | `core/src/main/java/com/crystalgui/style/transition/`, `.../style/easing/` |
 | Property registry | `core/src/main/java/com/crystalgui/style/property/StylePropertyRegistry.java` |
 | Box-model shorthand expansion | `core/src/main/java/com/crystalgui/style/property/layout/BoxEdgeShorthands.java` |
 | Border-radius shorthand expansion + value type | `core/src/main/java/com/crystalgui/style/property/visual/border/` (`BorderRadiusShorthand`, `BorderRadiusProperties`, `LengthPercent`) |
+| `line-height` value + property | `core/src/main/java/com/crystalgui/style/property/visual/text/` (`LineHeightValue`, `LineHeightProperty`) |
 | `transform` value type | `core/src/main/java/com/crystalgui/ui/UITransform.java` (ordered `Op` list + `applyTo`) |
 | `transform` parsing/property/origin shorthand | `core/src/main/java/com/crystalgui/style/property/visual/transform/` (`TransformValue`, `TransformProperty`, `TransformOriginShorthand`) |
 | Shared CSS parsing helpers | `core/src/main/java/com/crystalgui/style/CssParsingUtil.java` (`splitTopLevelCommas`, `splitFunctionList`), `.../style/CssAngle.java` |
 | Frame lifecycle | `core/src/main/java/com/crystalgui/ui/UIWindow.java` |
-| Paint entry points | `core/src/main/java/com/crystalgui/ui/UIElement.java` (`paintSelf`/`paintOverlay`/`drawSubtree`) |
+| Paint entry points | `core/src/main/java/com/crystalgui/ui/UIElement.java` (`paintSelf`/`paintOverlay`/`paintOutline`/`drawSubtree`) |
 | Paint context | `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java` |
 | Visual layers (opacity isolation + masking) | `CgUiPaintContext` (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`), `UIElement.drawSubtree`/`buildDefaultMask`, `CrystalGraphics/.../gl/framebuffer/CgFrameBuffer.java` (`createOwned`), `CrystalGraphics/.../api/state/CgBlendState.java` (`MASK_ALPHA_MULTIPLY`) |
 | Drawables | `core/src/main/java/com/crystalgui/render/texture/` |
@@ -596,4 +714,4 @@ origin) or `style(s -> s.general(g -> g.transformOrigin(x, y)))`.
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |
 | SDF material | `core/src/main/resources/assets/crystalgui/shaders/gui_rounded_rect.shader` |
 | Named 9-slice assets | `core/src/main/java/com/crystalgui/render/texture/asset/CgUiSpriteRegistry.java` |
-| Demo scenes | `gl-debug-harness/src/main/java/io/github/somehussar/crystalgraphics/harness/scene/ui/` — `CgUiStylingScene` (selectors/cascade/transitions), `CgUiVisualLayersScene` (opacity isolation + masking), `CgUiNineSliceScene` (tiling modes, CPU vs SDF path), `CgUiOreThemeScene` (the theme + forced-state matrices), `CgUiGalleryScene` (everything, with a live theme toggle). Full list in `CGUI_WIDGETS.md`. |
+| Demo scenes | `gl-debug-harness/src/main/java/io/github/somehussar/crystalgraphics/harness/scene/ui/` — `CgUiStylingScene` (selectors/cascade/transitions), `CgUiVisualLayersScene` (opacity isolation + masking), `CgUiNineSliceScene` (tiling modes, CPU vs SDF path), `CgUiOreThemeScene` (the theme + forced-state matrices), `CgUiTextFieldScene` (the only visible caret), `CgUiGalleryScene` (everything, with a live theme toggle). Full list in `CGUI_WIDGETS.md`. |

@@ -35,6 +35,22 @@
     /*border-radius: 2px;*/
 }
 
+/* ── Corners ────────────────────────────────────────────────────────────────────────────────────
+ * Rounding is applied PER WIDGET below, never on `*` — which is why the `border-radius` in the `*`
+ * rule above stays commented out. Two reasons, and the second is the real one:
+ *
+ *   1. resolveOverflowClip() picks the FBO MASK path over a cheap GL_SCISSOR_TEST rect whenever corner
+ *      radii are non-zero, since a rectangle can't clip a rounded shape. On `*` that silently drags
+ *      every scroll viewport and clipped pane onto the FBO path for corners nobody can see. Per-widget,
+ *      only `textfield` (which clips its own text) crosses over.
+ *   2. A `*` rule claims the property for every element in every consumer's tree, so a theme wanting
+ *      square corners has to fight it back with another `*` rule — and that second rule then squashes
+ *      radii the APP set on its own elements. Rounding only what this sheet actually draws keeps both
+ *      the theme's and the app's own declarations intact.
+ *
+ * Each value is tied to its widget's geometry: 50% on a square part is a circle, and a pill's radius is
+ * half its height. Change a widget's size and its radius moves with it. */
+
 /* ── Focus ──────────────────────────────────────────────────────────────────────────────────────
  * The browser analogue: whatever holds focus gets a visible ring, so a themeless UI is navigable by
  * keyboard at all. #0060df is Firefox's accent. Flat colour, not asset() — see rule 2 above.
@@ -42,12 +58,16 @@
  * This is the SDF path (outline-width + outline-color), which already follows border-radius and
  * expands it, so a rounded widget gets a rounded ring for free. It needs no Java support.
  *
- * A bare `:focus` is a complete selector here (a lone pseudo-class needs no `*`), and `*:focus` would
- * compute to the identical specificity of 10 — so the shorter form is the one to use.
+ * A bare `:focus-visible` is a complete selector here (a lone pseudo-class needs no `*`), and
+ * `*:focus-visible` would compute to the identical specificity of 10 — so the shorter form is the one
+ * to use.
  *
- * NOT `:focus-visible`: that pseudo-class doesn't exist in this engine, and the reason it exists on the
- * web — hiding the ring from mouse users — inverts in a mouse-first Minecraft UI, where seeing what
- * you just clicked take focus is useful.
+ * `:focus-visible`, NOT `:focus` — the web's rule. An earlier version of this comment argued the
+ * opposite, on the grounds that hiding rings from mouse users inverts in a mouse-first UI. Trying it
+ * settled it: a ring on every click is noise, while a slider you tabbed to needs to say so. The
+ * pseudo-class is true for keyboard and programmatic focus and false after a click — except on
+ * elements that take text input, which always ring (see UIInputHandler's FocusSource). So: tab to a
+ * slider and it rings, click it and it doesn't, and a text field rings either way.
  *
  * The seven things this can match are the only focusable elements in core/: button, tab, checkbox,
  * switch, slider, textfield, and SplitView's divider. A theme that rings a widget's CHILD instead must
@@ -62,7 +82,7 @@
  * collide, and it draws beyond the border box, where any ancestor with `overflow: hidden` scissors
  * it away (a focused row inside a ScrollerView would lose the edge of its own ring). Pulling the
  * stroke inside the border box instead means it always survives the clip. */
-:focus {
+:focus-visible {
     outline: 1px #0060df;
 }
 
@@ -79,6 +99,7 @@ button {
     background: #9A9A9A;
     color: #222222;
     text-shadow: false;
+    border-radius: 2px;
 }
 button:hover {
     background: #B4B4B4;
@@ -107,6 +128,7 @@ checkbox .__mark__ {
     width: 12px;
     height: 12px;
     background: #9A9A9A;
+    border-radius: 2px;
 }
 checkbox:hover .__mark__ {
     background: #B4B4B4;
@@ -129,6 +151,8 @@ switch {
     padding-all: 0;
     align-items: center;
     background: #6E6E6E;
+    /* Half the height — a pill. Tied to `height` above; change one and change both. */
+    border-radius: 7px;
 }
 switch:checked {
     background: #3C8527;
@@ -144,6 +168,9 @@ switch .__knob__ {
     height: 100%;
     aspect-rate: 1;
     background: #D0D1D4;
+    /* Percentages resolve per axis, so 50% on a square (aspect-rate: 1) part is a circle regardless of
+     * how big the switch gets — which is why this isn't a px value like the track's. */
+    border-radius: 50%;
 }
 switch:disabled .__knob__ {
     background: #8C8C8C;
@@ -158,27 +185,45 @@ switch:disabled .__knob__ {
 slider {
     width: 150px;
     height: 20px;
-    padding-left: 10px;
-    padding-right: 10px;
+    padding-left: 5px;
+    padding-right: 5px;
     align-items: center;
+    /* Shapes the FOCUS RING and nothing else — the root paints no background, so there is no fill for
+     * this to round. `paintOutline` derives the ring's corners from `border-radius` whatever the
+     * element draws, and without this the slider's ring is a hard rectangle where every other widget's
+     * is softened. Note this is only safe at all because `resolveRoundedFill` stopped treating "no
+     * background" as opaque white; before that, this line painted a white slab. */
+    border-radius: 4px;
 }
+/* 3px is half of the 6px bar height, so fill and track read as one rounded rail. */
 slider .__fill__ {
     height: 6px;
     background: #3C8527;
+    border-radius: 3px;
 }
 slider .__spacer__ {
     height: 6px;
     background: #6E6E6E;
+    border-radius: 3px;
 }
 slider .__thumb__ {
-    width: 20px;
-    height: 20px;
-    margin-left: -10px;
-    margin-right: -10px;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    margin-right: -5px;
     /* Required: painter's order is insertion order, so __spacer__ would otherwise draw over the half
      * of the thumb its negative right margin pulls underneath. */
     z-index: 1;
     background: #D0D1D4;
+    /* Square, so 50% is a circle — see the switch knob. */
+    border-radius: 50%;
+    /* Separates the thumb from the fill it sits on. border-color has NO currentColor equivalent here
+     * and defaults to black, so it must be stated alongside the width or the ring comes out dark.
+     *
+     * Sizing is unaffected: box-sizing is border-box engine-wide, so the outer box stays 10px and the
+     * padding/margin pairing above still holds. */
+    border-width: 2px;
+    border-color: #FFFFFF;
 }
 slider:hover .__thumb__ {
     background: #E4E5E8;
@@ -279,6 +324,24 @@ tab {
     background: #6E6E6E;
     color: #DDDDDD;
     text-shadow: false;
+    /* Rounded on the three OUTER edges only; the edge facing the panes stays square. The whole point of
+     * the `tab:checked` rule below is that the seam against the pane disappears, and rounding that edge
+     * would put two notches of pane colour back exactly where that rule works to hide them.
+     *
+     * Which edge that is depends on where the strip sits, so each side gets its own rule — TabView puts
+     * `__top__`/`__bottom__`/`__left__`/`__right__` on the tabview root for exactly this. The bare `tab`
+     * rule covers the TOP default; a left-side strip rounding its top corners (which is what a single
+     * `2px 2px 0 0` gives you) reads as plainly wrong in the sidebar layout the gallery uses. */
+    border-radius: 2px 2px 0 0;
+}
+tabview.__bottom__ tab {
+    border-radius: 0 0 2px 2px;
+}
+tabview.__left__ tab {
+    border-radius: 2px 0 0 2px;
+}
+tabview.__right__ tab {
+    border-radius: 0 2px 2px 0;
 }
 tab:hover {
     background: #8C8C8C;
@@ -320,6 +383,9 @@ scroller .__track__ {
 scroller .__thumb__ {
     height: 100%;
     background: #6E6E6E;
+    /* Half the 8px bar thickness set on the ScrollerView rules below. Deliberately on the thumb only —
+     * the track stays square so the bar keeps a crisp edge against the content it overlays. */
+    border-radius: 4px;
 }
 scroller.__vertical__ .__thumb__ {
     width: 100%;
@@ -394,6 +460,11 @@ textfield {
     align-items: center;
     background: #2A2A2A;
     color: #EEEEEE;
+    /* The one rounded widget here that also CLIPS (it scissors its own text horizontally), so it is
+     * the only one this sheet moves onto resolveOverflowClip()'s FBO mask path. Worth it on a field,
+     * which is the widget a square corner reads worst on; not worth it on a scroll viewport, which is
+     * why the containers above stay square. */
+    border-radius: 2px;
 }
 /* :blank is driven by TextField.isBlank(), already wired into PseudoClasses — so the placeholder,
  * which reuses `color`, dims itself with no widget-specific support. */

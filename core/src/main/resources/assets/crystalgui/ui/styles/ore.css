@@ -41,30 +41,126 @@
     font-family: "crystalgui:ui/fonts/MinecraftRegular.otf";
     font-size: 10;
     text-offset-y: 1px;
-    outline-offset: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════════
+ * ANTI-BLEED — everything this theme has to UNDO from the user-agent sheet.
+ * ══════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * THE RULE: the ONLY user-agent declaration allowed to reach an Ore-painted element is
+ * `:focus-visible`'s outline. Everything else default.css paints must be neutralised here, because
+ * default.css draws flat colours for a themeless UI and Ore draws 9-slice art — leaving a UA value
+ * underneath means a grey rectangle peeking out from behind a sprite, or an SDF stroke carving into
+ * one.
+ *
+ * Grouped BY PROPERTY rather than by widget, deliberately: this block is meant to be copied wholesale
+ * as the starting point for the next theme, and a new theme cares "what do I have to turn off" far
+ * more than "what does the button do". Keep it that way.
+ *
+ * WHY NOT `* { … }`: a universal reset also squashes values a CONSUMER set on its own elements, and a
+ * theme has no business reaching that far. Every selector below names something this sheet actually
+ * paints.
+ *
+ * MAINTENANCE: this list must track default.css. If a new appearance declaration lands there on
+ * anything Ore skins, it belongs here too — that promise has already been broken twice (first by
+ * `border-radius`, then by the slider thumb's `border-width`), which is why the block is consolidated
+ * and labelled rather than scattered.
+ * ────────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/* ── border-radius ── Ore's corners are drawn INTO the sprites, already at the right shape. An SDF
+ * radius on top rounds off finished art and shaves the corner pixels off the 1px outlines.
+ *
+ * A bare `tab` covers default.css's four per-side rules too: StyleSlot.compareTo weighs ORIGIN before
+ * specificity, so any STYLESHEET rule beats any USER_AGENT one at any specificity. `slider` (the root)
+ * is here for its focus ring's shape — it paints nothing, but paintOutline takes the ring's corners
+ * from border-radius regardless. */
+button,
+tab,
+textfield,
+switch,
+switch .__knob__,
+checkbox .__mark__,
+slider,
+slider .__fill__,
+slider .__spacer__,
+slider .__thumb__,
+scroller .__thumb__ {
     border-radius: 0;
 }
 
-:focus {
-    outline: auto;
+/* ── border-width ── The one non-radius border default.css sets, and the worst bleed of the lot: an
+ * SDF border doesn't sit ON the sprite, it REPLACES the outer 2px of it
+ * (`mix(_BorderColor, fillColor, innerCoverage)`), erasing exactly the bevel rows Ore's art draws. It
+ * also feeds Taffy and flips the element onto the rounded-rect path entirely, so the thumb stops going
+ * through CgUiSprite's CPU 9-slice and starts going through the shader's — where `background-color`
+ * tints only the fill, and the sprite's own tint is dropped.
+ *
+ * Only this selector: default.css sets no border-width on any other widget, and adding it to the list
+ * above would claim the property for consumers without cause. */
+slider .__thumb__ {
+    border-width: 0;
+}
+
+/* ── outline-offset ── default.css insets its SDF ring by 1px so the stroke stays inside the border box
+ * and survives an ancestor's scissor. Ore's ring is a nine-slice sprite drawn AT the border box, so the
+ * same inset just eats into it. Reset for every widget Ore rings; per-widget rules further down can
+ * still tune it (`tab:checked:focus-visible` does, and wins on both specificity and source order). */
+button:focus-visible,
+tab:focus-visible,
+textfield:focus-visible,
+checkbox:focus-visible .__mark__,
+switch:focus-visible .__knob__,
+slider:focus-visible .__thumb__ {
     outline-offset: 0;
 }
 
-/* Opting out of the user-agent sheet's `:focus` ring — required, not decorative.
+/* ── outline ── The one EXEMPTION to the rule at the top, and only half an exemption.
  *
- * That rule matches the element that holds focus, i.e. the ROOT. Ore rings the root for button, tab
- * and textfield, so those need nothing: a drawable `outline:` beats the SDF path outright in
+ * The UA ring matches the element that HOLDS focus, i.e. the root. Ore rings the root for button, tab
+ * and textfield, so those need nothing — a drawable `outline:` beats the SDF path outright in
  * paintOutline. But for checkbox, switch and slider Ore rings a CHILD (__mark__ / __knob__ / __thumb__)
- * and leaves the root's outline unset — so without this the root would sprout a second, blue ring
- * around the whole widget. The divider is the same story with a background swap instead of a ring.
+ * and leaves the root's outline unset, so without this the root sprouts a second, blue ring around the
+ * whole widget. The divider is the same story with a background swap instead of a ring.
  *
- * `outline: none` expands to `outline-width: 0`, and at STYLESHEET origin that outranks USER_AGENT. */
+ * Deliberately plain `:focus`, not `:focus-visible`, even though the rule these cancel is now the
+ * latter. `:focus` is the superset, so this still cancels it in every case it can appear — and staying
+ * broad means it keeps cancelling if anything ever adds a plain-`:focus` ring. An opt-out wants the
+ * widest reach it can get; the rings themselves are the things that want to be precise. */
 checkbox:focus,
 switch:focus,
 slider:focus,
 splitview .__divider__:focus {
     outline: none;
 }
+
+/* ── background / color ── Parts default.css paints that Ore had no rule for at all, so its flat greys
+ * were showing through under an Ore skin. Given a real Ore value rather than blanked: `background: none`
+ * on a strip or a scrollbar corner leaves a hole, which is a different bug, not a fix. */
+tabview .__strip__ {
+    background: asset("crystalgui:ore", "rect");
+}
+scrollerview .__corner__ {
+    background: asset("crystalgui:ore", "scroller-track");
+}
+/* Step buttons are `display: none` in default.css and stay hidden here — this only matters for a
+ * consumer that turns them on, which is a pure `display: flex` away and shouldn't also require
+ * re-theming them. */
+scroller .__head__,
+scroller .__tail__ {
+    background: asset("crystalgui:ore", "button");
+}
+scroller .__head__:hover,
+scroller .__tail__:hover {
+    background: asset("crystalgui:ore", "button-pressed");
+}
+/* `.label` is deliberately NOT reset, and it is the one place the "undo everything" rule is wrong.
+ *
+ * It is a generic layout helper default.css ships for consumers, not a part any widget owns and not
+ * something this sheet paints — so the principle at the top ("name only what this theme paints")
+ * excludes it. Tried the other way first and it was measurably worse: `.label { color: #222222 }` made
+ * cgui-scroller's row labels dark-on-dark, because a consumer puts `.label` on ITS backgrounds, not on
+ * Ore's panel, and a theme cannot know what those are. Widget-internal labels are already covered —
+ * `color` is inheritable and Ore sets it on the widget roots. */
 
 button {
     background: asset("crystalgui:ore", "button");
@@ -93,7 +189,7 @@ button:disabled {
 }
 /* `outline` is layout-free — unlike border-width, which feeds Taffy and would resize the button.
  * Ore's WHITE_BORDER hairline, the same sprite LDLib2 uses for its own focus-overlay. */
-button:focus {
+button:focus-visible {
     outline: asset("crystalgui:ore", "focus-ring");
 }
 
@@ -142,7 +238,7 @@ checkbox:checked:active .__mark__ {
 
 /* Ring the 12x12 box rather than the whole checkbox row — reads better, and matches the actual
  * click target. Depends on ancestor-state descendant matching (`checkbox:focus .__mark__`). */
-checkbox:focus .__mark__ {
+checkbox:focus-visible .__mark__ {
     outline: asset("crystalgui:ore", "focus-ring");
 }
 
@@ -188,7 +284,7 @@ switch:disabled .__knob__ {
     background: asset("crystalgui:ore", "button-disabled");
 }
 /* Layout-free, so the ring can't resize the knob and disturb the slide. */
-switch:focus .__knob__ {
+switch:focus-visible .__knob__ {
     outline: asset("crystalgui:ore", "focus-ring");
 }
 
@@ -254,7 +350,7 @@ slider:active .__thumb__ {
     background: asset("crystalgui:ore", "button-pressed");
     background-color: #DDDDDD;
 }
-slider:focus .__thumb__ {
+slider:focus-visible .__thumb__ {
     outline: asset("crystalgui:ore", "focus-ring");
 }
 /* A tint multiplied over the sprite (the `button:active` idiom above), not a flat colour replacing
@@ -326,7 +422,7 @@ splitview .__divider__:active {
  * 4px: `focus-ring` is a nine-slice with 2px borders, and at 4px it is nothing but border — the
  * centre never gets drawn and it renders as a solid block. Same nine-slicing size limit called out
  * for the tab strip's hairline scrollbar below. */
-splitview .__divider__:focus {
+splitview .__divider__:focus-visible {
     background: asset("crystalgui:ore", "divider-hover");
     background-color: #AACCFF;
 }
@@ -356,7 +452,7 @@ textfield {
     padding-all: 3px;
     align-items: center;
 }
-textfield:focus {
+textfield:focus-visible {
     /* Was border-color/border-width, which feeds Taffy and would resize the field on focus.
      * `outline` is the layout-free equivalent. */
     outline: asset("crystalgui:ore", "focus-ring");
@@ -430,7 +526,7 @@ tab:disabled {
  *
  * Layout-free, like every other ring in this sheet: `border-width` feeds Taffy and would resize the
  * tab, fighting the `:checked` padding shift above. */
-tab:focus {
+tab:focus-visible {
     outline: asset("crystalgui:ore", "focus-ring");
 }
 /* The selected tab needs the ring pulled IN by a pixel, because `tab-on`'s top 2 texel rows are
@@ -443,7 +539,7 @@ tab:focus {
  * deliberate divergence from CSS's single scalar, which exists for exactly this: the other three
  * edges are already flush, and pulling them in too would just trade a gap at the top for a gap
  * everywhere else. */
-tab:checked:focus {
+tab:checked:focus-visible {
     outline-offset: -2px 0 0 0;
 }
 
