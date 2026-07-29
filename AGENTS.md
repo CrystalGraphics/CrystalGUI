@@ -533,6 +533,50 @@ frame** from `paintFrame()`'s `beginFrame()`/`endFrame()` pair.
 
 ---
 
+# GL context lifecycle — `lifecycle/`
+
+CrystalGUI owns GL resources and caches of GL-derived objects, but is not part of CrystalGraphics and
+so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
+`CgLifecycleListener` (CrystalGraphics, `gl/lifecycle/`) — `onInit(w,h)` / `onFrame(frame)` /
+`onDestroy()`, all default no-ops, registered via `CgGraphicsLifecycle.addListener(...)`.
+
+**CrystalGUI registers exactly one**: `CgUiLifecycle`.
+
+| Moment | What CrystalGUI does |
+|---|---|
+| `onInit` | Nothing — every GL resource is lazily built on first paint, and forcing them here would defeat `CgUiPaintContext`'s deliberate laziness. It *does* fire though (see below), so work added here will run |
+| `onFrame` | Nothing — per-frame work is per-`UIWindow` (`paintFrame`, `UIFrameTicker`), not global |
+| `onDestroy` | `CgUiPaintContext.destroy()`, and nothing else |
+
+> **`onInit` reaches late registrants.** CrystalGUI registers from a class initializer on the *first
+> paint*, which is always after `CgGraphicsLifecycle.initContext()` has run — so a fire-only-during-init
+> design would mean `onInit` never fires for CrystalGUI at all. `addListener` therefore delivers
+> `onInit` immediately when a context is already live. The guarantee is **exactly once per context,
+> regardless of registration time**. Without it the miss would be invisible while the hook is empty
+> and appear as silently-skipped setup the moment it isn't.
+
+> **`destroyContext()` fires only at game shutdown.** There is no destroy-then-init cycle in a running
+> process, so there is no "next context" to protect, and **nothing needs invalidating merely because
+> CrystalGraphics is about to free it** — font families, cached stylesheets, sprite packs and shared
+> materials all die with the process. Do not add cache-clearing or material-invalidation to
+> `onDestroy`; it is ceremony, not correctness.
+
+What `onDestroy` legitimately does is release the one thing nobody else frees: `CgUiPaintContext`'s
+layer FBO pool is built with `CgFrameBuffer.createOwned`, which bypasses `CgFrameBufferRegistry`, so
+`deleteAll()` never reaches it.
+
+**`onDestroy` fires before CrystalGraphics frees anything** — the only window in which a listener can
+release its own FBOs/renderers while the context is whole. Listeners dispatch in *reverse*
+registration order.
+
+> **Registration is automatic** — a `static` initializer in `CgUiPaintContext` calls
+> `CgUiLifecycle.register()`, so CrystalGUI wires itself as soon as that class comes into play. Class
+> init runs once per classloader, so registration cannot repeat across a destroy/recreate cycle. A
+> process that never paints never touches the class, which keeps a dedicated server free of
+> CrystalGraphics. `register()` is idempotent and public for explicit use.
+
+---
+
 # Stack 4: Render — immediate-mode
 
 **The V3.1 draw-list design is gone.** `CgUiDrawList`, `CgUiDrawListExecutor`, `CgUiDrawState`,
@@ -550,6 +594,16 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIWindow`. Eve
 | Clip | `pushScissor` / `popScissor` |
 | Material | `withMaterial(material, body)` |
 | Layers | `withLayerOpacity(opacity, body)`, `beginLayerFbo()` / `endLayerFbo()`, `blitLayer(fbo, opacity)`, `compositeMask(subtreeFbo, maskFbo)` |
+| Lifecycle | `hasInstance()`, `destroy()` |
+
+> **`destroy()` must be called on GL-context destruction.** The instance is `static`, so it outlives
+> the context it was built against; without this the next context is handed an object whose material,
+> VAO/VBO and FBO handles are all dead — which draws nothing or draws garbage rather than failing
+> loudly. It frees only what the context genuinely owns (the layer FBO pool, the `CgUiRenderer`, the
+> `CgTextRenderer`) and deliberately not what it borrows from CrystalGraphics registries (materials,
+> the fallback white pixel, font atlases), since those are swept by `CgGraphicsLifecycle.destroyContext()`
+> and freeing them here would be a double free. Use `hasInstance()` to check without *causing*
+> construction.
 
 > **Opacity isolation and masking go through an FBO layer pass, not a flat multiply.** The
 > tint-vs-layer-opacity distinction is the thing most likely to be got wrong here — read
@@ -775,6 +829,9 @@ com.crystalgui.core            CrystalGuiCore — global LOGGER + adapter/clipbo
   .property                    Property<T> (binding, equality-suppressing set), ObservableList<T>
   .signal                      Signal.Action/Value/Pair, SignalBase, Connection, ConnectionGroup
   .sound                       UISoundSystem (SPI — widgets ask for a sound, the platform decides how)
+
+com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener CrystalGUI registers with
+                               CrystalGraphics; drives paint-context teardown + cache invalidation
 
 com.crystalgui.render          CgUiPaintContext (singleton), CgUiRenderer, ScissorStack
   .text                        FontFamilyCache — (font stack, px) -> CgFontFamily
