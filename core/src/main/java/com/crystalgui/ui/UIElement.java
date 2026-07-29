@@ -567,6 +567,43 @@ public class UIElement {
     @Getter
     private boolean scrollExempt = false;
 
+    /** @see #setTransform(UITransform) */
+    @Getter
+    private UITransform transform = UITransform.IDENTITY;
+
+    /**
+     * Applies a paint-time affine — translate, scale, rotation about a normalised pivot — to this
+     * element and everything under it.
+     *
+     * <p><b>Layout-free.</b> Taffy never sees it, so scaling an element cannot reflow its siblings or
+     * resize its parent. That is what makes it the right tool for a zoomable canvas: put one scale on
+     * a container and its whole subtree zooms, with layout frozen underneath — the same thing LDLib2's
+     * node graph does, and the reason it can zoom continuously without relaying out on every wheel
+     * notch.</p>
+     *
+     * <p><b>Hit-testing follows automatically.</b> The transform goes into
+     * {@code RuntimeCache.localToWorld}, which {@code UIWindow.elementHitTest} inverts — so a pointer
+     * is mapped back through the transform before any box test, and a scaled or rotated subtree stays
+     * clickable where it is drawn, with no special-casing. Nothing else needs to know.</p>
+     *
+     * <p>Not a style property yet; a CSS {@code transform}/{@code transform-origin} surface is the
+     * natural next step, using real CSS syntax.</p>
+     */
+    public UIElement setTransform(UITransform transform) {
+        UITransform next = transform == null ? UITransform.IDENTITY : transform;
+        if (this.transform.equals(next)) return this;
+        this.transform = next;
+        // The whole subtree's world matrices derive from this one, exactly as with uiScale — without
+        // this, hit-testing would keep inverting the pre-transform matrix.
+        invalidatePoseCaches(this);
+        return this;
+    }
+
+    private static void invalidatePoseCaches(UIElement element) {
+        element.getRuntimeCache().resetPoseCache();
+        for (UIElement child : element.children) invalidatePoseCaches(child);
+    }
+
     /**
      * Exempts this element from its parent's scroll offset — it stays pinned while siblings scroll,
      * and is excluded from the parent's {@code scrollWidth}/{@code scrollHeight}.
@@ -1132,6 +1169,25 @@ public class UIElement {
     public final void drawSubtree(CgUiPaintContext ctx) {
         if (style.taffyBridge.style.display == TaffyDisplay.NONE || style.generalGroup.opacity() == 0)
             return;
+        // Pushed BEFORE the localToWorld snapshot below, so that snapshot includes this element's own
+        // transform — which is what the RuntimeCache calculator produces too. Get this order wrong and
+        // hit-testing silently disagrees with rendering by exactly the transform.
+        boolean pushedTransform = !transform.isIdentity();
+        if (pushedTransform) {
+            ctx.getPoseStack().pushPose();
+            var pose = ctx.getPoseStack().last().pose();
+            transform.applyTo(pose, runtimeCache.getX(), runtimeCache.getY(),
+                    runtimeCache.getWidth(), runtimeCache.getHeight());
+        }
+        try {
+            drawSubtreeTransformed(ctx);
+        } finally {
+            if (pushedTransform) ctx.getPoseStack().popPose();
+        }
+    }
+
+    /** The body of {@link #drawSubtree}, with this element's own transform already on the pose. */
+    private void drawSubtreeTransformed(CgUiPaintContext ctx) {
         if (runtimeCache.localToWorld.isDirty()) {
             this.runtimeCache.localToWorld.set(ctx.getPoseStack().last().pose());
             this.runtimeCache.worldToLocal.invalidate();
@@ -1188,12 +1244,15 @@ public class UIElement {
             // semantics (clips at the padding edge, not the content edge) and paintDefaultMask's
             // real border-only mask band. Previously insetting by border+padding (the literal content
             // box) clipped away the padding gap, one box-model layer too tight — see isMouseOverContent.
+            //
+            // Passed unrounded. `pushScissor` quantises once, in physical space, growing outward —
+            // rounding here would quantise in LOGICAL space, which at a fractional uiScale throws
+            // away a fraction of a physical pixel before the transform has even run.
             float borderWidthPx = getTaffyLayout().border().left;
-            int contentX = Math.round(runtimeCache.getX() + borderWidthPx);
-            int contentY = Math.round(runtimeCache.getY() + borderWidthPx);
-            int contentWidth = Math.round(runtimeCache.getWidth() - 2f * borderWidthPx);
-            int contentHeight = Math.round(runtimeCache.getHeight() - 2f * borderWidthPx);
-            ctx.pushScissor(contentX, contentY, contentWidth, contentHeight);
+            ctx.pushScissor(runtimeCache.getX() + borderWidthPx,
+                    runtimeCache.getY() + borderWidthPx,
+                    runtimeCache.getWidth() - 2f * borderWidthPx,
+                    runtimeCache.getHeight() - 2f * borderWidthPx);
         }
 
         // Paint in the reverse of hit-test order (UIWindow.elementHitTest walks sortedChildren
@@ -1662,7 +1721,10 @@ public class UIElement {
             if (!element.scrollExempt && (parent.scrollLeft != 0f || parent.scrollTop != 0f)) {
                 old.translate(-parent.scrollLeft, -parent.scrollTop, 0f);
             }
-            // TODO: Style transforms
+            // This element's own transform, applied last so it composes inside the parent's space —
+            // the same call drawSubtree makes against the PoseStack, so the matrix hit-testing
+            // inverts and the matrix rendering uses are the same matrix by construction.
+            element.transform.applyTo(old, getX(), getY(), getWidth(), getHeight());
             return old;
         });
 

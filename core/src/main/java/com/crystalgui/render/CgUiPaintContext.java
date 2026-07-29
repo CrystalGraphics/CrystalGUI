@@ -378,20 +378,22 @@ public final class CgUiPaintContext {
      * convention, and the inverted-ortho projection {@link #beginFrame} sets up for vertex
      * rendering has no effect on the separate scissor-test raster stage.</p>
      */
-    public void pushScissor(int x, int y, int w, int h) {
+    public void pushScissor(float x, float y, float w, float h) {
         flush();
         Matrix4f m = poseStack.last().pose();
         float physX0 = m.m00() * x + m.m10() * y + m.m30();
         float physY0 = m.m01() * x + m.m11() * y + m.m31();
         float physX1 = m.m00() * (x + w) + m.m10() * (y + h) + m.m30();
         float physY1 = m.m01() * (x + w) + m.m11() * (y + h) + m.m31();
-        int physX = Math.round(Math.min(physX0, physX1));
-        int physY = Math.round(Math.min(physY0, physY1));
-        int physW = Math.round(Math.abs(physX1 - physX0));
-        int physH = Math.round(Math.abs(physY1 - physY0));
+
+
+        int physX = (int) Math.floor(Math.min(physX0, physX1));
+        int physY = (int) Math.floor(Math.min(physY0, physY1));
+        int physW = (int) Math.ceil(Math.max(physX0, physX1)) - physX;
+        int physH = (int) Math.ceil(Math.max(physY0, physY1)) - physY;
         // Top-left-origin logical space -> GL's bottom-left-origin glScissor space.
         int glY = screenHeight - (physY + physH);
-        scissorStack.pushScissor(physX, glY, physW, physH);
+        scissorStack.pushScissor(physX, glY, Math.max(0, physW), Math.max(0, physH));
         scissorStack.applyScissorIfNeeded();
     }
 
