@@ -27,6 +27,7 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.event.DOMEvent;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.DragEvent;
+import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.UIEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -121,6 +122,11 @@ public class UIElement {
     public final EventListenerGroup<MouseEvent.Move> onMouseMove = events.getGroup(MouseEvent.Move.class);
     public final EventListenerGroup<MouseEvent.Enter> onMouseEnter = events.getGroup(MouseEvent.Enter.class);
     public final EventListenerGroup<MouseEvent.Leave> onMouseLeave = events.getGroup(MouseEvent.Leave.class);
+
+    /** Keyboard, dispatched to the focused element and bubbled — so an ancestor can implement a
+     * shortcut (a dialog closing on Escape) without the focused child knowing about it. */
+    public final EventListenerGroup<KeyboardEvent.Down> onKeyDown = events.getGroup(KeyboardEvent.Down.class);
+    public final EventListenerGroup<KeyboardEvent.Up> onKeyUp = events.getGroup(KeyboardEvent.Up.class);
 
     /** Drag-and-drop, dispatched to whatever is under the pointer — <b>not</b> to the drag source,
      * which pointer capture keeps every {@link MouseEvent} pinned to. See {@link DragEvent}. */
