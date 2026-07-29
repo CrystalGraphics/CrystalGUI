@@ -690,6 +690,7 @@ int value types.
 | `Button` | `button` | `cgui-button` |
 | `Checkbox` | `checkbox` | `cgui-checkbox` |
 | `CheckboxGroup` | — (not a `UIElement`) | `cgui-checkbox` |
+| `DialogManager` | — (not a `UIElement`) | `cgui-gallery` (Dialog page) |
 | `Switch` | `switch` | `cgui-switch` |
 | `Slider` | `slider` | `cgui-slider` |
 | `TextField` | `textfield` | `cgui-textfield` |
@@ -910,7 +911,8 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
   .event                       UIEvent, PropagationPhase, DOMEvent, DragEvent, FocusEvent, KeyboardEvent,
                                MouseEvent
   .input                       UIInputHandler, UIDragController, FocusPolicy, ButtonState
-  .elements                    Button, Checkbox, CheckboxGroup, Dialog, Scroller, ScrollerView, Slider,
+  .elements                    Button, Checkbox, CheckboxGroup, Dialog, DialogManager, Scroller,
+                               ScrollerView, Slider,
                                SplitView, Switch, Tab, TabView, TextField, Tooltip, UIText
 
 com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, JsonOps, PlainOps,

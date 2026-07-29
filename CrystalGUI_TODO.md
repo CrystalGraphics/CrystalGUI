@@ -529,13 +529,39 @@ Source: [CSS UI 4 §resize](https://www.w3.org/TR/css-ui-4/#resize)
 **Composes from** P2's positional drag on the `__resizer__` handle. Edge handles (not just the corner)
 are a superset the spec doesn't cover — add only if 4.1/4.3 actually want them.
 
-### 4.3 Basic window manager · `TODO`
-Two candidate shapes, pick during 4.1:
-- multiple absolutely-positioned "windows" inside one `UIWindow`, or
-- a handler coordinating several real `UIWindow`s with an elevated drag/focus owner.
+### 4.3 Basic window manager · `DONE` (2026-07-29)
 
-Lean toward the first — one Taffy tree, one style engine, one input handler, and z-ordering already
-exists via `sortedChildren`. The second duplicates the whole runtime per window.
+**Shipped.** `DialogManager` — stacking, activation and cascade placement for a set of `Dialog`s
+sharing one container. 12 tests; gallery Dialog page rebuilt on it (three windows + a "new window"
+button, replacing the hand-rolled z-counter it had).
+
+**Shape 1 confirmed** — absolutely-positioned siblings in one `UIWindow`. Verified rather than
+assumed: `sortedChildren` sorts z-descending *per parent*, stable, later-inserted-first on ties, and
+painting walks it reversed — so each element is effectively its own stacking context, "raise to front"
+is just "hold a higher z-index than your siblings", and hit-testing agrees with painting for free
+because both read the same ordering. Shape 2 would have duplicated a Taffy tree, style engine and
+input handler per window to express that.
+
+Not a `UIElement`, following `CheckboxGroup`'s precedent: nothing to paint or lay out, so a node
+would only add a box whose job is to not affect anything.
+
+**Policy decisions, all ours** — raise-on-click uses the **capture phase** so clicking a button inside
+a window still activates it; z is monotonic rather than renumbered (only relative order matters);
+cascade placement offsets each new window and relies on `Dialog`'s own clamp to stop at the edge
+rather than carrying wrap logic.
+
+> ### Prior art check (prompted mid-task — worth having done)
+> I had written "no web precedent", which is true, but I had **not** checked LDLib2. It does have
+> some, and one claim of mine was wrong:
+> - `WindowDragHelper.setDragMove(element, target, …)` is the **same design** independently arrived
+>   at: a handle drags a target, writing `left`/`top`, snapshotting position at grab time. Good
+>   validation of the shape, including the snapshot that avoids compounding deltas.
+> - **LDLib has no window manager.** Its `Dialog` is a fixed `zIndex(1)` overlay and there is no
+>   `bringToFront` anywhere in the repo. So stacking/activation here is a genuine addition, not a
+>   reinvention.
+> - **Worth stealing later:** `WindowDragHelper.ResizeHandle` offers all **8** handles (4 edges + 4
+>   corners) with per-handle cursors. Our `resize` port follows CSS's single corner grabber; edge
+>   handles are the superset P4.2 already flagged as "add only if 4.1/4.3 want them". They do.
 
 ---
 
