@@ -1,7 +1,5 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
@@ -9,7 +7,7 @@ import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.ui.input.UIInputHandler;
 import dev.vfyjxf.taffy.style.TaffyDimension;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -28,18 +26,7 @@ import static org.junit.Assert.*;
  * likely thing to be "tidied" into the wrong pipeline, at which point a user drag would silently
  * start outranking an author's {@code !important} rule.</p>
  */
-public class ResizeTest {
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
+public class ResizeTest extends UiTestBase {
 
     private UIWindow window;
     private UIInputHandler input;

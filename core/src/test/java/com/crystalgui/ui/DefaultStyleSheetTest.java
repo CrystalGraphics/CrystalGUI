@@ -1,7 +1,5 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.sheet.StyleSheet;
 
@@ -9,7 +7,7 @@ import com.crystalgui.ui.elements.Slider;
 import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.Switch;
 import dev.vfyjxf.taffy.style.FlexDirection;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -20,18 +18,7 @@ import static org.junit.Assert.*;
  * <p>Covers the two things that would otherwise fail silently: the resource actually being present,
  * and author sheets always out-ranking it.</p>
  */
-public class DefaultStyleSheetTest {
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
+public class DefaultStyleSheetTest extends UiTestBase {
 
     /** A missing/misplaced default.css degrades into every widget laying out at 0x0, which is easy to
      * miss. StyleSheetRegistry hands back an empty sheet rather than failing, and DEFAULT holds that

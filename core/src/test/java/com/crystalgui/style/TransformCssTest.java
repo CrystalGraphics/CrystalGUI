@@ -1,7 +1,5 @@
 package com.crystalgui.style;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -9,7 +7,7 @@ import com.crystalgui.ui.Ui;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.UIWindow;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -22,21 +20,10 @@ import static org.junit.Assert.*;
  * class-init, so even {@code parse()} needs it. Value-level and codec coverage lives in
  * {@code TransformStylePropertiesTest} in the headless set, and the parser has its own unit test.</p>
  */
-public class TransformCssTest {
+public class TransformCssTest extends UiTestBase {
 
     /** {@code UIWindow}'s constructor builds a {@code UIInputHandler}, which asks the adapter how many
      * mouse buttons exist — a window cannot be constructed without one. */
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
-
     private UIElement child;
 
     /**

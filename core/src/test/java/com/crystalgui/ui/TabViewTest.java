@@ -1,7 +1,5 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -11,6 +9,7 @@ import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.tree.UITreeTraversal;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -31,21 +30,13 @@ import static org.junit.Assert.*;
  * anything geometric — mouse hit-testing on a tab, strip scrolling, where the panes actually sit —
  * belongs to {@code CgUiTabViewScene}, not here. See {@link #styleFrame()} and {@link #activate}.</p>
  */
-public class TabViewTest {
+public class TabViewTest extends UiTestBase {
 
     private UIWindow window;
     private TabView tabView;
 
     @Before
     public void setUp() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-
         tabView = new TabView();
         tabView.layout(l -> l.width(300).height(200));
         UIElement root = new UIElement().layout(l -> l.width(300).height(200));

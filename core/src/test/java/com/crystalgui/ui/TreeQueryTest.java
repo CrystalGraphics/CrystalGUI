@@ -1,8 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.ui.elements.Slider;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -16,21 +15,13 @@ import static org.junit.Assert.*;
  * <p>These delegate to the same {@code Selector} the stylesheet cascade uses — there is deliberately
  * no second matcher — so anything the cascade can select, a query can find.</p>
  */
-public class TreeQueryTest {
+public class TreeQueryTest extends UiTestBase {
 
     private UIWindow window;
     private UIElement root, panel, a, b, deep;
 
     @Before
     public void setUp() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-
         //  root(.app)
         //  └── panel(.panel #main)
         //      ├── a(.item)

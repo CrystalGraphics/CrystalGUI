@@ -1,11 +1,9 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import dev.vfyjxf.taffy.style.FlexDirection;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -21,22 +19,11 @@ import static org.junit.Assert.*;
  * <p>Every test here uses a plain {@link UIElement}. If any of them needed {@code ScrollerView}, the
  * capability wouldn't actually be in the engine.</p>
  */
-public class ScrollCapabilityTest {
+public class ScrollCapabilityTest extends UiTestBase {
 
     private static final float VIEWPORT = 100f;
     private static final float ROW_H = 40f;
     private static final int ROWS = 5;               // 200px of content in a 100px box
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
 
     // ── Which overflow values scroll ────────────────────────────────────────
 

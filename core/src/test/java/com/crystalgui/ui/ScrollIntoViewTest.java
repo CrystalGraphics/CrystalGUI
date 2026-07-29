@@ -1,13 +1,12 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -22,7 +21,7 @@ import static org.junit.Assert.*;
  * Clicking is excluded: you clicked what you could already see, and scrolling then would drag the
  * content out from under the cursor.</p>
  */
-public class ScrollIntoViewTest {
+public class ScrollIntoViewTest extends UiTestBase {
 
     private static final float VIEWPORT = 100f;
     private static final float ROW_H = 40f;
@@ -33,13 +32,6 @@ public class ScrollIntoViewTest {
 
     @Before
     public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
         build();
     }
 

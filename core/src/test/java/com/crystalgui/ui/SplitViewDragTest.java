@@ -1,12 +1,10 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.ui.elements.SplitView;
 import dev.vfyjxf.taffy.style.FlexDirection;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -22,23 +20,12 @@ import static org.junit.Assert.*;
  *
  * <p>Runs headless: layout and input need no GL context, only painting does.</p>
  */
-public class SplitViewDragTest {
+public class SplitViewDragTest extends UiTestBase {
 
     private static final float EPS = 0.001f;
 
     private UIWindow window;
     private SplitView split;
-
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
 
     /** A split view filling a fixed-size root, laid out at the given scale. */
     private SplitView setUp(float uiScale, SplitView.Orientation orientation) {

@@ -1,7 +1,6 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.style.StyleGroup;
@@ -10,6 +9,7 @@ import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Dialog;
 import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -26,7 +26,7 @@ import static org.junit.Assert.*;
  * <p>Modal is deliberately absent: {@code showModal()} makes everything outside the dialog
  * {@code inert}, and this engine has no inertness concept. That is a separate primitive.</p>
  */
-public class DialogTest {
+public class DialogTest extends UiTestBase {
 
     private UIWindow window;
     private UIInputHandler input;
@@ -42,14 +42,6 @@ public class DialogTest {
      */
     @Before
     public void build() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-
         root = new UIElement().layout(l -> l.width(400).height(300));
         dialog = new Dialog("Panel");
         dialog.layout(l -> l.width(120).height(80));

@@ -1,9 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import org.junit.Before;
+import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -19,21 +17,10 @@ import static org.junit.Assert.*;
  * <p>Layout-freeness is the other half: a transform must not reflow anything, which is what makes it
  * usable for a zoomable canvas.</p>
  */
-public class UITransformTest {
+public class UITransformTest extends UiTestBase {
 
     /** {@code UIWindow}'s constructor builds a {@code UIInputHandler}, which asks the adapter how
      * many mouse buttons exist — a window cannot be constructed without one. */
-    @Before
-    public void registerStubAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
-    }
-
     /** A 100x100 child at the origin of a window whose uiScale is 1, so logical == physical. */
     private static UIElement childInWindow() {
         UIElement root = new UIElement().layout(l -> l.width(400).height(400));
