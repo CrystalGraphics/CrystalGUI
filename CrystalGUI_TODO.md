@@ -585,6 +585,30 @@ P1, P2 and 6.1 underneath it. Big enough to need its own design doc when it come
 
 # Changelog
 
+- **2026-07-29** — **P4.1 + P4.2 done, then hygiene-scanned.** Suite 592.
+  - **P4.2 CSS `resize`** — ambient property, `__resizer__` handle, INLINE-origin size writes,
+    min/max clamping left to Taffy. Two documented divergences (applies regardless of `overflow`; no
+    `block`/`inline`).
+  - **P4.1 `Dialog`** — modeless `<dialog>`, movable by its title bar, `__close__` button, spec focus
+    delegation and focus-restore, clamped to its container.
+  - **Three bugs found by running it, not by tests:**
+    1. Text spilling a resized panel — *not* a bug (correct `overflow: visible`), but it corrected my
+       research: the spec's scroll-container restriction also guarantees a resizable box contains its
+       content, which I'd dismissed as purely a scrollbar-gutter artifact.
+    2. Escape didn't close dialogs — because it **shouldn't**. `show()` establishes no close watcher,
+       so browsers don't either. Removed, pinned with an assertion, close button added instead.
+    3. Reopened dialogs snapped to (0,0) and looked undraggable — the clamp ticker runs before layout,
+       so it read the zero-sized `display: none` box and wrote that back. Position is a field now.
+  - A focus ring that appeared "from nowhere" was real focus, correctly restored on close — but
+    unreachable by hand, since `FOCUSABLE` excludes click. Clicking the chrome now activates the window.
+  - Hygiene scan: dead import dropped; docs updated (`AGENTS.md` widget table, registry count,
+    internal classes, property list, package map; `CGUI_WIDGETS.md` §11 Dialog and §12 resize).
+
+  > **Found but deliberately NOT fixed here:** the stub `CgUiInputAdapter` is duplicated across **24**
+  > test classes, and most of them split it into a second `@Before` whose ordering JUnit 4 does not
+  > guarantee — they pass on a name hash. `DialogTest` hit exactly this and NPE'd. A shared base class
+  > fixes both at once (superclass `@Before` ordering *is* guaranteed), but it touches 18 files that
+  > have nothing to do with P4. **Own commit.**
 - **2026-07-29** — **P2 hygiene scan.** Suite 561. Three findings, one of them the worst kind:
   1. **The drop opt-in was documented in two places and implemented in none.** `DragEvent.Over`'s
      javadoc and `UIElement.onDragOver`'s both said `preventDefault()` accepts a drop —

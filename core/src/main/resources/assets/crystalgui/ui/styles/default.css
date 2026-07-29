@@ -556,3 +556,63 @@ tooltip .__label__ {
     /* Above ordinary content, or a filled panel would bury its own grab handle. */
     z-index: 10;
 }
+
+/* ── Dialog ─────────────────────────────────────────────────────────────────────────────────────
+ * A floating, movable panel — the web's `<dialog>`, modeless form. `position: absolute` is set in
+ * Java because being out of flow is structural, not cosmetic: a dialog that participated in its
+ * parent's layout would shove siblings around every time it moved.
+ *
+ * Deliberately NOT in the top layer. Per the HTML spec only showModal() promotes; a modeless dialog
+ * stacks normally, which is what lets several editor panels coexist and order among each other and
+ * ordinary content via z-index.
+ *
+ * The title bar is the drag handle, so it needs enough height to be grabbable — that is functional
+ * geometry, which is why it lives here rather than in a theme. */
+
+dialog {
+    min-width: 80px;
+    min-height: 40px;
+    background: #2A2F36;
+    outline: 1px #00000060;
+    z-index: 5;
+}
+
+dialog .__title-bar__ {
+    height: 16px;
+    width: 100%;
+    padding-left: 4px;
+    padding-right: 2px;
+    /* Explicit `row`: this engine's Taffy default is COLUMN, not CSS's `row` (see AGENTS.md), so
+     * without this the close button stacks underneath the title instead of beside it. */
+    flex-direction: row;
+    align-items: center;
+    /* Title left, close button hard right, whatever the dialog's width. */
+    justify-content: space-between;
+    background: #3A4450;
+}
+
+dialog .__content__ {
+    flex-grow: 1;
+    width: 100%;
+    padding-all: 6px;
+    /* A dialog contains its content: it is user-movable and user-resizable, and an unclipped panel
+     * spills the moment either shrinks it below the content. Same lesson as the resize page. */
+    overflow: hidden;
+}
+
+/* The dialog's close affordance. Browsers ship no dialog chrome at all — a `<dialog>` is a bare box —
+ * so this is ours. A floating panel with a draggable title bar and no way to dismiss it is simply
+ * broken, and Escape is not the answer: only a MODAL dialog establishes a close watcher, so a
+ * modeless one does not respond to Escape on the web either. */
+dialog .__close__ {
+    width: 12px;
+    min-height: 12px;
+    height: 12px;
+    padding-all: 0;
+    justify-content: center;
+    align-items: center;
+    background: #55606E;
+}
+dialog .__close__:hover {
+    background: #C05050;
+}

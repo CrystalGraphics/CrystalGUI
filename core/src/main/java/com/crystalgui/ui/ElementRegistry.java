@@ -2,6 +2,7 @@ package com.crystalgui.ui;
 
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Checkbox;
+import com.crystalgui.ui.elements.Dialog;
 import com.crystalgui.ui.elements.Scroller;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.Slider;
@@ -69,6 +70,7 @@ public final class ElementRegistry {
 
         register("button", Button.class, () -> new Button(""));
         register("checkbox", Checkbox.class, Checkbox::new);
+        register("dialog", Dialog.class, () -> new Dialog(""));
         register("scroller", Scroller.class, Scroller::new);
         register("scrollerview", ScrollerView.class, ScrollerView::new);
         register("slider", Slider.class, Slider::new);

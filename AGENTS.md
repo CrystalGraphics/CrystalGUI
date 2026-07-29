@@ -253,9 +253,9 @@ state. The declarative description layer it seeded now lives in `serialization/U
 
 ## `ElementRegistry`
 
-Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers thirteen:
+Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers fourteen:
 `element`, `button`, `checkbox`, `scroller`, `scrollerview`, `slider`, `splitview`, `switch`, `tab`,
-`tabview`, `textfield`, `text`, `tooltip`. Unknown tags **throw** on decode — a typo must not silently become a
+`tabview`, `textfield`, `text`, `tooltip`, `dialog`. Unknown tags **throw** on decode — a typo must not silently become a
 styleless div.
 
 ## `UITreeObserver`
@@ -341,7 +341,7 @@ property straight through to `TaffyBridge`.
 `border-color`, `caret-width`, `color`, `font-family`, `font-size`, `line-height`, `mask`,
 `mask-fit`, `mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`,
 `outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-fit`,
-`overlay-origin`, `overlay-position`, `scroll-behavior`, `scroll-duration`, `selection-color`,
+`overlay-origin`, `overlay-position`, `resize`, `scroll-behavior`, `scroll-duration`, `selection-color`,
 `text-offset-x`, `text-offset-y`, `text-shadow`, `transform`, `transform-origin-x`,
 `transform-origin-y`, `transition`, `z-index` — plus the whole layout set from `LayoutProperties`.
 
@@ -695,6 +695,7 @@ int value types.
 | `TextField` | `textfield` | `cgui-textfield` |
 | `UIText` | `text` | `cgui-text`, `cgui-text-stress` |
 | `Tooltip` | `tooltip` | `cgui-gallery` (Tooltip page) |
+| `Dialog` | `dialog` | `cgui-gallery` (Dialog page) |
 | `Scroller` | `scroller` | `cgui-scroller` |
 | `ScrollerView` | `scrollerview` | `cgui-scroller` |
 | `SplitView` | `splitview` | `cgui-splitview` |
@@ -716,7 +717,8 @@ int value types.
   __bottom__  __corner__  __divider__  __fill__      __first__   __h-scroller__  __head__
   __knob__    __left__    __mark__     __pane__      __panes__   __post-icon__   __pre-icon__
   __rail__    __right__   __second__   __spacer__    __strip__   __strip-bar__   __tail__
-  __label__   __thumb__   __top__     __track__    __v-scroller__  __vertical__
+  __close__   __content__ __label__    __resizer__  __thumb__       __title-bar__
+  __top__     __track__   __v-scroller__  __vertical__
   ```
 - **No sizes, no timings, no colours in Java.** Widgets write structure and state; `default.css` gives
   functional geometry, `ore.css` gives appearance. `Switch`'s knob animation is a CSS `transition` on
@@ -903,12 +905,12 @@ com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGro
     .visual.transform          TransformProperty, TransformValue, TransformOriginShorthand
 
 com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListenerGroup,
-                               ElementRegistry, UIFrameTicker (SPI), UITreeObserver, TopLayer
+                               ElementRegistry, UIFrameTicker (SPI), UITreeObserver, TopLayer, UIResizer
   .tree                        UITreeTraversal — stateless ancestor/tab-order queries
   .event                       UIEvent, PropagationPhase, DOMEvent, DragEvent, FocusEvent, KeyboardEvent,
                                MouseEvent
   .input                       UIInputHandler, UIDragController, FocusPolicy, ButtonState
-  .elements                    Button, Checkbox, CheckboxGroup, Scroller, ScrollerView, Slider,
+  .elements                    Button, Checkbox, CheckboxGroup, Dialog, Scroller, ScrollerView, Slider,
                                SplitView, Switch, Tab, TabView, TextField, Tooltip, UIText
 
 com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, JsonOps, PlainOps,

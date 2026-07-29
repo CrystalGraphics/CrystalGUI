@@ -398,7 +398,78 @@ subset of CSS Anchor Positioning's `position-try-fallbacks`.
 
 ---
 
-## 11. Harness scenes
+## 11. `Dialog`
+
+A floating, movable panel — the web's `<dialog>`, **modeless** form.
+
+```java
+Dialog panel = new Dialog("Inspector");
+stage.addChild(panel);          // stage is the containing block: dialogs are position: absolute
+panel.moveTo(20, 20).show();
+panel.getContent().addChild(...);
+```
+
+**Named `Dialog`, not `UIWindow`** — that name already means the runtime/Document analogue, and
+reusing it would be actively misleading.
+
+**Modeless on purpose.** Only `showModal()` adds a dialog to the top layer; `show()` leaves it in
+ordinary flow and ordinary stacking. That is what lets several editor panels coexist and order among
+each other — and against page content — by `z-index`.
+
+**Modal is not implemented.** `showModal()` makes everything outside the dialog `inert`, and this
+engine has no inertness concept at all. That is a separate primitive, not a flag on this class.
+
+**Escape does not close it, and that is correct.** Only `showModal()` "establishes a close watcher",
+the machinery that turns a close request into a `cancel` event and then a close — so browsers do not
+close a modeless dialog on Escape either. The affordance is the `__close__` button instead, which
+browsers leave to the author because their dialogs ship no chrome. (Escape *during a drag* cancels the
+drag — `UIInputHandler` consumes it before focus routing, so the innermost live interaction wins.)
+
+**Focus** follows the spec: the focus delegate (first focusable descendant) else the dialog itself on
+`show()`, and on `close()` focus returns to whatever held it beforehand. Clicking the title bar also
+focuses the dialog — without that the ring is only ever produced programmatically and looks like a
+glitch, since `FocusPolicy.FOCUSABLE` excludes click.
+
+**Moving is ours** — nothing in CSS or HTML moves an element by pointer. It runs on the P2 positional
+drag from `__title-bar__`, and writes `left`/`top` at **`INLINE`** origin, matching what CSS `resize`
+mandates for the size it writes. One rule covers both: user-driven geometry is inline, so an author's
+`!important` can pin a dialog.
+
+> **The position is a field, never re-read from the resolved box.** The re-clamp ticker runs during
+> `advanceFrame`, *before* layout, so just after a reopen the box is still the zero-sized
+> `display: none` one — deriving position from it snapped every reopened dialog to (0,0).
+
+- Tag `dialog` · internal `__title-bar__`, `__content__`, `__close__` · Scene: `cgui-gallery`
+- Combines with `resize` (§12): the gallery's second panel is both movable and resizable.
+
+---
+
+## 12. `resize` — an element capability, not a widget
+
+CSS `resize` (CSS UI 4) is **ambient on any element**, exactly as `overflow` makes any element a
+scroll container. Setting it adds an internal `__resizer__` grab handle; clearing it removes one.
+
+```java
+panel.generalStyle(g -> g.resize(Resize.BOTH));   // or in CSS: resize: both;
+```
+
+- The resulting size is written at **`INLINE`** origin — the spec says the UA replaces declarations in
+  the style attribute *"without `!important`"*, so an author's `!important` still wins. Every other
+  code-driven geometry write in this engine uses `IMPORTANT`; this is the deliberate exception.
+- **No clamping in the resizer**: `min-width`/`max-width`/`min-height`/`max-height` are the spec's only
+  constraints and Taffy already applies them.
+- **Divergences**: applies regardless of `overflow` (browsers restrict it to scroll containers, half a
+  rendering artifact of the grabber living in the scrollbar gutter); and no `block`/`inline` values,
+  which are writing-mode-relative and would be silent aliases here.
+- **Anything resizable should normally also set `overflow`** — the other half of that restriction did
+  real work, guaranteeing a resizable box contains its content.
+
+The rule this establishes, worth reusing: **if the web expresses it as a CSS property, make it ambient
+on `UIElement`; if the web expresses it as an element, make it a widget.**
+
+---
+
+## 13. Harness scenes
 
 ```bash
 ./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"
