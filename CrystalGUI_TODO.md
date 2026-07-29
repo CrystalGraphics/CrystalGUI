@@ -450,14 +450,55 @@ Flagging it so it stays visible rather than quietly becoming a surprise at ship 
 # P4 — Falls out of P1 + P2
 
 ### 4.1 Moving windows · `TODO`
-Screen-space repositioning, correct across screen resizes. Mostly composition once drag exists.
-`position: absolute` already parses (`TaffyPosition.ABSOLUTE`) and `ScrollerView` already uses it, so
-there's a working precedent. This is the natural place to decide whether `position: fixed` is worth
-adding for real — see the P1.1 note on why it is *not* the same thing as top-layer promotion.
+
+**There is no web precedent for this, and that is the finding.** Nothing in CSS moves an element by
+pointer; `<dialog>` is not natively draggable, and every "draggable window" on the web is library code
+over pointer events. So — exactly like drop targeting in P2 — this is **ours by design**, and the code
+should say so rather than read like a half-remembered port.
+
+**What it composes from, all of which now exists:**
+- P2's positional drag (zero threshold, so the window tracks from the first pixel) on a drag-handle
+  child — the same shape `SplitView`'s divider already uses.
+- Top-layer promotion for the window itself. A floating window wants viewport-relative positioning
+  *and* immunity from ancestor clipping, which is precisely what promotion already gives —
+  reparenting to the root makes the root box the containing block.
+
+> **This settles the `position: fixed` question the P1.1 note deferred here: we don't need it.**
+> `fixed` buys viewport-relative positioning but keeps normal stacking and ancestor clipping;
+> promotion already gives the containing block *and* the clip immunity. Adding `fixed` would be a
+> second, weaker way to do the same thing. Revisit only if something needs viewport anchoring while
+> deliberately staying clipped.
+
+**Open questions:**
+- Screen resize: a window parked near an edge must not end up off-screen. Clamp on resize, or anchor
+  proportionally? Clamping is simpler and matches how OS window managers behave.
+- Should moving be a `UIElement` capability (like scrolling) or a widget? Scrolling set the precedent
+  that ambient capabilities live on `UIElement` — but moving needs a *handle*, which is structure, so
+  a widget is more likely right. Decide before writing.
 
 ### 4.2 Resizable windows / elements · `TODO`
-Edge and corner grab handles on the new drag protocol. Reusable for a text area later. LDLib is a
-reasonable reference for handle affordances only — not for API shape.
+
+**This one IS a web feature: the CSS `resize` property** (CSS Basic User Interface L4). A port, not an
+invention — which makes it the higher-confidence half of P4.
+
+Source: [CSS UI 4 §resize](https://www.w3.org/TR/css-ui-4/#resize)
+
+| Spec says | Our design |
+|---|---|
+| `resize: none \| both \| horizontal \| vertical \| block \| inline` | Implement the first four. `block`/`inline` are writing-mode-relative and this engine has no writing modes, so they would be silent aliases — **record as a divergence** rather than fake them. |
+| "the user agent sets the width and height properties to px unit length values … in the element's style attribute DOM, replacing existing property declaration(s), if any, **without `!important`**" | **`StyleOrigin.INLINE`, via the existing `StyleGroup.inlinePipeline`** — *not* `IMPORTANT`. This is the fidelity detail most likely to be got wrong: every other widget-driven geometry write here uses IMPORTANT, but that would let a user resize beat an author's `!important`, which the spec explicitly does not. |
+| "must allow the user to resize … with no other constraints than what is imposed by min-width, max-width, min-height, and max-height" | Free — those properties already exist and Taffy clamps. No manual clamping, and none should be added. |
+| "applies to elements that are **scroll containers**" | `isScrollContainer()` already exists. **But see below.** |
+| Handle position/appearance unspecified | Ours: an internal `__resizer__` child, geometry and art from `default.css`, per the no-pixels-in-Java rule. |
+
+> **The scroll-container restriction is worth diverging from, deliberately.** It exists in browsers
+> because the resizer is drawn *in the scrollbar corner* — it is an artifact of where the widget was
+> put, not a semantic requirement. A resizable panel in a UI toolkit is very often not scrollable, and
+> "resize silently does nothing" is one of the web's genuinely annoying gotchas. We draw our own
+> grabber, so the constraint buys us nothing. **Apply regardless of `overflow`, and record it.**
+
+**Composes from** P2's positional drag on the `__resizer__` handle. Edge handles (not just the corner)
+are a superset the spec doesn't cover — add only if 4.1/4.3 actually want them.
 
 ### 4.3 Basic window manager · `TODO`
 Two candidate shapes, pick during 4.1:
