@@ -116,7 +116,7 @@ Encoding is aggressively sparse — flags pack into one int (bit 0 enabled, bit 
 default on so an ordinary element omits the field), and every field with a default value is left out.
 
 **Only `INLINE`-origin style values travel** (`serialization/style/`). `StyleValueCodecs` keys codecs
-by *value type* rather than by property — there are 78 registered properties but only about twenty
+by *value type* rather than by property — there are ~96 registered properties but only about twenty
 distinct types, so roughly eight codecs cover most of them (`LengthPercentageAuto` alone covers
 twenty-five properties, and enums are handled generically). `InlineStyleCodec` walks an element's
 inline slots and encodes each.
@@ -276,3 +276,4 @@ drift.
 | `SessionHandshakeTest` | open → req-desc → desc, and the cache-hit path that transfers nothing |
 | `ServerBehaviourLoopTest` | event in, handler runs, state update out |
 | `TextStylePropertiesTest` | the text style properties at value level (the CSS half lives in `test/`) |
+| `TransformStylePropertiesTest` | `transform`/`transform-origin` at value level (the CSS half lives in `test/`) |
