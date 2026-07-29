@@ -491,11 +491,18 @@ Source: [CSS UI 4 §resize](https://www.w3.org/TR/css-ui-4/#resize)
 | "applies to elements that are **scroll containers**" | `isScrollContainer()` already exists. **But see below.** |
 | Handle position/appearance unspecified | Ours: an internal `__resizer__` child, geometry and art from `default.css`, per the no-pixels-in-Java rule. |
 
-> **The scroll-container restriction is worth diverging from, deliberately.** It exists in browsers
-> because the resizer is drawn *in the scrollbar corner* — it is an artifact of where the widget was
-> put, not a semantic requirement. A resizable panel in a UI toolkit is very often not scrollable, and
-> "resize silently does nothing" is one of the web's genuinely annoying gotchas. We draw our own
-> grabber, so the constraint buys us nothing. **Apply regardless of `overflow`, and record it.**
+> **The scroll-container restriction is worth diverging from, deliberately.** Part of it exists
+> because the resizer is drawn *in the scrollbar corner* — an artifact of where the widget was put,
+> not a semantic requirement, and "resize silently does nothing" is one of the web's genuinely
+> annoying gotchas. We draw our own grabber, so that part buys us nothing.
+>
+> **Correction after seeing it run:** that was only half the story. The restriction *also* guarantees
+> a resizable box contains its content — shrink an `overflow: visible` element below its content and
+> the content spills out. Correct CSS, visually broken, and browsers never face it because `resize`
+> implies a scroll container. The divergence is still right (clipping is one declaration;
+> inexpressiveness is forever), but **anything resizable should normally also set `overflow`**. Not
+> enforceable in the UA sheet — there is no "has resize set" selector — so it is documented on
+> `Resize` instead.
 
 **Composes from** P2's positional drag on the `__resizer__` handle. Edge handles (not just the corner)
 are a superset the spec doesn't cover — add only if 4.1/4.3 actually want them.

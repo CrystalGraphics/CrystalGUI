@@ -9,6 +9,7 @@ import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.border.LengthPercentProperty;
@@ -153,6 +154,19 @@ public class StylePropertyRegistry {
             case SCROLL -> dev.vfyjxf.taffy.style.Overflow.SCROLL;
         };
     }
+    /**
+     * CSS {@code resize} (CSS UI 4) — user drag-to-resize.
+     *
+     * <p>Ambient on any element, exactly like {@code overflow} makes any element a scroll container.
+     * The listener adds or removes the internal {@code __resizer__} handle, so the capability is
+     * driven entirely by the cascade rather than by constructing a widget.</p>
+     *
+     * <p><b>Not restricted to scroll containers</b>, unlike the spec — see {@link Resize} for why that
+     * restriction is a browser rendering artifact rather than a semantic rule.</p>
+     */
+    public static final StyleProperty<Resize> RESIZE = create("resize", Resize.class, Resize.NONE)
+            .addListener((elem, prop, oldVal, newVal) -> elem.onResizeModeChanged(newVal));
+
     // CSS `scroll-behavior`. Purely a paint/animation concern, so no Taffy listener.
     public static final StyleProperty<ScrollBehavior> SCROLL_BEHAVIOR =
             create("scroll-behavior", ScrollBehavior.class, ScrollBehavior.AUTO);

@@ -534,3 +534,25 @@ tooltip .__label__ {
     color: #FFFFFF;
     max-width: 170px;
 }
+
+/* ── Resize handle ──────────────────────────────────────────────────────────────────────────────
+ * The `__resizer__` internal child, added to any element whose `resize` is not `none`. CSS UI 4
+ * leaves the grabber's size, position and appearance entirely to the UA, so all of it is here.
+ *
+ * Pinned to the bottom-right corner via `position: absolute` (set in Java, since being out of flow
+ * is structural — a handle that took a slot in its parent's layout would reflow the content the
+ * moment `resize` was set). Everything else is a theme's to change.
+ *
+ * Deliberately square and small: it has to be grabbable without covering content, and it is drawn
+ * INSIDE the element (unlike a browser's, which lives in the scrollbar gutter — see Resize's
+ * javadoc for why we don't inherit that constraint). */
+
+.__resizer__ {
+    width: 10px;
+    height: 10px;
+    right: 0;
+    bottom: 0;
+    background: #FFFFFF40;
+    /* Above ordinary content, or a filled panel would bury its own grab handle. */
+    z-index: 10;
+}
