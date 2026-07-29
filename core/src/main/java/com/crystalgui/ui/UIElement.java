@@ -19,6 +19,7 @@ import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.property.visual.OverflowClip;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
@@ -651,6 +652,36 @@ public class UIElement {
     public void invalidatePoseCachesRecursively() {
         runtimeCache.resetPoseCache();
         for (UIElement child : children) child.invalidatePoseCachesRecursively();
+    }
+
+    // ── Resize ───────────────────────────────────────────────────────────────
+
+    /** The {@code __resizer__} handle, present only while {@code resize} is not {@code none}. */
+    @Nullable
+    private UIResizer resizer;
+
+    /**
+     * Adds or removes the resize handle as the {@code resize} property changes.
+     *
+     * <p>Ambient on every element, driven by the cascade — the same shape as {@code overflow} making
+     * any element a scroll container, and for the same reason: {@code resize} is a CSS property that
+     * applies to elements generally, not a widget you opt into by construction.</p>
+     *
+     * <p>The handle is created lazily and destroyed again, so an element that never sets
+     * {@code resize} carries one null field and nothing else. Called from
+     * {@code StylePropertyRegistry.RESIZE}'s change listener.</p>
+     */
+    public void onResizeModeChanged(@Nullable Resize mode) {
+        boolean wanted = mode != null && mode.isResizable();
+        if (wanted == (resizer != null)) return;
+
+        if (wanted) {
+            resizer = new UIResizer();
+            addInternalChild(resizer);
+        } else {
+            removeInternalChild(resizer);
+            resizer = null;
+        }
     }
 
     // ── Top layer ────────────────────────────────────────────────────────────

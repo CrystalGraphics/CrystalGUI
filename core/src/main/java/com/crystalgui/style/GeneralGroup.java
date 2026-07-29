@@ -6,6 +6,7 @@ import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.TransitionSpec;
@@ -277,6 +278,16 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
     /** Raw {@code overflow:} value — whether clipping happens at all. This is NOT the clip
      * mechanism to render/hit-test with; use {@code UIElement#resolveOverflowClip()} for that
      * (it auto-detects scissor vs mask from the element's actual resolved shape). */
+    /** CSS `resize` — whether the user may drag this element's corner. @see Resize */
+    public Resize resize() {
+        return getValueSave(StylePropertyRegistry.RESIZE);
+    }
+
+    public GeneralGroup resize(Resize resize) {
+        set(StylePropertyRegistry.RESIZE, resize);
+        return this;
+    }
+
     public Overflow overflow() {
         return getValueSave(StylePropertyRegistry.OVERFLOW);
     }
