@@ -89,6 +89,10 @@ public class UIElement {
     @Getter
     private boolean isFocused = false;
 
+    /** @see #setFocused(boolean, boolean) */
+    @Getter
+    private boolean isFocusVisible = false;
+
     @Getter
     private boolean isHovered = false;
 
@@ -206,9 +210,31 @@ public class UIElement {
         invalidateStyleMatch();
     }
 
+    /**
+     * Focuses this element and treats that focus as <b>ring-worthy</b> ({@code :focus-visible}).
+     *
+     * <p>The visible default is deliberate, not a shortcut. Test and harness code forces a focus state
+     * through this method to photograph it, and matching the web — where a programmatic
+     * {@code element.focus()} does show the ring — keeps those rows working. Only the input handler,
+     * which knows a click from a Tab, has cause to say otherwise.</p>
+     */
     public void setFocused(boolean focused) {
-        if (this.isFocused == focused) return;
+        setFocused(focused, focused);
+    }
+
+    /**
+     * @param visible whether this focus should draw a focus ring — CSS's {@code :focus-visible}, as
+     *                opposed to {@code :focus}, which is true however focus arrived. Ignored (forced
+     *                false) when {@code focused} is false, so the two flags can never disagree.
+     */
+    public void setFocused(boolean focused, boolean visible) {
+        boolean nextVisible = focused && visible;
+        // BOTH fields gate the early-out: the input handler and the forced-state harness rows both call
+        // this every frame, and comparing only isFocused would silently swallow a visibility change on
+        // an already-focused element.
+        if (this.isFocused == focused && this.isFocusVisible == nextVisible) return;
         this.isFocused = focused;
+        this.isFocusVisible = nextVisible;
         onStyleChanged();
         invalidateStyleMatch();
     }
@@ -1379,6 +1405,9 @@ public class UIElement {
         }
 
         RectFill fill = resolveRoundedFill(d);
+        // Opaque white is CORRECT here and must stay, despite being the literal that caused the
+        // rounded-background bug: this builds a MASK, where white means "fully reveal". A mask with no
+        // resolvable drawable should reveal the element's whole rounded shape, not hide it.
         if (fill == null) fill = new ColorFill(0xFFFFFFFF);
 
         CgUiRoundedRect mask = buildFillOnlyRoundedRect(radii, fill);
@@ -1405,6 +1434,12 @@ public class UIElement {
         // transparent), so background-color instead paints as a flat fill directly.
         CgUiDrawable background = styleGen.background();
         int backgroundColor = styleGen.backgroundColor();
+        // background-color defaults to white (a no-op tint), so "is there a background-color" can't be
+        // read off the resolved value — it's white either way when unset. Hoisted above the radius
+        // branch because BOTH paths below need the same answer: the rounded path used to lack it, which
+        // is exactly how a backgroundless element ended up painting an opaque white rounded box.
+        boolean hasExplicitBackgroundColor =
+                style.containsCandidate(StylePropertyRegistry.BACKGROUND_COLOR, slot -> true);
 
         // Universal border-radius/border-width/border-color wrapping layer — applies on top of
         // whatever `background` resolves to, matching real CSS (rounding/border is orthogonal to
@@ -1414,16 +1449,14 @@ public class UIElement {
         CornerRadii radii = resolveCornerRadii(width, height);
         float borderWidthPx = getTaffyLayout().border().left;
         boolean needsRoundedWrap = !radii.isZero() || borderWidthPx > 0f;
-        if (needsRoundedWrap && paintRoundedBackground(ctx, x, y, width, height, radii, borderWidthPx, background, backgroundColor)) {
+        if (needsRoundedWrap && paintRoundedBackground(ctx, x, y, width, height, radii, borderWidthPx,
+                background, backgroundColor, hasExplicitBackgroundColor)) {
             return;
         }
 
         if (background == CgUiDrawable.EMPTY) {
             ctx.setColor(0xFFFFFFFF);
-            // background-color now defaults to white (a no-op tint) — so whether to paint a flat
-            // fill here can't be decided from the resolved value anymore (it's white either way when
-            // unset). Check for an explicit candidate instead.
-            if (style.containsCandidate(StylePropertyRegistry.BACKGROUND_COLOR, slot -> true)) {
+            if (hasExplicitBackgroundColor) {
                 ctx.fillRect(x, y, width, height, backgroundColor);
             }
         } else {
@@ -1440,7 +1473,35 @@ public class UIElement {
      *         (documented gap). */
     private boolean paintRoundedBackground(CgUiPaintContext ctx, float x, float y, float width, float height,
                                             CornerRadii radii, float borderWidthPx,
-                                            CgUiDrawable background, int backgroundColor) {
+                                            CgUiDrawable background, int backgroundColor,
+                                            boolean hasExplicitBackgroundColor) {
+        // No background drawable. Three cases, and none of them is "opaque white" — mirrors exactly the
+        // distinction paintSelf's plain path makes, which is the point: the two paths must agree on
+        // what an absent background looks like.
+        if (background == CgUiDrawable.EMPTY) {
+            int borderColorArgb = style.getGeneralGroup().borderColor();
+            RectFill fill;
+            if (hasExplicitBackgroundColor) {
+                // background-color with no drawable paints as a flat fill (see paintSelf's comment on
+                // why). The tint stays WHITE here: the colour is already the fill, and the shader does
+                // `fillColor *= i.color`, so tinting by it as well would square it.
+                fill = new ColorFill(backgroundColor);
+            } else if (borderWidthPx > 0f) {
+                // Border only — a transparent interior with a visible stroke. The fill carries the
+                // BORDER's rgb at zero alpha rather than plain 0x00000000, because the shader blends
+                // `mix(_BorderColor, fillColor, innerCoverage)` across the inner edge and a mismatched
+                // rgb bleeds a fringe there. paintOutline does the same thing for the same reason.
+                fill = new ColorFill(borderColorArgb & 0x00FFFFFF);
+            } else {
+                // Nothing to draw at all. Fall through so the plain path (which also draws nothing)
+                // stays the single definition of that case.
+                return false;
+            }
+            ctx.setColor(0xFFFFFFFF);
+            buildRoundedRect(radii, borderWidthPx, borderColorArgb, fill).draw(ctx, x, y, width, height);
+            return true;
+        }
+
         // Immediate-mode drawing can't be undone once issued, so resolvability must be checked in a
         // side-effect-free pass BEFORE any drawing starts — an interrupted-and-retargeted background
         // transition nests CgUiCrossFade arbitrarily deep (TextureProperty.interpolate always
@@ -1488,10 +1549,20 @@ public class UIElement {
     private record NineSliceFill(CgUiSprite sprite) implements RectFill {
     }
 
-    /** @return the fill this drawable would paint as, or {@code null} if it isn't a type the
-     * rounded-wrap layer can clip (anything unrecognized, or a sprite with no texture set). */
+    /** @return the fill this drawable would paint as, or {@code null} if there is nothing to fill with
+     * — either no background at all ({@link CgUiDrawable#EMPTY}) or a type the rounded-wrap layer
+     * can't clip (anything unrecognized, or a sprite with no texture set).
+     *
+     * <p>{@code EMPTY} used to return opaque white here, and that was the bug behind "any
+     * border-radius turns the whole UI white": {@code EMPTY} means <em>no background</em>, which is not
+     * a colour. Since {@code default.css} gives most containers no {@code background:} at all, a single
+     * universal {@code border-radius} painted a white slab over the root and every structural element
+     * under it. Callers decide what "nothing" should look like — see
+     * {@link #paintRoundedBackground}, which distinguishes an explicit {@code background-color} from a
+     * border-only box from a genuinely empty one, and {@link #paintDefaultMaskShape}, for which
+     * "nothing" legitimately means opaque white.</p> */
     private static @Nullable RectFill resolveRoundedFill(CgUiDrawable drawable) {
-        if (drawable == CgUiDrawable.EMPTY) return new ColorFill(0xFFFFFFFF);
+        if (drawable == CgUiDrawable.EMPTY) return null;
         if (drawable instanceof CgUiQuad quad) return new ColorFill(quad.getColorArgb());
         if (drawable instanceof CgUiSprite sprite) {
             var texture = sprite.getTexture();

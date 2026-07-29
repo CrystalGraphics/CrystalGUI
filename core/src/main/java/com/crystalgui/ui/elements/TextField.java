@@ -11,6 +11,7 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.style.property.visual.text.LineHeightValue;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.event.FocusEvent;
@@ -918,7 +919,31 @@ public class TextField extends UIElement implements UIFrameTicker {
 
         float originX = textOriginX() - displayOffset + offsetX;
 
-        float lineHeight = fontSize * styleGen.lineHeight();
+        // Font metrics drive the line box when `line-height` is `normal`, and the caret/selection
+        // always. This is the ONLY place either becomes pixels — deliberately not GeneralGroup or the
+        // cascade, which a dedicated server runs with no CrystalGraphics on the classpath at all.
+        // paintOverlay already resolves the family for the draw call, so nothing new is reached here.
+        var metrics = resolveFamily().getLayoutMetrics();
+
+        // CSS's `line-height: normal` — the font's own ascender + descender + lineGap. Used ONLY for
+        // vertical centring, i.e. where the line box sits inside the field.
+        float lineHeight = LineHeightValue.isNormal(styleGen.lineHeight())
+                ? metrics.getLineHeight()
+                : fontSize * styleGen.lineHeight();
+
+        // The caret and the selection band are sized to the INK box, not the line box. A line box also
+        // carries lineGap — leading *between* lines — which neither a text cursor nor a selection has
+        // any business drawing; including it left both hanging past the descender into the field
+        // sprite's bottom bevel. Browsers size the caret this way.
+        //
+        // The selection uses it too, which is a correction: a browser's selection does span the full
+        // line box, but only so consecutive lines leave no gap between them. TextField is single-line,
+        // so that reason does not apply and the extra lineGap was simply 2px of overhang.
+        //
+        // Measured on MinecraftRegular at size 10: ascender 8 + descender 2 + lineGap 2 = a 12px line
+        // box. So `line-height: normal` alone changes nothing for this font — dropping the lineGap is
+        // what takes the caret and selection from 12px to 10px.
+        float inkHeight = metrics.getAscender() + metrics.getDescender();
         // Vertically centred in the whole field rather than pinned to the content box's top: a
         // single-line field is almost always shorter than its font's line box once padding is taken
         // out, so top-aligning would push the text against the border.
@@ -933,10 +958,14 @@ public class TextField extends UIElement implements UIFrameTicker {
                 Math.max(0f, layout.contentBoxWidth()),
                 Math.max(0f, box.getHeight()));
 
-        if (hasSelection()) {
+        // Focused, not merely selected. A blurred field keeps its selection INDICES — browsers do too,
+        // so refocusing restores the range — but painting it while something else has focus reads as a
+        // second, live cursor. The Blur listener deliberately only commits and resets the blink; do not
+        // reach for clearSelection() here, that would lose the range rather than just stop drawing it.
+        if (isFocused() && hasSelection()) {
             float from = originX + prefixWidths[getSelectionStart()];
             float to = originX + prefixWidths[getSelectionEnd()];
-            ctx.fillRect(from, originY, to - from, lineHeight, styleGen.selectionColor());
+            ctx.fillRect(from, originY, to - from, inkHeight, styleGen.selectionColor());
         }
 
         String shown = text.isEmpty() ? placeholder : text;
@@ -953,7 +982,11 @@ public class TextField extends UIElement implements UIFrameTicker {
         // blink. No invalidation needed: the tree repaints every frame and tickAnimations runs first.
         if (isFocused() && !hasSelection() && caretVisible) {
             float x = originX + prefixWidths[caret];
-            ctx.fillRect(x, originY, styleGen.caretWidth(), lineHeight, styleGen.color());
+            // originY, not a re-centred value: the glyphs are drawn `.at(originY)` and CrystalGraphics
+            // puts the baseline at originY + ascender, so [originY, originY + ascender + descender] is
+            // exactly [baseline - ascender, baseline + descender] — the caret starts and ends where the
+            // glyphs do, for any `line-height`.
+            ctx.fillRect(x, originY, styleGen.caretWidth(), inkHeight, styleGen.color());
         }
 
         ctx.popScissor();

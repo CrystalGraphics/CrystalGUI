@@ -30,7 +30,10 @@ public class TextStylePropertiesTest {
     @Test
     public void defaultsMatchTheConstantsTheyReplaced() {
         var style = new TextField().getStyle().getGeneralGroup();
-        assertEquals("was SELECTION_HEIGHT_FACTOR", 1.2f, style.lineHeight(), 0.0001f);
+        // `normal`, asserted as the sentinel rather than a number precisely because this set has no
+        // CrystalGraphics: `normal` means "ask the font", and that reading it here does NOT try to is
+        // the property under test. The sentinel becomes pixels only in TextField.paintOverlay.
+        assertTrue("line-height defaults to `normal`", Float.isNaN(style.lineHeight()));
         assertEquals("was CARET_WIDTH", 1f, style.caretWidth(), 0.0001f);
         assertEquals("was SELECTION_ARGB", 0x803C8527, style.selectionColor());
     }

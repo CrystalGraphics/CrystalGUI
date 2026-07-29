@@ -105,7 +105,8 @@ public class TextStylePropertiesCssTest {
     @Test
     public void anUnstyledFieldKeepsTheOldConstants() {
         GeneralGroup style = styled("element { z-index: 0; }");
-        assertEquals(1.2f, style.lineHeight(), 0.0001f);
+        assertTrue("line-height defaults to CSS's `normal`, not a 1.2 convention",
+                Float.isNaN(style.lineHeight()));
         assertEquals(1f, style.caretWidth(), 0.0001f);
         assertEquals(0x803C8527, style.selectionColor());
         assertEquals("no nudge by default", 0f, style.textOffsetY().value, 0.0001f);

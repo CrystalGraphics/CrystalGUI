@@ -276,6 +276,27 @@ P1, P2 and 6.1 underneath it. Big enough to need its own design doc when it come
 
 # Changelog
 
+- **2026-07-29** — **Re-applied a batch of unpushed UI work on top of remote**, after a reset made
+  remote the source of truth. Suite green at **495 tests, 0 failures** (up from 484). Nothing in the
+  renderer was touched — `ctx.fillRect`'s signature survived the `CgQuadRenderer` migration, so this
+  sat entirely above it.
+  - **TextField caret and selection** are now `ascender + descender`, not the full line box. The
+    `lineGap` a line box carries is leading *between* lines, and this field is single-line — including
+    it made both 12px on 10px of ink and left them overhanging the sprite's bevel. Measured in
+    `cgui-textfield`: both exactly 10 logical px.
+  - **The selection now paints only while focused.** It previously drew whenever `hasSelection()`, so a
+    blurred field kept a live-looking highlight. The range is deliberately *not* cleared on blur.
+  - **`line-height: normal`** — CSS's real initial value, carried as a `Float.NaN` sentinel so the
+    property keeps its codec. Note it is a **no-op for MinecraftRegular**, whose declared line box is
+    exactly 12px; the lineGap removal above is what actually fixed the overrun.
+  - **`:focus-visible`** with a `FocusSource` (`KEYBOARD`/`POINTER`/`PROGRAMMATIC`) and the standard
+    text-input carve-out, plus `PseudoClasses.lookup`'s `-`→`_` mapping. Both sheets moved their rings
+    onto it; theme opt-outs stay on the broader `:focus`.
+  - **`border-radius` white-box bug fixed** — `resolveRoundedFill(EMPTY)` returned opaque white, so any
+    radius on a backgroundless element painted a slab. Regression rows are back in `cgui-gallery`.
+  - **Ore anti-bleed block** consolidated at the top of `ore.css`, grouped by property. Dropped
+    `:focus { outline: auto }`, which was dead: `auto` parses as a width, `LengthPercent.parse` returns
+    null, and the slot is rejected. Real `outline-style: auto` remains unimplemented.
 - **2026-07-29** — **P0.1 done.** Suite green at 484 tests (390 + 94 headless), 0 failures.
   Three drifted expectations reconciled, all traced to one untested commit. Next up: **P1.1**, the
   top layer — starting with the `position: fixed` vs. dedicated-promotion-API decision, since Taffy

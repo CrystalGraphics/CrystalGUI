@@ -504,6 +504,33 @@ public class TextFieldTest {
         assertTrue(field.isCaretVisible());
     }
 
+    // ── Selection across a blur ─────────────────────────────────────────────
+
+    /**
+     * Blurring must not destroy the selection — only stop drawing it.
+     *
+     * <p>The band used to paint whenever {@code hasSelection()} was true, with no focus check, so a
+     * blurred field kept a live-looking highlight. The fix is in {@code paintOverlay}'s guard, NOT in
+     * the blur handler: browsers keep the range so refocusing restores it, and reaching for
+     * {@code clearSelection()} on blur would lose it instead. This pins the state half of that —
+     * whether the band actually stops rendering is a paint concern and lives in the harness scene,
+     * since measuring it needs a GL context.</p>
+     */
+    @Test
+    public void blurKeepsTheSelectionRangeItJustStopsPaintingIt() {
+        field.setText("hello");
+        window.getInputHandler().requestFocus(field);
+        field.selectAll();
+        assertTrue(field.hasSelection());
+
+        window.getInputHandler().requestFocus(focusSink());
+
+        assertFalse("the field must actually be blurred", field.isFocused());
+        assertTrue("the range survives the blur", field.hasSelection());
+        assertEquals(0, field.getSelectionStart());
+        assertEquals(5, field.getSelectionEnd());
+    }
+
     // ── Caret position on focus ─────────────────────────────────────────────
 
     @Test
