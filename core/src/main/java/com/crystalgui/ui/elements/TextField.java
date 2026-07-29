@@ -928,9 +928,10 @@ public class TextField extends UIElement implements UIFrameTicker {
         // field's sides; clipping vertically to the content box would slice the glyphs, because that
         // box is routinely shorter than the line height (a 14px field with 3px padding leaves 8px for
         // 10px text). The full element height is used instead.
-        ctx.pushScissor(Math.round(textOriginX()), Math.round(box.getY()),
-                Math.round(Math.max(0f, layout.contentBoxWidth())),
-                Math.round(Math.max(0f, box.getHeight())));
+        // Unrounded — pushScissor quantises once, in physical space. See its javadoc.
+        ctx.pushScissor(textOriginX(), box.getY(),
+                Math.max(0f, layout.contentBoxWidth()),
+                Math.max(0f, box.getHeight()));
 
         if (hasSelection()) {
             float from = originX + prefixWidths[getSelectionStart()];

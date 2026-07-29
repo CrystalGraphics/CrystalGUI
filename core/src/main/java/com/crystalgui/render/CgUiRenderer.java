@@ -99,11 +99,30 @@ public final class CgUiRenderer {
             return getDelegate().format();
         }
 
+        /**
+         * Transforms into physical space and writes the result <b>unrounded</b>.
+         *
+         * <p>This used to snap to whole pixels, which is what made a 1-logical-pixel border render
+         * 1px on one widget and 2px on its neighbour at a fractional {@code uiScale} — adjacent
+         * elements sit at different fractional offsets, so each independently rounds a different
+         * way. Measured on Ore's tab rail: at scale 2 every border run is exactly 2px, at 1.5 they
+         * scatter between 1 and 2 with no pattern.</p>
+         *
+         * <p>Neither reference implementation snaps here. Minecraft 1.21's
+         * {@code BufferBuilder.addVertex} writes three raw floats, {@code POSITION} is
+         * {@code FLOAT}×3 non-normalised, and not one of its GUI vertex shaders contains a rounding
+         * intrinsic — vanilla's pixel alignment is a consequence of its GUI API being int-only in
+         * logical space over an integer {@code guiScale}, never of an explicit round.</p>
+         * <p>CrystalGUI already has that root-origin snap — {@code UIWindow.resolveRootPlacement}
+         * rounds {@code leftPos}/{@code topPos}. That is the one that keeps an unzoomed UI aligned,
+         * and it stays. This one was a second, redundant snap that only destroyed sub-pixel
+         * placement.</p>
+         */
         @Override
         public CgVertexConsumer vertex(float x, float y) {
             Matrix4f pose = poseStack.last().pose();
             Vector4f vec = CgVertexTransformUtil.transformPosition(pose, x, y);
-            this.getDelegate().vertex(Math.round(vec.x()), Math.round(vec.y()));
+            this.getDelegate().vertex(vec.x(), vec.y());
             return this;
         }
 
