@@ -219,7 +219,13 @@ public class StyleSheetTest {
         assertTrue(StylePropertyRegistry.FONT_SIZE.isInheritable());
         assertTrue(StylePropertyRegistry.FONT_FAMILY.isInheritable());
         assertEquals((Float) 16f, StylePropertyRegistry.FONT_SIZE.initialValue);
-        assertEquals(java.util.List.of("crystalgui:ui/fonts/Minecraft.otf"), StylePropertyRegistry.FONT_FAMILY.initialValue);
+        // Must track CgUiPaintContext.DEFAULT_FONT_ASSET. The two are a documented pair — an element
+        // with no font-family anywhere in its ancestor chain falls back to this initial value, and it
+        // has to name a font the paint context has actually loaded or text renders as nothing.
+        // They silently diverged once already (the property was reverted in one commit, this
+        // assertion updated to a different font two commits later), so if you change one, change both.
+        assertEquals(java.util.List.of("crystalgraphics:IBMPlexSans-Regular.ttf"),
+                StylePropertyRegistry.FONT_FAMILY.initialValue);
     }
 
     // ── `outline` shorthand disambiguation ──────────────────────────────────────────────────────
