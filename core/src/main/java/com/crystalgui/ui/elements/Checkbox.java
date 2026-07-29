@@ -57,7 +57,10 @@ public class Checkbox extends UIElement {
         addInternalChild(this.label);
         this.label.setHitTest(false);
 
-        this.setFocusPolicy(FocusPolicy.FOCUSABLE);
+        // CLICK so a click focuses it and Space then toggles the thing you just clicked — see the
+        // fuller reasoning on Button, which this matches deliberately. No ring on pointer focus;
+        // `:focus-visible` handles that.
+        this.setFocusPolicy(FocusPolicy.CLICK);
         this.attachDefaultListener(this.onMouseUp, (el, event) -> {
             if (event.isWasPressTarget() && isEnabled()) {
                 CrystalGuiCore.getSoundSystem().play("button_click");
