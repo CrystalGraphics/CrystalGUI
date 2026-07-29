@@ -456,25 +456,47 @@ pointer; `<dialog>` is not natively draggable, and every "draggable window" on t
 over pointer events. So — exactly like drop targeting in P2 — this is **ours by design**, and the code
 should say so rather than read like a half-remembered port.
 
-**What it composes from, all of which now exists:**
-- P2's positional drag (zero threshold, so the window tracks from the first pixel) on a drag-handle
-  child — the same shape `SplitView`'s divider already uses.
-- Top-layer promotion for the window itself. A floating window wants viewport-relative positioning
-  *and* immunity from ancestor clipping, which is precisely what promotion already gives —
-  reparenting to the root makes the root box the containing block.
+### The container IS specified, even though moving isn't — it's `<dialog>`
 
-> **This settles the `position: fixed` question the P1.1 note deferred here: we don't need it.**
-> `fixed` buys viewport-relative positioning but keeps normal stacking and ancestor clipping;
-> promotion already gives the containing block *and* the clip immunity. Adding `fixed` would be a
-> second, weaker way to do the same thing. Revisit only if something needs viewport anchoring while
-> deliberately staying clipped.
+Second research pass ([HTML §the-dialog-element](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element)).
+Dragging a window is nobody's spec, but the *thing being dragged* is a well-specified element, and it
+also answers the focus question P1.1 deferred to "when modals come up".
 
-**Open questions:**
-- Screen resize: a window parked near an edge must not end up off-screen. Clamp on resize, or anchor
-  proportionally? Clamping is simpler and matches how OS window managers behave.
-- Should moving be a `UIElement` capability (like scrolling) or a widget? Scrolling set the precedent
-  that ambient capabilities live on `UIElement` — but moving needs a *handle*, which is structure, so
-  a widget is more likely right. Decide before writing.
+> ### 🔄 Correction to the first pass
+> The earlier note said "top-layer promotion for the window itself." **That is only right for modal
+> dialogs.** Per spec, `showModal()` adds to the top layer; plain `show()` does **not** — a modeless
+> dialog stays in normal flow and normal stacking.
+>
+> Editor windows (P6.1) are modeless. Promoting them would make every floating panel outrank all
+> ordinary content and make them unable to stack *among* it. So: **`position: absolute` + `z-index`
+> for modeless windows, top layer only for modals.** Simpler, and more faithful than what I first
+> wrote.
+
+| Spec | Our design |
+|---|---|
+| `show()` modeless vs `showModal()` — "displays the dialog and makes it the top-most modal dialog", adding it to the top layer | Two entry points, only the modal one promotes. |
+| A modal makes everything outside it **inert** — "cause the focused area of the document to become inert" | **We have no `inert` concept at all.** New primitive, needed only for modals — not for moving. Scope it separately. |
+| Initial focus: `autofocus` → focus delegate (first focusable descendant) → the dialog itself; on close, focus returns to the previously focused element | Directly implementable — `UITreeTraversal.firstFocusableIn` already exists. Save/restore the focused element across open/close. |
+| Escape fires a cancelable `cancel` event, then closes | Note the ordering hazard: **Escape already cancels a drag** (P2). Innermost interaction wins — a drag inside a dialog must eat Escape before the dialog does. |
+| `closedby="any"` — light dismiss on outside click | Optional; decide per use. |
+| `::backdrop` renders behind a modal | No pseudo-elements here — already recorded as a P1 divergence. |
+
+**Naming.** Not `UIWindow` — that name is taken by the runtime/Document analogue and reusing it would
+be genuinely confusing. `Dialog` is the web's own name for this element and carries the right
+connotations.
+
+**Moving itself composes from** P2's positional drag (zero threshold, so it tracks from the first
+pixel) on a title-bar/handle child — the same shape `SplitView`'s divider already uses — writing
+`left`/`top` at **`INLINE` origin**, matching the precedent `resize` just set. Consistent, and it
+leaves an author's `!important` able to pin a window.
+
+**Both open questions from the first pass now resolve:**
+- *Capability or widget?* **Widget.** The rule that falls out of P4.2: if the web expresses it as a
+  CSS property, make it ambient on `UIElement` (`overflow`, `resize`); if the web expresses it as an
+  *element*, make it a widget (`<dialog>`). Moving has no CSS property and needs a handle, which is
+  structure.
+- *Screen resize?* **Clamp**, not proportional re-anchor. No spec covers it; clamping is what OS
+  window managers do and it cannot drift a window somewhere the user never put it. Ours, so say so.
 
 ### 4.2 Resizable windows / elements · `TODO`
 
