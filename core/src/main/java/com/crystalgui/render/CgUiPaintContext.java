@@ -19,6 +19,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgraphics.util.io.CgIO;
+import com.crystalgui.lifecycle.CgUiLifecycle;
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Matrix4f;
@@ -45,6 +46,10 @@ import java.util.List;
  * triggers GL material/font loads — a real, if small, step toward running CrystalGUI's tree/layout
  * logic headlessly (e.g. server-side) without a GL context.</p>
  *
+ * <p>Being static, the instance does <em>not</em> die with the GL context that built it, so whoever
+ * owns that lifecycle must call {@link #destroy()} on context destruction — see that method for what
+ * is and isn't freed, and why the distinction matters.</p>
+ *
  * <p>Wraps frame lifecycle in {@link CgGlScope} for GL state isolation and saves/restores
  * {@link CgFrameData} so UI rendering does not corrupt the 3D pipeline state.</p>
  *
@@ -62,6 +67,21 @@ public final class CgUiPaintContext {
      * which only ever worked on the original dev's machine). Reuses a font CrystalGraphics already
      * bundles rather than shipping a duplicate. */
     private static final String DEFAULT_FONT_ASSET = "crystalgraphics:IBMPlexSans-Regular.ttf";
+
+    static {
+        // Self-wire CrystalGUI's lifecycle the moment this class comes into play.
+        //
+        // Touching CgUiPaintContext at all is the event "CrystalGUI is about to own things that must
+        // be released on context loss" — so binding teardown to class initialization makes the two
+        // impossible to get out of step. The alternative, an explicit CgUiLifecycle.register() call
+        // in every loader and harness scene, is a step that can be forgotten, and forgetting it fails
+        // silently: the next GL context draws from freed materials and atlases rather than throwing.
+        //
+        // Costs nothing where it must cost nothing. A dedicated server never touches this class, so
+        // it never registers and never loads CrystalGraphics — and could not have anyway, since
+        // LAYER_FORMAT below already makes this class unloadable without CrystalGraphics present.
+        CgUiLifecycle.register();
+    }
 
     private static CgUiPaintContext instance;
 
@@ -642,5 +662,59 @@ public final class CgUiPaintContext {
             poseStack.popPose();
         }
         currentTexture = null;
+    }
+
+    /**
+     * Releases everything this context owns outright and drops the singleton, so the next
+     * {@link #getInstance()} builds a fresh one.
+     *
+     * <p>Called on GL-context destruction via {@code CgUiLifecycle}. Note that in this engine that
+     * means <b>game shutdown only</b> — there is no destroy-then-init cycle in a running process — so
+     * this is not protecting a subsequent context. It is explicit, complete teardown of what this
+     * class owns, matching the engine's own convention, and it is the only thing that frees the layer
+     * FBO pool: those are built with {@link CgFrameBuffer#createOwned}, which bypasses
+     * {@code CgFrameBufferRegistry}, so {@code deleteAll()} never reaches them.</p>
+     *
+     * <p><b>Only genuinely-owned resources are freed here</b>, and the distinction matters because
+     * double-freeing is as bad as leaking:</p>
+     * <ul>
+     *   <li><b>Freed</b> — the layer FBO pool ({@link CgFrameBuffer#createOwned}, so ours), the
+     *       {@link CgUiRenderer}'s batch renderer, and the {@link CgTextRenderer} (CrystalGraphics'
+     *       registry treats {@code deleteAll()} as a backstop and expects owners to delete their
+     *       own).</li>
+     *   <li><b>Not freed</b> — {@code boxModelMaterial}/{@code layerBlitMaterial} come from the
+     *       cache in {@code CgMaterialRegistry}, {@code whitePixel} is a
+     *       {@code CgFallbackTextures} constant, and the atlases behind {@code font} belong to
+     *       {@code CgFontRegistry}. All three are swept by
+     *       {@code CgGraphicsLifecycle.destroyContext()} itself; deleting them here would be a
+     *       double free of objects this context merely borrows.</li>
+     * </ul>
+     *
+     * <p>Idempotent, and safe to call when the singleton was never constructed.</p>
+     */
+    public static void destroy() {
+        if (instance == null) return;
+        instance.releaseOwnedResources();
+        instance = null;
+    }
+
+    private void releaseOwnedResources() {
+        // Any still-open layer frame belongs to a frame that will never finish. Drop the saved GL
+        // scopes without close()-ing them: their saved state refers to the dying context, so
+        // restoring it is meaningless at best.
+        layerStack.clear();
+
+        for (CgFrameBuffer fbo : layerFboPool) {
+            fbo.delete();
+        }
+        layerFboPool.clear();
+
+        renderer.delete();
+        textRenderer.delete();
+
+        glScope = null;
+        currentTexture = null;
+        currentMaterial = null;
+        frameActive = false;
     }
 }
