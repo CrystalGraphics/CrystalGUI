@@ -46,9 +46,9 @@ __top__  __bottom__  __left__  __right__                 (TabView, on the root)
 __pane__                      (Tab)
 ```
 
-Two class names appear in *comments* but are not added by any code today — `__stepped__`
-(`ore.css:170`, would let a theme style discrete sliders) and `__label__` (`Tab.java:85`). Don't write
-CSS against either until something actually adds them.
+One class name appears in a *comment* but is not added by any code today — `__stepped__`
+(`ore.css:208`, would let a theme style discrete sliders). Don't write CSS against it until something
+actually adds it.
 
 Every one is exposed as a `public static final String` constant on its widget — reference
 `Slider.THUMB_CLASS`, not the literal.
@@ -231,7 +231,9 @@ UIElement slot = new UIElement().layout(l -> l.width(58));
 slot.addChild(new UIText("label"));
 ```
 
-Consumes `color`, `font-size`, `font-family`; wraps at the font's own metrics and does **not** honour
+Consumes `color`, `font-size`, `font-family`, plus `text-offset-x`/`text-offset-y` (paint-time glyph
+nudge, applied *after* the wrap width is read so it can never affect geometry; percentages resolve
+per-axis against this element's own box). Wraps at the font's own metrics and does **not** honour
 `line-height` yet.
 
 - Tag `text` · no internal children
@@ -354,6 +356,7 @@ changing one widget's behaviour.
 | `cgui-slider` | `Slider` — drag/click/keys/wheel, forced states, stepped |
 | `cgui-textfield` | `TextField` — nine fields covering both validation tiers, binding, clipboard |
 | `cgui-text` | `UIText` — auto-size, wrap, font fallback, live binding |
+| `cgui-text-stress` | many text nodes at once — shaping/layout cost, retained-shape reuse |
 | `cgui-scroller` | `ScrollerView` vs programmatic-only element scrolling |
 | `cgui-splitview` | `SplitView` — both orientations, nesting, oversized content |
 | `cgui-tabview` | `TabView` — four sides, arrow nav, strip overflow |

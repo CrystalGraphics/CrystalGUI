@@ -2,10 +2,9 @@
 
 > **Current-state reference** for the style/cascade/paint pipeline, end to end.
 >
-> Supplements `CRYSTALGUI_OVERHAUL_V4.md`, which is **historical**: it records the *decision* that
-> CrystalGraphics owns rendering infrastructure and CrystalGUI is a thin paint surface — but the
-> render-queue design it goes on to specify was abandoned in favour of immediate-mode. Read that one
-> for the *why*; this one for the *what*.
+> Background, in one line: CrystalGraphics owns all rendering infrastructure and CrystalGUI is a thin
+> paint surface on top of it. An earlier design had CrystalGUI own a render queue; that was abandoned
+> in favour of the immediate-mode pipeline described here.
 >
 > Companions: `CGUI_WIDGETS.md` (the twelve widgets and their CSS surface) and
 > `CGUI_SERVER_AND_SERIALIZATION.md` (how styles travel to a client).
@@ -87,7 +86,7 @@ loads. Two sheets ship today: `default.css` (user-agent) and `ore.css` (theme).
 
 `StyleSheet.parse` buckets rules by id/class/type/universal for fast candidate lookup and delegates
 declaration-level parsing to **`sheet/DeclarationParser`**, which also implements CSS custom properties —
-`collectVariables` gathers `--name: value` declarations and `substituteVars` resolves `var(--name)`
+`collectVariables` gathers `--name: value` declarations and `substituteVariables` resolves `var(--name)`
 references. `StyleEngine.rematch(element)` re-evaluates only the buckets relevant to that element on
 every dirty pass.
 
@@ -146,16 +145,32 @@ is — not from the old resting value. Matches real CSS transition behavior.
 
 ```
 UIWindow.paintFrame()
-  styleEngine.calculateStyle(deltaSeconds)   // drainDirtyMatch() (selector rematch) + transitionEngine.tick()
-  calculateLayout()                          // Taffy computeLayout(), while dirty
-  paintContext.beginFrame(screenW, screenH)  // GL state save, ortho projection, bind gui_quad material
-    ui.rootElement.drawSubtree(paintContext) // paintSelf → children (z-sorted) → paintOverlay, per element
-  paintContext.endFrame()                    // GL state restore
-  inputHandler.beginFrame()/endFrame()       // hover cache invalidation + hit-test + event dispatch
+  advanceFrame()                               // shared with updateWithoutPainting() — see below
+    styleEngine.calculateStyle(deltaSeconds)   // drainDirtyMatch() (selector rematch) + transitionEngine.tick()
+    tickAnimations(deltaSeconds)               // smooth scrolls + every registered UIFrameTicker
+    calculateLayout()                          // Taffy computeLayout(), while dirty
+  CgUiPaintContext.getInstance()               // a SINGLETON — not owned per-UIWindow
+  paintContext.beginFrame(actualScreenW, actualScreenH)  // GL save, ortho, bind gui_quad, reset scissor
+    pose.pushPose(); pose.mulPoseMatrix(rootTransform)   // rootTransform = the ONE definition of uiScale
+      ui.rootElement.drawSubtree(paintContext) // paintSelf → children (z-sorted) → paintOverlay → paintOutline
+    pose.popPose()
+  paintContext.endFrame()                      // GL state restore
+  inputHandler.beginFrame()/endFrame()         // hover cache invalidation + hit-test + event dispatch
 ```
 
 Style resolution happens **before** layout on purpose — a stylesheet/transition change to a layout
-property (width, padding, ...) must be visible to Taffy in the same frame it changes.
+property (width, padding, ...) must be visible to Taffy in the same frame it changes. Note also that
+`drainDirtyMatch` runs *only* inside `calculateStyle`, so a window that is never painted never matches
+a selector at all.
+
+The `rootTransform` push is deliberate and load-bearing: `RuntimeCache.localToWorld` falls back to the
+same matrix for the root, so hit-testing is correct *before* the first paint. Don't inline a
+`pose.scale(...)` here — that is exactly how the two definitions of `uiScale` drifted apart before.
+
+**`updateWithoutPainting()`** runs `advanceFrame()` alone — style, animations and layout with no GL and
+no draw, and deliberately no input handling (no frame was presented, so hover has nothing to be
+relative to). It exists for headless tests and for benchmarks isolating layout/shaping cost from render
+cost, since per-element material binds at draw time can dwarf everything else.
 
 ---
 
@@ -533,7 +548,8 @@ origin) or `style(s -> s.general(g -> g.transformOrigin(x, y)))`.
   specificity. A theme still opts into the focus *ring* explicitly (see `ore.css`), but the mechanism
   it would need is no longer missing.
 - **Partial text styling** — `color`, `font-size`, `font-family`, `line-height`, `caret-width` and
-  `selection-color` are wired and inheritable. `UIText` consumes the first three; `TextField` consumes
+  `selection-color` are wired and inheritable. `UIText` consumes the first three (plus the
+  non-inheritable `text-offset-x`/`-y`); `TextField` consumes
   all six (`line-height` drives its caret height, selection rect and vertical centring). Still missing:
   `text-align`; `text-shadow` parses/cascades but is a registered **no-op** (nothing renders a shadow
   yet — see its `TODO` in `StylePropertyRegistry`); `line-height` takes only a unitless multiplier, not
