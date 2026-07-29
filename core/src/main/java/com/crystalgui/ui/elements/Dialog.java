@@ -193,6 +193,22 @@ public class Dialog extends UIElement {
         return this;
     }
 
+    /**
+     * A dialog owns its own position, so a left/top resize handle has to go through it rather than
+     * writing {@code left}/{@code top} directly.
+     *
+     * <p>Without this the two fight every frame: the handle would write the property, and the clamp
+     * ticker would immediately put {@code posLeft}/{@code posTop} back — dragging the left edge would
+     * resize the box while snapping its origin home on the next tick.</p>
+     */
+    @Override
+    protected void applyResizeOrigin(float left, float top) {
+        applyPosition(left, top);
+    }
+
+    @Override protected float resizeOriginLeft() { return posLeft; }
+    @Override protected float resizeOriginTop() { return posTop; }
+
     private void beginMove(float pointerX, float pointerY) {
         UIWindow window = getAttachedWindow();
         if (window == null) return;

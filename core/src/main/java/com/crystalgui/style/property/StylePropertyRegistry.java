@@ -7,6 +7,7 @@ import com.crystalgui.style.property.general.ints.IntProperty;
 import com.crystalgui.style.property.general.strings.StringValue;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
+import com.crystalgui.style.property.visual.Cursor;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.Resize;
@@ -166,6 +167,17 @@ public class StylePropertyRegistry {
      */
     public static final StyleProperty<Resize> RESIZE = create("resize", Resize.class, Resize.NONE)
             .addListener((elem, prop, oldVal, newVal) -> elem.onResizeModeChanged(newVal));
+
+    /**
+     * CSS {@code cursor} (CSS UI 4). <b>Inherited</b>, initial {@code auto}, exactly as the spec says --
+     * so a container can set one for its whole subtree and a resize handle can override just itself.
+     *
+     * <p>No listener: nothing changes when the value changes. The cursor is resolved from whatever the
+     * pointer is currently over, which {@code UIInputHandler} already tracks per frame -- reacting to
+     * the property itself would fire for elements nowhere near the pointer.</p>
+     */
+    public static final StyleProperty<Cursor> CURSOR =
+            create("cursor", Cursor.class, Cursor.AUTO).setInheritable(true);
 
     // CSS `scroll-behavior`. Purely a paint/animation concern, so no Taffy listener.
     public static final StyleProperty<ScrollBehavior> SCROLL_BEHAVIOR =

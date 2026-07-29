@@ -547,16 +547,6 @@ tooltip .__label__ {
  * INSIDE the element (unlike a browser's, which lives in the scrollbar gutter — see Resize's
  * javadoc for why we don't inherit that constraint). */
 
-.__resizer__ {
-    width: 10px;
-    height: 10px;
-    right: 0;
-    bottom: 0;
-    background: #FFFFFF40;
-    /* Above ordinary content, or a filled panel would bury its own grab handle. */
-    z-index: 10;
-}
-
 /* ── Dialog ─────────────────────────────────────────────────────────────────────────────────────
  * A floating, movable panel — the web's `<dialog>`, modeless form. `position: absolute` is set in
  * Java because being out of flow is structural, not cosmetic: a dialog that participated in its
@@ -616,3 +606,93 @@ dialog .__close__ {
 dialog .__close__:hover {
     background: #C05050;
 }
+
+/* ── Resize handles ─────────────────────────────────────────────────────────────────────────────
+ * Eight of them: four edges and four corners, added to any element whose `resize` is not `none`.
+ * Which ones exist depends on the axes the mode allows, so `resize: horizontal` gets the two side
+ * edges only.
+ *
+ * NOT a divergence from CSS UI 4, despite browsers shipping a single corner grabber: the spec says
+ * only that the UA "presents a bidirectional resizing mechanism" and leaves the mechanism entirely
+ * open. Browsers have one because theirs is drawn in the scrollbar gutter and has nowhere else to
+ * go — ours are our own elements, so edges cost nothing.
+ *
+ * Edges are deliberately invisible: a background is not what makes something hittable, so a bare
+ * grab strip works and does not put four bars around every resizable panel. Corners are tinted,
+ * because a corner is the one people look for.
+ *
+ * `position: absolute` comes from Java (structural — a handle in flow would reflow the content).
+ * Everything else, including which handles are visible at all, is a theme's to change. */
+
+.__resizer__ {
+    /* Above content, or a filled panel buries its own handles. Corners raise further, below. */
+    z-index: 10;
+}
+
+/* Edges: full-length grab strips, 4px thick. */
+.__resizer-top__,
+.__resizer-bottom__ {
+    width: 100%;
+    height: 4px;
+    left: 0;
+}
+.__resizer-left__,
+.__resizer-right__ {
+    width: 4px;
+    height: 100%;
+    top: 0;
+}
+.__resizer-top__    { top: 0; }
+.__resizer-bottom__ { bottom: 0; }
+.__resizer-left__   { left: 0; }
+.__resizer-right__  { right: 0; }
+
+/* Corners sit ON TOP of the edges they overlap — dragging a corner must resize both axes, so it has
+ * to win the hit test against the two edge strips crossing underneath it. */
+.__resizer-top-left__,
+.__resizer-top-right__,
+.__resizer-bottom-left__,
+.__resizer-bottom-right__ {
+    width: 8px;
+    height: 8px;
+    z-index: 11;
+    background: #FFFFFF40;
+}
+.__resizer-top-left__     { top: 0;    left: 0; }
+.__resizer-top-right__    { top: 0;    right: 0; }
+.__resizer-bottom-left__  { bottom: 0; left: 0; }
+.__resizer-bottom-right__ { bottom: 0; right: 0; }
+
+/* ── Cursors ────────────────────────────────────────────────────────────────────────────────────
+ * CSS `cursor`, assigned to the things whose affordance is otherwise invisible. `cursor` INHERITS,
+ * so setting it on a container would leak into its whole subtree — every rule here targets the exact
+ * element that owns the affordance.
+ *
+ * The bidirectional keywords are the right ones for handles: a handle resizes in both directions
+ * along its axis, so `ew-resize` rather than `e-resize`. The four single-direction diagonal keywords
+ * (`nw-resize` and friends) exist in CSS but say less than `nwse-resize` does.
+ *
+ * Whether any of this is VISIBLE is a platform question — see UICursorService. LWJGL3/GLFW has
+ * standard cursors for all of these; LWJGL2 has none at all and needs bitmaps. The property still
+ * cascades and resolves correctly either way. */
+
+.__resizer-left__,
+.__resizer-right__   { cursor: ew-resize; }
+.__resizer-top__,
+.__resizer-bottom__  { cursor: ns-resize; }
+/* Diagonals: top-left/bottom-right share an axis, as do top-right/bottom-left. */
+.__resizer-top-left__,
+.__resizer-bottom-right__ { cursor: nwse-resize; }
+.__resizer-top-right__,
+.__resizer-bottom-left__  { cursor: nesw-resize; }
+
+/* A title bar is the drag handle for the whole dialog, so it advertises a move rather than a grab. */
+dialog .__title-bar__ { cursor: move; }
+/* SplitView's divider resizes its two panes along one axis. */
+splitview .__divider__ { cursor: ew-resize; }
+splitview .__vertical__ .__divider__ { cursor: ns-resize; }
+
+/* `pointer` marks anything clickable, as it does on the web for links and buttons. */
+button, checkbox, switch, tab { cursor: pointer; }
+/* Not set on `textfield`: `cursor: auto` already resolves to `text` over an editable element, which
+ * is the spec's own rule and needs no declaration. */

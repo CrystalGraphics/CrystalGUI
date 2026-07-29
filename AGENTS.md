@@ -341,7 +341,8 @@ property straight through to `TaffyBridge`.
 `border-color`, `caret-width`, `color`, `font-family`, `font-size`, `line-height`, `mask`,
 `mask-fit`, `mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`,
 `outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-fit`,
-`overlay-origin`, `overlay-position`, `resize`, `scroll-behavior`, `scroll-duration`, `selection-color`,
+`overlay-origin`, `overlay-position`, `resize`, `cursor`, `scroll-behavior`, `scroll-duration`,
+`selection-color`,
 `text-offset-x`, `text-offset-y`, `text-shadow`, `transform`, `transform-origin-x`,
 `transform-origin-y`, `transition`, `z-index` — plus the whole layout set from `LayoutProperties`.
 
@@ -718,7 +719,8 @@ int value types.
   __bottom__  __corner__  __divider__  __fill__      __first__   __h-scroller__  __head__
   __knob__    __left__    __mark__     __pane__      __panes__   __post-icon__   __pre-icon__
   __rail__    __right__   __second__   __spacer__    __strip__   __strip-bar__   __tail__
-  __close__   __content__ __label__    __resizer__  __thumb__       __title-bar__
+  __close__   __content__ __label__    __resizer__  __resizer-{top,bottom,left,right}__
+  __resizer-{top,bottom}-{left,right}__  __thumb__   __title-bar__
   __top__     __track__   __v-scroller__  __vertical__
   ```
 - **No sizes, no timings, no colours in Java.** Widgets write structure and state; `default.css` gives
@@ -865,6 +867,7 @@ com.crystalgui.core            CrystalGuiCore — global LOGGER + adapter/clipbo
   .data                        CacheCell / IntCacheCell / LongCacheCell (dirty-flag memoization),
                                ReadOnlyVec2f (immutable view over a mutable JOML Vector2f), Transform2D
   .input                       CgUiInputAdapter (SPI), SystemInput (raw Mouse/Keyboard event records),
+                               UICursorService (SPI), CursorBitmaps (procedural 32x32 cursor art),
                                UIClipboard (SPI)
     .keyboard                  CgUiKeyCodes (LWJGL2-shaped constants, no LWJGL import), Modifiers (bitmask)
     .mouse                     CgUiMouseCodes

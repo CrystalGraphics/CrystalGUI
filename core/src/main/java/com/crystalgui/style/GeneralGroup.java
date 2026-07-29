@@ -5,6 +5,7 @@ import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
+import com.crystalgui.style.property.visual.Cursor;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.property.visual.ScrollBehavior;
@@ -285,6 +286,16 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     public GeneralGroup resize(Resize resize) {
         set(StylePropertyRegistry.RESIZE, resize);
+        return this;
+    }
+
+    /** CSS `cursor` -- inherited, initial `auto`. @see Cursor */
+    public Cursor cursor() {
+        return getValueSave(StylePropertyRegistry.CURSOR);
+    }
+
+    public GeneralGroup cursor(Cursor cursor) {
+        set(StylePropertyRegistry.CURSOR, cursor);
         return this;
     }
 

@@ -611,6 +611,63 @@ P1, P2 and 6.1 underneath it. Big enough to need its own design doc when it come
 
 # Changelog
 
+- **2026-07-29** — **CSS `cursor` + native OS cursors.** Suite 619. A port, plus the first real
+  implementation behind a platform seam.
+  - **`cursor` inherits**, initial `auto`, and `auto` is a *context rule* — "`text` over selectable or
+    editable elements, `default` otherwise" — which lands on the existing `consumesTextInput()` rather
+    than needing a new signal. Both facts came from the spec, not memory.
+  - Full keyword set registered (all 30-odd), on the same reasoning as `text-shadow`: a stylesheet must
+    be able to declare a standard property without a warning, and a curated subset hides its omissions.
+  - Resolution is driven from the **hover diff**, not the property's change listener — the cursor is a
+    function of where the pointer *is*. **Pointer capture pins it for a whole drag for free**, since
+    hover already resolves to the capture target; a resize reverting to `default` when the pointer left
+    the handle would look broken.
+  - Pushed **on change only**: an implementation may allocate a native object per call.
+  - **`UICursorService`** seam (NOOP default, same shape as `UIClipboard`/`UISoundSystem`), because the
+    platforms differ sharply: LWJGL3/GLFW ships the standard resize set, LWJGL2 — the harness *and* MC
+    1.7.10 — has no standard cursors at all and can only build them from pixel data.
+  - **`Lwjgl2CursorService` + `CursorBitmaps` in the harness**, generating 32×32 arrows procedurally
+    rather than shipping PNGs — the shapes are runs and triangles, and code keeps each hotspot next to
+    the geometry defining it. Outline derived from the body so the two can't drift. Three LWJGL2 traps
+    documented at the seam: bottom-up images, hotspot-Y-from-bottom (invisible on a symmetric arrow —
+    only the hotspot would betray it), platform size limits, and the transparency capability bit.
+  - Rejected the drawn-overlay alternative (LDLib's approach): drawing an icon *over* the OS arrow
+    means two cursors on screen.
+  - **Hygiene pass before commit found two real things:**
+    1. The native-cursor cache was keyed by **CSS keyword, not by shape** — 18 keywords map onto 6
+       pictures, so `ew-resize`/`col-resize`/`e-resize`/`w-resize` each allocated their own identical
+       native OS handle. Now keyed by a `Shape` enum: 6 natives, not 17. Capability query hoisted to
+       once per display too.
+    2. A javadoc claimed "a still pointer costs nothing." **False** — resolution runs every frame from
+       `endFrame()`; only the platform call is skipped. Corrected, and the per-frame cost is now
+       justified rather than denied: a stationary pointer can still need a different cursor when the
+       element under it changes (transition finishing, class toggling, content reflowing), which is the
+       same reasoning that makes `beginFrame()` invalidate hover unconditionally.
+  - **`CursorBitmaps` moved to `core/`.** It is integer pixel maths with no platform code, so it passes
+    the import guard trivially — and every LWJGL2 loader needs the same shapes. Each loader now
+    duplicates only the ~90-line adapter, not the artwork. Same split as the engine owning
+    `default.css`: the pictures are ours, presenting them is the platform's.
+  - **Copied to `mc1710`** as `com.crystalgui.platform.Lwjgl2CursorService`. ⚠️ That module is commented
+    out of `settings.gradle.kts` and has no CrystalGUI integration, so **that file has never been
+    compiled** — it is a byte-for-byte sibling of the harness copy, which *is* verified, so the logic is
+    exercised; what is unverified is only whether the module can resolve `core` and LWJGL2. Wiring
+    instructions are in its javadoc.
+- **2026-07-29** — **8-way resize handles.** Suite 610. Four edges + four corners, taken from LDLib2's
+  `WindowDragHelper.ResizeHandle` after the P4.3 prior-art check flagged it.
+  - **Not a divergence, which I expected it to be.** Re-reading CSS UI 4: it says only that the UA
+    "presents a bidirectional resizing mechanism" and never prescribes a single corner grabber.
+    Browsers ship one because theirs is drawn in the scrollbar gutter with nowhere else to go. So the
+    earlier note about diverging here was wrong in our favour.
+  - Which handles exist follows the resizable axes: `horizontal` yields the two side edges and **no
+    corners**, since a corner would imply a vertical resize the mode forbids.
+  - **A leading edge is a move as well as a resize** — growing leftwards keeps the right edge still.
+    That is why the web only offers bottom-right: it is the one handle that never repositions
+    anything. New `UIElement.applyResizeOrigin` seam, which **`Dialog` overrides** — it keeps
+    `left`/`top` in fields and re-clamps every frame, so a handle writing the property directly would
+    have been silently reverted on the next tick.
+  - Edges are invisible but grabbable (a background is not what makes something hittable); corners are
+    tinted and sit above the edge strips they cross so a corner drag wins the hit test.
+  - Three new origin tests verified to fail with the seam disabled before being trusted.
 - **2026-07-29** — **P4.1 + P4.2 done, then hygiene-scanned.** Suite 592.
   - **P4.2 CSS `resize`** — ambient property, `__resizer__` handle, INLINE-origin size writes,
     min/max clamping left to Taffy. Two documented divergences (applies regardless of `overflow`; no
