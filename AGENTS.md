@@ -492,6 +492,9 @@ concrete types:
 | `KeyboardEvent` — `Down`, `Up` | yes |
 | `MouseEvent` — `Click`→`Down`/`Up`, `Scroll`, `Move` | yes |
 | `MouseEvent` — `Enter`, `Leave` | no — but see below |
+| `DragEvent` — `Enter`, `Leave` | no — chain-dispatched, like the mouse pair |
+| `DragEvent` — `Over`, `Drop` | yes |
+| `DragEvent` — `Cancel` | no — goes to the drag source |
 
 > **`Enter`/`Leave` don't bubble, yet one is dispatched to *every* element in the entered/left chain**
 > — outermost-first on entry, innermost-first on exit, exactly as the DOM does. Firing only on the
@@ -519,7 +522,19 @@ One class, merging what older notes split into "input manager" + "focus manager"
   `UITreeTraversal.{firstFocusableIn, lastFocusableIn, previousFocusable, nextFocusable}`.
 - **Press/click state** per button (`ButtonState`, multi-click `detail` counting), and
   `MouseEvent.Up.isWasPressTarget()`.
-- **Drag**, via `UIDragController`.
+- **Pointer capture** (`setPointerCapture`/`releasePointerCapture`) — Pointer Events L3. While
+  captured, hit testing is *substituted*: every pointer event targets the capturing element "as if the
+  pointer is always over" it. Boundary events fall out of that for free — the hover diff sees no
+  change, so nothing enters or leaves and `:hover` stays pinned. Released implicitly on button-up,
+  *after* the up is delivered, which is what lets a drag end anywhere on screen.
+- **Drag**, via `UIDragController` — capture plus an optional payload, drop targeting, an activation
+  threshold, a ghost, and an Escape cancel path. **Not HTML5 drag-and-drop**; the web moved to
+  pointer events, so this does too.
+  - Drop targets get `DragEvent` `Enter`/`Leave`/`Over`/`Drop`/`Cancel`, dispatched to what is
+    *geometrically* under the pointer — which is why `UIWindow.getHoveredElement` is deliberately
+    left free of capture substitution. Conflating the two makes every drop land on the dragged thing.
+  - **Rejection is the default**: a target accepts by calling `preventDefault()` on `DragOver`,
+    re-read every frame and never latched. HTML5 DnD's one good idea, kept.
 - **Keyboard activation** — Space/Enter on a focused element synthesizes the same `MouseEvent.Down`/
   `Up` a real click would. This is why `Button` contains **zero** keyboard code.
 
@@ -776,6 +791,8 @@ The things that are invisible from any single class and expensive to rediscover.
 | A promoted element diverges from its DOM parent in **four** places (Taffy parent, `getX()/getY()`, `localToWorld`, paint+hit entry) — only the cascade stays | Fix three and it draws correctly but clicks land elsewhere, or the reverse |
 | Top-layer stacking is insertion order; `z-index` is irrelevant there (per spec) | Promoted elements stack unpredictably against each other |
 | `Enter`/`Leave` dispatch to every element in the entered/left chain | A container with children never receives hover events at all |
+| `setHitTest(false)` applies to the whole **subtree**, like CSS `pointer-events: none` | A transparent container is transparent everywhere except where its content is — hit testing looks random |
+| While a pointer is captured, no boundary events reach anything else | `:hover` flickers across every element a drag crosses |
 | `beginFrame()` only *invalidates* the hover cache, never reads it | Stuck hover (recompute against the new position labelled as the old) |
 | `replaceOrPutCandidate` no-ops on unchanged values | Widget geometry feedback loops oscillate forever instead of settling |
 | The cascade diff compares `realSlots`, not `computedSlots` | In-flight transitions can't be retargeted or cleaned up |
@@ -888,7 +905,8 @@ com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGro
 com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListenerGroup,
                                ElementRegistry, UIFrameTicker (SPI), UITreeObserver, TopLayer
   .tree                        UITreeTraversal — stateless ancestor/tab-order queries
-  .event                       UIEvent, PropagationPhase, DOMEvent, FocusEvent, KeyboardEvent, MouseEvent
+  .event                       UIEvent, PropagationPhase, DOMEvent, DragEvent, FocusEvent, KeyboardEvent,
+                               MouseEvent
   .input                       UIInputHandler, UIDragController, FocusPolicy, ButtonState
   .elements                    Button, Checkbox, CheckboxGroup, Scroller, ScrollerView, Slider,
                                SplitView, Switch, Tab, TabView, TextField, Tooltip, UIText

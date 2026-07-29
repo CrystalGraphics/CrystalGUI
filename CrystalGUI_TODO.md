@@ -59,24 +59,34 @@ draggable panels) all bottleneck on the **same two missing primitives**. Buildin
 every consumer dramatically cheaper; building them fifth means retrofitting five features.
 
 ```
-P1 Top layer  ──┬──> tooltips, dropdowns, context menus, modals
-                ├──> floating editor panels
-                └··> drag ghost ··┐          (soft — ghost only)
-                                  ▼
-                   P2 drag protocol ──┬──> moving windows
-                                      ├──> resizable elements
-                                      ├──> node graph wiring
-                                      └──> reorderable tabs
+P1 Top layer ✅ ─┬──> tooltips ✅
+                 ├──> dropdowns, context menus, modals   (unbuilt, now cheap)
+                 ├──> floating editor panels
+                 └··> drag ghost ✅ ┐        (soft — ghost only)
+                                    ▼
+                  P2 drag protocol ✅ ──┬──> moving windows      (P4.1)
+                                        ├──> resizable elements  (P4.2)
+                                        ├──> node graph wiring   (6.2)
+                                        └──> reorderable tabs
 ```
 
-That ordering falls out of the code, not taste. `UIElement.drawSubtree` (`UIElement.java:1188`)
-paints depth-first; `paintChildren` pushes ancestor scissor and opacity/mask push FBO layers — so
-**nothing painted during the tree walk can escape its ancestors.**
+**Both primitives now exist.** Everything below them is composition rather than new mechanism —
+which was the whole reason for building them first. P4 is unblocked.
 
-**The P1→P2 edge is soft, though** (dotted above). Only the drag *ghost* needs the top layer; the
-protocol itself — payload, drop targets, enter/leave/over/drop events, threshold — depends on none of
-it. So P2 is not hard-blocked and can start early or run in parallel if P1 stalls. P1 stays first
-because its fan-out is larger, not because P2 is waiting on it.
+That ordering fell out of the code, not taste. `UIElement.drawSubtree` paints depth-first;
+`paintChildren` pushes ancestor scissor and opacity/mask push FBO layers — so **nothing painted
+during the tree walk can escape its ancestors**, which is why a tooltip could not leave a scroller
+and a drag ghost could not draw over one.
+
+**The P1→P2 edge stayed soft** (dotted above): only the ghost needed the top layer, and the protocol
+itself — payload, drop targets, boundary events, threshold — depended on none of it. P1 went first
+for fan-out, not because P2 was blocked on it.
+
+> **In hindsight the ordering paid off twice over**, in a way the plan didn't predict: building the
+> primitives first meant their bugs surfaced against *two* consumers each rather than being baked
+> into five features. Three of P2's four defects were latent engine bugs (hover leaking during drag,
+> `setHitTest` not covering subtrees, `screenToLocal`'s coordinate frame being misread) that the top
+> layer and the ghost merely made visible.
 
 ---
 
@@ -151,7 +161,7 @@ Two more things only implementing revealed:
 <details>
 <summary>Original scoping</summary>
 
-### 1.1 A real top layer
+**1.1 — original scoping**
 
 **Why.** There is no way to paint above everything. `paintOverlay` runs *inside* `drawSubtree`
 (`UIElement.java:1250`), so it is subject to every ancestor's scissor, transform, opacity group and
@@ -305,12 +315,79 @@ shaping is pure CPU, so it works here; only atlas upload and drawing stay harnes
 
 # P2 — General drag protocol
 
-### 2.1 Drag with payload + drop targets · `TODO`
+### 2.1 Drag with payload + drop targets · `DONE` (2026-07-29) — visually confirmed in `cgui-gallery`
 
-**Why.** `UIDragController` is 77 lines serving Slider/Scroller/SplitView — source-driven, one
+**Shipped.** Pointer capture in `UIInputHandler`; `UIDragController` rebuilt on top of it with
+payload, drop targeting, activation threshold, ghost and cancel path; `DragEvent`
+(`Enter`/`Leave`/`Over`/`Drop`/`Cancel`) with listener groups on `UIElement`; a **Drag** page in
+`cgui-gallery`. 30 new tests across `PointerCaptureTest` and `DragPayloadTest`; suite 561.
+
+**Slider, Scroller and SplitView are untouched** and still green — the whole point of extending rather
+than replacing. Their local-space coordinate conversion survived intact.
+
+| Piece | Ported from | Note |
+|---|---|---|
+| Pointer capture | Pointer Events L3 | One field + one hit-test substitution. The spec's boundary rule falls out of its hit-testing rule for free. |
+| Threshold | nothing — libraries only | No web property exists; caller-supplied physical px. |
+| Drop targets | nothing — **ours** | No pointer-model spec for this. Capture routes *events*; the drag layer hit-tests separately. |
+| Accept-by-`preventDefault` | HTML5 DnD's one good idea | Rejection is the default, re-read every frame. |
+
+**Four bugs this work exposed or introduced, all fixed:**
+
+| Bug | Where it came from |
+|---|---|
+| Dragging leaked `:hover` + enter/leave across every element crossed | **Pre-existing**; the P1 hover-chain fix amplified it. Capture fixes it. |
+| Ghost rendered at the origin, tracking the cursor 1:1 | `screenToLocal` returns *absolute logical* coords, not an offset within the element |
+| Drop targeting unreliable — bins lit only sometimes | `setHitTest(false)` skipped only the element, not its subtree; the ghost's text label stayed hittable |
+| Drops fired for targets that never opted in | The `preventDefault()` contract was documented in two places and implemented in none |
+
+> ⚠️ **Testing lesson, recorded because it cost four rounds.** Every one of the above shipped past a
+> green suite, and *three* tests written for them still passed against the broken code — fixtures that
+> dragged from an element at x=0 (where the absolute coordinate and the grab offset are numerically
+> identical), a ghost that was never under the pointer, a single frame when the ghost is positioned
+> *after* the drop hit test and so only lands under the cursor on the next one, and a fixture that
+> never called `preventDefault()` and was therefore asserting the bug.
+> **A test for a positional or protocol bug is not trusted until it has been proven to fail against
+> the old code.** Every one of these now has been.
+
+**Still open, deliberately:** no `gotpointercapture`/`lostpointercapture` events (the drag layer's
+start/end signals cover it; adding a `PointerEvent` hierarchy is a bigger design call than P2 needed),
+and no window-focus-loss cancel — there is no platform hook for it in this build.
+
+<details>
+<summary>Original scoping + research</summary>
+
+**Why.** `UIDragController` was 77 lines serving Slider/Scroller/SplitView — source-driven, one
 listener, single active drag, and explicitly *"NOT general drag-and-drop (no drop-target concept, no
 DRAG_ENTER/LEAVE)"* per its own javadoc. Moving windows, resizable edges, draggable editor panels,
-node-graph wiring and reorderable tabs all need what it doesn't have.
+node-graph wiring and reorderable tabs all need what it didn't have.
+
+### Spec findings (researched 2026-07-29 — do not re-derive)
+
+Source: [Pointer Events Level 3](https://www.w3.org/TR/pointerevents3/). **Not** HTML5 DnD — see the
+standing-principles note. The thing to port is **pointer capture**, which is the primitive every
+pointer-based drag library is built on, and which `UIDragController` is a crude hand-rolled version of.
+
+| Spec says | Our design |
+|---|---|
+| "the capturing target will substitute the normal hit testing result **as if the pointer is always over the capturing target**, and they MUST always be targeted at this element until capture is released" | `getHoveredElement` returns the capture target while captured. This is the whole primitive; drag is capture + payload on top. |
+| "when an element receives the pointer capture all the following events for that pointer are **considered to be inside the boundary of the capturing element**" | Boundary events (enter/leave) must **not** fire to other elements while captured. |
+| `gotpointercapture` / `lostpointercapture`, the latter fired "prior to any subsequent events for the pointer after capture was released" | Natural drag-start / drag-end signals, with defined ordering. |
+| `pointercancel` fires on modal open, device loss, orientation change…, then `pointerout`, then `pointerleave`, and **implicitly releases capture** | The abort path — Escape, window focus loss. Gives cleanup a defined order instead of an ad-hoc reset. |
+| Implicit capture on `pointerdown` for *direct manipulation* devices only | Mouse does not implicitly capture; ours is explicit. |
+
+> **🐛 This exposes a bug in the drag we already have.** `UIInputHandler.endFrame` calls
+> `fireAccumulatedMouseEvents()` unconditionally and nothing consults `isDragging()` — so during a
+> Slider/Scroller/SplitView drag, hover diffing runs normally: `:hover` flickers on and enter/leave
+> fire on every element the cursor crosses. Per spec none of that should happen while captured.
+> **The P1 hover-chain fix amplified it**, since events now reach whole ancestor chains. Fixing this
+> is the first piece of P2, not an extra.
+
+> **Drop targets are ours to design — there is no web spec for them in the pointer model.** HTML5 DnD
+> has `dragover`; pointer-based libraries instead hit-test themselves each move
+> (`document.elementFromPoint`). So capture routes *events* to the drag source, while the drag layer
+> separately hit-tests to find what's underneath. Say so in the code — an undocumented invention
+> reads like a missing port.
 
 **What.** Extend rather than replace — the existing local-space coordinate conversion is correct and
 subtle (raw input is physical px, geometry is logical; deltas are differences of *separately
@@ -329,9 +406,19 @@ modern web app actually does it.
 (`SliderDragTest`, `ScrollerDragTest`, `SplitViewDragTest`), plus a harness scene with a real
 payload drag between two drop targets.
 
+</details>
+
 ---
 
-# P3 — Prove the v0 story
+# P3 — Prove the v0 story · `DEFERRED TO LAST` (2026-07-29)
+
+> **Numbering kept, running order changed.** P4 → P5 → P6 now come first; P3 runs at the end.
+> Deliberate call, not drift: P3 *validates* work rather than enabling any of it, so nothing
+> downstream is waiting on it, and both items age well — the RPC soak gets more valuable once there
+> are richer trees to send, and the mc1201 question is a product call that hasn't come due.
+>
+> The one thing this trades away: v0's shipping story stays unproven end-to-end for longer. Worth
+> saying out loud so it's a choice rather than a surprise later.
 
 ### 3.1 Two-session RPC soak in the harness · `TODO`
 
@@ -428,6 +515,65 @@ P1, P2 and 6.1 underneath it. Big enough to need its own design doc when it come
 
 # Changelog
 
+- **2026-07-29** — **P2 hygiene scan.** Suite 561. Three findings, one of them the worst kind:
+  1. **The drop opt-in was documented in two places and implemented in none.** `DragEvent.Over`'s
+     javadoc and `UIElement.onDragOver`'s both said `preventDefault()` accepts a drop —
+     `isDefaultPrevented()` was never read, so every drop fired regardless. A false documented
+     contract is worse than a missing feature, because callers build on it. Now implemented and
+     re-read every frame (never latched — a target can stop accepting), with `isDropAccepted()`
+     exposed and three tests.
+  2. **`startDrag` while a drag was live overwrote the state outright** — the old listener never
+     heard it ended, its target stayed highlighted, its ghost stayed promoted. Now cancels first, so
+     the displaced drag gets the same defined teardown Escape gives it.
+  3. **The enter/leave chain walk was written twice** — once for mouse, once for drag — and the
+     *ordering is the contract*. Extracted to `UITreeTraversal.forEachEntered`/`forEachLeft`; two
+     copies of a subtle order is how they drift apart.
+  Docs: `AGENTS.md` input stack (pointer capture + the drag protocol), `DragEvent` rows in the events
+  table, package map, and two new load-bearing invariants.
+- **2026-07-29** — **P2 steps 1–4.** Suite 550. Pointer capture, drag migration, payload + drop
+  targets, threshold, cancel path.
+  - **Pointer capture (Pointer Events L3)** in `UIInputHandler`. One field and one hit-test
+    substitution, not a second mechanism — because the hover cache resolves to the capture target for
+    the whole capture, the spec's boundary rule ("considered to be inside the boundary of the
+    capturing element") falls out of its hit-testing rule for free.
+  - **Fixed the pre-existing bug** it exposed: dragging leaked `:hover` and enter/leave to every
+    element the cursor crossed. Log for one drag across one element went from
+    `[leave:source, enter:other, leave:other, enter:source]` to empty.
+  - **`DragEvent`** (`Enter`/`Leave`/`Over`/`Drop`/`Cancel`) dispatched to what is *geometrically*
+    under the pointer — which is why `UIWindow.getHoveredElement` was deliberately left free of
+    capture substitution. Conflating the two would make every drop land on the thing being dragged.
+  - Kept HTML5 DnD's one good idea: `preventDefault()` on `Over` is how a target accepts a drop, so an
+    element that has never heard of dragging cannot silently become a drop target.
+  - **Threshold** (physical px, caller-supplied, conventional default) so a click on a draggable
+    element stays a click. Positional drags — Slider/Scroller/SplitView — keep zero threshold and are
+    otherwise completely unchanged.
+  - **Cancel path** on Escape, modelled on `pointercancel`: releases capture, tells the stranded drop
+    target the drag left it, and calls `onDragCancel` rather than `onDragEnd`.
+  - **Drag ghost** — a plain caller-owned `UIElement`, deliberately not a `DragGhost` widget: the
+    input layer has no business importing `ui.elements`, and a ghost is just "an element that follows
+    the cursor". Promoted into the top layer on activation (drag's one real P1 dependency),
+    `display: none` while idle so it is safe to park inside the source, positioned by the **grab
+    offset** rather than centred on the cursor.
+  - **`Drag` page in `cgui-gallery`** — chips, bins, ghost, highlight-on-enter, Escape to cancel.
+  - **Visual-pass fixes** (three, all found by looking at it rather than by tests):
+    1. Ghost rendered at the origin and tracked the cursor 1:1 — `screenToLocal` returns *absolute
+       logical* coordinates, not an offset within the element, so subtracting `startX` was wrong. Now
+       uses a grab offset captured at drag start.
+    2. Ghosts rendered in-flow before the first drag; the controller only learns about one at
+       `setGhost` (mouse-down), so the scene's ghost class now starts `display: none`.
+    3. **`setHitTest(false)` now applies to the whole subtree**, matching CSS `pointer-events: none`.
+       It previously skipped only the element itself, and children are tested *before* the parent's
+       flag — so a pointer-transparent container with content was transparent everywhere except where
+       its content was. Every prior user of the flag was a childless leaf, which is why it hid. It
+       surfaced as drop targets lighting up only sometimes.
+
+  > **Testing lesson, recorded because it cost three rounds.** Every one of these shipped past a green
+  > suite, and two of the tests written *for* them still passed against the broken code — one because
+  > the fixture dragged from an element at x=0 (where the absolute coordinate and the grab offset are
+  > numerically identical), the other because the ghost was never actually under the pointer, and
+  > because a ghost is positioned *after* the drop hit test within a tick, so it only sits under the
+  > cursor from the second frame. **A test for a positional bug must be proven to fail against the old
+  > code before it is trusted.** Both now are.
 - **2026-07-29** — **P1 review + ownership cleanup.** Suite 531. Structural, not cosmetic:
   - **`UIElement` imported `ui.elements.Tooltip`** — an inverted dependency; core DOM knowing about a
     widget, when every widget depends on `UIElement`. Replaced by `Tooltip.attach(anchor, text)`,
