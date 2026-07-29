@@ -6,35 +6,88 @@ import com.crystalgui.ui.input.UIDragController;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
- * The grab handle that implements {@code resize:} — an internal child added to any element whose
- * {@code resize} is not {@link Resize#NONE}.
+ * One grab handle implementing {@code resize:}. An element whose {@code resize} is not
+ * {@link Resize#NONE} gets a set of these as internal children — see {@link Handle}.
  *
  * <p>Engine structure rather than a widget, which is why it lives in {@code ui/} and not
  * {@code ui.elements/}: nobody constructs one, it has no public API, and it exists only because a
- * style property said so. It is the same relationship {@code __thumb__} has to {@code Slider}, except
- * the trigger is CSS rather than a constructor.</p>
+ * style property said so. Same relationship {@code __thumb__} has to {@code Slider}, except the
+ * trigger is CSS rather than a constructor.</p>
  *
- * <p>The spec leaves the handle's appearance and position entirely to the UA, so both come from
- * {@code default.css} via the {@code __resizer__} class — no pixel values here, per the usual rule.</p>
+ * <h3>Eight handles is not a divergence</h3>
+ * <p>CSS UI 4 says only that the UA "presents a bidirectional resizing mechanism" — it never
+ * prescribes a single bottom-right grabber. Browsers ship one because theirs lives in the scrollbar
+ * corner and has nowhere else to go; we draw our own, so all four edges and all four corners are
+ * available. LDLib2's {@code WindowDragHelper.ResizeHandle} offers the same eight, which is where the
+ * idea came from.</p>
+ *
+ * <p>Position and appearance are left entirely to {@code default.css} via the per-handle classes —
+ * no pixel values here, per the usual rule.</p>
  */
 final class UIResizer extends UIElement {
 
     static final String RESIZER_CLASS = "__resizer__";
 
-    /** Size at the moment the drag began. Resizing has to accumulate from there rather than from the
-     * live box: the box changes as we resize it, so reading it each frame would compound the delta
-     * and the element would race away from the cursor. */
-    private float startWidth, startHeight;
+    /**
+     * Which edges a handle moves.
+     *
+     * <p>{@code dx}/{@code dy} are −1, 0 or +1: the sign says which edge follows the pointer, and a
+     * <b>negative</b> one means the opposite edge stays put — so the element has to move as well as
+     * resize. That is the entire reason {@link UIElement#applyResizeOrigin} exists, and it is also
+     * why the web only ever offers the bottom-right corner: that is the one handle that never needs
+     * to reposition anything.</p>
+     */
+    enum Handle {
+        TOP(0, -1), BOTTOM(0, 1), LEFT(-1, 0), RIGHT(1, 0),
+        TOP_LEFT(-1, -1), TOP_RIGHT(1, -1), BOTTOM_LEFT(-1, 1), BOTTOM_RIGHT(1, 1);
 
-    UIResizer() {
+        final int dx, dy;
+
+        Handle(int dx, int dy) {
+            this.dx = dx;
+            this.dy = dy;
+        }
+
+        /** Lower-case, dash-separated: {@code TOP_LEFT} → {@code __resizer-top-left__}. */
+        String styleClass() {
+            return "__resizer-" + name().toLowerCase().replace('_', '-') + "__";
+        }
+
+        /**
+         * A handle exists only if <em>every</em> axis it touches is resizable. So
+         * {@code resize: horizontal} yields the two side edges and no corners — a corner would imply
+         * a vertical resize the mode forbids.
+         */
+        boolean appliesTo(Resize mode) {
+            if (!mode.isResizable()) return false;
+            if (dx != 0 && !mode.allowsWidth()) return false;
+            return dy == 0 || mode.allowsHeight();
+        }
+    }
+
+    private final Handle handle;
+
+    /** Box at the moment the drag began. Resizing accumulates from here rather than from the live
+     * box: the box changes as we resize it, so reading it each frame would compound the delta and the
+     * element would race away from the cursor. */
+    private float startWidth, startHeight, startLeft, startTop;
+
+    UIResizer(Handle handle) {
+        this.handle = handle;
         addClass(RESIZER_CLASS);
-        // Out of flow: the handle overlays its parent's corner and must not consume a slot in the
-        // parent's layout, or adding `resize:` to an element would visibly reflow its content.
+        addClass(handle.styleClass());
+
+        // Out of flow: handles overlay their parent's edges and must not consume a slot in its
+        // layout, or adding `resize:` to an element would visibly reflow its content.
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE));
 
         onMouseDown.attachListener((el, event) -> beginResize(event.getPosition().x(), event.getPosition().y()),
                 false, false);
+    }
+
+    Handle handle() {
+        return handle;
     }
 
     private void beginResize(float pointerX, float pointerY) {
@@ -43,6 +96,8 @@ final class UIResizer extends UIElement {
 
         startWidth = target.getRuntimeCache().getWidth();
         startHeight = target.getRuntimeCache().getHeight();
+        startLeft = target.resizeOriginLeft();
+        startTop = target.resizeOriginTop();
 
         UIDragController drag = target.getAttachedWindow().getInputHandler().getDragController();
         // Positional drag: no payload, no drop targets, and no activation threshold — a resize must
@@ -52,10 +107,12 @@ final class UIResizer extends UIElement {
 
     private void applyResize(UIElement target, float deltaX, float deltaY) {
         Resize mode = target.getStyle().getGeneralGroup().resize();
-        if (!mode.isResizable()) return;
+        if (!handle.appliesTo(mode)) return;
 
-        final float width = startWidth + deltaX;
-        final float height = startHeight + deltaY;
+        // A trailing edge grows by the drag; a leading edge grows by its negation and moves the
+        // origin to match, so the opposite edge stays where it was.
+        final float width = startWidth + handle.dx * deltaX;
+        final float height = startHeight + handle.dy * deltaY;
 
         // INLINE origin, NOT IMPORTANT. The spec is explicit that a user resize writes the style
         // attribute "without !important", so an author's !important rule still wins. Everything else
@@ -72,9 +129,14 @@ final class UIResizer extends UIElement {
         // constraints on a resize, and Taffy already applies them. Clamping again would double-apply
         // them and desync from whatever the cascade currently says.
         StyleGroup.inlinePipeline(target.getStyle().getLayoutGroup(), l -> {
-            if (mode.allowsWidth()) l.width(Math.max(0f, width));
-            if (mode.allowsHeight()) l.height(Math.max(0f, height));
+            if (handle.dx != 0) l.width(Math.max(0f, width));
+            if (handle.dy != 0) l.height(Math.max(0f, height));
         });
-    }
 
+        if (handle.dx < 0 || handle.dy < 0) {
+            target.applyResizeOrigin(
+                    handle.dx < 0 ? startLeft + deltaX : target.resizeOriginLeft(),
+                    handle.dy < 0 ? startTop + deltaY : target.resizeOriginTop());
+        }
+    }
 }

@@ -9,6 +9,7 @@ import com.crystalgui.core.input.SystemInput.Keyboard;
 import com.crystalgui.core.input.SystemInput.Mouse;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.core.input.keyboard.Modifiers;
+import com.crystalgui.style.property.visual.Cursor;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.tree.UITreeTraversal;
 import com.crystalgui.ui.UIWindow;
@@ -118,6 +119,8 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         if (scrollDelta != 0)
             emitMouseScroll(currentHover);
 
+        updateCursor(currentHover);
+
         // Snapshot for next frame's diff — must happen after use above, and must be a plain field
         // write here (not a read of the live hoverFrameData cache at the top of the next frame),
         // otherwise a mouse-move event that arrives before beginFrame() next frame would invalidate
@@ -129,6 +132,59 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
      * must not retain it across frames. */
     public ReadOnlyVec2f pointerPosition() {
         return hoverFrameData.eventPosition();
+    }
+
+    // ── Cursor ──────────────────────────────────────────────────────────────
+
+    /** Last cursor handed to the platform, so an unchanged one is not re-sent. */
+    private Cursor lastCursor = Cursor.DEFAULT;
+
+    /**
+     * Resolves the CSS {@code cursor} for whatever the pointer is over and pushes it to the platform.
+     *
+     * <p>Driven from the hover diff rather than from the property's own change listener: the cursor is
+     * a function of <em>where the pointer is</em>, so reacting to the property would fire for elements
+     * nowhere near it and still miss the case where the pointer moves onto an element whose value
+     * never changed.</p>
+     *
+     * <p><b>Pointer capture is handled for free.</b> While captured, hover resolves to the capturing
+     * element, so a resize keeps its {@code ew-resize} cursor for the whole drag even as the pointer
+     * travels across unrelated elements — which is exactly what a resize should do, and would need
+     * special-casing under any other arrangement.</p>
+     *
+     * <p><b>Resolution runs every frame; only the platform call is skipped.</b> That is deliberate, not
+     * an oversight: a stationary pointer can still need a different cursor because the element under it
+     * changed — a transition finishing, a class toggling, content reflowing beneath it. It is the same
+     * reasoning that makes {@link #beginFrame()} invalidate the hover cache unconditionally. The cost
+     * is one cascade read and an enum compare, against a platform call that may allocate a native
+     * cursor object, which is the one worth guarding.</p>
+     */
+    private void updateCursor(@Nullable UIElement hovered) {
+        Cursor resolved = resolveCursor(hovered);
+        if (resolved == lastCursor) return;
+        lastCursor = resolved;
+        CrystalGuiCore.getCursorService().setCursor(resolved);
+    }
+
+    /**
+     * The spec's {@code auto} rule: "behaves as {@code text} over selectable text or editable
+     * elements, and {@code default} otherwise".
+     *
+     * <p>{@code consumesTextInput()} is the engine's existing notion of "editable", already overridden
+     * by {@code TextField} — so the rule lands on a signal that exists rather than needing a new one.
+     * Inheritance itself needs no work here: {@code cursor} is an inheritable property, so the cascade
+     * has already resolved what a nested element should show.</p>
+     */
+    private Cursor resolveCursor(@Nullable UIElement hovered) {
+        if (hovered == null) return Cursor.DEFAULT;
+        Cursor declared = hovered.getStyle().getGeneralGroup().cursor();
+        if (!declared.needsResolution()) return declared;
+        return hovered.consumesTextInput() ? Cursor.TEXT : Cursor.DEFAULT;
+    }
+
+    /** The cursor currently being presented. Resolved, so never {@link Cursor#AUTO}. */
+    public Cursor currentCursor() {
+        return lastCursor;
     }
 
     // ── Pointer capture ─────────────────────────────────────────────────────

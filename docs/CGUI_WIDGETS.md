@@ -458,6 +458,12 @@ panel.generalStyle(g -> g.resize(Resize.BOTH));   // or in CSS: resize: both;
   code-driven geometry write in this engine uses `IMPORTANT`; this is the deliberate exception.
 - **No clamping in the resizer**: `min-width`/`max-width`/`min-height`/`max-height` are the spec's only
   constraints and Taffy already applies them.
+- **Eight handles** — four edges, four corners. *Not* a divergence: the spec says only that the UA
+  "presents a bidirectional resizing mechanism" and never prescribes one corner grabber. Which handles
+  exist follows the resizable axes, so `horizontal` gets the two side edges and no corners.
+- **A leading edge moves the box too** — growing leftwards keeps the right edge still, which CSS's
+  single bottom-right grabber exists to avoid ever needing. `Dialog` overrides `applyResizeOrigin` so
+  its own clamped position stays the source of truth rather than being overwritten each frame.
 - **Divergences**: applies regardless of `overflow` (browsers restrict it to scroll containers, half a
   rendering artifact of the grabber living in the scrollbar gutter); and no `block`/`inline` values,
   which are writing-mode-relative and would be silent aliases here.

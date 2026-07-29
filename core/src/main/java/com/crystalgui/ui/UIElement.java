@@ -14,6 +14,7 @@ import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiRoundedRect;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.ElementStyle;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -662,9 +663,10 @@ public class UIElement {
 
     // ── Resize ───────────────────────────────────────────────────────────────
 
-    /** The {@code __resizer__} handle, present only while {@code resize} is not {@code none}. */
-    @Nullable
-    private UIResizer resizer;
+    /** The resize handles, present only while {@code resize} is not {@code none}. Which ones exist
+     * depends on the axes the mode allows -- see {@link UIResizer.Handle}. */
+    private final List<UIResizer> resizers = new ArrayList<>();
+    private Resize resizeMode = Resize.NONE;
 
     /**
      * Adds or removes the resize handle as the {@code resize} property changes.
@@ -678,16 +680,45 @@ public class UIElement {
      * {@code StylePropertyRegistry.RESIZE}'s change listener.</p>
      */
     public void onResizeModeChanged(@Nullable Resize mode) {
-        boolean wanted = mode != null && mode.isResizable();
-        if (wanted == (resizer != null)) return;
+        Resize wanted = mode == null ? Resize.NONE : mode;
+        if (wanted == resizeMode) return;
+        resizeMode = wanted;
 
-        if (wanted) {
-            resizer = new UIResizer();
-            addInternalChild(resizer);
-        } else {
-            removeInternalChild(resizer);
-            resizer = null;
+        for (UIResizer handle : resizers) removeInternalChild(handle);
+        resizers.clear();
+
+        for (UIResizer.Handle h : UIResizer.Handle.values()) {
+            if (!h.appliesTo(wanted)) continue;
+            UIResizer handle = new UIResizer(h);
+            resizers.add(handle);
+            addInternalChild(handle);
         }
+    }
+
+    /** Origin offset written by a top/left resize handle. Plain elements track it here; see
+     * {@link #applyResizeOrigin}. */
+    private float resizeOriginLeft, resizeOriginTop;
+
+    protected float resizeOriginLeft() { return resizeOriginLeft; }
+    protected float resizeOriginTop() { return resizeOriginTop; }
+
+    /**
+     * Moves this element's origin because a {@code top}/{@code left} resize handle was dragged.
+     *
+     * <p>Growing an element leftwards keeps its right edge still, which is a <em>move</em> as well as
+     * a resize. CSS's single bottom-right grabber never needs this, which is part of why it is the
+     * only one the web offers — but the spec only mandates "a bidirectional resizing mechanism", and
+     * leaves the mechanism to the UA.</p>
+     *
+     * <p>Overridable because an element may already own its position: {@code Dialog} keeps
+     * {@code left}/{@code top} in fields and re-clamps them every frame, so a handle writing the
+     * property directly would be silently overwritten on the next tick. Routing through this lets it
+     * update its own notion of where it is instead.</p>
+     */
+    protected void applyResizeOrigin(float left, float top) {
+        resizeOriginLeft = left;
+        resizeOriginTop = top;
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.left(left).top(top));
     }
 
     // ── Top layer ────────────────────────────────────────────────────────────

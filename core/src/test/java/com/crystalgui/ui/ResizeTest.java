@@ -51,11 +51,28 @@ public class ResizeTest extends UiTestBase {
         window.calculateLayout();
     }
 
-    private UIElement handleOf(UIElement target) {
+    /** Any handle, for existence checks. There are up to eight now — see {@link #handleOf}. */
+    private UIElement anyHandleOf(UIElement target) {
         for (UIElement child : target.getChildren()) {
             if (child.hasClass("__resizer__")) return child;
         }
         return null;
+    }
+
+    /** A specific handle, by edge — {@code "bottom-right"}, {@code "left"}, and so on. Selecting
+     * explicitly matters: iteration order is enum order, so "the first handle" is {@code top}, and a
+     * test that grabbed it while meaning the corner would silently resize the wrong axis. */
+    private UIElement handleOf(UIElement target, String edge) {
+        for (UIElement child : target.getChildren()) {
+            if (child.hasClass("__resizer-" + edge + "__")) return child;
+        }
+        return null;
+    }
+
+    private int handleCountOf(UIElement target) {
+        int n = 0;
+        for (UIElement child : target.getChildren()) if (child.hasClass("__resizer__")) n++;
+        return n;
     }
 
     private void press(float x, float y) {
@@ -75,7 +92,13 @@ public class ResizeTest extends UiTestBase {
     /** Grabs the handle and drags by a logical delta. Sizes the handle explicitly so the fixture does
      * not depend on default.css's chosen grabber size. */
     private void dragHandleBy(float dx, float dy) {
-        UIElement handle = handleOf(panel);
+        dragHandleBy("bottom-right", dx, dy);
+    }
+
+    private void dragHandleBy(String edge, float dx, float dy) {
+        UIElement handle = handleOf(panel, edge);
+        assertNotNull("no `" + edge + "` handle on this panel", handle);
+        // Sized explicitly so the fixture does not depend on default.css's chosen handle thickness.
         handle.layout(l -> l.width(10).height(10));
         settle();
 
@@ -91,7 +114,7 @@ public class ResizeTest extends UiTestBase {
     @Test
     public void noHandleUntilResizeIsSet() {
         build(Resize.NONE);
-        assertNull("resize: none must cost nothing structurally", handleOf(panel));
+        assertNull("resize: none must cost nothing structurally", anyHandleOf(panel));
     }
 
     @Test
@@ -100,12 +123,12 @@ public class ResizeTest extends UiTestBase {
 
         panel.generalStyle(g -> g.resize(Resize.BOTH));
         settle();
-        assertNotNull("the handle appears from the cascade, not from constructing a widget",
-                handleOf(panel));
+        assertNotNull("the handles appear from the cascade, not from constructing a widget",
+                anyHandleOf(panel));
 
         panel.generalStyle(g -> g.resize(Resize.NONE));
         settle();
-        assertNull(handleOf(panel));
+        assertNull(anyHandleOf(panel));
     }
 
     /** The handle is internal, so it is invisible to public traversal and to the codec — like every
@@ -113,7 +136,7 @@ public class ResizeTest extends UiTestBase {
     @Test
     public void theHandleIsAnInternalChild() {
         build(Resize.BOTH);
-        assertTrue(handleOf(panel).isInternalUI());
+        assertTrue(anyHandleOf(panel).isInternalUI());
     }
 
     /** Out of flow, or adding `resize:` to an element would visibly reflow its content. */
@@ -143,11 +166,14 @@ public class ResizeTest extends UiTestBase {
         assertEquals(100f, panel.getRuntimeCache().getHeight(), 0.5f);
     }
 
+    /** {@code horizontal} offers the two side edges and <b>no corners</b> — a corner would imply a
+     * vertical resize the mode forbids. */
     @Test
     public void horizontalOnlyLeavesHeightAlone() {
         build(Resize.HORIZONTAL);
 
-        dragHandleBy(30f, 20f);
+        assertNull("a corner handle would imply a vertical resize", handleOf(panel, "bottom-right"));
+        dragHandleBy("right", 30f, 20f);
 
         assertEquals(130f, panel.getRuntimeCache().getWidth(), 0.5f);
         assertEquals("height must be untouched", 80f, panel.getRuntimeCache().getHeight(), 0.5f);
@@ -157,10 +183,107 @@ public class ResizeTest extends UiTestBase {
     public void verticalOnlyLeavesWidthAlone() {
         build(Resize.VERTICAL);
 
-        dragHandleBy(30f, 20f);
+        assertNull("a corner handle would imply a horizontal resize", handleOf(panel, "bottom-right"));
+        dragHandleBy("bottom", 30f, 20f);
 
         assertEquals("width must be untouched", 100f, panel.getRuntimeCache().getWidth(), 0.5f);
         assertEquals(100f, panel.getRuntimeCache().getHeight(), 0.5f);
+    }
+
+    // ── Eight handles ───────────────────────────────────────────────────────
+
+    /**
+     * Which handles exist is a function of the axes the mode allows.
+     *
+     * <p>Eight is not a divergence from CSS UI 4: the spec says only that the UA "presents a
+     * bidirectional resizing mechanism" and never prescribes a single corner grabber. Browsers ship
+     * one because theirs is drawn in the scrollbar gutter with nowhere else to go.</p>
+     */
+    @Test
+    public void theHandleSetFollowsTheResizableAxes() {
+        build(Resize.BOTH);
+        assertEquals("four edges and four corners", 8, handleCountOf(panel));
+
+        build(Resize.HORIZONTAL);
+        assertEquals("side edges only", 2, handleCountOf(panel));
+        assertNotNull(handleOf(panel, "left"));
+        assertNotNull(handleOf(panel, "right"));
+
+        build(Resize.VERTICAL);
+        assertEquals("top and bottom edges only", 2, handleCountOf(panel));
+        assertNotNull(handleOf(panel, "top"));
+        assertNotNull(handleOf(panel, "bottom"));
+
+        build(Resize.NONE);
+        assertEquals(0, handleCountOf(panel));
+    }
+
+    /** A trailing edge grows by the drag and leaves the origin alone. */
+    @Test
+    public void draggingTheRightEdgeGrowsWidthOnly() {
+        build(Resize.BOTH);
+
+        dragHandleBy("right", 40f, 0f);
+
+        assertEquals(140f, panel.getRuntimeCache().getWidth(), 0.5f);
+        assertEquals("height untouched by a side edge", 80f, panel.getRuntimeCache().getHeight(), 0.5f);
+    }
+
+    @Test
+    public void draggingTheBottomEdgeGrowsHeightOnly() {
+        build(Resize.BOTH);
+
+        dragHandleBy("bottom", 0f, 25f);
+
+        assertEquals("width untouched by a horizontal edge", 100f, panel.getRuntimeCache().getWidth(), 0.5f);
+        assertEquals(105f, panel.getRuntimeCache().getHeight(), 0.5f);
+    }
+
+    /**
+     * <b>A leading edge is a move as well as a resize.</b> Dragging the left edge leftwards grows the
+     * element <em>and</em> shifts its origin by the same amount, so the right edge stays put. This is
+     * the case CSS's single bottom-right grabber exists to avoid ever needing.
+     */
+    @Test
+    public void draggingTheLeftEdgeGrowsAwayFromAStationaryRightEdge() {
+        build(Resize.BOTH);
+        float rightEdgeBefore = panel.getRuntimeCache().getX() + panel.getRuntimeCache().getWidth();
+
+        dragHandleBy("left", -30f, 0f);
+        settle();
+
+        assertEquals("width grows by the drag's negation", 130f, panel.getRuntimeCache().getWidth(), 0.5f);
+        assertEquals("the opposite edge must not move", rightEdgeBefore,
+                panel.getRuntimeCache().getX() + panel.getRuntimeCache().getWidth(), 0.5f);
+    }
+
+    @Test
+    public void draggingTheTopEdgeGrowsAwayFromAStationaryBottomEdge() {
+        build(Resize.BOTH);
+        float bottomBefore = panel.getRuntimeCache().getY() + panel.getRuntimeCache().getHeight();
+
+        dragHandleBy("top", 0f, -20f);
+        settle();
+
+        assertEquals(100f, panel.getRuntimeCache().getHeight(), 0.5f);
+        assertEquals("the opposite edge must not move", bottomBefore,
+                panel.getRuntimeCache().getY() + panel.getRuntimeCache().getHeight(), 0.5f);
+    }
+
+    /** A corner moves both axes at once, and a leading corner moves the origin on both. */
+    @Test
+    public void draggingTheTopLeftCornerResizesAndMovesBothAxes() {
+        build(Resize.BOTH);
+        float rightBefore = panel.getRuntimeCache().getX() + panel.getRuntimeCache().getWidth();
+        float bottomBefore = panel.getRuntimeCache().getY() + panel.getRuntimeCache().getHeight();
+
+        dragHandleBy("top-left", -20f, -10f);
+        settle();
+
+        assertEquals(120f, panel.getRuntimeCache().getWidth(), 0.5f);
+        assertEquals(90f, panel.getRuntimeCache().getHeight(), 0.5f);
+        assertEquals(rightBefore, panel.getRuntimeCache().getX() + panel.getRuntimeCache().getWidth(), 0.5f);
+        assertEquals(bottomBefore, panel.getRuntimeCache().getY() + panel.getRuntimeCache().getHeight(), 0.5f);
     }
 
     /** Resizing accumulates from the size at grab time, not from the live box — reading the live box
@@ -168,7 +291,7 @@ public class ResizeTest extends UiTestBase {
     @Test
     public void resizingIsRelativeToTheSizeAtGrabTimeNotCompounded() {
         build(Resize.BOTH);
-        UIElement handle = handleOf(panel);
+        UIElement handle = handleOf(panel, "bottom-right");
         handle.layout(l -> l.width(10).height(10));
         settle();
 
