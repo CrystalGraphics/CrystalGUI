@@ -12,6 +12,7 @@ import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
+import dev.vfyjxf.taffy.style.TaffyDimension;
 
 /**
  * Plain-text element — CrystalGUI's first concrete widget. Renders {@link #text} using
@@ -174,7 +175,13 @@ public final class UIText extends UIElement {
         boolean selfSize = selfSizesWidth == null || selfSizesWidth;
 
         float contentWidth = layout.contentBoxWidth();
-        float maxWidthForWrap = selfSize ? 0f : contentWidth; // 0f == CrystalGraphics' documented "unbounded" convention
+        // 0f == CrystalGraphics' documented "unbounded" convention.
+        // Self-sizing is NOT the same as unbounded: `width: auto` with a `max-width` is CSS
+        // shrink-to-fit, which wraps at the max. Without this a max-width could only ever clip the
+        // BOX — the text kept its full unwrapped run and spilled straight out of it, which is what a
+        // max-width'd tooltip did (and it then defeated edge-clamping too, since placement was
+        // reasoning about a box far narrower than the glyphs actually drawn).
+        float maxWidthForWrap = selfSize ? selfMaxWidthForWrap() : contentWidth;
         CgTextLayout textLayout = ensureShaped().layout(maxWidthForWrap, 0f); // 0f maxHeight — see class javadoc / paintOverlay
 
         float chromeWidth = getRuntimeCache().getWidth() - contentWidth;         // border+padding this element itself owns (normally 0)
@@ -186,6 +193,32 @@ public final class UIText extends UIElement {
             }
             l.height(textLayout.totalHeight() + chromeHeight);
         });
+    }
+
+    /**
+     * This element's own {@code max-width} as a wrap bound, or {@code 0f} (unbounded) when it has
+     * none.
+     *
+     * <p>Only a definite {@code length} counts. A percentage would have to resolve against the
+     * containing block, and if this element is self-sizing then by definition no ancestor has given
+     * it a definite width to resolve against — so honouring one here would be inventing a number.
+     * {@code auto}, {@code min-content} and friends are likewise not bounds we can hand the shaper.</p>
+     *
+     * <p>The bound is the <em>content</em> box, so this element's own border and padding come off
+     * first — otherwise a padded text element wraps that much too late and overflows by exactly its
+     * horizontal padding.</p>
+     */
+    private float selfMaxWidthForWrap() {
+        // Read from the LIVE Taffy style, not from the cascade. It is the same value the layout pass
+        // itself uses, so the wrap bound cannot drift out of agreement with the box that gets
+        // measured — which is the failure mode this whole method exists to prevent.
+        TaffyDimension maxWidth = getStyle().getTaffyBridge().style.maxSize.width;
+        if (maxWidth == null || maxWidth.getType() != TaffyDimension.Type.LENGTH) return 0f;
+
+        var layout = getTaffyLayout();
+        float chrome = layout.border().left + layout.border().right
+                + layout.padding().left + layout.padding().right;
+        return Math.max(0f, maxWidth.getValue() - chrome);
     }
 
     @Override

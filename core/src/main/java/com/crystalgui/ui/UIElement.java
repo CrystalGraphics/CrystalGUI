@@ -69,6 +69,9 @@ public class UIElement {
     @Getter
     private final List<UIElement> children = new ArrayList<>();
 
+    /** @see #isInTopLayer() — owned by {@link UIWindow}, which is the only thing allowed to set it. */
+    boolean inTopLayer = false;
+
     @Getter
     private String id = "";
     @Getter
@@ -460,7 +463,7 @@ public class UIElement {
     /** Adds {@code child} bypassing the {@link #acceptsPublicChildren()} guard, then marks it internal.
      * Composite widgets call this (never {@code addChild}/{@code addChildAt}) to build their own
      * privately-owned structural children. */
-    protected final UIElement addInternalChild(UIElement child) {
+    public final UIElement addInternalChild(UIElement child) {
         addChildAtInternal(child, children.size());
         child.markAsInternal();
         return this;
@@ -507,7 +510,7 @@ public class UIElement {
     /** Removes a previously-{@link #markAsInternal() internal} child that this element itself owns,
      * bypassing the internal-child guard in {@link #removeChild}. Clears the child's internal flag on
      * the way out, since it's no longer owned by this widget once detached. */
-    protected final boolean removeInternalChild(UIElement child) {
+    public final boolean removeInternalChild(UIElement child) {
         if (child == null || !hasChild(child)) return false;
         boolean removed = removeChildInternal(child);
         if (removed) child.isInternalUI = false;
@@ -638,6 +641,53 @@ public class UIElement {
         runtimeCache.resetPoseCache();
         for (UIElement child : children) child.invalidatePoseCachesRecursively();
     }
+
+    // ── Top layer ────────────────────────────────────────────────────────────
+
+    /**
+     * Whether this element is in its window's <b>top layer</b> — CSS Position 4 §top-layer, the
+     * machinery behind {@code <dialog>} and popovers. A promoted element paints after the entire main
+     * tree and therefore "cannot be clipped by anything in the document, or obscured by anything
+     * except elements later in the top layer".
+     *
+     * <p>Promotion keeps the element exactly where it is in the DOM — <b>the cascade must not
+     * change</b>, since inheritance and selector matching are both by tree position. What changes is
+     * every <em>positional</em> relationship, and there are four of them, which is the part worth
+     * knowing before touching any of this:</p>
+     *
+     * <ol>
+     *   <li><b>Taffy parent</b> → the root node, making the root box the containing block (the spec's
+     *       "initial containing block"). {@code UIWindow.addToTopLayer} moves it.</li>
+     *   <li><b>{@link RuntimeCache#getX()}/{@link RuntimeCache#getY()}</b> → accumulate from the root
+     *       instead of the DOM parent; the Taffy location is already root-relative, so adding the DOM
+     *       parent's origin on top would double-count it.</li>
+     *   <li><b>{@link RuntimeCache#localToWorld}</b> → seeded from the window's root transform instead
+     *       of chaining the DOM parent's matrix, so no ancestor {@code transform} or scroll offset
+     *       leaks in. Separate code path from (2) — one feeds hit-testing, the other paint geometry —
+     *       so both must be handled or the two silently disagree.</li>
+     *   <li><b>Paint and hit-test entry</b> → {@code UIWindow}'s top-layer pass, and skipped by the
+     *       normal {@code paintChildren} walk so it is not drawn twice.</li>
+     * </ol>
+     */
+    public final boolean isInTopLayer() {
+        return inTopLayer;
+    }
+
+    /** Promotes this element into its window's top layer, or raises it if already there.
+     * Convenience for {@link TopLayer#add}; requires an attached window. */
+    public UIElement addToTopLayer() {
+        if (attachedWindow == null)
+            throw new IllegalStateException("Cannot promote a detached element; add it to a window's tree first");
+        attachedWindow.getTopLayer().add(this);
+        return this;
+    }
+
+    /** Removes this element from the top layer. No-op if it was never promoted, or is detached. */
+    public UIElement removeFromTopLayer() {
+        if (attachedWindow != null) attachedWindow.getTopLayer().remove(this);
+        return this;
+    }
+
 
     /** {@code transform-origin} resolved against this element's current box, in local pixels. */
     private float transformOriginPxX() {
@@ -1321,6 +1371,10 @@ public class UIElement {
         }
 
         for (int i = sorted.length - 1; i >= 0; i--) {
+            // Promoted children belong to UIWindow's top-layer pass, which runs after this whole
+            // tree. Painting them here as well would draw them twice — once clipped by this
+            // ancestor, which is exactly what promotion is supposed to prevent.
+            if (sorted[i].inTopLayer) continue;
             // Scroll-exempt children (a scroll container's own scrollbars) are painted after the
             // translate is popped, below — otherwise they would scroll away with the content.
             if (scrolled && sorted[i].scrollExempt) continue;
@@ -1330,6 +1384,7 @@ public class UIElement {
         if (scrolled) {
             ctx.getPoseStack().popPose();
             for (int i = sorted.length - 1; i >= 0; i--) {
+                if (sorted[i].inTopLayer) continue;
                 if (sorted[i].scrollExempt) sorted[i].drawSubtree(ctx);
             }
         }
@@ -1795,7 +1850,12 @@ public class UIElement {
         public final CacheCell<Matrix4f> localToWorld = new CacheCell<>(new Matrix4f()).setCalculator(old -> {
             var element = UIElement.this;
             var parent = element.getParent();
-            if (parent == null) {
+            // A promoted element is seeded from the window transform exactly like the root, NOT from
+            // its DOM parent. Chaining the parent would drag in every ancestor transform and scroll
+            // offset — the precise things the top layer exists to escape ("cannot be clipped by
+            // anything in the document"), and it would put hit-testing somewhere the element visibly
+            // is not, since UIWindow.paintTopLayer paints it from the bare rootTransform.
+            if (parent == null || element.inTopLayer) {
                 // The window's scale, NOT identity. drawSubtree overwrites this from the live
                 // PoseStack, which UIWindow.paintFrame seeds from the very same matrix — so the two
                 // agree. Returning identity here (as this did) left every transform wrong by exactly
@@ -1853,7 +1913,7 @@ public class UIElement {
         public float getX() {
             if (Float.isNaN(x)) {
                 UIElement element = UIElement.this;
-                x = element.getLayoutX() + (element.getParent() == null ? 0 : element.getParent().getRuntimeCache().getX());
+                x = element.getLayoutX() + originOfContainingBlockX(element);
             }
             return x;
         }
@@ -1861,9 +1921,35 @@ public class UIElement {
         public float getY() {
             if (Float.isNaN(y)) {
                 UIElement element = UIElement.this;
-                y = element.getLayoutY() + (element.getParent() == null ? 0 : element.getParent().getRuntimeCache().getY());
+                y = element.getLayoutY() + originOfContainingBlockY(element);
             }
             return y;
+        }
+
+        /**
+         * Origin the Taffy location is relative to — normally the DOM parent, but the <b>root</b> for
+         * a {@linkplain UIElement#isInTopLayer() promoted} element.
+         *
+         * <p>Promotion reparents the Taffy node to the root, so {@code getLayoutX()} already returns a
+         * root-relative coordinate. Adding the DOM parent's absolute origin on top of that would
+         * double-count everything between the root and the parent — a tooltip on a deeply nested,
+         * scrolled element would land far off-screen.</p>
+         */
+        private float originOfContainingBlockX(UIElement element) {
+            if (element.inTopLayer) {
+                UIElement root = element.attachedWindow == null ? null : element.attachedWindow.ui.rootElement;
+                return root == null || root == element ? 0 : root.getRuntimeCache().getX();
+            }
+            return element.getParent() == null ? 0 : element.getParent().getRuntimeCache().getX();
+        }
+
+        /** @see #originOfContainingBlockX */
+        private float originOfContainingBlockY(UIElement element) {
+            if (element.inTopLayer) {
+                UIElement root = element.attachedWindow == null ? null : element.attachedWindow.ui.rootElement;
+                return root == null || root == element ? 0 : root.getRuntimeCache().getY();
+            }
+            return element.getParent() == null ? 0 : element.getParent().getRuntimeCache().getY();
         }
 
         public float getWidth() {

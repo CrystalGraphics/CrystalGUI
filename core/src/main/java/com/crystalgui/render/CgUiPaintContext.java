@@ -459,6 +459,12 @@ public final class CgUiPaintContext {
         }
     }
 
+    /** Nesting depth of the clip stack; 0 when nothing is clipped. Exposed so the top-layer paint
+     * pass can assert the main tree left the stack balanced before it starts painting unclipped. */
+    public int getScissorDepth() {
+        return scissorStack.depth();
+    }
+
     /**
      * Switches to {@code material} for the duration of {@code drawBody}, then eagerly restores
      * {@link #boxModelMaterial}. Used for drawables (e.g. an SDF rounded rect) that need their own

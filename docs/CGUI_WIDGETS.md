@@ -350,7 +350,55 @@ moves with the selection. Bubble-phase, so a focused widget inside a pane sees a
 
 ---
 
-## 10. Harness scenes
+## 10. `Tooltip`
+
+The first consumer of the **top layer** (CSS Position 4 §top-layer — the machinery behind
+`<dialog>` and the Popover API), and the reason it was built.
+
+```java
+Tooltip tip = Tooltip.attach(anchor, "explain this");   // shown on hover, hidden on leave
+tip.detach();                                            // remove it again
+```
+
+`Tooltip.attach` is a **static factory on the widget**, deliberately not `UIElement.setTooltip`.
+`UIElement` is the core DOM node every widget builds on; a tooltip is a widget, so putting the wiring
+there inverted the dependency (core importing `ui.elements`) and made every element in the tree carry
+a field for a feature most never use. It was also where a real bug lived: a set/clear/set cycle
+attached a second pair of hover listeners each time. Creating the tooltip and its listeners in one
+call makes that unrepresentable.
+
+**Why it needs the top layer.** A tooltip's whole job is to draw *outside* the thing it describes.
+`drawSubtree` paints depth-first under every ancestor's scissor, so before promotion a tooltip on a
+row inside an `overflow: hidden` scroller was clipped to the scroller. See `TopLayer`.
+
+**Structure.** Internal child of the anchor — which keeps the cascade behaving like the web's, since
+it inherits `color`/`font-family` from where it sits in the tree rather than from wherever it paints.
+Its own internal `__label__` is a `UIText`.
+
+**Closed ⇒ `display: none`**, exactly as a closed popover is on the web. Not cosmetic: an ordinary
+child participates in its parent's flex flow, so a hidden tooltip would silently pad every element
+that had one. One property covers layout, paint and input at once.
+
+**Never eats the pointer** (`setHitTest(false)`). Otherwise the tooltip appearing under the cursor
+counts as leaving the anchor → hide → un-hover → show: a flicker loop. The web's `pointer-events: none`
+on tooltips exists for the same reason.
+
+**Placement** is recomputed *every frame* from the anchor's `localToWorld` — not its layout box, which
+knows nothing about scrolling — so it tracks a scrolling or animating anchor. Below the anchor by
+default, **flips above** when there is no room below, then clamps horizontally. That is the useful
+subset of CSS Anchor Positioning's `position-try-fallbacks`.
+
+- Tag `tooltip` · internal `__label__` · Scene: `cgui-gallery` (Tooltip page)
+- **No pixel values in Java**: the gap under the anchor is the tooltip's own `margin-top` in
+  `default.css`, and the wrap width is `tooltip .__label__ { max-width }`. The max-width has to sit on
+  the *label*, because `UIText` only wraps against a width it can see on itself.
+- Known gaps: no show delay (a delay is a timing value and belongs in the cascade — that needs a real
+  CSS property); no platform-delegated tooltips yet (an item's real MC tooltip must be drawn by the
+  loader, which needs a new SPI).
+
+---
+
+## 11. Harness scenes
 
 ```bash
 ./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"

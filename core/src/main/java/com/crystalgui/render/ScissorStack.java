@@ -97,6 +97,13 @@ public final class ScissorStack {
         return depth > 0;
     }
 
+    /** Number of nested scissor rects currently pushed. Zero between balanced frames — which is what
+     * {@code UIWindow.paintTopLayer} asserts before starting its own pass, so an unbalanced
+     * push/pop in the main tree is reported at its cause rather than as a mystery clip later. */
+    public int depth() {
+        return depth;
+    }
+
     /** Clear all scissor rects. Call at frame start. */
     public void reset() {
         depth = 0;

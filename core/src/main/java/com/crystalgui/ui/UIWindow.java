@@ -36,6 +36,8 @@ public final class UIWindow {
 
     @Getter
     private final TaffyTree taffyTree;
+    /** Package-private accessor for {@link TopLayer}, which reparents promoted nodes onto it. */
+    @Getter(lombok.AccessLevel.PACKAGE)
     private NodeId rootNodeId;
 
     @Getter
@@ -65,6 +67,10 @@ public final class UIWindow {
     private final Map<NodeId, UIElement> elementByNode = new HashMap<>();
     private final Set<NodeId> nodesWithNewLayout = new HashSet<>();
     private final Set<NodeId> nodesWithNewGeometry = new HashSet<>();
+
+    /** @see TopLayer — CSS Position 4 §top-layer; owns its own list, reparenting and passes. */
+    @Getter
+    private final TopLayer topLayer = new TopLayer(this);
 
     public UIWindow(Ui ui) {
         this.ui = ui;
@@ -245,6 +251,8 @@ public final class UIWindow {
 
         pose.popPose();
 
+        topLayer.paint(paintContext, pose, rootTransform);
+
         paintContext.endFrame();
         inputHandler.beginFrame();
         inputHandler.endFrame();
@@ -253,6 +261,9 @@ public final class UIWindow {
 
     public void unregisterElement(UIElement element) {
         if (element == null) return;
+        // Before anything else: a detached element must not linger in the top layer, or it would keep
+        // painting and hit-testing after leaving the tree.
+        topLayer.remove(element);
 
 
         elementByNode.remove(element.taffyNodeId);
@@ -297,6 +308,7 @@ public final class UIWindow {
     public List<UIElement> getElements() {
         return Collections.unmodifiableList(elements);
     }
+
 
     /**
      * The transform every element's {@code localToWorld} chain hangs off: physical pixels per
@@ -407,11 +419,27 @@ public final class UIWindow {
         return UITreeTraversal.getElementsByClassName(ui.rootElement, className, true);
     }
 
+    /**
+     * Topmost element under the pointer, or {@code null}.
+     *
+     * <p>Blink's rule is "hit testing is done in paint-order" — it reuses the paint walk to record
+     * hit-test data rather than keeping a second, drift-prone traversal. Same rule here: the top
+     * layer paints last, so it is tested <b>first</b>, and within it <b>backwards</b>, because the
+     * last-painted element is the visually topmost one.</p>
+     *
+     * <p>This must be a separate walk, not a reordering of the main one. {@link #elementHitTest}
+     * only recurses into children when the pointer is inside a clipping ancestor's content box, so a
+     * promoted element inside an {@code overflow: hidden} scroller is unreachable from the root walk
+     * exactly when the pointer is outside that scroller — which is precisely the case a tooltip
+     * exists to handle.</p>
+     */
     public UIElement getHoveredElement(float mouseX, float mouseY) {
+        UIElement promoted = topLayer.hitTest(mouseX, mouseY);
+        if (promoted != null) return promoted;
         return elementHitTest(ui.rootElement, mouseX, mouseY);
     }
 
-    private UIElement elementHitTest(UIElement element, float mouseX, float mouseY) {
+    UIElement elementHitTest(UIElement element, float mouseX, float mouseY) {
         if (element.getStyle().taffyBridge.style.display == TaffyDisplay.NONE) return null;
 
         Matrix4f transform = element.getRuntimeCache().worldToLocal.get();
@@ -421,6 +449,11 @@ public final class UIWindow {
         boolean contentCanClipOut = overflow.isClipped();
         if (!contentCanClipOut || element.isMouseOverContent(localX, localY, overflow)) {
             for (var child : element.getRuntimeCache().sortedChildren.get()) {
+                // Promoted children are tested by the top-layer walk in getHoveredElement, ahead of
+                // this one. Testing them here too would reach them through their DOM ancestor's clip
+                // — the wrong answer, and only reachable when the pointer happens to be inside that
+                // ancestor, so it would present as an intermittent off-by-a-container hit.
+                if (child.isInTopLayer()) continue;
                 var result = elementHitTest(child, mouseX, mouseY);
                 if (result != null) {
                     return result;

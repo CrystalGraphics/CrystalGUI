@@ -253,9 +253,9 @@ state. The declarative description layer it seeded now lives in `serialization/U
 
 ## `ElementRegistry`
 
-Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers twelve:
+Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers thirteen:
 `element`, `button`, `checkbox`, `scroller`, `scrollerview`, `slider`, `splitview`, `switch`, `tab`,
-`tabview`, `textfield`, `text`. Unknown tags **throw** on decode — a typo must not silently become a
+`tabview`, `textfield`, `text`, `tooltip`. Unknown tags **throw** on decode — a typo must not silently become a
 styleless div.
 
 ## `UITreeObserver`
@@ -491,7 +491,14 @@ concrete types:
 | `FocusEvent` — `Focus`, `Blur` | yes |
 | `KeyboardEvent` — `Down`, `Up` | yes |
 | `MouseEvent` — `Click`→`Down`/`Up`, `Scroll`, `Move` | yes |
-| `MouseEvent` — `Enter`, `Leave` | no (matches real DOM) |
+| `MouseEvent` — `Enter`, `Leave` | no — but see below |
+
+> **`Enter`/`Leave` don't bubble, yet one is dispatched to *every* element in the entered/left chain**
+> — outermost-first on entry, innermost-first on exit, exactly as the DOM does. Firing only on the
+> precise hit target means a container with children never hears about the pointer at all: hovering a
+> row's own label left the row with nothing, and only the bare gaps between children worked. The
+> `:hover` pseudo-class always walked this chain, so the two used to disagree about what "hovered"
+> meant.
 
 `EventListenerGroup<T>` bundles four signals per (element, event-type): `capture`, `target`, `bubble`,
 and `defaultEvents` for built-in behavior. `defaultEvents` fires only in the TARGET phase and only if
@@ -672,6 +679,7 @@ int value types.
 | `Slider` | `slider` | `cgui-slider` |
 | `TextField` | `textfield` | `cgui-textfield` |
 | `UIText` | `text` | `cgui-text`, `cgui-text-stress` |
+| `Tooltip` | `tooltip` | `cgui-gallery` (Tooltip page) |
 | `Scroller` | `scroller` | `cgui-scroller` |
 | `ScrollerView` | `scrollerview` | `cgui-scroller` |
 | `SplitView` | `splitview` | `cgui-splitview` |
@@ -693,7 +701,7 @@ int value types.
   __bottom__  __corner__  __divider__  __fill__      __first__   __h-scroller__  __head__
   __knob__    __left__    __mark__     __pane__      __panes__   __post-icon__   __pre-icon__
   __rail__    __right__   __second__   __spacer__    __strip__   __strip-bar__   __tail__
-  __thumb__   __top__     __track__    __v-scroller__  __vertical__
+  __label__   __thumb__   __top__     __track__    __v-scroller__  __vertical__
   ```
 - **No sizes, no timings, no colours in Java.** Widgets write structure and state; `default.css` gives
   functional geometry, `ore.css` gives appearance. `Switch`'s knob animation is a CSS `transition` on
@@ -765,6 +773,9 @@ The things that are invisible from any single class and expensive to rediscover.
 | `getRootTransform()` is the only definition of `uiScale` | Pose and hit-test caches drift apart by exactly `uiScale` until first paint |
 | `uiScale` lives in the `PoseStack`, not the ortho projection | Glyphs rasterize at logical size and get magnified — blurry text |
 | `sortedChildren` = z-descending, equal-z later-inserted-first; paint walks it reversed | Hit-testing and visual stacking disagree about which child is on top |
+| A promoted element diverges from its DOM parent in **four** places (Taffy parent, `getX()/getY()`, `localToWorld`, paint+hit entry) — only the cascade stays | Fix three and it draws correctly but clicks land elsewhere, or the reverse |
+| Top-layer stacking is insertion order; `z-index` is irrelevant there (per spec) | Promoted elements stack unpredictably against each other |
+| `Enter`/`Leave` dispatch to every element in the entered/left chain | A container with children never receives hover events at all |
 | `beginFrame()` only *invalidates* the hover cache, never reads it | Stuck hover (recompute against the new position labelled as the old) |
 | `replaceOrPutCandidate` no-ops on unchanged values | Widget geometry feedback loops oscillate forever instead of settling |
 | The cascade diff compares `realSlots`, not `computedSlots` | In-flight transitions can't be retargeted or cleaned up |
@@ -875,12 +886,12 @@ com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGro
     .visual.transform          TransformProperty, TransformValue, TransformOriginShorthand
 
 com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListenerGroup,
-                               ElementRegistry, UIFrameTicker (SPI), UITreeObserver
+                               ElementRegistry, UIFrameTicker (SPI), UITreeObserver, TopLayer
   .tree                        UITreeTraversal — stateless ancestor/tab-order queries
   .event                       UIEvent, PropagationPhase, DOMEvent, FocusEvent, KeyboardEvent, MouseEvent
   .input                       UIInputHandler, UIDragController, FocusPolicy, ButtonState
   .elements                    Button, Checkbox, CheckboxGroup, Scroller, ScrollerView, Slider,
-                               SplitView, Switch, Tab, TabView, TextField, UIText
+                               SplitView, Switch, Tab, TabView, TextField, Tooltip, UIText
 
 com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, JsonOps, PlainOps,
                                StateMap, UIDescriptionCodec, ContentHash
@@ -928,7 +939,7 @@ under `core/`. `core/input/` is the *raw platform I/O* layer only; dispatch and 
 | Doc | Status | Contents |
 |---|---|---|
 | `docs/CGUI_STYLE_RENDER_PIPELINE.md` | **current** | Cascade, selectors, stylesheets, transitions, frame lifecycle, drawables & compositing channels, `background:` grammar, border-radius layer, visual layers (opacity + masking), `transform`/`transform-origin`, known gaps vs. the web, file map |
-| `docs/CGUI_WIDGETS.md` | **current** | All twelve widgets: API, internal-child class hooks, pseudo-classes, covering harness scene |
+| `docs/CGUI_WIDGETS.md` | **current** | All thirteen widgets: API, internal-child class hooks, pseudo-classes, covering harness scene |
 | `docs/CGUI_SERVER_AND_SERIALIZATION.md` | **current** | Codecs, `StateMap`, descriptions, content hashing, network ids, `SheetRef`, packets/sessions/RPC, known gaps, the headless contract |
 
 These three are the only docs under `docs/` — audited against the code on 2026-07-29 and accurate as
@@ -939,12 +950,21 @@ backend, CrystalGUI is a thin immediate-mode paint surface — is recorded in
 
 ## External references
 
-- **LDLib2** — pattern prior art for widgets and the Ore theme. A **sibling checkout** at `../LDLib2`,
-  never a dependency. Stylesheets at `../LDLib2/src/main/resources/assets/ldlib2/lss/`.
-- **Taffy** — consumed as the Gradle artifact `dev.vfyjxf:taffy` (version in `gradle.properties`). No
-  source checkout; read decompiled sources through your IDE.
-- **Minecraft sources** — **none are extracted in this repo**, because neither MC module is in the
-  build. Do not cite `mc1201/*/build/mc-src/` or `build/rfg/minecraft-src/java` as if they exist.
+- **LDLib2** — pattern prior art for widgets and the Ore theme. An **in-repo checkout** at
+  `research_repos/LDLib2`, never a dependency. Stylesheets at
+  `research_repos/LDLib2/src/main/resources/assets/ldlib2/lss/` (`gdp.lss`, `mc.lss`, `modern.lss`).
+  Java sources under `src/main/java/com/lowdragmc/lowdraglib2/`; note `bin/` also holds compiled
+  `.class` files, so search `src/` explicitly. *(Was documented as a sibling checkout at `../LDLib2`,
+  which does not exist.)*
+- **Taffy** — consumed as the Gradle artifact `dev.vfyjxf:taffy` (version in `gradle.properties`), but
+  **extracted Java sources are checked in** at `research_repos/taffy/dev/vfyjxf/taffy/`. Read them
+  directly — there is no need to decompile through the IDE, and no need to guess at layout semantics
+  (containing blocks, absolute positioning, flex-wrap cross-sizing) that the engine's own behaviour
+  depends on. *(Previously documented as "no source checkout"; it exists.)*
+- **Minecraft sources** — not extracted at the paths the MC modules would produce
+  (`mc1201/*/build/mc-src/`, `build/rfg/minecraft-src/java`), since neither MC module is in the build.
+  **But an extracted 1.20.1 tree is checked in** at `research_repos/mc1201_sources/`
+  (`com/`, `mcp/`, `net/`). Cite that path, not the build ones.
 
 ---
 
