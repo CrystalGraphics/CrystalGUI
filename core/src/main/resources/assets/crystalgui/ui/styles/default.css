@@ -581,6 +581,39 @@ dialog .__title-bar__ {
     background: #3A4450;
 }
 
+/* An ellipsized title, and the one place in this sheet that truncates text by default.
+ *
+ * CSS does NOT do this for you: `text-overflow`'s initial value is `clip`, and no browser user-agent
+ * sheet ellipsizes generic text — overflowing content spilling is the correct CSS default, because
+ * content is the author's and silently hiding it would be a worse failure than an ugly one.
+ *
+ * A title bar is not content, though. It is chrome: a fixed 16px strip with a close button pinned to
+ * its right edge, and a title long enough to reach that button paints straight over it. Every native
+ * window manager ellipsizes window titles for exactly this reason, and a widget user-agent sheet is
+ * the right layer to encode it — an author who wants the full title can still override, which is what
+ * makes this a default rather than a policy.
+ *
+ * This is the web's canonical truncation recipe verbatim — `flex: 1 1 0; min-width: 0; overflow: hidden;
+ * text-overflow: ellipsis` — and every part of it is load-bearing:
+ *   flex-grow/basis — sizes the label to WHAT IS LEFT after the close button, not to its own text. The
+ *                     obvious alternative (`flex-shrink: 1` and let it shrink from its intrinsic width)
+ *                     works but makes the label's box depend on its own measured glyphs, so a title that
+ *                     fits by a fraction of a pixel truncates anyway and loses a whole character to an
+ *                     ellipsis it did not need. Growing from zero has no such edge.
+ *   min-width       — a flex item's automatic minimum is its min-content size, which for a nowrap line is
+ *                     the entire line; 0 is what allows the box to be smaller than its text at all.
+ *   white-space     — ellipsis only means something on a line that does not wrap.
+ *   overflow        — clips the glyphs the ellipsis stands in for, on exactly the box it measured
+ *                     against. */
+dialog .__title-bar__ .__label__ {
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 dialog .__content__ {
     flex-grow: 1;
     width: 100%;

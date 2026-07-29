@@ -16,6 +16,9 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.border.LengthPercentProperty;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.text.FontFamilyValue;
+import com.crystalgui.style.property.visual.text.TextAlign;
+import com.crystalgui.style.property.visual.text.TextOverflow;
+import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgui.style.property.visual.text.LineHeightProperty;
 import com.crystalgui.style.property.visual.text.LineHeightValue;
 import com.crystalgui.style.property.visual.texture.TextureProperty;
@@ -178,6 +181,17 @@ public class StylePropertyRegistry {
      */
     public static final StyleProperty<Cursor> CURSOR =
             create("cursor", Cursor.class, Cursor.AUTO).setInheritable(true);
+
+    /** CSS {@code text-align} (CSS Text 3). Inherited, initial {@code left}. @see TextAlign */
+    public static final StyleProperty<TextAlign> TEXT_ALIGN =
+            create("text-align", TextAlign.class, TextAlign.LEFT).setInheritable(true);
+    /** CSS {@code white-space}, wrapping half only. Inherited, initial {@code normal}. @see WhiteSpace */
+    public static final StyleProperty<WhiteSpace> WHITE_SPACE =
+            create("white-space", WhiteSpace.class, WhiteSpace.NORMAL).setInheritable(true);
+    /** CSS {@code text-overflow} (CSS UI 4). <b>Not</b> inherited, per spec -- truncation belongs to the
+     * box that clips, not to the text flowing through it. @see TextOverflow */
+    public static final StyleProperty<TextOverflow> TEXT_OVERFLOW =
+            create("text-overflow", TextOverflow.class, TextOverflow.CLIP);
 
     // CSS `scroll-behavior`. Purely a paint/animation concern, so no Taffy listener.
     public static final StyleProperty<ScrollBehavior> SCROLL_BEHAVIOR =

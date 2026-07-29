@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
  * Pure, stateless queries over the UIElement tree structure.
@@ -176,45 +177,74 @@ public final class UITreeTraversal {
         }
     }
 
-    public static UIElement firstFocusableIn(UIElement subtreeRoot) {
-        if (subtreeRoot.focusable()) return subtreeRoot;
+    /*
+     * Two predicates, and the distinction is the whole of the roving-tabindex pattern:
+     *
+     *   focusable()  — may hold focus at all. What a focus *delegate* wants (a dialog handing focus to
+     *                  its first control), and what arrow-key navigation inside a composite wants.
+     *   tabbable()   — additionally in the Tab sequence. What Tab/Shift+Tab wants.
+     *
+     * They differ only for FocusPolicy.CLICK_NOT_TABBABLE. Keeping them as constants rather than
+     * repeating `x.focusable()` inline is what stops the four walkers from drifting apart, which is
+     * exactly how a Tab key ends up skipping one direction but not the other.
+     */
+    private static final Predicate<UIElement> FOCUSABLE = UIElement::focusable;
+    private static final Predicate<UIElement> TABBABLE = UIElement::tabbable;
+
+    /** First element able to hold focus in this subtree, in document order. The focus-delegate query —
+     * see the predicate note above for why this is not the same as {@link #firstTabbableIn}. */
+    public static UIElement firstFocusableIn(UIElement subtreeRoot) { return firstIn(subtreeRoot, FOCUSABLE); }
+
+    /** Last element able to hold focus in this subtree, in reverse document order. */
+    public static UIElement lastFocusableIn(UIElement subtreeRoot) { return lastIn(subtreeRoot, FOCUSABLE); }
+
+    /** Where Tab lands when nothing is focused yet. */
+    public static UIElement firstTabbableIn(UIElement subtreeRoot) { return firstIn(subtreeRoot, TABBABLE); }
+
+    /** Where Shift+Tab lands when nothing is focused yet. */
+    public static UIElement lastTabbableIn(UIElement subtreeRoot) { return lastIn(subtreeRoot, TABBABLE); }
+
+    private static UIElement firstIn(UIElement subtreeRoot, Predicate<UIElement> accepts) {
+        if (accepts.test(subtreeRoot)) return subtreeRoot;
         for (UIElement child : subtreeRoot.getChildren()) {
             if (!child.getRuntimeCache().hasFocusableDescendant.get()) continue;
-            UIElement found = firstFocusableIn(child);
+            UIElement found = firstIn(child, accepts);
             if (found != null) return found;
         }
         return null;
     }
 
-    public static UIElement lastFocusableIn(UIElement subtreeRoot) {
+    private static UIElement lastIn(UIElement subtreeRoot, Predicate<UIElement> accepts) {
         List<UIElement> children = subtreeRoot.getChildren();
         for (int i = children.size() - 1; i >= 0; i--) {
             if (!children.get(i).getRuntimeCache().hasFocusableDescendant.get()) continue;
-            UIElement found = lastFocusableIn(children.get(i));
+            UIElement found = lastIn(children.get(i), accepts);
             if (found != null) return found;
         }
-        return subtreeRoot.focusable() ? subtreeRoot : null;
+        return accepts.test(subtreeRoot) ? subtreeRoot : null;
     }
 
-    public static UIElement previousFocusable(UIElement current) {
+    /** Previous element in the Tab sequence, or {@code null} at the start of the document. */
+    public static UIElement previousTabbable(UIElement current) {
         UIElement node = current;
         while (node.getParent() != null) {
             List<UIElement> siblings = node.getParent().getChildren();
             for (int i = node.getSiblingIndex() - 1; i >= 0; i--) {
                 if (!siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) continue;
-                UIElement found = lastFocusableIn(siblings.get(i));
+                UIElement found = lastIn(siblings.get(i), TABBABLE);
                 if (found != null) return found;
             }
-            if (node.getParent().focusable()) return node.getParent();
+            if (node.getParent().tabbable()) return node.getParent();
             node = node.getParent();
         }
         return null;
     }
 
-    public static UIElement nextFocusable(UIElement current) {
+    /** Next element in the Tab sequence, or {@code null} at the end of the document. */
+    public static UIElement nextTabbable(UIElement current) {
         for (UIElement child : current.getChildren()) {
             if (!child.getRuntimeCache().hasFocusableDescendant.get()) continue;
-            UIElement found = firstFocusableIn(child);
+            UIElement found = firstIn(child, TABBABLE);
             if (found != null) return found;
         }
         UIElement node = current;
@@ -222,7 +252,7 @@ public final class UITreeTraversal {
             List<UIElement> siblings = node.getParent().getChildren();
             for (int i = node.getSiblingIndex() + 1; i < siblings.size(); i++) {
                 if (!siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) continue;
-                UIElement found = firstFocusableIn(siblings.get(i));
+                UIElement found = firstIn(siblings.get(i), TABBABLE);
                 if (found != null) return found;
             }
             node = node.getParent();

@@ -5,6 +5,9 @@ import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.style.property.visual.text.TextOverflow;
+import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Dialog;
@@ -398,5 +401,81 @@ public class DialogTest extends UiTestBase {
         dragTitleBarBy(50f, 0f);
 
         assertEquals("!important must pin the dialog against a user drag", 5f, left(), 0.5f);
+    }
+
+    // ── Title chrome ────────────────────────────────────────────────────────
+
+    /*
+     * These two are the only tests here that install StyleSheet.DEFAULT, because they are the only ones
+     * asserting on what the user-agent sheet DOES. Everything above sets its own geometry explicitly and
+     * would change behaviour if the sheet were added to build(), so it stays local — and the sheet is
+     * genuinely not automatic (see StyleSheet.DEFAULT's javadoc), which is exactly the trap: without it
+     * a CSS assertion here quietly tests nothing and passes.
+     */
+    private Dialog withUserAgentSheet(String title) {
+        root = new UIElement().layout(l -> l.width(400).height(300));
+        dialog = new Dialog(title);
+        dialog.layout(l -> l.width(120).height(80));
+        root.addChild(dialog);
+
+        window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(800, 600);
+        // show() is not optional. A closed dialog is `display: none`, so every box in it measures 0 and
+        // any "did it fit?" assertion passes against 0 <= 0 — which is exactly how the first version of
+        // this test went green while the sheet it was checking was not even installed.
+        dialog.show();
+        settle();
+        settle();
+        return dialog;
+    }
+
+    /**
+     * A short title is left <b>completely alone</b>, and a long one truncates with an ellipsis.
+     *
+     * <p>Both halves in one test on purpose, because the interesting failure is the pair: an earlier
+     * version of this rule sized the label by shrinking it from its own intrinsic width, which meant a
+     * title fitting by a fraction of a pixel truncated anyway and silently lost a real character to an
+     * ellipsis it never needed. Asserting only that long titles truncate would have called that a pass.</p>
+     *
+     * <p>The label's width is now the leftover — bar content minus the close button — so it does not
+     * depend on its own glyphs at all. That is the web's canonical `flex: 1 1 0; min-width: 0` recipe.</p>
+     */
+    @Test
+    public void shortTitlesAreUntouchedAndLongOnesEllipsize() {
+        Dialog d = withUserAgentSheet("Panel");
+        UIText label = d.getTitleLabel();
+
+        float barContent = d.getTitleBar().getTaffyLayout().contentBoxWidth();
+        float closeWidth = d.getCloseButton().getRuntimeCache().getWidth();
+        assertEquals("the label must be exactly what is left of the bar",
+                barContent - closeWidth, label.getRuntimeCache().getWidth(), 0.5f);
+        assertEquals("a title that fits must not lose a character to an ellipsis",
+                "Panel", label.displayedText());
+
+        d.setTitle("a title far longer than one hundred and twenty pixels of dialog");
+        settle();
+        settle();
+
+        String shown = label.displayedText();
+        assertNotEquals("a title that cannot fit must be shortened", label.getText(), shown);
+        assertTrue("...and must end in an ellipsis, was '" + shown + "'",
+                shown.endsWith("…") || shown.endsWith("..."));
+        assertTrue("the box itself never grows to fit the text",
+                label.getRuntimeCache().getWidth() <= barContent - closeWidth + 0.5f);
+    }
+
+    /** The ellipsis is a default, not a policy — a caller who would rather see the whole title can turn
+     * it off, which is what makes exposing the label worth doing. */
+    @Test
+    public void theTitleEllipsisIsOverridable() {
+        Dialog d = withUserAgentSheet("Panel");
+        assertEquals(TextOverflow.ELLIPSIS, d.getTitleLabel().getStyle().getGeneralGroup().textOverflow());
+
+        d.getTitleLabel().generalStyle(g -> g.textOverflow(TextOverflow.CLIP));
+        settle();
+
+        assertEquals("an inline write outranks the user-agent sheet", TextOverflow.CLIP,
+                d.getTitleLabel().getStyle().getGeneralGroup().textOverflow());
     }
 }

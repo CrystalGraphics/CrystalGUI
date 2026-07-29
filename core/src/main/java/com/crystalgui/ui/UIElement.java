@@ -589,6 +589,17 @@ public class UIElement {
         return this.isEnabled() && this.getFocusPolicy() != FocusPolicy.NONE && this.style.taffyBridge.style.display != TaffyDisplay.NONE;
     }
 
+    /**
+     * Whether Tab/Shift+Tab may land here — {@link #focusable()} <em>and</em> in the tab sequence.
+     *
+     * <p>The two differ for {@code FocusPolicy.CLICK_NOT_TABBABLE}, the web's {@code tabindex="-1"}:
+     * still clickable, still reachable by {@code requestFocus} and by arrow keys inside a composite,
+     * but skipped by Tab so a tablist of ten tabs is one tab stop rather than ten.</p>
+     */
+    public boolean tabbable() {
+        return focusable() && getFocusPolicy().isTabbable();
+    }
+
     /** Marks this element and every ancestor as needing their cached "is anything here focusable"
      * answer recomputed. Must be called by anything that can change {@link #focusable()} — enabled
      * state, focus policy, or {@code display}. Public because {@code display} is driven from the

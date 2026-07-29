@@ -329,14 +329,14 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         final int modifiers = inputAdapter.getCurrentModifiers();
 
         if (focusedElement == null) {
-            findFocusableElement(event, modifiers);
+            moveTabFocus(event, modifiers);
             return false;
         }
 
         if (event.pressed()) {
             var propagationStopped = emitKeyboardDown(event, modifiers);
             if (!propagationStopped) {
-                findFocusableElement(event, modifiers);
+                moveTabFocus(event, modifiers);
             }
         } else {
             emitKeyboardUp(event, modifiers);
@@ -379,26 +379,26 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     }
 
-    private void findFocusableElement(Keyboard.Event event, int modifiers) {
+    private void moveTabFocus(Keyboard.Event event, int modifiers) {
         if (event.key() != CgUiKeyCodes.KEY_TAB) return;
         boolean reverse = Modifiers.hasShift(modifiers);
 
         UIElement next;
         if (focusedElement == null) {
             next = reverse
-                    ? UITreeTraversal.lastFocusableIn(window.ui.rootElement)
-                    : UITreeTraversal.firstFocusableIn(window.ui.rootElement);
+                    ? UITreeTraversal.lastTabbableIn(window.ui.rootElement)
+                    : UITreeTraversal.firstTabbableIn(window.ui.rootElement);
         } else {
             next = reverse
-                    ? UITreeTraversal.previousFocusable(focusedElement)
-                    : UITreeTraversal.nextFocusable(focusedElement);
+                    ? UITreeTraversal.previousTabbable(focusedElement)
+                    : UITreeTraversal.nextTabbable(focusedElement);
             if (next == null) { // fell off the end — wrap around
                 next = reverse
-                        ? UITreeTraversal.lastFocusableIn(window.ui.rootElement)
-                        : UITreeTraversal.firstFocusableIn(window.ui.rootElement);
+                        ? UITreeTraversal.lastTabbableIn(window.ui.rootElement)
+                        : UITreeTraversal.firstTabbableIn(window.ui.rootElement);
             }
         }
-        if (next == null) return; // nothing focusable at all
+        if (next == null) return; // nothing tabbable at all
 
         if (focusedElement != null) emitAndLoseFocus(focusedElement);
         focusedElement = next;
@@ -479,7 +479,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
             if (focusedElement != null) {
                 emitAndLoseFocus(focusedElement);
             }
-            if (targetElement != null && targetElement.getFocusPolicy() == FocusPolicy.CLICK) {
+            if (targetElement != null && targetElement.getFocusPolicy().focusesOnClick()) {
                 // Deliberately no scroll: you clicked what you could already see, and scrolling
                 // here would pull the content out from under the cursor. Nor a focus ring, unless
                 // this is a text field — see emitAndSetFocus.

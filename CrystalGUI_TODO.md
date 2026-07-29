@@ -3,6 +3,25 @@
 **This is the live plan.** Ordered, scoped, and maintained as work lands. Superseded the unordered
 draft on 2026-07-29.
 
+## Where we are
+
+| | Item | State |
+|---|---|---|
+| **P0** | Red tests | ✅ done |
+| **P1** | Top layer · Tooltip | ✅ done · visually confirmed |
+| **P2** | Pointer capture · drag protocol · payload/drop · ghost | ✅ done · visually confirmed |
+| **P3** | RPC soak · mc1201 decision | ⏸ **deferred to last** (see P3) |
+| **P4** | Dialog · CSS `resize` · DialogManager · 8-way handles · CSS `cursor` | ✅ done · visually confirmed |
+| **P5** | ~~Platform abstractions~~ (deferred) · `TextElement` gaps · composite tab stops | ✅ **5.2 + 5.3 done** · visually confirmed (5.1 deferred) |
+| **P6** | Editor windows · graph view | ⬜ all prerequisites now exist |
+
+**Suite: 652** (558 `test` + 94 `headlessTest`), 0 failures, 0 skipped.
+Last commits: `3bbcf55` DialogManager · `5981cef` handles+cursor · `72f32f7` test cleanup.
+
+**Nothing is blocked on me.** With 5.2 and 5.3 landed, every engine-shaped item is done except the two
+deliberately deferred ones (P3, 5.1). **P6 is next**, and 6.1 is the first item that genuinely needs a
+re-plan before starting — it is five features wearing one bullet.
+
 ---
 
 ## Standing principles
@@ -447,9 +466,9 @@ Flagging it so it stays visible rather than quietly becoming a surprise at ship 
 
 ---
 
-# P4 — Falls out of P1 + P2
+# P4 — Falls out of P1 + P2 · `ALL DONE`
 
-### 4.1 Moving windows · `TODO`
+### 4.1 Moving windows · `DONE` (2026-07-29) — shipped as `Dialog`, visually confirmed
 
 **There is no web precedent for this, and that is the finding.** Nothing in CSS moves an element by
 pointer; `<dialog>` is not natively draggable, and every "draggable window" on the web is library code
@@ -498,7 +517,7 @@ leaves an author's `!important` able to pin a window.
 - *Screen resize?* **Clamp**, not proportional re-anchor. No spec covers it; clamping is what OS
   window managers do and it cannot drift a window somewhere the user never put it. Ours, so say so.
 
-### 4.2 Resizable windows / elements · `TODO`
+### 4.2 Resizable windows / elements · `DONE` (2026-07-29) — CSS `resize`, visually confirmed
 
 **This one IS a web feature: the CSS `resize` property** (CSS Basic User Interface L4). A port, not an
 invention — which makes it the higher-confidence half of P4.
@@ -565,23 +584,211 @@ rather than carrying wrap logic.
 
 ---
 
+### 4.4 8-way resize handles · `DONE` (2026-07-29)
+
+Four edges + four corners, replacing CSS's single corner grabber. Not in the original plan — surfaced
+by the P4.3 prior-art check against LDLib2's `WindowDragHelper.ResizeHandle`.
+
+**Not a divergence**, contrary to what 4.2 assumed: CSS UI 4 mandates only "a bidirectional resizing
+mechanism" and leaves the mechanism to the UA. Browsers ship one grabber because theirs lives in the
+scrollbar gutter. Which handles exist follows the resizable axes, so `horizontal` gets two side edges
+and no corners. A **leading edge moves the box as well as resizing it** — the case CSS avoids by only
+offering bottom-right — via a new `UIElement.applyResizeOrigin` seam that `Dialog` overrides so its own
+clamped position stays authoritative.
+
+### 4.5 CSS `cursor` + native OS cursors · `DONE` (2026-07-29)
+
+Also unplanned — asked for after the handles landed, because invisible edge handles are undiscoverable
+without a cursor change.
+
+A port of CSS UI 4 `cursor` (inherited; `auto` resolves to `text` over editable elements), resolved
+from the hover diff so **pointer capture pins it for a whole drag for free**. Presentation sits behind
+`UICursorService`, because LWJGL2 — the harness *and* MC 1.7.10 — has no standard cursors at all, unlike
+GLFW. `CursorBitmaps` draws 32×32 arrows procedurally and lives in `core/` (pure pixel maths), so each
+loader duplicates only a ~90-line adapter.
+
+**Deliberately rejected:** drawing an icon over the OS arrow (LDLib's approach) — two cursors on screen.
+
+> **Open, small:** `mc1710`'s copy of the adapter has never been compiled, since that module is excluded
+> from the build. An LWJGL3/GLFW implementation is still unwritten and would be much shorter
+> (`glfwCreateStandardCursor` covers the resize set with no bitmaps).
+
+---
+
 # P5 — Independent, slot anywhere
 
-### 5.1 More platform abstractions · `TODO`
-`ChatComponent`-equivalent, translatable-text service. Same seam pattern as `UISoundSystem` /
-`UIClipboard`: interface in `core/`, `NOOP` default, loader registers the real one. Pairs naturally
-with the tooltip SPI in 1.2.
+### 5.1 The platform seam sweep · `DEFERRED` (2026-07-29) — with P3
 
-### 5.2 Scope LDLib `TextElement` vs `UIText` · `TODO`
-**Genuinely unsized**, but no longer blocked — LDLib2 *is* checked in, at `research_repos/LDLib2`
-(not `../LDLib2`, which `AGENTS.md` wrongly claimed and which does not exist; fixed 2026-07-29).
-`TextElement` and a `TextElement$TextStyle` are confirmed present. Search `src/`, not `bin/` — the
-latter holds compiled `.class` files. Deliverable is a short comparison note, not code; do it before
-committing to any `UIText` work.
+> **Deferred alongside P3**, and for the same reason: this is integration surface, not core foundation.
+> Nothing in P5.2/5.3/P6 needs it, and it cannot be verified without a loader in the build anyway — so
+> it naturally belongs next to P3.2 rather than ahead of the remaining engine work.
 
-### 5.3 Rework tab traversal · `TODO`
-Small and self-contained (`UITreeTraversal`). Good filler between big items — not worth a planned
-slot of its own.
+**Re-scoped 2026-07-29:** this was "ChatComponent + translatable service", but two platform items have
+since been deferred *into* it from elsewhere. Doing them together is cheaper than three separate visits,
+because they share one question — what the seam looks like and who registers it.
+
+| Item | Came from | Notes |
+|---|---|---|
+| `ChatComponent`-equivalent, translatable text | original 5.1 | The reason this section existed. |
+| **Platform-delegated tooltips** | deferred from 1.2 | An item's real MC tooltip must be drawn by the loader; item slots are platform-unique. Not designed yet, deliberately — there was no loader to validate against. |
+| **LWJGL3/GLFW cursor service** | open from 4.5 | Much shorter than the LWJGL2 one: `glfwCreateStandardCursor` covers the resize set with no bitmaps. |
+
+All follow the established shape: interface in `core/`, `NOOP` default, loader registers the real one —
+now proven four times over (`CgUiInputAdapter`, `UIClipboard`, `UISoundSystem`, `UICursorService`).
+
+> **The recurring caveat:** none of it can be *verified* without a loader in the build, which is P3.2 —
+> the one item still waiting on a call from you. Designing a seam blind is how you get an interface
+> nobody can implement, so the honest sequencing is either "accept unverified" or "do P3.2 first".
+
+### 5.2 LDLib `TextElement` vs `UIText` · `DONE` (2026-07-30)
+
+Read `research_repos/LDLib2/.../gui/ui/elements/TextElement.java` (358 lines) against our `UIText`.
+**Three real gaps, one non-gap, and one thing we already do better.**
+
+| LDLib has | We have | Verdict |
+|---|---|---|
+| `textAlignHorizontal` / `textAlignVertical` | **nothing** — only `text-offset-x/y`, which nudges glyphs by a fixed amount | ❗ **Real gap, and the biggest.** CSS `text-align` is the port. Vertical has no single CSS equivalent (the web uses flex/line-height), so that half needs a decision. |
+| `TextWrap.NONE` | always wraps | ❗ **Real gap.** CSS `white-space: nowrap` / `text-wrap: nowrap`. Needed the moment a label must not reflow. |
+| `TextWrap.ROLL` / `HOVER_ROLL` (marquee) | nothing | ⚠️ **Deliberately skip.** `<marquee>` is obsolete on the web and CSS has no replacement — because the web's answer to overflowing text is **`text-overflow: ellipsis`**, which is a real property, is more useful in a dense UI, and we also lack. Port that instead. |
+| `textShadow` (works) | `text-shadow` **registered but unimplemented** | ❗ Already a known no-op in `StylePropertyRegistry`. Cheap to finish and now has a second reason to. |
+| `adaptiveWidth`/`adaptiveHeight` as explicit flags | `selfSizesWidth`, auto-detected once | ✅ **Ours is better** — one fewer thing for a caller to get wrong, and it cannot disagree with reality. Their `recompute()` is otherwise near-identical to ours, including pushing size back at IMPORTANT origin and clearing it when not adaptive. Independent convergence on the same design. |
+| `setText(Component)`, `setText(String, translate)` | — | Platform-shaped → belongs to **5.1** (deferred), not here. |
+| `loadXml` | — | Their XML UI format. Not wanted. |
+
+**Sized as four independent ports, in value order:**
+
+1. **`text-align`** — the clear win. Real CSS, obvious gap, unblocks every centred label in a themed UI.
+2. **`text-overflow: ellipsis`** — the correct answer to LDLib's marquee, and more useful than it.
+3. **`white-space: nowrap`** — small, and pairs naturally with (2), since ellipsis only means anything
+   when text does not wrap.
+4. **Finish `text-shadow`** — already registered, currently a no-op that silently does nothing.
+
+> **Deliberate omission recorded:** no marquee. Scrolling text is an animation of overflow, not a text
+> property; if it is ever wanted it belongs on top of (2)/(3) rather than instead of them.
+
+#### Outcome
+
+All four shipped. New style types: `visual/text/TextAlign` (`leadingFraction()` — the fraction of
+leftover space that goes before the line, so LEFT/CENTER/RIGHT is `0`/`0.5`/`1` and paint does one
+multiply), `WhiteSpace` (`wraps()`), `TextOverflow`. All four properties inherit except
+`text-overflow`, matching CSS.
+
+Three implementation notes worth keeping:
+
+- **`text-align` is block-level only.** Vertical alignment was deliberately *not* invented: `UIText`
+  sizes to its content, so the containing flex box already aligns it — adding a `text-align-vertical`
+  would mean two mechanisms for one result, and the web declined to add one for the same reason.
+- **Ellipsis re-shapes, it does not drop glyphs.** Binary search over string prefixes + `"…"`, then
+  re-shape. Truncating the shaped run would be wrong: shaping is not a per-character mapping, so
+  ligatures and kerning at the cut change the width of what remains.
+- **`nowrap` sets the wrap bound to 0, it does not widen the box.** `max-width` still caps the element,
+  so the text overflows rather than growing it — which is exactly CSS, and exactly why `text-overflow`
+  only means anything alongside `nowrap`.
+
+`text-shadow` is now consumed: a second draw at +1px in a quarter-brightness copy of the colour (alpha
+preserved). It was registered long enough ago that `AGENTS.md` listed it as a known no-op.
+
+10 tests in `TextLayoutPropertiesTest`. **Two of my own assertions were wrong first time** — they
+asserted *width* for `nowrap`, which `max-width` pins; the observable effect is *height*. Corrected to
+assert the line count via height, which is what actually distinguishes the two modes.
+
+### 5.3 Composite tab stops — the roving tabindex · `DONE` (2026-07-30)
+
+**Re-scoped from "rework tab traversal to your preferences."** The actual target: Tab should move
+between *components*, and arrow keys should move *within* one. Not generic DOM behaviour — browsers do
+it natively only for radio groups — but it is a real, specified convention.
+
+Source: [ARIA APG — Developing a Keyboard Interface](https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/)
+
+> "A primary keyboard navigation convention common across all platforms is that the tab and shift+tab
+> keys move focus from one UI component to another while **other keys, primarily the arrow keys, move
+> focus inside of components** that include multiple focusable elements."
+>
+> "the tab sequence should include **only one focusable element of a composite** UI component."
+
+**The mechanism is the "roving tabindex":** the active child holds `tabindex="0"`, every sibling holds
+`tabindex="-1"`; arrow keys move the 0 along and call `focus()`. Composites named by the APG:
+radiogroup, tablist, listbox, menu/menubar, grid, tree/treegrid, toolbar, combobox.
+
+#### What we already have, and what is missing
+
+| | State |
+|---|---|
+| **Arrow navigation inside a composite** | ✅ **`TabView` already does it** — Left/Right/Up/Down are axis-aware (they respect `TabSide`), plus Home/End, bubble-phase so a focused child sees keys first, and focus moves *with* selection. A working precedent to generalise from, not a blank page. |
+| **Single tab stop per composite** | ❌ **The whole gap.** `Tab extends Button`, so every tab is `FocusPolicy.CLICK` and individually in the tab sequence — Tab cycles through all N tabs instead of entering the tablist once and leaving it once. |
+| `tabindex` as a concept | ❌ Absent. There is no ordering mechanism at all: `UITreeTraversal` walks pure DOM order. |
+| `display: none` subtrees excluded | ✅ Already correct, and documented — `hasFocusableDescendant` short-circuits on a hidden root. Found via `TabView`'s inactive panes; **I suspected this was broken and it was not.** |
+
+#### The design question to settle first
+
+`tabindex` is an *integer* attribute on the web, and its positive values are widely considered a
+misfeature (they reorder the whole document and are near-impossible to maintain). We already have
+`FocusPolicy` as an enum. **Two candidate shapes:**
+
+1. **Port `tabindex` as an int** — faithful, and gives arbitrary reordering for free. Also imports the
+   misfeature, and `FocusPolicy` then overlaps it confusingly (`NONE` vs negative, `FOCUSABLE`/`CLICK`
+   vs 0).
+2. **Extend `FocusPolicy` with the one distinction the pattern needs** — something like
+   `PROGRAMMATIC_ONLY` (focusable, reachable by arrows and `requestFocus`, *not* in the tab sequence),
+   which is exactly `tabindex="-1"`. No integer ordering, no reordering misfeature.
+
+**Leaning (2).** The roving-tabindex pattern only ever uses `0` and `-1`; positive values are a
+separate feature nobody has asked for, and the APG itself never uses them. Recording the divergence is
+cheaper than importing an attribute the web community regrets.
+
+#### Outcome — option (2), as leaned
+
+`FocusPolicy.CLICK_NOT_TABBABLE` is the whole of the new vocabulary: focusable by click, by
+`requestFocus`, and by arrow keys; **skipped by Tab**. Queried through three predicates
+(`isFocusable()`, `isTabbable()`, `focusesOnClick()`) rather than by `==`, which is what let the two
+behaviours diverge without every call site having to enumerate constants.
+
+**The load-bearing consequence: the tree walkers split in two.**
+
+| Question | Predicate | Walkers | Asked by |
+|---|---|---|---|
+| May this hold focus at all? | `focusable()` | `firstFocusableIn` / `lastFocusableIn` | focus delegation (`Dialog.show()`), arrow keys, `requestFocus` |
+| Is it in the Tab sequence? | `tabbable()` | `firstTabbableIn` / `lastTabbableIn` / `nextTabbable` / `previousTabbable` | Tab / Shift+Tab |
+
+Getting this wrong in *either* direction is a real bug, which is why both pairs exist and both are
+pinned by tests: gate Tab on `focusable()` and a composite is N stops again; gate a dialog's focus
+delegate on `tabbable()` and it skips its own first control.
+
+Two latent traps found while wiring it — both the same shape as P2's, where the new consumer merely
+made an existing weakness visible:
+
+- **`UIInputHandler` tested `getFocusPolicy() == FocusPolicy.CLICK`** for focus-on-click. Left alone,
+  every tab would have gone dead to the *mouse* the instant it stopped being the selected one. Now
+  `focusesOnClick()`. Proved by reverting the line and watching the test fail.
+- **`selectTab(null)` is public**, so a first-tab fallback is mandatory. Without it a deselected strip
+  has *zero* tab stops and the entire tablist vanishes from the keyboard — strictly worse than the
+  N-stops problem the pattern set out to fix. APG has the same fallback for the same reason.
+
+**Ownership moved to `TabView`, not `Tab`.** `TabView.updateTabStops()` assigns all N on every selection
+*and* membership change; `Tab.setTabStop` is package-private. "Exactly one" is a strip-wide invariant,
+identical in kind to selection itself, and a per-tab setter is precisely how it reaches zero or two.
+Removing a tab restores it to ordinarily-tabbable, so a tab handed back and re-used elsewhere is not
+silently keyboard-dead.
+
+`hasFocusableDescendant` needed no change: it is keyed on `focusable()`, a superset of `tabbable()`, so
+it stays a valid fast-path filter for both walkers and does not invalidate when only the stop moves.
+
+16 tests in `CompositeTabStopTest`; **11 of them fail against the old semantics**, verified by
+temporarily reverting `isTabbable()`.
+
+#### Decisions taken on the open questions
+
+- **Wrap-around: it already cycled**, and that stays. `UIInputHandler` falls back to
+  `first/lastTabbableIn(root)` when the walk runs off the end. Correct here — a browser hands focus to
+  its chrome, and we have none.
+- **No reusable composite helper, and no `CheckboxGroup` change.** `CheckboxGroup` is a plain
+  coordinator whose members can sit anywhere in the tree, and it has **no arrow-key handling at all**.
+  Making it one tab stop without that would strand every unselected member with no way to reach it —
+  shipping half the pattern is worse than shipping none. `TabView` is the only composite that has the
+  arrow half today, so it is the only one that gets the Tab half. Revisit when a second composite
+  genuinely earns it; a helper abstracted from one consumer would be guesswork.
+- Focus trapping for modals still needs `inert`, which remains unbuilt (noted in P4.1). Same subsystem,
+  still out of scope.
 
 ---
 
@@ -610,6 +817,79 @@ P1, P2 and 6.1 underneath it. Big enough to need its own design doc when it come
 ---
 
 # Changelog
+
+- **2026-07-30** — **Hygiene pass before committing.** One substantive find among five cosmetic ones:
+  - **The ellipsis path re-shaped every frame, forever.** `measureEllipsised` builds a fresh
+    `CgTextLayout` per probe, so unlike the wrapping path nothing memoised it — a truncating label re-ran
+    its entire binary search each frame. Worse, the class javadoc explicitly claimed the opposite. Now
+    memoised on `(text, family, contentWidth)`, reusing the reference-equality-on-family trick
+    `ensureShaped` already relies on, and the javadoc says which path its reuse claim covers.
+  - A local `CgTextRenderer text` **shadowed the `text` Property field**; `ELLIPSIS` and
+    `ELLIPSIS_CODE_POINT` were two independent spellings of one character that could drift (the drift
+    would mean coverage-checking a different glyph than the one drawn); `Tab`'s javadoc still claimed Tab
+    owned the tab stop; `findFocusableElement` walks the *tabbable* chain now → `moveTabFocus`.
+  - The wrapper-vs-`UIText` trap is now recorded on `TextOverflow` itself, where the next author will hit
+    it — not just in the changelog.
+
+- **2026-07-30** — **Two follow-ups from the visual pass**, both raised by the user after confirming the
+  tab traversal behaves as intended.
+  - **The dialog title now ellipsizes.** Asked whether truncation should be a default: on the web, no —
+    `text-overflow: clip` is the initial value and no UA sheet ellipsizes generic text. But a title bar
+    is *chrome*, with a close button a long title paints over, and every native window manager
+    ellipsizes titles. Scoped to `dialog .__title-bar__ .__label__` in `default.css`, not made global.
+  - The real fix in that rule is **`flex-shrink: 1; min-width: 0`**, not the ellipsis — this engine's
+    Taffy default is `flex-shrink: 0`, so the label was keeping its full intrinsic width and pushing the
+    close button off the bar. Ellipsis alone would have done nothing.
+  - **Two false greens caught while pinning it**, both worth remembering: `DialogTest` never installed
+    `StyleSheet.DEFAULT` (it is *not* automatic), so a CSS assertion there exercised no CSS; and a
+    **closed dialog is `display: none`**, so every box measures 0 and "does it fit?" passes against
+    `0 <= 0`. Both are now invariants in `AGENTS.md`. Confirmed the fixed test fails without the rule.
+  - **Two real ellipsis bugs, both found on screen and neither catchable by the tests as written.** The
+    root cause of that gap: truncation changes no geometry, so nothing in the layout tree reveals whether
+    it fired. `UIText.displayedText()` now exists to answer it — and doubles as the API the
+    "tooltip only when the label is truncated" pattern needs.
+    1. **`text-overflow` does not inherit** (correctly — CSS UI 4), so setting it on a wrapper never
+       reaches the `UIText`. `white-space` *does* inherit, so the nowrap half arrived and the row rendered
+       as a plain clipped line that looked exactly like the row above it. My own gallery page had this bug.
+    2. **The ellipsis glyph was invisible.** `MinecraftRegular.otf` has no U+2026, so a correctly
+       shortened label drew a blank advance — indistinguishable from `clip`, with every measurement right.
+       Now falls back to `...`, which is WebKit/Blink's own rule for exactly this.
+  - **The title rule was also subtly wrong**, and the user caught it: `flex-shrink: 1` sizes the label
+    from its own intrinsic width, so a title fitting by a fraction of a pixel truncated anyway and lost a
+    whole character (`panel one` → `panel on`). Replaced with the web's canonical `flex: 1 1 0;
+    min-width: 0` — the label is *what is left after the close button* and no longer depends on its own
+    glyphs at all. The test now pins **both** halves, because asserting only "long titles truncate" called
+    the broken version a pass.
+  - **`text-shadow` now batches.** Both passes go inside one `beginBatch`/`endBatch`, so a shadowed
+    label costs one draw call instead of two — `CgTextRenderer.draw()` auto-wraps each submit in its own
+    batch otherwise, paying two material binds for the same atlas and shader. Wrapped in `try/finally`
+    because an unclosed batch makes the *next* `beginBatch` throw, which would take down all subsequent
+    text rather than one label.
+
+- **2026-07-30** — **5.2 + 5.3 done.** Suite 647 (553 + 94). P5 is closed apart from the deliberately
+  deferred 5.1; every engine-shaped item is now behind us and **P6 is next**.
+  - **5.2 — four CSS text properties**, ported after reading LDLib's `TextElement` line by line:
+    `text-align`, `white-space: nowrap`, `text-overflow: ellipsis`, and finally *consuming*
+    `text-shadow`, which had been registered as a documented no-op. Marquee deliberately skipped —
+    `<marquee>` is obsolete and ellipsis is the web's answer to the same problem.
+  - Ellipsis **re-shapes a shortened string** rather than dropping shaped glyphs, because shaping is not
+    a per-character mapping; truncating the run would change the width of what remains.
+  - `nowrap` **does not widen the box** — `max-width` still caps it, so text overflows. Two of my own
+    tests asserted width and were wrong; the observable difference is height.
+  - **5.3 — the roving tabindex.** One new `FocusPolicy` constant (`CLICK_NOT_TABBABLE` = the web's
+    `tabindex="-1"`) instead of an integer `tabindex`, as the plan had leaned. A `TabView` strip is now
+    one Tab stop however many tabs it has, with arrows moving inside it — the arrow half already existed.
+  - **The walkers split in two**, and that is the load-bearing part: `focusable()` for focus delegation
+    and arrows, `tabbable()` for Tab. Getting it wrong in either direction is a bug, so both are pinned.
+  - **Two latent traps, same shape as P2's** — the new consumer only made them visible.
+    `UIInputHandler` tested `== FocusPolicy.CLICK` for click-focus, which would have made every
+    unselected tab dead to the mouse; and `selectTab(null)` being public means a strip needs a
+    first-tab fallback or it drops to *zero* tab stops and leaves the keyboard entirely.
+  - **`TabView` owns the invariant, not `Tab`** — "exactly one tabbable tab" is strip-wide, exactly like
+    selection, and a per-tab setter is how it reaches zero or two.
+  - **`CheckboxGroup` deliberately left alone**: it has no arrow-key handling, so one tab stop would
+    strand its other members. Half the pattern is worse than none.
+  - 16 tests, **11 of which fail against the old semantics** (verified by reverting `isTabbable()`).
 
 - **2026-07-29** — **CSS `cursor` + native OS cursors.** Suite 619. A port, plus the first real
   implementation behind a platform seam.

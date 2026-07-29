@@ -53,6 +53,9 @@ import javax.annotation.Nullable;
 public class Dialog extends UIElement {
 
     public static final String TITLE_BAR_CLASS = "__title-bar__";
+    /** On the title text, so a theme can reach it — the same {@code __label__} hook Button and
+     * Checkbox use for theirs. */
+    public static final String LABEL_CLASS = "__label__";
     public static final String CONTENT_CLASS = "__content__";
     public static final String CLOSE_CLASS = "__close__";
 
@@ -88,6 +91,7 @@ public class Dialog extends UIElement {
                 l -> l.positionType(TaffyPosition.ABSOLUTE).flexDirection(dev.vfyjxf.taffy.style.FlexDirection.COLUMN));
 
         titleLabel = new UIText(title == null ? "" : title);
+        titleLabel.addClass(LABEL_CLASS);
         titleLabel.setHitTest(false);
 
         titleBar = new UIElement();
@@ -134,6 +138,12 @@ public class Dialog extends UIElement {
     /** The drag handle. Exposed so a theme or a caller can restyle or replace what it contains. */
     public UIElement getTitleBar() {
         return titleBar;
+    }
+
+    /** The title text. Exposed for the same reason {@link #getTitleBar()} is — and so a caller can turn
+     * off the user-agent sheet's title ellipsis if a full title matters more than the close button. */
+    public UIText getTitleLabel() {
+        return titleLabel;
     }
 
     // ── Open / close ────────────────────────────────────────────────────────

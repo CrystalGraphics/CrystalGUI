@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgShapedParagraph;
 import com.crystalgraphics.api.text.CgTextLayout;
+import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.CgUiPaintContext;
@@ -10,6 +11,7 @@ import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.TaffyDimension;
@@ -51,6 +53,12 @@ import dev.vfyjxf.taffy.style.TaffyDimension;
  * a pure width/height change. {@link CgShapedParagraph#layout(float, float)} already memoizes the
  * last {@code (maxWidth, maxHeight)} pair internally, so {@link #recompute()} and
  * {@link #paintOverlay} calling it with the same width re-runs no real line-breaking work.</p>
+ *
+ * <p><b>That reuse covers the wrapping path only.</b> {@code text-overflow: ellipsis} cannot use the
+ * retained paragraph at all — it re-shapes a <em>different</em> (shortened) string on every probe of its
+ * binary search — so {@link #truncatedStringFor} carries its own memo keyed on
+ * {@code (text, family, contentWidth)}. Without it a truncating label pays a full set of shaping passes
+ * every single frame, forever.</p>
  */
 public final class UIText extends UIElement {
 
@@ -61,6 +69,12 @@ public final class UIText extends UIElement {
     private CgShapedParagraph shapedParagraph;
     private String shapedForText;
     private CgFontFamily shapedForFamily;
+
+    /** Last ellipsis result and the exact inputs that produced it — see {@link #truncatedStringFor}. */
+    private String truncated;
+    private String truncatedForText;
+    private CgFontFamily truncatedForFamily;
+    private float truncatedForWidth = Float.NaN;
 
     /** null = not yet determined. Decided ONCE, on the first {@link #recompute()} call after this
      * element is genuinely attached to a window, then never re-derived — see {@link #recompute()}. */
@@ -182,6 +196,11 @@ public final class UIText extends UIElement {
         // max-width'd tooltip did (and it then defeated edge-clamping too, since placement was
         // reasoning about a box far narrower than the glyphs actually drawn).
         float maxWidthForWrap = selfSize ? selfMaxWidthForWrap() : contentWidth;
+        // `white-space: nowrap` overrides both: one line, however long. Kept separate from
+        // `contentWidth`, which still has to describe the real content box — it feeds the chrome
+        // arithmetic below, and zeroing it there would report this element's border+padding as its
+        // entire width.
+        if (!getStyle().getGeneralGroup().whiteSpace().wraps()) maxWidthForWrap = 0f;
         CgTextLayout textLayout = ensureShaped().layout(maxWidthForWrap, 0f); // 0f maxHeight — see class javadoc / paintOverlay
 
         float chromeWidth = getRuntimeCache().getWidth() - contentWidth;         // border+padding this element itself owns (normally 0)
@@ -247,13 +266,182 @@ public final class UIText extends UIElement {
         // happens the budget check trips early and CgLineBreaker.breakLines returns before appending
         // the trailing line at all — not clipped, just silently dropped. Known upstream CrystalGraphics
         // issue; revisit once UIText actually needs a bounded maxHeight (max-lines/ellipsis support).
-        CgTextLayout textLayout = ensureShaped().layout(contentWidth, 0f);
+        boolean wraps = general.whiteSpace().wraps();
+        CgTextLayout textLayout = wraps
+                ? ensureShaped().layout(contentWidth, 0f)
+                : truncatedIfNeeded(family, contentWidth);
+
+        // `text-align`: distribute the leftover width. Clamped at zero so overflowing text always
+        // starts at the leading edge rather than being pushed negative — centring something wider than
+        // its box would otherwise hide its beginning, which is the half you need to read.
+        float leftover = Math.max(0f, contentWidth - textLayout.totalWidth());
+        contentX += leftover * general.textAlign().leadingFraction();
 
         ctx.setColor(0xFFFFFFFF);
-        ctx.text().draw().layout(textLayout).family(family)
-                .at(contentX, contentY)
-                .color(getStyle().getGeneralGroup().color())
-                .pose(ctx.getPoseStack())
-                .submit();
+        int color = general.color();
+
+        // `text-shadow`: the same layout drawn once more, offset by a pixel, darkened. Was registered
+        // but a no-op until now. Deliberately not a separate colour property — CSS's `text-shadow` is a
+        // full offset/blur/colour triple, and inventing a partial one of our own would be a
+        // non-web concept to defend forever. A hardcoded 1px drop is what Minecraft's own font renderer
+        // does, and it is what a theme expects when it says `text-shadow: true`.
+        //
+        // Both passes go inside ONE batch. Without it `draw()` auto-wraps each submit in a batch of its
+        // own, so a shadowed label pays two material binds and two flushes for the same glyph atlas and
+        // the same shader — pure waste, since only the offset and the colour differ and colour is
+        // per-instance data. Batched, the two passes coalesce into a single draw call. The `try` matters:
+        // an unclosed batch makes the *next* beginBatch throw, so one bad frame would take down all
+        // subsequent text rather than just this label.
+        boolean shadow = general.textShadow();
+        CgTextRenderer renderer = ctx.text();
+        if (shadow) renderer.beginBatch();
+        try {
+            if (shadow) {
+                renderer.draw().layout(textLayout).family(family)
+                        .at(contentX + 1f, contentY + 1f)
+                        .color(shadowColorFor(color))
+                        .pose(ctx.getPoseStack())
+                        .submit();
+            }
+
+            renderer.draw().layout(textLayout).family(family)
+                    .at(contentX, contentY)
+                    .color(color)
+                    .pose(ctx.getPoseStack())
+                    .submit();
+        } finally {
+            if (shadow) renderer.endBatch();
+        }
+    }
+
+    /** A quarter-brightness copy at the same alpha — Minecraft's own convention for glyph shadows. */
+    private static int shadowColorFor(int argb) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = ((argb >> 16) & 0xFF) / 4;
+        int g = ((argb >> 8) & 0xFF) / 4;
+        int b = (argb & 0xFF) / 4;
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    /**
+     * The single-line layout, trimmed to fit with an ellipsis if {@code text-overflow: ellipsis} asked
+     * for it and the text is genuinely too wide.
+     *
+     * <p>Truncation is done on the <b>string</b>, then re-shaped — not by dropping glyphs from the
+     * shaped run. Shaping is not a per-character mapping: ligatures, marks and cluster reordering mean
+     * the last N glyphs are not the last N characters, so cutting the glyph array would split clusters
+     * and produce nonsense in exactly the scripts that can least afford it.</p>
+     *
+     * <p>The search is a binary search over the prefix length, so a long label costs ~log₂(n) shaping
+     * passes rather than n. Only runs when the text actually overflows AND the memo in
+     * {@link #truncatedStringFor} misses, so a stationary label re-measures nothing after the first
+     * frame.</p>
+     */
+    private CgTextLayout truncatedIfNeeded(CgFontFamily family, float contentWidth) {
+        String display = truncatedStringFor(family, contentWidth);
+        return display.equals(text.get())
+                ? ensureShaped().layout(0f, 0f)          // untouched: reuse the retained paragraph
+                : CgTextLayout.of(display, family).build();
+    }
+
+    /**
+     * The string that will actually be painted at this content width — the source text unchanged unless
+     * {@code text-overflow: ellipsis} is genuinely shortening it.
+     *
+     * <p>One implementation, two callers ({@link #truncatedIfNeeded} for painting and
+     * {@link #displayedText()} for asking). They must agree exactly: two searches over the same
+     * predicate is how "what it shows" and "what it says it shows" drift apart, and the drift would only
+     * ever be visible on screen.</p>
+     */
+    private String truncatedStringFor(CgFontFamily family, float contentWidth) {
+        String source = text.get();
+        if (getStyle().getGeneralGroup().textOverflow() != TextOverflow.ELLIPSIS) return source;
+        if (contentWidth <= 0f || ensureShaped().layout(0f, 0f).totalWidth() <= contentWidth) return source;
+
+        // Memoised on everything the answer depends on, because the search below is genuinely expensive
+        // and this method runs EVERY FRAME a label is truncating: measureEllipsised builds a fresh
+        // CgTextLayout per probe, so unlike the wrapping path there is no retained paragraph memoising
+        // it — a full set of shaping passes per frame, per label. Reference equality on the family is the
+        // same trick ensureShaped uses, and correct for the same reason: FontFamilyCache.resolve caches
+        // by (paths, targetPx), so an unchanged font-family/size is literally the same instance.
+        if (source.equals(truncatedForText) && family == truncatedForFamily
+                && contentWidth == truncatedForWidth) {
+            return truncated;
+        }
+
+        String ellipsis = ellipsisFor(family);
+        int lo = 0, hi = source.length(), keep = 0;
+        while (lo <= hi) {
+            int mid = (lo + hi) >>> 1;
+            if (measureEllipsised(family, source, mid, ellipsis).totalWidth() <= contentWidth) {
+                keep = mid;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+
+        truncated = source.substring(0, keep) + ellipsis;
+        truncatedForText = source;
+        truncatedForFamily = family;
+        truncatedForWidth = contentWidth;
+        return truncated;
+    }
+
+    /**
+     * The string this element will actually paint — {@link #getText()} unless {@code text-overflow:
+     * ellipsis} is shortening it, in which case the truncated form ending in the ellipsis.
+     *
+     * <p>Public rather than an internal detail for two reasons:</p>
+     * <ul>
+     *   <li><b>It is the only way truncation is observable at all.</b> Ellipsising happens at paint time
+     *       and changes no geometry, so nothing in the layout tree reveals whether it fired — which is
+     *       exactly how an ellipsis that never applied shipped green and only showed up on screen.</li>
+     *   <li><b>"Tooltip only when the label is truncated" is a real pattern</b>, and this is the question
+     *       it needs answered. The DOM makes you compare {@code scrollWidth} against
+     *       {@code clientWidth}; a direct answer is better.</li>
+     * </ul>
+     *
+     * <p>Returns the full text when detached, before first layout, or while wrapping — in none of those
+     * cases is there a bounded single line to truncate, so claiming a truncation would invent one.</p>
+     */
+    public String displayedText() {
+        if (getAttachedWindow() == null) return getText();
+        if (getStyle().getGeneralGroup().whiteSpace().wraps()) return getText();
+        return truncatedStringFor(resolveFamily(), getTaffyLayout().contentBoxWidth());
+    }
+
+    /** U+2026 — one glyph, and the one a font actually designs for this. Derived from the code point
+     * rather than written twice, so the literal and the coverage check cannot disagree. */
+    private static final int ELLIPSIS_CODE_POINT = 0x2026;
+    private static final String ELLIPSIS = String.valueOf((char) ELLIPSIS_CODE_POINT);
+    /** For the fonts that do not have it — see {@link #ellipsisFor}. */
+    private static final String ELLIPSIS_FALLBACK = "...";
+
+    /**
+     * {@code "…"} when the font stack can actually draw U+2026, {@code "..."} when it cannot.
+     *
+     * <p>Straight out of WebKit/Blink, which does exactly this in its text-overflow path — <i>"use the
+     * ellipsis character if the font supports it, otherwise use three periods"</i>. Worth having here
+     * rather than trusting the glyph: this engine ships pixel fonts and loads arbitrary ones, and a
+     * missing U+2026 degrades in the worst possible way — the text is shortened correctly and then a
+     * blank advance is drawn in the gap, which is indistinguishable on screen from
+     * {@code text-overflow: clip} while every measurement stays right.</p>
+     *
+     * <p>Checked against the <em>resolved</em> source rather than the primary one, so a fallback font in
+     * the stack that does have the glyph still wins it. {@code resolveSourceForCodePoint} returns the
+     * primary source as a last resort when nothing covers the code point, hence the second
+     * {@code canDisplayCodePoint} — the resolve alone cannot tell "found it" from "gave up".</p>
+     */
+    private static String ellipsisFor(CgFontFamily family) {
+        var source = family.resolveSourceForCodePoint(ELLIPSIS_CODE_POINT);
+        return source != null && source.canDisplayCodePoint(ELLIPSIS_CODE_POINT)
+                ? ELLIPSIS
+                : ELLIPSIS_FALLBACK;
+    }
+
+    /** {@code keep} is always within {@code source} — the search bounds it at {@code source.length()}. */
+    private CgTextLayout measureEllipsised(CgFontFamily family, String source, int keep, String ellipsis) {
+        return CgTextLayout.of(source.substring(0, keep) + ellipsis, family).build();
     }
 }
