@@ -14,6 +14,7 @@
 // radius, border, box size) that don't fit the shared quad batch's per-vertex-only tint.
 
 #type pos2_uv2_col4ub
+#pragma cg_use quad
 
 #pragma cg_feature WITH_BORDER
 #pragma cg_feature WITH_TEXTURE_FILL
@@ -86,9 +87,9 @@ Pass {
     }
 
     void vertex(out v2f o) {
-        gl_Position = cg_ProjMatrix * vec4(cg_Position, 0.0, 1.0);
-        o.uv    = cg_TexCoord0;
-        o.color = cg_Color;
+        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_WORLD_POS, 1.0);
+        o.uv    = CG_QUAD_UV;
+        o.color = CG_QUAD_COLOR;
     }
 
     void fragment(in v2f i, out vec4 fragColor) {

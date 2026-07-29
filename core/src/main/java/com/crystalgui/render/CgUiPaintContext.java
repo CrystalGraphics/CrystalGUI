@@ -14,8 +14,10 @@ import com.crystalgraphics.api.vertex.CgVertexFormat;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.state.CgGlScope;
 import com.crystalgraphics.gl.state.CgGlState;
+import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgraphics.util.io.CgIO;
@@ -111,7 +113,7 @@ public final class CgUiPaintContext {
     private final PoseStack poseStack;
 
     /**
-     * Basic wrapper over CgBatchRenderer
+     * Basic wrapper over {@link com.crystalgraphics.gl.render.CgQuadRenderer}.
      * Works only for quads.
      * <br>
      * <b>Currently intended for immediate flushing, despite it being inefficient and going against the idea of "Batching"</b>
@@ -121,10 +123,14 @@ public final class CgUiPaintContext {
 
     // ── Text ─────────────────────────────────────────────────────────────────
     /**
-     * Owned independently of {@link #renderer} — text uses
-     * {@link CgVertexFormat#POS2_UV2_COL4UB}, distinct from
-     * {@code CgUiRenderer}'s {@code CgVertexFormat.UI}, so it cannot share the same
-     * {@code CgBatchRenderer}. See {@code docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md} §2.1.
+     * Owned independently of {@link #renderer}, though both now reach the GPU the same way:
+     * CrystalGraphics' {@code CgTextRenderer} batches glyphs through its own
+     * {@code CgQuadRenderer}, exactly as {@link CgUiRenderer} does for box-model quads.
+     *
+     * <p>They stay separate instances rather than sharing one because each batches across its own
+     * {@code begin()}/{@code end()} window against its own material — only the CPU-side accumulation
+     * buffer is per-instance state, while the unit-quad mesh and the instance SSBO/TBO behind them
+     * are class-wide and shared regardless.</p>
      */
     @Getter
     private final CgTextRenderer textRenderer;
@@ -185,7 +191,7 @@ public final class CgUiPaintContext {
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
         this.textRenderer = CgTextRenderer.createManualSized().poseStack(this.poseStack)
                                           .restoreStateWith(() -> {
-                boxModelMaterial.bind();
+                renderer.useMaterial(boxModelMaterial);
                 currentTexture = null;
             });
     }
@@ -255,11 +261,11 @@ public final class CgUiPaintContext {
 
         poseStack.pushPose();
         renderer.begin();
-        boxModelMaterial.bind();
+        renderer.useMaterial(boxModelMaterial);
         currentMaterial = boxModelMaterial;
         currentTexture = null;
         scissorStack.reset();
-        frameActive = true; // must be set before warmUp() — submitQuad()/vertex() require an active frame
+        frameActive = true; // must be set before warmUp() — quad() requires an active frame
 
         if (!warmedUp) {
             warmUp();
@@ -292,7 +298,9 @@ public final class CgUiPaintContext {
     public void endFrame() {
         if (!frameActive) return;
 
-        boxModelMaterial.unbind();
+        // No explicit unbind: CgQuadRenderer owns bind/unbind (see CgUiRenderer#useMaterial), and the
+        // PROGRAM slot saved by beginFrame's CgGlScope restores whatever program was bound before the
+        // UI painted anyway — which is the restoration that actually matters to the 3D pipeline.
         currentMaterial = null;
         currentTexture = null;
         frameActive = false;
@@ -316,7 +324,7 @@ public final class CgUiPaintContext {
     /** Solid-color fill, tint already includes opacity. */
     public void fillRect(float x, float y, float width, float height, int argb) {
         bindTexture(whitePixel);
-        submitQuad(x, y, width, height, 0f, 0f, 1f, 1f, argb);
+        quad().at(x, y).size(width, height).color(argb).submit();
         flush();
     }
 
@@ -324,7 +332,14 @@ public final class CgUiPaintContext {
     public void drawImage(CgTexture2D texture, float x, float y, float width, float height,
                            float u0, float v0, float u1, float v1, int argb) {
         bindTexture(texture);
-        submitQuad(x, y, width, height, u0, v0, u1, v1, argb);
+        // A failed load resolves to the fallback checkerboard, which has no meaningful sub-rect — a
+        // caller's UV crop would sample an arbitrary corner of it. Full-range UVs keep a missing
+        // texture looking like the recognisable "missing texture" it is, at whatever size it was
+        // asked to draw. Was previously enforced centrally in submitQuad; it now lives at the two
+        // sites that can actually be handed a fallback (here and CgUiSprite).
+        boolean missing = texture == CgTextureManager.get().getFallback();
+        CgQuadRenderer.Quad q = quad().at(x, y).size(width, height).color(argb);
+        (missing ? q : q.uv(u0, v0, u1, v1)).submit();
         flush();
     }
     
@@ -370,13 +385,26 @@ public final class CgUiPaintContext {
         currentTexture = texture;
     }
 
-    /** Submits quad (4 vertices from the given parameters) to the renderer's queue
-     *  but doesn't request the draw call.
-     *  Must {@link #flush()} to draw.
+    /**
+     * Starts a fluent quad, already carrying this context's {@code PoseStack} transform.
+     *
+     * <p>Build and {@code submit()} in one expression — the returned instance is
+     * {@code CgQuadRenderer}'s shared per-renderer scratch object, so holding it past the
+     * {@code submit()} is not safe (the next {@code quad()} resets and reuses it).</p>
+     *
+     * <pre>{@code
+     * ctx.bindTexture(tex);
+     * ctx.quad().at(x, y).size(w, h).uv(u0, v0, u1, v1).color(argb).submit();
+     * ctx.flush();   // submit() only queues — this is what draws
+     * }</pre>
+     *
+     * <p><b>Never call {@code .pose(...)} on the result.</b> {@link CgUiRenderer#quad()} has already
+     * applied the active pose, and overwriting it drops the {@code uiScale}/element transform that
+     * every logical-space coordinate in this API assumes. Defaults are the full UV rect and opaque
+     * white, so a solid fill needs neither.</p>
      */
-    public void submitQuad(float x, float y, float width, float height, 
-                           float u0, float v0, float u1, float v1, int argb) {
-        renderer.submitQuad(x, y, width, height, u0, v0, u1, v1, argb);
+    public CgQuadRenderer.Quad quad() {
+        return renderer.quad();
     }
 
     /**
@@ -455,20 +483,35 @@ public final class CgUiPaintContext {
      */
     public void withMaterial(CgMaterial material, Runnable drawBody) {
         flush();
-        if (currentMaterial != material && currentMaterial != null) {
-            currentMaterial.unbind();
-        }
         currentMaterial = material;
         currentTexture = null;
         material.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+
+        // useMaterial() is called TWICE around drawBody on purpose, and both calls are load-bearing.
+        //
+        // The first satisfies CgQuadRenderer's precondition — Quad.submit() throws unless a material
+        // is active, since that call is the renderer's only confirmation its instance buffer is
+        // attached to the bound program — and auto-flushes anything still queued for the previous
+        // material, whose shader those instances were computed against.
+        //
+        // The second preserves the bind-AFTER-drawBody invariant documented above. drawBody sets its
+        // per-instance properties (corner radii, border, fill) via applyProperties, which is CPU-only
+        // — the GPU upload happens inside bind(). useMaterial() rebinds on every call even for the
+        // same instance, so this second call is what actually uploads what drawBody just set. Without
+        // it the draw would run with whatever was dirty from the *previous* use of this material:
+        // invisible for a static drawable repeating identical values, badly wrong for two instances
+        // alternating every frame, which is exactly the cross-fade bug this ordering was written to fix.
+        renderer.useMaterial(material);
         drawBody.run();
-        material.bind();
+        renderer.useMaterial(material);
         flush();
-        material.unbind();
-        boxModelMaterial.bind();
+
+        // Properties before the bind here, so the restored box-model material uploads the current
+        // layer opacity on this bind rather than trailing a frame behind.
+        boxModelMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+        renderer.useMaterial(boxModelMaterial);
         currentMaterial = boxModelMaterial;
         currentTexture = null;
-        boxModelMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
     }
 
     /**
@@ -492,12 +535,12 @@ public final class CgUiPaintContext {
         // effect on whatever it wraps.
         layerOpacity = previous * opacity;
         currentMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
-        currentMaterial.bind();
+        renderer.useMaterial(currentMaterial);
         drawBody.run();
         flush();
         layerOpacity = previous;
         currentMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
-        currentMaterial.bind();
+        renderer.useMaterial(currentMaterial);
     }
 
     // ── Visual layers ────────────────────────────────────────────────────────
@@ -545,7 +588,7 @@ public final class CgUiPaintContext {
             fbo.clearColor(0f, 0f, 0f, 0f);
             withMaterial(layerBlitMaterial, () -> {
                 bindTexture(whitePixel);
-                submitQuad(0, 0, fbo.getWidth(), fbo.getHeight(), 0f, 0f, 1f, 1f, 0x00000000);
+                quad().at(0, 0).size(fbo.getWidth(), fbo.getHeight()).color(0x0).submit();
                 flush();
             });
         }
@@ -619,7 +662,7 @@ public final class CgUiPaintContext {
      * applies in vanilla Minecraft/LDLib2 for the identical reason.</p>
      *
      * <p>{@code fbo}'s dimensions are real physical screen pixels (that's what it was allocated
-     * with), but every vertex submitted through {@link #submitQuad} is run through the active
+     * with), but every quad submitted through {@link #quad} is run through the active
      * {@link PoseStack} transform — which, mid-frame, still carries {@code UIWindow}'s own
      * {@code uiScale} scale meant for logical-space element coordinates. Submitting an
      * already-physical-sized quad through that same scale would double-apply it. Temporarily
@@ -630,7 +673,9 @@ public final class CgUiPaintContext {
             bindTexture(colorTex);
             poseStack.pushPose();
             poseStack.setIdentity();
-            submitQuad(0, 0, fbo.getWidth(), fbo.getHeight(), 0f, 1f, 1f, 0f, getColor());
+            quad().at(0, 0).size(fbo.getWidth(), fbo.getHeight())
+                  .uv(0f, 1f, 1f, 0f)   // V flipped — see the javadoc above
+                  .color(getColor()).submit();
             flush();
             poseStack.popPose();
         }));
@@ -657,7 +702,9 @@ public final class CgUiPaintContext {
             // identity-pose bypass as blitLayer too — this quad is already physical-pixel-sized.
             poseStack.pushPose();
             poseStack.setIdentity();
-            submitQuad(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight(), 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+            quad().at(0, 0).size(subtreeFbo.getWidth(), subtreeFbo.getHeight())
+                  .uv(0f, 1f, 1f, 0f)   // V flipped, same reason as blitLayer
+                  .color(0xFFFFFFFF).submit();
             flush();
             poseStack.popPose();
         }
