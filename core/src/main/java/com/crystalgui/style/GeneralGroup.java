@@ -9,6 +9,7 @@ import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.TransitionSpec;
+import com.crystalgui.ui.UITransform;
 
 import java.util.List;
 
@@ -212,6 +213,46 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
     public GeneralGroup textOffsetY(LengthPercent offset) {
         set(StylePropertyRegistry.TEXT_OFFSET_Y, offset);
         return this;
+    }
+
+    /**
+     * CSS's {@code transform} — a paint-time affine over this element and its subtree, applied on top
+     * of layout without disturbing it. Hit-testing follows it automatically.
+     *
+     * @see com.crystalgui.ui.UIElement#setTransform(UITransform)
+     */
+    public UITransform transform() {
+        return getValueSave(StylePropertyRegistry.TRANSFORM);
+    }
+
+    public GeneralGroup transform(UITransform transform) {
+        set(StylePropertyRegistry.TRANSFORM, transform == null ? UITransform.IDENTITY : transform);
+        return this;
+    }
+
+    /** The point {@link #transform()} scales and rotates about. Defaults to 50% — the element's centre. */
+    public LengthPercent transformOriginX() {
+        return getValueSave(StylePropertyRegistry.TRANSFORM_ORIGIN_X);
+    }
+
+    public GeneralGroup transformOriginX(LengthPercent origin) {
+        set(StylePropertyRegistry.TRANSFORM_ORIGIN_X, origin);
+        return this;
+    }
+
+    /** @see #transformOriginX() */
+    public LengthPercent transformOriginY() {
+        return getValueSave(StylePropertyRegistry.TRANSFORM_ORIGIN_Y);
+    }
+
+    public GeneralGroup transformOriginY(LengthPercent origin) {
+        set(StylePropertyRegistry.TRANSFORM_ORIGIN_Y, origin);
+        return this;
+    }
+
+    /** Both axes at once — the {@code transform-origin} shorthand's Java equivalent. */
+    public GeneralGroup transformOrigin(LengthPercent x, LengthPercent y) {
+        return transformOriginX(x).transformOriginY(y);
     }
 
     /** Fallback stack of font asset paths, primary first. */

@@ -2,6 +2,7 @@ package com.crystalgui.ui;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.input.CgUiInputAdapter;
+import com.crystalgui.style.property.visual.border.LengthPercent;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -92,13 +93,14 @@ public class UITransformTest {
         assertEquals(50f, local.y(), 0.001f);
     }
 
-    /** The pivot is normalised, so a top-left pivot scales toward the corner rather than the centre. */
+    /** `transform-origin` decides what stays fixed — a top-left origin scales toward the corner. */
     @Test
-    public void pivotDecidesWhatStaysFixed() {
+    public void transformOriginDecidesWhatStaysFixed() {
         UIElement child = childInWindow();
-        child.setTransform(UITransform.scale(0.5f).withPivot(0f, 0f));
+        child.setTransform(UITransform.scale(0.5f));
+        child.style(s -> s.general(g -> g.transformOrigin(LengthPercent.percent(0f), LengthPercent.percent(0f))));
 
-        // With the pivot at the element's own origin, that origin is the fixed point.
+        // With the origin at the element's own corner, that corner is the fixed point.
         var atOrigin = child.screenToLocal(0f, 0f);
         assertEquals(0f, atOrigin.x(), 0.001f);
         assertEquals(0f, atOrigin.y(), 0.001f);
@@ -107,6 +109,62 @@ public class UITransformTest {
         var half = child.screenToLocal(50f, 50f);
         assertEquals(100f, half.x(), 0.001f);
         assertEquals(100f, half.y(), 0.001f);
+    }
+
+    /** `transform-origin` takes pixels as readily as percentages — 0px is the same as 0%. */
+    @Test
+    public void transformOriginAcceptsPixels() {
+        UIElement child = childInWindow();
+        child.setTransform(UITransform.scale(0.5f));
+        child.style(s -> s.general(g -> g.transformOrigin(LengthPercent.px(0f), LengthPercent.px(0f))));
+
+        var atOrigin = child.screenToLocal(0f, 0f);
+        assertEquals(0f, atOrigin.x(), 0.001f);
+        assertEquals(0f, atOrigin.y(), 0.001f);
+    }
+
+    /**
+     * The reason the value type is an ordered list: CSS composes functions left-to-right, so the same
+     * two functions in the other order are a different transform.
+     *
+     * <p>With the origin at the corner, {@code translate(10) scale(2)} moves by 10 and then scales the
+     * translated space — local 0 lands at screen 10. {@code scale(2) translate(10)} scales first, so
+     * the same translate happens in doubled space and local 0 lands at screen 20. A transform stored
+     * as one translate field plus one scale field cannot tell these apart at all.</p>
+     */
+    @Test
+    public void functionOrderChangesTheResult() {
+        UIElement translateThenScale = childInWindow();
+        translateThenScale.style(s -> s.general(g -> g.transformOrigin(LengthPercent.px(0f), LengthPercent.px(0f))));
+        translateThenScale.setTransform(UITransform.translate(10f, 0f).withScale(2f, 2f));
+
+        UIElement scaleThenTranslate = childInWindow();
+        scaleThenTranslate.style(s -> s.general(g -> g.transformOrigin(LengthPercent.px(0f), LengthPercent.px(0f))));
+        scaleThenTranslate.setTransform(UITransform.scale(2f).withTranslate(10f, 0f));
+
+        // screenToLocal inverts, so ask where screen X maps to and check it is local 0.
+        assertEquals("translate applied before the scale", 0f,
+                translateThenScale.screenToLocal(10f, 0f).x(), 0.001f);
+        assertEquals("translate applied inside the scale", 0f,
+                scaleThenTranslate.screenToLocal(20f, 0f).x(), 0.001f);
+    }
+
+    /**
+     * Skew's matrix is the one that is easy to transpose, and a transposed shear still looks like a
+     * shear — so pin the direction rather than just "something happened".
+     *
+     * <p>{@code skewX(45deg)} means {@code x' = x + tan(45°)·y = x + y}, so with the origin at the
+     * corner, local (0, 20) draws at screen (20, 20).</p>
+     */
+    @Test
+    public void skewXShearsAlongXAndNotY() {
+        UIElement child = childInWindow();
+        child.style(s -> s.general(g -> g.transformOrigin(LengthPercent.px(0f), LengthPercent.px(0f))));
+        child.setTransform(UITransform.of(UITransform.Op.skew((float) Math.toRadians(45), 0f)));
+
+        var local = child.screenToLocal(20f, 20f);
+        assertEquals("x is sheared by y", 0f, local.x(), 0.001f);
+        assertEquals("y is untouched by skewX", 20f, local.y(), 0.001f);
     }
 
     /** Nested transforms compose — a child inside a scaled container is scaled by both. */
@@ -121,8 +179,10 @@ public class UITransformTest {
         window.setUiScale(1f);
         window.init(400, 400);
 
-        outer.setTransform(UITransform.scale(0.5f).withPivot(0f, 0f));
-        inner.setTransform(UITransform.scale(0.5f).withPivot(0f, 0f));
+        outer.style(s -> s.general(g -> g.transformOrigin(LengthPercent.px(0f), LengthPercent.px(0f))));
+        inner.style(s -> s.general(g -> g.transformOrigin(LengthPercent.px(0f), LengthPercent.px(0f))));
+        outer.setTransform(UITransform.scale(0.5f));
+        inner.setTransform(UITransform.scale(0.5f));
 
         // 0.5 * 0.5 = 0.25, so local (100, 100) sits at screen (25, 25).
         var local = inner.screenToLocal(25f, 25f);

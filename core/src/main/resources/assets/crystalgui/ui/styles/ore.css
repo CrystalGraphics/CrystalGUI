@@ -41,13 +41,36 @@
     font-family: "crystalgui:ui/fonts/MinecraftRegular.otf";
     font-size: 10;
     text-offset-y: 1px;
+    outline-offset: 0;
+    border-radius: 0;
+}
+
+:focus {
+    outline: auto;
+    outline-offset: 0;
+}
+
+/* Opting out of the user-agent sheet's `:focus` ring — required, not decorative.
+ *
+ * That rule matches the element that holds focus, i.e. the ROOT. Ore rings the root for button, tab
+ * and textfield, so those need nothing: a drawable `outline:` beats the SDF path outright in
+ * paintOutline. But for checkbox, switch and slider Ore rings a CHILD (__mark__ / __knob__ / __thumb__)
+ * and leaves the root's outline unset — so without this the root would sprout a second, blue ring
+ * around the whole widget. The divider is the same story with a background swap instead of a ring.
+ *
+ * `outline: none` expands to `outline-width: 0`, and at STYLESHEET origin that outranks USER_AGENT. */
+checkbox:focus,
+switch:focus,
+slider:focus,
+splitview .__divider__:focus {
+    outline: none;
 }
 
 button {
     background: asset("crystalgui:ore", "button");
     color: #222222;
     text-shadow: false;
-    height: 14px;
+    min-height: 14px;
     padding-left: 2px;
     padding-top: 2px;
     padding-right: 2px;

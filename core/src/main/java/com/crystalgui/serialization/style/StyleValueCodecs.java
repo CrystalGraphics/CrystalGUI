@@ -5,6 +5,8 @@ import com.crystalgui.serialization.CodecException;
 import com.crystalgui.serialization.Codecs;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.visual.border.LengthPercent;
+import com.crystalgui.ui.UITransform;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 
@@ -107,6 +109,77 @@ public final class StyleValueCodecs {
                 default -> throw new CodecException("Unknown TaffyDimension type '" + tag + "'");
             });
 
+    /**
+     * The paint-time length-or-percentage behind {@code border-radius}, {@code outline-offset},
+     * {@code text-offset}, {@code mask-offset} and {@code transform-origin}.
+     *
+     * <p>Its absence was a latent bug rather than a gap: any of those set inline on a server-built
+     * element threw a {@link CodecException} from {@code InlineStyleCodec} at encode time, which is
+     * exactly the "fail loudly" contract working — but the fix is a codec, not a refusal.</p>
+     *
+     * <p>Two fields rather than the {@code "5.0px"}/{@code "50.0%"} text form, so nothing round-trips
+     * through float formatting.</p>
+     */
+    public static final Codec<LengthPercent> LENGTH_PERCENT = new Codec<LengthPercent>() {
+        @Override
+        public <T> T encode(DynamicOps<T> ops, LengthPercent input) {
+            return Codecs.map(ops)
+                    .field("v", Codecs.FLOAT, input.value)
+                    .optional("pct", Codecs.BOOL, input.percent, false)
+                    .build();
+        }
+
+        @Override
+        public <T> LengthPercent decode(DynamicOps<T> ops, T input) {
+            var in = Codecs.read(ops, input);
+            float value = in.field("v", Codecs.FLOAT);
+            return in.optional("pct", Codecs.BOOL, false) ? LengthPercent.percent(value) : LengthPercent.px(value);
+        }
+    };
+
+    /**
+     * One {@code transform} function. Only the fields the kind uses are written — a {@code scale} does
+     * not carry two {@code LengthPercent}s it would ignore on the way back in.
+     */
+    private static final Codec<UITransform.Op> TRANSFORM_OP = new Codec<UITransform.Op>() {
+        @Override
+        public <T> T encode(DynamicOps<T> ops, UITransform.Op input) {
+            var out = Codecs.map(ops).field("k", Codecs.enumOf(UITransform.Kind.class), input.kind());
+            if (input.kind() == UITransform.Kind.TRANSLATE) {
+                out.field("x", LENGTH_PERCENT, input.lx()).field("y", LENGTH_PERCENT, input.ly());
+            } else {
+                out.field("x", Codecs.FLOAT, input.fx());
+                // rotate() has no second component; omitting it keeps the common node small and the
+                // encoding a pure function of the value, which the content-hash cache depends on.
+                if (input.kind() != UITransform.Kind.ROTATE) {
+                    out.field("y", Codecs.FLOAT, input.fy());
+                }
+            }
+            return out.build();
+        }
+
+        @Override
+        public <T> UITransform.Op decode(DynamicOps<T> ops, T input) {
+            var in = Codecs.read(ops, input);
+            UITransform.Kind kind = in.field("k", Codecs.enumOf(UITransform.Kind.class));
+            if (kind == UITransform.Kind.TRANSLATE) {
+                return UITransform.Op.translate(in.field("x", LENGTH_PERCENT), in.field("y", LENGTH_PERCENT));
+            }
+            float x = in.field("x", Codecs.FLOAT);
+            float y = in.optional("y", Codecs.FLOAT, 0f);
+            return switch (kind) {
+                case SCALE -> UITransform.Op.scale(x, y);
+                case ROTATE -> UITransform.Op.rotate(x);
+                case SKEW -> UITransform.Op.skew(x, y);
+                default -> throw new CodecException("Unhandled transform op kind '" + kind + "'");
+            };
+        }
+    };
+
+    /** {@code transform}, as its ordered function list — order is the whole point of the value type. */
+    public static final Codec<UITransform> TRANSFORM =
+            Codecs.xmap(Codecs.listOf(TRANSFORM_OP), UITransform::of, UITransform::ops);
+
     static {
         BY_TYPE.put(String.class, Codecs.STRING);
         BY_TYPE.put(Integer.class, Codecs.INT);
@@ -116,6 +189,8 @@ public final class StyleValueCodecs {
         BY_TYPE.put(Long.class, Codecs.LONG);
         BY_TYPE.put(LengthPercentageAuto.class, LENGTH_PERCENTAGE_AUTO);
         BY_TYPE.put(TaffyDimension.class, DIMENSION);
+        BY_TYPE.put(LengthPercent.class, LENGTH_PERCENT);
+        BY_TYPE.put(UITransform.class, TRANSFORM);
     }
 
     /**

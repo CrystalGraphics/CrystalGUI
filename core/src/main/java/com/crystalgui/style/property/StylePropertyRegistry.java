@@ -15,9 +15,12 @@ import com.crystalgui.style.property.visual.border.LengthPercentProperty;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.text.FontFamilyValue;
 import com.crystalgui.style.property.visual.texture.TextureProperty;
+import com.crystalgui.style.property.visual.transform.TransformOriginShorthand;
+import com.crystalgui.style.property.visual.transform.TransformProperty;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.transition.TransitionSpec;
 import com.crystalgui.style.transition.TransitionValue;
+import com.crystalgui.ui.UITransform;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
@@ -205,6 +208,35 @@ public class StylePropertyRegistry {
             create(new ColorProperty("outline-color", 0xFFFFFFFF));
     public static final StyleProperty<List<TransitionSpec>> TRANSITION =
             create("transition", List.of(), TransitionValue::new);
+
+    // ── transform ────────────────────────────────────────────────────────────
+    //
+    // CSS's transform, as an ordered function list (see UITransform for why the order has to be
+    // preserved rather than decomposed into fields). Layout-free: Taffy never sees it, so there is no
+    // TaffyBridge listener here — a transform moves pixels and the hit-test matrix, nothing else.
+    //
+    // The listener below is NOT optional. Every descendant's world matrix derives from this element's,
+    // so a change has to dirty the whole subtree or hit-testing keeps inverting the pre-transform
+    // matrix. Rendering re-snapshots the pose only when the cell is ALREADY dirty, so nothing else
+    // corrects it — the failure mode is clicks landing where the element used to be, with the render
+    // looking perfectly correct. TransitionEngine notifies listeners every frame, so an animating
+    // transform invalidates correctly for free.
+    //
+    // Deliberately NOT inheritable, matching CSS. A transform already reaches the whole subtree through
+    // the matrix chain, and inheritance here is pull-based — an inherited change does not fire the
+    // inheriting element's listeners, which is exactly the invalidation this depends on.
+    public static final StyleProperty<UITransform> TRANSFORM =
+            create(new TransformProperty("transform", UITransform.IDENTITY))
+                    .addListener((elem, prop, oldVal, newVal) -> elem.invalidatePoseCachesRecursively());
+    // transform-origin is 1-2 value shorthand syntax over these two (see TransformOriginShorthand),
+    // the same way margin/padding/outline-offset work. Both default to 50% — the element's own centre,
+    // so an unqualified scale or rotation stays put, as in CSS.
+    public static final StyleProperty<LengthPercent> TRANSFORM_ORIGIN_X =
+            create(new LengthPercentProperty("transform-origin-x", TransformOriginShorthand.CENTER))
+                    .addListener((elem, prop, oldVal, newVal) -> elem.invalidatePoseCachesRecursively());
+    public static final StyleProperty<LengthPercent> TRANSFORM_ORIGIN_Y =
+            create(new LengthPercentProperty("transform-origin-y", TransformOriginShorthand.CENTER))
+                    .addListener((elem, prop, oldVal, newVal) -> elem.invalidatePoseCachesRecursively());
 
     // ── Registry infrastructure ──────────────────────────────────────────────
 

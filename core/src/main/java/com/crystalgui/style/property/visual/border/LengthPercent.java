@@ -53,6 +53,26 @@ public final class LengthPercent {
         }
     }
 
+    /**
+     * Value equality, and it is load-bearing rather than a convenience.
+     *
+     * <p>{@code ElementStyle.resolveOne} decides whether a computed value actually changed with
+     * {@code Objects.equals}. Without this, every re-resolve of a {@code border-radius} or
+     * {@code transform-origin} looked like a change and fired the property's listeners — which for
+     * {@code transform-origin} means invalidating a whole subtree's matrices on every style pass.</p>
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof LengthPercent other)) return false;
+        return percent == other.percent && Float.compare(value, other.value) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return 31 * Boolean.hashCode(percent) + Float.hashCode(value);
+    }
+
     @Override
     public String toString() {
         return percent ? (value * 100f) + "%" : value + "px";

@@ -29,14 +29,44 @@
  * font-size defaults to 16 in the property registry, which is huge next to Minecraft's own UI.
  * These are inheritable, so setting them on the widgets reaches their labels. */
 
-button, checkbox, switch, slider, splitview, textfield, tabview, tab {
+* {
     font-size: 10;
+    outline-offset: -1px;
+    /*border-radius: 2px;*/
+}
+
+/* ── Focus ──────────────────────────────────────────────────────────────────────────────────────
+ * The browser analogue: whatever holds focus gets a visible ring, so a themeless UI is navigable by
+ * keyboard at all. #0060df is Firefox's accent. Flat colour, not asset() — see rule 2 above.
+ *
+ * This is the SDF path (outline-width + outline-color), which already follows border-radius and
+ * expands it, so a rounded widget gets a rounded ring for free. It needs no Java support.
+ *
+ * A bare `:focus` is a complete selector here (a lone pseudo-class needs no `*`), and `*:focus` would
+ * compute to the identical specificity of 10 — so the shorter form is the one to use.
+ *
+ * NOT `:focus-visible`: that pseudo-class doesn't exist in this engine, and the reason it exists on the
+ * web — hiding the ring from mouse users — inverts in a mouse-first Minecraft UI, where seeing what
+ * you just clicked take focus is useful.
+ *
+ * The seven things this can match are the only focusable elements in core/: button, tab, checkbox,
+ * switch, slider, textfield, and SplitView's divider. A theme that rings a widget's CHILD instead must
+ * turn this off on the root with `outline: none`, or both rings draw — see ore.css.
+ *
+ * 1px and NO outline-offset, where the web's default ring is 2px and often offset. Both were measured
+ * in cgui-gallery at uiScale 2 rather than assumed, and both were worse: a 2px ring is proportionally
+ * enormous against this engine's 10px default text (same reason font-size is set to 10 above), and an
+ * outward offset made adjacent checkboxes' rings collide. An offset also draws OUTSIDE the border box,
+ * where any ancestor with `overflow: hidden` scissors it away — a focused row inside a ScrollerView
+ * would lose the edge of its own ring. At 0 the stroke sits on the border box and always survives. */
+:focus {
+    outline: 1.5px #0060df;
 }
 
 /* ── Button ─────────────────────────────────────────────────────────────────────────────────── */
 
 button {
-    height: 14px;
+    min-height: 14px;
     padding-left: 2px;
     padding-top: 1px;
     padding-right: 2px;
