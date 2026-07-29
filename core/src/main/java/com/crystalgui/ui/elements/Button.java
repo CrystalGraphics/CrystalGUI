@@ -49,7 +49,16 @@ public class Button extends UIElement {
         this.label = new UIText(label == null ? "" : label);
         addInternalChild(this.label);
         this.label.setHitTest(false);
-        this.setFocusPolicy(FocusPolicy.FOCUSABLE);
+        // CLICK, not FOCUSABLE — clicking a button focuses it, exactly as clicking a `<button>` does
+        // on the web. CLICK is a superset: it keeps tab traversal and programmatic focus and adds
+        // pointer focus.
+        //
+        // This was FOCUSABLE only because a ring on every click looks terrible, and until
+        // `:focus-visible` existed there was no way to have click-focus without one. There is now:
+        // pointer focus doesn't ring, keyboard focus does. Keeping FOCUSABLE would mean clicking a
+        // button leaves focus wherever it was — so Space would then activate some *other* widget,
+        // which is the surprising behaviour, not the ring.
+        this.setFocusPolicy(FocusPolicy.CLICK);
 
         this.attachDefaultListener(this.onMouseUp, (el, event) -> {
             if (event.isWasPressTarget() && isEnabled()) {
