@@ -4,7 +4,9 @@ import com.crystalgui.core.input.SystemInput;
 import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.Checkbox;
 import com.crystalgui.ui.elements.Slider;
+import com.crystalgui.ui.elements.Switch;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
@@ -125,6 +127,42 @@ public class FocusVisibleTest extends UiTestBase {
 
         assertTrue("clicking a slider should focus it", slider.isFocused());
         assertFalse("a click must NOT ring", slider.isFocusVisible());
+    }
+
+    /**
+     * Button, Checkbox and Switch behave exactly as the Slider does — clicking focuses without
+     * ringing, which is what a browser does with a `&lt;button&gt;`.
+     *
+     * <p>They were {@code FocusPolicy.FOCUSABLE} (tab-reachable but never click-focused) purely
+     * because, before `:focus-visible`, click-focus meant a ring on every click. The consequence was
+     * that clicking a button left focus wherever it had been, so a subsequent Space activated some
+     * other widget entirely. This pins the fix, and pins that it did not cost the ring on Tab.</p>
+     */
+    @Test
+    public void clickingAButtonCheckboxOrSwitchFocusesItWithoutRinging() {
+        for (UIElement widget : new UIElement[]{new Button("b"), new Checkbox("c"), new Switch()}) {
+            setUp(widget);
+
+            click(widget);
+
+            String what = widget.getClass().getSimpleName();
+            assertTrue(what + " should take focus from a click", widget.isFocused());
+            assertFalse(what + " must not ring on a click", widget.isFocusVisible());
+        }
+    }
+
+    /** ...and Tab still rings all three, i.e. CLICK really is a superset of FOCUSABLE. */
+    @Test
+    public void tabStillRingsButtonCheckboxAndSwitch() {
+        for (UIElement widget : new UIElement[]{new Button("b"), new Checkbox("c"), new Switch()}) {
+            setUp(widget);
+
+            pressTab();
+
+            String what = widget.getClass().getSimpleName();
+            assertTrue(what + " should still be tab-reachable", widget.isFocused());
+            assertTrue(what + " must ring on keyboard focus", widget.isFocusVisible());
+        }
     }
 
     /**

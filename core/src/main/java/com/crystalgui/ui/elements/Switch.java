@@ -63,7 +63,10 @@ public class Switch extends UIElement {
         addInternalChild(this.knob);
         this.knob.setHitTest(false);
 
-        this.setFocusPolicy(FocusPolicy.FOCUSABLE);
+        // CLICK so a click focuses it and Space then toggles the thing you just clicked — see the
+        // fuller reasoning on Button, which this matches deliberately. No ring on pointer focus;
+        // `:focus-visible` handles that.
+        this.setFocusPolicy(FocusPolicy.CLICK);
         // Same press-and-release-on-the-same-element contract as Button/Checkbox; Space/Enter
         // activation arrives for free through UIInputHandler's generic keyboard bridge.
         this.attachDefaultListener(this.onMouseUp, (el, event) -> {
