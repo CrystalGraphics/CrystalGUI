@@ -10,6 +10,7 @@ import com.crystalgui.ui.elements.Switch;
 import com.crystalgui.ui.elements.Tab;
 import com.crystalgui.ui.elements.TabView;
 import com.crystalgui.ui.elements.TextField;
+import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 
 import javax.annotation.Nullable;
@@ -77,6 +78,9 @@ public final class ElementRegistry {
         register("tabview", TabView.class, TabView::new);
         register("textfield", TextField.class, TextField::new);
         register("text", UIText.class, () -> new UIText(""));
+        // Registered so `tooltip { ... }` is a usable type selector — a Tooltip is styled entirely
+        // from default.css/themes, and an unregistered class has no tag for the selector to match.
+        register("tooltip", Tooltip.class, Tooltip::new);
     }
 
     /**

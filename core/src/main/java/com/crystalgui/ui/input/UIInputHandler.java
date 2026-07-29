@@ -109,9 +109,10 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         if (lastHover == currentHover) {
             emitMouseMove(lastHover);
         } else {
-            updateHoverChain(lastHover, currentHover);
-            emitMouseLeave(lastHover);
-            emitMouseEnter(currentHover);
+            final var commonAncestor = UITreeTraversal.commonAncestor(lastHover, currentHover);
+            updateHoverChain(lastHover, currentHover, commonAncestor);
+            emitMouseLeaveChain(lastHover, commonAncestor);
+            emitMouseEnterChain(currentHover, commonAncestor);
         }
 
         if (scrollDelta != 0)
@@ -124,14 +125,47 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         this.lastFrameHover = currentHover;
     }
 
-    private void updateHoverChain(UIElement oldHover, UIElement newHover) {
-        final var commonAncestor = UITreeTraversal.commonAncestor(oldHover, newHover);
-
+    private void updateHoverChain(UIElement oldHover, UIElement newHover, UIElement commonAncestor) {
         for (var e = oldHover; e != null && e != commonAncestor; e = e.getParent()) {
             e.setHovered(false);
         }
         for (var e = newHover; e != null && e != commonAncestor; e = e.getParent()) {
             e.setHovered(true);
+        }
+    }
+
+    /**
+     * Fires {@code mouseleave} on <b>every</b> element being left, innermost first — not just the
+     * exact element the pointer was over.
+     *
+     * <p>This is what the DOM does, and the distinction is easy to misread: {@code mouseenter} and
+     * {@code mouseleave} do not <em>bubble</em>, but the browser still fires a separate one on each
+     * element in the entered/left chain. Only firing on the precise target means a container never
+     * hears about the pointer once it has any children — hovering a row's own label would leave the
+     * row itself with no event at all, and only the bare gaps between children would work. The
+     * {@code :hover} pseudo-class was already walking this same chain (right below), so the two used
+     * to disagree about what "hovered" meant.</p>
+     */
+    private void emitMouseLeaveChain(UIElement from, UIElement commonAncestor) {
+        if (from == null) return;
+        emitMouseMove(from);
+        for (var e = from; e != null && e != commonAncestor; e = e.getParent()) {
+            sendInputEvent(e, new MouseEvent.Leave(e, hoverFrameData.eventPosition()));
+        }
+    }
+
+    /** Counterpart to {@link #emitMouseLeaveChain}, outermost first — the DOM's entry order, so an
+     * ancestor learns the pointer arrived before its child does. */
+    private void emitMouseEnterChain(UIElement to, UIElement commonAncestor) {
+        if (to == null) return;
+        emitMouseMove(to);
+        int depth = 0;
+        for (var e = to; e != null && e != commonAncestor; e = e.getParent()) depth++;
+        UIElement[] chain = new UIElement[depth];
+        int i = depth;
+        for (var e = to; e != null && e != commonAncestor; e = e.getParent()) chain[--i] = e;
+        for (UIElement e : chain) {
+            sendInputEvent(e, new MouseEvent.Enter(e, hoverFrameData.eventPosition()));
         }
     }
 
@@ -316,18 +350,6 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
      */
     private void emitMouseScroll(UIElement target) {
         MouseEvent.Scroll event = new MouseEvent.Scroll(target, hoverFrameData.eventPosition(), scrollDelta);
-        sendInputEvent(target, event);
-    }
-
-    private void emitMouseEnter(UIElement target) {
-        emitMouseMove(target);
-        MouseEvent.Enter event = new MouseEvent.Enter(target, hoverFrameData.eventPosition());
-        sendInputEvent(target, event);
-    }
-
-    private void emitMouseLeave(UIElement target) {
-        emitMouseMove(target);
-        MouseEvent.Leave event = new MouseEvent.Leave(target, hoverFrameData.eventPosition());
         sendInputEvent(target, event);
     }
 

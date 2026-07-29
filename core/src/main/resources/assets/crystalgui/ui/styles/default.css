@@ -503,3 +503,34 @@ textfield:disabled {
 .spacer {
     flex-grow: 1;
 }
+
+/* ── Tooltip ────────────────────────────────────────────────────────────────────────────────────
+ * A `tooltip` is promoted into the top layer (CSS Position 4 §top-layer, the mechanism behind
+ * <dialog> and popovers), so it is NOT clipped by an ancestor's `overflow` — that is the entire
+ * reason the top layer exists. Placement is computed per frame in Tooltip.reposition().
+ *
+ * `margin-top` is load-bearing, not decoration: Java positions the tooltip flush against the
+ * anchor's bottom edge and this is what creates the visual gap. Widgets write structure, the
+ * cascade writes geometry — so the gap is tunable here, per theme, without touching Java.
+ * A theme that flips a tooltip above its anchor will want margin-bottom instead. */
+
+tooltip {
+    background: #1E1E1EF0;
+    outline: 1px #00000080;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    margin-top: 3px;
+}
+
+/* max-width goes on the LABEL, not on the tooltip box. UIText wraps against a width it can see on
+ * itself — an ancestor's max-width is not one, because a self-sizing UIText reports its full
+ * unwrapped run and the ancestor would only ever clip the box while the glyphs spilled out of it.
+ * Bounding the label instead makes it wrap, and the tooltip box then shrink-wraps the wrapped text,
+ * which is also what keeps edge-clamping honest — placement measures the box, so the box has to be
+ * the size of what actually draws. */
+tooltip .__label__ {
+    color: #FFFFFF;
+    max-width: 170px;
+}

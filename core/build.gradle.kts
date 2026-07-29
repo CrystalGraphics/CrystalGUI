@@ -41,6 +41,12 @@ dependencies {
     // that actually allocate GL objects still need a live context and remain harness-only.
     testImplementation("com.crystalgraphics:core:1.0.0")
     testImplementation("com.crystalgraphics:platform:1.0.0")
+    // Text shaping. This source set is the one that's *supposed* to have fonts (headlessTest is the
+    // one that deliberately doesn't), but the bindings were never wired in — so any test that laid
+    // out a non-empty UIText died with NoClassDefFoundError: FreeTypeException, several frames deep
+    // in FontFamilyCache. Shaping is pure CPU work (no GL context), so it genuinely works here; only
+    // atlas upload and drawing remain harness-only.
+    testImplementation("com.crystalgraphics:freetype-msdfgen-harfbuzz-bindings:1.0.0")
     // CG declares commons-io compileOnly (Minecraft ships it at runtime), so it isn't inherited
     // transitively. Tests that load a resource go through CgIO -> IOUtils, so they need it directly.
     testImplementation("commons-io:commons-io:2.4")
