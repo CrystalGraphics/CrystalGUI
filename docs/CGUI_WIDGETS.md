@@ -344,6 +344,17 @@ both skip hidden panes. If you want lazy population, do it yourself in an `onTab
 Keyboard: Left/Right (Up/Down when vertical) step the selection, Home/End jump to the ends; focus
 moves with the selection. Bubble-phase, so a focused widget inside a pane sees arrows first.
 
+**A whole strip is one Tab stop** — the ARIA APG's *roving tabindex*. The selected tab is
+`FocusPolicy.CLICK`; every other tab is `CLICK_NOT_TABBABLE` (the web's `tabindex="-1"`), so Tab enters
+the strip once, arrows move within it, and Tab again leaves for whatever follows. Ten tabs cost one
+press to skip, not ten.
+
+`TabView.updateTabStops()` owns that invariant — not `Tab` — for the same reason `selectTab` owns
+selection: "exactly one" is a strip-wide property, and a per-tab setter could leave **zero** stops,
+which makes the entire tablist unreachable by keyboard. It runs on every selection *and* membership
+change, falls back to the first tab when nothing is selected (`selectTab(null)` is public), and restores
+a removed tab to ordinarily-tabbable on the way out.
+
 - Tags `tabview`, `tab` · internal as listed in §0 · `tab:checked` works via the overridden `isChecked()`
 - Scenes: `cgui-tabview` (four sides, strip overflow, focus exclusion), `cgui-gallery`
 - Known gap: tabs and panes do **not** round-trip through the codec — they live in internal containers.
@@ -439,7 +450,24 @@ mandates for the size it writes. One rule covers both: user-driven geometry is i
 > `advanceFrame`, *before* layout, so just after a reopen the box is still the zero-sized
 > `display: none` one — deriving position from it snapped every reopened dialog to (0,0).
 
-- Tag `dialog` · internal `__title-bar__`, `__content__`, `__close__` · Scene: `cgui-gallery`
+**The title ellipsizes, and it is the one place this engine truncates text by default.** CSS does not:
+`text-overflow`'s initial value is `clip`, and no browser user-agent sheet ellipsizes generic text —
+spilling content is the correct default, since the content is the author's. A title bar is chrome
+though, with a close button pinned to its right edge that a long title paints straight over, and every
+native window manager ellipsizes window titles for that reason. `default.css` therefore gives
+`__title-bar__ .__label__` the web's canonical truncation recipe verbatim: **`flex: 1 1 0; min-width: 0;
+white-space: nowrap; overflow: hidden; text-overflow: ellipsis`**. Override on `getTitleLabel()` if the
+whole title matters more than the button.
+
+> **`flex-grow`/`flex-basis: 0`, not `flex-shrink: 1`** — and the difference is not cosmetic. Shrinking
+> from the label's intrinsic width makes its box depend on its own measured glyphs, so a title that fits
+> by a fraction of a pixel truncates anyway and loses a whole real character to an ellipsis it never
+> needed. (Observed: `panel one` rendering as `panel on`.) Growing from zero sizes the label to *what is
+> left after the close button*, which is the actual intent and has no such edge. `min-width: 0` is what
+> permits it at all — a flex item's automatic minimum is its min-content size, which for a `nowrap` line
+> is the entire line.
+
+- Tag `dialog` · internal `__title-bar__`, `__content__`, `__close__`, and `__label__` on the title text · Scene: `cgui-gallery`
 - Combines with `resize` (§12): the gallery's second panel is both movable and resizable.
 
 ---

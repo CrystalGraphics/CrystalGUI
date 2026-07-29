@@ -211,6 +211,7 @@ public class TabView extends UIElement {
         tab.attachListener(() -> selectTab(tab));
 
         if (selectedTab == null) selectTab(tab);
+        else updateTabStops(); // a fresh Tab arrives tabbable (Button's default) — demote it
         return tab;
     }
 
@@ -229,6 +230,9 @@ public class TabView extends UIElement {
         tabs.remove(index);
         rail.removeChild(tab);
         panes.removeChild(tab.content());
+        // Hands it back as an ordinary tabbable control. It is no longer part of any composite, so
+        // leaving it at tabindex="-1" would make a re-used tab silently unreachable by keyboard.
+        tab.setTabStop(true);
 
         if (selectedTab == tab) {
             tab.setSelected(false);
@@ -238,6 +242,8 @@ public class TabView extends UIElement {
             } else {
                 selectTab(tabs.get(Math.min(index, tabs.size() - 1)));
             }
+        } else {
+            updateTabStops(); // it may have been holding the no-selection fallback stop
         }
         return true;
     }
@@ -277,6 +283,7 @@ public class TabView extends UIElement {
         if (selectedTab != null) selectedTab.setSelected(false);
         selectedTab = tab;
         if (selectedTab != null) selectedTab.setSelected(true);
+        updateTabStops();
 
         onTabSelected.emit(selectedTab);
         return this;
@@ -290,6 +297,26 @@ public class TabView extends UIElement {
     public TabView attachListener(Signal.Value.Listener<Tab> action) {
         onTabSelected.connect(action);
         return this;
+    }
+
+    /**
+     * Keeps <b>exactly one</b> tab in the Tab sequence — the ARIA APG's roving tabindex, whose point is
+     * that a ten-tab strip costs one Tab press to skip rather than ten. The arrow keys
+     * ({@link #focusAndSelect}) move within it; Tab enters once and leaves once.
+     *
+     * <p>The stop follows selection, and falls back to the <b>first</b> tab when nothing is selected —
+     * which {@link #selectTab(Tab) selectTab(null)} makes reachable. Without that fallback a deselected
+     * strip would have zero tab stops and become entirely unreachable by keyboard, since every tab would
+     * be {@code tabindex="-1"}. APG has the same rule for the same reason.</p>
+     *
+     * <p>Called from every path that changes selection or strip membership. Assigning all N each time is
+     * deliberate over tracking the previous holder: {@code setFocusPolicy} already no-ops on an unchanged
+     * value, tab counts are single digits, and a missed clear is the one failure mode that produces two
+     * stops and silently defeats the whole pattern.</p>
+     */
+    private void updateTabStops() {
+        Tab stop = selectedTab != null ? selectedTab : (tabs.isEmpty() ? null : tabs.get(0));
+        for (Tab t : tabs) t.setTabStop(t == stop);
     }
 
     /** Arrow-key navigation moves focus with the selection, so the next arrow continues from there. */

@@ -206,15 +206,17 @@ public class TabViewTest extends UiTestBase {
         styleFrame();
 
         List<UIElement> reachable = new ArrayList<>();
-        for (UIElement at = UITreeTraversal.firstFocusableIn(window.ui.rootElement);
+        for (UIElement at = UITreeTraversal.firstTabbableIn(window.ui.rootElement);
              at != null && !reachable.contains(at);
-             at = UITreeTraversal.nextFocusable(at)) {
+             at = UITreeTraversal.nextTabbable(at)) {
             reachable.add(at);
         }
 
         assertTrue("the showing pane's content must be reachable", reachable.contains(visibleField));
         assertFalse("Tab must not land inside a hidden pane", reachable.contains(hiddenField));
-        assertTrue("the tabs themselves stay reachable", reachable.contains(first));
+        assertTrue("the selected tab holds the strip's one tab stop", reachable.contains(first));
+        assertFalse("...and the unselected one does not — a tablist is one tab stop",
+                reachable.contains(second));
     }
 
     // ── Keyboard ────────────────────────────────────────────────────────────

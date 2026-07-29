@@ -6,6 +6,9 @@ import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Cursor;
+import com.crystalgui.style.property.visual.text.TextAlign;
+import com.crystalgui.style.property.visual.text.TextOverflow;
+import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.property.visual.ScrollBehavior;
@@ -286,6 +289,47 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     public GeneralGroup resize(Resize resize) {
         set(StylePropertyRegistry.RESIZE, resize);
+        return this;
+    }
+
+    /** CSS `text-shadow`, as a boolean drop shadow. Inherited. Registered long before anything drew
+     * it; UIText.paintOverlay finally consumes it. */
+    public boolean textShadow() {
+        return getValueSave(StylePropertyRegistry.TEXT_SHADOW);
+    }
+
+    public GeneralGroup textShadow(boolean textShadow) {
+        set(StylePropertyRegistry.TEXT_SHADOW, textShadow);
+        return this;
+    }
+
+    /** CSS `text-align` -- inherited. @see TextAlign */
+    public TextAlign textAlign() {
+        return getValueSave(StylePropertyRegistry.TEXT_ALIGN);
+    }
+
+    public GeneralGroup textAlign(TextAlign align) {
+        set(StylePropertyRegistry.TEXT_ALIGN, align);
+        return this;
+    }
+
+    /** CSS `white-space`, wrapping half only -- inherited. @see WhiteSpace */
+    public WhiteSpace whiteSpace() {
+        return getValueSave(StylePropertyRegistry.WHITE_SPACE);
+    }
+
+    public GeneralGroup whiteSpace(WhiteSpace whiteSpace) {
+        set(StylePropertyRegistry.WHITE_SPACE, whiteSpace);
+        return this;
+    }
+
+    /** CSS `text-overflow` -- NOT inherited. @see TextOverflow */
+    public TextOverflow textOverflow() {
+        return getValueSave(StylePropertyRegistry.TEXT_OVERFLOW);
+    }
+
+    public GeneralGroup textOverflow(TextOverflow overflow) {
+        set(StylePropertyRegistry.TEXT_OVERFLOW, overflow);
         return this;
     }
 

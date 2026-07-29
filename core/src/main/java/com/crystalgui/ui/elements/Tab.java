@@ -4,6 +4,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 /**
@@ -24,6 +25,21 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
  * because the header strip and the content area are separate layout regions. The tab merely owns the
  * reference. A Tab built standalone (by {@code ElementRegistry}) has a pane that is simply not
  * attached to anything until a TabView adopts it.</p>
+ *
+ * <h3>A whole tablist is one tab stop</h3>
+ * <p>One tab in a strip is {@code FocusPolicy.CLICK}; every other is {@link FocusPolicy#CLICK_NOT_TABBABLE}.
+ * This is the ARIA APG's <b>roving tabindex</b>: Tab enters the strip once, arrow keys move within it,
+ * and Tab again leaves for whatever follows. Ten tabs cost one press to skip, not ten — the entire
+ * reason the pattern exists.</p>
+ *
+ * <p><b>{@link TabView} owns which tab that is</b>, via {@code updateTabStops()} — normally the selected
+ * one, falling back to the first when nothing is selected. {@link #setTabStop} is package-private
+ * precisely so a Tab cannot decide this for itself; see that method for why. Arrow-key navigation lives
+ * in TabView too.</p>
+ *
+ * <p>Not overridable by CSS, deliberately: which control in a composite holds the tab stop is a
+ * behavioural invariant of the composite, and the web doesn't expose {@code tabindex} to stylesheets
+ * either.</p>
  */
 public class Tab extends Button {
 
@@ -101,5 +117,22 @@ public class Tab extends Button {
     private void applyPaneVisibility() {
         StyleGroup.importantPipeline(pane.getStyle().getLayoutGroup(),
                 l -> l.display(selected ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+    }
+
+    /**
+     * Whether Tab may land on this tab — the roving half of the roving-tabindex pattern.
+     *
+     * <p>Package-private for the same reason {@link #setSelected} is: "exactly one tab in the strip is
+     * tabbable" is a TabView-wide invariant, so {@link TabView#updateTabStops()} is the only caller.
+     * Setting it per-tab from outside could leave a strip with zero tab stops, which makes an entire
+     * tablist unreachable by keyboard — a far worse failure than a stray focus ring.</p>
+     *
+     * <p>Either way the tab stays clickable and stays reachable by the arrow keys; only Tab's view of it
+     * changes. {@code invalidateFocusableChain()} is deliberately not called — the
+     * {@code hasFocusableDescendant} cache is keyed on {@code focusable()}, which is identical for the
+     * two policies, so nothing it memoizes has changed.</p>
+     */
+    void setTabStop(boolean tabStop) {
+        setFocusPolicy(tabStop ? FocusPolicy.CLICK : FocusPolicy.CLICK_NOT_TABBABLE);
     }
 }

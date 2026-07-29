@@ -195,7 +195,7 @@ styleable, extensible container, conceptually like an HTML `<div>`". It owns:
 | Tree | `addChild`/`addChildAt`/`addChildren`/`removeChild`/`removeSelf`/`clearAllChildren`/`hasChild`/`getSiblingIndex` |
 | Identity | `setId`, `addClass`/`removeClass`/`hasClass`, `tagName()` (via `ElementRegistry`) |
 | State flags | `setEnabled`/`setPressed`/`setFocused`/`setHovered`; overridable `isChecked`/`isBlank`/`isInvalid`/`consumesTextInput` |
-| Focus | `setFocusPolicy`, `focusable()`, `invalidateFocusableChain()` |
+| Focus | `setFocusPolicy`, `focusable()`, `tabbable()`, `invalidateFocusableChain()` |
 | Hit testing | `setHitTest`, `containsScreenPoint`, `screenToLocal` |
 | Transform | `getTransform`/`setTransform` (`UITransform`), `invalidatePoseCachesRecursively()` |
 | Scrolling | `setScrollTop`/`setScrollLeft`/`setScroll`/`setScrollImmediate`/`scrollIntoView`/`clampScroll`/`getMaxScroll*`/`getClientWidth`/`getScrollWidth`/`setScrollExempt` |
@@ -441,7 +441,10 @@ getter**; `Tab.isChecked()` is the whole implementation of `tab:checked`.
 - `StyleSheetRegistry.of("crystalgui:ore")` — loads `assets/{ns}/ui/styles/{path}.css`, lazily parsed
   and `ConcurrentHashMap`-cached, so repeated calls return the same instance.
 - `DeclarationParser` — declaration-level parsing including `var(--x)` custom-property substitution.
-- `StyleSheet.DEFAULT` — the user-agent sheet (see the headless trap above).
+- `StyleSheet.DEFAULT` — the user-agent sheet (see the headless trap above). **Not applied
+  automatically** — `window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT)` is a real call a caller
+  has to make. A test that asserts on `default.css` behaviour without it silently exercises no CSS and
+  passes for the wrong reason.
 
 ## `StyleEngine` — the per-window driver
 
@@ -520,7 +523,9 @@ One class, merging what older notes split into "input manager" + "focus manager"
   for CAPTURE, fire once for TARGET, walk target→root for BUBBLE if `bubbles`.
 - **Hover**, via a `CacheCell<UIElement>` diffed once per frame inside `endFrame()`.
 - **Focus** (`requestFocus`, `blurIfFocused`, `getFocusedElement`) and Tab traversal via
-  `UITreeTraversal.{firstFocusableIn, lastFocusableIn, previousFocusable, nextFocusable}`.
+  `UITreeTraversal.{firstTabbableIn, lastTabbableIn, previousTabbable, nextTabbable}` — with
+  `{first,last}FocusableIn` kept as a *separate* pair for focus delegation (see `FocusPolicy` below).
+  Tab wraps around at both ends.
 - **Press/click state** per button (`ButtonState`, multi-click `detail` counting), and
   `MouseEvent.Up.isWasPressTarget()`.
 - **Pointer capture** (`setPointerCapture`/`releasePointerCapture`) — Pointer Events L3. While
@@ -552,7 +557,33 @@ frame** from `paintFrame()`'s `beginFrame()`/`endFrame()` pair.
 > mislabeled as the *old* one. That was the original stuck-hover bug. The "last frame's hover"
 > baseline is a plain field (`lastFrameHover`) snapshotted at the end of `fireAccumulatedMouseEvents()`.
 
-`FocusPolicy` is `NONE` / `FOCUSABLE` / `CLICK`.
+### `FocusPolicy` — four values, and two of them look alike
+
+`NONE` / `FOCUSABLE` / `CLICK` / `CLICK_NOT_TABBABLE`, queried through `isFocusable()`,
+`isTabbable()` and `focusesOnClick()` rather than by `==`.
+
+`CLICK_NOT_TABBABLE` is the web's `tabindex="-1"` and exists for one purpose: the ARIA APG's **roving
+tabindex**, where *"the tab sequence should include only one focusable element of a composite UI
+component"* and *"the arrow keys move focus inside"* it. A ten-tab `TabView` is one Tab press to skip,
+not ten.
+
+That splits the tree walkers in two, and **the pair is not interchangeable**:
+
+| Question | Predicate | Walkers | Asked by |
+|---|---|---|---|
+| May this hold focus at all? | `focusable()` | `firstFocusableIn`/`lastFocusableIn` | focus delegation (`Dialog.show()`), arrow keys inside a composite, `requestFocus` |
+| Is it in the Tab sequence? | `tabbable()` | `firstTabbableIn`/`lastTabbableIn`/`nextTabbable`/`previousTabbable` | Tab / Shift+Tab |
+
+> Click-focus therefore tests **`focusesOnClick()`, never `== CLICK`** — a `CLICK_NOT_TABBABLE`
+> element is still fully clickable, so an equality check makes every unselected tab go dead to the
+> mouse.
+
+**Integer `tabindex` was deliberately not ported.** The roving pattern only ever uses `0` and `-1`;
+positive values reorder the whole document from one element and are widely regretted. One enum
+constant covers the pattern.
+
+`hasFocusableDescendant` stays keyed on `focusable()` — a superset of `tabbable()`, so it remains a
+valid fast-path filter for both walkers and needs no invalidation when only the tab stop moves.
 
 ---
 
@@ -739,6 +770,14 @@ instead of an item's resolved column width under `flex-wrap: wrap` (the `nowrap`
 a measured leaf wraps at the wrong width whenever any ancestor has wrapping enabled — unfixable
 without forking a Maven dependency.
 
+`text-overflow: ellipsis` truncates the **string** and re-shapes, never drops glyphs from the shaped run
+— shaping is not a per-character mapping, so cutting the glyph array splits clusters. The ellipsis is
+`…` when the font stack can draw U+2026 and `...` when it cannot, which is WebKit/Blink's own rule and
+not hypothetical: the bundled `MinecraftRegular.otf` has no U+2026, and without the fallback a truncated
+label draws a blank advance and is indistinguishable from `clip`. `displayedText()` returns what will
+actually be painted — the only observable evidence that truncation fired, and the answer to
+"tooltip only when the label is ellipsized".
+
 Instead it is an ordinary Taffy leaf that recomputes *after* layout: `onLayoutChanged()` →
 `recompute()` re-wraps against the box's just-settled `contentBoxWidth()` and pushes the resulting
 height (and width, when self-sizing) back as `IMPORTANT` candidates via `StyleGroup.importantPipeline`.
@@ -807,6 +846,13 @@ The things that are invisible from any single class and expensive to rediscover.
 | JOML + Taffy must stay on the headless classpath | Field descriptors resolve at class load; `UIElement`/`ElementStyle` have fields of those types |
 | Composites return `acceptsPublicChildren() == false` | `addChild` throws; widgets need named content accessors |
 | `attachListener`'s two booleans are additive | Target phase is *always* subscribed |
+| `StyleSheet.DEFAULT` is not installed for you | A test asserting on user-agent-sheet behaviour tests nothing and goes green |
+| `text-overflow` does **not** inherit — it must sit on the `UIText` itself | Set on a wrapper it silently never arrives, and the row renders as plain `clip` (`white-space` *does* inherit, which masks it) |
+| Truncation changes no geometry — `UIText.displayedText()` is the only way to observe it | An ellipsis that never fires looks identical to one that does, in every test and every layout dump |
+| A closed `Dialog` is `display: none`, so every box in it measures 0 | Any "does it fit?" assertion passes against `0 <= 0` — call `show()` first |
+| Tab traversal gates on `tabbable()`; focus delegation gates on `focusable()` | Either a composite is N tab stops again, or a dialog's focus delegate skips its own first control |
+| Click-focus tests `focusesOnClick()`, not `== FocusPolicy.CLICK` | Every non-selected member of a composite stops responding to the mouse |
+| Exactly one tab in a `TabView` strip is tabbable, falling back to the first when nothing is selected | Zero tab stops — the whole tablist disappears from the keyboard |
 | `Property.set()` silently drops re-entrant sets from inside its own emit | A listener cannot fight the value it's being notified about |
 
 ---
