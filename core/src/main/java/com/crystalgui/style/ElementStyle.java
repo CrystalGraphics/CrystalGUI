@@ -45,8 +45,8 @@ public final class ElementStyle {
         return this;
     }
 
-    public ElementStyle general(Consumer<LayoutGroup> configurator) {
-        configurator.accept(this.getLayoutGroup());
+    public ElementStyle general(Consumer<GeneralGroup> configurator) {
+        configurator.accept(this.getGeneralGroup());
         return this;
     }
 

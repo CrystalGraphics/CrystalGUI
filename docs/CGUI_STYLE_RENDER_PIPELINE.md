@@ -438,6 +438,47 @@ something creates very deep transient nesting.
 
 ---
 
+## 8b. `transform` / `transform-origin`
+
+A paint-time affine over an element and its whole subtree, applied on top of layout without disturbing
+it. **Taffy never sees it** — transforming an element cannot reflow its siblings or resize its parent,
+which is what makes it the right tool for a zoomable canvas (put one scale on a container and the
+subtree zooms with layout frozen underneath — the same trick LDLib2's node graph uses).
+
+```css
+transform: translate(10px, 5px) scale(2) rotate(45deg);
+transform-origin: left top;              /* default: 50% 50% */
+transition: transform 160ms ease;        /* interpolatable */
+```
+
+Supported functions: `translate`/`translateX`/`translateY` (lengths or percentages of the element's own
+box), `scale`/`scaleX`/`scaleY` (unitless), `rotate`, `skew`/`skewX`/`skewY`, and `none`. Angles take
+`deg`/`rad`/`turn`/`grad` — a unitless non-zero angle is rejected, as in CSS.
+
+**The value is an ordered function list, not a decomposition.** CSS composes left-to-right as matrix
+multiplication, so `translate(10px) scale(2)` and `scale(2) translate(10px)` are genuinely different —
+the first translates then scales the translated space, the second scales first so the same translate
+lands at 20. A translate-field-plus-scale-field value type cannot represent that distinction at all.
+`UITransform` therefore stores `List<Op>` and `applyTo` walks it in order; each JOML call
+post-multiplies, so declaration order *is* the composition order with no reversal.
+
+**`transform-origin` is two real longhands** (`transform-origin-x`/`-y`, both `LengthPercent`), with
+`transform-origin` as 1–2 value shorthand syntax over them — the same architecture as `outline-offset`.
+Keywords (`left`/`center`/`right`/`top`/`bottom`) resolve to percentages, and the reversed keyword pair
+(`top left`) is accepted as CSS allows.
+
+**Hit-testing follows automatically and this is the load-bearing invariant.** `RuntimeCache.localToWorld`
+and the paint `PoseStack` both call the *same* `UITransform.applyTo`. If they ever diverged, a click
+would land somewhere other than what is drawn and nothing about the rendering would look wrong —
+`UITransformTest` exists to pin exactly that.
+
+Non-inheritable, matching CSS. It already reaches descendants through the matrix chain, and inheritance
+here is pull-based — an inherited change does not fire the inheriting element's `StyleChangeListener`s,
+which is the very mechanism that dirties the subtree's matrices.
+
+**Set from Java** with `element.setTransform(UITransform…)` (sugar writing `transform` at `INLINE`
+origin) or `style(s -> s.general(g -> g.transformOrigin(x, y)))`.
+
 ## 9. Known Gaps vs. the Web
 
 - **No `@import` or media queries.** External stylesheets *are* supported now —
@@ -445,6 +486,20 @@ something creates very deep transient nesting.
   resource pack ships a theme just by placing a file at that path. CSS custom properties
   (`--var`/`var()`) are implemented too.
 - **No `:nth-child`, attribute selectors, or `~`/`+` sibling combinators** — only `>` and descendant.
+- **No `:focus-visible`.** Only `:focus`, which is also what `default.css`'s ring hangs off — so the
+  ring shows after a mouse click, where a browser would suppress it. Deliberate: the distinction exists
+  on the web to hide rings from mouse users, and this is a mouse-first UI. Cheap to add later —
+  `UIInputHandler` already separates the keyboard/programmatic focus path from the click path.
+- **`transform` has no `matrix()`**, and mismatched function lists **snap** where CSS decomposes both
+  ends into matrices and interpolates those. Matching lists (same length, same kinds in the same
+  order) interpolate component-wise as CSS does, which covers the case authors are told to write
+  anyway. The axis variants also collapse into their two-argument form (`translateX(5px)` →
+  `translate(5px, 0)`), which *widens* what can interpolate rather than narrowing it.
+- **Clipping is axis-aligned, so `overflow: hidden` on a rotated or skewed element clips against its
+  unrotated bounding box.** The scissor is a real `GL_SCISSOR_TEST` rect; browsers do better.
+- **Text inside a scaled subtree rasterises at its untransformed size**, so it blurs when zoomed well
+  past 1×. That is a CrystalGraphics-side glyph-cache concern, not a style one; LDLib2 has the same
+  shape of problem and mitigates it with font oversampling on its TTF.
 - **No pseudo-elements** (`::before`/`::after`) — decorative sub-visuals use the `overlay`/`outline`
   paint layers (§5) or a real internal child with a fixed class, not generated content.
 - **No `background-position`/`-size`/`-origin`** as independent properties — the analog is
@@ -513,6 +568,9 @@ something creates very deep transient nesting.
 | Property registry | `core/src/main/java/com/crystalgui/style/property/StylePropertyRegistry.java` |
 | Box-model shorthand expansion | `core/src/main/java/com/crystalgui/style/property/layout/BoxEdgeShorthands.java` |
 | Border-radius shorthand expansion + value type | `core/src/main/java/com/crystalgui/style/property/visual/border/` (`BorderRadiusShorthand`, `BorderRadiusProperties`, `LengthPercent`) |
+| `transform` value type | `core/src/main/java/com/crystalgui/ui/UITransform.java` (ordered `Op` list + `applyTo`) |
+| `transform` parsing/property/origin shorthand | `core/src/main/java/com/crystalgui/style/property/visual/transform/` (`TransformValue`, `TransformProperty`, `TransformOriginShorthand`) |
+| Shared CSS parsing helpers | `core/src/main/java/com/crystalgui/style/CssParsingUtil.java` (`splitTopLevelCommas`, `splitFunctionList`), `.../style/CssAngle.java` |
 | Frame lifecycle | `core/src/main/java/com/crystalgui/ui/UIWindow.java` |
 | Paint entry points | `core/src/main/java/com/crystalgui/ui/UIElement.java` (`paintSelf`/`paintOverlay`/`drawSubtree`) |
 | Paint context | `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java` |

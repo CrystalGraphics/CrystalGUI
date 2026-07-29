@@ -567,13 +567,20 @@ public class UIElement {
     @Getter
     private boolean scrollExempt = false;
 
-    /** @see #setTransform(UITransform) */
-    @Getter
-    private UITransform transform = UITransform.IDENTITY;
+    /** The cascaded {@code transform}. @see #setTransform(UITransform) */
+    public UITransform getTransform() {
+        return style.getGeneralGroup().transform();
+    }
 
     /**
-     * Applies a paint-time affine — translate, scale, rotation about a normalised pivot — to this
-     * element and everything under it.
+     * Applies a paint-time affine — CSS's {@code transform} — to this element and everything under it.
+     *
+     * <p>Sugar over the style system: this writes {@code transform} at {@link StyleOrigin#INLINE},
+     * exactly as {@code layout(l -> ...)} does, so a stylesheet rule and this setter compete through
+     * the normal cascade rather than one silently shadowing the other. Read it back with
+     * {@link #getTransform()}, or set the pivot with
+     * {@code style(s -> s.transformOrigin(x, y))} — the origin is {@code transform-origin}, its own
+     * cascading property.</p>
      *
      * <p><b>Layout-free.</b> Taffy never sees it, so scaling an element cannot reflow its siblings or
      * resize its parent. That is what makes it the right tool for a zoomable canvas: put one scale on
@@ -586,22 +593,34 @@ public class UIElement {
      * is mapped back through the transform before any box test, and a scaled or rotated subtree stays
      * clickable where it is drawn, with no special-casing. Nothing else needs to know.</p>
      *
-     * <p>Not a style property yet; a CSS {@code transform}/{@code transform-origin} surface is the
-     * natural next step, using real CSS syntax.</p>
+     * @param transform {@code null} resets to {@link UITransform#IDENTITY}
      */
     public UIElement setTransform(UITransform transform) {
-        UITransform next = transform == null ? UITransform.IDENTITY : transform;
-        if (this.transform.equals(next)) return this;
-        this.transform = next;
-        // The whole subtree's world matrices derive from this one, exactly as with uiScale — without
-        // this, hit-testing would keep inverting the pre-transform matrix.
-        invalidatePoseCaches(this);
+        style.getGeneralGroup().transform(transform);
         return this;
     }
 
-    private static void invalidatePoseCaches(UIElement element) {
-        element.getRuntimeCache().resetPoseCache();
-        for (UIElement child : element.children) invalidatePoseCaches(child);
+    /**
+     * Dirties this element's world matrix and every descendant's.
+     *
+     * <p>Public because the {@code transform}/{@code transform-origin} properties invalidate through it
+     * from {@code StylePropertyRegistry}'s change listeners — the whole subtree's matrices derive from
+     * this element's, so a transform change that only dirtied this node would leave hit-testing
+     * inverting the pre-transform matrix for every descendant, while rendering looked correct.</p>
+     */
+    public void invalidatePoseCachesRecursively() {
+        runtimeCache.resetPoseCache();
+        for (UIElement child : children) child.invalidatePoseCachesRecursively();
+    }
+
+    /** {@code transform-origin} resolved against this element's current box, in local pixels. */
+    private float transformOriginPxX() {
+        return style.getGeneralGroup().transformOriginX().resolve(runtimeCache.getWidth());
+    }
+
+    /** @see #transformOriginPxX() */
+    private float transformOriginPxY() {
+        return style.getGeneralGroup().transformOriginY().resolve(runtimeCache.getHeight());
     }
 
     /**
@@ -1172,12 +1191,14 @@ public class UIElement {
         // Pushed BEFORE the localToWorld snapshot below, so that snapshot includes this element's own
         // transform — which is what the RuntimeCache calculator produces too. Get this order wrong and
         // hit-testing silently disagrees with rendering by exactly the transform.
+        UITransform transform = getTransform();
         boolean pushedTransform = !transform.isIdentity();
         if (pushedTransform) {
             ctx.getPoseStack().pushPose();
             var pose = ctx.getPoseStack().last().pose();
             transform.applyTo(pose, runtimeCache.getX(), runtimeCache.getY(),
-                    runtimeCache.getWidth(), runtimeCache.getHeight());
+                    runtimeCache.getWidth(), runtimeCache.getHeight(),
+                    transformOriginPxX(), transformOriginPxY());
         }
         try {
             drawSubtreeTransformed(ctx);
@@ -1724,7 +1745,8 @@ public class UIElement {
             // This element's own transform, applied last so it composes inside the parent's space —
             // the same call drawSubtree makes against the PoseStack, so the matrix hit-testing
             // inverts and the matrix rendering uses are the same matrix by construction.
-            element.transform.applyTo(old, getX(), getY(), getWidth(), getHeight());
+            element.getTransform().applyTo(old, getX(), getY(), getWidth(), getHeight(),
+                    element.transformOriginPxX(), element.transformOriginPxY());
             return old;
         });
 

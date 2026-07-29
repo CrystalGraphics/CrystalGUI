@@ -7,6 +7,7 @@ import com.crystalgui.style.property.layout.BoxEdgeShorthands;
 import com.crystalgui.style.property.visual.OutlineOffsetShorthand;
 import com.crystalgui.style.property.visual.OutlineShorthand;
 import com.crystalgui.style.property.visual.border.BorderRadiusShorthand;
+import com.crystalgui.style.property.visual.transform.TransformOriginShorthand;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 
 import java.util.ArrayList;
@@ -89,6 +90,13 @@ public final class DeclarationParser {
             // edges are the real properties. See OutlineOffsetShorthand for why per-edge.
             if (OutlineOffsetShorthand.isOutlineOffset(name)) {
                 OutlineOffsetShorthand.expand(declarations, rawValue, important);
+                continue;
+            }
+
+            // 1-2 values (or keywords) over transform-origin-x/-y. `transform` itself is a real
+            // registered property and falls through to the lookup below — only the origin is syntax.
+            if (TransformOriginShorthand.isTransformOrigin(name)) {
+                TransformOriginShorthand.expand(declarations, rawValue, important);
                 continue;
             }
 

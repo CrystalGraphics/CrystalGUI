@@ -20,7 +20,6 @@ public record TransitionSpec(String propertyNameOrAll, long durationNanos, long 
 
     public static final String ALL = "all";
 
-    private static final Pattern TOKEN = Pattern.compile("[^\\s()]+\\([^()]*\\)|\\S+");
     private static final Pattern TIME = Pattern.compile("(?i)^(-?\\d+(?:\\.\\d+)?)(ms|s)$");
     private static final Pattern CUBIC_BEZIER = Pattern.compile(
             "(?i)^cubic-bezier\\(\\s*([-\\d.]+)\\s*,\\s*([-\\d.]+)\\s*,\\s*([-\\d.]+)\\s*,\\s*([-\\d.]+)\\s*\\)$");
@@ -40,9 +39,9 @@ public record TransitionSpec(String propertyNameOrAll, long durationNanos, long 
     }
 
     private static TransitionSpec parseEntry(String entry) {
-        List<String> tokens = new ArrayList<>();
-        Matcher m = TOKEN.matcher(entry);
-        while (m.find()) tokens.add(m.group());
+        // Shared with `transform`'s function-list parsing — a cubic-bezier(...) call and a
+        // translate(...) call tokenise by the same rule.
+        List<String> tokens = CssParsingUtil.splitFunctionList(entry);
 
         if (tokens.isEmpty()) {
             throw new IllegalArgumentException("Empty transition entry");
