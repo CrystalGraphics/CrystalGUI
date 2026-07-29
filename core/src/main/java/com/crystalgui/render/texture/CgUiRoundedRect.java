@@ -21,6 +21,15 @@ import com.crystalgui.render.CgUiPaintContext;
  */
 public final class CgUiRoundedRect implements CgUiDrawable {
 
+    /**
+     * The shared SDF material. No {@code attachTo} needed — {@code gui_rounded_rect.shader} declares
+     * {@code #pragma cg_use quad}, so the instance buffer is wired during parsing.
+     *
+     * <p>That matters here specifically: {@link #draw} calls {@code toggleKeyword} <em>before</em>
+     * the material ever reaches {@code CgQuadRenderer.useMaterial()}, and {@code enableKeyword}
+     * compiles on the spot when the shader has not been parsed yet. This class is why the attach has
+     * to happen at parse time rather than first use.</p>
+     */
     private static final CgMaterial MATERIAL = CgMaterial.load("crystalgui:shaders/gui_rounded_rect.shader");
 
     private float rxTL = 0f, ryTL = 0f, rxTR = 0f, ryTR = 0f, rxBR = 0f, ryBR = 0f, rxBL = 0f, ryBL = 0f;
@@ -120,7 +129,7 @@ public final class CgUiRoundedRect implements CgUiDrawable {
                     b.sampler("_MainTex", 0, fillTexture);
                 }
             });
-            ctx.submitQuad(x, y, width, height, 0f, 0f, 1f, 1f, ctx.getColor());
+            ctx.quad().at(x, y).size(width, height).color(ctx.getColor()).submit();
         });
     }
 }

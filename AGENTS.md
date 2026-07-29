@@ -590,7 +590,14 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIWindow`. Eve
 | Group | Methods |
 |---|---|
 | Frame | `beginFrame(w,h)` / `endFrame()` — save/restore GL via `CgGlScope`, ortho projection, bind `crystalgui:shaders/gui_quad.shader`, reset `ScissorStack` |
-| Draw | `fillRect`, `drawImage`, `submitQuad` + `flush`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
+| Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
+
+> `quad()` returns `CgQuadRenderer.Quad` — `ctx.quad().at(x,y).size(w,h).uv(...).color(argb).submit()`,
+> then `flush()` to draw (`submit()` only queues). **Never call `.pose(...)` on it**: `CgUiRenderer.quad()`
+> is the single place the `PoseStack` is applied, and overwriting it silently drops `uiScale` and the
+> element transform. It's re-applied per call because `CgQuadRenderer.quad()` resets the scratch
+> instance's pose to null. The returned object is that shared scratch — build and `submit()` in one
+> expression, never hold it.
 | Clip | `pushScissor` / `popScissor` |
 | Material | `withMaterial(material, body)` |
 | Layers | `withLayerOpacity(opacity, body)`, `beginLayerFbo()` / `endLayerFbo()`, `blitLayer(fbo, opacity)`, `compositeMask(subtreeFbo, maskFbo)` |
@@ -611,9 +618,13 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIWindow`. Eve
 
 ## Supporting classes
 
-- **`CgUiRenderer`** — thin wrapper over CrystalGraphics' `CgBatchRenderer` (`CgVertexFormat.UI`).
-  Its nested `VertexWriter` is `PoseStack`-aware: it transforms vertices through the current matrix
-  before delegating to `CgVertexWriter`.
+- **`CgUiRenderer`** — thin wrapper over CrystalGraphics' `CgQuadRenderer`: instanced unit quads whose
+  per-instance record (`origin` + `right`/`up` edge vectors, UVs, colour) lives in a class-wide
+  SSBO/TBO. The `PoseStack` matrix is baked in at `submit()` time by `Quad.pose(...)` — three
+  transforms per quad rather than four corners, and affine-correct under `transform:`. **Material
+  bind/unbind is owned by `CgQuadRenderer.useMaterial()`**, which must be called before any `submit()`
+  and again every frame; never call `material.bind()` yourself. Text goes through the same renderer
+  (CrystalGraphics' `CgTextRenderer` owns its own `CgQuadRenderer` instance).
 - **`ScissorStack`** — allocation-free nested clip stack (`int[64]`, 16 levels × 4 ints), applied via
   CrystalGraphics' `CgGL` facade. **No LWJGL imports** — the old "V3.x legacy, raw GL11, scheduled for
   deletion" note is obsolete.
@@ -902,6 +913,13 @@ under `core/`. `core/input/` is the *raw platform I/O* layer only; dispatch and 
 | `shaders/gui_quad.shader` | Default material bound by `beginFrame`. |
 | `shaders/gui_rounded_rect.shader` | SDF rounded rects. |
 | `shaders/gui_layer_blit.shader` | Visual-layer FBO composite. |
+
+> **All three declare `#pragma cg_use quad`, and any new CrystalGUI shader must too.** Everything
+> here draws through `CgQuadRenderer`, whose per-instance buffer supplies `CG_QUAD_WORLD_POS` /
+> `CG_QUAD_UV` / `CG_QUAD_COLOR` — the pragma is what wires it, during parsing, before anything can
+> compile. Omitting it is a parse error naming the missing line (it used to be a GLSL error about an
+> undefined `QUAD_DATA`, reported four layers up as an unrelated `#pragma cg_feature` complaint).
+> Never attach the buffer from Java. See `CrystalGraphics/AGENTS.md` § *Engine Buffers*.
 
 ---
 

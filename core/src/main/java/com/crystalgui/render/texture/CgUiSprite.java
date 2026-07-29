@@ -1,6 +1,7 @@
 package com.crystalgui.render.texture;
 
 import com.crystalgraphics.api.texture.CgTextureSpec;
+import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgui.render.texture.geometry.Position;
@@ -58,6 +59,10 @@ public final class CgUiSprite implements CgUiDrawable {
     // Cached derived data, recomputed only when setup data changes (not per-draw).
     private boolean uvDirty = true;
     private boolean hasBorder = false;
+
+    /** Whether {@link #getTexture()} resolved to the fallback checkerboard, recomputed each
+     * {@link #draw}. Consumed by {@link #submit}. */
+    private boolean missingTexture = false;
     private float u0, u1, u2, u3;
     private float v0, v1, v2, v3;
     private float borderSumX = 0f;
@@ -321,6 +326,10 @@ public final class CgUiSprite implements CgUiDrawable {
         CgTexture2D resolved = getTexture();
         if (resolved == null || textureSize.width <= 0 || textureSize.height <= 0) return;
 
+        // A failed load resolves to the shared fallback checkerboard. Recorded once per draw and
+        // consumed by submit() below — see there for why the UV crop has to be dropped.
+        missingTexture = resolved == CgTextureManager.get().getFallback();
+
         updateUvCacheIfNeeded();
 
         final int tintArgb = ArgbMath.multiply(this.tintArgb, ctx.getColor());
@@ -328,7 +337,7 @@ public final class CgUiSprite implements CgUiDrawable {
 
         if (!hasBorder) {
             if (width > 0 && height > 0) {
-                ctx.submitQuad(x, y, width, height, u0, v0, u3, v3, tintArgb);
+                submit(ctx, x, y, width, height, u0, v0, u3, v3, tintArgb);
                 ctx.flush();
             }
             return;
@@ -367,9 +376,9 @@ public final class CgUiSprite implements CgUiDrawable {
 
         // Top / bottom edges: tiled horizontally, stretched vertically.
         if (rowH0 > 0) {
-            if (colW0 > 0) ctx.submitQuad(x0, y0, colW0, rowH0, u0, v0, u1, v1, tintArgb);
+            if (colW0 > 0) submit(ctx, x0, y0, colW0, rowH0, u0, v0, u1, v1, tintArgb);
             emitRow(ctx, tilesX, x1, y0, rowH0, v0, v1, tintArgb);
-            if (colW2 > 0) ctx.submitQuad(x2, y0, colW2, rowH0, u2, v0, u3, v1, tintArgb);
+            if (colW2 > 0) submit(ctx, x2, y0, colW2, rowH0, u2, v0, u3, v1, tintArgb);
         }
         // Left / right edges tiled vertically; centre tiled on both axes.
         if (rowH1 > 0) {
@@ -379,20 +388,40 @@ public final class CgUiSprite implements CgUiDrawable {
                 if (th <= 0) continue;
                 float tv0 = tilesY.uvStart();
                 float tv1 = tilesY.uvEnd(ty);
-                if (colW0 > 0) ctx.submitQuad(x0, ty0, colW0, th, u0, tv0, u1, tv1, tintArgb);
+                if (colW0 > 0) submit(ctx, x0, ty0, colW0, th, u0, tv0, u1, tv1, tintArgb);
                 if (fillCenter) emitRow(ctx, tilesX, x1, ty0, th, tv0, tv1, tintArgb);
-                if (colW2 > 0) ctx.submitQuad(x2, ty0, colW2, th, u2, tv0, u3, tv1, tintArgb);
+                if (colW2 > 0) submit(ctx, x2, ty0, colW2, th, u2, tv0, u3, tv1, tintArgb);
                 maybeFlush(ctx);
             }
         }
         if (rowH2 > 0) {
-            if (colW0 > 0) ctx.submitQuad(x0, y2, colW0, rowH2, u0, v2, u1, v3, tintArgb);
+            if (colW0 > 0) submit(ctx, x0, y2, colW0, rowH2, u0, v2, u1, v3, tintArgb);
             emitRow(ctx, tilesX, x1, y2, rowH2, v2, v3, tintArgb);
-            if (colW2 > 0) ctx.submitQuad(x2, y2, colW2, rowH2, u2, v2, u3, v3, tintArgb);
+            if (colW2 > 0) submit(ctx, x2, y2, colW2, rowH2, u2, v2, u3, v3, tintArgb);
         }
 
         ctx.flush();
         pendingQuads = 0;
+    }
+
+    /**
+     * Queues one quad, applying the missing-texture UV rule.
+     *
+     * <p>The fallback checkerboard has no meaningful sub-rect, so cropping into it samples an
+     * arbitrary corner and a broken sprite reads as a solid colour rather than as "missing". Dropping
+     * the crop makes every quad show the whole checkerboard, which is recognisable at any size.</p>
+     *
+     * <p>This rule used to live centrally in {@code CgUiPaintContext.submitQuad}, which could inspect
+     * the bound texture before writing UVs. The fluent {@code ctx.quad()} builder has the caller set
+     * UVs directly, so the check now lives at the two places that can actually be handed a fallback:
+     * here, and {@code CgUiPaintContext.drawImage}. Everything else either binds the 1×1 white pixel
+     * or an FBO colour attachment.</p>
+     */
+    private void submit(CgUiPaintContext ctx, float x, float y, float w, float h,
+                        float u0, float v0, float u1, float v1, int argb) {
+        CgQuadRenderer.Quad q = ctx.quad().at(x, y).size(w, h).color(argb);
+        if (!missingTexture) q.uv(u0, v0, u1, v1);
+        q.submit();
     }
 
     /** Emits one horizontal strip of tiles at a fixed y/height and fixed vertical UV range. */
@@ -402,7 +431,7 @@ public final class CgUiSprite implements CgUiDrawable {
             float tx0 = xStart + tilesX.offset(tx);
             float tw = tilesX.size(tx);
             if (tw <= 0) continue;
-            ctx.submitQuad(tx0, yPos, tw, h, tilesX.uvStart(), vTop, tilesX.uvEnd(tx), vBottom, tintArgb);
+            submit(ctx, tx0, yPos, tw, h, tilesX.uvStart(), vTop, tilesX.uvEnd(tx), vBottom, tintArgb);
             maybeFlush(ctx);
         }
     }
