@@ -346,14 +346,21 @@ its cascade behaviour:
 Properties also carry change listeners — this is how `LayoutProperties.init()` wires every layout
 property straight through to `TaffyBridge`.
 
-**Registered CSS properties** (`StylePropertyRegistry`): `background`, `background-color`,
-`border-color`, `caret-width`, `color`, `font-family`, `font-size`, `line-height`, `mask`,
-`mask-fit`, `mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`,
+**Registered CSS properties** (`StylePropertyRegistry`) — the full set, alphabetically, so a missing
+entry is visible rather than merely absent: `background`, `background-color`, `border-color`,
+`caret-width`, `color`, `cursor`, `font-family`, `font-size`, `line-height`, `mask`, `mask-fit`,
+`mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`,
 `outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-fit`,
-`overlay-origin`, `overlay-position`, `resize`, `cursor`, `scroll-behavior`, `scroll-duration`,
-`selection-color`,
-`text-offset-x`, `text-offset-y`, `text-shadow`, `transform`, `transform-origin-x`,
-`transform-origin-y`, `transition`, `z-index` — plus the whole layout set from `LayoutProperties`.
+`overlay-origin`, `overlay-position`, `resize`, `scroll-behavior`, `scroll-duration`,
+`selection-color`, `text-align`, `text-decoration-line`, `text-offset-x`, `text-offset-y`,
+`text-overflow`, `text-shadow`, `transform`, `transform-origin-x`, `transform-origin-y`,
+`transition`, `white-space`, `z-index` — plus the whole layout set from `LayoutProperties`.
+
+> **This list goes stale silently.** Registering a property is a one-line addition in a 300-line file and
+> nothing links the two, so three of the entries above (`text-align`, `white-space`, `text-overflow`) were
+> missing for a full release cycle after 5.2 shipped them, and `text-decoration-line` nearly repeated it.
+> If you add a property, add it here in the same edit. `grep -oE 'create\("[a-z-]+"' StylePropertyRegistry.java`
+> regenerates the set in one command.
 
 ## Adding a CSS property
 
