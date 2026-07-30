@@ -435,8 +435,13 @@ assigned explicitly so it stays self-documented rather than at the mercy of a fu
 ## Selectors
 
 `style/selector/` — `Selector`, `CompoundSelector`, `SelectorType` with real CSS specificity weights:
-`UNIVERSAL(0)`, `TYPE(1)`, `CLASS(10)`, `PSEUDO_CLASS(10)`, `ID(100)`. Descendant and child
-combinators are supported.
+`UNIVERSAL(0)`, `TYPE(1)`, `PSEUDO_ELEMENT(1)`, `CLASS(10)`, `PSEUDO_CLASS(10)`, `ID(100)`. Descendant
+and child combinators are supported.
+
+**One pseudo-element exists: `::highlight(name)`** — the CSS Custom Highlight API, for styling text
+ranges without wrapping them in elements. It never matches the originating element (that is what
+`matchesOriginating` is for), and `StyleEngine` cascades it into a `HighlightStyle` kept apart from
+`ElementStyle`. `::before`/`::after` are rejected at parse time — internal children are the substitute.
 
 **Not supported:** `:nth-child`, attribute selectors, `~`/`+` sibling combinators, `@media`, `@import`.
 
@@ -948,6 +953,11 @@ The things that are invisible from any single class and expensive to rediscover.
 | Hit-testing an inert subtree **falls through** to what is behind it | `pointer-events: none` passes the pointer over a node; it does not punch a hole in the document |
 | A detached modal must be popped from the modal stack | The window stays inert forever with nothing left to interact with — unrecoverable from the user's side |
 | `StyleSheet.DEFAULT` is not installed for you | A test asserting on user-agent-sheet behaviour tests nothing and goes green |
+| A compound selector carrying `::highlight()` must never match the originating element | Every highlight colour repaints the whole paragraph — and looks plausible, because the highlighted words are the right colour too |
+| Pseudo-elements weigh **1** (type component), not 10 | Wrong by analogy with pseudo-classes; a `::highlight()` rule then silently outranks the class rules around it |
+| A highlight property that resolves but is never painted is worse than one refused — `HighlightStyle` splits `ALLOWED` from `NOT_YET_PAINTABLE` | `background-color`/`text-shadow` sat in the allowed set doing nothing; the rule looked right, the band never appeared, and there was nothing to search for |
+| `::highlight()` accepts only non-layout properties, enforced with a warning | The restriction *is* the feature: a highlight that could set `font-size` would reflow the text being searched as you type |
+| Highlights re-shape here, but **overlay** on the web — so un-highlighted text must stay on the unspanned path | A span boundary is a shaping-run boundary; route plain text through a one-span document and every label in the engine shifts by a fraction of a pixel |
 | `text-overflow` does **not** inherit — it must sit on the `UIText` itself | Set on a wrapper it silently never arrives, and the row renders as plain `clip` (`white-space` *does* inherit, which masks it) |
 | Truncation changes no geometry — `UIText.displayedText()` is the only way to observe it | An ellipsis that never fires looks identical to one that does, in every test and every layout dump |
 | A closed `Dialog` is `display: none`, so every box in it measures 0 | Any "does it fit?" assertion passes against `0 <= 0` — call `show()` first |
@@ -1093,6 +1103,8 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
   .event                       UIEvent, PropagationPhase, CloseEvent, DOMEvent, DragEvent, FocusEvent,
                                KeyboardEvent, MouseEvent
   .input                       UIInputHandler, UIDragController, FocusPolicy, ButtonState
+  .text                        TextRange, HighlightRegistry — CSS Custom Highlight API (ranges in Java,
+                               styling in CSS via ::highlight(name)); see StyleEngine.highlightStyle
   .elements                    Button, Checkbox, CheckboxGroup, Dialog, DialogManager, Dropdown, Menu,
                                MenuItem, Popover, Scroller, ScrollerView, Slider,
                                SplitView, Switch, Tab, TabView, TextField, Tooltip, UIText

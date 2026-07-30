@@ -2,6 +2,7 @@ package com.crystalgui.render.text;
 
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.api.font.CgFontFamilyGroup;
 import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
@@ -29,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class FontFamilyCache {
 
     private static final Map<String, CgFontFamily> CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, CgFontFamilyGroup> GROUP_CACHE = new ConcurrentHashMap<>();
 
     private FontFamilyCache() {
     }
@@ -44,6 +46,26 @@ public final class FontFamilyCache {
         }
         String key = targetPx + "@" + String.join(",", paths);
         return CACHE.computeIfAbsent(key, ignored -> build(paths, targetPx));
+    }
+
+    /**
+     * The same family wrapped as a {@link CgFontFamilyGroup} — what styled text needs, because
+     * {@code bold}/{@code italic} select a <em>face</em> and a bare {@link CgFontFamily} has only one.
+     *
+     * <p>Built with {@link CgFontFamilyGroup#ofRegular}, so bold and italic are <b>synthesised</b> rather
+     * than loaded: {@link #loadFont} loads every source as {@link CgFontStyle#REGULAR}, and CSS
+     * {@code font-family} as this engine parses it is a list of asset paths with no way to say "and this
+     * one is the bold face". Synthesis is the honest answer until that grammar exists — the backend
+     * carries {@code syntheticBold}/{@code syntheticItalic} through to the glyph key for exactly this.</p>
+     *
+     * <p>Cached under the same {@code (paths, targetPx)} key as {@link #resolve}, which matters for more
+     * than allocation: {@code UIText} memoises its shaped paragraph on <b>reference equality</b> of what
+     * it resolved, so a group rebuilt per call would re-shape the text on every single frame.</p>
+     */
+    public static CgFontFamilyGroup resolveGroup(List<String> paths, int targetPx) {
+        CgFontFamily family = resolve(paths, targetPx);
+        return GROUP_CACHE.computeIfAbsent(targetPx + "@" + String.join(",", paths),
+                ignored -> CgFontFamilyGroup.ofRegular(family));
     }
 
     private static CgFontFamily build(List<String> paths, int targetPx) {

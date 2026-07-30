@@ -13,15 +13,16 @@ draft on 2026-07-29.
 | **P3** | RPC soak · mc1201 decision | ⏸ **deferred to last** (see P3) |
 | **P4** | Dialog · CSS `resize` · DialogManager · 8-way handles · CSS `cursor` | ✅ done · visually confirmed |
 | **P5** | ~~Platform abstractions~~ (deferred) · `TextElement` gaps · tab stops · `inert` + modals · popovers/menus | ✅ **5.2–5.5 done** · visually confirmed (5.1 deferred) |
-| **P6** | Editor windows · graph view | ⬜ all prerequisites now exist |
+| **P6** | Editor windows · graph view | ⬜ **re-planned — see [`CrystalGUI_P6_TODO.md`](CrystalGUI_P6_TODO.md)** |
 
 **Suite: 771** (677 `test` + 94 `headlessTest`), 0 failures, 0 skipped.
 Last commits: `83b43fa` shader preprocessor · `6069a3c` inert + modals + menus · `0ce9df1` text CSS + tab stops.
 
 **Nothing is blocked on me.** With 5.5 landed, **the top-layer branch of the spine is closed** and every
 engine-shaped item is done except the two deliberately deferred ones (P3, 5.1). What remains is P3.1 (a
-cheap validation scene) and **P6**, whose 6.1 needs a re-plan before starting — it is five features wearing
-one bullet.
+cheap validation scene) and **P6** — which has now had the re-plan its own bullet demanded, in its own file:
+**[`CrystalGUI_P6_TODO.md`](CrystalGUI_P6_TODO.md)**. Two bullets became seventeen items, and P6 is
+authoritative there, not here.
 
 ---
 
@@ -940,15 +941,15 @@ plus gallery `modal` and `menus` pages.
 
 # P6 — Downstream applications
 
-### 6.1 Editor windows · `TODO`
-Not one item — resource view, action history, draggable panels, custom `tab` elements with
-open/close affordances, and a `Configurator` interface (annotation-driven or otherwise, concept
-borrowed from LDLib). Sits on top of P1, P2 and P4. **Re-plan this into real tasks when we get
-here**; do not start from this bullet.
-
-### 6.2 General graph view · `TODO`
-The grand goal's actual substrate — this is what the node-based shader graph gets built in. Wants
-P1, P2 and 6.1 underneath it. Big enough to need its own design doc when it comes up.
+> **Moved.** P6 is planned in its own file: **[`CrystalGUI_P6_TODO.md`](CrystalGUI_P6_TODO.md)**.
+>
+> It was two bullets — "editor windows" and "general graph view" — carrying about a dozen real features
+> between them, with an explicit instruction not to start from them. That re-plan happened on 2026-07-30 and
+> produced seventeen ordered items, an audit of what already exists, and a full design for the one genuine
+> engine gap (`CgCurveRenderer`). It is large enough that keeping it here would have swamped P0–P5.
+>
+> **Scope, settled there:** a general-purpose editor framework with the shader graph as its first client,
+> and 6.1 before 6.2 because the graph view is a document type hosted inside editor windows.
 
 ---
 

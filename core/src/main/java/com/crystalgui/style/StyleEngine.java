@@ -38,6 +38,17 @@ public final class StyleEngine {
      * origin slot might equally have come from user Java code via StyleGroup.setImportant()). */
     private final Map<UIElement, List<StyleSlot<?>>> appliedByElement = new HashMap<>();
 
+    /**
+     * Resolved {@code ::highlight(name)} styles, per element, per highlight name.
+     *
+     * <p>Kept apart from the element's own cascade because a highlight pseudo-element is not an element:
+     * it has no box, no children and no transitions, and folding its declarations into
+     * {@link ElementStyle} would recolour the whole paragraph. Rebuilt wholesale in {@link #rematch},
+     * so it stays in step with the ordinary cascade by construction rather than by a second
+     * invalidation path.</p>
+     */
+    private final Map<UIElement, Map<String, HighlightStyle>> highlightsByElement = new HashMap<>();
+
     public StyleEngine(UIWindow window) {
         this.window = window;
     }
@@ -62,6 +73,7 @@ public final class StyleEngine {
     public void onElementDetached(UIElement element) {
         dirtyMatch.remove(element);
         appliedByElement.remove(element);
+        highlightsByElement.remove(element);
         transitionEngine.onElementDetached(element);
     }
 
@@ -98,13 +110,37 @@ public final class StyleEngine {
      * {@code int} would cap this at roughly twenty sheets before wrapping. */
     private static final long SHEET_ORDER_STRIDE = 1_000_000_000_000L;
 
+    /**
+     * The resolved style of {@code ::highlight(name)} on {@code element}, or
+     * {@link HighlightStyle#EMPTY} when no rule matched.
+     *
+     * <p>Never null, because "no theme styles this highlight name" is an ordinary, expected state — a
+     * highlighter emits names without knowing which of them a given theme cares about.</p>
+     */
+    public HighlightStyle highlightStyle(UIElement element, String name) {
+        var forElement = highlightsByElement.get(element);
+        if (forElement == null) return HighlightStyle.EMPTY;
+        return forElement.getOrDefault(name, HighlightStyle.EMPTY);
+    }
+
     private void rematch(UIElement element) {
         var previouslyApplied = appliedByElement.get(element);
 
         List<StyleSlot<?>> newSlots = new ArrayList<>();
+        // name -> property -> winning slot. Built alongside the element's own cascade rather than in a
+        // second pass, so the two cannot disagree about which rules matched.
+        Map<String, Map<StyleProperty<?>, StyleSlot<?>>> highlightSlots = new HashMap<>();
+
         for (int sheetIndex = 0; sheetIndex < sheets.size(); sheetIndex++) {
             var sheet = sheets.get(sheetIndex);
             for (var rule : sheet.candidatesFor(element)) {
+                var pseudo = rule.selector().pseudoElement();
+                if (pseudo != null) {
+                    if (rule.selector().matchesOriginating(element)) {
+                        collectHighlight(highlightSlots, pseudo.argument(), rule, sheet, sheetIndex);
+                    }
+                    continue;
+                }
                 if (!rule.selector().matches(element)) continue;
                 int specificity = rule.selector().specificity();
                 var decls = rule.declarations();
@@ -127,6 +163,18 @@ public final class StyleEngine {
             }
         }
 
+        if (highlightSlots.isEmpty()) {
+            highlightsByElement.remove(element);
+        } else {
+            Map<String, HighlightStyle> resolved = new HashMap<>();
+            highlightSlots.forEach((name, slots) -> {
+                Map<StyleProperty<?>, Object> values = new HashMap<>();
+                slots.forEach((property, slot) -> values.put(property, slot.value()));
+                resolved.put(name, new HighlightStyle(values));
+            });
+            highlightsByElement.put(element, resolved);
+        }
+
         if (newSlots.isEmpty()) {
             appliedByElement.remove(element);
             if (previouslyApplied != null && !previouslyApplied.isEmpty()) {
@@ -140,6 +188,59 @@ public final class StyleEngine {
                 element.getStyle().replaceCandidates(previouslyApplied::contains, newSlots);
             } else {
                 element.getStyle().putCandidates(newSlots);
+            }
+        }
+    }
+
+    /**
+     * Folds one matched {@code ::highlight(name)} rule into the per-name winner map.
+     *
+     * <p>Resolves by ordinary {@link StyleSlot#compare} rather than by a bespoke rule, so a highlight
+     * obeys origin, specificity and source order exactly as any other declaration does — a theme can
+     * override the user-agent sheet's {@code ::highlight()} colours the same way it overrides anything
+     * else.</p>
+     *
+     * <p><b>Declarations outside the allowed set are dropped with a warning.</b> CSS restricts highlight
+     * pseudo-elements to properties that cannot affect layout, and the restriction is the feature: a
+     * {@code font-size} here would reflow the text as you typed in a search box. Silently ignoring it
+     * would leave an author with a rule that looks right and does nothing.</p>
+     */
+    private void collectHighlight(Map<String, Map<StyleProperty<?>, StyleSlot<?>>> out, String name,
+                                  StyleRule rule, StyleSheet sheet, int sheetIndex) {
+        int specificity = rule.selector().specificity();
+        var decls = rule.declarations();
+        for (int i = 0; i < decls.size(); i++) {
+            var decl = decls.get(i);
+            if (!HighlightStyle.ALLOWED.contains(decl.property())) {
+                // Two different failures, deliberately worded differently: one is the author asking for
+                // something CSS itself forbids, the other is the author asking for something CSS allows
+                // and we cannot draw yet. Collapsing them would tell the first author to go and check a
+                // spec that agrees with them.
+                if (HighlightStyle.NOT_YET_PAINTABLE.contains(decl.property())) {
+                    CrystalGuiCore.LOGGER.warn(
+                            "'{}' is valid on ::highlight({}) per CSS but is NOT IMPLEMENTED here yet, so it"
+                                    + " was ignored. It needs per-range geometry from the text layout, which"
+                                    + " CgStyleSpan cannot express. Recolour or underline the range instead.",
+                            decl.property().name, name);
+                } else {
+                    CrystalGuiCore.LOGGER.warn(
+                            "'{}' is not allowed on ::highlight({}) and was ignored. Highlight"
+                                    + " pseudo-elements accept only properties that cannot affect layout —"
+                                    + " CSS Pseudo-Elements 4 — because a highlight must never reflow the text"
+                                    + " it highlights.",
+                            decl.property().name, name);
+                }
+                continue;
+            }
+            var origin = decl.important() ? StyleOrigin.IMPORTANT : sheet.getOrigin();
+            long sourceOrder = (long) sheetIndex * SHEET_ORDER_STRIDE
+                    + (long) rule.sourceOrder() * DECLARATION_ORDER_MULTIPLIER + i;
+            var slot = toSlot(decl, origin, specificity, sourceOrder);
+            if (slot == null) continue;
+            var forName = out.computeIfAbsent(name, ignored -> new HashMap<>());
+            var existing = forName.get(decl.property());
+            if (existing == null || existing.compareTo(slot) < 0) {
+                forName.put(decl.property(), slot);
             }
         }
     }
