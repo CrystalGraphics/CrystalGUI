@@ -144,7 +144,8 @@ public class TabView extends UIElement {
         this.panes.addClass(PANES_CLASS);
         // flex-grow is not optional here: this engine's FLEX_SHRINK defaults to 0 and MIN_WIDTH to
         // ZERO (both diverge from CSS), so without an explicit grow the panes container would sit at
-        // its content size and leave the rest of the TabView empty.
+        // its content size and leave the rest of the TabView empty. The matching zero basis — the other
+        // half of the same problem, and the half that was missing — is set per-axis in setTabSide.
         StyleGroup.defaultPipeline(panes.getStyle().getLayoutGroup(), l -> l.flexGrow(1));
         StyleGroup.defaultPipeline(panes.getStyle().getGeneralGroup(), g -> g.overflow(Overflow.HIDDEN));
         addInternalChild(this.panes);
@@ -357,6 +358,22 @@ public class TabView extends UIElement {
                 l -> l.flexDirection(vertical ? FlexDirection.ROW : FlexDirection.COLUMN));
         StyleGroup.defaultPipeline(rail.getStyle().getLayoutGroup(),
                 l -> l.flexDirection(vertical ? FlexDirection.COLUMN : FlexDirection.ROW));
+        // A ZERO flex basis on the panes' MAIN axis, and it is not cosmetic.
+        //
+        // flex-grow alone is not enough, because flex-shrink is 0 here: with an `auto` basis the panes
+        // container's basis IS its content size, so it can grow but never shrink, and a TabView narrower
+        // (or shorter) than its widest page silently overflows its own parent. The panes background
+        // stretches with it, so the overhang is visible as a pane spilling past the frame around it —
+        // and only at small window sizes, because at large ones there is room to spare.
+        //
+        // Zero basis plus grow is the flexbox idiom: take no space of your own, then fill exactly what is
+        // left. Both axes are written every time rather than only the main one, because switching sides
+        // has to CLEAR the basis the previous side set — a leftover `width: 0` on a TOP strip would
+        // collapse the panes to nothing.
+        StyleGroup.defaultPipeline(panes.getStyle().getLayoutGroup(), l -> {
+            if (vertical) l.width(0).heightAuto();
+            else l.widthAuto().height(0);
+        });
         bar.setOrientation(vertical ? Scroller.Orientation.VERTICAL : Scroller.Orientation.HORIZONTAL);
         refreshStripBar();
 

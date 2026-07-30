@@ -1,6 +1,7 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.ui.elements.TabView;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -59,5 +60,63 @@ public class FlexShrinkOverflowTest extends UiTestBase {
         UIElement filler = build(true);
         assertEquals("grows to exactly the space available, never past it",
                 100f, filler.getRuntimeCache().getHeight(), 0.5f);
+    }
+
+    // ── The instance of this that shipped: TabView's panes container ─────────
+
+    private UIElement panesOf(TabView tabs) {
+        for (UIElement child : tabs.getChildren()) {
+            if (child.hasClass("__panes__")) return child;
+        }
+        throw new AssertionError("no __panes__");
+    }
+
+    private TabView buildTabs(TabView.TabSide side, int w, int h, int contentW, int contentH) {
+        UIElement root = new UIElement().layout(l -> l.width(w).height(h));
+        TabView tabs = new TabView();
+        tabs.setTabSide(side);
+        tabs.layout(l -> l.width(w).height(h));
+        root.addChild(tabs);
+        for (int i = 0; i < 6; i++) {
+            tabs.addTab("t" + i).content()
+                    .addChild(new UIElement().layout(l -> l.width(contentW).height(contentH)));
+        }
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.init(w * 2, h * 2);
+        for (int i = 0; i < 8; i++) {
+            window.getStyleEngine().calculateStyle(0.016f);
+            window.calculateLayout();
+        }
+        return tabs;
+    }
+
+    /**
+     * <b>A {@code TabView} narrower than its widest page must not overflow itself.</b>
+     *
+     * <p>{@code __panes__} has {@code flex-grow: 1} so it fills the space beside the strip — but with an
+     * {@code auto} basis its basis <em>is</em> its content width, and {@code flex-shrink: 0} means it can
+     * then only ever grow. A page wider than the view pushed the whole container past its own parent, and
+     * because the panes background stretches with it, the overhang was visible as a pane spilling out of
+     * the frame drawn around it. Only at small window sizes, because larger ones had room to spare —
+     * which is what made it survive several rounds of looking straight at it.</p>
+     */
+    @Test
+    public void aSideStripTabViewDoesNotOverflowOnTheWidthAxis() {
+        TabView tabs = buildTabs(TabView.TabSide.LEFT, 200, 150, 400, 40);
+        UIElement panes = panesOf(tabs);
+        float right = panes.getRuntimeCache().getX() + panes.getRuntimeCache().getWidth();
+        assertTrue("panes ends at " + right + ", past the TabView's own 200", right <= 200.5f);
+    }
+
+    /** The same on the other axis, since the basis has to follow whichever way the tabs stack. A leftover
+     * {@code width: 0} from a previous side would collapse the panes entirely, so both are written. */
+    @Test
+    public void aTopStripTabViewDoesNotOverflowOnTheHeightAxis() {
+        TabView tabs = buildTabs(TabView.TabSide.TOP, 200, 120, 40, 400);
+        UIElement panes = panesOf(tabs);
+        float bottom = panes.getRuntimeCache().getY() + panes.getRuntimeCache().getHeight();
+        assertTrue("panes ends at " + bottom + ", past the TabView's own 120", bottom <= 120.5f);
+        assertTrue("and is not collapsed to nothing by a stale cross-axis basis",
+                panes.getRuntimeCache().getWidth() > 0f);
     }
 }
