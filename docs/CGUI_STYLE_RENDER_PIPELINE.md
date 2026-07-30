@@ -451,6 +451,19 @@ uses the identical technique against the same resolved per-corner values, so ren
 never disagree about the element's shape. `sdf_coverage` turns a signed distance into an antialiased
 0–1 mask via `fwidth`.
 
+> **`sdf_coverage` is wrapped in `#ifndef CG_VERTEX_STAGE`, and that guard is load-bearing.**
+> `gui_rounded_rect.shader` includes `sdf.glsl` at *material* scope, and CrystalGraphics' compiler
+> hoists every material-scope `#`-line into **both** generated stages — so without the guard,
+> `fwidth`, a fragment-only derivative builtin, lands in the vertex shader. NVIDIA compiles that
+> anyway. AMD refuses, and the whole material fails to compile: an AMD tester could not launch
+> `cgui-gallery` at all while it ran flawlessly here. The three `sdf_rounded_box` overloads are pure
+> maths and stay available to both stages; only the coverage helper is fragment-restricted.
+>
+> Two things keep it that way: `ShippedShaderStagePurityTest` (GL-free, fails on any machine if a
+> fragment-only builtin becomes reachable in a generated vertex source) and the harness's
+> `--mode=shader-compile-audit` (real driver, every shipped shader and keyword variant, one report).
+> The full contract is in `CrystalGraphics/AGENTS.md` § *Stage defines*.
+
 The shader is a genuine "canvas": interior filled by `_FillColor` or a sampled `_MainTex`
 (`WITH_TEXTURE_FILL` keyword), an optional `_BorderColor` stroke band (`WITH_BORDER` keyword) along the
 outer edge, both masked by the same distance field so corners clip fill and border consistently.

@@ -941,6 +941,8 @@ The things that are invisible from any single class and expensive to rediscover.
 | Click-focus tests `focusesOnClick()`, not `== FocusPolicy.CLICK` | Every non-selected member of a composite stops responding to the mouse |
 | Exactly one tab in a `TabView` strip is tabbable, falling back to the first when nothing is selected | Zero tab stops — the whole tablist disappears from the keyboard |
 | `Property.set()` silently drops re-entrant sets from inside its own emit | A listener cannot fight the value it's being notified about |
+| A `.shader`'s `#include` reaches the **vertex** stage too — fragment-only lib code must self-guard with `#ifndef CG_VERTEX_STAGE` | NVIDIA compiles it and AMD refuses, so the UI is fine here and completely unlaunchable there |
+| A failed material compile latches (`hasCompileFailed`) and is cleared only by `markDirty()` | Without the latch every draw retries the compile — 3044 log lines a second; without the clear, hot-reload can never fix a broken shader |
 
 ---
 
@@ -1090,6 +1092,15 @@ under `core/`. `core/input/` is the *raw platform I/O* layer only; dispatch and 
 > compile. Omitting it is a parse error naming the missing line (it used to be a GLSL error about an
 > undefined `QUAD_DATA`, reported four layers up as an unrelated `#pragma cg_feature` complaint).
 > Never attach the buffer from Java. See `CrystalGraphics/AGENTS.md` § *Engine Buffers*.
+
+> **A `#include` in a `.shader` is compiled into the vertex stage as well as the fragment stage.**
+> The material compiler hoists every material-scope `#`-line into both. `gui_rounded_rect.shader` is
+> the only shipped shader with an include, and its `sdf.glsl` needed `#ifndef CG_VERTEX_STAGE` around
+> `sdf_coverage` — `fwidth` is fragment-only, NVIDIA accepted it anyway, and AMD's refusal made the
+> whole gallery unlaunchable on that hardware. Guard fragment-only code inside the lib, with
+> `#ifndef CG_VERTEX_STAGE` and never `#ifdef CG_FRAGMENT_STAGE` (raw `.vert`/`.frag` get neither
+> define). `ShippedShaderStagePurityTest` enforces it GL-free; `--mode=shader-compile-audit` checks it
+> against a real driver. See `CrystalGraphics/AGENTS.md` § *Stage defines*.
 
 ---
 
