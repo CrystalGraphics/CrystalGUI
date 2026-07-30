@@ -947,8 +947,6 @@ The things that are invisible from any single class and expensive to rediscover.
 | The popover stack and the close-watcher stack are separate | A modal is Escape-closable but not light-dismissable; a MANUAL popover is neither — one list gets one of them wrong |
 | Light dismiss runs after the mouse-down dispatch, and spares the invoker | Dismiss-first tears down the tree under an undelivered event; no invoker carve-out and a dropdown button flickers instead of closing |
 | Light dismiss considers the popovers open **before** the dispatch, not the live stack | A popover opened from a mouse-down handler is closed by the very press that opened it — it appears never to open at all |
-| CrystalGraphics `platform` must stay on the headless classpath too — the excluded module is CG **core** | `UIInputHandler` *implements* `CgSystemInput`; a supertype resolves at class load, so stripping it fails every input test with `NoClassDefFoundError` |
-| CrystalGUI has no platform registry — input, sound, clipboard and cursor all come from `CgPlatform` | Two registries let a loader wire up one and not the other: a working GL backend and a dead keyboard, with nothing to report it |
 | A widget's cascade identity is its **tag**, never its Java supertype | `Dropdown extends Button` but `button {}` does not match `dropdown` — it laid out at zero height until `default.css` named it |
 | Only `AnchoredPlacement` writes `left`/`top` on an anchored popup | Any other writer fights placement every frame |
 | Transitioning *into* view needs a resting value in the sheet, never a one-frame write from Java | The write is itself transitionable, so the engine eases toward it and the cleanup retargets it back — nothing animates, and no test sees it |
