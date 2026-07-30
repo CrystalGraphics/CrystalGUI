@@ -137,7 +137,7 @@ b.setEnabled(false);                        // inherited from UIElement
 ```
 
 Activates on press-then-release **over the same element** (dragging off cancels), and on Space/Enter
-when focused. Fires `UISoundSystem` with `button_click` if a platform registered one.
+when focused. Fires `CgPlatform.sound()` with `button_click`; silent unless the registered platform implements it.
 
 - Tag `button` · internal `__pre-icon__`, `__post-icon__` · pseudo `:hover :active :focus :focus-visible :disabled`
 - Scenes: `cgui-button`, `cgui-ore-theme` (forced-state matrix), `cgui-gallery`
@@ -227,7 +227,7 @@ filter: a `0..100` integer field silently drops `-`, a `-50..50` one admits it.
 
 Also: caret blink (`setCaretBlinkSeconds`, `isCaretVisible`, via `UIFrameTicker`), selection
 (`selectAll`, `clearSelection`, `getSelectedText`, `getSelectionStart/End`), clipboard through
-`CrystalGuiCore.getClipboard()`, wheel-steps-the-value (`stepBy(notches)`), and Escape to revert.
+`CgPlatform.input().getClipboard()`, wheel-steps-the-value (`stepBy(notches)`), and Escape to revert.
 
 Six style properties drive its text: `color`, `font-size`, `font-family`, `line-height` (vertical
 centring only), `caret-width`, `selection-color`.

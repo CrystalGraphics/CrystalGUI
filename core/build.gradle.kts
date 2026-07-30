@@ -87,10 +87,17 @@ dependencies {
 
 
 // -- Headless (server-side) test source set -----------------------------------
-// CrystalGraphics is DELIBERATELY absent here, at compile AND runtime. That absence IS the
-// assertion: on a dedicated Minecraft server there is no GL context, no fonts, and no CG jar, so
-// anything in core/ that reaches a CG type outside a paint method body fails here with
+// CrystalGraphics *core* is DELIBERATELY absent here, at compile AND runtime. That absence IS the
+// assertion: on a dedicated Minecraft server there is no GL context and no fonts, so anything in
+// core/ that reaches a CG core type outside a paint method body fails here with
 // NoClassDefFoundError rather than in production.
+//
+// CrystalGraphics `platform` is the one CG module that IS present, and deliberately so. It is pure
+// SPI — interfaces, key-code constants, and the CgPlatform registry — with no GL calls and no
+// context requirement, and it ships inside every loader jar, so a dedicated server genuinely has it.
+// Excluding it would assert something that is not true of production. core/ reaches it for real:
+// UIInputHandler implements CgSystemInput, and CgPlatform.input()/sound()/cursor() replaced what
+// CrystalGuiCore's static registry used to hold.
 //
 // JOML and Taffy must stay. UIElement and ElementStyle have *fields* of those types (Matrix4f,
 // NodeId, TaffyStyle), and field descriptors resolve at class load — unlike method-body references,
@@ -103,6 +110,7 @@ val headlessTest: SourceSet by sourceSets.creating {
 
 dependencies {
     "headlessTestImplementation"("junit:junit:4.13.2")
+    "headlessTestImplementation"("com.crystalgraphics:platform:1.0.0")
     "headlessTestImplementation"("org.apache.logging.log4j:log4j-core:2.26.1")
     "headlessTestImplementation"("com.google.code.gson:gson:2.11.0")
     "headlessTestImplementation"("dev.vfyjxf:taffy:${rootProject.properties["taffy_version"]}")

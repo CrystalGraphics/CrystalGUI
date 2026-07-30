@@ -8,6 +8,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
+import com.crystalgraphics.platform.CgPlatform;
 
 /**
  * On/off switch with a knob that slides between the two ends.
@@ -71,7 +72,7 @@ public class Switch extends UIElement {
         // activation arrives for free through UIInputHandler's generic keyboard bridge.
         this.attachDefaultListener(this.onMouseUp, (el, event) -> {
             if (event.isWasPressTarget() && isEnabled()) {
-                CrystalGuiCore.getSoundSystem().play("button_click");
+                CgPlatform.sound().play("button_click");
                 setChecked(!checked);
             }
         });

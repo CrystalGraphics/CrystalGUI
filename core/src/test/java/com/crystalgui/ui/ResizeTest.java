@@ -1,6 +1,6 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -85,14 +85,14 @@ public class ResizeTest extends UiTestBase {
     }
 
     private void press(float x, float y) {
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(x * 2f), Math.round(y * 2f), 0, 0, 0, true, 0f, 1L));
         input.beginFrame();
         input.endFrame();
     }
 
     private void move(float x, float y) {
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(x * 2f), Math.round(y * 2f), 0, 0, -1, false, 0f, -1L));
         input.beginFrame();
         input.endFrame();

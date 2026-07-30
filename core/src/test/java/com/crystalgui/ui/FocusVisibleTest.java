@@ -1,7 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Checkbox;
@@ -53,16 +53,16 @@ public class FocusVisibleTest extends UiTestBase {
         int x = Math.round(cache.getX() + cache.getWidth() / 2f);
         int y = Math.round(cache.getY() + cache.getHeight() / 2f);
         var handler = window.getInputHandler();
-        handler.consumeMouseEvent(new SystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
+        handler.consumeMouseEvent(new CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
         frame();
-        handler.consumeMouseEvent(new SystemInput.Mouse.Event(x, y, 0, 0, 0, true, 0f, now()));
-        handler.consumeMouseEvent(new SystemInput.Mouse.Event(x, y, 0, 0, 0, false, 0f, now()));
+        handler.consumeMouseEvent(new CgSystemInput.Mouse.Event(x, y, 0, 0, 0, true, 0f, now()));
+        handler.consumeMouseEvent(new CgSystemInput.Mouse.Event(x, y, 0, 0, 0, false, 0f, now()));
         frame();
     }
 
     private void pressTab() {
         window.getInputHandler().consumeKeyboardEvent(
-                new SystemInput.Keyboard.Event('\t', CgUiKeyCodes.KEY_TAB, true, false, now()));
+                new CgSystemInput.Keyboard.Event('\t', CgKeyCodes.KEY_TAB, true, false, now()));
         frame();
     }
 

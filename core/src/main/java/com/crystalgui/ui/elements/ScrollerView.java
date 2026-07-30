@@ -1,13 +1,14 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.keyboard.Modifiers;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
+import com.crystalgraphics.platform.CgPlatform;
 
 /**
  * A scroll container with visible scrollbars.
@@ -99,8 +100,8 @@ public class ScrollerView extends UIElement implements com.crystalgui.ui.UIFrame
 
             // Shift+wheel scrolls horizontally — the convention everywhere, and the only way to reach
             // a horizontal overflow with a plain vertical wheel.
-            var adapter = CrystalGuiCore.getAdapter();
-            boolean horizontal = adapter != null && Modifiers.hasShift(adapter.getCurrentModifiers());
+            var adapter = CgPlatform.input();
+            boolean horizontal = adapter != null && CgModifiers.hasShift(adapter.getCurrentModifiers());
 
             // ...and on a view that can ONLY scroll sideways, the plain wheel drives that axis too.
             // Otherwise a horizontal-only strip (a tab bar, a toolbar) simply ignores the wheel and

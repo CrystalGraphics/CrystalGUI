@@ -1,6 +1,6 @@
 package com.crystalgui.ui.elements;
 
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
@@ -123,10 +123,10 @@ public class SplitView extends UIElement {
             if (!isEnabled()) return;
             float step = 1f;
             switch (event.getKeyCode()) {
-                case CgUiKeyCodes.KEY_LEFT, CgUiKeyCodes.KEY_UP -> setPercentage(percentage - step);
-                case CgUiKeyCodes.KEY_RIGHT, CgUiKeyCodes.KEY_DOWN -> setPercentage(percentage + step);
-                case CgUiKeyCodes.KEY_HOME -> setPercentage(minPercentage);
-                case CgUiKeyCodes.KEY_END -> setPercentage(maxPercentage);
+                case CgKeyCodes.KEY_LEFT, CgKeyCodes.KEY_UP -> setPercentage(percentage - step);
+                case CgKeyCodes.KEY_RIGHT, CgKeyCodes.KEY_DOWN -> setPercentage(percentage + step);
+                case CgKeyCodes.KEY_HOME -> setPercentage(minPercentage);
+                case CgKeyCodes.KEY_END -> setPercentage(maxPercentage);
                 default -> {
                     return;
                 }

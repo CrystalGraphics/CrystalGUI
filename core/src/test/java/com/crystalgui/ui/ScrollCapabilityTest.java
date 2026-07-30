@@ -7,6 +7,7 @@ import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import com.crystalgraphics.platform.input.CgSystemInput;
 
 /**
  * Scrolling as an <b>element capability</b>, with no widget involved.
@@ -85,11 +86,11 @@ public class ScrollCapabilityTest extends UiTestBase {
         int x = Math.round((c.getX() + 10f) * 2f), y = Math.round((c.getY() + 20f) * 2f);
 
         window.getInputHandler().consumeMouseEvent(
-                new com.crystalgui.core.input.SystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
+                new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
         window.getInputHandler().beginFrame();
         window.getInputHandler().endFrame();
         window.getInputHandler().consumeMouseEvent(
-                new com.crystalgui.core.input.SystemInput.Mouse.Event(x, y, 0, 0, -1, false, 3f, -1L));
+                new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 3f, -1L));
         window.getInputHandler().beginFrame();
         window.getInputHandler().endFrame();
         window.tickAnimations(0.016f);

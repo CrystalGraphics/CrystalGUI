@@ -1,6 +1,6 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIInputHandler;
@@ -152,10 +152,10 @@ public class InertTest extends UiTestBase {
         box.setInert(true);
         settle();
 
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(20, 20, 0, 0, -1, false, 0f, -1L));
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(20, 20, 0, 0, -1, false, 0f, -1L));
         input.beginFrame();
         input.endFrame();
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(20, 20, 0, 0, 0, true, 0f, 1L));
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(20, 20, 0, 0, 0, true, 0f, 1L));
         input.beginFrame();
         input.endFrame();
 

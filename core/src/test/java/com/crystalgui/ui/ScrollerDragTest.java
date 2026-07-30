@@ -1,8 +1,8 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
-import com.crystalgui.core.input.SystemInput;
+import com.crystalgui.testsupport.TestPlatformService;
+import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -13,6 +13,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import com.crystalgraphics.platform.input.CgModifiers;
 
 /**
  * Scrollbar dragging and wheel handling, driven through the same entry point real input uses.
@@ -40,12 +41,15 @@ public class ScrollerDragTest {
     public void registerStubAdapter() {
         mouseHeld = false;
         shiftHeld = false;
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return shiftHeld ? com.crystalgui.core.input.keyboard.Modifiers.SHIFT : 0; }
+        TestPlatformService.install().input(new CgInputService() {
+            @Override public int getCurrentModifiers() { return shiftHeld ? com.crystalgraphics.platform.input.CgModifiers.SHIFT : 0; }
             @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
             @Override public boolean isKeyDown(int localKeyCode) { return false; }
+            @Override public int translateMouseCodes(int platformCode) { return platformCode; }
             @Override public boolean isMouseDown(int localMouseCode) { return mouseHeld; }
             @Override public int howManyMouseButtons() { return 3; }
+            @Override public String getClipboard() { return ""; }
+            @Override public void setClipboard(String text) { }
         });
     }
 
@@ -86,22 +90,22 @@ public class ScrollerDragTest {
     }
 
     private void mouseTo(int x, int y) {
-        window.getInputHandler().consumeMouseEvent(new SystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
     }
 
     private void press(int x, int y) {
         window.getInputHandler().consumeMouseEvent(
-                new SystemInput.Mouse.Event(x, y, 0, 0, 0, true, 0f, System.currentTimeMillis()));
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, 0, true, 0f, System.currentTimeMillis()));
     }
 
     private void release(int x, int y) {
         window.getInputHandler().consumeMouseEvent(
-                new SystemInput.Mouse.Event(x, y, 0, 0, 0, false, 0f, System.currentTimeMillis()));
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, 0, false, 0f, System.currentTimeMillis()));
     }
 
     private void wheel(int x, int y, float notches) {
         window.getInputHandler().consumeMouseEvent(
-                new SystemInput.Mouse.Event(x, y, 0, 0, -1, false, notches, -1L));
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, notches, -1L));
     }
 
     /** Physical centre of the vertical scrollbar's thumb — where a user would grab it. */

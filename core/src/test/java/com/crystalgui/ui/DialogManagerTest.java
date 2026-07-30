@@ -1,6 +1,6 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Dialog;
@@ -70,7 +70,7 @@ public class DialogManagerTest extends UiTestBase {
     private void pressInside(UIElement e) {
         float x = e.getRuntimeCache().getX() + 3f;
         float y = e.getRuntimeCache().getY() + 3f;
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(x * 2f), Math.round(y * 2f), 0, 0, 0, true, 0f, 1L));
         input.beginFrame();
         input.endFrame();

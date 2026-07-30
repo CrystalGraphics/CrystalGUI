@@ -1,12 +1,13 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.mouse.CgUiMouseCodes;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.FlexDirection;
+import com.crystalgraphics.platform.CgPlatform;
 
 /**
  * A scrollbar: a track with a variable-length thumb.
@@ -274,8 +275,8 @@ public class Scroller extends UIElement implements com.crystalgui.ui.UIFrameTick
         // Poll the real button state rather than waiting for a mouse-up event: a release outside the
         // button (or outside the window entirely) would never be delivered here, and the repeat would
         // run forever.
-        var adapter = CrystalGuiCore.getAdapter();
-        if (adapter == null || !adapter.isMouseDown(CgUiMouseCodes.LEFT_BUTTON)) {
+        var adapter = CgPlatform.input();
+        if (adapter == null || !adapter.isMouseDown(CgMouseCodes.LEFT_BUTTON)) {
             heldDirection = 0f;
             return false;
         }

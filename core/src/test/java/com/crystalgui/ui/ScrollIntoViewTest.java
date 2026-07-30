@@ -1,7 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -152,9 +152,9 @@ public class ScrollIntoViewTest extends UiTestBase {
         // Tab down to a row past the fold.
         for (int i = 0; i < 4; i++) {
             window.getInputHandler().consumeKeyboardEvent(
-                    new SystemInput.Keyboard.Event('\t', CgUiKeyCodes.KEY_TAB, true, false, 0L));
+                    new CgSystemInput.Keyboard.Event('\t', CgKeyCodes.KEY_TAB, true, false, 0L));
             window.getInputHandler().consumeKeyboardEvent(
-                    new SystemInput.Keyboard.Event('\t', CgUiKeyCodes.KEY_TAB, false, false, 0L));
+                    new CgSystemInput.Keyboard.Event('\t', CgKeyCodes.KEY_TAB, false, false, 0L));
             frame();
         }
 
@@ -178,10 +178,10 @@ public class ScrollIntoViewTest extends UiTestBase {
         int py = Math.round((c.getY() + 10f) * 2f);
 
         window.getInputHandler().consumeMouseEvent(
-                new SystemInput.Mouse.Event(px, py, 0, 0, -1, false, 0f, -1L));
+                new CgSystemInput.Mouse.Event(px, py, 0, 0, -1, false, 0f, -1L));
         frame();
         window.getInputHandler().consumeMouseEvent(
-                new SystemInput.Mouse.Event(px, py, 0, 0, 0, true, 0f, System.currentTimeMillis()));
+                new CgSystemInput.Mouse.Event(px, py, 0, 0, 0, true, 0f, System.currentTimeMillis()));
         frame();
 
         assertEquals("a click must never scroll the view", 0f, view.getScrollTop(), 0.5f);

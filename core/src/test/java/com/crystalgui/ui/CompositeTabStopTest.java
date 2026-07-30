@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.*;
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
 
 /**
  * Composite tab stops — the ARIA APG's <b>roving tabindex</b>, ported as
@@ -59,9 +61,9 @@ public class CompositeTabStopTest extends UiTestBase {
 
     private void key(int keyCode) {
         window.getInputHandler().consumeKeyboardEvent(
-                new com.crystalgui.core.input.SystemInput.Keyboard.Event('\0', keyCode, true, false, 0L));
+                new com.crystalgraphics.platform.input.CgSystemInput.Keyboard.Event('\0', keyCode, true, false, 0L));
         window.getInputHandler().consumeKeyboardEvent(
-                new com.crystalgui.core.input.SystemInput.Keyboard.Event('\0', keyCode, false, false, 0L));
+                new com.crystalgraphics.platform.input.CgSystemInput.Keyboard.Event('\0', keyCode, false, false, 0L));
     }
 
     /** The whole Tab sequence, in order, from a cold start. */
@@ -174,11 +176,11 @@ public class CompositeTabStopTest extends UiTestBase {
 
         var input = window.getInputHandler();
         // uiScale 2 at 800x600 over a 400x300 root, so logical (5,5) is physical (10,10).
-        input.consumeMouseEvent(new com.crystalgui.core.input.SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
                 10, 10, 0, 0, -1, false, 0f, -1L));
         input.beginFrame();
         input.endFrame();
-        input.consumeMouseEvent(new com.crystalgui.core.input.SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
                 10, 10, 0, 0, 0, true, 0f, 1L));
         input.beginFrame();
         input.endFrame();
@@ -320,7 +322,7 @@ public class CompositeTabStopTest extends UiTestBase {
         styleFrame();
 
         window.getInputHandler().requestFocus(one);
-        key(com.crystalgui.core.input.keyboard.CgUiKeyCodes.KEY_RIGHT);
+        key(com.crystalgraphics.platform.input.CgKeyCodes.KEY_RIGHT);
 
         assertSame("arrows must reach a tab Tab cannot", two, window.getInputHandler().getFocusedElement());
         assertSame(two, view.getSelectedTab());

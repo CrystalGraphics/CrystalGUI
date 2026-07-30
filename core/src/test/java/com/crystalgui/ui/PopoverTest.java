@@ -1,7 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Dialog;
 import com.crystalgui.ui.elements.Dropdown;
@@ -67,22 +67,22 @@ public class PopoverTest extends UiTestBase {
     /** A press at a logical point, through the real input path. */
     private void pressAt(float logicalX, float logicalY) {
         int px = Math.round(logicalX * 2f), py = Math.round(logicalY * 2f);
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(px, py, 0, 0, -1, false, 0f, -1L));
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(px, py, 0, 0, -1, false, 0f, -1L));
         input.beginFrame();
         input.endFrame();
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(px, py, 0, 0, 0, true, 0f, 1L));
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(px, py, 0, 0, 0, true, 0f, 1L));
         input.beginFrame();
         input.endFrame();
     }
 
     private void escape() {
-        input.consumeKeyboardEvent(new SystemInput.Keyboard.Event('\0', CgUiKeyCodes.KEY_ESCAPE, true, false, 0L));
-        input.consumeKeyboardEvent(new SystemInput.Keyboard.Event('\0', CgUiKeyCodes.KEY_ESCAPE, false, false, 0L));
+        input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event('\0', CgKeyCodes.KEY_ESCAPE, true, false, 0L));
+        input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event('\0', CgKeyCodes.KEY_ESCAPE, false, false, 0L));
     }
 
     private void key(int code) {
-        input.consumeKeyboardEvent(new SystemInput.Keyboard.Event('\0', code, true, false, 0L));
-        input.consumeKeyboardEvent(new SystemInput.Keyboard.Event('\0', code, false, false, 0L));
+        input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event('\0', code, true, false, 0L));
+        input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event('\0', code, false, false, 0L));
     }
 
     // ── Showing ─────────────────────────────────────────────────────────────
@@ -491,15 +491,15 @@ public class PopoverTest extends UiTestBase {
         settle();
         assertSame(a, input.getFocusedElement());
 
-        key(CgUiKeyCodes.KEY_DOWN);
+        key(CgKeyCodes.KEY_DOWN);
         assertSame(b, input.getFocusedElement());
-        key(CgUiKeyCodes.KEY_END);
+        key(CgKeyCodes.KEY_END);
         assertSame(c, input.getFocusedElement());
-        key(CgUiKeyCodes.KEY_DOWN);
+        key(CgKeyCodes.KEY_DOWN);
         assertSame("a menu is a ring, per the ARIA pattern", a, input.getFocusedElement());
-        key(CgUiKeyCodes.KEY_UP);
+        key(CgKeyCodes.KEY_UP);
         assertSame(c, input.getFocusedElement());
-        key(CgUiKeyCodes.KEY_HOME);
+        key(CgKeyCodes.KEY_HOME);
         assertSame(a, input.getFocusedElement());
     }
 
@@ -562,7 +562,7 @@ public class PopoverTest extends UiTestBase {
         // Hover the second row through the real input path.
         float x = second.getRuntimeCache().getX() + 2f;
         float y = second.getRuntimeCache().getY() + 2f;
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(x * 2f), Math.round(y * 2f), 0, 0, -1, false, 0f, -1L));
         input.beginFrame();
         input.endFrame();

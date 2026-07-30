@@ -1,7 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
-import com.crystalgui.core.input.mouse.CgUiMouseCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
@@ -54,7 +54,7 @@ public class HoverChainTest extends UiTestBase {
 
     /** Physical coords; uiScale is 2. Drives a real move through the accumulate-then-dispatch path. */
     private void moveTo(float logicalX, float logicalY) {
-        window.getInputHandler().consumeMouseEvent(new SystemInput.Mouse.Event(
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(logicalX * 2f), Math.round(logicalY * 2f),
                 0, 0, -1, false, 0f, -1L)); // button -1 / millis -1 == a pure move
         window.getInputHandler().beginFrame();
