@@ -1,7 +1,11 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.api.font.CgFontFamilyGroup;
 import com.crystalgraphics.api.text.CgShapedParagraph;
+import com.crystalgraphics.api.text.CgStyleSpan;
+import com.crystalgraphics.api.text.CgStyledText;
+import com.crystalgraphics.api.text.CgTextDecoration;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.property.Property;
@@ -14,16 +18,57 @@ import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.style.HighlightStyle;
+import com.crystalgui.style.property.visual.text.TextDecorationLine;
+import com.crystalgui.ui.text.HighlightRegistry;
+import com.crystalgui.ui.text.TextRange;
 import dev.vfyjxf.taffy.style.TaffyDimension;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Plain-text element — CrystalGUI's first concrete widget. Renders {@link #text} using
  * {@code font-family}/{@code font-size}/{@code color} and wraps within its content box.
  *
- * <p>Deliberately plain text only — no rich formatting (bold/italic/color spans), no markup
- * parsing. CrystalGraphics' rich-text engine (`CgStyledText`/`CgStyleSpan`/`CgFontFamilyGroup`) is
- * mostly built already but its BiDi ∩ style-span splitting integration is still an open gap; wiring
- * rich text into this element is future work once that's resolved, not attempted here.</p>
+ * <h3>Highlights — the CSS Custom Highlight API</h3>
+ * <p>{@link #highlights()} registers named {@link TextRange}s, and a stylesheet styles them through the
+ * {@code ::highlight(name)} pseudo-element. That is the web's own mechanism for decorating ranges of
+ * text <b>without wrapping them in elements</b>, and it exists on the web for exactly our reason: an
+ * editor cannot afford a {@code <span>} per token, and here every element is a real Taffy node.</p>
+ *
+ * <pre>{@code
+ * text.highlights().set("keyword", TextRange.of(0, 4));   // Java says WHERE
+ * ::highlight(keyword) { color: #C678DD; }                // CSS says WHAT
+ * }</pre>
+ *
+ * <p><b>The property set is restricted on purpose.</b> CSS Pseudo-Elements 4 allows highlight
+ * pseudo-elements only properties that cannot affect layout — colour, background, text-decoration,
+ * text-shadow — because a highlight must never reflow the text it highlights. No bold, no italic, no
+ * font-size. See {@link HighlightStyle}.</p>
+ *
+ * <p><b>Known divergence: we re-shape, the web overlays.</b> Browsers paint highlights over text that
+ * has already been laid out, so a highlight provably cannot change metrics. Here the ranges are turned
+ * into {@code CgStyleSpan}s at shape time, because glyph colour is baked into the shaped run by the
+ * backend. A span's boundaries are shaping-run boundaries, and separately-shaped runs lose the kerning
+ * across them — so a highlight here can shift the measured width by a fraction of a pixel, which on the
+ * web it cannot. Closing that gap needs draw-time per-range colour in CrystalGraphics, driven by
+ * {@code CgShapedRun.clusterIds}. Until then: <b>un-highlighted text stays on the unspanned path
+ * entirely</b>, so ordinary labels measure exactly as they always did.</p>
+ *
+ * <p>Rich text as <em>content</em> — bold and italic as part of the document — is a different feature
+ * and the web answers it differently, with inline child elements in an inline formatting context. Taffy
+ * has no inline layout, so that is not attempted here and is not what highlights are for.</p>
+ *
+ * <p>Markup ({@code <b>}, {@code <color=#RRGGBB>}, {@code §l}) is deliberately <b>not</b> wired up,
+ * though {@code CgMarkupParser.HTML}/{@code .MINECRAFT} exist and it would be one call. Markup strips its
+ * own tags, so {@link #getText()} and what is painted would stop being the same string — which
+ * {@link #displayedText()}, the ellipsis search and every measurement path currently assume.</p>
  *
  * <h3>Sizing: no Taffy {@code MeasureFunc} — a post-layout recompute instead</h3>
  * <p>An earlier design reported intrinsic size via a Taffy {@code MeasureFunc} (see
@@ -66,9 +111,31 @@ public final class UIText extends UIElement {
      * infrastructure the rest of CrystalGUI uses (see {@code Property.bindTo}). */
     public final Property<String> text = new Property<>("");
 
+    /** Named ranges, styled from CSS via {@code ::highlight(name)}. Empty for ordinary labels — the
+     * common case, and the one that must stay on the unspanned shaping path (see the class javadoc). */
+    private final HighlightRegistry highlights = new HighlightRegistry(registry -> {
+        // Same reasoning as the text listener: a bare markTreeDirty() would re-run Taffy against the
+        // !important width/height recompute() last pushed, produce identical geometry, and never fire
+        // onLayoutChanged() — leaving the box sized for the previous highlights.
+        shapedParagraph = null;
+        shadowParagraph = null;
+        recompute();
+    });
+
     private CgShapedParagraph shapedParagraph;
     private String shapedForText;
     private CgFontFamily shapedForFamily;
+    /** The resolved highlight styles the retained paragraph was shaped against.
+     *
+     * <p>Part of the memo key rather than a separate invalidation hook: a highlight's colour comes from
+     * the cascade, so editing a stylesheet, switching theme or a {@code :hover} on the originating
+     * element can all change it with nothing on this element having been touched. Comparing the resolved
+     * values catches every one of those, and costs a small map comparison per settled layout.</p> */
+    private Map<String, HighlightStyle> shapedForHighlights = Collections.emptyMap();
+
+    /** Shadow twin of {@link #shapedParagraph}, built only when a highlight sets a colour — see
+     * {@link #shadowLayoutFor}. Null whenever the ordinary paragraph can serve both passes. */
+    private CgShapedParagraph shadowParagraph;
 
     /** Last ellipsis result and the exact inputs that produced it — see {@link #truncatedStringFor}. */
     private String truncated;
@@ -124,6 +191,26 @@ public final class UIText extends UIElement {
         return text.bindTo(source);
     }
 
+    // ── Highlights ──────────────────────────────────────────────────────────
+
+    /**
+     * This element's named highlight ranges — {@code CSS.highlights}, scoped to one label.
+     *
+     * <p>Register <em>where</em> here and style <em>what</em> in CSS:</p>
+     * <pre>{@code
+     * text.highlights().set("keyword", TextRange.of(0, 4));
+     * }</pre>
+     * <pre>{@code
+     * ::highlight(keyword) { color: #C678DD; }
+     * }</pre>
+     *
+     * <p>Registering a name no stylesheet mentions is legal and does nothing, exactly as on the web — a
+     * highlighter should not have to know which theme is loaded.</p>
+     */
+    public HighlightRegistry highlights() {
+        return highlights;
+    }
+
     private CgFontFamily resolveFamily() {
         var general = getStyle().getGeneralGroup();
         return FontFamilyCache.resolve(general.fontFamily(), Math.round(general.fontSize()));
@@ -137,12 +224,122 @@ public final class UIText extends UIElement {
     private CgShapedParagraph ensureShaped() {
         String currentText = text.get();
         CgFontFamily currentFamily = resolveFamily();
-        if (shapedParagraph == null || !currentText.equals(shapedForText) || currentFamily != shapedForFamily) {
-            shapedParagraph = CgTextLayout.of(currentText, currentFamily).shape();
+        Map<String, HighlightStyle> currentHighlights = resolveHighlightStyles();
+        if (shapedParagraph == null || !currentText.equals(shapedForText) || currentFamily != shapedForFamily
+                || !currentHighlights.equals(shapedForHighlights)) {
+            shapedParagraph = shape(currentText, currentFamily, currentHighlights, false);
             shapedForText = currentText;
             shapedForFamily = currentFamily;
+            shapedForHighlights = currentHighlights;
+            shadowParagraph = null;
         }
         return shapedParagraph;
+    }
+
+    /**
+     * Asks the cascade for the style of every highlight name registered on this element.
+     *
+     * <p>Names with no matching rule resolve to {@link HighlightStyle#EMPTY} and are dropped, so a
+     * highlighter emitting names the current theme ignores costs one map lookup each and produces no
+     * spans at all — which is what keeps such an element on the fast unspanned shaping path.</p>
+     */
+    private Map<String, HighlightStyle> resolveHighlightStyles() {
+        if (highlights.isEmpty()) return Collections.emptyMap();
+        var window = getAttachedWindow();
+        if (window == null) return Collections.emptyMap();
+
+        Map<String, HighlightStyle> resolved = new LinkedHashMap<>();
+        for (String name : highlights.names()) {
+            HighlightStyle style = window.getStyleEngine().highlightStyle(this, name);
+            if (!style.isEmpty()) resolved.put(name, style);
+        }
+        return resolved;
+    }
+
+    /**
+     * The one place plain and highlighted shaping diverge.
+     *
+     * <p>With no effective highlights this takes {@code CgTextLayout.of(text, family)} — the original
+     * path, byte for byte, which is what keeps ordinary labels measuring exactly as they always have.
+     * With highlights it builds a {@link CgStyledText} over a {@link CgFontFamilyGroup}.</p>
+     *
+     * @param limit  characters of {@code content} the ranges may cover, for the truncation path where the
+     *               painted string is a prefix of the real one
+     * @param shadow darken every highlight colour, for the {@code text-shadow} pass
+     */
+    private CgShapedParagraph shape(String content, CgFontFamily family,
+                                    Map<String, HighlightStyle> styles, boolean shadow) {
+        List<CgStyleSpan> spans = toCgSpans(styles, content.length(), shadow);
+        if (spans.isEmpty()) {
+            return CgTextLayout.of(content, family).shape();
+        }
+        return CgTextLayout.of(new CgStyledText(content, spans), resolveGroup()).shape();
+    }
+
+    private CgFontFamilyGroup resolveGroup() {
+        var general = getStyle().getGeneralGroup();
+        return FontFamilyCache.resolveGroup(general.fontFamily(), Math.round(general.fontSize()));
+    }
+
+    /**
+     * Flattens registered ranges plus their resolved styles into backend spans, clipped to {@code limit}.
+     *
+     * <p>The clip is what makes truncation and text-shrinking safe: both leave ranges pointing past the
+     * end of the string that will actually be shaped, and {@code CgStyledText} rejects that outright —
+     * from inside a paint, on a later frame, with no caller code on the stack.</p>
+     *
+     * <p><b>Overlapping highlights resolve by registration order</b>, last one winning, and non-overlap
+     * within a single name is enforced by {@link HighlightRegistry}. The web layers overlapping
+     * highlights by priority instead; ours is the simpler rule that a single shaped run per character
+     * can actually express, and it is at least deterministic and explainable.</p>
+     */
+    private List<CgStyleSpan> toCgSpans(Map<String, HighlightStyle> styles, int limit, boolean shadow) {
+        if (styles.isEmpty()) return Collections.emptyList();
+
+        // Winner per character, then run-length encoded — the only way to get disjoint spans out of
+        // ranges that may overlap across names.
+        HighlightStyle[] perChar = new HighlightStyle[limit];
+        for (Map.Entry<String, HighlightStyle> entry : styles.entrySet()) {
+            for (TextRange range : highlights.get(entry.getKey())) {
+                TextRange clipped = range.clippedTo(limit);
+                if (clipped == null) continue;
+                for (int i = clipped.start(); i < clipped.end(); i++) perChar[i] = entry.getValue();
+            }
+        }
+
+        List<CgStyleSpan> out = new ArrayList<>();
+        int runStart = -1;
+        for (int i = 0; i <= limit; i++) {
+            HighlightStyle here = i < limit ? perChar[i] : null;
+            HighlightStyle previous = runStart < 0 ? null : perChar[runStart];
+            if (here == previous) continue;
+            if (previous != null) out.add(toCgSpan(previous, runStart, i, shadow));
+            runStart = here == null ? -1 : i;
+        }
+        return out;
+    }
+
+    private static CgStyleSpan toCgSpan(HighlightStyle style, int start, int end, boolean shadow) {
+        // 0 is the backend's "inherit the draw colour" sentinel, and on the shadow pass the draw colour
+        // already IS the shadow — so a background-only highlight needs no help. Only an explicit colour
+        // has to be darkened, or a red keyword would paint its shadow bright red.
+        int color = style.color(0);
+        if (shadow && color != 0) color = shadowColorFor(color);
+        return new CgStyleSpan(start, end, false, false, toCgDecorations(style.decorations()), color,
+                null, 0f);
+    }
+
+    private static Set<CgTextDecoration> toCgDecorations(Set<TextDecorationLine> source) {
+        if (source.isEmpty()) return Collections.emptySet();
+        EnumSet<CgTextDecoration> out = EnumSet.noneOf(CgTextDecoration.class);
+        for (TextDecorationLine line : source) {
+            // CSS spells it `line-through`; the backend enum says STRIKETHROUGH. Mapped by hand rather
+            // than by name(), because they deliberately do not agree — see TextDecorationLine.
+            out.add(line == TextDecorationLine.LINE_THROUGH
+                    ? CgTextDecoration.STRIKETHROUGH
+                    : CgTextDecoration.valueOf(line.name()));
+        }
+        return out;
     }
 
     @Override
@@ -297,7 +494,13 @@ public final class UIText extends UIElement {
         if (shadow) renderer.beginBatch();
         try {
             if (shadow) {
-                renderer.draw().layout(textLayout).family(family)
+                // A span's own colour BEATS the draw colour downstream
+                // (`overrideColor != 0 ? overrideColor : rgba`), so a coloured span would paint its
+                // shadow in full brightness — a red keyword with a red shadow, which reads as a blur
+                // rather than a shadow. ensureShadowShaped() supplies a twin whose span colours are
+                // pre-darkened; it returns the ordinary layout whenever nothing needs darkening.
+                renderer.draw().layout(shadowLayoutFor(textLayout, family, contentWidth, wraps))
+                        .family(family)
                         .at(contentX + 1f, contentY + 1f)
                         .color(shadowColorFor(color))
                         .pose(ctx.getPoseStack())
@@ -312,6 +515,35 @@ public final class UIText extends UIElement {
         } finally {
             if (shadow) renderer.endBatch();
         }
+    }
+
+    /**
+     * The layout the {@code text-shadow} pass should draw — the ordinary one unless a span carries an
+     * explicit colour that would otherwise paint at full brightness behind its own glyph.
+     *
+     * <p>Shaped lazily and retained, so the cost is one extra shaping pass per genuine content change and
+     * nothing per frame. Skipped entirely when no span sets a colour, which covers bold/italic/underline
+     * spans as well as every plain label — those inherit the draw colour, and the draw colour on this
+     * pass is already the shadow.</p>
+     */
+    private CgTextLayout shadowLayoutFor(CgTextLayout normal, CgFontFamily family, float contentWidth,
+                                         boolean wraps) {
+        if (!anyHighlightIsColoured()) return normal;
+        // Truncated text is left alone deliberately: the ellipsis path already re-shapes per width, and
+        // a second shadow-coloured re-shape of a *changing* prefix would double that cost every frame for
+        // a nearly invisible difference behind an already-clipped label.
+        if (!wraps) return normal;
+        if (shadowParagraph == null) {
+            shadowParagraph = shape(text.get(), family, shapedForHighlights, true);
+        }
+        return shadowParagraph.layout(contentWidth, 0f);
+    }
+
+    private boolean anyHighlightIsColoured() {
+        for (HighlightStyle style : shapedForHighlights.values()) {
+            if (style.color(0) != 0) return true;
+        }
+        return false;
     }
 
     /** A quarter-brightness copy at the same alpha — Minecraft's own convention for glyph shadows. */
@@ -339,9 +571,22 @@ public final class UIText extends UIElement {
      */
     private CgTextLayout truncatedIfNeeded(CgFontFamily family, float contentWidth) {
         String display = truncatedStringFor(family, contentWidth);
-        return display.equals(text.get())
-                ? ensureShaped().layout(0f, 0f)          // untouched: reuse the retained paragraph
-                : CgTextLayout.of(display, family).build();
+        if (display.equals(text.get())) {
+            return ensureShaped().layout(0f, 0f);        // untouched: reuse the retained paragraph
+        }
+        // Truncated: a different, shorter string, so the retained paragraph cannot serve. Spans have to
+        // come along clipped — TextSpan.clippedTo drops the ones past the cut and shortens the one
+        // straddling it, which is what keeps a half-highlighted token from throwing on validation.
+        //
+        // Known, accepted imprecision: the binary search that chose this cut measured the text UNSPANNED
+        // (measureEllipsised builds a plain layout per probe), while what gets painted here is spanned.
+        // Span boundaries are shaping-run boundaries and separately-shaped runs lose the kerning across
+        // them, so the painted width can differ from the probed one by a fraction of a pixel per span —
+        // enough, at worst, for a styled label to overhang its box by a hair. Making the probe span-aware
+        // would mean shaping styled text on every step of the search, which is the exact cost the memo
+        // above exists to avoid, for an error smaller than the ellipsis glyph. Revisit only if a real
+        // label is visibly wrong, not on principle.
+        return shape(display, family, shapedForHighlights, false).layout(0f, 0f);
     }
 
     /**

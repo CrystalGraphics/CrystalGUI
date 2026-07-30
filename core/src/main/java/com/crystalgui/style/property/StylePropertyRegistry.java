@@ -17,6 +17,8 @@ import com.crystalgui.style.property.visual.border.LengthPercentProperty;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.text.FontFamilyValue;
 import com.crystalgui.style.property.visual.text.TextAlign;
+import com.crystalgui.style.property.visual.text.TextDecorationLine;
+import com.crystalgui.style.property.visual.text.TextDecorationLineValue;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgui.style.property.visual.text.LineHeightProperty;
@@ -32,6 +34,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReferenceArray;
@@ -192,6 +195,19 @@ public class StylePropertyRegistry {
      * box that clips, not to the text flowing through it. @see TextOverflow */
     public static final StyleProperty<TextOverflow> TEXT_OVERFLOW =
             create("text-overflow", TextOverflow.class, TextOverflow.CLIP);
+    /**
+     * CSS {@code text-decoration-line}. Inherited, per spec, and initially empty.
+     *
+     * <p>The longhand rather than the {@code text-decoration} shorthand — see
+     * {@link TextDecorationLine} for why the other three components are deliberately not offered.</p>
+     *
+     * <p>Consumed today only through {@code ::highlight()}, which is the CSS Custom Highlight API's
+     * whole point: decorating a range without putting an element around it.</p>
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static final StyleProperty<Set<TextDecorationLine>> TEXT_DECORATION_LINE =
+            create("text-decoration-line", (Class) Set.class, java.util.Collections.emptySet(),
+                    TextDecorationLineValue::new).setInheritable(true);
 
     // CSS `scroll-behavior`. Purely a paint/animation concern, so no Taffy listener.
     public static final StyleProperty<ScrollBehavior> SCROLL_BEHAVIOR =

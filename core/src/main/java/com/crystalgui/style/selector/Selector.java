@@ -1,6 +1,7 @@
 package com.crystalgui.style.selector;
 
 import com.crystalgui.ui.UIElement;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,9 +25,37 @@ public record Selector(List<CompoundSelector> compounds, List<Combinator> combin
         }
     }
 
+    /**
+     * The pseudo-element this selector targets, or null for an ordinary selector.
+     *
+     * <p>Read from the rightmost compound only, because that is the only place CSS allows one: a
+     * pseudo-element is not a real element, so nothing may be selected relative to it.</p>
+     */
+    @Nullable
+    public CompoundSelector.Part pseudoElement() {
+        return compounds.get(compounds.size() - 1).pseudoElement();
+    }
+
+    /**
+     * Whether this selector applies to {@code element}'s own style.
+     *
+     * <p>Always false when a pseudo-element is present — those rules style an overlay, not the element,
+     * and are routed separately by {@code StyleEngine}. See {@link #matchesOriginating}.</p>
+     */
     public boolean matches(UIElement element) {
+        if (pseudoElement() != null) return false;
+        return matchesOriginating(element);
+    }
+
+    /**
+     * Whether {@code element} is the <b>originating element</b> — the one a pseudo-element hangs off.
+     *
+     * <p>Identical to {@link #matches} except that a trailing pseudo-element is ignored rather than
+     * disqualifying. This is what {@code .code text::highlight(keyword)} is matched with.</p>
+     */
+    public boolean matchesOriginating(UIElement element) {
         int lastIndex = compounds.size() - 1;
-        if (!compounds.get(lastIndex).matches(element)) return false;
+        if (!compounds.get(lastIndex).matchesOriginating(element)) return false;
 
         UIElement current = element;
         for (int i = lastIndex - 1; i >= 0; i--) {
