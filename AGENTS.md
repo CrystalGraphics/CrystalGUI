@@ -937,6 +937,7 @@ The things that are invisible from any single class and expensive to rediscover.
 | The cascade diff compares `realSlots`, not `computedSlots` | In-flight transitions can't be retargeted or cleaned up |
 | Re-adding a stylesheet appends it at highest priority | Runtime theme switches apply in the wrong order |
 | Taffy defaults are **not** CSS defaults | Silently wrong layout — see the table above |
+| `flex-shrink: 0` means a `flex-grow: 1` child **overflows its parent** rather than shrinking — give it `height: 0`/`width: 0` as its basis | The child keeps its content size and anything stretching to that size spills with it. Cost a real session on the gallery: `__panes__` overhung the frame containing it, and only at small window sizes, because at large ones there was room. `FlexShrinkOverflowTest` pins both halves |
 | CSS text belongs in `test`, never `headlessTest` | `StyleSheet` class-init reads `default.css` via `CgIO` → unloadable headlessly |
 | JOML + Taffy must stay on the headless classpath | Field descriptors resolve at class load; `UIElement`/`ElementStyle` have fields of those types |
 | CrystalGraphics `platform` must stay on the headless classpath too — the excluded module is CG **core** | `UIInputHandler` *implements* `CgSystemInput`; a supertype resolves at class load, so stripping it fails every input test with `NoClassDefFoundError` |
