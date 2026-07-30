@@ -4,8 +4,8 @@ import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
-import com.crystalgui.core.input.keyboard.Modifiers;
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
@@ -21,6 +21,7 @@ import com.crystalgui.ui.input.FocusPolicy;
 
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
+import com.crystalgraphics.platform.CgPlatform;
 
 /**
  * A single-line editable text field.
@@ -166,7 +167,7 @@ public class TextField extends UIElement implements UIFrameTicker {
                 selectWordAt(index);
                 return;
             }
-            moveCaret(index, Modifiers.hasShift(currentModifiers()));
+            moveCaret(index, CgModifiers.hasShift(currentModifiers()));
 
             // Drag-select. The press has already placed the caret, which becomes the anchor; every
             // drag update just re-runs click-to-caret with select=true so the selection grows from it.
@@ -189,7 +190,7 @@ public class TextField extends UIElement implements UIFrameTicker {
             }
             // Ctrl-combos that reach here (Ctrl+S and friends) carry a control character, which
             // insertChar rejects anyway, but bailing early keeps them from being swallowed.
-            if (Modifiers.hasCtrl(event.getModifiers())) return;
+            if (CgModifiers.hasCtrl(event.getModifiers())) return;
             char typed = event.getCharacter();
             if (typed != '\0' && !Character.isISOControl(typed)) {
                 insertChar(typed);
@@ -739,39 +740,39 @@ public class TextField extends UIElement implements UIFrameTicker {
     }
 
     private int currentModifiers() {
-        var adapter = CrystalGuiCore.getAdapter();
+        var adapter = CgPlatform.input();
         return adapter == null ? 0 : adapter.getCurrentModifiers();
     }
 
     /** @return whether the key was consumed. */
     private boolean handleKey(int key, int modifiers) {
-        boolean shift = Modifiers.hasShift(modifiers);
-        boolean ctrl = Modifiers.hasCtrl(modifiers);
+        boolean shift = CgModifiers.hasShift(modifiers);
+        boolean ctrl = CgModifiers.hasCtrl(modifiers);
 
         if (ctrl) {
             switch (key) {
-                case CgUiKeyCodes.KEY_A -> {
+                case CgKeyCodes.KEY_A -> {
                     selectionAnchor = 0;
                     caret = text.length();
                     resetBlink();       // assigns caret directly, bypassing moveCaret
                     onStyleChanged();
                     return true;
                 }
-                case CgUiKeyCodes.KEY_C -> {
-                    if (hasSelection()) CrystalGuiCore.getClipboard().set(getSelectedText());
+                case CgKeyCodes.KEY_C -> {
+                    if (hasSelection()) CgPlatform.input().setClipboard(getSelectedText());
                     return true;
                 }
-                case CgUiKeyCodes.KEY_X -> {
+                case CgKeyCodes.KEY_X -> {
                     if (hasSelection()) {
-                        CrystalGuiCore.getClipboard().set(getSelectedText());
+                        CgPlatform.input().setClipboard(getSelectedText());
                         deleteSelectionOr(0);
                     }
                     return true;
                 }
-                case CgUiKeyCodes.KEY_V -> {
+                case CgKeyCodes.KEY_V -> {
                     // Paste goes through the keystroke filters too, so a filtered field can't be
                     // bypassed by pasting what it refuses to accept typed.
-                    String pasted = CrystalGuiCore.getClipboard().get();
+                    String pasted = CgPlatform.input().getClipboard();
                     StringBuilder kept = new StringBuilder(pasted.length());
                     for (int i = 0; i < pasted.length(); i++) {
                         char c = pasted.charAt(i);
@@ -785,13 +786,13 @@ public class TextField extends UIElement implements UIFrameTicker {
         }
 
         switch (key) {
-            case CgUiKeyCodes.KEY_LEFT -> moveCaret(step(caret, -1), shift);
-            case CgUiKeyCodes.KEY_RIGHT -> moveCaret(step(caret, 1), shift);
-            case CgUiKeyCodes.KEY_HOME -> moveCaret(0, shift);
-            case CgUiKeyCodes.KEY_END -> moveCaret(text.length(), shift);
-            case CgUiKeyCodes.KEY_BACK -> deleteSelectionOr(-1);
-            case CgUiKeyCodes.KEY_DELETE -> deleteSelectionOr(1);
-            case CgUiKeyCodes.KEY_RETURN, CgUiKeyCodes.KEY_NUMPADENTER -> {
+            case CgKeyCodes.KEY_LEFT -> moveCaret(step(caret, -1), shift);
+            case CgKeyCodes.KEY_RIGHT -> moveCaret(step(caret, 1), shift);
+            case CgKeyCodes.KEY_HOME -> moveCaret(0, shift);
+            case CgKeyCodes.KEY_END -> moveCaret(text.length(), shift);
+            case CgKeyCodes.KEY_BACK -> deleteSelectionOr(-1);
+            case CgKeyCodes.KEY_DELETE -> deleteSelectionOr(1);
+            case CgKeyCodes.KEY_RETURN, CgKeyCodes.KEY_NUMPADENTER -> {
                 commit();
                 onSubmit.emit(value.get());
                 // NOT consumed on purpose: consumesTextInput() already stops the activation bridge
@@ -800,7 +801,7 @@ public class TextField extends UIElement implements UIFrameTicker {
                 // fall-through to the typing path discards it.
                 return false;
             }
-            case CgUiKeyCodes.KEY_ESCAPE -> {
+            case CgKeyCodes.KEY_ESCAPE -> {
                 // Abandon the edit. Consumed ONLY if there was something to abandon, so Escape still
                 // closes an enclosing dialog when the field is untouched.
                 if (text.equals(value.get())) return false;

@@ -1,7 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.input.UIDragController;
 import com.crystalgui.ui.input.UIInputHandler;
@@ -73,21 +73,21 @@ public class DragPayloadTest extends UiTestBase {
     }
 
     private void press(float x, float y) {
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(x * 2f), Math.round(y * 2f), 0, 0, 0, true, 0f, 1L));
         input.beginFrame();
         input.endFrame();
     }
 
     private void move(float x, float y) {
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(x * 2f), Math.round(y * 2f), 0, 0, -1, false, 0f, -1L));
         input.beginFrame();
         input.endFrame();
     }
 
     private void release(float x, float y) {
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(x * 2f), Math.round(y * 2f), 0, 0, 0, false, 0f, 2L));
         input.beginFrame();
         input.endFrame();
@@ -434,8 +434,8 @@ public class DragPayloadTest extends UiTestBase {
     // ── Cancel ──────────────────────────────────────────────────────────────
 
     private void escape() {
-        input.consumeKeyboardEvent(new SystemInput.Keyboard.Event(
-                '\0', CgUiKeyCodes.KEY_ESCAPE, true, false, 3L));
+        input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
+                '\0', CgKeyCodes.KEY_ESCAPE, true, false, 3L));
     }
 
     @Test

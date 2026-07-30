@@ -1,8 +1,8 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.SystemInput;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -40,7 +40,7 @@ public class DialogTest extends UiTestBase {
      * One {@code @Before}, deliberately. JUnit 4 does not order multiple {@code @Before} methods, so
      * splitting "register the adapter" from "build the tree" is a coin flip — and
      * {@code UIInputHandler}'s constructor dereferences the adapter immediately. Other tests here get
-     * away with the split only because {@code CrystalGuiCore.setAdapter} is static global state that
+     * away with the split only because the registered {@code CgPlatformService} is static global state that
      * an earlier test class happened to fill in.
      */
     @Before
@@ -68,22 +68,22 @@ public class DialogTest extends UiTestBase {
     private float top()  { return dialog.getRuntimeCache().getY() - root.getRuntimeCache().getY(); }
 
     private void press(float x, float y) {
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(x * 2f), Math.round(y * 2f), 0, 0, 0, true, 0f, 1L));
         input.beginFrame();
         input.endFrame();
     }
 
     private void move(float x, float y) {
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(x * 2f), Math.round(y * 2f), 0, 0, -1, false, 0f, -1L));
         input.beginFrame();
         input.endFrame();
     }
 
     private void escape() {
-        input.consumeKeyboardEvent(new SystemInput.Keyboard.Event(
-                '\0', CgUiKeyCodes.KEY_ESCAPE, true, false, 3L));
+        input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
+                '\0', CgKeyCodes.KEY_ESCAPE, true, false, 3L));
     }
 
     /** Grabs the title bar at its current position and drags by a logical delta. */

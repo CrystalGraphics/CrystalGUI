@@ -1,17 +1,14 @@
 package com.crystalgui.testsupport;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
 import org.junit.Before;
 
 /**
- * Installs the no-op platform input adapter every UI test needs.
+ * Registers the platform bundle every UI test needs.
  *
  * <h3>Why a base class and not another {@code @Before}</h3>
- * <p>{@link CrystalGuiCore#setAdapter} is global static state that {@code UIInputHandler}'s
- * <em>constructor</em> dereferences — so anything building a {@code UIWindow} needs it installed
- * first. Twenty-two test classes each declared their own {@code @Before} to do that, alongside a
- * second {@code @Before} that built the tree.</p>
+ * <p>The input service is global state that {@code UIInputHandler}'s <em>constructor</em> dereferences —
+ * so anything building a {@code UIWindow} needs it installed first. Twenty-two test classes each declared
+ * their own {@code @Before} to do that, alongside a second {@code @Before} that built the tree.</p>
  *
  * <p><b>JUnit 4 does not order sibling {@code @Before} methods.</b> It sorts them by a method-name
  * hash, which is deterministic but arbitrary — so whether the adapter was installed before the tree
@@ -26,7 +23,7 @@ import org.junit.Before;
  * collapses twenty-two identical anonymous adapters into one.</p>
  *
  * <p>Two classes deliberately do <em>not</em> extend this — {@code TextFieldTest} and
- * {@code ScrollerDragTest} — because they need adapters that report live modifier state rather than
+ * {@code ScrollerDragTest} — because they need input services that report live modifier state rather than
  * a constant. Their stubs are real fixtures, not duplication.</p>
  */
 public abstract class UiTestBase {
@@ -36,13 +33,7 @@ public abstract class UiTestBase {
      * ambiguous sibling-ordering problem the class exists to remove.
      */
     @Before
-    public final void installStubInputAdapter() {
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
-            @Override public int getCurrentModifiers() { return 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-        });
+    public final void installTestPlatform() {
+        TestPlatformService.install();
     }
 }

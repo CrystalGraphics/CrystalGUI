@@ -1,7 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Dialog;
@@ -70,8 +70,8 @@ public class ModalDialogTest extends UiTestBase {
     }
 
     private void escape() {
-        input.consumeKeyboardEvent(new SystemInput.Keyboard.Event('\0', CgUiKeyCodes.KEY_ESCAPE, true, false, 0L));
-        input.consumeKeyboardEvent(new SystemInput.Keyboard.Event('\0', CgUiKeyCodes.KEY_ESCAPE, false, false, 0L));
+        input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event('\0', CgKeyCodes.KEY_ESCAPE, true, false, 0L));
+        input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event('\0', CgKeyCodes.KEY_ESCAPE, false, false, 0L));
     }
 
     // ── Modality bookkeeping ────────────────────────────────────────────────
@@ -191,10 +191,10 @@ public class ModalDialogTest extends UiTestBase {
         settle();
         UIElement focusedBefore = input.getFocusedElement();
 
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(40, 40, 0, 0, -1, false, 0f, -1L));
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(40, 40, 0, 0, -1, false, 0f, -1L));
         input.beginFrame();
         input.endFrame();
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(40, 40, 0, 0, 0, true, 0f, 1L));
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(40, 40, 0, 0, 0, true, 0f, 1L));
         input.beginFrame();
         input.endFrame();
 
@@ -223,7 +223,7 @@ public class ModalDialogTest extends UiTestBase {
 
         for (int i = 0; i < 6; i++) {
             input.consumeKeyboardEvent(
-                    new SystemInput.Keyboard.Event('\0', CgUiKeyCodes.KEY_TAB, true, false, 0L));
+                    new CgSystemInput.Keyboard.Event('\0', CgKeyCodes.KEY_TAB, true, false, 0L));
             UIElement focused = input.getFocusedElement();
             assertNotNull("Tab must always land somewhere inside the modal", focused);
             assertFalse("Tab escaped the modal to " + focused.getId(), focused.isInert());

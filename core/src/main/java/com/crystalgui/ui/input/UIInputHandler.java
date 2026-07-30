@@ -3,13 +3,13 @@ package com.crystalgui.ui.input;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.ReadOnlyVec2f;
-import com.crystalgui.core.input.CgUiInputAdapter;
-import com.crystalgui.core.input.SystemInput;
-import com.crystalgui.core.input.SystemInput.Keyboard;
-import com.crystalgui.core.input.SystemInput.Mouse;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
-import com.crystalgui.core.input.keyboard.Modifiers;
-import com.crystalgui.style.property.visual.Cursor;
+import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgSystemInput.Keyboard;
+import com.crystalgraphics.platform.input.CgSystemInput.Mouse;
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgraphics.platform.input.CgCursor;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.tree.UITreeTraversal;
 import com.crystalgui.ui.UIWindow;
@@ -17,9 +17,10 @@ import com.crystalgui.ui.event.*;
 import lombok.Getter;
 import org.joml.Vector2f;
 import org.jspecify.annotations.Nullable;
+import com.crystalgraphics.platform.CgPlatform;
 
-public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.Mouse {
-    public final static long multiClickInterval = SystemInput.multiClickInterval.get();
+public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInput.Mouse {
+    public final static long multiClickInterval = CgSystemInput.multiClickIntervalMs();
 
     private final UIWindow window;
 
@@ -44,7 +45,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
 
     private boolean firstFrameOver = false;
 
-    private final ButtonState[] mouseButtonStates = new ButtonState[CrystalGuiCore.getAdapter().howManyMouseButtons()];
+    private final ButtonState[] mouseButtonStates = new ButtonState[CgPlatform.input().howManyMouseButtons()];
 
     public UIInputHandler(UIWindow window) {
         this.window = window;
@@ -134,10 +135,10 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         return hoverFrameData.eventPosition();
     }
 
-    // ── Cursor ──────────────────────────────────────────────────────────────
+    // ── CgCursor ──────────────────────────────────────────────────────────────
 
     /** Last cursor handed to the platform, so an unchanged one is not re-sent. */
-    private Cursor lastCursor = Cursor.DEFAULT;
+    private CgCursor lastCursor = CgCursor.DEFAULT;
 
     /**
      * Resolves the CSS {@code cursor} for whatever the pointer is over and pushes it to the platform.
@@ -160,10 +161,10 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
      * cursor object, which is the one worth guarding.</p>
      */
     private void updateCursor(@Nullable UIElement hovered) {
-        Cursor resolved = resolveCursor(hovered);
+        CgCursor resolved = resolveCursor(hovered);
         if (resolved == lastCursor) return;
         lastCursor = resolved;
-        CrystalGuiCore.getCursorService().setCursor(resolved);
+        CgPlatform.cursor().setCursor(resolved);
     }
 
     /**
@@ -175,15 +176,15 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
      * Inheritance itself needs no work here: {@code cursor} is an inheritable property, so the cascade
      * has already resolved what a nested element should show.</p>
      */
-    private Cursor resolveCursor(@Nullable UIElement hovered) {
-        if (hovered == null) return Cursor.DEFAULT;
-        Cursor declared = hovered.getStyle().getGeneralGroup().cursor();
+    private CgCursor resolveCursor(@Nullable UIElement hovered) {
+        if (hovered == null) return CgCursor.DEFAULT;
+        CgCursor declared = hovered.getStyle().getGeneralGroup().cursor();
         if (!declared.needsResolution()) return declared;
-        return hovered.consumesTextInput() ? Cursor.TEXT : Cursor.DEFAULT;
+        return hovered.consumesTextInput() ? CgCursor.TEXT : CgCursor.DEFAULT;
     }
 
-    /** The cursor currently being presented. Resolved, so never {@link Cursor#AUTO}. */
-    public Cursor currentCursor() {
+    /** The cursor currently being presented. Resolved, so never {@link CgCursor#AUTO}. */
+    public CgCursor currentCursor() {
         return lastCursor;
     }
 
@@ -320,7 +321,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         // what holds focus (which during a drag is usually not the drag source at all). Deliberately
         // ahead of the focusedElement == null branch, or a drag started from a non-focusable element
         // would be uncancellable.
-        if (event.pressed() && event.key() == CgUiKeyCodes.KEY_ESCAPE && dragController.isDragging()) {
+        if (event.pressed() && event.key() == CgKeyCodes.KEY_ESCAPE && dragController.isDragging()) {
             dragController.cancelDrag();
             return true;
         }
@@ -332,12 +333,12 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         // Asks the TOPMOST watcher, which is what makes nesting work: a dropdown opened from inside a modal
         // closes first, and only a second Escape reaches the modal. Elements that establish no watcher —
         // a modeless dialog, a MANUAL popover — never see Escape at all, which is the web's behaviour too.
-        if (event.pressed() && event.key() == CgUiKeyCodes.KEY_ESCAPE) {
+        if (event.pressed() && event.key() == CgKeyCodes.KEY_ESCAPE) {
             UIElement watcher = window.getTopCloseWatcher();
             if (watcher != null && watcher.requestClose()) return true;
         }
 
-        CgUiInputAdapter inputAdapter = CrystalGuiCore.getAdapter();
+        CgInputService inputAdapter = CgPlatform.input();
         final int modifiers = inputAdapter.getCurrentModifiers();
 
         if (focusedElement == null) {
@@ -371,7 +372,7 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
      */
     private void handleActivationKey(Keyboard.Event event) {
         if (focusedElement == null) return;
-        if (event.key() != CgUiKeyCodes.KEY_SPACE && event.key() != CgUiKeyCodes.KEY_RETURN) return;
+        if (event.key() != CgKeyCodes.KEY_SPACE && event.key() != CgKeyCodes.KEY_RETURN) return;
         // A text-editing element gets Space as a character, not as activation — synthesizing a click
         // for it would fire the element's press handlers every time somebody typed a space, and the
         // synthesized Down carries the physical cursor position, so it would also land wherever the
@@ -392,8 +393,8 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     }
 
     private void moveTabFocus(Keyboard.Event event, int modifiers) {
-        if (event.key() != CgUiKeyCodes.KEY_TAB) return;
-        boolean reverse = Modifiers.hasShift(modifiers);
+        if (event.key() != CgKeyCodes.KEY_TAB) return;
+        boolean reverse = CgModifiers.hasShift(modifiers);
 
         // The whole of focus trapping: while a modal is open the tab sequence IS the modal's subtree,
         // because everything outside it is inert. Enforced here rather than inside `tabbable()` so the

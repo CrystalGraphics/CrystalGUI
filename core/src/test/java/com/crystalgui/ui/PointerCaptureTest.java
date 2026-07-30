@@ -1,6 +1,6 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.input.UIInputHandler;
 import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Before;
@@ -66,21 +66,21 @@ public class PointerCaptureTest extends UiTestBase {
     }
 
     private void move(float logicalX, float logicalY) {
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(logicalX * 2f), Math.round(logicalY * 2f), 0, 0, -1, false, 0f, -1L));
         input.beginFrame();
         input.endFrame();
     }
 
     private void press(float logicalX, float logicalY) {
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(logicalX * 2f), Math.round(logicalY * 2f), 0, 0, 0, true, 0f, 1L));
         input.beginFrame();
         input.endFrame();
     }
 
     private void release(float logicalX, float logicalY) {
-        input.consumeMouseEvent(new SystemInput.Mouse.Event(
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(logicalX * 2f), Math.round(logicalY * 2f), 0, 0, 0, false, 0f, 2L));
         input.beginFrame();
         input.endFrame();

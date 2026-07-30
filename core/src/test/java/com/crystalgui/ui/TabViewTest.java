@@ -1,7 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.elements.Tab;
 import com.crystalgui.ui.elements.TabView;
@@ -74,9 +74,9 @@ public class TabViewTest extends UiTestBase {
 
     private void key(int keyCode) {
         window.getInputHandler().consumeKeyboardEvent(
-                new SystemInput.Keyboard.Event('\0', keyCode, true, false, 0L));
+                new CgSystemInput.Keyboard.Event('\0', keyCode, true, false, 0L));
         window.getInputHandler().consumeKeyboardEvent(
-                new SystemInput.Keyboard.Event('\0', keyCode, false, false, 0L));
+                new CgSystemInput.Keyboard.Event('\0', keyCode, false, false, 0L));
     }
 
     /**
@@ -91,7 +91,7 @@ public class TabViewTest extends UiTestBase {
      */
     private void activate(Tab tab) {
         window.getInputHandler().requestFocus(tab);
-        key(CgUiKeyCodes.KEY_SPACE);
+        key(CgKeyCodes.KEY_SPACE);
     }
 
     private TaffyDisplay displayOf(UIElement element) {
@@ -229,13 +229,13 @@ public class TabViewTest extends UiTestBase {
         styleFrame();
         window.getInputHandler().requestFocus(first);
 
-        key(CgUiKeyCodes.KEY_RIGHT);
+        key(CgKeyCodes.KEY_RIGHT);
         assertSame(second, tabView.getSelectedTab());
-        key(CgUiKeyCodes.KEY_RIGHT);
+        key(CgKeyCodes.KEY_RIGHT);
         assertSame(third, tabView.getSelectedTab());
-        key(CgUiKeyCodes.KEY_RIGHT);
+        key(CgKeyCodes.KEY_RIGHT);
         assertSame("must clamp at the end rather than wrap", third, tabView.getSelectedTab());
-        key(CgUiKeyCodes.KEY_LEFT);
+        key(CgKeyCodes.KEY_LEFT);
         assertSame(second, tabView.getSelectedTab());
     }
 
@@ -247,9 +247,9 @@ public class TabViewTest extends UiTestBase {
         styleFrame();
         window.getInputHandler().requestFocus(first);
 
-        key(CgUiKeyCodes.KEY_END);
+        key(CgKeyCodes.KEY_END);
         assertSame(third, tabView.getSelectedTab());
-        key(CgUiKeyCodes.KEY_HOME);
+        key(CgKeyCodes.KEY_HOME);
         assertSame(first, tabView.getSelectedTab());
     }
 
@@ -262,9 +262,9 @@ public class TabViewTest extends UiTestBase {
         styleFrame();
         window.getInputHandler().requestFocus(first);
 
-        key(CgUiKeyCodes.KEY_RIGHT);
+        key(CgKeyCodes.KEY_RIGHT);
         assertSame("left/right must not move a vertical strip", first, tabView.getSelectedTab());
-        key(CgUiKeyCodes.KEY_DOWN);
+        key(CgKeyCodes.KEY_DOWN);
         assertSame(second, tabView.getSelectedTab());
     }
 

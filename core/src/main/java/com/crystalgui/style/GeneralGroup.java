@@ -5,7 +5,7 @@ import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
-import com.crystalgui.style.property.visual.Cursor;
+import com.crystalgraphics.platform.input.CgCursor;
 import com.crystalgui.style.property.visual.text.TextAlign;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
@@ -333,12 +333,12 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    /** CSS `cursor` -- inherited, initial `auto`. @see Cursor */
-    public Cursor cursor() {
+    /** CSS `cursor` -- inherited, initial `auto`. @see CgCursor */
+    public CgCursor cursor() {
         return getValueSave(StylePropertyRegistry.CURSOR);
     }
 
-    public GeneralGroup cursor(Cursor cursor) {
+    public GeneralGroup cursor(CgCursor cursor) {
         set(StylePropertyRegistry.CURSOR, cursor);
         return this;
     }

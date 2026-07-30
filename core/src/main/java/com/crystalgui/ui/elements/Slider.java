@@ -1,7 +1,7 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.serialization.StateMap;
@@ -109,10 +109,10 @@ public class Slider extends UIElement {
         this.events.getGroup(KeyboardEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled()) return;
             switch (event.getKeyCode()) {
-                case CgUiKeyCodes.KEY_LEFT -> setValue(value - stepOrDefault());
-                case CgUiKeyCodes.KEY_RIGHT -> setValue(value + stepOrDefault());
-                case CgUiKeyCodes.KEY_HOME -> setValue(min);
-                case CgUiKeyCodes.KEY_END -> setValue(max);
+                case CgKeyCodes.KEY_LEFT -> setValue(value - stepOrDefault());
+                case CgKeyCodes.KEY_RIGHT -> setValue(value + stepOrDefault());
+                case CgKeyCodes.KEY_HOME -> setValue(min);
+                case CgKeyCodes.KEY_END -> setValue(max);
                 default -> {
                     return;
                 }

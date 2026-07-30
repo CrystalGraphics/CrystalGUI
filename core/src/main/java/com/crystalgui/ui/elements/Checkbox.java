@@ -7,6 +7,7 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
+import com.crystalgraphics.platform.CgPlatform;
 
 /**
  * Toggle button with an internal check-mark and an internal, click-inclusive label.
@@ -63,7 +64,7 @@ public class Checkbox extends UIElement {
         this.setFocusPolicy(FocusPolicy.CLICK);
         this.attachDefaultListener(this.onMouseUp, (el, event) -> {
             if (event.isWasPressTarget() && isEnabled()) {
-                CrystalGuiCore.getSoundSystem().play("button_click");
+                CgPlatform.sound().play("button_click");
                 setChecked(!checked);
             }
         });

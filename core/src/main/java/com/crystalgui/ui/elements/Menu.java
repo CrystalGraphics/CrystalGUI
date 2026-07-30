@@ -1,6 +1,6 @@
 package com.crystalgui.ui.elements;
 
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
@@ -84,15 +84,15 @@ public class Menu extends Popover {
         this.events.getGroup(KeyboardEvent.Down.class).attachListener((el, event) -> {
             if (!isOpen() || itemList.isEmpty()) return;
             switch (event.getKeyCode()) {
-                case CgUiKeyCodes.KEY_UP -> moveFocus(-1);
-                case CgUiKeyCodes.KEY_DOWN -> moveFocus(1);
-                case CgUiKeyCodes.KEY_HOME -> focusItem(0);
-                case CgUiKeyCodes.KEY_END -> focusItem(itemList.size() - 1);
+                case CgKeyCodes.KEY_UP -> moveFocus(-1);
+                case CgKeyCodes.KEY_DOWN -> moveFocus(1);
+                case CgKeyCodes.KEY_HOME -> focusItem(0);
+                case CgKeyCodes.KEY_END -> focusItem(itemList.size() - 1);
                 // Right opens a submenu immediately — the delay exists to filter out an accidental mouse
                 // sweep, and a deliberate keypress is never accidental. Left closes this menu and hands
                 // focus back to the row that opened it, which Popover.hide()'s focus restore already does.
-                case CgUiKeyCodes.KEY_RIGHT -> openFocusedSubmenu();
-                case CgUiKeyCodes.KEY_LEFT -> {
+                case CgKeyCodes.KEY_RIGHT -> openFocusedSubmenu();
+                case CgKeyCodes.KEY_LEFT -> {
                     if (parentPopover() == null) return; // a root menu has nothing to close back into
                     hide();
                 }

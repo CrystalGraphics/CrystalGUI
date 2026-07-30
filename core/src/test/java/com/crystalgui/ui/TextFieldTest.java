@@ -1,11 +1,10 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.input.CgUiInputAdapter;
-import com.crystalgui.core.input.SystemInput;
-import com.crystalgui.core.input.UIClipboard;
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
-import com.crystalgui.core.input.keyboard.Modifiers;
+import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.testsupport.TestPlatformService;
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.TextField;
@@ -38,16 +37,16 @@ public class TextFieldTest {
     public void setUp() {
         modifiers = 0;
         clipboardContents = "";
-        CrystalGuiCore.setAdapter(new CgUiInputAdapter() {
+        // Clipboard and modifiers live on the same service, so one stub covers both.
+        TestPlatformService.install().input(new CgInputService() {
             @Override public int getCurrentModifiers() { return modifiers; }
             @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
             @Override public boolean isKeyDown(int localKeyCode) { return false; }
+            @Override public int translateMouseCodes(int platformCode) { return platformCode; }
             @Override public boolean isMouseDown(int localMouseCode) { return false; }
             @Override public int howManyMouseButtons() { return 3; }
-        });
-        CrystalGuiCore.setClipboard(new UIClipboard() {
-            @Override public String get() { return clipboardContents; }
-            @Override public void set(String text) { clipboardContents = text; }
+            @Override public String getClipboard() { return clipboardContents; }
+            @Override public void setClipboard(String text) { clipboardContents = text; }
         });
 
         field = new TextField();
@@ -98,10 +97,10 @@ public class TextFieldTest {
         int x = Math.round((box.getX() + 4f) * 2f);
         int y = Math.round((box.getY() + 4f) * 2f);
         window.getInputHandler().consumeMouseEvent(
-                new SystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
         frame();
         window.getInputHandler().consumeMouseEvent(
-                new SystemInput.Mouse.Event(x, y, 0, 0, -1, false, -notches, -1L));
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, -notches, -1L));
         frame();
     }
 
@@ -115,9 +114,9 @@ public class TextFieldTest {
 
     private void key(int keyCode) {
         window.getInputHandler().consumeKeyboardEvent(
-                new SystemInput.Keyboard.Event('\0', keyCode, true, false, 0L));
+                new CgSystemInput.Keyboard.Event('\0', keyCode, true, false, 0L));
         window.getInputHandler().consumeKeyboardEvent(
-                new SystemInput.Keyboard.Event('\0', keyCode, false, false, 0L));
+                new CgSystemInput.Keyboard.Event('\0', keyCode, false, false, 0L));
     }
 
     /**
@@ -130,9 +129,9 @@ public class TextFieldTest {
      */
     private void type(char c) {
         window.getInputHandler().consumeKeyboardEvent(
-                new SystemInput.Keyboard.Event(c, CgUiKeyCodes.KEY_NONE, true, false, 0L));
+                new CgSystemInput.Keyboard.Event(c, CgKeyCodes.KEY_NONE, true, false, 0L));
         window.getInputHandler().consumeKeyboardEvent(
-                new SystemInput.Keyboard.Event(c, CgUiKeyCodes.KEY_NONE, false, false, 0L));
+                new CgSystemInput.Keyboard.Event(c, CgKeyCodes.KEY_NONE, false, false, 0L));
     }
 
     private void type(String s) {
@@ -140,7 +139,7 @@ public class TextFieldTest {
     }
 
     private void ctrl(int keyCode) {
-        modifiers = Modifiers.CTRL;
+        modifiers = CgModifiers.CTRL;
         key(keyCode);
         modifiers = 0;
     }
@@ -157,7 +156,7 @@ public class TextFieldTest {
         int[] presses = {0};
         field.onMouseDown.attachListener((el, e) -> presses[0]++, false, false);
 
-        key(CgUiKeyCodes.KEY_SPACE);
+        key(CgKeyCodes.KEY_SPACE);
 
         assertEquals("space fired a synthetic click on the text field", 0, presses[0]);
         assertTrue(field.consumesTextInput());
@@ -174,7 +173,7 @@ public class TextFieldTest {
         int[] presses = {0};
         button.onMouseDown.attachListener((el, e) -> presses[0]++, false, false);
 
-        key(CgUiKeyCodes.KEY_SPACE);
+        key(CgKeyCodes.KEY_SPACE);
 
         assertEquals("button lost its keyboard activation", 1, presses[0]);
         assertFalse(button.consumesTextInput());
@@ -190,7 +189,7 @@ public class TextFieldTest {
 
         field.setText("");
         field.insert("ab");
-        key(CgUiKeyCodes.KEY_LEFT);
+        key(CgKeyCodes.KEY_LEFT);
         field.insertChar('X');
         assertEquals("aXb", field.getText());
     }
@@ -198,33 +197,33 @@ public class TextFieldTest {
     @Test
     public void backspaceAndDeleteRemoveOneCharacter() {
         field.insert("abc");
-        key(CgUiKeyCodes.KEY_BACK);
+        key(CgKeyCodes.KEY_BACK);
         assertEquals("ab", field.getText());
 
-        key(CgUiKeyCodes.KEY_HOME);
-        key(CgUiKeyCodes.KEY_DELETE);
+        key(CgKeyCodes.KEY_HOME);
+        key(CgKeyCodes.KEY_DELETE);
         assertEquals("b", field.getText());
     }
 
     /** Deleting at either edge must be a no-op, not an exception. */
     @Test
     public void deletingAtTheEdgesIsSafe() {
-        key(CgUiKeyCodes.KEY_BACK);
-        key(CgUiKeyCodes.KEY_DELETE);
+        key(CgKeyCodes.KEY_BACK);
+        key(CgKeyCodes.KEY_DELETE);
         assertEquals("", field.getText());
 
         field.insert("a");
-        key(CgUiKeyCodes.KEY_END);
-        key(CgUiKeyCodes.KEY_DELETE);
+        key(CgKeyCodes.KEY_END);
+        key(CgKeyCodes.KEY_DELETE);
         assertEquals("a", field.getText());
     }
 
     @Test
     public void homeAndEndJumpToTheEnds() {
         field.insert("hello");
-        key(CgUiKeyCodes.KEY_HOME);
+        key(CgKeyCodes.KEY_HOME);
         assertEquals(0, field.getCaret());
-        key(CgUiKeyCodes.KEY_END);
+        key(CgKeyCodes.KEY_END);
         assertEquals(5, field.getCaret());
     }
 
@@ -233,9 +232,9 @@ public class TextFieldTest {
     @Test
     public void shiftArrowExtendsTheSelection() {
         field.insert("hello");
-        modifiers = Modifiers.SHIFT;
-        key(CgUiKeyCodes.KEY_LEFT);
-        key(CgUiKeyCodes.KEY_LEFT);
+        modifiers = CgModifiers.SHIFT;
+        key(CgKeyCodes.KEY_LEFT);
+        key(CgKeyCodes.KEY_LEFT);
         modifiers = 0;
 
         assertTrue(field.hasSelection());
@@ -245,7 +244,7 @@ public class TextFieldTest {
     @Test
     public void typingReplacesTheSelection() {
         field.insert("hello");
-        ctrl(CgUiKeyCodes.KEY_A);
+        ctrl(CgKeyCodes.KEY_A);
         type('X');
         assertEquals("X", field.getText());
     }
@@ -253,7 +252,7 @@ public class TextFieldTest {
     @Test
     public void selectAllCoversTheWholeValue() {
         field.insert("hello");
-        ctrl(CgUiKeyCodes.KEY_A);
+        ctrl(CgKeyCodes.KEY_A);
         assertEquals("hello", field.getSelectedText());
     }
 
@@ -262,16 +261,16 @@ public class TextFieldTest {
     @Test
     public void copyCutAndPasteGoThroughTheClipboardSpi() {
         field.insert("hello");
-        ctrl(CgUiKeyCodes.KEY_A);
-        ctrl(CgUiKeyCodes.KEY_C);
+        ctrl(CgKeyCodes.KEY_A);
+        ctrl(CgKeyCodes.KEY_C);
         assertEquals("hello", clipboardContents);
 
-        ctrl(CgUiKeyCodes.KEY_A);
-        ctrl(CgUiKeyCodes.KEY_X);
+        ctrl(CgKeyCodes.KEY_A);
+        ctrl(CgKeyCodes.KEY_X);
         assertEquals("", field.getText());
         assertEquals("hello", clipboardContents);
 
-        ctrl(CgUiKeyCodes.KEY_V);
+        ctrl(CgKeyCodes.KEY_V);
         assertEquals("hello", field.getText());
     }
 
@@ -280,7 +279,7 @@ public class TextFieldTest {
     public void pasteIsFilteredToo() {
         field.setCharFilter(Character::isDigit);
         clipboardContents = "a1b2c3";
-        ctrl(CgUiKeyCodes.KEY_V);
+        ctrl(CgKeyCodes.KEY_V);
         assertEquals("123", field.getText());
     }
 
@@ -295,13 +294,13 @@ public class TextFieldTest {
     public void caretStepsOverAnAstralCharacterInOnePress() {
         String emoji = "😀";          // U+1F600, two chars
         field.setText("a" + emoji + "b");
-        key(CgUiKeyCodes.KEY_HOME);
+        key(CgKeyCodes.KEY_HOME);
 
-        key(CgUiKeyCodes.KEY_RIGHT);
+        key(CgKeyCodes.KEY_RIGHT);
         assertEquals(1, field.getCaret());
-        key(CgUiKeyCodes.KEY_RIGHT);
+        key(CgKeyCodes.KEY_RIGHT);
         assertEquals("caret landed inside the surrogate pair", 3, field.getCaret());
-        key(CgUiKeyCodes.KEY_RIGHT);
+        key(CgKeyCodes.KEY_RIGHT);
         assertEquals(4, field.getCaret());
     }
 
@@ -310,8 +309,8 @@ public class TextFieldTest {
     public void backspaceRemovesAWholeAstralCharacter() {
         String emoji = "😀";
         field.setText("a" + emoji);
-        key(CgUiKeyCodes.KEY_END);
-        key(CgUiKeyCodes.KEY_BACK);
+        key(CgKeyCodes.KEY_END);
+        key(CgKeyCodes.KEY_BACK);
 
         assertEquals("backspace split a surrogate pair", "a", field.getText());
     }
@@ -434,16 +433,16 @@ public class TextFieldTest {
     public void controlCharactersAreNotInserted() {
         // Enter and Tab arrive with a real character ('\r', '\t') that must not land in the text.
         window.getInputHandler().consumeKeyboardEvent(
-                new SystemInput.Keyboard.Event('\r', CgUiKeyCodes.KEY_RETURN, true, false, 0L));
+                new CgSystemInput.Keyboard.Event('\r', CgKeyCodes.KEY_RETURN, true, false, 0L));
         assertEquals("", field.getText());
     }
 
     @Test
     public void ctrlCombosDoNotTypeTheirLetter() {
         // Ctrl+S is unhandled, but it must not insert an 's'.
-        modifiers = Modifiers.CTRL;
+        modifiers = CgModifiers.CTRL;
         window.getInputHandler().consumeKeyboardEvent(
-                new SystemInput.Keyboard.Event('s', CgUiKeyCodes.KEY_S, true, false, 0L));
+                new CgSystemInput.Keyboard.Event('s', CgKeyCodes.KEY_S, true, false, 0L));
         modifiers = 0;
         assertEquals("", field.getText());
     }
@@ -480,7 +479,7 @@ public class TextFieldTest {
         field.insert("hello");
         tick(0.6f);
         assertFalse(field.isCaretVisible());
-        key(CgUiKeyCodes.KEY_LEFT);
+        key(CgKeyCodes.KEY_LEFT);
         assertTrue(field.isCaretVisible());
     }
 
@@ -536,7 +535,7 @@ public class TextFieldTest {
     @Test
     public void focusPutsTheCaretAtTheEnd() {
         field.setText("hello");
-        key(CgUiKeyCodes.KEY_HOME);
+        key(CgKeyCodes.KEY_HOME);
         assertEquals(0, field.getCaret());
 
         window.getInputHandler().requestFocus(focusSink());
@@ -556,7 +555,7 @@ public class TextFieldTest {
         assertEquals("ON_COMMIT must not publish per keystroke", 0, fired[0]);
         assertEquals("", field.getValue());
 
-        key(CgUiKeyCodes.KEY_RETURN);
+        key(CgKeyCodes.KEY_RETURN);
         assertEquals(1, fired[0]);
         assertEquals("123", field.getValue());
     }
@@ -593,7 +592,7 @@ public class TextFieldTest {
                 .attachListener((el, e) -> ancestorSaw[0]++, false, true);
 
         type("hi");
-        key(CgUiKeyCodes.KEY_RETURN);
+        key(CgKeyCodes.KEY_RETURN);
 
         assertEquals(1, submits[0]);
         assertTrue("Enter must keep bubbling so a dialog can submit", ancestorSaw[0] > 0);
@@ -608,7 +607,7 @@ public class TextFieldTest {
         type("XY");
         assertEquals("abcXY", field.getText());
 
-        key(CgUiKeyCodes.KEY_ESCAPE);
+        key(CgKeyCodes.KEY_ESCAPE);
         assertEquals("abc", field.getText());
         assertEquals("reverting must not publish anything", 0, fired[0]);
     }
@@ -625,7 +624,7 @@ public class TextFieldTest {
         assertEquals("an external set must reach the visible box", "yo", field.getText());
 
         type("!");
-        key(CgUiKeyCodes.KEY_RETURN);
+        key(CgKeyCodes.KEY_RETURN);
         assertEquals("committing must write back through the binding", "yo!", model.get());
     }
 
@@ -717,7 +716,7 @@ public class TextFieldTest {
         assertEquals("clamping mid-typing would fight the typist", "50", field.getText());
         assertTrue(field.isInvalid());
 
-        key(CgUiKeyCodes.KEY_RETURN);
+        key(CgKeyCodes.KEY_RETURN);
         assertEquals("10", field.getText());
         assertEquals("10", field.getValue());
         assertFalse(field.isInvalid());
@@ -736,7 +735,7 @@ public class TextFieldTest {
         assertEquals("7-", field.getText());
         assertTrue(field.isInvalid());
 
-        key(CgUiKeyCodes.KEY_RETURN);
+        key(CgKeyCodes.KEY_RETURN);
         assertEquals("the box must never show something that isn't the value", "7", field.getText());
         assertEquals("7", field.getValue());
     }

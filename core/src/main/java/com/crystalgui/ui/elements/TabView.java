@@ -1,6 +1,6 @@
 package com.crystalgui.ui.elements;
 
-import com.crystalgui.core.input.keyboard.CgUiKeyCodes;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
@@ -158,16 +158,16 @@ public class TabView extends UIElement {
             boolean vertical = tabSide.isVertical();
             int step;
             switch (event.getKeyCode()) {
-                case CgUiKeyCodes.KEY_LEFT -> step = vertical ? 0 : -1;
-                case CgUiKeyCodes.KEY_RIGHT -> step = vertical ? 0 : 1;
-                case CgUiKeyCodes.KEY_UP -> step = vertical ? -1 : 0;
-                case CgUiKeyCodes.KEY_DOWN -> step = vertical ? 1 : 0;
-                case CgUiKeyCodes.KEY_HOME -> {
+                case CgKeyCodes.KEY_LEFT -> step = vertical ? 0 : -1;
+                case CgKeyCodes.KEY_RIGHT -> step = vertical ? 0 : 1;
+                case CgKeyCodes.KEY_UP -> step = vertical ? -1 : 0;
+                case CgKeyCodes.KEY_DOWN -> step = vertical ? 1 : 0;
+                case CgKeyCodes.KEY_HOME -> {
                     focusAndSelect(tabs.get(0));
                     event.stopPropagation();
                     return;
                 }
-                case CgUiKeyCodes.KEY_END -> {
+                case CgKeyCodes.KEY_END -> {
                     focusAndSelect(tabs.get(tabs.size() - 1));
                     event.stopPropagation();
                     return;

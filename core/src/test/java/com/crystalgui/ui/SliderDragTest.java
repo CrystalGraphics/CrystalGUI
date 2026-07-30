@@ -1,6 +1,6 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.input.SystemInput;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.ui.elements.Slider;
 import org.joml.Matrix4f;
@@ -63,17 +63,17 @@ public class SliderDragTest extends UiTestBase {
 
     private void mouseTo(int physX, int physY) {
         window.getInputHandler().consumeMouseEvent(
-                new SystemInput.Mouse.Event(physX, physY, 0, 0, -1, false, 0f, -1L));
+                new CgSystemInput.Mouse.Event(physX, physY, 0, 0, -1, false, 0f, -1L));
     }
 
     private void press(int physX, int physY) {
         window.getInputHandler().consumeMouseEvent(
-                new SystemInput.Mouse.Event(physX, physY, 0, 0, 0, true, 0f, System.currentTimeMillis()));
+                new CgSystemInput.Mouse.Event(physX, physY, 0, 0, 0, true, 0f, System.currentTimeMillis()));
     }
 
     private void release(int physX, int physY) {
         window.getInputHandler().consumeMouseEvent(
-                new SystemInput.Mouse.Event(physX, physY, 0, 0, 0, false, 0f, System.currentTimeMillis()));
+                new CgSystemInput.Mouse.Event(physX, physY, 0, 0, 0, false, 0f, System.currentTimeMillis()));
     }
 
     /** Physical-pixel centre of the thumb, i.e. where a user would actually grab it. */

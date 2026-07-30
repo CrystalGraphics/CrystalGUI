@@ -56,7 +56,7 @@ cross-agent tool use permitted is asking the orchestrator a clarifying question,
 ```bash
 ./gradlew :core:compileJava       # the engine — enforces the MC/Forge/LWJGL import guard
 ./gradlew :core:test              # unit tests, CrystalGraphics ON the classpath
-./gradlew :core:headlessTest      # server-side tests, CrystalGraphics DELIBERATELY absent
+./gradlew :core:headlessTest      # server-side tests, CrystalGraphics CORE deliberately absent
 ./gradlew :core:check             # both test tasks
 ```
 
@@ -137,12 +137,19 @@ build. There are currently **no exemptions** — the guard is clean.
 | Source set | CrystalGraphics on classpath? | What belongs there |
 |---|---|---|
 | `core/src/test/` | ✅ `testImplementation` | Anything needing `CgIO`, fonts, `StyleSheet`, sprites, drawables |
-| `core/src/headlessTest/` | ❌ **deliberately absent** | Everything a dedicated server must run: `serialization/`, `net/`, tree/state logic |
+| `core/src/headlessTest/` | ❌ **core deliberately absent**, `platform` present | Everything a dedicated server must run: `serialization/`, `net/`, tree/state logic |
 | harness scenes | ✅ full GL | Anything visual |
 
-**The absence is the assertion.** On a dedicated Minecraft server there is no GL context, no fonts,
-and no CrystalGraphics jar. Anything in `core/` that reaches a CG type *outside a paint-method body*
-fails in `headlessTest` with `NoClassDefFoundError` rather than in production.
+**The absence is the assertion.** On a dedicated Minecraft server there is no GL context and no fonts.
+Anything in `core/` that reaches a CrystalGraphics **core** type *outside a paint-method body* fails in
+`headlessTest` with `NoClassDefFoundError` rather than in production.
+
+> **`com.crystalgraphics:platform` is the one CG module that stays**, and it is not an exception to the
+> rule — it is what the rule is actually modelling. `platform` is pure SPI (interfaces, key-code
+> constants, the `CgPlatform` registry) with no GL calls and no context requirement, and it ships inside
+> every loader jar, so a dedicated server genuinely has it. Excluding it would assert something untrue of
+> production, and `core/` reaches it for real: `UIInputHandler` *implements* `CgSystemInput`, which is a
+> supertype and therefore resolves at class load, not in a method body.
 
 JOML and Taffy **must stay** on the headless classpath: `UIElement` and `ElementStyle` have *fields*
 of those types (`Matrix4f`, `NodeId`, `TaffyStyle`), and field descriptors resolve at class load —
@@ -520,7 +527,7 @@ and `defaultEvents` for built-in behavior. `defaultEvents` fires only in the TAR
 ## `UIInputHandler`
 
 One class, merging what older notes split into "input manager" + "focus manager". It implements
-`SystemInput.Mouse` and `SystemInput.Keyboard` directly as the raw-event sink, and owns:
+`CgSystemInput.Mouse` and `CgSystemInput.Keyboard` directly as the raw-event sink, and owns:
 
 - **The three-phase walk** (`sendInputEvent`): build `UITreeTraversal.pathToRoot`, walk root→target
   for CAPTURE, fire once for TARGET, walk target→root for BUBBLE if `bubbles`.
@@ -925,6 +932,8 @@ The things that are invisible from any single class and expensive to rediscover.
 | The popover stack and the close-watcher stack are separate | A modal is Escape-closable but not light-dismissable; a MANUAL popover is neither — one list gets one of them wrong |
 | Light dismiss runs after the mouse-down dispatch, and spares the invoker | Dismiss-first tears down the tree under an undelivered event; no invoker carve-out and a dropdown button flickers instead of closing |
 | Light dismiss considers the popovers open **before** the dispatch, not the live stack | A popover opened from a mouse-down handler is closed by the very press that opened it — it appears never to open at all |
+| CrystalGraphics `platform` must stay on the headless classpath too — the excluded module is CG **core** | `UIInputHandler` *implements* `CgSystemInput`; a supertype resolves at class load, so stripping it fails every input test with `NoClassDefFoundError` |
+| CrystalGUI has no platform registry — input, sound, clipboard and cursor all come from `CgPlatform` | Two registries let a loader wire up one and not the other: a working GL backend and a dead keyboard, with nothing to report it |
 | A widget's cascade identity is its **tag**, never its Java supertype | `Dropdown extends Button` but `button {}` does not match `dropdown` — it laid out at zero height until `default.css` named it |
 | Only `AnchoredPlacement` writes `left`/`top` on an anchored popup | Any other writer fights placement every frame |
 | Transitioning *into* view needs a resting value in the sheet, never a one-frame write from Java | The write is itself transitionable, so the engine eases toward it and the cleanup retargets it back — nothing animates, and no test sees it |
@@ -975,10 +984,33 @@ the backend here.
 ## Platform-agnostic core
 
 `core/` must stay fully cross-platform — the import guard enforces no `net.minecraft.*`,
-`cpw.mods.fml.*`, `net.minecraftforge.*`, `org.lwjgl.*`. The platform seam is the **interface side
-only**: `core/input/CgUiInputAdapter`, `core/input/UIClipboard`, `core/sound/UISoundSystem`, with
-`CrystalGuiCore.setAdapter()/setClipboard()/setSoundSystem()` where a loader registers concrete
-implementations. `UISoundSystem` and `UIClipboard` default to `NOOP`.
+`cpw.mods.fml.*`, `net.minecraftforge.*`, `org.lwjgl.*`.
+
+**The platform seam is CrystalGraphics'.** CrystalGUI has no registry of its own — it reads everything
+through `CgPlatform`, and a loader registers exactly one `CgPlatformService` bundle:
+
+| Need | Reached via | Lives in |
+|---|---|---|
+| Key/mouse codes, modifier state, **and the clipboard** | `CgPlatform.input()` | `platform/service/CgInputService` |
+| UI sounds | `CgPlatform.sound()` | `platform/service/CgSoundService` |
+| Presenting a cursor | `CgPlatform.cursor()` | `platform/service/CgCursorService` |
+| Raw event sink (`UIInputHandler` implements it) | — | `platform/input/CgSystemInput` |
+| Code constants, cursor enum, cursor artwork | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers`, `CgCursor`, `CgCursorBitmaps` |
+
+> **The clipboard is on `CgInputService`, not a service of its own.** It is not conceptually input, but it
+> is reached the same way and needed by exactly the code that handles keys — two methods do not earn a
+> registration slot. Both default to a no-op pair.
+
+**No method in this SPI has a default, and neither sound nor cursor ships a `NOOP` constant.** A default is
+an answer chosen for someone who never saw the question: a new platform compiles cleanly while silently
+inheriting "no sound, no cursor, no clipboard", and inheriting a no-op is indistinguishable from deciding
+on one. Abstract methods make the compiler the reminder — and a platform with nothing to offer still says
+so, with an empty body in its own source.
+
+> **Why this stopped being CrystalGUI's own registry.** `CrystalGuiCore` used to hold four static fields
+> with setters. CrystalGraphics is the parent project and is always present, so two registries meant a
+> loader had to find both — and could wire up one, leaving a UI with a working GL backend and no keyboard.
+> One bundle makes a platform either registered or not. `CrystalGuiCore` now holds only `LOGGER`.
 
 ## Lombok
 
@@ -1003,17 +1035,23 @@ Do **not** use `@Data` on classes with inheritance — use explicit annotations 
 # Package map
 
 ```
-com.crystalgui.core            CrystalGuiCore — global LOGGER + adapter/clipboard/soundSystem registry
+com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing else. The platform
+                               registry it used to hold now lives in CrystalGraphics; see below.
   .data                        CacheCell / IntCacheCell / LongCacheCell (dirty-flag memoization),
                                ReadOnlyVec2f (immutable view over a mutable JOML Vector2f), Transform2D
-  .input                       CgUiInputAdapter (SPI), SystemInput (raw Mouse/Keyboard event records),
-                               UICursorService (SPI), CursorBitmaps (procedural 32x32 cursor art),
-                               UIClipboard (SPI)
-    .keyboard                  CgUiKeyCodes (LWJGL2-shaped constants, no LWJGL import), Modifiers (bitmask)
-    .mouse                     CgUiMouseCodes
   .property                    Property<T> (binding, equality-suppressing set), ObservableList<T>
   .signal                      Signal.Action/Value/Pair, SignalBase, Connection, ConnectionGroup
-  .sound                       UISoundSystem (SPI — widgets ask for a sound, the platform decides how)
+
+com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platform SPI, which CrystalGUI
+                               consumes. Listed here because the engine's input, sound, clipboard and
+                               cursor seams all live in it.
+  (root)                       CgPlatform (the registry), CgPlatformService (the bundle a loader registers)
+  .input                       CgSystemInput (raw Mouse/Keyboard event sink + event types),
+                               CgKeyCodes (LWJGL2-shaped, no LWJGL import), CgMouseCodes,
+                               CgModifiers (bitmask), CgCursor (the cursor keyword set),
+                               CgCursorBitmaps (procedural 32x32 cursor art)
+  .service                     CgInputService (codes, modifier/key/button state, AND the clipboard),
+                               CgSoundService, CgCursorService — plus CrystalGraphics' own six
 
 com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener CrystalGUI registers with
                                CrystalGraphics; drives paint-context teardown + cache invalidation
@@ -1069,8 +1107,10 @@ com.crystalgui.net             UIPacket, UIPacketCodec, UITransport, InMemoryTra
 ```
 
 **Naming corrections vs. older notes:** `render/` is top-level (`com.crystalgui.render`), *not* nested
-under `core/`. `core/input/` is the *raw platform I/O* layer only; dispatch and focus live in
-`ui/input/`. The three-phase event types are in `ui/event/` — there is no `core/event/` package.
+under `core/`. There is **no `core/input/` or `core/sound/` package any more** — the raw platform I/O
+layer moved wholesale to `com.crystalgraphics.platform`, and `com.crystalgui.core` is now the logger plus
+three small utility packages. Dispatch and focus were always in `ui/input/` and stayed there. The
+three-phase event types are in `ui/event/` — there is no `core/event/` package.
 
 ---
 
