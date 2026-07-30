@@ -939,6 +939,8 @@ The things that are invisible from any single class and expensive to rediscover.
 | Taffy defaults are **not** CSS defaults | Silently wrong layout — see the table above |
 | CSS text belongs in `test`, never `headlessTest` | `StyleSheet` class-init reads `default.css` via `CgIO` → unloadable headlessly |
 | JOML + Taffy must stay on the headless classpath | Field descriptors resolve at class load; `UIElement`/`ElementStyle` have fields of those types |
+| CrystalGraphics `platform` must stay on the headless classpath too — the excluded module is CG **core** | `UIInputHandler` *implements* `CgSystemInput`; a supertype resolves at class load, so stripping it fails every input test with `NoClassDefFoundError` |
+| CrystalGUI has no platform registry — input, sound, clipboard and cursor all come from `CgPlatform` | Two registries let a loader wire up one and not the other: a working GL backend and a dead keyboard, with nothing to report it |
 | Composites return `acceptsPublicChildren() == false` | `addChild` throws; widgets need named content accessors |
 | `attachListener`'s two booleans are additive | Target phase is *always* subscribed |
 | The popover stack and the close-watcher stack are separate | A modal is Escape-closable but not light-dismissable; a MANUAL popover is neither — one list gets one of them wrong |
