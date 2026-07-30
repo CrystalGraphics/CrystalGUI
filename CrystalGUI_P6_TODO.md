@@ -228,19 +228,216 @@ is the same work 6.1.6 needs for a caret.
   gets attention.
 
 
-### 6.1.2 Keymap and accelerators · `TODO`
+### 6.1.2 Keymap and accelerators · `MOSTLY DONE` (2026-07-31)
 
-A keymap registry: chords (`Ctrl+Shift+P`), sequences, scoping to a focused subtree, and a conflict report.
+Chords, sequences, scoping, remapping and a conflict report. Cheapest item on the list and
+disproportionately what makes an application *feel* like an editor — and placed second because
+everything after it wants to register bindings. Retrofitting a keymap means revisiting every widget that
+grew its own key handling in the meantime, which is exactly how `Button` would have ended up with
+keyboard code if `UIInputHandler` had not synthesised activation centrally.
 
-Cheapest item on the list and disproportionately what makes an application *feel* like an editor. Placed
-second because everything after it wants to register bindings, and retrofitting a keymap means revisiting
-every widget that grew its own key handling in the meantime — which is exactly how `Button` would have ended
-up with keyboard code if `UIInputHandler` had not synthesised activation centrally.
+#### Is taking from five sources a Frankenstein? Only if you let it be
 
-- Scoped, not global: a binding lives on an element subtree and is active when focus is inside it. That is
-  what makes a text editor's `Ctrl+D` different from the workspace's.
-- Must compose with the existing bubble phase rather than intercepting ahead of it.
-- Platform seam: modifier naming differs per OS. `Modifiers` already exists in `core/input/keyboard/`.
+**A design is Frankenstein when two mechanisms can disagree about the same question. It is a synthesis
+when each source answers a different question.** Counting the questions is therefore the whole discipline,
+and here there are only four:
+
+| Question | What the sources say | Contested? |
+|---|---|---|
+| What does a binding point at? | VS Code, Blender, Unity and Unreal **all** say a command/action ID | No — consensus, not a choice |
+| What is it keyed on? | VS Code: chord sequences · Blender: event type | No — orthogonal axes of one key |
+| How does a user change it? | Photoshop/Resolve: swappable presets | No — falls out of question 1 free |
+| **What decides whether a binding is active?** | VS Code `when` · Unity action maps · **us: the focus path** | **Yes — the only one** |
+
+Three of four cost nothing. For the fourth, pick one answer and record who lost and why: `when` clauses
+exist because VS Code has no tree to walk, and Unity's action maps are the same idea at coarser
+granularity. We have a real DOM, so the focus path wins and neither of the others is admitted.
+
+The rule that keeps it honest going forward: **one question, one mechanism.** The first draft of this plan
+broke it once — see the per-binding predicate, below — which is a fair indication of how easily it
+happens.
+
+#### Prior art, and the verdict
+
+| Source | What it contributes |
+|---|---|
+| **VS Code** | The best-documented model there is: `{ key, command, when }` as **data**, commands as string IDs, chords as space-separated strokes, `-command` to remove a default. Resolution is bottom-to-top, first match on key **and** `when` wins. Also the closest thing to a "web" answer, being an Electron app with a public spec. |
+| **Blender** | Keymaps are per-editor-context and per-event-*type* — press, release, click, double-click, drag. The event-type axis is the part worth stealing; nothing else has it and space-to-pan needs it. |
+| **Photoshop / DaVinci Resolve** | Swappable **presets** (Resolve ships Premiere/FCP/Avid maps), and bare single-key tool shortcuts (`B` brush, `V` move) that must not fire while a text field has focus. |
+| **Unity / Unreal** | Bind abstract **actions**, not keys; action *maps* enabled per context. Same idea as command IDs plus scoping, arrived at from the other direction. |
+| **The web platform itself** | **Nothing usable.** `accessKey` is the only built-in and is universally avoided; everything real is a library (tinykeys, Mousetrap). This is a genuine case for the P6 standing decision that the reference set widens where the web has no answer. |
+
+#### The design: element-scoped bindings, command IDs, no expression language
+
+VS Code needs `when` clauses because its context is not a tree it can walk — `editorTextFocus`,
+`listHasSelection` and friends are hand-maintained booleans. **We have a real DOM with focus**, so the
+tree *is* the context, and scoping falls out of machinery that already exists:
+
+```java
+CommandRegistry.register(Command.of("edit.save", "Save").run(ctx -> ...));
+
+element.keymap().bind("Mod+S", "edit.save");           // scoped to this subtree
+element.keymap().bind("Mod+K Mod+S", "edit.saveAll");  // chord sequence
+window.keymap().bind("Mod+Shift+P", "palette.open");   // application-wide = bound at the root
+```
+
+**Resolution walks the focus path outward, innermost scope first** — the same order events bubble, and
+the right answer for the obvious conflict: a text field's `Mod+A` (select all text) must beat the
+window's `Mod+A` (select all items) without either knowing about the other. That is `when`-clause
+specificity, obtained structurally instead of by an expression language.
+
+**No `when` expression language in v1.** A string mini-language over hand-maintained context keys is a
+permanent maintenance burden and precisely the kind of non-web invention this project avoids.
+
+**And no per-binding predicate either** — that was in the first draft of this plan and it was a second
+activation mechanism wearing a disguise. The moment one exists, somebody writes a predicate that
+duplicates scoping badly and two things decide whether a binding fires.
+
+The replacement is better than what it replaces. "`Delete` needs a selection" is not a property of the
+keystroke, it is a property of the **command** — and a greyed-out menu item needs the identical answer:
+
+- **`KeyBinding` answers "where, and which keys."** Scope plus chord. Nothing else.
+- **`Command` answers "can I run right now."** `isEnabled()`, consulted by the keymap, by menu items, and
+  by the command palette.
+
+One enablement mechanism, three consumers, no way for them to disagree. It is also what Photoshop and
+Resolve actually do: they grey out the *command*, they do not disable the shortcut.
+
+A binding loaded from a *file* therefore needs only scope + command — which is all a user remapping ever
+wants anyway, since those apps let you rebind the key and never the condition.
+
+#### Where it hooks in
+
+**After** `KeyboardEvent.Down` has finished bubbling and was not `preventDefault()`ed. That is exactly
+how a browser applies its own shortcuts: page handlers run first and may consume the event. Resolving
+ahead of dispatch would let a global `Mod+F` steal a keystroke from a control that wanted it, with no way
+for the control to object.
+
+#### The types
+
+| Type | Role |
+|---|---|
+| `KeyStroke` | One key + a `CgModifiers` bitmask. Parsed from `"Mod+Shift+P"`. Value type, interned-cheap. |
+| `KeyChord` | A **sequence** of one or more strokes. VS Code caps at two; N is no harder and Blender/Emacs users expect it. |
+| `Command` | String id + human label + handler. The label is what a menu item and the command palette render. |
+| `CommandRegistry` | id → `Command`. One per… **window or global?** See open questions. |
+| `KeyBinding` | chord → command id, plus optional predicate, event type, and source (for the conflict report). |
+| `Keymap` | Per-element list of bindings. `UIElement.keymap()`, built lazily so an element that binds nothing costs one null field. |
+| `KeymapResolver` | Owns pending-chord state and the focus-path walk. Lives on `UIInputHandler`, beside the focus it already tracks. |
+
+#### Six things that will bite, named now
+
+1. **A bare single-key binding must not fire while text input has focus.** `B` selects the brush in
+   Photoshop and types a "b" in a filename box. `UIElement.consumesTextInput()` already exists and is
+   exactly the guard; the default is to suppress unmodified single-key bindings when it returns true,
+   with an explicit opt-out. Getting this wrong makes every tool shortcut corrupt every text field.
+2. **`Mod`, not `Ctrl`.** One token resolving to Ctrl on Windows/Linux and Super on macOS, the way
+   CodeMirror and tinykeys do it — rather than VS Code's parallel `mac:` bindings, which double the file.
+   `CgModifiers` already has `SUPER`.
+3. **Chords need a visible pending state and a timeout.** VS Code shows "(Ctrl+K) was pressed, waiting…"
+   in the status bar. Without feedback a half-entered chord is indistinguishable from a dead keyboard.
+   The pending state must also be cleared by focus changes and by any non-matching key.
+4. **Press versus release, and only those two.** Space-to-pan (Photoshop, and 6.2.2's canvas) is a
+   *hold*, not a press, so the event-type axis has to exist from the start rather than being bolted on as
+   a second mechanism later. But Blender's full taxonomy is press/release/click/double-click/drag, and
+   importing all five would be borrowing a vocabulary we do not need — click and drag are mouse concepts
+   `UIInputHandler` already owns. **Take the axis, leave the enum.**
+5. **Conflicts must be reported, not silently resolved.** Two bindings on the same chord in the same
+   scope is a bug in the sheet, and innermost-first resolution would hide it. A `conflicts()` report that
+   a test can assert on, and a warning at registration.
+6. **A binding whose command id is not registered.** Real, because sheets and registries are edited
+   separately — warn at bind time rather than failing silently on the keystroke.
+
+#### Status
+
+**Built and green (21 tests in `KeymapTest`, suite 809):** `KeyStroke`/`KeyChord`/`KeyBinding`/`Keymap`/
+`KeymapResolver`, `Command`/`CommandContext`/`CommandRegistry`, `UIElement.keymap()`, resolution wired
+into `UIInputHandler` after bubble, pending-chord cancellation on focus change, and a `keymap` gallery
+page.
+
+**Reverse lookup added 2026-07-31** — `Keymap.acceleratorFor` (what a menu item renders) and
+`acceleratorsFrom` (what a palette lists), both walking the resolver's own path so a label cannot
+disagree with what fires.
+
+**Not yet built — the one remaining deliverable:** the **keymap sheet parser**. Bindings being data is a
+premise of the whole design ("what makes them remappable"), and until a sheet can be parsed that claim is
+theoretical: today bindings are only reachable from Java. It is additive — `{key, command}` entries plus
+`-command` removal, over the existing `JsonOps` — and nothing else waits on it.
+
+Two design points were confirmed by building rather than by argument:
+
+- **`CommandRegistry` is per-`UIWindow`, not global** — the plan left this open. Deciding factor was not
+  the server-driven case but tests: a global mutable registry leaks between them, so one test registering
+  a command silently changes what another resolves.
+- **A disabled command falls through to an outer scope** rather than stopping the walk. That makes
+  enablement a routing decision, and is what lets a disabled editor command hand its key to an
+  application-wide one.
+
+#### Deliverables
+
+- `core/input/keymap/`: `KeyStroke`, `KeyChord`, `KeyBinding`, `Keymap`, `KeymapResolver`.
+- `core/command/`: `Command`, `CommandRegistry`. Deliberately its own package — 6.1.9's undo stack is the
+  natural consumer, and `Command` must be able to grow an undoable-edit return without an API break.
+- `UIElement.keymap()` + resolution wired into `UIInputHandler` after bubble.
+- A parser for keymap **sheets** (VS Code-shaped `{key, command}` entries, `-command` to remove) so
+  presets and user remapping are data. Reuses `serialization/`'s `JsonOps`.
+- Tests: parsing, chord sequences and timeout, innermost-wins, the text-input guard, conflict reporting,
+  `Mod` platform resolution, removal entries, press-vs-release.
+- Harness: a `keymap` gallery page showing live chord state, a scoped binding that only fires inside one
+  panel, and a tool-shortcut row that proves it stays out of the text field next to it.
+
+#### Will this get rewritten once the editor actually uses it?
+
+Asked directly on 2026-07-31, and worth an honest answer rather than a reassuring one. **My estimate: the
+core survives, the edges get added.** What follows is what I would bet on, and what would change my mind.
+
+**Likely safe.** The command-id indirection is the one genuinely load-bearing choice, and four independent
+editors converged on it — VS Code, Blender, Unity, Unreal. Focus-path scoping covers every case that can
+currently be enumerated, and it is *less* machinery than `when` clauses, so if it proves insufficient the
+move is additive rather than an unwind.
+
+**Three things could force real change, in descending order of risk:**
+
+1. **Undo integration (6.1.9).** Adding an undoable-edit return is additive — a second registration path
+   plus a push inside `Command.execute`, with existing callers untouched. The risk is not that. It is the
+   decision, **still unmade**, of whether *every* mutation must go through a command. If it must, then
+   every widget that currently mutates a model directly changes, and this stops being shortcut plumbing
+   and becomes the application's spine. A spine designed as plumbing is the classic rewrite. **Settle the
+   shape before 6.1.6**, not after there are fifty commands.
+2. **Modal / layered keymaps.** Scoping cannot express "the same chord means something else in a different
+   *mode*" — Vim-style editing, or a tool that captures keys while active. `Command.isEnabled` returning
+   false falls through to an *outer scope*, not to a different binding in the same one, and two bindings
+   on one chord in one scope is a reported conflict. Modes would need a keymap-layer concept. Not a
+   resolver rewrite, but a genuine addition to the model. **Deliberately not built speculatively** — that
+   is how `when`-clause complexity creeps back in through a side door.
+3. **Key repeat.** Currently ignored globally, which is right for shortcuts and wrong for anything
+   navigational. A per-binding opt-in when something asks; additive.
+
+**One gap was found by asking this question and closed immediately:** there was no reverse lookup, so a
+menu item could not render "Ctrl+S" beside its label and a palette could not list chords at all. Both
+6.1.8 and 6.1.12 need it, and it is the kind of thing that gets improvised around at three call sites if
+left absent. `Keymap.acceleratorFor` / `acceleratorsFrom` now walk **the same path, in the same order, as
+`KeymapResolver`** — which is the property that matters: a cheaper implementation (flat registry,
+first-found scan) can drift from resolution, and the failure mode is a menu confidently advertising a
+shortcut that does something else. It is also why a chord is *not* stored on `Command`: the same id can be
+bound in several scopes to different chords, so "the accelerator" is meaningless without asking from
+somewhere.
+
+#### Explicit non-goals
+
+- **No `when` expression language.** See above.
+- **No global OS hotkeys.** Out of scope for an in-game UI and a platform concern regardless.
+- **No key-repeat semantics** beyond what the platform already delivers.
+- **No chord *display* localisation.** Labels render the same tokens they parse.
+
+#### Open questions
+
+| Question | Why it matters |
+|---|---|
+| Is `CommandRegistry` global or per-`UIWindow`? | Global is simpler and matches VS Code; per-window is more correct for a server-driven UI where two windows could disagree about what `edit.save` means. Leaning global with a window-scoped override. |
+| Do commands need arguments (VS Code's `args`)? | Cheap to add now, awkward later. Leaning yes, as an opaque payload the handler casts. |
+| Should `default.css`-style *default bindings* ship in a user-agent keymap sheet? | Consistent with `StyleSheet.DEFAULT`, and it is where `Tab`/`Escape`/`Space` activation would eventually belong — but those live in `UIInputHandler` today and moving them is a separate, riskier change. |
+
 
 ### 6.1.3 Virtualised list view · `TODO` · **foundation**
 
@@ -459,7 +656,7 @@ this stops being a UI demo and becomes the shader graph's actual data.
 6.2.1 CgCurveRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──► 6.2.4 editing ──► 6.2.5 model
 ```
 
-**Recommended sequence:** 6.1.1 → 6.1.2 → 6.1.3 → 6.1.4 → 6.1.5 → 6.1.6 → 6.1.7 → 6.1.8, with 6.1.9's
+**Recommended sequence:** ~~6.1.1~~ → **6.1.2 (planned)** → 6.1.3 → 6.1.4 → 6.1.5 → 6.1.6 → 6.1.7 → 6.1.8, with 6.1.9's
 *design* settled before 6.1.6 starts, then 6.1.10–12, then the 6.2 chain.
 
 6.2.1 is the one item that can be pulled forward at any time — it is self-contained, depends on nothing in

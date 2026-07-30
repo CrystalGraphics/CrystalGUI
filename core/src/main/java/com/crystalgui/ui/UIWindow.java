@@ -3,6 +3,7 @@ package com.crystalgui.ui;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -38,6 +39,20 @@ public final class UIWindow {
 
     @Getter
     private final TaffyTree taffyTree;
+
+    /**
+     * Commands invocable in this window — what key bindings, menu items and the command palette all
+     * resolve ids against.
+     *
+     * <p>Per window rather than a global static, for two reasons. A server-driven UI can have two windows
+     * whose {@code "edit.save"} legitimately mean different things; and a global mutable registry leaks
+     * between tests, so one test registering a command would silently change what another resolves.</p>
+     *
+     * <p>Declared <b>before</b> {@link #inputHandler}: field initialisers run in source order and the
+     * handler's keymap resolver takes this in its constructor.</p>
+     */
+    @Getter
+    private final CommandRegistry commands = new CommandRegistry();
 
     @Getter
     private final UIInputHandler inputHandler = new UIInputHandler(this);

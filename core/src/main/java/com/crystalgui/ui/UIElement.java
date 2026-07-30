@@ -32,6 +32,7 @@ import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.UIEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.ui.tree.UITreeTraversal;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -923,6 +924,37 @@ public class UIElement {
      */
     protected void applyResizeOrigin(float left, float top) {
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.left(left).top(top));
+    }
+
+    // ── Keymap ───────────────────────────────────────────────────────────────
+
+    /** Built lazily — an element that binds nothing costs one null field, and almost none do. */
+    @Nullable
+    private Keymap keymap;
+
+    /**
+     * This element's key bindings. Live whenever focus is inside its subtree.
+     *
+     * <p>Scope is the tree rather than a condition language: {@link KeymapResolver} walks the focus path
+     * outward and takes the <b>innermost</b> match, so a text field's {@code Mod+A} beats the window's
+     * {@code Mod+A} without either knowing the other exists. Application-wide bindings are not a special
+     * case — bind them on the root, which is every element's ancestor.</p>
+     *
+     * <pre>{@code
+     * element.keymap().bind("Mod+S", "edit.save");
+     * element.keymap().bind("Mod+K Mod+S", "edit.saveAll");
+     * }</pre>
+     */
+    public Keymap keymap() {
+        if (keymap == null) keymap = new Keymap();
+        return keymap;
+    }
+
+    /** The keymap if one was ever created, without creating one. Used by the resolver, which walks every
+     * ancestor on every keystroke and must not allocate a keymap for each. */
+    @Nullable
+    public Keymap keymapOrNull() {
+        return keymap;
     }
 
     // ── Top layer ────────────────────────────────────────────────────────────

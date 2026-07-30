@@ -10,6 +10,9 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgCursor;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.input.keymap.KeyEventType;
+import com.crystalgui.ui.input.keymap.KeyStroke;
+import com.crystalgui.ui.input.keymap.KeymapResolver;
 import com.crystalgui.ui.tree.UITreeTraversal;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.event.*;
@@ -22,6 +25,13 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
     public final static long multiClickInterval = CgSystemInput.multiClickIntervalMs();
 
     private final UIWindow window;
+
+    /**
+     * Owns pending-chord state, so it sits beside the focus it depends on — a half-entered chord has to be
+     * abandoned when focus moves, or a prefix begun in one panel could complete in another.
+     */
+    @Getter
+    private final KeymapResolver keymapResolver;
 
     @Getter
     private float scrollDelta = 0;
@@ -48,6 +58,7 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
 
     public UIInputHandler(UIWindow window) {
         this.window = window;
+        this.keymapResolver = new KeymapResolver(window.getCommands());
     }
 
     /**
@@ -341,20 +352,56 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         final int modifiers = inputAdapter.getCurrentModifiers();
 
         if (focusedElement == null) {
+            // The keymap still runs, against the ROOT. This branch used to return before ever reaching
+            // it, which made every application-wide binding — the command palette, save, quit — dead
+            // until the user happened to click something focusable first. Substituting the root inside
+            // resolveKeymap was not enough on its own, because this early return meant it was never
+            // called. A browser hands the keystroke to the document when nothing has focus; so do we.
+            if (event.pressed() && resolveKeymap(event, modifiers, KeyEventType.PRESS)) return true;
+            if (!event.pressed()) resolveKeymap(event, modifiers, KeyEventType.RELEASE);
             moveTabFocus(event, modifiers);
             return false;
         }
 
         if (event.pressed()) {
             var propagationStopped = emitKeyboardDown(event, modifiers);
+            // The keymap resolves AFTER the event has bubbled, and only if nothing consumed it — exactly
+            // how a browser applies its own shortcuts, with page handlers getting first refusal. Resolving
+            // ahead of dispatch would let an application-wide binding steal a keystroke from a control
+            // that wanted it, with no way for the control to object.
+            if (!propagationStopped && resolveKeymap(event, modifiers, KeyEventType.PRESS)) {
+                return true;
+            }
             if (!propagationStopped) {
                 moveTabFocus(event, modifiers);
             }
         } else {
             emitKeyboardUp(event, modifiers);
+            // A release binding is not gated on propagation: a release cannot be "handled" the way a press
+            // can, because what it ends was already begun by the matching press. Suppressing it would
+            // leave a space-to-pan gesture stuck on.
+            resolveKeymap(event, modifiers, KeyEventType.RELEASE);
         }
         handleActivationKey(event);
         return false;
+    }
+
+    /**
+     * Runs the keymap over the focus path, outward from {@link #focusedElement}.
+     *
+     * @return true if a binding fired or accepted a chord prefix, in which case the caller must treat the
+     *         key as consumed — falling through to Tab traversal or Space/Enter activation as well would
+     *         let one keystroke do two things at once.
+     */
+    private boolean resolveKeymap(Keyboard.Event event, int modifiers, KeyEventType type) {
+        // Falls back to the ROOT when nothing holds focus, which is what makes an application-wide
+        // binding actually application-wide. Without it the resolver bailed on a null focus and every
+        // root-scoped shortcut — the command palette, save, quit — was dead until the user happened to
+        // click something focusable first. A browser behaves the same way: with no focused element the
+        // document handles the keystroke.
+        UIElement start = focusedElement != null ? focusedElement : window.ui.rootElement;
+        return keymapResolver.resolve(start, new KeyStroke(event.key(), modifiers), type,
+                event.millis(), event.repeat());
     }
 
     /**
@@ -595,6 +642,11 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
     }
 
     private void emitAndSetFocus(UIElement target, FocusSource source) {
+        // A half-entered chord belongs to the scope it was begun in. Carrying it across a focus change
+        // would let `Mod+K` typed in one panel complete as `Mod+K Mod+S` in another, firing a command the
+        // user never aimed at — and the resolver walks the NEW focus path, so it would not even be the
+        // binding they started.
+        keymapResolver.cancelPending();
         this.focusedElement = target;
         if (target != null) {
             // The text-input carve-out: browsers ring a focused text field however it was focused,
