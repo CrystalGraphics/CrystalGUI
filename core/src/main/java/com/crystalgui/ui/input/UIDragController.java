@@ -115,6 +115,12 @@ public final class UIDragController {
      * safe to parent anywhere — including inside the drag source, which is the recommended spot:
      * {@link #isSelfOrInsideSource} then excludes it from drop targeting automatically, on top of the
      * {@code hitTest(false)} set below.</p>
+     *
+     * <p><b>Register per drag, not once.</b> The controller drops its reference when the drag ends, so a
+     * caller that registers a ghost at construction time gets one for the first drag and none afterwards.
+     * That is deliberate: a retained ghost survived the drag that owned it and turned up again on
+     * unrelated pages the next time anything was dragged, which is far harder to explain than
+     * re-registering on mouse-down.</p>
      */
     public void setGhost(@Nullable UIElement ghost) {
         this.ghost = ghost;
@@ -418,6 +424,9 @@ public final class UIDragController {
     private void clear() {
         // Before the fields go — hideGhost demotes, and demotion needs the element still attached.
         if (ghost != null) hideGhost(ghost);
+        // The ghost is DROPPED, not kept for a future drag, and that is the point rather than an
+        // oversight: a retained ghost outlived the drag that registered it and reappeared on unrelated
+        // pages the next time anything was dragged. Registration is therefore per drag — see setGhost.
         ghost = null;
         source = null;
         listener = null;

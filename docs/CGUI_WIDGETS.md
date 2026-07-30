@@ -573,6 +573,13 @@ derived, so restoring the text would put the right words on a control that still
 
 ## 12. `resize` — an element capability, not a widget
 
+> **Leading-edge handles exist only for out-of-flow elements.** A top or left handle must move the origin
+> so the opposite edge stays put, and `left`/`top` only *place* an absolutely positioned box — on an in-flow
+> one they are a relative offset that slides it over the sibling above while everything below carries on as
+> if nothing moved. So an in-flow element gets **right, bottom and the bottom-right corner**, which is
+> exactly the set CSS offers (and CSS never moves the box at all); a positioned one like `Dialog` gets all
+> eight. The set is rebuilt when `position` changes, since `position` and `resize` are independent.
+
 CSS `resize` (CSS UI 4) is **ambient on any element**, exactly as `overflow` makes any element a
 scroll container. Setting it adds an internal `__resizer__` grab handle; clearing it removes one.
 

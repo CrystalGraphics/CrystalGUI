@@ -111,6 +111,10 @@ public class LayoutProperties {
         createSetter(LayoutProperties.FLEX_DIRECTION, TaffyBridge::setFlexDirection);
         createSetter(LayoutProperties.FLEX_WRAP, TaffyBridge::setFlexWrap);
         createSetter(LayoutProperties.POSITION, TaffyBridge::setPosition);
+        // Whether an element is out of flow decides whether it may have LEADING resize handles, and
+        // `position` and `resize` are independent properties set in either order. Same shape as the
+        // DISPLAY hook above, and for the same reason: the dependent state is cached, so it needs telling.
+        LayoutProperties.POSITION.addListener((el, prop, oldVal, newVal) -> el.onPositionModeChanged());
         createSetter(LayoutProperties.BOX_SIZING, TaffyBridge::setBoxSizing);
         createSetter(LayoutProperties.ALIGN_ITEMS, TaffyBridge::setAlignItems);
         createSetter(LayoutProperties.JUSTIFY_CONTENT, TaffyBridge::setJustifyContent);

@@ -34,7 +34,16 @@ public class ResizeTest extends UiTestBase {
 
     private void build(Resize mode) {
         root = new UIElement().layout(l -> l.width(400).height(400));
-        panel = new UIElement().layout(l -> l.width(100).height(80));
+        // Out of flow, because that is the only case where a LEADING edge can resize: moving the origin
+        // is how the opposite edge stays put, and `left`/`top` only place an absolutely positioned box.
+        // On an in-flow element they are a relative offset that slides it over its neighbours — see
+        // inFlowElementsGetNoLeadingHandles below.
+        // Placed away from the corner on purpose. At the origin a leading edge has nowhere to grow —
+        // the containing-block clamp stops it, correctly — so a fixture parked at (0,0) cannot exercise
+        // leftward or upward resizing at all.
+        panel = new UIElement().layout(l -> l.width(100).height(80)
+                .positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                .left(120).top(100));
         panel.generalStyle(g -> g.resize(mode));
         root.addChild(panel);
 
@@ -193,6 +202,54 @@ public class ResizeTest extends UiTestBase {
     // ── Eight handles ───────────────────────────────────────────────────────
 
     /**
+     * An in-flow element gets only the <b>trailing</b> handles — which is exactly the set CSS offers.
+     *
+     * <p>A leading handle has to move the origin so the opposite edge stays put, and on an in-flow box
+     * {@code left}/{@code top} is a relative offset: it slides over the sibling above while everything
+     * below carries on as though nothing moved. Reported from the harness as a panel eating its
+     * neighbour when its top edge was dragged. CSS sidesteps this by offering one grabber at the
+     * bottom-right and never moving the box; the eight handles are our extension, so it applies where it
+     * is meaningful.</p>
+     */
+    @Test
+    public void inFlowElementsGetNoLeadingHandles() {
+        root = new UIElement().layout(l -> l.width(400).height(400));
+        UIElement flowPanel = new UIElement().layout(l -> l.width(100).height(80));
+        flowPanel.generalStyle(g -> g.resize(Resize.BOTH));
+        root.addChild(flowPanel);
+        window = new UIWindow(Ui.of(root));
+        window.init(800, 800);
+        settle();
+
+        assertNull("no top edge on an element that cannot move", handleOf(flowPanel, "top"));
+        assertNull("nor a left one", handleOf(flowPanel, "left"));
+        assertNotNull("but the trailing edges are still there", handleOf(flowPanel, "bottom"));
+        assertNotNull(handleOf(flowPanel, "right"));
+        assertEquals("right, bottom and the bottom-right corner — the set CSS itself offers",
+                3, handleCountOf(flowPanel));
+    }
+
+    /** Becoming positioned later must grow the missing handles, since `resize` and `position` are
+     * independent properties and either can be set first. */
+    @Test
+    public void becomingPositionedGrowsTheLeadingHandles() {
+        root = new UIElement().layout(l -> l.width(400).height(400));
+        UIElement flowPanel = new UIElement().layout(l -> l.width(100).height(80));
+        flowPanel.generalStyle(g -> g.resize(Resize.BOTH));
+        root.addChild(flowPanel);
+        window = new UIWindow(Ui.of(root));
+        window.init(800, 800);
+        settle();
+        assertEquals(3, handleCountOf(flowPanel));
+
+        flowPanel.layout(l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE));
+        settle();
+        settle();
+
+        assertEquals("all eight once it can actually be placed", 8, handleCountOf(flowPanel));
+    }
+
+    /**
      * Which handles exist is a function of the axes the mode allows.
      *
      * <p>Eight is not a divergence from CSS UI 4: the spec says only that the UA "presents a
@@ -347,8 +404,15 @@ public class ResizeTest extends UiTestBase {
 
     // ── Constraints ─────────────────────────────────────────────────────────
 
-    /** The spec's only constraints are min/max, and Taffy already applies them — the resizer must not
-     * clamp again, or it would double-apply and desync from the cascade. */
+    /**
+     * The spec's only constraints on a resize are {@code min-*}/{@code max-*}.
+     *
+     * <p>Taffy applies them regardless, so these two tests would pass even if the resizer wrote the raw
+     * dragged size — which is what it used to do. It now re-applies the same bounds itself, not to
+     * constrain the box but to <em>know</em> the size it will settle at, because a leading edge has to
+     * derive its origin from that. See
+     * {@link #shrinkingFromALeadingEdgeStopsMovingOnceTheSizeStops()}.</p>
+     */
     @Test
     public void maxWidthConstrainsTheResize() {
         build(Resize.BOTH);
@@ -369,6 +433,142 @@ public class ResizeTest extends UiTestBase {
         dragHandleBy(-200f, 0f);
 
         assertEquals("min-width must floor it", 60f, panel.getRuntimeCache().getWidth(), 0.5f);
+    }
+
+    // ── The box stays inside its containing block ───────────────────────
+
+    /**
+     * <b>A resize cannot push a box out through its containing block.</b>
+     *
+     * <p>Moving was clamped this way from the start and sizing was not, so a panel dragged into the
+     * bottom-right corner — as far as it could be moved — could then be <em>grown</em> straight out
+     * through the corner it had just been stopped at. Reported from the harness exactly that way.</p>
+     *
+     * <p>No spec covers this, for the same reason none covers the move clamp: the web has no draggable
+     * window. It is the OS window-manager behaviour, and the two halves have to agree or the clamp
+     * reads as arbitrary.</p>
+     */
+    @Test
+    public void aTrailingResizeStopsAtTheContainingBlocksEdge() {
+        build(Resize.BOTH);
+        // Parked at the far corner of the 400x400 root: 300+100 and 320+80 land exactly on the edges.
+        panel.layout(l -> l.left(300).top(320));
+        settle();
+
+        dragHandleBy("bottom-right", 500f, 500f);
+        settle();
+
+        assertEquals("nothing left to grow into on the right", 100f,
+                panel.getRuntimeCache().getWidth(), 0.5f);
+        assertEquals("nor below", 80f, panel.getRuntimeCache().getHeight(), 0.5f);
+    }
+
+    /** The leading counterpart: growing leftwards stops when the origin reaches the container's edge,
+     * rather than carrying the box out through it into negative coordinates. */
+    @Test
+    public void aLeadingResizeStopsWhenItsOriginReachesTheEdge() {
+        build(Resize.BOTH);
+        panel.layout(l -> l.left(40).top(40));
+        settle();
+
+        dragHandleBy("left", -500f, 0f);
+        settle();
+
+        assertEquals("40 of travel available, so 100 + 40", 140f,
+                panel.getRuntimeCache().getWidth(), 0.5f);
+        assertEquals("and the origin lands on the edge, not past it", 0f,
+                panel.getRuntimeCache().getX(), 0.5f);
+    }
+
+    /** In-flow elements are deliberately exempt: {@code left}/{@code top} are a relative nudge there, so
+     * there is no origin to clamp — and they have no leading handles for the same reason. Growing one
+     * past its parent is ordinary overflow, which CSS permits. */
+    @Test
+    public void anInFlowElementIsNotClampedToItsParent() {
+        root = new UIElement().layout(l -> l.width(400).height(400));
+        panel = new UIElement().layout(l -> l.width(100).height(80));
+        panel.generalStyle(g -> g.resize(Resize.BOTH));
+        root.addChild(panel);
+        window = new UIWindow(Ui.of(root));
+        window.init(800, 800);
+        settle();
+        input = window.getInputHandler();
+        input.beginFrame();
+        input.endFrame();
+
+        dragHandleBy("right", 500f, 0f);
+        settle();
+
+        assertEquals("overflow is legal; only positioned boxes are clamped", 600f,
+                panel.getRuntimeCache().getWidth(), 0.5f);
+    }
+
+    // ── The origin follows the achieved size, not the pointer ─────────────
+
+    /**
+     * <b>Once the size stops shrinking, the element stops moving.</b>
+     *
+     * <p>The origin used to follow the raw pointer delta, so dragging a top edge downward shrank the
+     * dialog to its {@code min-height} and then went on <em>towing it down the screen</em> — while the
+     * mirror-image drag upward from the bottom correctly just stopped. The asymmetry is what gave it
+     * away: only the leading edges move anything, so only they could diverge.</p>
+     *
+     * <p>Deriving the origin from the size actually achieved makes the two halves the same computation,
+     * so they cannot come apart again.</p>
+     */
+    @Test
+    public void shrinkingFromALeadingEdgeStopsMovingOnceTheSizeStops() {
+        build(Resize.BOTH);
+        panel.getStyle().getLayoutGroup().set(LayoutProperties.MIN_HEIGHT, TaffyDimension.length(40f));
+        settle();
+
+        // 80 tall against a floor of 40: only 40px of shrink exists, and the drag asks for 100.
+        dragHandleBy("top", 0f, 100f);
+        settle();
+
+        assertEquals("floored at min-height", 40f, panel.getRuntimeCache().getHeight(), 0.5f);
+        // Started at y=100 and shrank by the 40 that was available, so the top edge lands at 140 — not
+        // at the 200 the raw 100px drag would have taken it to.
+        assertEquals("the origin travels only as far as the box actually shrank",
+                140f, panel.getRuntimeCache().getY(), 0.5f);
+    }
+
+    /** The trailing half of the same pair, stated so the symmetry is pinned rather than assumed. */
+    @Test
+    public void shrinkingFromATrailingEdgeLeavesTheOriginAlone() {
+        build(Resize.BOTH);
+        panel.getStyle().getLayoutGroup().set(LayoutProperties.MIN_HEIGHT, TaffyDimension.length(40f));
+        settle();
+        float yBefore = panel.getRuntimeCache().getY();
+
+        dragHandleBy("bottom", 0f, -100f);
+        settle();
+
+        assertEquals(40f, panel.getRuntimeCache().getHeight(), 0.5f);
+        assertEquals("a trailing edge never moves the box", yBefore,
+                panel.getRuntimeCache().getY(), 0.5f);
+    }
+
+    /**
+     * The origin is read from the live inset, not from a field this class wrote.
+     *
+     * <p>A field only knows about positions the resizer itself applied, so an element placed by the
+     * cascade reported an origin of zero and the first leading drag teleported it to the corner before
+     * resizing anything.</p>
+     */
+    @Test
+    public void aLeadingDragRespectsAPositionSetByTheCascade() {
+        build(Resize.BOTH);
+        panel.layout(l -> l.left(150).top(100));
+        settle();
+        float rightBefore = panel.getRuntimeCache().getX() + panel.getRuntimeCache().getWidth();
+
+        dragHandleBy("left", -20f, 0f);
+        settle();
+
+        assertEquals(120f, panel.getRuntimeCache().getWidth(), 0.5f);
+        assertEquals("the right edge must stay put even though nothing here wrote `left` first",
+                rightBefore, panel.getRuntimeCache().getX() + panel.getRuntimeCache().getWidth(), 0.5f);
     }
 
     // ── Divergence from the spec, asserted so it stays deliberate ───────────

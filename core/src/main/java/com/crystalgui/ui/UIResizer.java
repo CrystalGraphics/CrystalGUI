@@ -3,6 +3,7 @@ package com.crystalgui.ui;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.ui.input.UIDragController;
+import dev.vfyjxf.taffy.style.TaffyDimension;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -51,6 +52,11 @@ final class UIResizer extends UIElement {
         /** Lower-case, dash-separated: {@code TOP_LEFT} → {@code __resizer-top-left__}. */
         String styleClass() {
             return "__resizer-" + name().toLowerCase().replace('_', '-') + "__";
+        }
+
+        /** Whether dragging this handle has to move the element's origin — a top or left edge. */
+        boolean isLeading() {
+            return dx < 0 || dy < 0;
         }
 
         /**
@@ -111,8 +117,38 @@ final class UIResizer extends UIElement {
 
         // A trailing edge grows by the drag; a leading edge grows by its negation and moves the
         // origin to match, so the opposite edge stays where it was.
-        final float width = startWidth + handle.dx * deltaX;
-        final float height = startHeight + handle.dy * deltaY;
+        float width = startWidth + handle.dx * deltaX;
+        float height = startHeight + handle.dy * deltaY;
+
+        // Clamp to the element's OWN min/max first. This is not what constrains the box — Taffy applies
+        // these regardless — it is what lets the origin below be derived from a size the element will
+        // actually settle at. Without it the origin followed the raw pointer delta while the size sat
+        // pinned at its minimum, so dragging a top edge downward shrank the dialog to min-height and then
+        // started towing it down the screen, while the mirror-image drag from the bottom correctly just
+        // stopped. Re-applying the same numbers Taffy uses is idempotent, and they are read from the live
+        // style, so they are exactly what the cascade currently says.
+        width = clampToStyleRange(target, width, true);
+        height = clampToStyleRange(target, height, false);
+
+        // Then keep the box inside its containing block — for out-of-flow elements only, which is the same
+        // set that has leading handles at all, and the only set where left/top are a position rather than
+        // a relative nudge. Moving was already clamped this way and sizing was not, so a panel parked in
+        // the bottom-right corner could be resized straight out through its parent.
+        UIElement container = target.canMoveResizeOrigin() ? target.resizeContainingBlock() : null;
+        if (container != null) {
+            float availableWidth = container.getRuntimeCache().getWidth();
+            float availableHeight = container.getRuntimeCache().getHeight();
+            // A trailing edge is bounded by the far side of the container. A leading edge is bounded by its
+            // own origin reaching zero, which caps growth at everything between the container's near side
+            // and the edge that is staying put.
+            if (handle.dx > 0) width = Math.min(width, availableWidth - startLeft);
+            if (handle.dx < 0) width = Math.min(width, startLeft + startWidth);
+            if (handle.dy > 0) height = Math.min(height, availableHeight - startTop);
+            if (handle.dy < 0) height = Math.min(height, startTop + startHeight);
+        }
+
+        final float finalWidth = Math.max(0f, width);
+        final float finalHeight = Math.max(0f, height);
 
         // INLINE origin, NOT IMPORTANT. The spec is explicit that a user resize writes the style
         // attribute "without !important", so an author's !important rule still wins. Everything else
@@ -124,19 +160,39 @@ final class UIResizer extends UIElement {
         // "existing property declaration(s)" in the style attribute, which is precisely where an
         // author's inline width already lives. It also means a resize is NOT undone by setting
         // `resize: none` later, matching browsers.
-        //
-        // No clamping here either: min-width/max-width/min-height/max-height are the spec's *only*
-        // constraints on a resize, and Taffy already applies them. Clamping again would double-apply
-        // them and desync from whatever the cascade currently says.
         StyleGroup.inlinePipeline(target.getStyle().getLayoutGroup(), l -> {
-            if (handle.dx != 0) l.width(Math.max(0f, width));
-            if (handle.dy != 0) l.height(Math.max(0f, height));
+            if (handle.dx != 0) l.width(finalWidth);
+            if (handle.dy != 0) l.height(finalHeight);
         });
 
-        if (handle.dx < 0 || handle.dy < 0) {
+        // The origin follows the size that was ACHIEVED, never the pointer. That is what pins the opposite
+        // edge in place, and what makes the element stop moving the instant it stops resizing.
+        if (handle.isLeading()) {
             target.applyResizeOrigin(
-                    handle.dx < 0 ? startLeft + deltaX : target.resizeOriginLeft(),
-                    handle.dy < 0 ? startTop + deltaY : target.resizeOriginTop());
+                    handle.dx < 0 ? startLeft + (startWidth - finalWidth) : target.resizeOriginLeft(),
+                    handle.dy < 0 ? startTop + (startHeight - finalHeight) : target.resizeOriginTop());
         }
+    }
+
+    /**
+     * Clamps a desired size into the element's own {@code min-*}/{@code max-*}, read from the live Taffy
+     * style so it agrees with whatever the cascade currently says.
+     *
+     * <p>Only definite lengths participate: a percentage would have to be resolved against the containing
+     * block, and {@code auto} is not a bound at all. Both are left to Taffy — the point of this method is
+     * not to constrain the box but to <em>predict</em> the size it will settle at, and an unpredictable
+     * bound simply means the origin is derived from the unclamped value, which is the old behaviour.</p>
+     */
+    private static float clampToStyleRange(UIElement target, float desired, boolean horizontal) {
+        var style = target.getStyle().getTaffyBridge().style;
+        TaffyDimension min = horizontal ? style.minSize.width : style.minSize.height;
+        TaffyDimension max = horizontal ? style.maxSize.width : style.maxSize.height;
+        if (min != null && min.getType() == TaffyDimension.Type.LENGTH) {
+            desired = Math.max(desired, min.getValue());
+        }
+        if (max != null && max.getType() == TaffyDimension.Type.LENGTH) {
+            desired = Math.min(desired, max.getValue());
+        }
+        return desired;
     }
 }

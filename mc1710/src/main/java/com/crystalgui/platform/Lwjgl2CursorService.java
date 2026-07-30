@@ -65,12 +65,24 @@ public final class Lwjgl2CursorService implements UICursorService {
         DIAGONAL_NWSE(CursorBitmaps::diagonalNwseArrow),
         DIAGONAL_NESW(CursorBitmaps::diagonalNeswArrow),
         FOUR_WAY(CursorBitmaps::fourWayArrow),
-        TEXT_BEAM(CursorBitmaps::textBeam);
+        TEXT_BEAM(CursorBitmaps::textBeam),
+        // The one shape whose hotspot is not its centre: a hand points, and the click must land on the
+        // fingertip rather than half a cursor below it.
+        POINTING_HAND(CursorBitmaps::pointingHand,
+                CursorBitmaps.HAND_HOTSPOT_X, CursorBitmaps.HAND_HOTSPOT_Y);
 
         private final java.util.function.Supplier<int[]> draw;
+        private final int hotspotX;
+        private final int hotspotY;
 
         Shape(java.util.function.Supplier<int[]> draw) {
+            this(draw, CursorBitmaps.HOTSPOT, CursorBitmaps.HOTSPOT);
+        }
+
+        Shape(java.util.function.Supplier<int[]> draw, int hotspotX, int hotspotY) {
             this.draw = draw;
+            this.hotspotX = hotspotX;
+            this.hotspotY = hotspotY;
         }
     }
 
@@ -102,7 +114,7 @@ public final class Lwjgl2CursorService implements UICursorService {
         org.lwjgl.input.Cursor created = null;
         if (canCreateCursors()) {
             try {
-                created = toCursor(shape.draw.get());
+                created = toCursor(shape.draw.get(), shape.hotspotX, shape.hotspotY);
             } catch (LWJGLException e) {
                 created = null;
             }
@@ -130,6 +142,10 @@ public final class Lwjgl2CursorService implements UICursorService {
                 return Shape.FOUR_WAY;
             case TEXT:
                 return Shape.TEXT_BEAM;
+            // `pointer` is the most common cursor in any UI — every button, link and menu row asks for it —
+            // so it is the one keyword worth artwork beyond the resize set.
+            case POINTER: case GRAB:
+                return Shape.POINTING_HAND;
             default:
                 return null;
         }
@@ -153,7 +169,7 @@ public final class Lwjgl2CursorService implements UICursorService {
      * <p>The vertical flip and the hotspot conversion are the whole reason this is a separate method:
      * they are one line each and both are silently wrong if omitted.</p>
      */
-    private org.lwjgl.input.Cursor toCursor(int[] topDown) throws LWJGLException {
+    private org.lwjgl.input.Cursor toCursor(int[] topDown, int hotspotX, int hotspotY) throws LWJGLException {
         final int size = CursorBitmaps.SIZE;
         IntBuffer pixels = org.lwjgl.BufferUtils.createIntBuffer(size * size);
         for (int y = size - 1; y >= 0; y--) {
@@ -164,7 +180,7 @@ public final class Lwjgl2CursorService implements UICursorService {
         pixels.flip();
 
         // Y from the bottom, since that is the space the image is now in.
-        int hotspotY = size - 1 - CursorBitmaps.HOTSPOT;
-        return new org.lwjgl.input.Cursor(size, size, CursorBitmaps.HOTSPOT, hotspotY, 1, pixels, null);
+        int flippedHotspotY = size - 1 - hotspotY;
+        return new org.lwjgl.input.Cursor(size, size, hotspotX, flippedHotspotY, 1, pixels, null);
     }
 }
