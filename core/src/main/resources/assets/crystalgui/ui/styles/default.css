@@ -88,7 +88,11 @@
 
 /* ── Button ─────────────────────────────────────────────────────────────────────────────────── */
 
-button {
+/* `dropdown` is listed alongside `button` throughout this section because a Dropdown IS a Button in
+ * Java — but a type selector matches the TAG, exactly as in CSS, and its tag is `dropdown`. Java
+ * inheritance is invisible to the cascade. Without this a dropdown laid out at ZERO HEIGHT, since
+ * min-height is where a Button gets its box from. Same trap `tab` avoids by having its own block. */
+button, dropdown {
     min-height: 14px;
     padding-left: 2px;
     padding-top: 1px;
@@ -101,13 +105,13 @@ button {
     text-shadow: false;
     border-radius: 2px;
 }
-button:hover {
+button:hover, dropdown:hover {
     background: #B4B4B4;
 }
-button:active {
+button:active, dropdown:active {
     background: #7A7A7A;
 }
-button:disabled {
+button:disabled, dropdown:disabled {
     background: #6E6E6E;
     color: #4A4A4A;
 }
@@ -581,6 +585,127 @@ dialog .__title-bar__ {
     background: #3A4450;
 }
 
+/* ── Popovers, menus and dropdowns ──────────────────────────────────────────────────────────────
+ * `position: absolute` is forced at IMPORTANT origin by top-layer promotion, and `left`/`top` are written
+ * by AnchoredPlacement — so nothing here may set either, or it would fight placement every frame.
+ *
+ * A popover is a bare box on the web (the UA sheet gives `<dialog>`/`[popover]` little more than borders),
+ * so this is our chrome: enough for a menu to be legible with no theme loaded. */
+popover, menu, dropdown .__menu__ {
+    min-width: 60px;
+    /* LIGHTER than the panels it floats over, with a LIGHT hairline. Both matter, and the first version
+     * got both backwards: #2A2F36 with a #00000060 outline is within a few points of every dark surface in
+     * this sheet, so a menu rendered perfectly and was simply invisible — reported from the harness as
+     * "I right-clicked but no menu". A popup that cannot be told apart from what is behind it has failed at
+     * the one job it has, so being separable is a functional requirement here, not styling. */
+    background: #3F4A57;
+    outline: 1px #808E9E;
+    /* Light text, set on the POPOVER so it inherits to every item and to arbitrary popover content.
+     * Needed because a Dropdown is a Button, so its menu — an internal child — inherits the button's dark
+     * `color: #222222`, which on this surface renders as barely-legible grey. Colour is inheritable, so the
+     * fix belongs at the top of the popover rather than repeated on each item. */
+    color: #DDDDDD;
+    /* Transparent while closed, opaque once `__open__` lands — see the rule below. The pair is what gives the
+     * transition a real value to start from; a popover coming out of `display: none` otherwise has no previous
+     * opacity to interpolate from, which is the problem `@starting-style` exists to solve on the web.
+     *
+     * QUICK, deliberately: the pause before a submenu appears is the hover delay doing its job, and a slow
+     * fade stacked on top of it reads as lag rather than polish. The timing lives here and not in Java because
+     * the stylesheet owns durations — drop this line and popovers snap in, with nothing broken. */
+    opacity: 0;
+    transition: opacity 120ms ease;
+    padding-all: 2px;
+    flex-direction: column;
+    /* A long menu must scroll rather than run off the screen. AnchoredPlacement clamps the BOX into the
+     * containing block, which without this would just squash the items instead. */
+    overflow: hidden;
+}
+
+/* NO `width: 100%` on the items container or the items, deliberately. A percentage width against a
+ * shrink-to-fit parent cannot contribute to that parent's intrinsic size, so the menu had no way to learn
+ * how wide its items wanted to be and collapsed to `min-width` — clipping every label. Letting the default
+ * `align-items: stretch` do the work instead means the menu sizes to its widest item and the items then
+ * fill it, which is the standard CSS idiom for exactly this and the reason the idiom exists. */
+popover.__open__, menu.__open__, dropdown .__menu__.__open__ {
+    opacity: 1;
+}
+
+menu .__items__ {
+    flex-direction: column;
+    gap-all: 1px;
+}
+
+/* Items are Buttons, so they inherit the button rule above; these overrides make them read as rows
+ * rather than as a stack of separate controls — full width, left-aligned, no rounding between them. */
+menuitem {
+    min-height: 13px;
+    padding-left: 6px;
+    padding-right: 6px;
+    justify-content: flex-start;
+    background: #00000000;
+    border-radius: 0;
+}
+/* The active row is highlighted by :focus and DELIBERATELY NOT by :hover.
+ *
+ * There is exactly one active row in a menu, and hover cannot express that: CSS `:hover` correctly stays on
+ * whatever the mouse is over, so hovering one row and then arrowing down lit up two at once — reported from
+ * the harness as "I hover Add node, press down, and can still focus the ones below". Since Menu does
+ * focus-follows-hover, the hovered row IS the focused row in the normal case, which makes a :hover rule pure
+ * redundancy that can only ever disagree with the truth. Focus is the single source of it.
+ *
+ * A disabled row therefore shows no highlight at all, which is right — it cannot be focused, and inviting a
+ * click on something inert would be worse than being unresponsive.
+ *
+ * The highlight is also the ONLY focus affordance here: no ring. A ring would trail the mouse across every
+ * row it passed over, which is the noise :focus-visible exists to avoid, so it is suppressed explicitly
+ * rather than left to depend on which focus path happened to fire. */
+menuitem:focus {
+    background: #4A6E9A;
+}
+/* A row that leads somewhere: label left, arrow hard right, and a gap so the two never touch on a short
+ * label. `space-between` overrides the `flex-start` above, which is why this rule follows it. */
+menuitem.__has-submenu__ {
+    justify-content: space-between;
+    gap-all: 8px;
+}
+/* Dimmer than the label — it is an affordance, not content. Colour is inheritable, so this only needs to
+ * override, not restate. */
+menuitem .__submenu-arrow__ {
+    color: #A8B0B8;
+}
+menuitem:focus-visible {
+    outline: 0;
+}
+menuitem:disabled {
+    background: #00000000;
+    color: #6E6E6E;
+}
+
+/* The closed-state marker on the button, so a theme can point an arrow at it. */
+dropdown {
+    justify-content: space-between;
+}
+
+/* The modal scrim — our stand-in for `::backdrop`, which cannot exist here because the style engine has
+ * no pseudo-elements (the same divergence recorded for the top layer). It is an internal child promoted
+ * to the top layer alongside its dialog, so `100%` resolves against the initial containing block — the
+ * whole window — rather than against the dialog's own box.
+ *
+ * `left`/`top` are set explicitly rather than relying on `position: absolute`'s static position: the top
+ * layer forces `position: absolute` at IMPORTANT origin, and an absolutely positioned box with all-auto
+ * offsets sits where it would have been in flow, which for an internal child of a moved dialog is the
+ * dialog's corner. Pinning both to zero is what makes it cover the viewport.
+ *
+ * Deliberately semi-transparent rather than opaque: the point of a modal backdrop is to say "that is
+ * still there but not yours right now", which needs the content to remain visible. */
+dialog .__backdrop__ {
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: #00000080;
+}
+
 /* An ellipsized title, and the one place in this sheet that truncates text by default.
  *
  * CSS does NOT do this for you: `text-overflow`'s initial value is `clip`, and no browser user-agent
@@ -726,6 +851,6 @@ splitview .__divider__ { cursor: ew-resize; }
 splitview .__vertical__ .__divider__ { cursor: ns-resize; }
 
 /* `pointer` marks anything clickable, as it does on the web for links and buttons. */
-button, checkbox, switch, tab { cursor: pointer; }
+button, checkbox, switch, tab, dropdown, menuitem { cursor: pointer; }
 /* Not set on `textfield`: `cursor: auto` already resolves to `text` over an editable element, which
  * is the spec's own rule and needs no declaration. */

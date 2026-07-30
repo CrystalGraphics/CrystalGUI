@@ -20,6 +20,8 @@ import lombok.Getter;
 import lombok.Setter;
 import org.joml.Matrix4f;
 
+import javax.annotation.Nullable;
+
 import java.util.*;
 
 /**
@@ -36,9 +38,6 @@ public final class UIWindow {
 
     @Getter
     private final TaffyTree taffyTree;
-    /** Package-private accessor for {@link TopLayer}, which reparents promoted nodes onto it. */
-    @Getter(lombok.AccessLevel.PACKAGE)
-    private NodeId rootNodeId;
 
     @Getter
     private final UIInputHandler inputHandler = new UIInputHandler(this);
@@ -71,6 +70,47 @@ public final class UIWindow {
     /** @see TopLayer — CSS Position 4 §top-layer; owns its own list, reparenting and passes. */
     @Getter
     private final TopLayer topLayer = new TopLayer(this);
+
+    /**
+     * The document's modal dialogs, outermost first — the spec's "active modal dialog" generalised to a
+     * stack so one modal can open another. The topmost is the active one; everything outside its subtree
+     * is inert.
+     *
+     * <p>A list rather than a single field because {@code showModal()} on top of an open modal is legal
+     * and has to unwind in order. Kept here rather than in {@link TopLayer} because modality is about
+     * <em>inertness</em>, not painting, and because the spec hangs it off the {@code Document} — which is
+     * what this class is.</p>
+     */
+    private final List<UIElement> modalStack = new ArrayList<>();
+
+    /**
+     * Open <b>auto</b> popovers, bottom-most first — the spec's "showing auto popover list".
+     *
+     * <p>Separate from {@link #closeWatchers} on purpose, because the two answer different questions and
+     * the same element is often in one and not the other. This list drives <b>light dismiss</b> (click
+     * outside); that one drives <b>Escape</b>. A modal dialog has a close watcher but is not light
+     * dismissable, and a {@code manual} popover is neither.</p>
+     */
+    private final List<UIElement> autoPopovers = new ArrayList<>();
+
+    /**
+     * Elements with an active close watcher, oldest first — Escape asks the <b>last</b> one.
+     *
+     * <p>The web's {@code CloseWatcher} is a general primitive that dialogs and popovers both build on,
+     * so this is one stack rather than a modal-specific field. Ordering is the whole point: a dropdown
+     * opened from inside a modal must eat Escape before the modal does, exactly as a live drag eats it
+     * before either.</p>
+     */
+    private final List<UIElement> closeWatchers = new ArrayList<>();
+
+    /**
+     * Monotonic counter bumped every time a popover is shown — including a re-show of one already open.
+     *
+     * <p>Read before a press is dispatched and handed back to {@link #lightDismiss(UIElement, int)}, so a
+     * popover shown <em>during</em> that press is exempt from it. See there for why a counter and not a
+     * snapshot of the stack.</p>
+     */
+    private int popoverShowSeq;
 
     public UIWindow(Ui ui) {
         this.ui = ui;
@@ -264,6 +304,15 @@ public final class UIWindow {
         // Before anything else: a detached element must not linger in the top layer, or it would keep
         // painting and hit-testing after leaving the tree.
         topLayer.remove(element);
+        // Nor in the modal stack, and this one is worse than a leak — a modal that left the tree without
+        // being closed would keep the ENTIRE window inert with nothing left to interact with, which is
+        // unrecoverable from the user's side. Cheap unconditionally: a no-op for the elements that were
+        // never modal, which is nearly all of them.
+        popModal(element);
+        // Same reasoning, one step further: a popover that left the tree must stop being light-dismissable
+        // and stop being asked for Escape, or the stacks accumulate elements that can never be closed.
+        popAutoPopover(element);
+        popCloseWatcher(element);
 
 
         elementByNode.remove(element.taffyNodeId);
@@ -281,6 +330,23 @@ public final class UIWindow {
 
         elements.remove(element);
         styleEngine.onElementDetached(element);
+    }
+
+    /**
+     * The root's Taffy node — what {@link TopLayer} reparents promoted nodes onto, making the root box
+     * their containing block.
+     *
+     * <p><b>Derived, not stored.</b> This used to be a field that {@code registerElement} was supposed to
+     * fill in and never did, so it was permanently {@code null} — and because both reparenting methods
+     * bail out silently on a null root, <em>promotion never actually moved a Taffy node at all</em>. The
+     * one documented divergence it exists to implement (a promoted element's containing block is the
+     * initial containing block) was inert from the day it was written. Nothing caught it because every
+     * promoted element until now had an explicit pixel size and absolute offsets, so the wrong percentage
+     * basis had nothing to show; the first promoted element sized in {@code %} — a modal backdrop — made
+     * it obvious immediately. Deriving removes the class of bug rather than fixing this instance.</p>
+     */
+    NodeId getRootNodeId() {
+        return ui.rootElement.taffyNodeId;
     }
 
     public void registerElement(UIElement element) {
@@ -436,7 +502,171 @@ public final class UIWindow {
     public UIElement getHoveredElement(float mouseX, float mouseY) {
         UIElement promoted = topLayer.hitTest(mouseX, mouseY);
         if (promoted != null) return promoted;
+        // A modal makes the entire rest of the document inert, and hit-testing an inert node must act as
+        // if `pointer-events: none` — so the main-tree walk is skipped wholesale rather than filtered.
+        // The modal itself lives in the top layer, so it was already offered above.
+        if (getActiveModal() != null) return null;
         return elementHitTest(ui.rootElement, mouseX, mouseY);
+    }
+
+    // ── Modality ────────────────────────────────────────────────────────────
+
+    /** The topmost open modal, or {@code null}. The spec's {@code Document}'s "active modal dialog". */
+    @Nullable
+    public UIElement getActiveModal() {
+        return modalStack.isEmpty() ? null : modalStack.get(modalStack.size() - 1);
+    }
+
+    /**
+     * Whether {@code element} is blocked by an active modal — i.e. inert by virtue of sitting outside it.
+     *
+     * <p>Tested against the <b>topmost</b> modal only, and that is the whole rule — the spec defines
+     * inertness against "the document's active modal dialog", singular. A lower modal in the stack being
+     * blocked by a higher one is not a gap, it is the point: open a modal from inside a modal and the
+     * first correctly stops accepting input until the second closes.</p>
+     */
+    public boolean isModalBlocked(UIElement element) {
+        UIElement modal = getActiveModal();
+        if (modal == null || element == null) return false;
+        for (UIElement el = element; el != null; el = el.getParent()) {
+            if (el == modal) return false;
+        }
+        return true;
+    }
+
+    /** Marks {@code element} modal. Idempotent — re-pushing raises it, matching {@link TopLayer#add}. */
+    public void pushModal(UIElement element) {
+        Objects.requireNonNull(element, "element");
+        modalStack.remove(element);
+        modalStack.add(element);
+    }
+
+    /** Clears {@code element}'s modality. No-op if it was not modal. */
+    public void popModal(UIElement element) {
+        modalStack.remove(element);
+    }
+
+    // ── Close watchers ──────────────────────────────────────────────────────
+
+    /** Registers {@code element} to receive Escape, ahead of anything registered before it. Idempotent —
+     * re-registering raises it, which is what reopening a popup should do. */
+    public void pushCloseWatcher(UIElement element) {
+        Objects.requireNonNull(element, "element");
+        closeWatchers.remove(element);
+        closeWatchers.add(element);
+    }
+
+    public void popCloseWatcher(UIElement element) {
+        closeWatchers.remove(element);
+    }
+
+    /** The element Escape should ask, or {@code null}. */
+    @Nullable
+    public UIElement getTopCloseWatcher() {
+        return closeWatchers.isEmpty() ? null : closeWatchers.get(closeWatchers.size() - 1);
+    }
+
+    // ── Light dismiss (the popover stack) ───────────────────────────────────
+
+    /** Open auto popovers, bottom-most first. Read-only. */
+    public List<UIElement> getAutoPopovers() {
+        return Collections.unmodifiableList(autoPopovers);
+    }
+
+    public void pushAutoPopover(UIElement element) {
+        Objects.requireNonNull(element, "element");
+        autoPopovers.remove(element);
+        autoPopovers.add(element);
+    }
+
+    public void popAutoPopover(UIElement element) {
+        autoPopovers.remove(element);
+    }
+
+    /**
+     * The spec's <b>light dismiss</b>: a press on {@code target} closes every open auto popover that
+     * {@code target} is not inside.
+     *
+     * <p>Ported from HTML's "light dismiss open popovers" — find the target's topmost popover ancestor,
+     * then hide everything above it. Clicking <em>inside</em> a popover therefore closes its submenus but
+     * not itself, and clicking anywhere unrelated closes the whole chain. Doing it any other way means
+     * either a submenu that cannot be dismissed without killing its parent, or a parent that dies when
+     * you reach for its child.</p>
+     *
+     * @param target what was pressed, or {@code null} for a press that hit nothing at all.
+     */
+    public void lightDismiss(@Nullable UIElement target) {
+        lightDismiss(target, Integer.MAX_VALUE);
+    }
+
+    /**
+     * As {@link #lightDismiss(UIElement)}, but sparing any popover shown after {@code shownBefore} — the
+     * value {@link #popoverShowSeq()} returned before the press was dispatched.
+     *
+     * <p><b>This is what stops a popover dismissing itself.</b> Light dismiss runs after the mouse-down event
+     * is delivered, so a handler that opens a context menu on press has already put it in the stack by the
+     * time dismissal runs — and the pressed element is not inside it, so the naive algorithm closed the menu
+     * on the very press that asked for it. It opened and vanished in the same frame, which from the outside is
+     * indistinguishable from never opening at all.</p>
+     *
+     * <p><b>A counter rather than a snapshot of the stack</b>, and the difference is a real case: a context
+     * menu that is <em>already open</em> and gets re-shown at a new position by the press is in any
+     * before-snapshot, so a membership test dismisses it — right-clicking elsewhere closed the menu instead of
+     * moving it. Asking "was this shown during the press" answers both that and the first-open case with one
+     * rule, since {@code show} bumps the counter whether or not the popover was already open.</p>
+     */
+    public void lightDismiss(@Nullable UIElement target, int shownBefore) {
+        if (autoPopovers.isEmpty()) return;
+        UIElement ancestor = topmostPopoverAncestor(target);
+        // Copy and walk downwards: closing mutates the live list, and requestClose() can run arbitrary
+        // listener code that opens or closes further popovers.
+        List<UIElement> doomed = new ArrayList<>();
+        for (int i = autoPopovers.size() - 1; i >= 0; i--) {
+            UIElement popover = autoPopovers.get(i);
+            if (popover == ancestor) break;
+            if (popover instanceof com.crystalgui.ui.elements.Popover p && p.getLastShownSeq() > shownBefore) {
+                continue; // shown by the very press that is now dismissing
+            }
+            doomed.add(popover);
+        }
+        for (UIElement popover : doomed) popover.requestClose();
+    }
+
+    /** The current show sequence. Capture before dispatching a press; hand to
+     * {@link #lightDismiss(UIElement, int)} after. */
+    public int popoverShowSeq() {
+        return popoverShowSeq;
+    }
+
+    /** Bumped by {@code Popover.show*}, including a re-show of an already-open popover. */
+    public int nextPopoverShowSeq() {
+        return ++popoverShowSeq;
+    }
+
+    /**
+     * The innermost open auto popover that {@code target} belongs to, or {@code null}.
+     *
+     * <p>"Belongs to" covers DOM ancestry <em>and</em> the invoker: a press on the button that opened a
+     * popover must not light-dismiss it, or a dropdown button would close on the press and reopen on the
+     * click, visibly flickering and never staying shut.</p>
+     */
+    @Nullable
+    private UIElement topmostPopoverAncestor(@Nullable UIElement target) {
+        if (target == null) return null;
+        for (int i = autoPopovers.size() - 1; i >= 0; i--) {
+            UIElement popover = autoPopovers.get(i);
+            if (isInclusiveDescendant(target, popover)) return popover;
+            UIElement invoker = popover.getPopoverInvoker();
+            if (invoker != null && isInclusiveDescendant(target, invoker)) return popover;
+        }
+        return null;
+    }
+
+    private static boolean isInclusiveDescendant(UIElement node, UIElement of) {
+        for (UIElement el = node; el != null; el = el.getParent()) {
+            if (el == of) return true;
+        }
+        return false;
     }
 
     UIElement elementHitTest(UIElement element, float mouseX, float mouseY) {
@@ -452,6 +682,10 @@ public final class UIWindow {
         // position where the label happened to be and accepted the rest — hit testing that looked
         // random. Every widget using this before was a childless leaf, which is why it went unnoticed.
         if (!element.isHitTest()) return null;
+        // Same subtree rule, and the spec asks for it in the same words: hit-testing an inert node "must
+        // act as if the pointer-events CSS property were set to none". Only the element's OWN attribute
+        // is read — an ancestor's already returned above, on the way down.
+        if (element.isInertAttribute()) return null;
 
         Matrix4f transform = element.getRuntimeCache().worldToLocal.get();
         var local = Transform2D.apply(transform, mouseX, mouseY);

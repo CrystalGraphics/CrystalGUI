@@ -325,6 +325,18 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
             return true;
         }
 
+        // Then the close watcher. Deliberately AFTER the drag branch: a drag inside a menu must eat Escape
+        // before the menu does, because it is the innermost live interaction — the ordering hazard flagged
+        // when Dialog was researched.
+        //
+        // Asks the TOPMOST watcher, which is what makes nesting work: a dropdown opened from inside a modal
+        // closes first, and only a second Escape reaches the modal. Elements that establish no watcher —
+        // a modeless dialog, a MANUAL popover — never see Escape at all, which is the web's behaviour too.
+        if (event.pressed() && event.key() == CgUiKeyCodes.KEY_ESCAPE) {
+            UIElement watcher = window.getTopCloseWatcher();
+            if (watcher != null && watcher.requestClose()) return true;
+        }
+
         CgUiInputAdapter inputAdapter = CrystalGuiCore.getAdapter();
         final int modifiers = inputAdapter.getCurrentModifiers();
 
@@ -383,19 +395,26 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
         if (event.key() != CgUiKeyCodes.KEY_TAB) return;
         boolean reverse = Modifiers.hasShift(modifiers);
 
+        // The whole of focus trapping: while a modal is open the tab sequence IS the modal's subtree,
+        // because everything outside it is inert. Enforced here rather than inside `tabbable()` so the
+        // cached focusable-descendant answers stay free of a condition that changes for nearly every
+        // element in the tree the moment a modal opens.
+        UIElement modal = window.getActiveModal();
+        UIElement scope = modal != null ? modal : window.ui.rootElement;
+
         UIElement next;
         if (focusedElement == null) {
             next = reverse
-                    ? UITreeTraversal.lastTabbableIn(window.ui.rootElement)
-                    : UITreeTraversal.firstTabbableIn(window.ui.rootElement);
+                    ? UITreeTraversal.lastTabbableIn(scope)
+                    : UITreeTraversal.firstTabbableIn(scope);
         } else {
             next = reverse
-                    ? UITreeTraversal.previousTabbable(focusedElement)
-                    : UITreeTraversal.nextTabbable(focusedElement);
-            if (next == null) { // fell off the end — wrap around
+                    ? UITreeTraversal.previousTabbable(focusedElement, modal)
+                    : UITreeTraversal.nextTabbable(focusedElement, modal);
+            if (next == null) { // fell off the end — wrap around, inside the scope
                 next = reverse
-                        ? UITreeTraversal.lastTabbableIn(window.ui.rootElement)
-                        : UITreeTraversal.firstTabbableIn(window.ui.rootElement);
+                        ? UITreeTraversal.lastTabbableIn(scope)
+                        : UITreeTraversal.firstTabbableIn(scope);
             }
         }
         if (next == null) return; // nothing tabbable at all
@@ -475,7 +494,13 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
     }
 
     private void emitMouseDown(UIElement targetElement, int buttonId, int detail) {
-        if (targetElement != focusedElement) {
+        // A press that hit nothing normally blurs, matching the browser: click empty space and the active
+        // element goes away. But while a modal is open, "hit nothing" does not mean the user clicked bare
+        // document — it means inertness ATE the press. Treating the two the same drops the caret out of a
+        // dialog's text field the moment you click its dim backdrop, which no dialog anywhere does.
+        boolean absorbedByModal = targetElement == null && window.getActiveModal() != null;
+
+        if (targetElement != focusedElement && !absorbedByModal) {
             if (focusedElement != null) {
                 emitAndLoseFocus(focusedElement);
             }
@@ -487,8 +512,22 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
             }
         }
 
+        // Read BEFORE dispatch, and that ordering is the whole point: a handler is free to open — or re-open
+        // at a new position — a context menu from this very press, and anything shown during the dispatch must
+        // not then be dismissed by it. See UIWindow.lightDismiss(UIElement, int).
+        int shownBeforePress = window.popoverShowSeq();
+
         var event = new MouseEvent.Down(targetElement, hoverFrameData.eventPosition(), buttonId, detail);
         sendInputEvent(targetElement, event);
+
+        // Light dismiss LAST, so the press still reaches whatever it landed on. Clicking a button outside
+        // an open menu both presses that button and closes the menu, which is what browsers do — dismissing
+        // first would tear down the tree under an event that has not been delivered yet.
+        //
+        // On press rather than release: the spec pairs pointerdown with pointerup so a text-selection drag
+        // that starts inside and ends outside does not dismiss, which is a concern for selectable document
+        // content and not for menus. Recorded as a divergence rather than an oversight.
+        window.lightDismiss(targetElement, shownBeforePress);
     }
 
     private void emitMouseUp(UIElement target, int buttonId, int detail, boolean wasPressTarget) {
@@ -528,12 +567,31 @@ public final class UIInputHandler implements SystemInput.Keyboard, SystemInput.M
      */
     public void requestFocus(UIElement element) {
         if (element == null || !element.focusable()) return;
+        // focusable() sees only the inert *attribute* — the modal half is checked here, where it costs one
+        // ancestor walk per (rare) programmatic focus call instead of poisoning a per-frame cache. The web
+        // ignores focus() on an inert element in exactly this way.
+        if (element.isInert()) return;
         if (focusedElement == element) {
             element.scrollIntoView(); // already focused, but may have been scrolled away since
             return;
         }
         if (focusedElement != null) emitAndLoseFocus(focusedElement);
         emitAndSetFocus(element, FocusSource.PROGRAMMATIC);
+    }
+
+    /**
+     * Moves focus because <b>the pointer went there</b> — no ring and no scroll, exactly like the click path.
+     *
+     * <p>Separate from {@link #requestFocus} because that one is {@code PROGRAMMATIC}, which rings: a menu
+     * doing focus-follows-hover through it would draw a focus ring on whatever the mouse passed over, which
+     * is precisely the noise {@code :focus-visible} exists to avoid. Same carve-out as a click, for the same
+     * reason — you already know where your pointer is.</p>
+     */
+    public void requestPointerFocus(UIElement element) {
+        if (element == null || !element.focusable() || element.isInert()) return;
+        if (focusedElement == element) return;
+        if (focusedElement != null) emitAndLoseFocus(focusedElement);
+        emitAndSetFocus(element, FocusSource.POINTER);
     }
 
     private void emitAndSetFocus(UIElement target, FocusSource source) {

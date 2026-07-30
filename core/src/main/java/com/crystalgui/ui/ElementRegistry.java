@@ -3,6 +3,10 @@ package com.crystalgui.ui;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Checkbox;
 import com.crystalgui.ui.elements.Dialog;
+import com.crystalgui.ui.elements.Dropdown;
+import com.crystalgui.ui.elements.Menu;
+import com.crystalgui.ui.elements.MenuItem;
+import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.Scroller;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.Slider;
@@ -83,6 +87,10 @@ public final class ElementRegistry {
         // Registered so `tooltip { ... }` is a usable type selector — a Tooltip is styled entirely
         // from default.css/themes, and an unregistered class has no tag for the selector to match.
         register("tooltip", Tooltip.class, Tooltip::new);
+        register("popover", Popover.class, Popover::new);
+        register("menu", Menu.class, Menu::new);
+        register("menuitem", MenuItem.class, () -> new MenuItem(""));
+        register("dropdown", Dropdown.class, () -> new Dropdown(""));
     }
 
     /**

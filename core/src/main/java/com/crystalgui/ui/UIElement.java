@@ -86,6 +86,15 @@ public class UIElement {
 
     @Getter
     private boolean hitTest = true;
+    /** The HTML {@code inert} content attribute. See {@link #isInert()}. */
+    private boolean inert = false;
+    /** What opened this as a popover, if anything — the spec's invoker. Lives here rather than on a
+     * Popover subclass because {@link UIWindow#lightDismiss} has to consult it for any promoted element,
+     * and reaching down into a widget type from the window would invert the dependency. */
+    @Getter
+    @Setter
+    @Nullable
+    private UIElement popoverInvoker;
 
     @Getter
     private boolean isEnabled = true;
@@ -585,8 +594,96 @@ public class UIElement {
         return this;
     }
 
+    /**
+     * The HTML {@code inert} attribute — makes this element <b>and its whole subtree</b> non-interactive
+     * without hiding it.
+     *
+     * <p>An inert subtree is not hit-testable (the spec: hit-testing "must act as if the
+     * {@code pointer-events} CSS property were set to {@code none}"), cannot be focused by pointer or by
+     * {@code requestFocus}, and is skipped entirely by Tab. It still lays out, still paints, and still
+     * cascades — that is the difference between {@code inert} and {@code display: none}, and the reason
+     * both exist.</p>
+     *
+     * <p><b>A Java flag, not a CSS property</b>, because that is what it is on the web: a content
+     * attribute, set imperatively. The same call the engine already makes for
+     * {@code pointer-events: none} ({@link #setHitTest}), and the same reasoning that made top-layer
+     * promotion imperative rather than a declaration.</p>
+     *
+     * <p>Inertness only ever propagates <em>down</em>. A descendant cannot opt back out — there is no
+     * {@code inert="false"} on the web either. The one carve-out in the whole model is a modal dialog,
+     * which is not expressed with this flag at all; see {@link #isInert()}.</p>
+     */
+    public UIElement setInert(boolean inert) {
+        if (this.inert == inert) return this;
+        this.inert = inert;
+        // Everything below just became unreachable (or reachable) by Tab, and the cache that answers
+        // "is anything focusable in here" is keyed on this element as the subtree root.
+        invalidateFocusableChain();
+        notifyIdentityChanged();
+        return this;
+    }
+
+    /** This element's own {@code inert} attribute, ignoring ancestors and modals. */
+    public boolean isInertAttribute() {
+        return inert;
+    }
+
+    /**
+     * The spec's full "is this node inert" predicate: {@code true} when this element or any ancestor
+     * carries {@link #setInert}, <b>or</b> when a modal dialog is open and this element is not inside
+     * it.
+     *
+     * <p>The second half is why this is not simply an inherited flag. A modal makes <em>everything
+     * else</em> in the document inert, which cannot be spelled by setting the flag on a common ancestor:
+     * the root's subtree includes the modal itself. The spec words it as a separate condition on the
+     * document's active modal dialog, and so does {@link UIWindow#isModalBlocked}.</p>
+     *
+     * <h3>Three enforcement points, deliberately not one</h3>
+     * <p>Consulting this single predicate everywhere would be tidier and wrong: the modal half changes
+     * for nearly every element in the tree the instant a modal opens, so anything <em>cached</em> that
+     * depended on it would need mass invalidation. Instead each mechanism enforces at the level where it
+     * is cheap and correct:</p>
+     * <ul>
+     *   <li><b>{@link #focusable()}</b> and the {@code hasFocusableDescendant} cache see only the
+     *       <em>attribute</em> half ({@link #isInertSubtree()}) — no global invalidation.</li>
+     *   <li><b>Tab</b> is scoped to the modal's subtree at the entry point, which is the focus trap.</li>
+     *   <li><b>Hit-testing</b> skips inert subtrees, and the main tree wholesale while a modal is open.</li>
+     *   <li><b>{@code requestFocus}</b> consults this, the full predicate — a programmatic focus call is
+     *       rare and must respect a modal.</li>
+     * </ul>
+     */
+    public boolean isInert() {
+        if (isInertSubtree()) return true;
+        UIWindow window = getAttachedWindow();
+        return window != null && window.isModalBlocked(this);
+    }
+
+    /** The attribute half of {@link #isInert()} — this element or an ancestor. No modal condition, so it
+     * is safe for cached predicates to depend on. */
+    private boolean isInertSubtree() {
+        for (UIElement el = this; el != null; el = el.getParent()) {
+            if (el.inert) return true;
+        }
+        return false;
+    }
+
+    /**
+     * The <b>close-watcher</b> hook — "close this if you can", asked when Escape is pressed.
+     *
+     * <p>The web's {@code CloseWatcher} is a general primitive (dialogs and popovers both build on it),
+     * so this is a general element hook rather than something wired only to {@code Dialog}. Default is
+     * to decline, which is what an ordinary element should do.</p>
+     *
+     * @return whether this element consumed the close request. {@code false} lets Escape fall through.
+     */
+    public boolean requestClose() {
+        return false;
+    }
+
     public boolean focusable() {
-        return this.isEnabled() && this.getFocusPolicy() != FocusPolicy.NONE && this.style.taffyBridge.style.display != TaffyDisplay.NONE;
+        return this.isEnabled() && this.getFocusPolicy() != FocusPolicy.NONE
+                && this.style.taffyBridge.style.display != TaffyDisplay.NONE
+                && !isInertSubtree();
     }
 
     /**
@@ -1916,6 +2013,10 @@ public class UIElement {
             // something nobody can see. Found via TabView, whose inactive panes are hidden exactly
             // this way while their content stays display:flex.
             if (element.style.taffyBridge.style.display == TaffyDisplay.NONE) return false;
+            // Same shape, same reason: an inert subtree is unreachable in its entirety. Checking the
+            // element's OWN attribute here (rather than letting focusable() walk ancestors on every
+            // node) is what keeps this cache free of the modal condition and O(n) instead of O(n*depth).
+            if (element.inert) return false;
             if (element.focusable()) return true;
             for (UIElement child : element.getChildren()) {
                 if (child.getRuntimeCache().hasFocusableDescendant.get()) return true;

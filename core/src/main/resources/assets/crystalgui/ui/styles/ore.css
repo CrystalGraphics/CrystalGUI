@@ -75,6 +75,7 @@
  * is here for its focus ring's shape — it paints nothing, but paintOutline takes the ring's corners
  * from border-radius regardless. */
 button,
+dropdown,
 tab,
 textfield,
 switch,
@@ -162,7 +163,9 @@ scroller .__tail__:hover {
  * Ore's panel, and a theme cannot know what those are. Widget-internal labels are already covered —
  * `color` is inheritable and Ore sets it on the widget roots. */
 
-button {
+/* `dropdown` alongside `button`: a Dropdown is a Button in Java, but the cascade matches tags, not
+ * Java supertypes. Without it a themed dropdown renders with no chrome at all. */
+button, dropdown {
     background: asset("crystalgui:ore", "button");
     color: #222222;
     text-shadow: false;
@@ -174,7 +177,7 @@ button {
     justify-content: center;
     align-items: center;
 }
-button:hover {
+button:hover, dropdown:hover {
     background: asset("crystalgui:ore", "button-pressed");
 }
 button:active {
@@ -183,13 +186,13 @@ button:active {
      * "#FFDDDDDD" would be light RED at 87% alpha, not a gray tint. */
     background-color: #DDDDDD;
 }
-button:disabled {
+button:disabled, dropdown:disabled {
     background: asset("crystalgui:ore", "button-disabled");
     color: #666666;
 }
 /* `outline` is layout-free — unlike border-width, which feeds Taffy and would resize the button.
  * Ore's WHITE_BORDER hairline, the same sprite LDLib2 uses for its own focus-overlay. */
-button:focus-visible {
+button:focus-visible, dropdown:focus-visible {
     outline: asset("crystalgui:ore", "focus-ring");
 }
 

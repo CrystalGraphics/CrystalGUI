@@ -226,8 +226,18 @@ public final class UITreeTraversal {
 
     /** Previous element in the Tab sequence, or {@code null} at the start of the document. */
     public static UIElement previousTabbable(UIElement current) {
+        return previousTabbable(current, null);
+    }
+
+    /**
+     * As {@link #previousTabbable(UIElement)}, but never climbs above {@code scope} — <b>this is the
+     * focus trap</b>. Pass the active modal dialog and Shift+Tab cannot walk out of it, which is what
+     * "everything outside a modal is inert" means for sequential navigation. {@code null} scope means the
+     * whole document.
+     */
+    public static UIElement previousTabbable(UIElement current, UIElement scope) {
         UIElement node = current;
-        while (node.getParent() != null) {
+        while (node != scope && node.getParent() != null) {
             List<UIElement> siblings = node.getParent().getChildren();
             for (int i = node.getSiblingIndex() - 1; i >= 0; i--) {
                 if (!siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) continue;
@@ -242,13 +252,18 @@ public final class UITreeTraversal {
 
     /** Next element in the Tab sequence, or {@code null} at the end of the document. */
     public static UIElement nextTabbable(UIElement current) {
+        return nextTabbable(current, null);
+    }
+
+    /** As {@link #nextTabbable(UIElement)}, but never climbs above {@code scope}. @see #previousTabbable(UIElement, UIElement) */
+    public static UIElement nextTabbable(UIElement current, UIElement scope) {
         for (UIElement child : current.getChildren()) {
             if (!child.getRuntimeCache().hasFocusableDescendant.get()) continue;
             UIElement found = firstIn(child, TABBABLE);
             if (found != null) return found;
         }
         UIElement node = current;
-        while (node.getParent() != null) {
+        while (node != scope && node.getParent() != null) {
             List<UIElement> siblings = node.getParent().getChildren();
             for (int i = node.getSiblingIndex() + 1; i < siblings.size(); i++) {
                 if (!siblings.get(i).getRuntimeCache().hasFocusableDescendant.get()) continue;
