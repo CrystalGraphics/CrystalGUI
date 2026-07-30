@@ -138,6 +138,7 @@ public final class UIDragController {
     private void hideGhost(UIElement g) {
         g.removeFromTopLayer();
         StyleGroup.importantPipeline(g.getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
+
     }
 
     /**
@@ -417,6 +418,7 @@ public final class UIDragController {
     private void clear() {
         // Before the fields go — hideGhost demotes, and demotion needs the element still attached.
         if (ghost != null) hideGhost(ghost);
+        ghost = null;
         source = null;
         listener = null;
         payload = null;
