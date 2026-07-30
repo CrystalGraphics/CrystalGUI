@@ -53,6 +53,19 @@ actually adds it.
 Every one is exposed as a `public static final String` constant on its widget — reference
 `Slider.THUMB_CLASS`, not the literal.
 
+### A widget's CSS identity is its tag, not its Java supertype
+
+`Dropdown extends Button`, `MenuItem extends Button`, `Tab extends Button` — and **none of them are matched
+by `button { … }`**, because a type selector matches the registered tag, exactly as in CSS. Java inheritance
+is invisible to the cascade.
+
+This is not theoretical: `Dropdown` shipped laying out at **zero height**, because `min-height` is where a
+Button gets its box and no rule reached it. `default.css` now names `dropdown` alongside `button` throughout
+(and so does `ore.css`, or a themed dropdown renders with no chrome at all).
+
+> When you subclass a widget, decide explicitly: extend the existing selector list if it should look the
+> same, or write it its own block if it should not. Doing neither gives you an invisible control.
+
 ### No sizes, no timings, no colours in Java
 
 Widgets write structure and state. `default.css` gives every widget functional geometry so it works
@@ -427,8 +440,20 @@ reusing it would be actively misleading.
 ordinary flow and ordinary stacking. That is what lets several editor panels coexist and order among
 each other — and against page content — by `z-index`.
 
-**Modal is not implemented.** `showModal()` makes everything outside the dialog `inert`, and this
-engine has no inertness concept at all. That is a separate primitive, not a flag on this class.
+**`showModal()` is implemented**, and it is where `inert` earns its keep. It does three things `show()`
+does not: joins the **top layer**, makes everything outside it **inert**, and **closes on Escape** via a
+close watcher (a cancelable `onCancel`, then `close()`). *Focus trapping is not a fourth feature* — it
+falls out of inertness, which is why there is no trap code anywhere. Nesting works and unwinds in order.
+
+A modal also gets a `__backdrop__` scrim: an internal child promoted to the top layer just *before* the
+dialog, so it paints behind it and covers the whole window (`100%` against the initial containing block,
+same as the dialog's own offsets). Not a `::backdrop` pseudo-element — the style engine has none — but the
+same idea via the substitute the widgets already use. It is `setHitTest(false)` and inert, because it is
+decoration rather than a control.
+
+> **Escape on a *modeless* dialog still does nothing**, and that is not an omission — only `showModal()`
+> establishes a close watcher, so browsers behave the same way. A live drag also eats Escape ahead of the
+> modal, because a drag is the innermost live interaction.
 
 **Escape does not close it, and that is correct.** Only `showModal()` "establishes a close watcher",
 the machinery that turns a close request into a `cancel` event and then a close — so browsers do not
@@ -467,8 +492,82 @@ whole title matters more than the button.
 > permits it at all — a flex item's automatic minimum is its min-content size, which for a `nowrap` line
 > is the entire line.
 
-- Tag `dialog` · internal `__title-bar__`, `__content__`, `__close__`, and `__label__` on the title text · Scene: `cgui-gallery`
+- Tag `dialog` · internal `__title-bar__`, `__content__`, `__close__`, `__label__` on the title text,
+  and `__backdrop__` when shown modally · Scenes: `cgui-gallery` (Dialog page, modal page)
 - Combines with `resize` (§12): the gallery's second panel is both movable and resizable.
+
+---
+
+## 11b. `Popover`, `Menu`, `MenuItem`, `Dropdown`
+
+The Popover API port, plus the two widgets on top of it. **A dropdown and a context menu are the same
+class** — `Menu` — anchored to an element or to a point, which is how the web does it too.
+
+```java
+Menu menu = new Menu();
+parent.addChild(menu);                    // must be in the tree to be promoted
+menu.addItem("Cut").attachListener(...);
+menu.showFor(button, button);             // dropdown-style: under an element
+menu.showAt(x, y, null);                  // context menu: at the pointer
+
+Dropdown quality = new Dropdown("Quality");
+quality.addOptions("Low", "Medium", "High");
+quality.attachSelectionListener(index -> ...);
+```
+
+`Popover.Mode.AUTO` gets light dismiss + Escape; `MANUAL` gets neither. Placement is
+`setPreferredSide` + `setOffset`, resolved by `AnchoredPlacement` — **never set `left`/`top` yourself on
+one**, it fights placement every frame.
+
+`Menu` refuses public children (items only), focuses its first item on open, and handles Up/Down (wrapping,
+per the ARIA pattern), Home/End; Enter/Space comes from `Button`. The whole menu is **one Tab stop** — its
+items are `CLICK_NOT_TABBABLE`, and unlike `Tab` the stop does not rove, because an open menu holds focus
+outright and Tab has nothing to do inside it.
+
+**Submenus open on hover**, after `Menu.DEFAULT_SUBMENU_DELAY` (0.4s — Windows' own `MenuShowDelay` default;
+`setSubmenuDelay` to change it). Instant opening makes submenus flash as the pointer sweeps past. `addSubmenu`
+also adds a `>` indicator in the `__post-icon__` slot (`__submenu-arrow__`, replaceable via `setPostIcon`) and
+marks the row `__has-submenu__`. Right arrow opens immediately — a keypress is never an accidental sweep;
+Left closes back into the parent.
+
+> **The fade-in hangs off a state class, not a starting style.** A popover opens out of `display: none`, so a
+> `transition` on `opacity` has nothing to interpolate *from* — the wall `@starting-style` exists to solve.
+> `Popover` toggles `__open__`, and `default.css` keeps a **closed** popover at `opacity: 0` and an open one
+> at `1`, which gives the transition a real from-value. The duration lives in the sheet; drop that line and
+> popovers snap in.
+>
+> An earlier attempt hand-rolled the starting style — one frame of `opacity: 0` at IMPORTANT origin, removed
+> on the next tick — and **silently defeated itself**: that `1 → 0` write is a transitionable change too, so
+> the engine eased *toward* zero and the removal retargeted it back before it arrived. Nothing visibly faded,
+> and no test noticed. Don't reintroduce it.
+
+**Choosing a leaf closes the whole chain; Escape peels one level.** `Popover.hideChain()` walks the invoker
+chain (`parentPopover()`) and closes all of it — what the ARIA pattern means by "activates the item and closes
+the menu". `hide()` alone closes a popover and its *descendants*, which leaves a submenu's parent standing.
+
+> **Pass an invoker only for a *toggle*.** `showFor`/`showAt`'s invoker is excluded from light dismiss, which
+> is what a dropdown button needs (its own press must not close the menu it just opened) and wrong for a
+> context menu — naming its trigger surface makes that whole surface unable to dismiss the menu. Nothing is
+> lost by passing `null`: a popover opened during a press is already protected from that press.
+
+**Menus do focus-follows-hover.** Hovering a row focuses it via `UIInputHandler.requestPointerFocus`, so
+exactly one row is ever highlighted and the keyboard continues from wherever the pointer left off.
+`requestPointerFocus` is the no-ring, no-scroll variant — a focus ring trailing the mouse is what
+`:focus-visible` exists to prevent, and `menuitem`'s row highlight is its focus affordance instead.
+
+**Submenus go through `Menu.addSubmenu(label, child)`**, never `addItem` plus a listener. It wires the three
+things that are easy to forget: the item does not close its parent (an ordinary item does), the child anchors
+to the *row* rather than to the menu, and it prefers `Side.RIGHT` so it sits beside rather than on top.
+`MenuItem.getSubmenu()`/`hasSubmenu()` expose the relationship. Closing a parent closes its submenus.
+
+`Dropdown` is a `Button` that owns a `Menu` as an internal child and keeps its label in step with the
+selection. Pressing it **toggles**. Its `writeState` records the **index, not the text** — the label is
+derived, so restoring the text would put the right words on a control that still thinks nothing is selected.
+
+- Tags `popover`, `menu`, `menuitem`, `dropdown` · internal `__items__` (Menu), `__menu__` (Dropdown)
+- Scene: `cgui-gallery` (menus page — dropdown, context menu, submenu)
+- Known gap: a decoded `menu` comes back **empty**, and a `dropdown` with no options — items and options
+  live in internal containers, the same gap `TabView` has with its tabs.
 
 ---
 

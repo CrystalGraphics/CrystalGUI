@@ -12,15 +12,16 @@ draft on 2026-07-29.
 | **P2** | Pointer capture · drag protocol · payload/drop · ghost | ✅ done · visually confirmed |
 | **P3** | RPC soak · mc1201 decision | ⏸ **deferred to last** (see P3) |
 | **P4** | Dialog · CSS `resize` · DialogManager · 8-way handles · CSS `cursor` | ✅ done · visually confirmed |
-| **P5** | ~~Platform abstractions~~ (deferred) · `TextElement` gaps · composite tab stops | ✅ **5.2 + 5.3 done** · visually confirmed (5.1 deferred) |
+| **P5** | ~~Platform abstractions~~ (deferred) · `TextElement` gaps · tab stops · `inert` + modals · popovers/menus | ✅ **5.2–5.5 done** · visually confirmed (5.1 deferred) |
 | **P6** | Editor windows · graph view | ⬜ all prerequisites now exist |
 
-**Suite: 652** (558 `test` + 94 `headlessTest`), 0 failures, 0 skipped.
-Last commits: `3bbcf55` DialogManager · `5981cef` handles+cursor · `72f32f7` test cleanup.
+**Suite: 747** (653 `test` + 94 `headlessTest`), 0 failures, 0 skipped.
+Last commits: `0ce9df1` text CSS + tab stops · `3bbcf55` DialogManager · `5981cef` handles+cursor.
 
-**Nothing is blocked on me.** With 5.2 and 5.3 landed, every engine-shaped item is done except the two
-deliberately deferred ones (P3, 5.1). **P6 is next**, and 6.1 is the first item that genuinely needs a
-re-plan before starting — it is five features wearing one bullet.
+**Nothing is blocked on me.** With 5.5 landed, **the top-layer branch of the spine is closed** and every
+engine-shaped item is done except the two deliberately deferred ones (P3, 5.1). What remains is P3.1 (a
+cheap validation scene) and **P6**, whose 6.1 needs a re-plan before starting — it is five features wearing
+one bullet.
 
 ---
 
@@ -79,8 +80,9 @@ every consumer dramatically cheaper; building them fifth means retrofitting five
 
 ```
 P1 Top layer ✅ ─┬──> tooltips ✅
-                 ├──> dropdowns, context menus, modals   (unbuilt, now cheap)
-                 ├──> floating editor panels
+                 ├──> modals ✅ (5.4)  ──> inert ✅ (the primitive modals needed)
+                 ├──> dropdowns ✅ · context menus ✅ (5.5, via Popover)
+                 ├──> floating editor panels ✅ (Dialog + DialogManager + resize)
                  └··> drag ghost ✅ ┐        (soft — ghost only)
                                     ▼
                   P2 drag protocol ✅ ──┬──> moving windows      (P4.1)
@@ -89,8 +91,13 @@ P1 Top layer ✅ ─┬──> tooltips ✅
                                         └──> reorderable tabs
 ```
 
-**Both primitives now exist.** Everything below them is composition rather than new mechanism —
-which was the whole reason for building them first. P4 is unblocked.
+**Both primitives now exist, and every consumer on the diagram is built.** Everything below them turned
+out to be composition rather than new mechanism, which was the whole reason for building them first.
+
+> **Two consumers needed a primitive of their own after all**, and neither was predicted here: modals
+> needed `inert` (5.4), and menus needed **light dismiss** (5.5). Both are small, both are element-level,
+> and both fanned out the same way the originals did — `inert` is what makes focus trapping fall out for
+> free, and light dismiss is what makes nested menus possible at all.
 
 That ordering fell out of the code, not taste. `UIElement.drawSubtree` paints depth-first;
 `paintChildren` pushes ancestor scissor and opacity/mask push FBO layers — so **nothing painted
@@ -792,6 +799,145 @@ temporarily reverting `isTabbable()`.
 
 ---
 
+### 5.4 `inert` + modal dialogs · `DONE` (2026-07-30)
+
+**Promoted from prose to a real item** on 2026-07-30. It had been living only inside P4.1's research table
+("we have no `inert` concept at all — new primitive, scope it separately") and a passing note in 5.3, so it
+was invisible to anyone reading the list — exactly how something real quietly becomes a surprise. It was
+also the last remaining *foundation* piece: P6.1's draggable panels want modals.
+
+#### The primitive
+
+`inert` is an HTML **content attribute**, so it is a Java flag (`setInert`), not a CSS property — the same
+call shape `setHitTest` already has, and the same reasoning that made top-layer promotion imperative rather
+than declarative. (CSS UI does have a newer `interactivity: inert`, but the shipped web platform is the
+attribute, and this engine follows what ships.)
+
+An inert subtree is unhittable, unfocusable and skipped by Tab, while **still laying out and still
+painting**. That last part is the entire reason it exists next to `display: none`, and it is pinned by a
+test — if `inert` ever stops laying out it has become a worse spelling of hiding.
+
+#### The load-bearing decision: four enforcement points, not one predicate
+
+`isInert()` is the spec's full condition — own/ancestor attribute **or** outside an open modal. Consulting
+it everywhere would be tidier and wrong: the modal half changes for nearly every element in the tree the
+instant a modal opens, so any *cache* depending on it would need mass invalidation. So:
+
+| Mechanism | Sees | Why there |
+|---|---|---|
+| `focusable()`, `hasFocusableDescendant` | attribute half only | keeps a per-frame cache free of a global condition |
+| Tab / Shift+Tab | scoped to the modal at the entry point | **this is the focus trap** — no trap code exists |
+| Hit-testing | skips inert subtrees; skips the main tree wholesale under a modal | matches "act as if `pointer-events: none`" |
+| `requestFocus` | the full predicate | rare enough to afford an ancestor walk, and must respect a modal |
+
+Each is pinned independently, verified by neutering all four in turn and confirming a *different* test
+fails each time. A "simplify to one predicate" refactor that missed one would otherwise look green.
+
+#### Modals
+
+`showModal()` does three things `show()` does not: joins the top layer, makes everything else inert, and
+closes on Escape via a close watcher (cancelable `onCancel`, then `close()`). **Focus trapping is not a
+fourth feature** — it falls out of inertness. Nesting works and unwinds in order.
+
+- `UIWindow` owns the modal stack, because modality is about inertness rather than painting and the spec
+  hangs it off the `Document`.
+- `UIElement.requestClose()` is a **general** close-watcher hook, since the web's `CloseWatcher` is a
+  general primitive rather than a dialog feature.
+- The Escape ordering hazard flagged back in P4.1 held up: a live drag eats Escape before the modal does,
+  because a drag is the innermost live interaction. Pinned.
+- **`::backdrop` shipped after all**, despite P1 recording "no pseudo-elements" as a divergence — as an
+  internal child promoted to the top layer just *before* the dialog, so it paints behind and covers the
+  window. A modal with no scrim is visually indistinguishable from a modeless one, which would have made
+  the harness page useless.
+
+#### Two bugs found while building it
+
+1. **A detached modal wedged the entire window.** `unregisterElement` removed it from the top layer but not
+   from the modal stack, so everything stayed inert with nothing left to interact with — unrecoverable from
+   the user's side, and strictly worse than an ordinary leak. Now popped there.
+2. **Clicking a modal's backdrop blurred the focused control.** A press that hits nothing normally blurs,
+   matching the browser — but under a modal "hit nothing" means *inertness ate the press*, not that the
+   user clicked bare document. Conflating them drops the caret out of a dialog's text field the moment you
+   click its dim area, which no dialog anywhere does.
+
+37 tests across `InertTest` (13) and `ModalDialogTest` (24), plus a gallery `modal` page.
+
+---
+
+### 5.5 Popovers — dropdowns and context menus · `DONE` (2026-07-30)
+
+The last top-layer consumer, and the item that closes that branch of the spine. Prompted by noticing the
+spine still listed "dropdowns, context menus, floating editor panels" as unbuilt when one of the three had
+already shipped as `Dialog` + `DialogManager` + `resize`.
+
+#### One primitive, one extraction, the rest composition
+
+| | |
+|---|---|
+| **New** | **Light dismiss** — press-outside-to-close, with a popover stack. Nothing in `core/` did this. |
+| **Extracted** | `AnchoredPlacement` — pulled out of `Tooltip` at the moment a second consumer appeared, not after. |
+| **Reused** | Top layer (P1), the close-watcher hook (5.4), one-tab-stop composites (5.3). |
+
+**A dropdown and a context menu are the same widget.** `Menu`, anchored to an element or to a point —
+which is how the web does it too, and why there is no `ContextMenu` class. `Dropdown` is a thin `Button`
+that owns a `Menu` and remembers a selection; that *is* the whole difference between the two (a menu does
+things, a dropdown remembers one).
+
+#### The design calls
+
+- **`Popover` is a base class, not an attribute**, diverging from the web deliberately. Unlike `inert` —
+  one property with subtree semantics — popover-ness is a bundle of behaviour that is meaningless
+  piecemeal. What genuinely has to be element-level to work *is* on `UIElement`: the `popoverInvoker` link,
+  which light dismiss must consult for any promoted element.
+- **Two stacks on `UIWindow`, not one.** `autoPopovers` drives light dismiss; `closeWatchers` drives
+  Escape. The same element is routinely in one and not the other — a modal has a close watcher but is not
+  light-dismissable; a `MANUAL` popover is in neither. Collapsing them gets one of those wrong.
+- **Light dismiss runs *after* the mouse-down dispatch**, so the press still reaches what it landed on;
+  browsers both dismiss and activate. It fires on press rather than the spec's press/release pair, which
+  exists for text-selection drags this engine has no equivalent of. Recorded as a divergence.
+- **The invoker counts as inside its popover.** Without that carve-out a dropdown button dies on its own
+  press — dismissed on mouse-down, reopened by the click, flickering and never closing.
+
+#### Three bugs found while building it
+
+1. **`AnchoredPlacement` had preferred/opposite room swapped** for `Side.TOP` and `Side.LEFT`. A
+   TOP-preferring popup measured the room *below* it, so it never flipped and clamped to the top edge
+   instead. Caught immediately by the extracted maths being testable headlessly — which is most of the
+   argument for extracting it.
+2. **Generalising Escape broke modals.** Moving from "ask the active modal" to "ask the topmost close
+   watcher" left `Dialog.showModal` never registering one, so modals silently stopped responding to Escape.
+   Exactly the regression a second consumer of a 5.4 mechanism should be expected to expose.
+3. Two of my own tests were **modelling the thing wrong** rather than finding bugs: a submenu whose invoker
+   was its entire parent popover (so every press in the parent counted as a press on the child's invoker),
+   and a press point that lay inside *both* the parent and the child.
+
+#### What the visual passes added on top
+
+The item shipped once and was then reopened **five times** by looking at it, which is worth recording as a
+pattern rather than a list of fixes — every one of these was semantically correct code doing exactly what it
+said, and none was catchable without a person driving the widget:
+
+| Reported as | Actually |
+|---|---|
+| "I right-clicked but nothing happened" | The menu opened and light-dismissed itself in the same frame |
+| "quality... has no chrome" | `Dropdown`'s tag is not `button`, so no button rule reached it — zero height |
+| "no menu appears" | It rendered perfectly, in dark-on-dark camouflage |
+| "clicking More... closes the menu" | `Menu` closed on *every* activation, submenu rows included |
+| "it chose Ultra and left the parent open" | `hide()` closes descendants, not ancestors — leaves needed `hideChain()` |
+| "Add node is still ringed while I hover Paste" | Hover and focus were separate highlights; menus now do focus-follows-hover |
+| "left-clicking the canvas doesn't close it" | I had named the canvas as the *invoker*, which light dismiss spares |
+| "right-clicking elsewhere closes it instead of moving it" | The pre-dispatch snapshot could not express a *re-show*; replaced with a show counter |
+| "it's not fading" | The hand-rolled starting style eased toward zero and got retargeted back |
+
+Two features were added from the same passes, both matching the ARIA pattern rather than only Windows:
+**submenus open on hover** (0.4s, Windows' own `MenuShowDelay` default) with a `>` indicator and Right/Left
+arrow support, and **a fade-in** owned entirely by CSS.
+
+95 tests across `PopoverTest` (43), `ModalDialogTest` (28), `InertTest` (13) and `AnchoredPlacementTest` (11),
+plus gallery `modal` and `menus` pages.
+
+---
+
 # P6 — Downstream applications
 
 ### 6.1 Editor windows · `TODO`
@@ -817,6 +963,162 @@ P1, P2 and 6.1 underneath it. Big enough to need its own design doc when it come
 ---
 
 # Changelog
+
+- **2026-07-30** — **Submenus open on hover, with a `>` indicator — requested after comparing against the
+  Windows shell menu.** Both are in the ARIA pattern too, so this is convergence rather than a one-off.
+  - **Hover-to-open with a delay.** `0.4s`, which is Windows' own `MenuShowDelay` default rather than a
+    guess — sweeping the mouse down a menu crosses every row on the way, so opening instantly makes submenus
+    flash open and shut under the cursor. Settable per menu. Moving onto an ordinary row closes whatever
+    submenu was showing, or a sweep leaves a trail of them stacked open.
+  - **A quick fade-in, owned by CSS** — and it took two attempts, the first of which is the more instructive.
+    A popover opens out of `display: none`, so a `transition` on `opacity` has nothing to interpolate *from*;
+    the web hit the same wall and answered it with `@starting-style`, which this engine has no equivalent of.
+    - **Attempt one hand-rolled the starting style**: one frame of `opacity: 0` at IMPORTANT origin, removed
+      on the next tick. It **silently defeated itself** — that `1 -> 0` write is a transitionable change too,
+      so the engine eased *toward* zero and the removal retargeted it back before it ever arrived. Nothing
+      visibly faded. No test noticed, because none of them looked at opacity at all.
+    - **Attempt two is the standard CSS shape**: `Popover` toggles an `__open__` class, and the sheet keeps a
+      closed popover at `opacity: 0`. The resting value *is* the from-value, so there is nothing to
+      hand-roll. Duration and easing stay in `default.css` per the no-timings-in-Java rule; a theme that
+      drops the line gets a popover that snaps in.
+    - Now pinned by asserting the **inputs** — resting value, state class, and an ANIMATION-origin candidate
+      proving a transition started. Deliberately not the intermediate opacity: `TransitionEngine` advances on
+      `System.nanoTime()` and ignores the delta it is handed, so a ramp assertion would have to sleep, and a
+      timing assertion that sleeps is one that eventually flakes and then gets deleted. Both invariants are
+      now in `AGENTS.md`.
+  - **Right/Left arrows** complete the ARIA pattern: Right opens a submenu immediately (a keypress is never
+    an accidental sweep, so it bypasses the delay), Left closes back into the parent.
+  - **Third bug found on the way**: right-clicking elsewhere while a context menu was open *closed* it instead
+    of moving it. The pre-dispatch **snapshot** that stops a popover self-dismissing could not express this —
+    an already-open menu is in the snapshot, so a membership test dismissed it. Replaced with a monotonic
+    **show counter**: "was this shown during the press" answers the first-open case and the re-show case with
+    one rule. Verified to fail against the old code.
+
+- **2026-07-30** — **Two more, and one of them was self-inflicted two commits earlier.**
+  - **Hover and focus both highlighted, so two rows lit up at once.** Hover a row, arrow down, and the mouse's
+    row stayed lit alongside the keyboard's. Not expressible in engine state — CSS `:hover` correctly stays
+    where the mouse is — so the fix is to **delete `menuitem:hover` entirely**: since menus do
+    focus-follows-hover the hovered row already *is* the focused row, making the hover rule pure redundancy
+    that can only ever disagree with the truth. Focus is now the single source of the active row. Pinned by
+    asserting on the **sheet**, since that is where the decision lives.
+  - **A context menu could not be dismissed by clicking the surface it came from.** My own doing: when the
+    self-dismiss bug was fixed I also changed the harness to name the trigger as the popover's *invoker*,
+    calling it "correct usage". It is correct for a **toggle** — a dropdown button's own press must not close
+    the menu it just opened — and wrong for a context menu, because an invoker is excluded from light dismiss,
+    so the entire canvas became unable to dismiss its own menu. The engine had stopped needing an invoker for
+    self-dismissal the moment the pre-dispatch snapshot landed, so the change was both unnecessary and
+    harmful. `Popover.showAt`'s javadoc now says so explicitly.
+  - Both verified to fail against the old code.
+
+- **2026-07-30** — **Two menu-semantics bugs, both spotted by eye and neither a crash.** They are the kind
+  that only a person using the widget finds, because the code does exactly what it says.
+  - **Choosing a leaf in a submenu left the parent open.** `hide()` closes a popover and its *descendants*,
+    which for a submenu leaves its parent standing — so you picked an option and were still staring at the
+    menu you picked it from. The ARIA pattern is explicit that activating a menuitem closes *the menu*, and
+    every native menu collapses the full chain. Added `Popover.hideChain()` and `parentPopover()`, the latter
+    derived from the invoker so there is no second parent link that could disagree with the one dismissal
+    already reasons about. **Escape still peels one level** — that difference is now pinned both ways.
+  - **Two rows highlighted at once**: the one the keyboard had focused and the one under the mouse. Menus now
+    do **focus-follows-hover**, like native menus and the ARIA pattern, which also keeps the input modes in
+    step — Down after hovering continues from the pointer instead of jumping back. Needed a new
+    `UIInputHandler.requestPointerFocus`, because `requestFocus` is PROGRAMMATIC and *rings*, and a focus ring
+    trailing the mouse across a menu is precisely the noise `:focus-visible` exists to avoid. Same carve-out
+    the click path already made.
+  - Both fixes verified to fail against the old code. Two of my own tests were wrong first: `PopoverTest`
+    installs no stylesheet, so menu rows are 0x0 and unhoverable unless the test sizes them itself.
+
+- **2026-07-30** — **Submenus: two more bugs, and an API that was missing.** `Menu` closed on *every* item
+  activation — right for a leaf, wrong for a row that opens a submenu, so pressing "More..." opened the child
+  and shut the menu it belonged to in the same breath. The submenu appeared with no parent behind it, which
+  reads far more like a placement bug than what it was.
+  - The fix is an **API**, not a flag on the call site: `Menu.addSubmenu(label, child)` wires the three things
+    a submenu needs and a caller should not have to remember — the item does not close its parent, the child
+    anchors to the *row* rather than the menu, and it prefers `Side.RIGHT`. `MenuItem.getSubmenu()` is ARIA's
+    `aria-haspopup` relationship made explicit.
+  - **The reverse case was also broken**: closing a parent left its submenu orphaned in the top layer, still
+    painting and still taking Escape with nothing on screen to explain it. `Popover.hide()` now takes
+    everything above it with it — the spec's "hide all popovers until", reusing `lightDismiss(this)`, which
+    already means exactly that.
+  - Four tests, all verified to fail against the old code.
+
+- **2026-07-30** — **Three bugs from the menus visual pass.** All three shipped green, and the reason each
+  escaped is more interesting than the fix.
+  - **A popover opened from a mouse-down handler dismissed itself.** Light dismiss runs after the down event
+    is delivered, so a handler that opens a context menu on press had already pushed it onto the stack — and
+    the pressed element is not inside it, so dismissal closed it in the same frame. From the outside that is
+    *identical to never opening*, which is exactly how it was reported ("I right-clicked but nothing
+    happened"). Every existing test opened popovers by calling `showAt`/`showFor` directly rather than from
+    inside a dispatch, so none of them could see it. Fixed by dismissing only what was open **before** the
+    dispatch, so it holds with no invoker at all — an invoker also spares a popover (and is the web's own
+    mechanism) but relying on that alone leaves the no-invoker case silently self-destructing.
+  - **`Dropdown` laid out at zero height.** A `Dropdown` is a `Button` in Java, but a type selector matches
+    the **tag**, so `button { min-height: 14px; … }` never reached `dropdown` — Java inheritance is invisible
+    to the cascade. Both sheets now name it. Recorded as a convention in `docs/CGUI_WIDGETS.md`, because it
+    will happen again the next time anyone subclasses a widget.
+  - **Menus rendered perfectly and were invisible.** `#2A2F36` with a `#00000060` outline is within a few
+    points of every dark surface in the sheet, and the items inherited the *button's* dark `#222222` text
+    colour onto a dark popover. A popup that cannot be told apart from what is behind it has failed at its
+    only job, so this is a functional defect rather than styling.
+  - Two things I suspected and was **wrong** about, both checked rather than assumed: menus *do* auto-size to
+    their widest item (verified with a long label — 60px was simply `min-width` with short labels fitting
+    inside it), and closed menus *are* correctly `display: none` and take no space.
+
+- **2026-07-30** — **Two bugs from the modal visual pass, and the older of them is the significant one.**
+  Both reported from the harness; both are the same root cause wearing two faces.
+  - **Top-layer promotion had never reparented a Taffy node.** `UIWindow.rootNodeId` was a field that
+    `registerElement` was supposed to fill in and never did, so it was permanently `null` — and *both* of
+    `TopLayer`'s reparenting methods bail out silently on a null root. The divergence promotion exists to
+    implement (a promoted element's containing block is the initial containing block) was **inert from the
+    day it was written**, back in P1.
+  - Nothing caught it for a reason worth remembering: every promoted element until now had an explicit pixel
+    size and absolute offsets, so the wrong percentage basis had nothing to show. A **modal backdrop** is the
+    first promoted element sized in `%`, and it came out the size of its dialog instead of the window.
+    Now **derived** from the root element rather than stored, which removes the class of bug rather than the
+    instance.
+  - **`Dialog` clamped its position against `getParent()`** — the DOM parent — when a promoted modal's
+    containing block is the root. So `left`/`top` were root-relative while the clamp was parent-relative,
+    and dragging stopped dead at the DOM parent's edge with most of the window free. Reported as "the modal
+    can't be moved further than this". This is the four-divergences trap in its purest form, and it is now
+    two more invariants in `AGENTS.md`.
+  - Four new tests, all four verified to fail against the old code — including the general statement
+    (`promotionReparentsToTheRootSoPercentagesResolveAgainstIt`) rather than only the backdrop that exposed it.
+
+- **2026-07-30** — **5.5 done: popovers, dropdowns and context menus.** Suite 726. Closes the top-layer
+  branch of the spine — every consumer on that diagram is now built.
+  - **One new primitive**: light dismiss, with a popover stack. Everything else was composition or reuse.
+  - **`AnchoredPlacement` extracted from `Tooltip`** at the moment a second consumer appeared rather than
+    after — the `forEachLeft`/`forEachEntered` lesson, where the same subtle logic written twice drifted.
+    It paid for itself immediately: making the maths headlessly testable **found a real bug on the first
+    run**, preferred/opposite room swapped for `Side.TOP`/`LEFT`, which no rendered tooltip would have
+    shown because tooltips only ever prefer BOTTOM.
+  - **A dropdown and a context menu are one widget**, anchored to an element or a point. No `ContextMenu`
+    class, because the web does not have one either.
+  - **Two stacks, deliberately**: light dismiss and Escape answer different questions, and a modal is in
+    one but not the other. Collapsing them would break modals or menus depending on which way you went.
+  - **Generalising Escape to a close-watcher stack broke modals** — `Dialog.showModal` was still only
+    registering modality, so Escape silently stopped closing it. Caught by a nesting test, and precisely
+    the regression that a second consumer of a 5.4 mechanism should be expected to surface.
+  - Also updated the **dependency spine**, which still listed modals and dropdowns as unbuilt and did not
+    reflect that floating editor panels had already shipped as `Dialog` + `DialogManager` + `resize`.
+
+- **2026-07-30** — **5.4 done: `inert` + modal dialogs.** Suite 689. The last engine-shaped item, and it
+  had to be promoted from prose into a real list entry first — it existed only inside P4.1's research table.
+  - **`inert` is a Java flag, not a CSS property**, because that is what it is on the web: a content
+    attribute. Same shape as the existing `setHitTest`.
+  - **The design call**: `isInert()` is the spec's full predicate, but it is enforced at **four** points
+    rather than consulted from one, because the modal half changes for the whole tree at once and would
+    poison any cache that depended on it. Verified by neutering each point and watching a *different* test
+    fail — a "simplify to one predicate" refactor is the realistic future regression.
+  - **Focus trapping is not a feature** — it falls out of scoping Tab to the modal, which is what
+    "everything outside is inert" means for sequential navigation. There is no trap code.
+  - Two bugs found while building: a **detached modal wedged the window** (inert forever, nothing to click,
+    unrecoverable), and **clicking the backdrop blurred the focused control** — because "hit nothing" under
+    a modal means inertness ate the press, not that the user clicked bare document.
+  - **`::backdrop` shipped**, reversing P1's "no pseudo-elements so no backdrop" note: an internal child
+    promoted to the top layer *before* the dialog. A modal with no scrim looks exactly like a modeless one.
+  - Hygiene pass caught `Dialog`'s own class javadoc still asserting **"Modal is not implemented"**, and a
+    javadoc justification on `isModalBlocked` that was simply false (it claimed nested modals must be
+    descendants of each other; nothing requires that, and the real rule is that only the topmost matters).
 
 - **2026-07-30** — **Hygiene pass before committing.** One substantive find among five cosmetic ones:
   - **The ellipsis path re-shaped every frame, forever.** `measureEllipsised` builds a fresh

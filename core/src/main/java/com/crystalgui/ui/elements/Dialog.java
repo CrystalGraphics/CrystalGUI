@@ -2,9 +2,11 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.EventListenerGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.event.CloseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIDragController;
 import com.crystalgui.ui.tree.UITreeTraversal;
@@ -20,28 +22,25 @@ import javax.annotation.Nullable;
  * <p>Named for the element it ports rather than "window", because {@link UIWindow} already means this
  * engine's {@code Document} analogue and reusing the word would be actively misleading.</p>
  *
- * <h3>Modeless, deliberately</h3>
- * <p>Ports {@code dialog.show()}, not {@code showModal()}. Per the HTML spec only the modal form is
- * added to the top layer; a modeless dialog stays in ordinary flow and ordinary stacking. That is the
- * right model for editor panels: several of them coexist, they stack against each other and against
- * page content by {@code z-index}, and none of them outranks the whole UI.</p>
+ * <h3>Two entry points, and the difference is not cosmetic</h3>
+ * <p>{@link #show()} is modeless, {@link #showModal()} is modal, and per the HTML spec only the modal
+ * form joins the top layer. A modeless dialog stays in ordinary flow and ordinary stacking, which is the
+ * right model for editor panels: several coexist, they order themselves against each other and against
+ * page content by {@code z-index}, and none outranks the whole UI. A modal is the opposite by design —
+ * it outranks everything and makes everything else {@link UIElement#isInert() inert}.</p>
  *
- * <p><b>Modal is not implemented</b>, and it is not a small addition: {@code showModal()} makes
- * everything outside the dialog {@code inert}, and this engine has no inertness concept at all. That
- * is a separate primitive, not a flag on this class.</p>
- *
- * <h3>Escape does not close this, and that is correct</h3>
+ * <h3>Escape closes a modal, and only a modal</h3>
  * <p>Only {@code showModal()} "establishes a close watcher" — the machinery that turns a close request
- * (Escape) into a {@code cancel} event and then a close. {@code show()}'s algorithm contains no
- * reference to one, so <b>a modeless dialog does not close on Escape in a browser either</b>.</p>
+ * (Escape) into a cancelable {@code cancel} event and then a close. {@code show()}'s algorithm contains
+ * no reference to one, so <b>a modeless dialog does not close on Escape in a browser either</b>, and does
+ * not here. See {@link #requestClose()} and {@link #onCancel}.</p>
  *
- * <p>An earlier revision here did close on Escape, and worse, only when focus happened to be inside —
- * an accidental middle ground that was neither the web's behaviour nor a coherent one. Escape-to-close
- * arrives with {@code showModal()} and its close watcher, or not at all.</p>
+ * <p>An earlier revision closed on Escape regardless, and worse, only when focus happened to be inside —
+ * an accidental middle ground that was neither the web's behaviour nor a coherent one of its own.</p>
  *
- * <p>What a floating panel actually needs instead is a <b>close button</b>, which browsers leave
- * entirely to the author because their dialogs ship no chrome. This one has chrome — a title bar to
- * drag — so it carries a {@code __close__} button too.</p>
+ * <p>A modeless panel therefore needs a <b>close button</b>, which browsers leave entirely to the author
+ * because their dialogs ship no chrome. This one has chrome — a title bar to drag — so it carries a
+ * {@code __close__} button too.</p>
  *
  * <h3>Moving is ours</h3>
  * <p>Nothing in CSS or HTML moves an element by pointer; every draggable window on the web is library
@@ -58,9 +57,15 @@ public class Dialog extends UIElement {
     public static final String LABEL_CLASS = "__label__";
     public static final String CONTENT_CLASS = "__content__";
     public static final String CLOSE_CLASS = "__close__";
+    /** The modal scrim. Our stand-in for {@code ::backdrop} — see {@link #showModal()}. */
+    public static final String BACKDROP_CLASS = "__backdrop__";
 
     /** Emitted after the dialog closes, however it was closed. */
     public final Signal.Action onClosed = new Signal.Action();
+
+    /** The spec's cancelable {@code cancel} event — Escape on a modal. {@code preventDefault()} keeps
+     * the dialog open. Never fires for a modeless dialog, which establishes no close watcher. */
+    public final EventListenerGroup<CloseEvent.Cancel> onCancel = events.getGroup(CloseEvent.Cancel.class);
 
     private final UIElement titleBar;
     private final Button closeButton;
@@ -70,6 +75,11 @@ public class Dialog extends UIElement {
 
     @Getter
     private boolean open;
+    /** Whether this was opened with {@link #showModal()} rather than {@link #show()}. */
+    @Getter
+    private boolean modal;
+    /** Built lazily: a modeless dialog never needs one, and most dialogs are modeless. */
+    private UIElement backdrop;
 
     /** Position at the moment a move began. Accumulating from here rather than from the live box
      * keeps the drag from compounding its own deltas — same reason {@code UIResizer} snapshots size. */
@@ -161,14 +171,109 @@ public class Dialog extends UIElement {
         open = true;
         applyOpenState();
         startClampTicker();
+        runFocusingSteps();
+        return this;
+    }
+
+    /**
+     * Shows the dialog <b>modally</b> — the spec's {@code showModal()}. Three things happen that
+     * {@link #show()} does not do.
+     *
+     * <ol>
+     *   <li><b>It joins the top layer</b>, so it paints above everything and is clipped by nothing. Only
+     *       the modal form promotes; a modeless dialog stays in normal flow and normal stacking, which is
+     *       what lets several editor panels order themselves among ordinary content.</li>
+     *   <li><b>Everything outside it becomes inert</b> — unhittable, unfocusable, and outside the tab
+     *       sequence. That last part is focus trapping, and it falls out of inertness rather than being a
+     *       separate mechanism. See {@link UIElement#isInert()}.</li>
+     *   <li><b>Escape closes it</b>, via a close watcher: a cancelable {@link #onCancel} first, then
+     *       {@link #close()}. A modeless dialog establishes no close watcher and so ignores Escape — on
+     *       the web too.</li>
+     * </ol>
+     *
+     * <p>Nesting is allowed and unwinds in order: a modal opened on top of a modal blocks it in turn, and
+     * closing restores the one beneath.</p>
+     *
+     * @throws IllegalStateException if not attached to a window, or if already open <em>modelessly</em> —
+     *         both mirror the spec, which throws {@code InvalidStateError} for each. Reopening an
+     *         already-modal dialog is a no-op, also per spec.
+     */
+    public Dialog showModal() {
+        if (open && modal) return this;
+        if (open) throw new IllegalStateException(
+                "Dialog is already open modelessly; close() it before showModal()");
+        UIWindow window = getAttachedWindow();
+        if (window == null) throw new IllegalStateException(
+                "Dialog must be attached to a window before showModal()");
+
+        open = true;
+        modal = true;
+        applyOpenState();
+        startClampTicker();
+
+        // Backdrop FIRST, so it lands beneath the dialog: the top layer stacks purely by insertion order.
+        ensureBackdrop().addToTopLayer();
+        addToTopLayer();
+        window.pushModal(this);
+        // Modality and Escape are separate registrations because they are separate concerns: a popover has
+        // a close watcher without being modal, and a MANUAL popover is neither. Escape asks the topmost
+        // watcher, so a dropdown opened inside this modal correctly closes before the modal does.
+        window.pushCloseWatcher(this);
+
+        runFocusingSteps();
+        return this;
+    }
+
+    /**
+     * The spec's <b>dialog focusing steps</b>: the focus delegate (first focusable descendant), else the
+     * dialog itself. There is no {@code autofocus} attribute here, so that tier is skipped — a caller who
+     * wants a specific control focused should request it after showing.
+     *
+     * <p>Reads {@code firstFocusableIn}, not {@code firstTabbableIn}: a focus delegate is the first thing
+     * that <em>can</em> hold focus, which is a different question from where Tab lands.</p>
+     */
+    private void runFocusingSteps() {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        focusBeforeOpen = window.getInputHandler().getFocusedElement();
+        UIElement delegate = UITreeTraversal.firstFocusableIn(content);
+        window.getInputHandler().requestFocus(delegate != null ? delegate : this);
+    }
+
+    /**
+     * The close-watcher hook. Fires a cancelable {@link #onCancel}; closes unless it was prevented.
+     *
+     * <p>Overrides {@link UIElement#requestClose()}, which {@code UIInputHandler} asks of the active modal
+     * on Escape. Guarded on {@link #isModal()} too, so a stray call on a modeless dialog cannot give it
+     * Escape behaviour the web would not.</p>
+     */
+    @Override
+    public boolean requestClose() {
+        if (!open || !modal) return false;
 
         UIWindow window = getAttachedWindow();
         if (window != null) {
-            focusBeforeOpen = window.getInputHandler().getFocusedElement();
-            UIElement delegate = UITreeTraversal.firstFocusableIn(content);
-            window.getInputHandler().requestFocus(delegate != null ? delegate : this);
+            CloseEvent.Cancel cancel = new CloseEvent.Cancel(this);
+            window.getInputHandler().sendInputEvent(this, cancel);
+            if (cancel.isDefaultPrevented()) return true; // handled: consumed, but stays open
         }
-        return this;
+        close();
+        return true;
+    }
+
+    /** The scrim. Not a {@code ::backdrop} pseudo-element — this engine has none — but the same idea via
+     * the same substitute the widgets already use: an internal child carrying a {@code __} class a theme
+     * can target. Promoted alongside the dialog so it covers the viewport rather than the dialog's own box,
+     * and inert plus non-hit-testable because it is decoration, not a control. */
+    private UIElement ensureBackdrop() {
+        if (backdrop == null) {
+            backdrop = new UIElement();
+            backdrop.addClass(BACKDROP_CLASS);
+            backdrop.setHitTest(false);
+            backdrop.setInert(true);
+            addInternalChild(backdrop);
+        }
+        return backdrop;
     }
 
     /** Closes the dialog and hands focus back to whatever held it beforehand. */
@@ -176,6 +281,17 @@ public class Dialog extends UIElement {
         if (!open) return this;
         open = false;
         applyOpenState();
+
+        if (modal) {
+            modal = false;
+            UIWindow modalWindow = getAttachedWindow();
+            if (modalWindow != null) {
+                modalWindow.popModal(this);
+                modalWindow.popCloseWatcher(this);
+                removeFromTopLayer();
+                if (backdrop != null) backdrop.removeFromTopLayer();
+            }
+        }
 
         UIWindow window = getAttachedWindow();
         if (window != null && focusBeforeOpen != null
@@ -256,7 +372,7 @@ public class Dialog extends UIElement {
      * so an author's {@code !important} still wins.</p>
      */
     private void applyPosition(float left, float top) {
-        UIElement container = getParent();
+        UIElement container = containingBlock();
         float maxLeft = Float.MAX_VALUE, maxTop = Float.MAX_VALUE;
         if (container != null) {
             maxLeft = Math.max(0f, container.getRuntimeCache().getWidth() - getRuntimeCache().getWidth());
@@ -277,6 +393,25 @@ public class Dialog extends UIElement {
 
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
                 l -> l.left(clampedLeft).top(clampedTop));
+    }
+
+    /**
+     * What {@code left}/{@code top} actually resolve against — <b>the root when promoted</b>, the DOM
+     * parent otherwise.
+     *
+     * <p>This is the documented promoted-element trap in its purest form: a modal is added to the top
+     * layer, which reparents its Taffy node to the root, so the root box becomes its containing block —
+     * but {@code getParent()} still answers with the DOM parent, and the two are different boxes.
+     * Clamping against the wrong one meant a modal could be positioned across the whole window while the
+     * clamp believed it lived inside its DOM parent, so dragging stopped dead at that parent's edge with
+     * plenty of window left. Reported from the harness as "the modal can't be moved further than this".</p>
+     */
+    private UIElement containingBlock() {
+        if (isInTopLayer()) {
+            UIWindow window = getAttachedWindow();
+            if (window != null) return window.ui.rootElement;
+        }
+        return getParent();
     }
 
     /**

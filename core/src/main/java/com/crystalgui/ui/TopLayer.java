@@ -166,6 +166,10 @@ public final class TopLayer {
         for (int i = elements.size() - 1; i >= 0; i--) {
             UIElement promoted = elements.get(i);
             if (promoted.getAttachedWindow() != window) continue;
+            // A promoted element outside the active modal is still inert — a tooltip belonging to
+            // blocked content must not remain clickable just because it sits in the top layer. Skipped
+            // rather than returned-null on, so the modal beneath it is still reachable.
+            if (window.isModalBlocked(promoted)) continue;
             UIElement hit = window.elementHitTest(promoted, mouseX, mouseY);
             if (hit != null) return hit;
         }

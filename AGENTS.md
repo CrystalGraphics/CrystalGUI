@@ -197,6 +197,7 @@ styleable, extensible container, conceptually like an HTML `<div>`". It owns:
 | State flags | `setEnabled`/`setPressed`/`setFocused`/`setHovered`; overridable `isChecked`/`isBlank`/`isInvalid`/`consumesTextInput` |
 | Focus | `setFocusPolicy`, `focusable()`, `tabbable()`, `invalidateFocusableChain()` |
 | Hit testing | `setHitTest`, `containsScreenPoint`, `screenToLocal` |
+| Inertness | `setInert`/`isInertAttribute`/`isInert`, `requestClose()` (the close-watcher hook) |
 | Transform | `getTransform`/`setTransform` (`UITransform`), `invalidatePoseCachesRecursively()` |
 | Scrolling | `setScrollTop`/`setScrollLeft`/`setScroll`/`setScrollImmediate`/`scrollIntoView`/`clampScroll`/`getMaxScroll*`/`getClientWidth`/`getScrollWidth`/`setScrollExempt` |
 | Querying | `querySelector`/`querySelectorAll`/`getElementById`/`getElementsByClassName` — same selector engine the stylesheets use |
@@ -253,9 +254,10 @@ state. The declarative description layer it seeded now lives in `serialization/U
 
 ## `ElementRegistry`
 
-Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers fourteen:
+Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers eighteen:
 `element`, `button`, `checkbox`, `scroller`, `scrollerview`, `slider`, `splitview`, `switch`, `tab`,
-`tabview`, `textfield`, `text`, `tooltip`, `dialog`. Unknown tags **throw** on decode — a typo must not silently become a
+`tabview`, `textfield`, `text`, `tooltip`, `dialog`, `popover`, `menu`, `menuitem`, `dropdown`.
+Unknown tags **throw** on decode — a typo must not silently become a
 styleless div.
 
 ## `UITreeObserver`
@@ -492,6 +494,7 @@ concrete types:
 | Type | Bubbles? |
 |---|---|
 | `DOMEvent` — `ElementAdded`, `ElementRemoved` | no |
+| `CloseEvent` — `Cancel` (cancelable; Escape on a modal) | no |
 | `FocusEvent` — `Focus`, `Blur` | yes |
 | `KeyboardEvent` — `Down`, `Up` | yes |
 | `MouseEvent` — `Click`→`Down`/`Up`, `Scroll`, `Move` | yes |
@@ -556,6 +559,72 @@ frame** from `paintFrame()`'s `beginFrame()`/`endFrame()` pair.
 > before `beginFrame()` ran, so reading there is really an eager recompute against the *new* position
 > mislabeled as the *old* one. That was the original stuck-hover bug. The "last frame's hover"
 > baseline is a plain field (`lastFrameHover`) snapshotted at the end of `fireAccumulatedMouseEvents()`.
+
+### `inert` and modal dialogs
+
+`inert` is the HTML content attribute, ported as a Java flag (`setInert`) rather than a CSS property —
+same as `setHitTest`, and for the same reason top-layer promotion is imperative. An inert subtree keeps
+laying out and painting but stops being interactive: unhittable, unfocusable, skipped by Tab. That it
+**keeps its box** is the whole reason it exists alongside `display: none`.
+
+`UIElement.isInert()` is the spec's full predicate: this element or an ancestor carries the attribute,
+**or** a modal dialog is open and this element is not inside it. The second half is why it is not simply
+an inherited flag — a modal makes *everything else* inert, which cannot be spelled by setting the flag on
+a common ancestor, because the root's subtree contains the modal too.
+
+> **Enforced at four points, deliberately not one.** The modal half changes for nearly every element in
+> the tree the instant a modal opens, so anything *cached* that depended on it would need mass
+> invalidation. Instead: `focusable()` and the `hasFocusableDescendant` cache see only the **attribute**
+> half; Tab is **scoped** to the modal at the entry point (that is the focus trap); hit-testing skips
+> inert subtrees and skips the main tree wholesale while a modal is open; `requestFocus` consults the
+> **full** predicate. Each is pinned by its own test — a "simplify to one predicate" refactor that missed
+> one would otherwise look green.
+
+`UIWindow` owns the modal stack (`getActiveModal`/`isModalBlocked`/`pushModal`/`popModal`) because
+modality is about inertness, not painting, and because the spec hangs it off the `Document`. Nesting
+works and unwinds in order. `unregisterElement` pops it: a modal that left the tree without closing would
+keep the whole window inert with nothing left to interact with.
+
+`requestClose()` is the **close-watcher** hook — the web's `CloseWatcher` is a general primitive, so this
+is a general element hook rather than something wired only to `Dialog`. Escape asks the active modal;
+a live drag eats Escape first, because a drag is the innermost live interaction.
+
+### Popovers — light dismiss and the two stacks
+
+`Popover` is the Popover API port and the base under `Menu`/`Dropdown`. It is a **base class**, not an
+attribute, and that is a deliberate divergence: unlike `inert` — one property with subtree semantics —
+popover-ness is a bundle of behaviour (show/hide, placement, dismissal, focus restore) that is meaningless
+piecemeal. What genuinely must be element-level to work *is* on `UIElement`: `popoverInvoker`, which light
+dismiss has to consult for any promoted element.
+
+`Mode.AUTO` joins the popover stack (light dismiss + Escape); `Mode.MANUAL` joins neither.
+
+> **`UIWindow` keeps two separate stacks, and they are not redundant.** `autoPopovers` drives
+> **light dismiss** (press outside); `closeWatchers` drives **Escape**. The same element is routinely in
+> one and not the other — a modal dialog has a close watcher but is not light-dismissable, and a `MANUAL`
+> popover is in neither. Collapsing them makes one of those two cases wrong.
+
+**Light dismiss** (`UIWindow.lightDismiss`) is the spec's algorithm: find the press target's innermost
+popover ancestor, then close everything above it. So a press inside a menu closes its submenus but not
+itself, and a press anywhere unrelated closes the whole chain.
+
+> **The invoker counts as part of its popover.** Without that carve-out a dropdown button dies on its own
+> press: light dismiss closes the menu on mouse-down and the button's click reopens it, so it can never be
+> shut by pressing the button again — and flickers while trying.
+
+> **Light dismiss runs *after* the mouse-down event is dispatched**, so the press still reaches whatever it
+> landed on (browsers both dismiss and activate). Dismissing first tears down the tree under an undelivered
+> event. It fires on press, not the spec's press/release pair — that pairing exists for text-selection
+> drags, which this engine has no equivalent of.
+
+**Escape asks the topmost close watcher**, which is what makes nesting work: a dropdown opened inside a
+modal closes first, and only a second Escape reaches the modal. A live drag still eats Escape before
+either.
+
+`AnchoredPlacement` owns positioning for every anchored popup — flip on the main axis, clamp on the cross
+axis, anchor geometry read from the **transform chain** rather than the layout box. Extracted from
+`Tooltip` when `Popover` became its second consumer. **Nothing else may write `left`/`top` on a promoted
+popup**, or it fights placement every frame.
 
 ### `FocusPolicy` — four values, and two of them look alike
 
@@ -728,7 +797,11 @@ int value types.
 | `TextField` | `textfield` | `cgui-textfield` |
 | `UIText` | `text` | `cgui-text`, `cgui-text-stress` |
 | `Tooltip` | `tooltip` | `cgui-gallery` (Tooltip page) |
-| `Dialog` | `dialog` | `cgui-gallery` (Dialog page) |
+| `Dialog` | `dialog` | `cgui-gallery` (Dialog page, modal page) |
+| `Popover` | `popover` | `cgui-gallery` (menus page) |
+| `Menu` | `menu` | `cgui-gallery` (menus page) |
+| `MenuItem` | `menuitem` | `cgui-gallery` (menus page) |
+| `Dropdown` | `dropdown` | `cgui-gallery` (menus page) |
 | `Scroller` | `scroller` | `cgui-scroller` |
 | `ScrollerView` | `scrollerview` | `cgui-scroller` |
 | `SplitView` | `splitview` | `cgui-splitview` |
@@ -750,7 +823,8 @@ int value types.
   __bottom__  __corner__  __divider__  __fill__      __first__   __h-scroller__  __head__
   __knob__    __left__    __mark__     __pane__      __panes__   __post-icon__   __pre-icon__
   __rail__    __right__   __second__   __spacer__    __strip__   __strip-bar__   __tail__
-  __close__   __content__ __label__    __resizer__  __resizer-{top,bottom,left,right}__
+  __backdrop__ __close__  __content__  __items__    __label__    __menu__
+  __resizer__  __resizer-{top,bottom,left,right}__
   __resizer-{top,bottom}-{left,right}__  __thumb__   __title-bar__
   __top__     __track__   __v-scroller__  __vertical__
   ```
@@ -833,6 +907,8 @@ The things that are invisible from any single class and expensive to rediscover.
 | `uiScale` lives in the `PoseStack`, not the ortho projection | Glyphs rasterize at logical size and get magnified — blurry text |
 | `sortedChildren` = z-descending, equal-z later-inserted-first; paint walks it reversed | Hit-testing and visual stacking disagree about which child is on top |
 | A promoted element diverges from its DOM parent in **four** places (Taffy parent, `getX()/getY()`, `localToWorld`, paint+hit entry) — only the cascade stays | Fix three and it draws correctly but clicks land elsewhere, or the reverse |
+| A promoted element's **containing block is the root** — so anything resolving `%`, `left`/`top`, or a clamp against "the parent" must ask the root, not `getParent()` | Percentages size against the wrong box, and a clamp stops a drag dead at the DOM parent's edge with the window still free |
+| `UIWindow.getRootNodeId()` is **derived** from the root element, never stored | It was a field nothing assigned, so it was permanently null — and both reparenting methods bail out silently on null, which made top-layer promotion never move a Taffy node at all |
 | Top-layer stacking is insertion order; `z-index` is irrelevant there (per spec) | Promoted elements stack unpredictably against each other |
 | `Enter`/`Leave` dispatch to every element in the entered/left chain | A container with children never receives hover events at all |
 | `setHitTest(false)` applies to the whole **subtree**, like CSS `pointer-events: none` | A transparent container is transparent everywhere except where its content is — hit testing looks random |
@@ -846,6 +922,17 @@ The things that are invisible from any single class and expensive to rediscover.
 | JOML + Taffy must stay on the headless classpath | Field descriptors resolve at class load; `UIElement`/`ElementStyle` have fields of those types |
 | Composites return `acceptsPublicChildren() == false` | `addChild` throws; widgets need named content accessors |
 | `attachListener`'s two booleans are additive | Target phase is *always* subscribed |
+| The popover stack and the close-watcher stack are separate | A modal is Escape-closable but not light-dismissable; a MANUAL popover is neither — one list gets one of them wrong |
+| Light dismiss runs after the mouse-down dispatch, and spares the invoker | Dismiss-first tears down the tree under an undelivered event; no invoker carve-out and a dropdown button flickers instead of closing |
+| Light dismiss considers the popovers open **before** the dispatch, not the live stack | A popover opened from a mouse-down handler is closed by the very press that opened it — it appears never to open at all |
+| A widget's cascade identity is its **tag**, never its Java supertype | `Dropdown extends Button` but `button {}` does not match `dropdown` — it laid out at zero height until `default.css` named it |
+| Only `AnchoredPlacement` writes `left`/`top` on an anchored popup | Any other writer fights placement every frame |
+| Transitioning *into* view needs a resting value in the sheet, never a one-frame write from Java | The write is itself transitionable, so the engine eases toward it and the cleanup retargets it back — nothing animates, and no test sees it |
+| `TransitionEngine` advances on `System.nanoTime()`, ignoring the delta it is passed | A test loop cannot step transition time; assert the inputs (resting value, state class, ANIMATION-origin candidate) rather than intermediate values |
+| `inert` keeps its box — it is not a spelling of `display: none` | The one reason both exist; if inert ever stops laying out, it has become a worse `display: none` |
+| Modal inertness is enforced at four points, and `focusable()` is deliberately **not** one of them | Fold it in and every cached focusable-descendant answer needs invalidating whenever a modal opens |
+| Hit-testing an inert subtree **falls through** to what is behind it | `pointer-events: none` passes the pointer over a node; it does not punch a hole in the document |
+| A detached modal must be popped from the modal stack | The window stays inert forever with nothing left to interact with — unrecoverable from the user's side |
 | `StyleSheet.DEFAULT` is not installed for you | A test asserting on user-agent-sheet behaviour tests nothing and goes green |
 | `text-overflow` does **not** inherit — it must sit on the `UIText` itself | Set on a wrapper it silently never arrives, and the row renders as plain `clip` (`white-space` *does* inherit, which masks it) |
 | Truncation changes no geometry — `UIText.displayedText()` is the only way to observe it | An ellipsis that never fires looks identical to one that does, in every test and every layout dump |
@@ -955,13 +1042,14 @@ com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGro
     .visual.transform          TransformProperty, TransformValue, TransformOriginShorthand
 
 com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListenerGroup,
-                               ElementRegistry, UIFrameTicker (SPI), UITreeObserver, TopLayer, UIResizer
+                               ElementRegistry, UIFrameTicker (SPI), UITreeObserver, TopLayer, UIResizer,
+                               AnchoredPlacement (CSS Anchor Positioning subset)
   .tree                        UITreeTraversal — stateless ancestor/tab-order queries
-  .event                       UIEvent, PropagationPhase, DOMEvent, DragEvent, FocusEvent, KeyboardEvent,
-                               MouseEvent
+  .event                       UIEvent, PropagationPhase, CloseEvent, DOMEvent, DragEvent, FocusEvent,
+                               KeyboardEvent, MouseEvent
   .input                       UIInputHandler, UIDragController, FocusPolicy, ButtonState
-  .elements                    Button, Checkbox, CheckboxGroup, Dialog, DialogManager, Scroller,
-                               ScrollerView, Slider,
+  .elements                    Button, Checkbox, CheckboxGroup, Dialog, DialogManager, Dropdown, Menu,
+                               MenuItem, Popover, Scroller, ScrollerView, Slider,
                                SplitView, Switch, Tab, TabView, TextField, Tooltip, UIText
 
 com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, JsonOps, PlainOps,

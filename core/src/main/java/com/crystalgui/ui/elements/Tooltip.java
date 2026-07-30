@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
@@ -202,60 +203,13 @@ public class Tooltip extends UIElement {
     /**
      * Re-runs placement against the anchor's current box.
      *
-     * <p>Everything here is in the root element's coordinate space, which is exactly what a promoted
-     * element's {@code left}/{@code top} resolve against — promotion reparents the Taffy node to the
-     * root, so the root box is the containing block. Anchor geometry is absolute, so the root's own
-     * origin is subtracted back out.</p>
+     * <p>The geometry — reading the anchor through the transform chain rather than its layout box,
+     * flipping above when cramped, clamping into the containing block — lives in
+     * {@link AnchoredPlacement}, extracted here when {@code Popover} became its second consumer. A
+     * tooltip is just {@code Side.BOTTOM} with no offset.</p>
      */
     public void reposition() {
-        UIElement target = this.anchor;
-        UIWindow window = getAttachedWindow();
-        if (target == null || window == null || target.getAttachedWindow() != window) return;
-
-        UIElement root = window.ui.rootElement;
-        float rootX = root.getRuntimeCache().getX();
-        float rootY = root.getRuntimeCache().getY();
-        float availableW = root.getRuntimeCache().getWidth();
-        float availableH = root.getRuntimeCache().getHeight();
-
-        // Anchor position comes from the TRANSFORM CHAIN, not from the layout box.
-        // runtimeCache.getX()/getY() are pure layout and know nothing about scrolling — a scroll
-        // container offsets its children inside localToWorld instead (see the comment there), and
-        // ancestor `transform:` lives there too. Reading the box would leave a tooltip pinned to
-        // where its anchor would be if nothing had ever scrolled.
-        Vector2f anchorWorld = Transform2D.apply(target.getRuntimeCache().localToWorld.get(),
-                target.getRuntimeCache().getX(), target.getRuntimeCache().getY());
-        Vector2f anchorInRoot = Transform2D.apply(root.getRuntimeCache().worldToLocal.get(),
-                anchorWorld.x(), anchorWorld.y());
-
-        float anchorX = anchorInRoot.x() - rootX;
-        float anchorY = anchorInRoot.y() - rootY;
-        float anchorH = target.getRuntimeCache().getHeight();
-
-        float selfW = getRuntimeCache().getWidth();
-        float selfH = getRuntimeCache().getHeight();
-
-        float x = anchorX;
-        float y = anchorY + anchorH;
-
-        // Flip above when the tooltip would run off the bottom — but only if there is genuinely more
-        // room up there, otherwise flipping just moves the overflow to the other edge.
-        float spaceBelow = availableH - (anchorY + anchorH);
-        if (selfH > spaceBelow && anchorY > spaceBelow) {
-            y = anchorY - selfH;
-        }
-
-        // Horizontal is clamped rather than flipped: a tooltip that jumped sides as the pointer
-        // crossed the midpoint would be far more distracting than one that slides.
-        if (x + selfW > availableW) x = availableW - selfW;
-        if (x < 0f) x = 0f;
-        if (y < 0f) y = 0f;
-
-        final float left = x, top = y;
-        // IMPORTANT origin, like every other widget-driven geometry write in this codebase.
-        // replaceOrPutCandidate no-ops on an unchanged value, so a stationary tooltip stops
-        // re-triggering layout after the first frame instead of dirtying the tree forever.
-        StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.left(left).top(top));
+        AnchoredPlacement.place(this, anchor, AnchoredPlacement.Side.BOTTOM, 0f);
     }
 
     /** Keeps placement current while shown, then drops itself. Registration is idempotent
