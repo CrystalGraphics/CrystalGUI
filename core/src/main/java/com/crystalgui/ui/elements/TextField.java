@@ -3,7 +3,6 @@ package com.crystalgui.ui.elements;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgraphics.api.text.CgTextLayout;
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.property.Property;

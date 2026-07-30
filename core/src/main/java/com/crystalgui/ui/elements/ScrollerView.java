@@ -1,6 +1,5 @@
 package com.crystalgui.ui.elements;
 
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;

@@ -1,6 +1,5 @@
 package com.crystalgui.ui.input;
 
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgraphics.platform.service.CgInputService;
