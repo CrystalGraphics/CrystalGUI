@@ -15,8 +15,8 @@ draft on 2026-07-29.
 | **P5** | ~~Platform abstractions~~ (deferred) · `TextElement` gaps · tab stops · `inert` + modals · popovers/menus | ✅ **5.2–5.5 done** · visually confirmed (5.1 deferred) |
 | **P6** | Editor windows · graph view | ⬜ all prerequisites now exist |
 
-**Suite: 747** (653 `test` + 94 `headlessTest`), 0 failures, 0 skipped.
-Last commits: `0ce9df1` text CSS + tab stops · `3bbcf55` DialogManager · `5981cef` handles+cursor.
+**Suite: 771** (677 `test` + 94 `headlessTest`), 0 failures, 0 skipped.
+Last commits: `83b43fa` shader preprocessor · `6069a3c` inert + modals + menus · `0ce9df1` text CSS + tab stops.
 
 **Nothing is blocked on me.** With 5.5 landed, **the top-layer branch of the spine is closed** and every
 engine-shaped item is done except the two deliberately deferred ones (P3, 5.1). What remains is P3.1 (a
@@ -963,6 +963,87 @@ P1, P2 and 6.1 underneath it. Big enough to need its own design doc when it come
 ---
 
 # Changelog
+
+- **2026-07-30** — **Two dialog-resize bugs, and they turned out to be one mistake wearing two hats.**
+  Both reported from the harness resize page, both in `UIResizer.applyResize`, both confirmed fixed by eye.
+  - **A panel parked in the bottom-right corner could be resized straight out through it.** Moving had
+    been clamped to the containing block from the start; sizing never was. Half a clamp reads as arbitrary
+    — the box stops when you drag it and does not when you stretch it — so the size is bounded now too. A
+    trailing edge stops at the container's far side, a leading edge stops when its own origin reaches zero.
+    **Out-of-flow elements only**, which is the same set that has leading handles at all: on an in-flow box
+    `left`/`top` are a relative nudge, there is no origin to clamp, and growing past the parent is ordinary
+    overflow that CSS explicitly permits.
+  - **Dragging a top edge downward shrank the dialog to its `min-height` and then towed it down the
+    screen**, while the mirror-image drag upward from the bottom correctly just stopped. The asymmetry was
+    the tell: only leading edges move anything, so only they could diverge. The origin was following the
+    **raw pointer delta** while the size sat pinned at its minimum by Taffy. It now follows the size
+    *actually achieved*, which makes the two halves the same computation so they cannot come apart again.
+    Getting there needs the resizer to know the settled size, so it re-applies the element's own
+    `min-*`/`max-*` before writing — not to constrain the box, since Taffy does that regardless, but to
+    predict it. The old comment asserting the opposite ("clamping again would double-apply and desync")
+    was right about the constraint and wrong about the need.
+  - **A third fell out on the way.** `resizeOriginLeft()` was a field, so it only knew about positions the
+    resizer itself had written — an element placed by a stylesheet reported an origin of zero, and the
+    first leading drag teleported it to the corner before resizing anything. It now reads the **live Taffy
+    inset**, the same value layout uses, so the answer cannot disagree with where the box actually is.
+  - `Dialog.containingBlock()` was doing this work privately; it is `UIElement.resizeContainingBlock()` now
+    and both callers share it. Four tests, each verified red against the old code first. The three
+    *pre-existing* leading-edge tests went red on the first run for the right reason — the fixture sat at
+    `(0, 0)`, where a leading edge genuinely has nowhere to grow — so the fixture moved off the corner.
+
+- **2026-07-30** — **The hand cursor: four generated attempts, then authored pixel art.** The blocky look
+  was a consequence of 1-bit transparency, so the first fix was to draw the hand from a **signed distance
+  field** — tapered round cones for the fingers, a rounded box for the palm, smooth-unioned — and use
+  `CURSOR_8_BIT_ALPHA` where the driver had it. It was the wrong tool, and the reasons are worth keeping:
+  - **A 32×32 cursor is about twenty pixels of usable shape.** At that size every native pointer is
+    axis-aligned pixel art with a uniform one-pixel outline, because anything else turns to mush. An SDF
+    rim lands on a curve and rasterises two pixels thick on the diagonals and one on the flats, which reads
+    as a *ragged* edge rather than a smooth one. Reported back as "it literally looks the same".
+  - **Fingers have to separate near the tips and merge into the palm.** Trivial to say in blocks, fiddly to
+    coax out of a blend radius: the SDF versions either fused them into a slab or split them into detached
+    sticks, and the band between the two was too narrow to hit. Reported as "one big middle finger".
+  - So the shape is declared directly as five blocks and `outline()` derives the border, exactly as the
+    arrows do. `pointingHandPixelArt()` stays as the solid alternative. All the SDF machinery (`smin`,
+    round-cone and rounded-box distance) is deleted, along with `toOneBit` and the 8-bit-alpha capability
+    probe — every cursor here is 1-bit now, which is one fewer thing to degrade.
+  - **The decisive tooling change was dumping the bitmap to a PNG and looking at it.** Four blind
+    iterations had gone by on ASCII at five intensity levels, which flattens exactly the proportions that
+    were wrong. It also settled two "or am I imagining it?" questions in one render — the diagonal cursor
+    really was ~1.3× the vertical one, and its two arrowheads really were different sizes.
+  - Also from that pass: arrowheads centred on their shaft (they sat a pixel and a half off), the diagonal
+    resized to match the vertical/horizontal so switching between them is not a visible jump, and
+    `fillLatticeGaps()` to close the interior holes a diagonal march leaves behind — the checkerboard
+    silhouette was the right one all along, it just needed filling in.
+
+- **2026-07-30** — **Three visual-pass bugs after the commit, plus a red test I had already shipped.**
+  - **A modeless dialog showed a backdrop.** The backdrop is built lazily and then *kept* as an internal
+    child; demotion drops the `position: absolute` the top layer forced, turning it back into an ordinary
+    in-flow child sized `100%` of the **dialog** — a dark panel over the dialog's own content, spilling out
+    below it. Every modeless `show()` after any modal looked like that. Now driven by `display`, with each
+    of the two call sites covered by its own test (verified by removing them one at a time).
+  - **The SplitView divider's cursor reverted to the arrow while dragging.** The drag captures the pointer
+    on the SplitView **root**, not the divider — the drag maths live in the root's local space — and the
+    cursor resolves from the capture target. A `__dragging__` state class carries the resize cursor for the
+    whole gesture. The vertical case was also plain wrong before this: it inherited `ew-resize`.
+  - **`cursor: pointer` had no artwork.** The cascade was right all along; `Lwjgl2CursorService` simply had
+    no hand, so the most-used keyword in any UI fell through to the system arrow. Added one — and with it
+    the first **per-shape hotspot**, because a hand points and the click has to land on the fingertip rather
+    than half a cursor below it. Every other bitmap here is a symmetric arrow whose hotspot genuinely is its
+    centre, which is why the constant had gone unquestioned.
+
+- **2026-07-30** — **A test that went red between commits, and the fix was the opposite of what it looked
+  like.** `theGhostIsWithdrawnWhenTheDragEnds` asserted that a drag ghost stays registered for the next drag.
+  - **Not shipped red**, which I initially assumed and stated: the reflog shows `acb69e9 "Drag controller
+    never nulled, continuing drags"` arrived from `origin/master` in a fast-forward *after* `6069a3c`. My
+    commit was green when it was made; the pull is what turned that test red. Checking the reflog before
+    blaming the last commit would have got there faster.
+  - The obvious reading was "the code regressed, restore the contract". Wrong: the user knew the history —
+    the retained ghost was the bug, surviving its drag and reappearing on unrelated pages, and
+    `acb69e9 "Drag controller never nulled, continuing drags"` fixed it by dropping the reference. The test
+    was simply left behind asserting the pre-fix behaviour.
+  - So the test was corrected, not the code, and `setGhost` now states the contract it implies: **register
+    per drag**, because the ghost is per-gesture state rather than configuration. I had already "fixed" the
+    controller the wrong way round and reverted it.
 
 - **2026-07-30** — **Submenus open on hover, with a `>` indicator — requested after comparing against the
   Windows shell menu.** Both are in the ARIA pattern too, so this is convergence rather than a one-off.

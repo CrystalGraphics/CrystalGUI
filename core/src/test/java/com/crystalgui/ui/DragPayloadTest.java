@@ -306,16 +306,28 @@ public class DragPayloadTest extends UiTestBase {
         assertTrue("an active drag's ghost belongs in the top layer", g.isInTopLayer());
     }
 
+    /**
+     * Ending a drag withdraws the ghost <b>and forgets it</b>.
+     *
+     * <p>This assertion used to say the opposite — that the ghost stayed registered for the next drag —
+     * which is the contract P2 shipped with and which turned out to be wrong in practice: a retained ghost
+     * outlived the drag that registered it and reappeared on unrelated pages the next time anything was
+     * dragged. "Drag controller never nulled, continuing drags" fixed that by dropping the reference, and
+     * this test was simply left behind asserting the old behaviour.</p>
+     *
+     * <p>So the rule is <b>register per drag</b>: the ghost is per-gesture state, not configuration.</p>
+     */
     @Test
-    public void theGhostIsWithdrawnWhenTheDragEnds() {
+    public void theGhostIsWithdrawnAndForgottenWhenTheDragEnds() {
         UIElement g = ghostOn(source);
         startPayloadDrag();
         move(150f, 50f);
 
         release(150f, 50f);
 
-        assertFalse(g.isInTopLayer());
-        assertTrue("the ghost stays the caller's for the next drag", drag.getGhost() == g);
+        assertFalse("withdrawn from the top layer", g.isInTopLayer());
+        assertNull("and forgotten, or it leaks into the next drag on some unrelated screen",
+                drag.getGhost());
     }
 
     @Test

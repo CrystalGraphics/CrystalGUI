@@ -5,6 +5,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.input.UIDragController;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -57,6 +58,16 @@ public class SplitView extends UIElement {
     /** Present on the root exactly while the orientation is {@link Orientation#VERTICAL}, so a
      * stylesheet can flip the divider's own axis ({@code splitview.__vertical__ .__divider__}). */
     public static final String VERTICAL_CLASS = "__vertical__";
+    /**
+     * On the root while a divider drag is running, so the sheet can keep the resize cursor up for the
+     * whole gesture.
+     *
+     * <p>Needed because the drag captures the pointer on <b>this</b> element, not on the divider — the drag
+     * maths are in the SplitView's local space — and the cursor resolves from the capture target. Without
+     * it the cursor is correct while hovering the divider, reverts to the default arrow the moment you
+     * press, and only comes back if you happen to release over the divider again.</p>
+     */
+    public static final String DRAGGING_CLASS = "__dragging__";
 
     /** Fires whenever the split actually moves, from any source. */
     public final Signal.Value<Float> onPercentageChanged = new Signal.Value<>();
@@ -273,12 +284,26 @@ public class SplitView extends UIElement {
         if (window == null) return;
         this.dragStartPercentage = this.percentage;
         float travel = travelLength();
+        addClass(DRAGGING_CLASS);
         window.getInputHandler().getDragController().startDrag(this, rawMouseX, rawMouseY,
                 // Delta from the grab point, not absolute: grabbing the divider anywhere along its
                 // thickness must not teleport it so its centre lands under the cursor.
-                (mx, my, sx, sy, dx, dy) -> {
-                    float delta = isVertical() ? dy : dx;
-                    setPercentage(dragStartPercentage + (delta / travel) * 100f);
+                new UIDragController.DragListener() {
+                    @Override
+                    public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
+                        float delta = isVertical() ? dy : dx;
+                        setPercentage(dragStartPercentage + (delta / travel) * 100f);
+                    }
+
+                    @Override
+                    public void onDragEnd(float mx, float my) {
+                        removeClass(DRAGGING_CLASS);
+                    }
+
+                    @Override
+                    public void onDragCancel() {
+                        removeClass(DRAGGING_CLASS);
+                    }
                 });
     }
 }

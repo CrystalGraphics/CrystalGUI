@@ -846,8 +846,16 @@ dialog .__close__:hover {
 
 /* A title bar is the drag handle for the whole dialog, so it advertises a move rather than a grab. */
 dialog .__title-bar__ { cursor: move; }
-/* SplitView's divider resizes its two panes along one axis. */
+/* SplitView's divider resizes its two panes along one axis.
+ *
+ * The `__dragging__` rules keep that cursor up for the whole gesture. The drag captures the pointer on the
+ * SplitView ROOT rather than on the divider — the drag maths live in the root's local space — and the cursor
+ * resolves from the capture target, so without these the cursor reverts to the arrow the instant you press
+ * and only returns if you happen to release back over the divider. */
 splitview .__divider__ { cursor: ew-resize; }
+splitview.__dragging__ { cursor: ew-resize; }
+splitview.__vertical__ .__divider__ { cursor: ns-resize; }
+splitview.__vertical__.__dragging__ { cursor: ns-resize; }
 splitview .__vertical__ .__divider__ { cursor: ns-resize; }
 
 /* `pointer` marks anything clickable, as it does on the web for links and buttons. */

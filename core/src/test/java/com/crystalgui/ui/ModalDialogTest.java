@@ -8,6 +8,7 @@ import com.crystalgui.ui.elements.Dialog;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIInputHandler;
 import com.crystalgui.ui.tree.UITreeTraversal;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -512,6 +513,47 @@ public class ModalDialogTest extends UiTestBase {
 
         float left = inStage.getRuntimeCache().getX() - stage.getRuntimeCache().getX();
         assertEquals("clamped to 140 - 100", 40f, left, 0.5f);
+    }
+
+    /**
+     * After a modal has been shown once, going back to {@link Dialog#show()} must not leave a backdrop behind.
+     *
+     * <p>The backdrop is built lazily and then <b>kept</b> as an internal child. Demotion drops the
+     * {@code position: absolute} the top layer forced, which turned it back into an ordinary in-flow child
+     * sized {@code 100%} of the <em>dialog</em> — a dark panel painted over the dialog's own content and
+     * spilling out below it. Every modeless dialog opened after any modal looked like that.</p>
+     */
+    @Test
+    public void aBackdropDoesNotSurviveIntoAModelessReopen() {
+        dialog.showModal();
+        settle();
+        UIElement backdrop = window.getTopLayer().elements().get(0);
+        assertTrue(backdrop.hasClass(Dialog.BACKDROP_CLASS));
+        assertNotEquals(TaffyDisplay.NONE, backdrop.getStyle().getTaffyBridge().style.display);
+
+        dialog.close();
+        settle();
+        dialog.show();
+        settle();
+
+        assertTrue("modeless, so nothing may be promoted", window.getTopLayer().isEmpty());
+        assertEquals("the kept backdrop must be hidden, not left in flow inside the dialog",
+                TaffyDisplay.NONE, backdrop.getStyle().getTaffyBridge().style.display);
+    }
+
+    /** ...and showing it modally again brings the same backdrop back. */
+    @Test
+    public void reShowingModallyRestoresTheBackdrop() {
+        dialog.showModal();
+        settle();
+        dialog.close();
+        settle();
+        dialog.showModal();
+        settle();
+
+        UIElement backdrop = window.getTopLayer().elements().get(0);
+        assertTrue(backdrop.hasClass(Dialog.BACKDROP_CLASS));
+        assertNotEquals(TaffyDisplay.NONE, backdrop.getStyle().getTaffyBridge().style.display);
     }
 
     @Test

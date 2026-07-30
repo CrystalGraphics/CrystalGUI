@@ -273,7 +273,26 @@ public class Dialog extends UIElement {
             backdrop.setInert(true);
             addInternalChild(backdrop);
         }
+        applyBackdropVisibility();
         return backdrop;
+    }
+
+    /**
+     * Shows the backdrop only while modal.
+     *
+     * <p>It is built lazily and then <b>kept</b>, so after one {@code showModal()} it is a permanent
+     * internal child. Demotion drops the {@code position: absolute} the top layer forced, which turned it
+     * back into an ordinary in-flow child sized {@code 100%} of the <em>dialog</em> — a dark panel painted
+     * over the dialog's own content and spilling below it. That is what a modeless {@code show()} looked
+     * like after any modal had ever been opened: a backdrop it should never have had.</p>
+     *
+     * <p>Driven by {@code display} rather than by removing the child, so the Taffy tree is not churned on
+     * every open — the same reason {@code Tab} hides panes instead of detaching them.</p>
+     */
+    private void applyBackdropVisibility() {
+        if (backdrop == null) return;
+        StyleGroup.importantPipeline(backdrop.getStyle().getLayoutGroup(),
+                l -> l.display(modal ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
     }
 
     /** Closes the dialog and hands focus back to whatever held it beforehand. */
@@ -284,6 +303,7 @@ public class Dialog extends UIElement {
 
         if (modal) {
             modal = false;
+            applyBackdropVisibility();
             UIWindow modalWindow = getAttachedWindow();
             if (modalWindow != null) {
                 modalWindow.popModal(this);
@@ -372,7 +392,7 @@ public class Dialog extends UIElement {
      * so an author's {@code !important} still wins.</p>
      */
     private void applyPosition(float left, float top) {
-        UIElement container = containingBlock();
+        UIElement container = resizeContainingBlock();
         float maxLeft = Float.MAX_VALUE, maxTop = Float.MAX_VALUE;
         if (container != null) {
             maxLeft = Math.max(0f, container.getRuntimeCache().getWidth() - getRuntimeCache().getWidth());
@@ -393,25 +413,6 @@ public class Dialog extends UIElement {
 
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
                 l -> l.left(clampedLeft).top(clampedTop));
-    }
-
-    /**
-     * What {@code left}/{@code top} actually resolve against — <b>the root when promoted</b>, the DOM
-     * parent otherwise.
-     *
-     * <p>This is the documented promoted-element trap in its purest form: a modal is added to the top
-     * layer, which reparents its Taffy node to the root, so the root box becomes its containing block —
-     * but {@code getParent()} still answers with the DOM parent, and the two are different boxes.
-     * Clamping against the wrong one meant a modal could be positioned across the whole window while the
-     * clamp believed it lived inside its DOM parent, so dragging stopped dead at that parent's edge with
-     * plenty of window left. Reported from the harness as "the modal can't be moved further than this".</p>
-     */
-    private UIElement containingBlock() {
-        if (isInTopLayer()) {
-            UIWindow window = getAttachedWindow();
-            if (window != null) return window.ui.rootElement;
-        }
-        return getParent();
     }
 
     /**

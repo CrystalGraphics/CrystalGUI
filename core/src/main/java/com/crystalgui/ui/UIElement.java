@@ -33,7 +33,9 @@ import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.UIEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.tree.UITreeTraversal;
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
+import dev.vfyjxf.taffy.style.TaffyPosition;
 import dev.vfyjxf.taffy.tree.Layout;
 import dev.vfyjxf.taffy.tree.NodeId;
 import dev.vfyjxf.taffy.tree.TaffyTree;
@@ -791,24 +793,116 @@ public class UIElement {
         Resize wanted = mode == null ? Resize.NONE : mode;
         if (wanted == resizeMode) return;
         resizeMode = wanted;
+        rebuildResizers();
+    }
 
+    /**
+     * Builds the handle set for the current {@code resize} mode — <b>leading edges only when this element
+     * can actually move.</b>
+     *
+     * <p>A top or left handle has to shift the origin as it resizes, or the opposite edge would travel
+     * instead of staying put. That only works for an out-of-flow element, whose {@code left}/{@code top}
+     * genuinely place it. On an in-flow element those properties are a <em>relative offset</em>: the box
+     * slides but its flow position does not change, so it silently overlaps the sibling above it while
+     * everything below carries on as if nothing moved. That is precisely what dragging a gallery panel's
+     * top edge did.</p>
+     *
+     * <p>Refusing the handle rather than fixing the offset is the faithful answer, because <b>CSS
+     * {@code resize} never moves a box at all</b> — it offers one grabber, at the bottom-right, for exactly
+     * this reason. Eight handles are our extension, and it applies where it is meaningful: a
+     * {@code Dialog} keeps all eight, a flex child gets the three CSS would have given it.</p>
+     */
+    private void rebuildResizers() {
         for (UIResizer handle : resizers) removeInternalChild(handle);
         resizers.clear();
+        resizersAssumeMovable = canMoveResizeOrigin();
 
         for (UIResizer.Handle h : UIResizer.Handle.values()) {
-            if (!h.appliesTo(wanted)) continue;
+            if (!h.appliesTo(resizeMode)) continue;
+            if (h.isLeading() && !resizersAssumeMovable) continue;
             UIResizer handle = new UIResizer(h);
             resizers.add(handle);
             addInternalChild(handle);
         }
     }
 
-    /** Origin offset written by a top/left resize handle. Plain elements track it here; see
-     * {@link #applyResizeOrigin}. */
-    private float resizeOriginLeft, resizeOriginTop;
+    /**
+     * Whether a leading-edge resize could place this element — i.e. whether it is out of flow.
+     *
+     * <p>{@code Dialog} answers yes by being {@code position: absolute}; it also overrides
+     * {@link #applyResizeOrigin} to route the move through its own clamped position, which is why a modal
+     * stays inside its containing block while being resized from the top-left.</p>
+     */
+    boolean canMoveResizeOrigin() {
+        return style.taffyBridge.style.position == TaffyPosition.ABSOLUTE;
+    }
 
-    protected float resizeOriginLeft() { return resizeOriginLeft; }
-    protected float resizeOriginTop() { return resizeOriginTop; }
+    /**
+     * The box this element's position and size are bounded by — <b>the root when promoted</b>, the DOM
+     * parent otherwise.
+     *
+     * <p>The promoted-element trap in its purest form: promotion reparents the Taffy node to the root, so
+     * the root becomes the containing block, but {@code getParent()} still answers with the DOM parent and
+     * the two are different boxes. Anything clamping against "the parent" has to ask this instead, or a
+     * modal stops dead at its DOM parent's edge with plenty of window left — which is exactly how it was
+     * reported from the harness.</p>
+     *
+     * <p>Only meaningful for an out-of-flow element, since it is {@code left}/{@code top} that resolve
+     * against it. {@link #canMoveResizeOrigin()} is the matching predicate.</p>
+     */
+    @Nullable
+    protected UIElement resizeContainingBlock() {
+        if (isInTopLayer()) {
+            UIWindow window = getAttachedWindow();
+            if (window != null) return window.ui.rootElement;
+        }
+        return getParent();
+    }
+
+    /** Whether the current handle set was built for a movable element. See {@link #rebuildResizers}. */
+    private boolean resizersAssumeMovable;
+
+    /**
+     * Re-derives the handle set when {@code position} changes, since that is what decides whether the
+     * leading edges may exist at all.
+     *
+     * <p>Driven from the style property rather than from {@link #onLayoutChanged()}, which was the first
+     * attempt and does not work: an absolutely positioned box with auto offsets sits at its static
+     * position, so becoming positioned frequently moves nothing and the layout callback never fires.
+     * {@code LayoutProperties} wires this the same way it wires {@code display} to the focusable-chain
+     * cache.</p>
+     */
+    public void onPositionModeChanged() {
+        if (resizeMode == Resize.NONE) return;
+        if (canMoveResizeOrigin() == resizersAssumeMovable) return;
+        rebuildResizers();
+    }
+
+    /**
+     * Where this element's origin currently sits inside its containing block — the {@code left} it would
+     * have to be given to stay exactly where it is.
+     *
+     * <p>Read from the <b>live Taffy inset</b> rather than tracked in a field. A field only knows about
+     * positions this class itself wrote, so an element placed by a stylesheet reported an origin of zero
+     * and the first leading-edge drag teleported it to the container's corner. The inset is the same value
+     * layout uses, so the answer cannot disagree with where the box actually is.</p>
+     *
+     * <p>{@code auto} answers zero, which is the static position for the out-of-flow elements that can get
+     * here at all — the fallback is only reachable before anything has placed the element.</p>
+     */
+    protected float resizeOriginLeft() {
+        return definiteInset(style.taffyBridge.style.inset.left);
+    }
+
+    protected float resizeOriginTop() {
+        return definiteInset(style.taffyBridge.style.inset.top);
+    }
+
+    /** A definite inset in pixels, or 0. Percentages resolve against the containing block, which this
+     * layer does not have, so they are treated as unplaced rather than guessed at. */
+    private static float definiteInset(@Nullable LengthPercentageAuto inset) {
+        return inset != null && inset.getType() == LengthPercentageAuto.Type.LENGTH ? inset.getValue() : 0f;
+    }
 
     /**
      * Moves this element's origin because a {@code top}/{@code left} resize handle was dragged.
@@ -818,14 +912,16 @@ public class UIElement {
      * only one the web offers — but the spec only mandates "a bidirectional resizing mechanism", and
      * leaves the mechanism to the UA.</p>
      *
+     * <p>Only ever called for an <b>out-of-flow</b> element — {@link #rebuildResizers} withholds the
+     * leading handles otherwise, because {@code left}/{@code top} on an in-flow box is a relative offset
+     * that slides it over its neighbours without changing the layout.</p>
+     *
      * <p>Overridable because an element may already own its position: {@code Dialog} keeps
      * {@code left}/{@code top} in fields and re-clamps them every frame, so a handle writing the
      * property directly would be silently overwritten on the next tick. Routing through this lets it
      * update its own notion of where it is instead.</p>
      */
     protected void applyResizeOrigin(float left, float top) {
-        resizeOriginLeft = left;
-        resizeOriginTop = top;
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.left(left).top(top));
     }
 
