@@ -1,6 +1,5 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.StyleGroup;

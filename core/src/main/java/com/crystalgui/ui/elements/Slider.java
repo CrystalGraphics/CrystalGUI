@@ -1,6 +1,5 @@
 package com.crystalgui.ui.elements;
 
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
