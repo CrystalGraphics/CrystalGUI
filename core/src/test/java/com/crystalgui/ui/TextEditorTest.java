@@ -2536,6 +2536,49 @@ public class TextEditorTest extends UiTestBase {
         assertEquals(1, countOf(TextEditor.RULER_CLASS));
     }
 
+    /**
+     * <b>The gutter leaves a clear column before the code.</b> Without it the gutter ends exactly where
+     * the text begins and the first glyph of an unindented line sits <em>on</em> the border — a {@code p}
+     * with its descender crossing it. IntelliJ and VS Code both fill this gap with fold arrows.
+     */
+    @Test
+    public void theGutterLeavesRoomBetweenItsNumbersAndTheCode() {
+        build("public final class Shader {" + NL + "    body();");
+        showEditor();
+
+        UIElement number = null;
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
+            for (UIElement candidate : child.getChildren()) {
+                if (candidate.hasClass(TextEditor.LINE_NUMBER_CLASS)
+                        && candidate.getTaffyLayout().contentBoxHeight() > 0f) {
+                    number = candidate;
+                    break;
+                }
+            }
+        }
+        assertNotNull("a line number must be laid out", number);
+
+        float numbersEnd = number.getTaffyLayout().contentBoxWidth();
+        float textStart = editor.getGutterWidth();
+        assertTrue("the numbers must stop short of the code: numbers end " + numbersEnd
+                + ", text starts " + textStart, textStart - numbersEnd >= 4f);
+    }
+
+    /** The gap scales with the font, so the gutter stays proportionate when the editor is zoomed. */
+    @Test
+    public void theGutterGapGrowsWithTheFont() {
+        build("x");
+        showEditor();
+        float small = editor.getGutterWidth();
+
+        editor.generalStyle(g -> g.fontSize(24f));
+        showEditor();
+
+        assertTrue("a larger font must widen the gutter: " + small + " -> " + editor.getGutterWidth(),
+                editor.getGutterWidth() > small);
+    }
+
     /** The editor is a composite: its lines and caret are its own, and callers do not add children. */
     @Test
     public void theEditorRefusesPublicChildren() {
