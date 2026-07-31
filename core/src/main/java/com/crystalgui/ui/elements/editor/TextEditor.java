@@ -2784,15 +2784,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
             for (UIElement number : lineNumbers) hide(number);
             return;
         }
-        final float width = gutterWidth;
-        final float left = getTaffyLayout().padding().left;
+        // FROM THE EDITOR'S EDGE, not from past its padding. The editor's own padding-left is a strip the
+        // gutter did not cover and scrolled text painted into, visible as fragments to the LEFT of the
+        // gutter when zoomed in. The gutter's width absorbs it; the numbers carry it themselves below so
+        // they stay where they were.
+        //
+        // FULL CLIENT HEIGHT. It used to stop at the viewport so it would not paint over the horizontal
+        // bar's left end -- and that left the corner between the two uncovered, which scrolled text showed
+        // through. The bars now sit ABOVE the gutter in z, so there is nothing left to paint over: the
+        // gutter can run the whole height and the bar draws on top of its bottom edge.
+        final float width = getTaffyLayout().padding().left + gutterWidth;
+        final float left = 0f;
         // Stops ABOVE the horizontal bar. The gutter sits at a higher z than the scrollbars so that a
         // long line scrolled sideways passes behind the numbers -- which also means a full-height gutter
         // paints over the bar's left end, showing as a dead square in the corner.
-        final float viewport = viewportHeight();
+        final float gutterHeight = getClientHeight();
         StyleGroup.defaultPipeline(gutter.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(left).top(0f).width(width).height(viewport));
+                        .left(left).top(0f).width(width).height(gutterHeight));
 
         float height = lineHeight();
         int used = 0;
@@ -2822,7 +2831,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // field updated only when it moves, so measuring the digits afresh at layout time meant the
             // two could disagree on any frame where the font had not resolved: the numbers got a
             // zero-width box and every one of them piled up in the same place.
-            final float numberLeft = gutterPadLeft();
+            // Carries the editor's padding itself, now that the gutter's box starts at its edge.
+            final float numberLeft = getTaffyLayout().padding().left + gutterPadLeft();
             final float numberWidth = gutterNumbersWidth;
             StyleGroup.defaultPipeline(number.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE)

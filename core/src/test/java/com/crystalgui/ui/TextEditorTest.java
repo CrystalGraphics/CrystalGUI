@@ -1428,15 +1428,21 @@ public class TextEditorTest extends UiTestBase {
     }
 
     /**
-     * <b>The gutter must stop above the horizontal scrollbar, not paint over it.</b>
+     * <b>The gutter covers its whole column, and the bars paint over it.</b>
      *
-     * <p>The gutter sits at a higher z than the scrollbars on purpose, so a long line scrolled sideways
-     * passes behind the numbers rather than through them. The cost of that is a full-height gutter
-     * covering the bar's left end, which shows as a dead square in the corner that no drag responds to.
-     * </p>
+     * <p>This inverts an earlier decision, so the reasoning matters. The gutter used to sit <em>above</em>
+     * the bars in z, which meant a full-height gutter covered the horizontal bar's left end as a dead
+     * square — so it was made to stop short of the bar. Stopping short left the corner between the two
+     * uncovered, and scrolled text painted straight through it: visible as fragments below the gutter
+     * once zoomed in far enough to see them.</p>
+     *
+     * <p>Putting the bars on top removes the reason the gutter had to stop. It now runs the full client
+     * height, covering its column completely, and the bar draws over its bottom edge. The property that
+     * actually mattered is untouched: the <b>lines</b> are still behind the gutter, so a long line
+     * scrolled sideways passes behind the numbers rather than through them.</p>
      */
     @Test
-    public void theGutterStopsAboveTheHorizontalScrollbar() {
+    public void theGutterCoversItsColumnAndTheBarsPaintOverIt() {
         buildOverflowing();
 
         UIElement gutter = childWithClass(TextEditor.GUTTER_CLASS);
@@ -1444,10 +1450,12 @@ public class TextEditorTest extends UiTestBase {
         assertTrue("the horizontal bar should be showing for this document",
                 bar.getRuntimeCache().getHeight() > 0f);
 
-        float gutterBottom = gutter.getRuntimeCache().getY() + gutter.getRuntimeCache().getHeight();
-        float barTop = bar.getRuntimeCache().getY();
-        assertTrue("the gutter runs to " + gutterBottom + ", over a bar starting at " + barTop,
-                gutterBottom <= barTop + 0.5f);
+        assertEquals("no corner left below the gutter for text to leak through",
+                editor.getClientHeight(), gutter.getTaffyLayout().contentBoxHeight(), 1f);
+        assertEquals("and no strip of the editor's own padding to its left",
+                editor.getRuntimeCache().getX(), gutter.getRuntimeCache().getX(), 0.5f);
+        assertTrue("so the bar must be above it, or the gutter would hide the bar's left end",
+                bar.getStyle().getGeneralGroup().zIndex() > gutter.getStyle().getGeneralGroup().zIndex());
     }
 
     /**
@@ -1551,7 +1559,10 @@ public class TextEditorTest extends UiTestBase {
         float gutterZ = gutter.getStyle().getGeneralGroup().zIndex();
 
         assertTrue("a bar at z=" + barZ + " is not above text at z=" + lineZ, barZ > lineZ);
-        assertTrue("the gutter at z=" + gutterZ + " must stay above the bars", gutterZ > barZ);
+        assertTrue("the gutter at z=" + gutterZ + " must stay above the TEXT, so a long line scrolled "
+                + "sideways passes behind the numbers", gutterZ > lineZ);
+        assertTrue("but below the bars, so a full-height gutter cannot hide the bar's left end",
+                barZ > gutterZ);
     }
 
     // ── Multi-cursor ─────────────────────────────────────────────

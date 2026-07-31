@@ -609,3 +609,39 @@ scrollerview .__h-scroller__ {
     right: 0;
     bottom: 0;
 }
+
+/* ── The editor's zoom indicator ────────────────────────────────────────────────────────────────
+ *
+ * The reset control is a Button, so this theme's `button` rule claims it — and a theme is at
+ * StyleOrigin.STYLESHEET, which beats the user-agent sheet at ANY specificity. So default.css making it
+ * look like a link is not enough: without these rules the ore sprite paints straight over it and the
+ * link comes back as a raised, bordered button in the middle of a transient bar.
+ *
+ * That is the cascade working as designed rather than a bug — a theme owns appearance — which is exactly
+ * why the answer is for the theme to say what it wants, not for the widget to force it.
+ *
+ * background, not background-color: this sheet's rule 3. background-color is a multiplicative tint over
+ * whatever drawable is there, so a colour here would darken the sprite instead of replacing it, and the
+ * transparent fill a link needs would be no fill change at all. */
+texteditor .__zoom-indicator__ {
+    background: #22252CDD;
+    border-radius: 3px;
+}
+texteditor .__zoom-reset__ {
+    background: #00000000;
+    color: #4A9EFF;
+    padding-all: 0px;
+    min-height: 0px;
+    border-radius: 0px;
+    outline: none;
+}
+texteditor .__zoom-reset__:hover {
+    background: #00000000;
+    color: #4A9EFF;
+    text-decoration-line: underline;
+}
+texteditor .__zoom-reset__:active {
+    background: #00000000;
+    color: #2F7FD8;
+    text-decoration-line: underline;
+}

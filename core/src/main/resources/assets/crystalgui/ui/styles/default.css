@@ -702,12 +702,20 @@ tableview .__corner__ {
     background: #2A2A2A;
 }
 
-/* Above the editor's text, below its gutter -- see the stacking note above. Only the editor needs this:
- * a list's rows do not overlap its bars. */
+/* ABOVE the editor's text AND above its gutter. Only the editor needs this: a list's rows do not overlap
+ * its bars.
+ *
+ * The bars used to sit BELOW the gutter, which forced the gutter to stop short of them -- otherwise it
+ * painted over the bar's left end as a dead square. Stopping short left the corner between the two
+ * uncovered, and scrolled text showed through it. Putting the bars on top removes the reason the gutter
+ * had to stop, so it can run the full height and there is no corner left to leak through.
+ *
+ * The lines are still behind the gutter (they are at z-index 0), which is the property that mattered:
+ * a long line scrolled sideways passes behind the numbers rather than through them. */
 texteditor .__v-scroller__,
 texteditor .__h-scroller__,
 texteditor .__corner__ {
-    z-index: 5;
+    z-index: 7;
 }
 
 scrollerview .__v-scroller__,
@@ -1249,7 +1257,10 @@ graphnode .__control-row__ {
 }
 /* The preview slot has a height even while empty, because 6.2.7 fills it with a render and a node
  * that changed size the moment previews arrived would move every wire in the graph. */
-graphnode .__preview__ { height: 78px; }
+/* Tall enough to be roughly square against the 134px min-width, because the render target IS square
+ * and the thumbnail is drawn letterboxed inside this box. At 78px a sphere was a wide ellipse — the
+ * picture was never wrong, the box it was stretched into was. */
+graphnode .__preview__ { height: 128px; }
 /* The rendered thumbnail fills its slot. Explicit because the slot is a flex COLUMN with the project's
  * flex-shrink: 0 default, so a child with no size of its own would lay out at zero and paint nothing —
  * which is indistinguishable from a preview that has not rendered yet. */
