@@ -2788,6 +2788,39 @@ public class TextEditorTest extends UiTestBase {
         }
     }
 
+    /**
+     * <b>The text must move when the view scrolls.</b>
+     *
+     * <p>The regression this exists for: the lines moved into a scroll-exempt viewport, so they stopped
+     * getting the scroll translate for free and their {@code top} is now baked in by {@code layOutLine} —
+     * which only ran when a line was realised or rebound, not every frame. The gutter and the scrollbar
+     * moved and the text stood still.</p>
+     *
+     * <p>Every test in this file passed against that, because they all assert on offsets, counts and
+     * element trees rather than on where anything ended up after a scroll.</p>
+     */
+    @Test
+    public void scrollingMovesTheTextAndTheGutterTogether() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 200; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        showEditor();
+
+        UIElement line = linesOf().get(0);
+        UIElement number = childWithClass(TextEditor.LINE_NUMBER_CLASS);
+        float lineBefore = line.getRuntimeCache().getY();
+        float numberBefore = number.getRuntimeCache().getY();
+
+        editor.setScrollImmediate(0f, 20f * editor.lineHeight());
+        showEditor();
+
+        float lineMoved = line.getRuntimeCache().getY() - lineBefore;
+        float numberMoved = number.getRuntimeCache().getY() - numberBefore;
+        assertTrue("the text must actually move: it shifted " + lineMoved, Math.abs(lineMoved) > 1f);
+        assertEquals("and by the same amount as the gutter, or the two drift apart",
+                numberMoved, lineMoved, 1f);
+    }
+
     /** The gap scales with the font, so the gutter stays proportionate when the editor is zoomed. */
     @Test
     public void theGutterGapGrowsWithTheFont() {
