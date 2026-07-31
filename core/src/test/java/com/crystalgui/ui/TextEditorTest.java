@@ -40,6 +40,7 @@ public class TextEditorTest extends UiTestBase {
     private static final String NL = "\n";
 
     private int modifiers;
+    private long wheelClock = 50L;
     private String clipboard = "";
 
     @Before
@@ -2788,6 +2789,70 @@ public class TextEditorTest extends UiTestBase {
         key(CgKeyCodes.KEY_MINUS, CgModifiers.CTRL);
         showEditor();
         assertEquals("and two down", Math.round(before) - 1, Math.round(editor.getFontSize()));
+    }
+
+    /** Spins the wheel over the editor with the given modifiers held through the dispatch. */
+    private void wheel(float notches, int held) {
+        float px = editor.getRuntimeCache().getX() + editor.getRuntimeCache().getWidth() / 2f;
+        float py = editor.getRuntimeCache().getY() + editor.getRuntimeCache().getHeight() / 2f;
+        // The mask must stay held THROUGH the settle. Scroll is accumulated by consumeMouseEvent and
+        // dispatched once per frame from endFrame(), so a mask cleared before that is not the one the
+        // resolver reads -- it reads CgPlatform's live state at DISPATCH time.
+        this.modifiers = held;
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                (int) px, (int) py, 0, 0, 0, false, notches, wheelClock += 20L));
+        settle();
+        this.modifiers = 0;
+        editor.updateWindow();
+        settle();
+    }
+
+    /**
+     * <b>Ctrl+wheel zooms, through the KEYMAP.</b>
+     *
+     * <p>Not a listener on the editor — that is the hard-coded input path section H removed from
+     * {@code handleKey}, and a wheel gesture that cannot be remapped is exactly what it argued against.
+     * The wheel is a {@code KeyStroke}, so it resolves like any chord.</p>
+     */
+    @Test
+    public void ctrlWheelUpZoomsIn() {
+        build("x");
+        showEditor();
+        int before = Math.round(editor.getFontSize());
+
+        wheel(-1f, CgModifiers.CTRL);
+
+        assertEquals("wheel up zooms in", before + 1, Math.round(editor.getFontSize()));
+    }
+
+    /** And the sign is the engine's: a POSITIVE notch means the wheel rolled down, so down zooms out. */
+    @Test
+    public void ctrlWheelDownZoomsOut() {
+        build("x");
+        showEditor();
+        int before = Math.round(editor.getFontSize());
+
+        wheel(1f, CgModifiers.CTRL);
+
+        assertEquals("wheel down zooms out", before - 1, Math.round(editor.getFontSize()));
+    }
+
+    /**
+     * <b>A plain wheel still scrolls.</b> {@code ScrollerView} declines only Mod+wheel, which is what lets
+     * that fall through to the keymap while everything else stays its own.
+     */
+    @Test
+    public void aPlainWheelScrollsRatherThanZooming() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 200; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        showEditor();
+        float before = editor.getFontSize();
+
+        wheel(1f, CgModifiers.NONE);
+
+        assertEquals("the font is untouched", before, editor.getFontSize(), 0.01f);
+        assertTrue("and the view actually scrolled", editor.getScrollTop() > 0f);
     }
 
     /**

@@ -95,6 +95,15 @@ public class ScrollerView extends UIElement implements com.crystalgui.ui.UIFrame
         // the cursor, not this view, and default listeners only fire in the TARGET phase.
         this.events.getGroup(MouseEvent.Scroll.class).attachListener((el, event) -> {
             if (!isEnabled()) return;
+            // Mod+wheel is NOT scrolling. Declining it here is what lets it fall through to the keymap,
+            // where `editor.zoomIn` and anything else can bind it -- and declining is the only way, since
+            // the resolver runs after dispatch and only on what nothing consumed. Shift+wheel is still
+            // ours: it is this view's horizontal scroll, and the convention everywhere.
+            int held = com.crystalgraphics.platform.CgPlatform.input().getCurrentModifiers();
+            if (com.crystalgraphics.platform.input.CgModifiers.hasCtrl(held)
+                    || com.crystalgraphics.platform.input.CgModifiers.hasSuper(held)) {
+                return;
+            }
             float delta = event.getScroll() * WHEEL_PIXELS_PER_NOTCH;
 
             // Shift+wheel scrolls horizontally — the convention everywhere, and the only way to reach

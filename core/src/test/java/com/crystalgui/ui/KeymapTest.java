@@ -84,6 +84,64 @@ public class KeymapTest extends UiTestBase {
         assertEquals(expected, KeyStroke.parse("Mod+S").modifiers());
     }
 
+    /**
+     * <b>The wheel is a stroke, not a special case.</b> Modelling it that way is what makes it rebindable
+     * for free — the resolver, conflict reporting, accelerator labels and {@code bindAll} all work on it
+     * without knowing it is not a key.
+     */
+    @Test
+    public void theWheelParsesAndRendersAsAStroke() {
+        KeyStroke up = KeyStroke.parse("Mod+WheelUp");
+        assertTrue(up.isWheel());
+        assertEquals("Ctrl+WheelUp", up.toString());
+        assertEquals(KeyStroke.parse("Mod+WheelDown"),
+                new KeyStroke(KeyStroke.WHEEL_DOWN, com.crystalgraphics.platform.input.CgModifiers.CTRL));
+    }
+
+    /**
+     * <b>A positive notch means the wheel rolled DOWN.</b> The engine's own rule, stated by
+     * {@code ScrollerView}'s {@code setScrollTop(before + delta)} — and got wrong once already by
+     * {@code CanvasView}, which shipped zooming in on scroll-down.
+     */
+    @Test
+    public void aPositiveNotchIsWheelDown() {
+        assertEquals(KeyStroke.WHEEL_DOWN, KeyStroke.ofWheel(1f, 0).key());
+        assertEquals(KeyStroke.WHEEL_UP, KeyStroke.ofWheel(-1f, 0).key());
+    }
+
+    /** Wheel codes are negative so a future {@code CgKeyCodes} constant can never collide with them. */
+    @Test
+    public void wheelCodesCannotCollideWithAKey() {
+        assertTrue(KeyStroke.WHEEL_UP < 0);
+        assertTrue(KeyStroke.WHEEL_DOWN < 0);
+        assertFalse("a real key is not a wheel", KeyStroke.parse("A").isWheel());
+    }
+
+    /** Several alternatives in one call — {@code bindAll}, comma-separated because space means sequence. */
+    @Test
+    public void bindAllTakesCommaSeparatedAlternatives() {
+        UIElement root = build();
+        root.keymap().bindAll("Mod+Equals, Mod+Add", "editor.zoomIn");
+
+        assertEquals(2, root.keymap().bindings().size());
+        for (var binding : root.keymap().bindings()) {
+            assertEquals("editor.zoomIn", binding.getCommandId());
+            assertEquals("each alternative is one stroke, not a sequence", 1, binding.getChord().length());
+        }
+    }
+
+    /** A comma and a space in one string keep their separate meanings. */
+    @Test
+    public void bindAllStillAllowsSequencesAmongTheAlternatives() {
+        UIElement root = build();
+        root.keymap().bindAll("Mod+K Mod+S, F1", "app.save");
+
+        var chords = root.keymap().bindings();
+        assertEquals(2, chords.size());
+        assertEquals("the first is a two-stroke sequence", 2, chords.get(0).getChord().length());
+        assertEquals("the second is one stroke", 1, chords.get(1).getChord().length());
+    }
+
     @Test
     public void chordsAreSpaceSeparatedSequences() {
         KeyChord chord = KeyChord.parse("Mod+K Mod+S");

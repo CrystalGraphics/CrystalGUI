@@ -25,6 +25,32 @@ import java.util.TreeMap;
  */
 public record KeyStroke(int key, int modifiers) {
 
+    /**
+     * The mouse wheel, as strokes — {@code "Mod+WheelUp"}, {@code "Mod+WheelDown"}.
+     *
+     * <p><b>Negative, so they cannot collide with a real key.</b> {@code CgKeyCodes} is LWJGL2-shaped and
+     * every constant in it is a non-negative scan code, so the space below zero is free forever and a
+     * future key cannot silently become "wheel up".</p>
+     *
+     * <p>Modelling the wheel as a stroke rather than as its own binding type is what makes it rebindable
+     * for free: the resolver, the conflict report, the accelerator label and {@code bindAll} all work on
+     * it without knowing it is not a key. A binding that cannot be remapped is the shape section H spent
+     * its whole existence removing, and a hard-coded Ctrl+wheel would have reintroduced it.</p>
+     */
+    public static final int WHEEL_UP = -100;
+    public static final int WHEEL_DOWN = -101;
+
+    /** The stroke a wheel notch makes. A POSITIVE notch means the wheel rolled DOWN — the engine's rule,
+     * stated by {@code ScrollerView}'s {@code setScrollTop(before + delta)} and got wrong once already by
+     * {@code CanvasView}, which shipped zooming in on scroll-down. */
+    public static KeyStroke ofWheel(float notches, int modifiers) {
+        return new KeyStroke(notches > 0f ? WHEEL_DOWN : WHEEL_UP, modifiers);
+    }
+
+    public boolean isWheel() {
+        return key == WHEEL_UP || key == WHEEL_DOWN;
+    }
+
     /** Modifiers that participate in matching. Anything else the platform reports is ignored rather than
      * required, so a stray lock key cannot make a binding unreachable. */
     private static final int MATCHED = CgModifiers.SHIFT | CgModifiers.CTRL | CgModifiers.ALT | CgModifiers.SUPER;
@@ -118,6 +144,11 @@ public record KeyStroke(int key, int modifiers) {
     private static final Map<Integer, String> BY_CODE = new TreeMap<>();
 
     static {
+        // The wheel first, so a CgKeyCodes constant could never shadow these names.
+        BY_NAME.put("WHEELUP", WHEEL_UP);
+        BY_NAME.put("WHEELDOWN", WHEEL_DOWN);
+        BY_CODE.put(WHEEL_UP, "WheelUp");
+        BY_CODE.put(WHEEL_DOWN, "WheelDown");
         for (Field field : CgKeyCodes.class.getDeclaredFields()) {
             if (!Modifier.isStatic(field.getModifiers()) || field.getType() != int.class) continue;
             if (!field.getName().startsWith("KEY_")) continue;
