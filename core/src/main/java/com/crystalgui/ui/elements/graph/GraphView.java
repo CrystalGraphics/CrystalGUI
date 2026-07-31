@@ -4,7 +4,14 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.graph.EdgeData;
+import com.crystalgui.graph.GraphChangeset;
+import com.crystalgui.graph.GraphDocument;
+import com.crystalgui.graph.GraphIds;
 import com.crystalgui.graph.NodeData;
+import com.crystalgui.graph.NodeType;
+import com.crystalgui.graph.PortRef;
+import com.crystalgui.graph.PortSpec;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.TypeCompatibility;
 import com.crystalgui.core.undo.Edit;
@@ -27,7 +34,9 @@ import lombok.Getter;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A {@link CanvasView} that knows about nodes and wires: it owns the edge set, the wire layer that
@@ -80,6 +89,20 @@ public class GraphView extends CanvasView implements UndoScope {
 
     private final List<GraphConnection> connections = new ArrayList<>();
     private final List<GraphConnection> connectionsView = Collections.unmodifiableList(connections);
+
+    /**
+     * The data this view projects. <b>The document is the model; the widgets are the projection.</b>
+     *
+     * <p>Every mutation here writes through to it, so the two can never disagree — which is what makes
+     * saving, loading, duplicating and a server-authored graph ordinary rather than special. The view
+     * keeps its own {@link GraphConnection} list because the wire layer draws from widget geometry, but
+     * that list is derived: {@link #load} rebuilds it from the document and nothing else may.</p>
+     */
+    @Getter
+    private GraphDocument document = new GraphDocument();
+
+    /** id → widget. The only way back from document data to the thing on screen. */
+    private final Map<String, GraphNode> widgetsById = new LinkedHashMap<>();
 
     private final NodeWireLayer wireLayer;
 
@@ -232,6 +255,271 @@ public class GraphView extends CanvasView implements UndoScope {
         return wireLayer;
     }
 
+    // ── The document seam ───────────────────────────────────────────────────
+
+    /**
+     * Adds a node, binding it to the document.
+     *
+     * <p>A widget arriving without a {@code nodeId} — anything built by hand rather than from a
+     * {@link NodeData} — gets one here, along with {@link NodeData} <b>derived from its own ports</b>.
+     * That keeps the 6.2.3 API working unchanged while making the document complete either way: there is
+     * no such thing as a node on this canvas the document does not know about, which is the property
+     * every later feature (save, duplicate, a server sending a graph) depends on.</p>
+     */
+    @Override
+    public GraphView addNode(UIElement node, float worldX, float worldY) {
+        if (node instanceof GraphNode graphNode) {
+            attachNode(graphNode, dataFor(graphNode, worldX, worldY));
+            return this;
+        }
+        super.addNode(node, worldX, worldY);
+        return this;
+    }
+
+    @Override
+    public GraphView moveNode(UIElement node, float worldX, float worldY) {
+        super.moveNode(node, worldX, worldY);
+        // Position is document data — a reload has to give a moved node back where it was left.
+        if (node instanceof GraphNode graphNode && graphNode.getNodeId() != null) {
+            document.moveNode(graphNode.getNodeId(), worldX, worldY);
+        }
+        markSynced();
+        return this;
+    }
+
+    /** The {@link NodeData} for a widget: its own if it already has one, otherwise derived from it. */
+    private NodeData dataFor(GraphNode widget, float worldX, float worldY) {
+        String existing = widget.getNodeId();
+        if (existing != null) {
+            NodeData known = document.node(existing);
+            if (known != null) return known.movedTo(worldX, worldY);
+        }
+        List<PortSpec> ports = new ArrayList<>();
+        for (NodePort port : widget.getPorts()) {
+            ports.add(new PortSpec(port.getPortId(), port.getDirection(), port.getType().id()));
+        }
+        String typeId = widget.getTypeId() != null ? widget.getTypeId() : WIDGET_AUTHORED_TYPE;
+        // A widget-authored node stores its own title, because there is no library type to take one
+        // from and reloading it as "crystalgui:widget" is true but useless. Its controls and preview
+        // still cannot come back — those are Java the document never saw — which is the honest limit of
+        // building a node as a widget rather than registering a type for it.
+        Map<String, String> properties = widget.getTypeId() != null
+                ? Map.of()
+                : Map.of(NodeWidgetFactory.TITLE_PROPERTY, widget.getTitle());
+        return new NodeData(existing != null ? existing : GraphIds.generate(),
+                typeId, worldX, worldY, ports, properties);
+    }
+
+    /**
+     * The {@code typeId} given to a node built as a widget rather than from a document.
+     *
+     * <p>Honest rather than empty: it says the node was authored in the UI and has no library type
+     * behind it, which is exactly what a loader needs to know to rebuild it as a placeholder.</p>
+     */
+    public static final String WIDGET_AUTHORED_TYPE = "crystalgui:widget";
+
+    /**
+     * The view has just made this change itself, so the changeset must not report it again.
+     *
+     * <p>Without this the two directions fight, and they fight <em>quietly</em>. A changeset records the
+     * NET change since it was last drained, so an add the view had already applied sat pending — and a
+     * later remove of that same node cancelled the add instead of recording a removal. The changeset
+     * then said "nothing happened" while the view still held the widget, so
+     * {@link #syncFromDocument()} left a node on screen that the document no longer had.</p>
+     */
+    private void markSynced() {
+        document.changeset().clear();
+    }
+
+    /** Puts a node into both the document and the tree. The one path; {@link AddNodeEdit} uses it too,
+     * which is what makes an undone delete restore the SAME id rather than a new one. */
+    private void attachNode(GraphNode widget, NodeData data) {
+        if (!document.hasNode(data.id())) document.addNode(data);
+        widget.bindToDocument(data.id(), data.typeId());
+        widgetsById.put(data.id(), widget);
+        super.addNode(widget, data.x(), data.y());
+        markSynced();
+    }
+
+    /** Removes a node from both. */
+    private void detachNode(GraphNode widget) {
+        String id = widget.getNodeId();
+        if (id != null) {
+            document.removeNode(id);
+            widgetsById.remove(id);
+        }
+        content().removeChild(widget);
+        markSynced();
+    }
+
+    /**
+     * Re-derives a bound node's declared ports from its widget.
+     *
+     * <p>Called by {@link GraphNode#addPort}, because a node may gain ports after it joins the view.
+     * Only for widget-authored nodes: one built from a library type already has the ports its type
+     * declared, and re-deriving them would throw away anything the type knew that the widget does not.</p>
+     */
+    void syncPorts(GraphNode widget) {
+        String id = widget.getNodeId();
+        if (id == null) return;
+        NodeData current = document.node(id);
+        // The DOCUMENT decides whether this is widget-authored, not the widget. Binding sets the
+        // widget's typeId to WIDGET_AUTHORED_TYPE, so a "typeId == null" test here rejected precisely
+        // the nodes it existed to serve — every one of them, silently.
+        if (current == null || !WIDGET_AUTHORED_TYPE.equals(current.typeId())) return;
+        List<PortSpec> ports = new ArrayList<>();
+        for (NodePort port : widget.getPorts()) {
+            ports.add(new PortSpec(port.getPortId(), port.getDirection(), port.getType().id()));
+        }
+        document.replaceNode(new NodeData(id, current.typeId(), current.x(), current.y(),
+                ports, current.properties()));
+        markSynced();
+    }
+
+    /** The widget projecting {@code nodeId}, or null. */
+    @Nullable
+    public GraphNode widgetFor(String nodeId) {
+        return widgetsById.get(nodeId);
+    }
+
+    /** The port a {@link PortRef} names, or null if the node or the port is not on screen. */
+    @Nullable
+    public NodePort portFor(PortRef ref) {
+        GraphNode widget = widgetsById.get(ref.nodeId());
+        if (widget == null) return null;
+        for (NodePort port : widget.getPorts()) {
+            if (port.getPortId().equals(ref.portId())) return port;
+        }
+        return null;
+    }
+
+    /** The {@link PortRef} naming a live port, or null before its node has been added. */
+    @Nullable
+    public static PortRef refFor(NodePort port) {
+        GraphNode owner = port.node();
+        if (owner == null || owner.getNodeId() == null) return null;
+        return new PortRef(owner.getNodeId(), port.getPortId());
+    }
+
+    /**
+     * Rebuilds the whole view from {@code document} — opening a file, or receiving a graph.
+     *
+     * <p>The one place a wholesale rebuild is correct, because there is no interaction in flight: every
+     * <em>incremental</em> change goes through the ordinary mutators instead, since rebuilding detaches
+     * the element under the pointer.</p>
+     *
+     * <p>Nodes whose type is not in the library still appear — {@link NodeWidgetFactory} builds them
+     * from the ports the document stored, which is why the document stores them.</p>
+     */
+    public GraphView load(GraphDocument source) {
+        for (GraphNode widget : List.copyOf(widgetsById.values())) content().removeChild(widget);
+        widgetsById.clear();
+        connections.clear();
+        selection.clear();
+        undoStack.clear();
+        this.document = source;
+
+        NodeWidgetFactory factory = nodeFactory != null ? nodeFactory : NodeWidgetFactory.of(nodeLibrary).build();
+        for (NodeData data : source.nodes()) {
+            NodeType type = nodeLibrary != null ? nodeLibrary.get(data.typeId()) : null;
+            GraphNode widget = factory.create(type, data);
+            widget.bindToDocument(data.id(), data.typeId());
+            widgetsById.put(data.id(), widget);
+            super.addNode(widget, data.x(), data.y());
+        }
+        for (EdgeData edge : source.edges()) linkWidgets(edge);
+        onConnectionsChanged.emit();
+        return this;
+    }
+
+    /**
+     * Applies the document's pending changes to the widgets <b>in place</b>, and clears them.
+     *
+     * <p>The other direction from everything above: this is how a change made to the document by
+     * something that is not this view — a server, a command, a paste — reaches the screen. Mutations
+     * made <em>through</em> the view already updated both sides, and this is idempotent, so calling it
+     * afterwards is harmless.</p>
+     *
+     * <p><b>In place, never a rebuild</b>, and that is the whole reason a changeset exists rather than a
+     * "something changed" flag. Rebuilding detaches the element under the pointer: a drag's source
+     * would go stale on its first update and every later frame would feed it garbage — the same defect
+     * that froze the table header. Untouched nodes here keep their widget, and therefore their drag,
+     * their focus and their scroll position.</p>
+     *
+     * @return how many individual changes were applied
+     */
+    public int syncFromDocument() {
+        GraphChangeset pending = document.changeset();
+        if (pending.isEmpty()) return 0;
+
+        // Snapshot EVERYTHING, then clear, then apply — because applying re-enters. `CanvasView.addNode`
+        // calls `moveNode` polymorphically, which reaches this class's override, which writes through to
+        // the document and drains the changeset. Reading the lists as it went meant adding the first
+        // node wiped the pending edges, and the wires simply never appeared.
+        List<String> removedNodes = List.copyOf(pending.removedNodes());
+        List<String> addedNodes = List.copyOf(pending.addedNodes());
+        List<String> movedNodes = List.copyOf(pending.movedNodes());
+        List<EdgeData> removedEdges = List.copyOf(pending.removedEdges());
+        List<EdgeData> addedEdges = List.copyOf(pending.addedEdges());
+        pending.clear();
+        int applied = 0;
+
+        for (String id : removedNodes) {
+            GraphNode widget = widgetsById.remove(id);
+            if (widget == null) continue;
+            content().removeChild(widget);
+            applied++;
+        }
+        for (String id : addedNodes) {
+            NodeData data = document.node(id);
+            if (data == null || widgetsById.containsKey(id)) continue;
+            NodeWidgetFactory factory = nodeFactory != null
+                    ? nodeFactory : NodeWidgetFactory.of(nodeLibrary).build();
+            NodeType type = nodeLibrary != null ? nodeLibrary.get(data.typeId()) : null;
+            GraphNode widget = factory.create(type, data);
+            widget.bindToDocument(data.id(), data.typeId());
+            widgetsById.put(id, widget);
+            super.addNode(widget, data.x(), data.y());
+            applied++;
+        }
+        for (String id : movedNodes) {
+            GraphNode widget = widgetsById.get(id);
+            NodeData data = document.node(id);
+            // super, not this: the position is already what the document says, and going back through
+            // the override would write it straight back with no effect but a second changeset entry.
+            if (widget != null && data != null) {
+                super.moveNode(widget, data.x(), data.y());
+                applied++;
+            }
+        }
+        for (EdgeData edge : removedEdges) {
+            NodePort from = portFor(edge.from());
+            NodePort to = portFor(edge.to());
+            if (connections.removeIf(c -> c.from() == from && c.to() == to)) applied++;
+            if (from != null && to != null) refreshCounts(from, to);
+        }
+        for (EdgeData edge : addedEdges) {
+            int before = connections.size();
+            linkWidgets(edge);
+            if (connections.size() != before) applied++;
+        }
+
+        selection.prune(this);
+        if (applied > 0) onConnectionsChanged.emit();
+        return applied;
+    }
+
+    /** Builds the view-side {@link GraphConnection} for a document edge. Silent when either end is
+     * missing: a document may legitimately outrun its widgets mid-load. */
+    private void linkWidgets(EdgeData edge) {
+        NodePort from = portFor(edge.from());
+        NodePort to = portFor(edge.to());
+        if (from == null || to == null) return;
+        GraphConnection connection = new GraphConnection(from, to);
+        if (!connections.contains(connection)) connections.add(connection);
+        refreshCounts(from, to);
+    }
+
     // ── Nodes ───────────────────────────────────────────────────────────────
 
     /**
@@ -243,11 +531,18 @@ public class GraphView extends CanvasView implements UndoScope {
      * ports that exist again.</p>
      */
     public GraphView removeNode(GraphNode node) {
-        WorldRect at = worldBoundsOf(node);
+        String id = node.getNodeId();
+        NodeData data = id == null ? null : document.node(id);
+        if (data == null) {
+            // Never bound — nothing for the document to forget, so this is a plain detach.
+            content().removeChild(node);
+            selection.prune(this);
+            return this;
+        }
         undoStack.beginTransaction("delete node");
         try {
             for (NodePort port : node.getPorts()) disconnectAll(port);
-            undoStack.execute(new AddNodeEdit(this, node, at.x(), at.y(), false));
+            undoStack.execute(new AddNodeEdit(this, node, data, false));
         } finally {
             undoStack.endTransaction();
         }
@@ -280,16 +575,24 @@ public class GraphView extends CanvasView implements UndoScope {
         return doomedNodes.size() + (doomedWire == null ? 0 : 1);
     }
 
-    /** Adding or removing a node, as data: the widget and where it sat. */
-    private record AddNodeEdit(GraphView view, GraphNode node, float worldX, float worldY,
+    /**
+     * Adding or removing a node, as data: the {@link NodeData} and the widget projecting it.
+     *
+     * <p><b>It carries the NodeData, not a position</b>, and that is what makes delete-then-undo safe.
+     * The id has to come back <em>unchanged</em>, or every edge that referenced the node points at
+     * nothing — and since the edges are restored by the same transaction, one fresh id would silently
+     * drop every wire the node had. Re-adding the stored data restores the id, the ports and the
+     * properties together.</p>
+     */
+    private record AddNodeEdit(GraphView view, GraphNode node, NodeData data,
                                boolean adding) implements Edit {
         @Override public void apply() {
-            if (adding) view.addNode(node, worldX, worldY);
-            else view.content().removeChild(node);
+            if (adding) view.attachNode(node, data);
+            else view.detachNode(node);
         }
         @Override public void undo() {
-            if (adding) view.content().removeChild(node);
-            else view.addNode(node, worldX, worldY);
+            if (adding) view.detachNode(node);
+            else view.attachNode(node, data);
         }
         @Override public String label() { return adding ? "add node" : "delete node"; }
     }
@@ -425,18 +728,24 @@ public class GraphView extends CanvasView implements UndoScope {
         NodePort input = output == a ? b : a;
 
         GraphConnection connection = new GraphConnection(output, input);
+        EdgeData edge = edgeDataOf(connection);
+        // Unbound ports have no document identity, so there is nothing to record — this is a view built
+        // outside a document, which the tests do and a caller may.
+        if (edge == null) return null;
+
         GraphConnection existing = firstConnectionTo(input);
         if (existing == null) {
-            undoStack.execute(new ConnectEdit(this, connection, true));
+            undoStack.execute(new ConnectEdit(this, edge, true));
             return connection;
         }
+        EdgeData existingEdge = edgeDataOf(existing);
         // The replace is ONE undo step, and that is the whole reason transactions exist: a user who
         // rewires an input did one thing, and a Ctrl+Z that put the old wire back while leaving the new
         // one would leave the input holding two edges — a state the model forbids.
         undoStack.beginTransaction("reconnect");
         try {
-            undoStack.execute(new ConnectEdit(this, existing, false));
-            undoStack.execute(new ConnectEdit(this, connection, true));
+            if (existingEdge != null) undoStack.execute(new ConnectEdit(this, existingEdge, false));
+            undoStack.execute(new ConnectEdit(this, edge, true));
         } finally {
             undoStack.endTransaction();
         }
@@ -450,35 +759,55 @@ public class GraphView extends CanvasView implements UndoScope {
      * remembering anything, and what would let it be sent to a server if 6.2.5 wants that later — a
      * captured lambda could be neither.</p>
      */
-    private record ConnectEdit(GraphView view, GraphConnection connection, boolean adding) implements Edit {
+    private record ConnectEdit(GraphView view, EdgeData edge, boolean adding) implements Edit {
         @Override public void apply() {
-            if (adding) view.addEdge(connection);
-            else view.removeEdge(connection);
+            if (adding) view.addEdge(edge);
+            else view.removeEdge(edge);
         }
         @Override public void undo() {
-            if (adding) view.removeEdge(connection);
-            else view.addEdge(connection);
+            if (adding) view.removeEdge(edge);
+            else view.addEdge(edge);
         }
         @Override public String label() { return adding ? "connect" : "disconnect"; }
     }
 
-    /** The raw mutation both directions of {@link ConnectEdit} share. */
-    private void addEdge(GraphConnection connection) {
-        if (connections.contains(connection)) return;
-        connections.add(connection);
-        refreshCounts(connection.from(), connection.to());
+    /**
+     * The raw mutation both directions of {@link ConnectEdit} share.
+     *
+     * <p>{@code restoreEdge} rather than {@code connect}: an undo must put back exactly the edge that
+     * was there, and re-running validation at that point can only ever refuse it — the graph it was
+     * legal in is precisely the graph the undo is restoring.</p>
+     */
+    private void addEdge(EdgeData edge) {
+        document.restoreEdge(edge);
+        linkWidgets(edge);
+        markSynced();
         onConnectionsChanged.emit();
     }
 
-    private void removeEdge(GraphConnection connection) {
-        if (!connections.remove(connection)) return;
-        refreshCounts(connection.from(), connection.to());
+    private void removeEdge(EdgeData edge) {
+        document.disconnect(edge);
+        NodePort from = portFor(edge.from());
+        NodePort to = portFor(edge.to());
+        connections.removeIf(c -> c.from() == from && c.to() == to);
+        if (from != null && to != null) refreshCounts(from, to);
+        markSynced();
         onConnectionsChanged.emit();
+    }
+
+    /** The document edge a view-side connection stands for, or null before either end is bound. */
+    @Nullable
+    private static EdgeData edgeDataOf(GraphConnection connection) {
+        PortRef from = refFor(connection.from());
+        PortRef to = refFor(connection.to());
+        return from == null || to == null ? null : new EdgeData(from, to);
     }
 
     public boolean disconnect(GraphConnection connection) {
         if (!connections.contains(connection)) return false;
-        undoStack.execute(new ConnectEdit(this, connection, false));
+        EdgeData edge = edgeDataOf(connection);
+        if (edge == null) return false;
+        undoStack.execute(new ConnectEdit(this, edge, false));
         return true;
     }
 
@@ -493,7 +822,10 @@ public class GraphView extends CanvasView implements UndoScope {
         // user never saw.
         undoStack.beginTransaction("disconnect all");
         try {
-            for (GraphConnection connection : doomed) undoStack.execute(new ConnectEdit(this, connection, false));
+            for (GraphConnection connection : doomed) {
+                EdgeData edge = edgeDataOf(connection);
+                if (edge != null) undoStack.execute(new ConnectEdit(this, edge, false));
+            }
         } finally {
             undoStack.endTransaction();
         }
@@ -556,7 +888,8 @@ public class GraphView extends CanvasView implements UndoScope {
      */
     public void recordMove(GraphNode node, float fromX, float fromY, float toX, float toY) {
         if (fromX == toX && fromY == toY) return;
-        undoStack.push(new MoveNodeEdit(this, node, fromX, fromY, toX, toY));
+        if (node.getNodeId() == null) return;
+        undoStack.push(new MoveNodeEdit(this, node.getNodeId(), fromX, fromY, toX, toY));
     }
 
     /**
@@ -577,7 +910,9 @@ public class GraphView extends CanvasView implements UndoScope {
         try {
             for (int i = 0; i < moved.size(); i++) {
                 float[] origin = origins.get(i);
-                undoStack.push(new MoveNodeEdit(this, moved.get(i),
+                String id = moved.get(i).getNodeId();
+                if (id == null) continue;
+                undoStack.push(new MoveNodeEdit(this, id,
                         origin[0], origin[1], origin[0] + dx, origin[1] + dy));
             }
         } finally {
@@ -585,11 +920,17 @@ public class GraphView extends CanvasView implements UndoScope {
         }
     }
 
-    /** Data, not a closure: two positions and the node. Invertible by swapping them. */
-    private record MoveNodeEdit(GraphView view, GraphNode node,
+    /** Data, not a closure: two positions and the node's ID. Invertible by swapping them, and it keeps
+     * working across a delete-then-undo because the id is what comes back, not the widget. */
+    private record MoveNodeEdit(GraphView view, String nodeId,
                                 float fromX, float fromY, float toX, float toY) implements Edit {
-        @Override public void apply() { view.moveNode(node, toX, toY); }
-        @Override public void undo() { view.moveNode(node, fromX, fromY); }
+        @Override public void apply() { move(toX, toY); }
+        @Override public void undo() { move(fromX, fromY); }
+        private void move(float x, float y) {
+            GraphNode widget = view.widgetFor(nodeId);
+            if (widget != null) view.moveNode(widget, x, y);
+            else view.document.moveNode(nodeId, x, y);
+        }
         @Override public String label() { return "move"; }
     }
 
@@ -782,6 +1123,7 @@ public class GraphView extends CanvasView implements UndoScope {
     private NodeTypeRegistry nodeLibrary;
 
     @Nullable
+    @Getter
     private NodeWidgetFactory nodeFactory;
 
     private TypeCompatibility typeRule = TypeCompatibility.EXACT;
@@ -877,15 +1219,22 @@ public class GraphView extends CanvasView implements UndoScope {
         if (nodeFactory == null) return;
         NodeData data = offer.type().create(pendingWorldX, pendingWorldY);
         GraphNode node = nodeFactory.create(offer.type(), data);
+        // Bound BEFORE it is added, so the node keeps the id and ports the library built rather than
+        // having a second set derived from the widget.
+        node.bindToDocument(data.id(), data.typeId());
+        // Into the document first, so addNode adopts the library's ports and properties instead of
+        // deriving a second set from the widget.
+        document.addNode(data);
 
         undoStack.beginTransaction("create " + offer.type().label());
         try {
             addNode(node, pendingWorldX, pendingWorldY);
-            undoStack.push(new AddNodeEdit(this, node, pendingWorldX, pendingWorldY, true));
+            NodeData placed = document.node(node.getNodeId());
+            if (placed != null) undoStack.push(new AddNodeEdit(this, node, placed, true));
             NodePort source = pendingFrom;
             if (source != null && offer.port() != null) {
                 for (NodePort port : node.getPorts()) {
-                    if (port.getName().startsWith(offer.port().portId())) {
+                    if (port.getPortId().equals(offer.port().portId())) {
                         connect(source, port);
                         break;
                     }

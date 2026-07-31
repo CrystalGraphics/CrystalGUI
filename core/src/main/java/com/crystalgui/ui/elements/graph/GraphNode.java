@@ -103,6 +103,36 @@ public class GraphNode extends UIElement {
 
     private boolean selected;
 
+    /**
+     * The {@link com.crystalgui.graph.NodeData} id this widget projects, or null until a
+     * {@link GraphView} binds it.
+     *
+     * <p>This is the only durable name a node has. The widget is a projection — it can be detached by a
+     * delete and re-attached by an undo, rebuilt wholesale when a document is loaded, or never exist at
+     * all on a server — so every edge, every {@code Edit} and every changeset refers to the id instead.
+     * A reference to the widget would survive none of those.</p>
+     */
+    @Getter
+    @Nullable
+    private String nodeId;
+
+    /**
+     * The document {@code typeId} this node was built from, or null when it was hand-built as a widget.
+     *
+     * <p>Kept so a widget-authored node still produces honest {@code NodeData} when the view binds it —
+     * see {@link GraphView#addNode}.</p>
+     */
+    @Getter
+    @Nullable
+    private String typeId;
+
+    /** Bound by {@link GraphView} when the widget joins a document; package-private so nothing else can
+     * rename a node behind the document's back. */
+    void bindToDocument(@Nullable String nodeId, @Nullable String typeId) {
+        this.nodeId = nodeId;
+        if (typeId != null) this.typeId = typeId;
+    }
+
     /** Fires when this node's collapsed state changes, carrying the new value. */
     public final Signal.Value<Boolean> onCollapsedChanged = new Signal.Value<>();
 
@@ -317,6 +347,12 @@ public class GraphNode extends UIElement {
             outputPorts.add(port);
             outputs.addInternalChild(port);
         }
+        // The document has to learn about it, because ports may be added AFTER the node joins the view —
+        // `addNode(node, x, y); node.addOutput(...)` is the order 6.2.3's own examples use. Deriving the
+        // NodeData once at add time captured whatever ports existed at that instant, so a port declared
+        // afterwards existed on screen, could be wired, and was absent from every save.
+        GraphView view = graphView();
+        if (view != null) view.syncPorts(this);
         return port;
     }
 

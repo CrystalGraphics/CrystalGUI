@@ -67,6 +67,17 @@ public final class GraphDocument {
     @Setter
     private TypeCompatibility typeCompatibility = TypeCompatibility.EXACT;
 
+    /**
+     * What has changed since this was last cleared — what a view drains to update itself.
+     *
+     * <p>Live rather than a copy, and the caller clears it: a view that applied half a changeset and
+     * then lost the rest would be silently out of step with the document, which is the one failure mode
+     * this whole mechanism exists to prevent.</p>
+     */
+    public GraphChangeset changeset() {
+        return changeset;
+    }
+
     /** Fires after any structural change, once the changeset has been updated. */
     public final Signal.Action onChanged = new Signal.Action();
 
