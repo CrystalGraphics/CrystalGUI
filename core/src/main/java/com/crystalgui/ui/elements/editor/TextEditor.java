@@ -2160,6 +2160,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
             zoomResetButton = new com.crystalgui.ui.elements.Button("");
             zoomResetButton.addClass(ZOOM_RESET_CLASS);
+            // NEVER takes focus. A Button focuses on click by default, so pressing reset would move focus
+            // out of the editor and the next keystroke would go nowhere -- from a control whose whole
+            // purpose is to get you back to reading the text.
+            zoomResetButton.setFocusPolicy(com.crystalgui.ui.input.FocusPolicy.NONE);
             zoomResetButton.attachListener(this::resetZoom);
             zoomIndicator.addChild(zoomResetButton);
 

@@ -2844,6 +2844,71 @@ public class TextEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>Clicking reset must not take focus off the editor.</b> A {@code Button} focuses on click by
+     * default, so the control whose entire purpose is to get you back to reading the text would leave the
+     * next keystroke going nowhere.
+     */
+    @Test
+    public void theResetLinkNeverTakesFocus() {
+        build("x");
+        showEditor();
+        key(CgKeyCodes.KEY_EQUALS, CgModifiers.CTRL);
+        showEditor();
+
+        UIElement reset = null;
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.ZOOM_INDICATOR_CLASS)) continue;
+            for (UIElement part : child.getChildren()) {
+                if (part.hasClass(TextEditor.ZOOM_RESET_CLASS)) reset = part;
+            }
+        }
+        assertNotNull(reset);
+        assertFalse("a link in a transient bar must not be a focus stop", reset.focusable());
+    }
+
+    /**
+     * <b>The reset link is styled as a link, not as the sheet's grey button.</b> It unwinds the fill and
+     * the rounding, and hovering adds an <em>underline</em> rather than changing the colour — a colour
+     * shift on hover reads as a button lighting up, which is what this is trying not to look like.
+     */
+    @Test
+    public void theResetLinkIsStyledAsALink() {
+        build("x");
+        showEditor();
+        key(CgKeyCodes.KEY_EQUALS, CgModifiers.CTRL);
+        showEditor();
+
+        UIElement reset = null;
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.ZOOM_INDICATOR_CLASS)) continue;
+            for (UIElement part : child.getChildren()) {
+                if (part.hasClass(TextEditor.ZOOM_RESET_CLASS)) reset = part;
+            }
+        }
+        assertNotNull(reset);
+
+        var general = reset.getStyle().getGeneralGroup();
+        assertEquals("the accent blue, not the button grey", 0xFF4A9EFF, general.color());
+        var decoration = general.getValueSave(
+                com.crystalgui.style.property.StylePropertyRegistry.TEXT_DECORATION_LINE);
+        assertTrue("and no underline until hovered", decoration == null || decoration.isEmpty());
+
+        // Hovering adds the underline. The colour deliberately does NOT change: an underline appearing
+        // under an already-blue label is what says "link", where a colour shift reads as a button
+        // lighting up.
+        reset.setHovered(true);
+        settle();
+
+        var hovered = reset.getStyle().getGeneralGroup().getValueSave(
+                com.crystalgui.style.property.StylePropertyRegistry.TEXT_DECORATION_LINE);
+        assertNotNull("hovering must resolve a decoration", hovered);
+        assertTrue("and it must be an underline",
+                hovered.contains(com.crystalgui.style.property.visual.text.TextDecorationLine.UNDERLINE));
+        assertEquals("with the colour unchanged", 0xFF4A9EFF,
+                reset.getStyle().getGeneralGroup().color());
+    }
+
+    /**
      * <b>The indicator does not scale with the zoom.</b> It is chrome describing the text, not part of
      * it — scaling it made the label unreadable at the minimum size and oversized at the maximum, which
      * is the one thing it exists to be legible at. {@code font-size} is inheritable, so this only holds
