@@ -1025,6 +1025,35 @@ Why it earns a native dependency, rather than a hand-written lexer:
 grammar) but is **not** in the fork, so it needs adding and cross-compiling; that is a second step, not a
 prerequisite.
 
+#### How Zed does it, and what to take
+
+Read from `crates/language/src/syntax_map.rs`, since Zed is the closest analogue we have — GPU-rendered
+editor, rope buffer, tree-sitter highlighting. Four things there change this plan:
+
+- **Edits are handled in two phases, and only the first is synchronous.** `interpolate()` applies
+  tree-sitter `InputEdit`s to the existing trees immediately — updating node *coordinates* only, no
+  parsing — so highlights stay attached to the right text the instant a key lands. The real
+  `reparse()` happens afterwards, off the UI thread. Applying only one of the two is the trap:
+  reparse-only makes typing stutter, interpolate-only leaves the tree structurally stale.
+  <br>**For v1 take interpolate synchronously and reparse synchronously too** — our documents are shader
+  snippets and single files, not Zed's repositories — but keep the two as separate steps so the reparse
+  can move to a worker later without touching the edit path.
+- **Queries are bounded to a byte range, not run over the document.** Zed caps a single query at
+  `MAX_BYTES_TO_QUERY = 16 * 1024` and only queries layers overlapping the requested range. This fits our
+  virtualisation exactly and for free: the editor already knows its realised row window, so it can convert
+  that to a byte range and query only what is on screen. **Highlighting cost becomes proportional to the
+  viewport rather than the file**, which is the same argument the virtualised list is built on.
+- **Query cursors are pooled** (`QueryCursorHandle`). They are not cheap to allocate and there is one per
+  query per frame.
+- **Dropping a deep tree is slow enough that Zed does it on a background thread.** Worth knowing before
+  it shows up as a frame spike on closing a large file, which is the kind of thing that gets blamed on
+  rendering.
+
+Also noted and deliberately *not* taken for v1: **injection layers** (`SyntaxLayerEntry` at multiple
+depths, `Single` vs `Combined`), which is how Zed highlights one language embedded in another. Out of
+scope now, but the shader graph will want exactly this — GLSL embedded in a node definition — so the
+tokenizer SPI should return ranges without assuming a single grammar produced them.
+
 #### The SPI, and why it is not optional
 
 `core/` must stay loadable on a dedicated server with no GL and no natives. So:
@@ -1051,7 +1080,9 @@ rather than writing a second time in the other direction. Getting it wrong is in
 2. Multi-cursor selection model in `TextEditor`.
 3. Gutter, line numbers, current-line highlight — all of which need (1).
 4. `SyntaxTokenizer` SPI + the built-in lexer, wired to `HighlightRegistry`.
-5. tree-sitter module, Java grammar, `highlights.scm` → `::highlight()` captures.
+5. tree-sitter module, Java grammar, `highlights.scm` → `::highlight()` captures. Edit path is
+   interpolate-then-reparse as two separate steps; queries bounded to the realised row window's byte
+   range; query cursors pooled.
 6. Bracket matching and indent handling from the tree.
 7. Find/replace.
 8. GLSL grammar added to the fork.
