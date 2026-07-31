@@ -446,6 +446,29 @@ texteditor .__selection__ {
     z-index: 0;
 }
 
+/* The gutter. Scroll-exempt, so TextEditor positions its numbers by hand -- it has to hold still
+ * horizontally while scrolling vertically, and a scroll offset here is a pose translate that cannot
+ * apply on one axis only. z-index above the lines so a long line scrolled sideways passes behind the
+ * numbers rather than through them. */
+texteditor .__gutter__ {
+    z-index: 3;
+    background-color: #1A1D23;
+}
+
+texteditor .__line-number__ {
+    justify-content: center;
+    align-items: flex-end;
+    padding-right: 4px;
+    color: #5C6570;
+    white-space: nowrap;
+}
+
+/* Behind everything, including the selection bands: it marks a row, it does not compete with them. */
+texteditor .__current-line__ {
+    background-color: #232830;
+    z-index: -1;
+}
+
 /* Functional geometry for the table's own structure. Nothing here is decoration — a theme owns all of
  * that — but without these the widget does not work at all:
  *
@@ -1064,6 +1087,11 @@ nodeport .__dot__ {
  * wins. */
 nodeport .__editor__ { display: none; }
 nodeport:blank .__editor__ { display: flex; }
+
+/* The marquee. Positioned and sized from Java at IMPORTANT origin — it is runtime state, like a
+ * scrollbar thumb's length — so all that belongs here is the fact that it must not eat the pointer it
+ * is being drawn by. Its look is the theme's. */
+graphview .__marquee__ { }
 
 /* `pointer` marks anything clickable, as it does on the web for links and buttons. */
 button, checkbox, switch, tab, dropdown, menuitem { cursor: pointer; }
