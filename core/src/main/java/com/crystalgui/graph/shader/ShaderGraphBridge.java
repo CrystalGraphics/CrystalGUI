@@ -1,0 +1,241 @@
+package com.crystalgui.graph.shader;
+
+import com.crystalgraphics.shadergraph.CgMasterNode;
+import com.crystalgraphics.shadergraph.CgShaderEmitter;
+import com.crystalgraphics.shadergraph.CgShaderGraph;
+import com.crystalgraphics.shadergraph.CgShaderNode;
+import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
+import com.crystalgraphics.shadergraph.CgShaderPort;
+import com.crystalgui.graph.EdgeData;
+import com.crystalgui.graph.GraphDocument;
+import com.crystalgui.graph.NodeData;
+import com.crystalgui.graph.NodeType;
+import com.crystalgui.graph.NodeTypeRegistry;
+import com.crystalgui.graph.PortSpec;
+import com.crystalgui.graph.TypeCompatibility;
+
+import javax.annotation.Nullable;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * Maps the editor's {@link GraphDocument} onto CrystalGraphics' {@link CgShaderGraph}, and compiles it.
+ *
+ * <h3>Why a bridge rather than one shared model</h3>
+ * <p>{@code GraphDocument} is a <b>general-purpose</b> typed graph — a dialogue graph and a shader graph
+ * are both documents, and it knows about neither GLSL nor widgets. {@code CgShaderGraph} is the
+ * compiler's input and lives in CrystalGraphics, which <b>cannot depend on CrystalGUI</b>: the
+ * dependency has always run the other way.</p>
+ *
+ * <p>So the mapping lives here, on the side that already depends on both. The compiler never learns what
+ * a widget is, the document never learns what GLSL is, and a server can compile a graph with no UI
+ * library present at all.</p>
+ *
+ * <h3>⚠ This class reaches CrystalGraphics CORE, and its package is otherwise headless</h3>
+ * <p>{@code com.crystalgui.graph} is deliberately free of CrystalGraphics so a dedicated server can
+ * author and validate a document with no GL library present — {@code headlessTest} asserts that by
+ * excluding CG core from its classpath entirely. This subpackage is the exception: a shader
+ * <em>compiler</em> is CrystalGraphics' by definition, so anything that compiles needs it.</p>
+ *
+ * <p>Class loading is lazy, so the exception is contained as long as nothing headless references this
+ * type. <b>Do not call into this from {@code com.crystalgui.graph} proper</b>, or the first headless
+ * test to touch a document will fail with {@code NoClassDefFoundError} — which reports the missing CG
+ * class rather than the import that dragged it in.</p>
+ *
+ * <h3>The type ids line up by construction</h3>
+ * <p>A {@code PortSpec.typeId} in a document is a plain string, and this bridge writes the GLSL name into
+ * it when it builds the editor's {@link NodeType}s — so {@code "vec3"} on the editor side and
+ * {@code CgShaderType.VEC3} on the compiler side are the same thing spelled once.</p>
+ */
+public final class ShaderGraphBridge {
+
+    /** The document {@code typeId} of the master node, and the id its instance takes. */
+    public static final String MASTER_TYPE = "cg:master";
+
+    private ShaderGraphBridge() {
+    }
+
+    // ── Editor side: a library the create menu can offer ────────────────────
+
+    /**
+     * Builds a {@link NodeTypeRegistry} mirroring {@code shaderNodes}, so the create menu, the search
+     * and the widget factory all work with no shader-specific code.
+     *
+     * <p>The master is included, because a graph needs somewhere to end — and because leaving it out
+     * would mean the one node every graph must have is the one the menu cannot create.</p>
+     */
+    public static NodeTypeRegistry asNodeLibrary(CgShaderNodeRegistry shaderNodes) {
+        registerPortTypes();
+        NodeTypeRegistry library = new NodeTypeRegistry();
+        for (CgShaderNode node : shaderNodes.all()) library.register(asNodeType(node));
+        library.register(asNodeType(new CgMasterNode()));
+        return library;
+    }
+
+    /** One shader node as an editor node type. Category comes from the id's own namespace. */
+    public static NodeType asNodeType(CgShaderNode node) {
+        NodeType.Builder builder = NodeType.of(node.id()).label(node.label()).category(categoryOf(node.id()));
+        for (CgShaderPort port : node.ports()) {
+            if (port.isInput()) builder.in(port.id(), typeIdOf(port));
+            else builder.out(port.id(), typeIdOf(port));
+        }
+        return builder.build();
+    }
+
+    /**
+     * The document type id of a dynamic port — a real type, not a stand-in.
+     *
+     * <p>It was briefly presented as {@code float}, on the reasoning that a port the editor cannot
+     * colour is worse than one typed loosely. That is exactly backwards: {@code float} is the
+     * <em>narrowest</em> numeric type, so under GLSL's own rule (a scalar promotes, nothing demotes) a
+     * dynamic port typed {@code float} <b>refuses every vector</b>. Wiring a Color into a Multiply was
+     * silently rejected and the graph compiled without it — a connection that just does not happen,
+     * with nothing to read anywhere.</p>
+     */
+    public static final String DYNAMIC_TYPE = "dynamic";
+
+    /**
+     * A {@link com.crystalgui.ui.elements.graph.PortType} carrying GLSL's promotion rule.
+     *
+     * <p><b>There are two compatibility checks and they are not the same one.</b> The document's
+     * {@link TypeCompatibility} governs {@code GraphDocument.connect}; a widget drag goes through
+     * {@code GraphView.canConnect}, which asks the <b>PortType</b>. Registering the rule in only one of
+     * them produces the worst kind of failure: a connection that is simply refused, with no wire, no
+     * error and nothing to read anywhere. That is exactly what happened — the starter graph reported
+     * {@code 4n/0e} because {@code BasicPortType} defaults to identity and a {@code vec4} could not
+     * reach a {@code dynamic} port.</p>
+     */
+    public record GlslPortType(String id, int arity) implements
+            com.crystalgui.ui.elements.graph.PortType {
+
+        @Override
+        public boolean isCompatibleWith(com.crystalgui.ui.elements.graph.PortType other) {
+            if (other == null) return false;
+            // Dynamic has no type until the compiler resolves one from what is connected, so refusing
+            // here would refuse the connection that decides it.
+            if (DYNAMIC_TYPE.equals(id) || DYNAMIC_TYPE.equals(other.id())) return true;
+            return id.equals(other.id()) || "float".equals(id);
+        }
+    }
+
+    /**
+     * Registers a {@link GlslPortType} for every type the shader nodes use.
+     *
+     * <p>Called by {@link #asNodeLibrary}, because a library whose ports cannot be wired together is not
+     * a library. Idempotent — {@code PortTypeRegistry.register} tolerates a repeat.</p>
+     */
+    public static void registerPortTypes() {
+        register(new GlslPortType(DYNAMIC_TYPE, 0));
+        register(new GlslPortType("float", 1));
+        register(new GlslPortType("vec2", 2));
+        register(new GlslPortType("vec3", 3));
+        register(new GlslPortType("vec4", 4));
+        register(new GlslPortType("bool", 1));
+        register(new GlslPortType("int", 1));
+    }
+
+    private static void register(GlslPortType type) {
+        if (com.crystalgui.ui.elements.graph.PortTypeRegistry.get(type.id()) == null) {
+            com.crystalgui.ui.elements.graph.PortTypeRegistry.register(type);
+        }
+    }
+
+    private static String typeIdOf(CgShaderPort port) {
+        return port.type() == com.crystalgraphics.shadergraph.CgShaderType.DYNAMIC
+                ? DYNAMIC_TYPE : port.type().glsl();
+    }
+
+    /** {@code cg:math/add} → {@code Math}; {@code cg:master} → {@code Output}. */
+    private static String categoryOf(String id) {
+        int colon = id.indexOf(':');
+        String path = colon < 0 ? id : id.substring(colon + 1);
+        int slash = path.indexOf('/');
+        if (slash < 0) return "Output";
+        String head = path.substring(0, slash);
+        return Character.toUpperCase(head.charAt(0)) + head.substring(1);
+    }
+
+    /**
+     * GLSL's own promotion rule, in the form the document wants — a scalar feeds any vector, nothing
+     * demotes.
+     *
+     * <p>Declared once here rather than at each call site so the create menu offers exactly what a drag
+     * would accept, and both agree with what {@code CgShaderType.canFeed} will do at compile time.</p>
+     */
+    public static final TypeCompatibility GLSL_PROMOTION = (from, to) -> {
+        if (from == null || to == null) return false;
+        // A dynamic port accepts anything and feeds anything — it has no type until the compiler
+        // resolves one from what is actually connected, so refusing here would refuse the very
+        // connection that decides it.
+        if (DYNAMIC_TYPE.equals(from) || DYNAMIC_TYPE.equals(to)) return true;
+        return from.equals(to) || from.equals("float");
+    };
+
+    // ── Compiler side: document to IR ───────────────────────────────────────
+
+    /**
+     * Converts a document into the compiler's IR.
+     *
+     * <p>Nodes whose {@code typeId} is not in {@code shaderNodes} are <b>skipped rather than fatal</b> —
+     * the same reasoning that makes an unknown type open as a placeholder instead of eating the graph.
+     * The result is a shader missing that branch, which the user can see, rather than an exception.</p>
+     *
+     * @return the IR, or {@code null} when the document has no master node to compile toward
+     */
+    @Nullable
+    public static CgShaderGraph toShaderGraph(GraphDocument document, CgShaderNodeRegistry shaderNodes,
+                                              CgMasterNode master) {
+        CgShaderGraph graph = new CgShaderGraph();
+        Map<String, Boolean> present = new LinkedHashMap<>();
+        String masterId = null;
+
+        for (NodeData data : document.nodes()) {
+            CgShaderNode type = MASTER_TYPE.equals(data.typeId()) ? master : shaderNodes.get(data.typeId());
+            if (type == null) {
+                present.put(data.id(), false);
+                continue;
+            }
+            if (type == master) masterId = data.id();
+            graph.add(new CgShaderGraph.Instance(data.id(), type, inputValuesOf(data)));
+            present.put(data.id(), true);
+        }
+        if (masterId == null) return null;
+
+        for (EdgeData edge : document.edges()) {
+            if (!Boolean.TRUE.equals(present.get(edge.from().nodeId()))) continue;
+            if (!Boolean.TRUE.equals(present.get(edge.to().nodeId()))) continue;
+            graph.link(edge.from().nodeId(), edge.from().portId(),
+                    edge.to().nodeId(), edge.to().portId());
+        }
+        return graph.output(masterId);
+    }
+
+    /**
+     * The literal values on a node's unconnected inputs.
+     *
+     * <p>A document stores properties as {@code String}, which is already a GLSL literal for every type
+     * the five built-ins use — so this is a filter, not a conversion. A property keyed by a port name is
+     * that port's value; anything else is node state the compiler has no use for.</p>
+     */
+    private static Map<String, String> inputValuesOf(NodeData data) {
+        Map<String, String> values = new LinkedHashMap<>();
+        for (PortSpec port : data.ports()) {
+            if (!port.direction().isInput()) continue;
+            String value = data.properties().get(port.portId());
+            if (value != null && !value.isEmpty()) values.put(port.portId(), value);
+        }
+        return values;
+    }
+
+    /** Document to finished {@code .shader} source, in one call. */
+    public static CgShaderEmitter.Result compile(GraphDocument document,
+                                                 CgShaderNodeRegistry shaderNodes,
+                                                 CgMasterNode master) {
+        CgShaderGraph graph = toShaderGraph(document, shaderNodes, master);
+        if (graph == null) {
+            return new CgShaderEmitter.Result("", java.util.List.of(),
+                    java.util.List.of("The graph has no Output node, so there is nothing to compile"));
+        }
+        return CgShaderEmitter.emit(graph, master);
+    }
+}
