@@ -3020,6 +3020,50 @@ public class TextEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>Zooming keeps the line you were on.</b>
+     *
+     * <p>{@code scrollTop} is a PIXEL count, so leaving it alone across a font change silently
+     * reinterprets it: 440px is line 44 at a ten-pixel line and line 7 at sixty. Zooming in from line 44
+     * used to land the viewport on line 5.</p>
+     *
+     * <p>VS Code's {@code StableViewport}, ported: capture the <b>model</b> position of the viewport's
+     * first line, recover it afterwards. A model position and not a view line, because the font change
+     * also reprojects — with soft wrap on, the same text occupies a different number of view lines
+     * afterwards.</p>
+     */
+    @Test
+    public void zoomingKeepsTheTopLineInPlace() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 200; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        showEditor();
+
+        editor.setScrollImmediate(0f, 44f * editor.lineHeight());
+        showEditor();
+        int topRowBefore = editor.rowAtTopOfViewport();
+
+        editor.setFontSize(editor.getFontSize() * 3f);
+        showEditor();
+
+        assertEquals("the same row must still be at the top after a 3x zoom",
+                topRowBefore, editor.rowAtTopOfViewport());
+    }
+
+    /** At the very top there is nothing to preserve, and VS Code skips the capture there too. */
+    @Test
+    public void zoomingAtTheTopStaysAtTheTop() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 200; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        showEditor();
+
+        editor.setFontSize(editor.getFontSize() * 3f);
+        showEditor();
+
+        assertEquals(0f, editor.getScrollTop(), 0.5f);
+    }
+
+    /**
      * <b>Zoom must beat the sheet.</b> {@code default.css} sets {@code * { font-size: 10 }}, and a
      * {@code *} rule at USER_AGENT beats an inline write at any specificity — so the size is written at
      * IMPORTANT origin, the same trap {@code syncLineFonts} documents for the lines.

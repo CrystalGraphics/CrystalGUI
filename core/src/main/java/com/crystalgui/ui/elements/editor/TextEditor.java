@@ -2098,6 +2098,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public TextEditor setFontSize(float size) {
         float clamped = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size));
         if (baseFontSize < 0f) baseFontSize = getStyle().getGeneralGroup().fontSize();
+        // WHAT THE VIEW IS ANCHORED ON, captured before anything changes. scrollTop is in PIXELS, so
+        // leaving it alone across a font change silently reinterprets it: 440px is line 44 at a
+        // ten-pixel line and line 7 at sixty. Zooming in from line 44 landed the viewport on line 5.
+        //
+        // Anchored on a DOCUMENT OFFSET rather than on a view line or a pixel count, because the font
+        // change also reprojects -- a different wrap width gives the same text a different number of
+        // view lines, so a view line captured before the change does not mean the same thing after it.
+        StableViewport anchor = captureStableViewport();
         StyleGroup.importantPipeline(getStyle().getGeneralGroup(), g -> g.fontSize(clamped));
         measuredRows.clear();
         measuredFontKey = null;
@@ -2105,8 +2113,54 @@ public class TextEditor extends ScrollerView implements UndoScope {
         digitWidth = -1f;
         markerFontKey = null;
         reproject();
+        restoreStableViewport(anchor);
         invalidateWindow();
         return this;
+    }
+
+    /**
+     * What the viewport is anchored on across a font change — VS Code's {@code StableViewport}.
+     *
+     * <p>Ported from {@code ViewModel._captureStableViewport} / {@code StableViewport.recoverViewportStart}
+     * ({@code src/vs/editor/common/viewModel/viewModelImpl.ts}, MIT). It captures the <b>model</b> position
+     * of the viewport's first line and recovers it afterwards, which is the same reason this anchors on a
+     * document offset: the change also reprojects, so a view line captured beforehand does not mean the
+     * same thing after it.</p>
+     *
+     * @param offset the document offset at the top of the viewport, or {@code -1} for "do not restore"
+     * @param delta  pixels the viewport was scrolled INTO that line, so a partial scroll is not snapped
+     *               to a line boundary on every zoom step
+     */
+    private record StableViewport(int offset, float delta) {
+        static final StableViewport NONE = new StableViewport(-1, 0f);
+    }
+
+    private StableViewport captureStableViewport() {
+        float height = lineHeight();
+        // Nothing to preserve at the very top, and VS Code skips it there too -- restoring a zero is at
+        // best a no-op and at worst fights a clamp.
+        if (!(height > 0f) || getScrollTop() <= 0f) return StableViewport.NONE;
+        int viewLine = Math.max(0, Math.min(viewLineCount() - 1, (int) (getScrollTop() / height)));
+        return new StableViewport(viewLineStartOffset(viewLine), getScrollTop() - viewLine * height);
+    }
+
+    /**
+     * Puts the captured line back at the top of the viewport.
+     *
+     * <p>Immediate rather than eased, as VS Code's is: the text has already changed size, so an animated
+     * correction would show the wrong lines for the length of it — the same reason caret-follow scrolling
+     * is immediate.</p>
+     */
+    private void restoreStableViewport(StableViewport anchor) {
+        float height = lineHeight();
+        if (anchor.offset() < 0 || !(height > 0f)) return;
+        // The delta is re-added verbatim, which is what the original does. It is a pixel count taken at
+        // the OLD line height, so a large zoom step lands slightly inside the line rather than exactly on
+        // it -- accepted rather than "improved", because scaling it is an invention and the whole point of
+        // porting this is that the behaviour is somebody else's, already lived with.
+        setScrollImmediate(getScrollLeft(),
+                viewLineOf(anchor.offset(), LineProjection.Affinity.RIGHT) * height + anchor.delta());
+        clampScroll();
     }
 
     public float getFontSize() {
@@ -2277,6 +2331,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
         StyleGroup.defaultPipeline(textViewport().getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                         .left(left).top(0f).width(width).height(height));
+    }
+
+    /** The document row showing at the top of the viewport — what a zoom keeps still. */
+    public int rowAtTopOfViewport() {
+        float height = lineHeight();
+        if (!(height > 0f)) return 0;
+        int viewLine = Math.max(0, Math.min(viewLineCount() - 1, (int) (getScrollTop() / height)));
+        return modelAt(viewLine).row();
     }
 
     /** Visual rows — the same as the row count when wrap is off. */
