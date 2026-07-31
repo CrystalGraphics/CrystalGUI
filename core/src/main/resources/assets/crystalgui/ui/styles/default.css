@@ -571,20 +571,39 @@ texteditor .__zoom-label__ {
     white-space: nowrap;
 }
 
-/* A link, not a raised button — it is one action inside a transient bar, and a chunky button there reads
- * as a dialog. Accent-coloured for the same reason a link is. */
+/* A LINK, not a raised button. It is one action inside a transient bar, and a chunky grey button there
+ * reads as a dialog. Everything the `button` rule gives it is unwound: the fill, the rounding, the
+ * padding, the minimum height and the focus ring.
+ *
+ * These win on specificity without a fight -- `texteditor .__zoom-reset__` is 11 against `button`'s 1 --
+ * except against `button:hover` and `button:active`, which are also 11. Those tie, and this file's later
+ * source position decides it. Spelled out because a tie broken by source order is exactly what a future
+ * reorganisation of this sheet would silently flip.
+ *
+ * The hover state changes the DECORATION, not the colour: an underline appearing under an already-blue
+ * label is what says "link" -- a colour shift on hover reads as a button lighting up, which is the thing
+ * this is trying not to look like. text-decoration-line is inheritable, so it reaches the Button's own
+ * UIText without a descendant selector. */
 texteditor .__zoom-reset__ {
     font-size: 10;
     background: #00000000;
     color: #4A9EFF;
     white-space: nowrap;
-    padding-left: 2px;
-    padding-right: 2px;
+    padding-all: 0px;
     min-height: 0px;
+    border-radius: 0px;
+    text-shadow: false;
+    outline: none;
 }
 texteditor .__zoom-reset__:hover {
     background: #00000000;
-    color: #7FBCFF;
+    color: #4A9EFF;
+    text-decoration-line: underline;
+}
+texteditor .__zoom-reset__:active {
+    background: #00000000;
+    color: #2F7FD8;
+    text-decoration-line: underline;
 }
 
 /* A column ruler spans the viewport and does not scroll vertically -- TextEditor marks it scroll-exempt
