@@ -236,6 +236,9 @@ public class GraphNode extends UIElement {
 
                     @Override
                     public void onDragEnd(float mx, float my) {
+                        WorldRect end = view.worldBoundsOf(GraphNode.this);
+                        // One step for the whole drag — see GraphView.recordMove.
+                        view.recordMove(GraphNode.this, startX, startY, end.x(), end.y());
                         endMove();
                     }
 

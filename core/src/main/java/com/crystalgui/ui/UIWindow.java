@@ -129,6 +129,10 @@ public final class UIWindow {
 
     public UIWindow(Ui ui) {
         this.ui = ui;
+        // Deliberately NOT installing edit.undo/edit.redo here — see UndoCommands.install(UIWindow).
+        // This engine never injects its own defaults: StyleSheet.DEFAULT says so in its own header, and
+        // a keymap that acquires bindings nobody registered is the same surprise as a stylesheet that
+        // applies itself. It cost four KeymapTest failures to be reminded.
         this.taffyTree = new TaffyTree();
         this.taffyTree.disableRounding();
         this.taffyTree.setLayoutChangeListener(((nodeId, oldLayout, newLayout) -> {

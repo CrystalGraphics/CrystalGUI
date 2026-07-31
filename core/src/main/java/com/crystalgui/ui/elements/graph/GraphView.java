@@ -1,6 +1,9 @@
 package com.crystalgui.ui.elements.graph;
 
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.undo.Edit;
+import com.crystalgui.core.undo.UndoScope;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.canvas.CanvasView;
 import lombok.Getter;
@@ -34,7 +37,7 @@ import java.util.List;
  * {@code graphview} too; the viewport's structural styling is written from Java at DEFAULT origin
  * precisely so this class inherits it for real.</p>
  */
-public class GraphView extends CanvasView {
+public class GraphView extends CanvasView implements UndoScope {
 
     /** Logical px, before zoom. */
     private static final float DEFAULT_WIRE_WIDTH = 2f;
@@ -56,6 +59,25 @@ public class GraphView extends CanvasView {
     private final List<GraphConnection> connectionsView = Collections.unmodifiableList(connections);
 
     private final NodeWireLayer wireLayer;
+
+    /**
+     * This document's history.
+     *
+     * <p>Owned here because the edges are owned here: a command has one seam to call into rather than
+     * needing to walk the tree putting ports back. Implementing {@link UndoScope} is what lets
+     * {@code edit.undo} find it — the nearest scope outward from whatever has focus, so a graph in one
+     * tab and an editor in another never share a history.</p>
+     *
+     * <p><b>Only document state goes through it.</b> Pan, zoom, selection and collapse are view state
+     * and are mutated directly; Ctrl+Z after wiring up a graph must undo the wire, not the scroll.</p>
+     */
+    private final UndoStack undoStack = new UndoStack();
+
+    /** @see UndoScope */
+    @Override
+    public UndoStack undoStack() {
+        return undoStack;
+    }
 
     @Getter
     private float wireBaseWidth = DEFAULT_WIRE_WIDTH;
@@ -188,20 +210,61 @@ public class GraphView extends CanvasView {
         NodePort output = a.getDirection().isOutput() ? a : b;
         NodePort input = output == a ? b : a;
 
-        GraphConnection existing = firstConnectionTo(input);
-        if (existing != null) disconnect(existing);
-
         GraphConnection connection = new GraphConnection(output, input);
-        connections.add(connection);
-        refreshCounts(output, input);
-        onConnectionsChanged.emit();
+        GraphConnection existing = firstConnectionTo(input);
+        if (existing == null) {
+            undoStack.execute(new ConnectEdit(this, connection, true));
+            return connection;
+        }
+        // The replace is ONE undo step, and that is the whole reason transactions exist: a user who
+        // rewires an input did one thing, and a Ctrl+Z that put the old wire back while leaving the new
+        // one would leave the input holding two edges — a state the model forbids.
+        undoStack.beginTransaction("reconnect");
+        try {
+            undoStack.execute(new ConnectEdit(this, existing, false));
+            undoStack.execute(new ConnectEdit(this, connection, true));
+        } finally {
+            undoStack.endTransaction();
+        }
         return connection;
     }
 
-    public boolean disconnect(GraphConnection connection) {
-        if (!connections.remove(connection)) return false;
+    /**
+     * Adding or removing one edge.
+     *
+     * <p>Data, not a closure: the two ports and a direction. That is what makes it invertible without
+     * remembering anything, and what would let it be sent to a server if 6.2.5 wants that later — a
+     * captured lambda could be neither.</p>
+     */
+    private record ConnectEdit(GraphView view, GraphConnection connection, boolean adding) implements Edit {
+        @Override public void apply() {
+            if (adding) view.addEdge(connection);
+            else view.removeEdge(connection);
+        }
+        @Override public void undo() {
+            if (adding) view.removeEdge(connection);
+            else view.addEdge(connection);
+        }
+        @Override public String label() { return adding ? "connect" : "disconnect"; }
+    }
+
+    /** The raw mutation both directions of {@link ConnectEdit} share. */
+    private void addEdge(GraphConnection connection) {
+        if (connections.contains(connection)) return;
+        connections.add(connection);
         refreshCounts(connection.from(), connection.to());
         onConnectionsChanged.emit();
+    }
+
+    private void removeEdge(GraphConnection connection) {
+        if (!connections.remove(connection)) return;
+        refreshCounts(connection.from(), connection.to());
+        onConnectionsChanged.emit();
+    }
+
+    public boolean disconnect(GraphConnection connection) {
+        if (!connections.contains(connection)) return false;
+        undoStack.execute(new ConnectEdit(this, connection, false));
         return true;
     }
 
@@ -212,9 +275,14 @@ public class GraphView extends CanvasView {
             if (connection.touches(port)) doomed.add(connection);
         }
         if (doomed.isEmpty()) return 0;
-        connections.removeAll(doomed);
-        for (GraphConnection connection : doomed) refreshCounts(connection.from(), connection.to());
-        onConnectionsChanged.emit();
+        // One step: pulling a node's wires is one action, and undoing it half way would be a graph the
+        // user never saw.
+        undoStack.beginTransaction("disconnect all");
+        try {
+            for (GraphConnection connection : doomed) undoStack.execute(new ConnectEdit(this, connection, false));
+        } finally {
+            undoStack.endTransaction();
+        }
         return doomed.size();
     }
 
@@ -259,6 +327,30 @@ public class GraphView extends CanvasView {
             }
             port.setConnectionCount(count);
         }
+    }
+
+    /**
+     * Records a completed node move as one undo step.
+     *
+     * <p>Recorded at the <b>end</b> of the drag, not per frame: the position is written continuously
+     * while the pointer moves, and a history of four hundred one-pixel steps is not a history. So the
+     * move happens directly and the stack is told afterwards with {@link UndoStack#push} — which is
+     * exactly the case that method exists for, and the reason it exists alongside {@code execute}.</p>
+     *
+     * <p>A move that ended where it started records nothing. A Ctrl+Z that appears to do nothing is
+     * worse than one press too few.</p>
+     */
+    public void recordMove(GraphNode node, float fromX, float fromY, float toX, float toY) {
+        if (fromX == toX && fromY == toY) return;
+        undoStack.push(new MoveNodeEdit(this, node, fromX, fromY, toX, toY));
+    }
+
+    /** Data, not a closure: two positions and the node. Invertible by swapping them. */
+    private record MoveNodeEdit(GraphView view, GraphNode node,
+                                float fromX, float fromY, float toX, float toY) implements Edit {
+        @Override public void apply() { view.moveNode(node, toX, toY); }
+        @Override public void undo() { view.moveNode(node, fromX, fromY); }
+        @Override public String label() { return "move"; }
     }
 
     // ── The wire being dragged ──────────────────────────────────────────────

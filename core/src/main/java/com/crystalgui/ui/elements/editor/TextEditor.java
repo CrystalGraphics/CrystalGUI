@@ -9,6 +9,8 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.core.undo.UndoScope;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.ui.UIElement;
@@ -54,7 +56,7 @@ import java.util.Map;
  * nothing would be worse than an absent one, and this engine has already paid for that lesson once with
  * highlight properties that resolved and never painted.</p>
  */
-public class TextEditor extends ScrollerView {
+public class TextEditor extends ScrollerView implements UndoScope {
 
     public static final String LINE_CLASS = "__line__";
     public static final String CARET_CLASS = "__caret__";
@@ -136,6 +138,19 @@ public class TextEditor extends ScrollerView {
     }
 
     // ── Document ────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * This editor's history — its buffer's.
+     *
+     * <p>Implementing {@link UndoScope} is what puts the document on the map for {@code edit.undo}: a
+     * menu item, the command palette and a remapped keystroke all reach the same stack this editor's own
+     * Ctrl+Z does, rather than the keyboard path being the only way in. The editor still handles Ctrl+Z
+     * itself and consumes the key, so the two never both fire.</p>
+     */
+    @Override
+    public UndoStack undoStack() {
+        return buffer.history();
+    }
 
     public TextBuffer buffer() {
         return buffer;
