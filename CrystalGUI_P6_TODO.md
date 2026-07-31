@@ -1126,7 +1126,7 @@ The native shipping story is the real one. Loader jars already bundle JNI for
 configuration across four targets, and the mc modules are not in this build today. Keeping tree-sitter in
 its own module means `core/` and the harness stay unaffected either way.
 
-### 6.1.7b Code editor — the rest of the foundations · `DONE` (2026-07-31), except the remaining view items
+### 6.1.7b Code editor — the rest of the foundations · `DONE` (2026-07-31)
 
 6.1.7 was marked done against this plan's checklist rather than against "is this an editor anyone would
 use". Audited against that question instead, and the gaps were real — one of them undercut a feature
@@ -1194,7 +1194,7 @@ backend responsible for things a grammar does not describe.
 "3 of 47" cannot be computed from what is on screen. **Regex and whole-word are still not implemented** —
 `find` is plain substring, and search-within-selection has no UI.
 
-#### G. View · **soft wrap `DONE`** (2026-07-31); the rest deferred
+#### G. View · `DONE` (2026-07-31)
 
 **Soft wrap is delivered.** `com.crystalgui.text.wrap` — a port of VS Code's view model, kept headless:
 
@@ -1250,7 +1250,50 @@ backend responsible for things a grammar does not describe.
 most of `modelLineProjectionData.ts`. There are no inlay hints here, and it would leave four coordinate
 spaces where two suffice.
 
-**Still deferred:** indent guides, visible whitespace, a column ruler, scroll-past-end. None started.
+#### §G is now complete — the remaining four, 2026-07-31
+
+`com.crystalgui.text.view`, headless, ported from Monaco:
+
+| Class | Ported from |
+|---|---|
+| `IndentLevels` | `guidesTextModelPart.ts` `getLinesIndentGuides` + `utils.ts` `computeIndentLevel` |
+| `WhitespaceMarkers` | `viewLineRenderer.ts` `_applyRenderWhitespace` |
+| `RenderWhitespace` | `editor.renderWhitespace` |
+
+> **The whole difficulty of indent guides is blank lines.** A line with content states its own indent;
+> a blank line has none and must borrow one, and the rule is neither obvious nor guessable: nothing at the
+> file's edges, one *more* than above when the block below is opening, the shared level between two
+> siblings, and one more than below when the block above is closing. Get the last one wrong and guides
+> visibly break at every blank line in a function. `offSide` flips exactly that case for languages whose
+> blocks end by dedent alone (Python, YAML), which is why it is carried rather than assumed false.
+
+> **Boundary whitespace is the useful mode, and its rule is one line:** a lone space between two words is
+> left alone; leading, trailing, tabs and runs of two or more are marked. Without that carve-out the text
+> becomes a field of dots and the feature gets turned straight back off. A **tab is marked in every mode**
+> including boundary — it is invisible *and* ambiguous in a way a single space is not.
+
+> **Markers are separate elements at measured x, not substituted into the text.** Substitution is what VS
+> Code does and is right there because the editor is monospaced; here a middot and a space have different
+> advances, so replacing one with the other would shift every glyph after it and the caret would stop
+> landing where the text is.
+
+> **Scroll-past-end: the horizontal bar's allowance is the ELSE branch.** `getScrollHeight` previously
+> added the bar's thickness unconditionally. Monaco adds a viewport-minus-a-line *or* the bar, never both —
+> scrolling past the end already leaves empty space below the last line, so adding the bar on top is a
+> second allowance for the same problem. Genuinely easy to miss, and it changes the default behaviour, so
+> the existing scroll-height test now asserts both modes rather than being quietly renumbered.
+
+Decoration elements are capped (`MAX_INDENT_GUIDES`, `MAX_WHITESPACE_MARKS`) because each is a Taffy node
+and `renderWhitespace: all` on a wide file is thousands — VS Code has `stopRenderingLineAfter` for the same
+reason. The cap degrades the decoration, not the editor.
+
+**`core/build.gradle.kts` now pins `options.encoding = "UTF-8"`.** The markers are U+00B7 and U+2192 and
+the line breaker classifies CJK ranges; under a platform default of windows-1252 those decode to different
+characters and draw the wrong glyph — a failure no test asserting on offsets would notice, and invisible on
+a JDK 18+ toolchain that already defaults to UTF-8. It is why `BreakOpportunities` had previously *avoided*
+its CJK literals.
+
+**§G is done. 6.1.7b is closed.**
 
 #### H. All of it through the keymap · `DONE` (2026-07-31)
 
@@ -2475,7 +2518,7 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
 ```
 
 **Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → ~~6.1.6~~ →
-~~6.1.7~~ → ~~6.1.7b~~ (bar soft wrap and the keymap) → **6.1.8 (next)**, then 6.1.10-12, then the 6.2
+~~6.1.7~~ → ~~6.1.7b~~ (complete) → **6.1.8 (next)**, then 6.1.10-12, then the 6.2
 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done, see 6.1.9; its implementation lands with
 6.1.6.
 

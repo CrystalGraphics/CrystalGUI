@@ -480,6 +480,29 @@ texteditor .__current-line__ {
     z-index: -2;
 }
 
+/* Indent guides sit BEHIND the text but in front of the current-line band, so a guide still reads on the
+ * row the caret is on. Deliberately dim: a guide the eye can follow when it looks for it and ignores when
+ * it does not is the whole design brief, and one that competes with the code is worse than none. */
+texteditor .__indent-guide__ {
+    background-color: #2F3540;
+    z-index: -1;
+}
+
+/* Whitespace markers are text, not a fill, so they take a colour rather than a background. Dimmer than
+ * the dimmest syntax colour, for the same reason as the guides. */
+texteditor .__whitespace__ {
+    color: #454C57;
+    z-index: 0;
+    white-space: nowrap;
+}
+
+/* A column ruler spans the viewport and does not scroll vertically -- TextEditor marks it scroll-exempt
+ * and subtracts the horizontal offset by hand, exactly as the gutter does. */
+texteditor .__ruler__ {
+    background-color: #2F3540;
+    z-index: 4;
+}
+
 /* Functional geometry for the table's own structure. Nothing here is decoration — a theme owns all of
  * that — but without these the widget does not work at all:
  *

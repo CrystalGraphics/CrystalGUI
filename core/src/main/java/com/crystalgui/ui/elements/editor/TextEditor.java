@@ -31,6 +31,9 @@ import com.crystalgui.text.cursor.MoveOperations;
 import com.crystalgui.text.cursor.TypeOperations;
 import com.crystalgui.text.wrap.LineBreaksComputer;
 import com.crystalgui.text.wrap.LineProjection;
+import com.crystalgui.text.view.IndentLevels;
+import com.crystalgui.text.view.RenderWhitespace;
+import com.crystalgui.text.view.WhitespaceMarkers;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.text.wrap.ShapedLineBreaks;
 import com.crystalgui.text.wrap.WrapIndent;
@@ -84,6 +87,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String CARET_CLASS = "__caret__";
     public static final String SELECTION_CLASS = "__selection__";
     public static final String GUTTER_CLASS = "__gutter__";
+    public static final String INDENT_GUIDE_CLASS = "__indent-guide__";
+    public static final String WHITESPACE_CLASS = "__whitespace__";
+    public static final String RULER_CLASS = "__ruler__";
     public static final String LINE_NUMBER_CLASS = "__line-number__";
     public static final String CURRENT_LINE_CLASS = "__current-line__";
 
@@ -127,6 +133,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Whether the live projection was built with real measurement, or is the no-font fallback. */
     private boolean projectedWithMeasurement = true;
+
+    // ── §G view decorations ─────────────────────────────────────────────────────────────────────
+
+    private boolean indentGuidesVisible;
+    private RenderWhitespace renderWhitespace = RenderWhitespace.NONE;
+    private int[] rulers = new int[0];
+    private boolean scrollBeyondLastLine = true;
+    private boolean offSideLanguage;
+
+    private final List<UIElement> indentGuides = new ArrayList<>();
+    private final List<UIElement> whitespaceMarks = new ArrayList<>();
+    private final List<UIElement> rulerLines = new ArrayList<>();
 
     private final Map<Integer, UIElement> realisedLines = new HashMap<>();
     private final Deque<UIElement> linePool = new ArrayDeque<>();
@@ -939,7 +957,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     @Override
     public float getScrollHeight() {
-        return viewLineCount() * lineHeight() + horizontalBarThickness();
+        float content = viewLineCount() * lineHeight();
+        // VS Code's ViewLayout._getTotalHeight, including the part that is easy to miss: the horizontal
+        // bar's allowance is the ELSE branch. Scrolling past the end already leaves a viewport of empty
+        // space below the last line, so adding the bar's thickness on top would be a second allowance for
+        // the
+        // same problem -- the last line would stop a bar's height short of where it should.
+        if (scrollBeyondLastLine) {
+            return content + Math.max(0f, viewportHeight() - lineHeight());
+        }
+        return content + horizontalBarThickness();
     }
 
     /** Document offset nearest a point in this element's own space. */
@@ -1785,6 +1812,71 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return wrapIndent;
     }
 
+    // ── §G view decorations ─────────────────────────────────────────────────────────────────────
+
+    /** Vertical lines marking each indent level. */
+    public TextEditor setIndentGuidesVisible(boolean value) {
+        this.indentGuidesVisible = value;
+        invalidateWindow();
+        return this;
+    }
+
+    public boolean isIndentGuidesVisible() {
+        return indentGuidesVisible;
+    }
+
+    /**
+     * Whether the language's blocks end by dedenting alone — Python, YAML.
+     *
+     * <p>Changes exactly one thing: what a blank line after a deeper block guides at. It belongs on the
+     * editor rather than on {@code Language} only because {@code Language} describes how to <em>edit</em>
+     * a language and this is how to <em>draw</em> it; move it there if a second drawing rule appears.</p>
+     */
+    public TextEditor setOffSideLanguage(boolean value) {
+        this.offSideLanguage = value;
+        invalidateWindow();
+        return this;
+    }
+
+    /** Which whitespace to make visible. Default {@link RenderWhitespace#NONE}, as in VS Code. */
+    public TextEditor setRenderWhitespace(RenderWhitespace mode) {
+        this.renderWhitespace = mode == null ? RenderWhitespace.NONE : mode;
+        invalidateWindow();
+        return this;
+    }
+
+    public RenderWhitespace getRenderWhitespace() {
+        return renderWhitespace;
+    }
+
+    /** Vertical rules at the given columns — VS Code's {@code editor.rulers}. */
+    public TextEditor setRulers(int... columns) {
+        this.rulers = columns == null ? new int[0] : columns.clone();
+        invalidateWindow();
+        return this;
+    }
+
+    public int[] getRulers() {
+        return rulers.clone();
+    }
+
+    /**
+     * Whether the document may be scrolled until the last line reaches the top — VS Code's
+     * {@code scrollBeyondLastLine}, on by default there and here.
+     *
+     * <p>It exists so the last line of a file can be read and edited somewhere other than jammed against
+     * the bottom edge, which is where every other line gets to be.</p>
+     */
+    public TextEditor setScrollBeyondLastLine(boolean value) {
+        this.scrollBeyondLastLine = value;
+        markTreeDirty();
+        return this;
+    }
+
+    public boolean isScrollBeyondLastLine() {
+        return scrollBeyondLastLine;
+    }
+
     /** Visual rows — the same as the row count when wrap is off. */
     public int viewLineCount() {
         return Math.max(1, projections.viewLineCount());
@@ -2154,6 +2246,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         syncLineFonts();
         refreshHighlights(first, last);
         layOutGutter(first, last);
+        layOutIndentGuides(first, last);
+        layOutWhitespace(first, last);
+        layOutRulers();
         layOutCurrentLine();
         layOutCaretAndSelection(first, last);
     }
@@ -2447,6 +2542,169 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private void hide(UIElement element) {
         StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(), l -> l.width(0f).height(0f));
     }
+
+    // ── §G view decorations: layout ─────────────────────────────────────────────────────────────
+
+    /** A pooled decoration element of the given class, appended as an internal child. */
+    private UIElement decorationAt(List<UIElement> pool, int index, String className, boolean withText) {
+        while (pool.size() <= index) {
+            UIElement element = new UIElement();
+            element.addClass(className);
+            element.setHitTest(false);
+            element.markAsInternal();
+            if (withText) element.addChild(new UIText(""));
+            addInternalChild(element);
+            pool.add(element);
+        }
+        return pool.get(index);
+    }
+
+    private static void hideFrom(List<UIElement> pool, int used) {
+        for (int i = used; i < pool.size(); i++) {
+            StyleGroup.defaultPipeline(pool.get(i).getStyle().getLayoutGroup(),
+                    l -> l.width(0f).height(0f));
+        }
+    }
+
+    /**
+     * One vertical line per indent level, on every visual row.
+     *
+     * <p>Placed at whole multiples of the indent width rather than at measured text, because a guide
+     * marks a <b>level</b> and must be at the same x on a blank line as on the code around it — which is
+     * exactly the case {@link IndentLevels} exists to answer, and where a guide derived from a row's own
+     * characters would have nothing to derive from.</p>
+     */
+    private void layOutIndentGuides(int firstViewLine, int lastViewLine) {
+        if (!indentGuidesVisible || lastViewLine < firstViewLine) {
+            hideFrom(indentGuides, 0);
+            return;
+        }
+        float advance = spaceAdvance();
+        if (!(advance > 0f)) {
+            hideFrom(indentGuides, 0);
+            return;
+        }
+
+        float height = lineHeight();
+        float step = advance * Math.max(1, indentWidth);
+        int used = 0;
+
+        for (int viewLine = Math.max(0, firstViewLine);
+             viewLine <= Math.min(lastViewLine, viewLineCount() - 1); viewLine++) {
+            int row = modelAt(viewLine).row();
+            int levels = IndentLevels.guidesFor(buffer.document(), row, row,
+                    indentWidth, tabSize, offSideLanguage)[0];
+            final float top = textOriginY() + viewLine * height;
+
+            for (int level = 0; level < levels && used < MAX_INDENT_GUIDES; level++) {
+                final float left = textOriginX() + level * step;
+                // Past the right edge there is nothing to guide, and the elements are better spent on
+                // rows that are visible.
+                if (left > getClientWidth()) break;
+                UIElement guide = decorationAt(indentGuides, used++, INDENT_GUIDE_CLASS, false);
+                StyleGroup.defaultPipeline(guide.getStyle().getLayoutGroup(),
+                        l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                                .left(left).top(top).width(1f).height(height));
+            }
+        }
+        hideFrom(indentGuides, used);
+    }
+
+    /**
+     * A marker glyph over every whitespace character the mode asks for.
+     *
+     * <p>Drawn as separate elements at <b>measured</b> x rather than substituted into the line's text.
+     * Substitution is what VS Code does and it is right there because the editor is monospaced: here a
+     * middot and a space have different advances, so replacing one with the other would shift every glyph
+     * after it and the caret would stop landing where the text is.</p>
+     */
+    private void layOutWhitespace(int firstViewLine, int lastViewLine) {
+        if (renderWhitespace == RenderWhitespace.NONE || lastViewLine < firstViewLine) {
+            hideFrom(whitespaceMarks, 0);
+            return;
+        }
+        float height = lineHeight();
+        float ink = textHeight();
+        int used = 0;
+
+        for (int viewLine = Math.max(0, firstViewLine);
+             viewLine <= Math.min(lastViewLine, viewLineCount() - 1) && used < MAX_WHITESPACE_MARKS;
+             viewLine++) {
+            ProjectedLines.ModelPosition model = modelAt(viewLine);
+            LineProjection projection = projectionAt(viewLine);
+            String row = buffer.line(model.row());
+            int from = projection.viewLineStart(model.viewLineInRow());
+            int to = Math.min(row.length(), projection.viewLineEnd(model.viewLineInRow()));
+            // TRAILING asks whether this segment is the row's last, which is what stops a soft wrap from
+            // reporting its own break as trailing whitespace.
+            boolean continues = model.viewLineInRow() < projection.viewLineCount() - 1;
+            boolean[] marked = WhitespaceMarkers.shouldMark(row, renderWhitespace, tabSize, continues);
+
+            final float top = textOriginY() + viewLine * height + (height - ink) / 2f;
+            for (int column = from; column < to && used < MAX_WHITESPACE_MARKS; column++) {
+                if (!marked[column]) continue;
+                char marker = WhitespaceMarkers.markerFor(row.charAt(column));
+                if (marker == '\0') continue;
+
+                LineProjection.ViewPosition at =
+                        projection.toViewPosition(column, LineProjection.Affinity.RIGHT);
+                final float left = textOriginX() + xOfView(viewLine, at.column());
+                UIElement mark = decorationAt(whitespaceMarks, used++, WHITESPACE_CLASS, true);
+                UIText label = (UIText) mark.getChildren().get(0);
+                label.setText(String.valueOf(marker));
+                StyleGroup.importantPipeline(label.getStyle().getGeneralGroup(),
+                        g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
+                                .fontFamily(getStyle().getGeneralGroup().fontFamily()));
+                StyleGroup.defaultPipeline(mark.getStyle().getLayoutGroup(),
+                        l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                                .left(left).top(top).height(ink));
+            }
+        }
+        hideFrom(whitespaceMarks, used);
+    }
+
+    /**
+     * A vertical rule at each configured column.
+     *
+     * <p>Full viewport height and scroll-exempt: a ruler marks a <em>column</em>, which does not move when
+     * the document scrolls vertically. It does move when the document scrolls sideways, which is why the
+     * horizontal offset is subtracted and the vertical one is not.</p>
+     */
+    private void layOutRulers() {
+        if (rulers.length == 0) {
+            hideFrom(rulerLines, 0);
+            return;
+        }
+        float advance = spaceAdvance();
+        if (!(advance > 0f)) {
+            hideFrom(rulerLines, 0);
+            return;
+        }
+        final float height = viewportHeight();
+        int used = 0;
+        for (int column : rulers) {
+            if (column <= 0) continue;
+            final float left = textOriginX() + column * advance - getScrollLeft();
+            if (left < textOriginX() || left > getClientWidth()) continue;
+            UIElement rule = decorationAt(rulerLines, used++, RULER_CLASS, false);
+            rule.setScrollExempt(true);
+            StyleGroup.defaultPipeline(rule.getStyle().getLayoutGroup(),
+                    l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                            .left(left).top(0f).width(1f).height(height));
+        }
+        hideFrom(rulerLines, used);
+    }
+
+    /**
+     * Caps on decoration elements.
+     *
+     * <p>Each is a Taffy node, and {@code renderWhitespace: all} on a wide file is thousands of them —
+     * VS Code has {@code stopRenderingLineAfter} for the same reason. The cap degrades the decoration
+     * rather than the editor, which is the right way round: markers missing off the far edge of a very
+     * long line are barely noticeable, and a layout pass that takes a second is not.</p>
+     */
+    private static final int MAX_INDENT_GUIDES = 512;
+    private static final int MAX_WHITESPACE_MARKS = 2048;
 
     /** X of a document column, via its display index — see {@link RowMetrics}. */
     private float widthOf(int row, int column) {
