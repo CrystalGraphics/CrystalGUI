@@ -1025,20 +1025,34 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
  * Without these rules a node is a column of full-width rows with no port dots to grab: the dot has no
  * intrinsic size, and Taffy's default direction is COLUMN, so the two port columns would stack. */
 
+/* Sized to its CONTENT between a floor and a ceiling: the node grows to fit its port names rather than
+ * wrapping them. Works only because nothing inside declares a zero flex basis -- a zero-basis child
+ * contributes nothing to a container's max-content, so the node could never grow. */
 graphnode {
-    width: 168px;
+    width: auto;
+    min-width: 134px;
+    max-width: 320px;
     flex-direction: column;
 }
 graphnode .__title-bar__ {
     flex-direction: row;
     align-items: center;
+    /* Pins the chevron right WITHOUT the title having to grow into the gap — see the note on the title.
+       This is the alignment mechanism that survives a self-sizing label. */
+    justify-content: space-between;
     padding-left: 6px;
     padding-right: 4px;
-    height: 18px;
+    /* Measured off the reference rather than chosen: Unity's header is 31px on a 173px-wide node, and
+       ours is 134px wide, so the same proportion is ~24. At 18px it was visibly squatter than the
+       reference beside an otherwise matching node — the one piece of the box still out of scale. */
+    height: 24px;
 }
-/* The title takes the slack so the chevron is pinned right. `width: 0` as the basis because
- * flex-shrink is 0 in this engine — a long title would otherwise push the chevron out of the node. */
-graphnode .__title__ { flex-grow: 1; width: 0; }
+/* The title takes the slack so the chevron is pinned right, and SHRINKS rather than sitting on a zero
+ * basis. The zero basis was there to stop a long title pushing the chevron out of a fixed-width node;
+ * now the node grows instead, and a zero basis would contribute nothing to that growth — the node would
+ * stay at its floor while the title ellipsized inside it. flex-shrink: 1 still protects the chevron once
+ * the node is clamped at max-width. */
+graphnode .__title__ { flex-grow: 0; flex-shrink: 1; }
 graphnode .__collapse__ {
     width: 10px;
     height: 10px;
@@ -1047,9 +1061,41 @@ graphnode .__collapse__ {
     cursor: pointer;
 }
 
-graphnode .__ports__ { flex-direction: row; padding-top: 2px; padding-bottom: 2px; }
-/* Two columns, each taking half. Zero basis for the same flex-shrink reason as above. */
-graphnode .__inputs__, graphnode .__outputs__ { flex-direction: column; flex-grow: 1; width: 0; }
+/* Three 1px separators from one rule: padding gives the horizontal pair (under the title bar, above the
+ * section below), `gap` the vertical one between the columns. They are the BAND showing through, which
+ * is why the band carries the tint (graph.css). Padding the columns instead cannot make a separator at
+ * all — a column paints its background across its own padding, so the strip comes out the panel's colour
+ * and just looks like a taller panel. A separator must be drawn by something OTHER than the two things
+ * it separates. */
+graphnode .__ports__ {
+    flex-direction: row;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    gap-all: 1px;
+}
+/* The input column hugs its content; the OUTPUT column takes the slack. Not two halves (that gives an
+ * inputless node an empty input panel and pins the output at 50%), and not two huggers (that leaves a
+ * hole between them on any node narrower than min-width). Growing only the output side fixes all three.
+ *
+ * The vertical padding is on the COLUMNS so it paints in the panel's own colour — on the band it would
+ * be a fourth seam. It costs an empty column nothing: padding adds no width, so an inputless node still
+ * has a zero-width input column and paints no panel.
+ *
+ * flex-shrink: 1 (this engine defaults to 0) lets them give way at max-width instead of overflowing. */
+graphnode .__inputs__ {
+    flex-direction: column;
+    flex-grow: 0;
+    flex-shrink: 1;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+graphnode .__outputs__ {
+    flex-direction: column;
+    flex-grow: 1;
+    flex-shrink: 1;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
 /* An output reads right-to-left: label, then the dot on the edge. */
 graphnode .__outputs__ { align-items: flex-end; }
 
@@ -1061,8 +1107,12 @@ graphnode .__control-row__ {
     gap-all: 4px;
     padding-left: 6px;
     padding-right: 6px;
-    padding-top: 2px;
-    padding-bottom: 2px;
+    /* The padding, not min-height, is what holds the widget clear of the seams: extra height alone just
+       centres it in more space, and a taller widget takes that slack straight back. */
+    padding-top: 4px;
+    padding-bottom: 4px;
+    /* A floor, not a cap — the row holds whatever widget a node puts in it. */
+    min-height: 25px;
 }
 /* The preview slot has a height even while empty, because 6.2.7 fills it with a render and a node
  * that changed size the moment previews arrived would move every wire in the graph. */
@@ -1081,24 +1131,55 @@ nodeport {
     /* The padding IS the hit target. The dot is 8px and a pointer is not — a connection you have to
      * aim for is a connection you get wrong. */
     padding-all: 3px;
-    height: 16px;
+    /* Measured off the reference like the header: Unity's port rows are ~24px on a 173px-wide node, so
+       the same proportion on our 134px one is ~18. At 16 the band was visibly tighter than the reference
+       while the header beside it already matched, which is what made the whole node read as compressed. */
+    height: 18px;
 }
-nodeport.__output__ { justify-content: flex-end; }
-/* The label takes the slack and truncates rather than overflowing.
+/* Breathing room on the side AWAY from the dot, which is what makes a port panel read as a panel
+   rather than as a box drawn tight around a word.
  *
- * Both are needed and neither is optional. flex-shrink is 0 in this engine, so a label wider than its
- * half of the node keeps its measured width and spills straight across the output column — which is
- * exactly what "Sampling Coordinates(3)" did on top of "Value(1)". A zero basis plus flex-grow gives it
- * the space that is actually there, and `text-overflow` truncates what is left over. The property has
- * to sit on the UIText itself (it does not inherit), which the label is. */
-nodeport .__label__ { flex-grow: 1; width: 0; text-overflow: ellipsis; }
+ * It has to sit on the ROW and not on the column, even though the column is what it visually pads: the
+ * column's width is the node's, so padding there would give a node with no inputs a 10px strip of input
+ * panel — a rect for something that does not exist, which is the bug this pair of rules is downstream
+ * of. No rows means no padding means nothing painted.
+ *
+ * Asymmetric because the two sides mirror: an input is dot-then-label reading left to right, an output
+ * is label-then-dot, and both dots sit on the node's edge where a wire meets them. */
+nodeport.__input__ { padding-left: 5px; padding-right: 10px; }
+nodeport.__output__ { padding-left: 10px; padding-right: 5px; }
+
+/* A floor so a short port name still gets a panel worth looking at (~45% of the node, as Unity does).
+ * Kept in PROPORTION to `graphnode`'s min-width — that ratio IS the 45%, so change both or neither.
+ *
+ * On the ROW, not the two places it seems to belong: on the COLUMN an inputless node gets the floor too
+ * and paints a panel for ports it does not have; on the LABEL it poisons UIText's self-sizing, which
+ * decides ONCE from `contentBoxWidth() <= 0` whether it sizes itself — hand it a width up front and it
+ * never pushes its measured one, so the node loses the ability to grow to fit long names. The row is
+ * safe only because the label does not grow. */
+nodeport.__input__ { min-width: 64px; }
+nodeport.__output__ { justify-content: flex-end; }
+/* `white-space: nowrap` is what makes `text-overflow` mean anything — ellipsis applies only to text that
+ * cannot wrap, so without it the label silently takes a second line inside a fixed-height row. Declare
+ * the pair together.
+ *
+ * No zero basis: the label's width is what the node grows to fit, and a zero-basis child contributes
+ * nothing to grow FROM. Shrinking covers the clamped case. */
+nodeport .__label__ {
+    flex-grow: 0;
+    flex-shrink: 1;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
 nodeport.__output__ .__label__ { text-align: right; }
+/* 6px = the reference's 24% of the port band's height. Safe to keep this small only because the hit
+ * target is the ROW's padding, never the dot. */
 nodeport .__dot__ {
-    width: 8px;
-    height: 8px;
-    border-radius: 4px;
-    /* The ring IS the port when unconnected, so the border is structural rather than decoration —
-     * without a width here a hollow port is invisible. Its colour is the type's, from the theme. */
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+    /* The ring IS the port when unconnected, so this is structural, not decoration — and it stays 2px
+     * rather than scaling with the diameter, or a hollow port stops reading as one. */
     border-width: 2px;
 }
 /* The inline editor an unconnected input offers (Unity's `X 0.9` field). Shown only while blank:
@@ -1116,69 +1197,84 @@ graphview .__marquee__ { }
  * what is left is the geometry it cannot function without: a width, a bounded list that scrolls rather
  * than growing past the screen, and rows tall enough to hit. */
 nodecreationmenu {
-    /* Sized to its WIDEST ROW, between a floor and a ceiling.
-       A fixed width clipped "Perlin noise 3D - Sampling Coordinates" while wasting space on "Add - A",
-       and a label a user cannot read is a row they cannot choose. `auto` here means max-content, since a
-       popover is content-sized; the floor stops a library of short names producing a sliver, and the
-       ceiling stops one pathological label producing a menu wider than the window. */
-    width: auto;
+    /* DEFINITE, and forced by the tree rather than chosen: a TreeView is virtualised, so its rows are
+       absolutely positioned and its scroll range comes from the model — it contributes nothing to either
+       intrinsic axis, and a content-sized box around one measures as empty (0 height realises exactly one
+       row). The cost is that the menu can no longer size to its widest row; it opens at a sensible size
+       and is resizable, as Unity's own Create Node window is. */
+    width: 260px;
+    height: 240px;
     max-width: 320px;
-    /* The floor a drag cannot go below. Expressed as min-width/min-height rather than as a clamp in the
-       resizer, deliberately: those are the spec's only constraints on `resize` and Taffy already applies
-       them, so a resizer that clamped as well would be a second mechanism able to disagree.
-
-       46px is the search box plus a row, which is the point below which this stops being a menu -- drag
-       it smaller and you get a clipped search bar and nothing to pick from, since `overflow: hidden` now
-       (correctly) hides what will not fit. */
+    /* The drag floor. min-* rather than a clamp in the resizer: those are `resize`'s only spec'd
+       constraints and Taffy already applies them, so a second mechanism could only disagree. */
     min-width: 170px;
     min-height: 46px;
-    /* Trailing handles only -- Popover refuses the leading four, because AnchoredPlacement owns left/top
-       on an anchored popup and a second writer fights it every frame. That leaves the bottom-right
-       corner, which is CSS's own default grabber and what Unity offers.
-
-       `overflow: hidden` is NOT optional beside it. A resize writes an explicit height, and without a
-       clip the rows simply carried on painting past the border and over the canvas below -- which is
-       exactly what a menu dragged shorter did. This engine's own notes say a resizable box should set
-       overflow; that is the half browsers get for free by restricting `resize` to scroll containers. */
+    /* Trailing handles only — Popover refuses the leading four, since AnchoredPlacement owns left/top.
+       `overflow: hidden` is not optional beside `resize`: a resize writes an explicit height, and without
+       a clip the rows paint straight past the border. */
     resize: both;
     overflow: hidden;
     flex-direction: column;
     padding-all: 3px;
     gap-all: 2px;
 }
+/* The draggable header, Unity's "Create Node". `grab` rather than `pointer`: it moves the window, it
+   does not activate anything, and the two cursors are the web's own distinction. */
+nodecreationmenu .__title-bar__ {
+    width: 100%;
+    height: 14px;
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    padding-left: 4px;
+    cursor: grab;
+}
 nodecreationmenu .__search__ { width: 100%; height: 14px; }
-/* NO zero basis here, and that is the opposite of the advice everywhere else in this file.
- *
- * `height: 0` + `flex-grow: 1` is right inside a container with a DEFINITE height, where growing means
- * taking the space left over. This popover is content-sized, so there is no leftover space to take and
- * the list simply stayed 0px tall -- the menu opened showing its search box and nothing else, which is
- * precisely what it looked like. Auto height plus a max-height gives the wanted behaviour directly: as
- * tall as its rows, until it would be taller than the screen, then it scrolls. */
-/* flex-shrink: 1 is a deliberate departure from this engine's default of 0. The menu is resizable, so
- * its content has to give way when it is dragged shorter -- and the list is the part that should, because
- * it can scroll. Left at 0 the rows keep their full height inside a smaller box and spill (or, now,
- * are clipped away entirely, which is worse: they would be unreachable). */
+/* `height: 0` + `flex-grow: 1` — correct only because the parent above has a definite height. A
+ * virtualised list has no intrinsic height, so growing into the leftover space is the ONLY thing that
+ * gives it a viewport. flex-shrink: 1 (engine default is 0) lets it give way when the menu is dragged
+ * shorter, since the list is the part that can scroll. */
 nodecreationmenu .__items__ {
     width: 100%;
-    max-height: 160px;
-    flex-direction: column;
+    height: 0;
     flex-grow: 1;
     flex-shrink: 1;
 }
-/* flex-direction: row is NOT optional, and its absence is why the labels came out centred and clipped
-   on both sides: Taffy's default here is COLUMN, so `align-items: center` was centring them across the
-   row rather than down it. The two properties read as a pair and only one of them was written. */
+/* NO `height` and NO `padding-left` — one trap with two faces. A virtualised row's geometry is written
+   FROM JAVA at DEFAULT origin, which every stylesheet origin beats: ListView writes top/height from its
+   ItemSizeStrategy, and TreeView writes padding-left from the row's DEPTH. Setting either here does not
+   adjust the tree, it breaks it (rows the right size with gaps between them; every level flattened to
+   one indent). Row height and indentation belong to the view.
+
+   flex-direction is not optional either — Taffy defaults to COLUMN, so `align-items: center` without it
+   centres labels ACROSS the row. The two read as a pair. */
 nodecreationmenu .__entry__ {
     width: 100%;
-    height: 13px;
     flex-direction: row;
-    padding-left: 4px;
     padding-right: 4px;
     justify-content: flex-start;
     align-items: center;
     /* A label past the ceiling clips at its own row rather than escaping the menu. */
     overflow: hidden;
     cursor: pointer;
+}
+/* The twisty is a real element, because this engine has no ::before to put it in. Fixed width so every
+   label at a given depth starts at the same x whether or not its row can be opened -- a leaf simply
+   draws an empty one rather than shifting left, which is what makes a column of siblings line up. */
+nodecreationmenu .__twisty__ {
+    width: 9px;
+    flex-shrink: 0;
+    text-align: center;
+}
+/* Clips at the row rather than escaping it, and `text-overflow` has to sit on the TEXT, not on the row:
+   it does not inherit, so on the wrapper it would silently never arrive. */
+nodecreationmenu .__entry__ .__label__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 nodecreationmenu .__empty__ { padding-all: 4px; }
 

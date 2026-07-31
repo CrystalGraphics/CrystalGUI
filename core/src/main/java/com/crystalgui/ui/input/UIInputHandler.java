@@ -443,6 +443,23 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
      * has press-and-hold semantics mirroring an actual mouse press, so it needs the held-until-release
      * tracking in {@link #keyboardPressTarget}.
      */
+    /**
+     * {@code detail} on a click this handler synthesized from the keyboard — <b>zero</b>, which is the
+     * DOM's own signal for exactly this ("the click was not caused by a pointer").
+     *
+     * <p>It has to be distinguishable, and a real press can never be 0 because the first one is 1. The
+     * activation events are otherwise deliberately identical to a mouse press, which is what lets
+     * {@code Button} and {@code Checkbox} get keyboard support with no keyboard code — but a widget
+     * whose press means <em>"the pointer went down at this position"</em> rather than <em>"activate
+     * me"</em> needs to opt out, and until now it had nothing to opt out on.</p>
+     *
+     * <p>{@code GraphView} is the case that found it: it takes focus so its command keys work, so Enter
+     * synthesized a press at the physical cursor and it started a rubber band — one that could not be
+     * ended, because a marquee is released by the real pointer-up path and the synthesized Up never
+     * reaches it.</p>
+     */
+    public static final int KEYBOARD_DETAIL = 0;
+
     private void handleActivationKey(Keyboard.Event event) {
         if (focusedElement == null) return;
         if (event.key() != CgKeyCodes.KEY_SPACE && event.key() != CgKeyCodes.KEY_RETURN) return;
@@ -455,11 +472,13 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         if (event.pressed() && !event.repeat()) {
             keyboardPressTarget = focusedElement;
             focusedElement.setPressed(true);
-            sendInputEvent(focusedElement, new MouseEvent.Down(focusedElement, hoverFrameData.eventPosition(), 0, 1));
+            sendInputEvent(focusedElement,
+                    new MouseEvent.Down(focusedElement, hoverFrameData.eventPosition(), 0, KEYBOARD_DETAIL));
         } else if (!event.pressed()) {
             boolean wasPressTarget = focusedElement == keyboardPressTarget; // false if focus moved mid-hold
             if (keyboardPressTarget != null) keyboardPressTarget.setPressed(false);
-            sendInputEvent(focusedElement, new MouseEvent.Up(focusedElement, hoverFrameData.eventPosition(), 0, 1, wasPressTarget));
+            sendInputEvent(focusedElement, new MouseEvent.Up(
+                    focusedElement, hoverFrameData.eventPosition(), 0, KEYBOARD_DETAIL, wasPressTarget));
             keyboardPressTarget = null;
         }
 

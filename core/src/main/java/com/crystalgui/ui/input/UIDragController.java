@@ -399,15 +399,31 @@ public final class UIDragController {
         Object droppedPayload = payload;
         UIWindow window = source.getAttachedWindow();
 
+        // Resolved BEFORE the drop is dispatched, because a drop handler is entitled to change the tree
+        // and this reads the source's transform.
         Vector2f local = source.screenToLocal(mouseX, mouseY);
-        listener.onDragEnd(local.x(), local.y());
-        clear();
 
+        // The DROP fires first, then the source's onDragEnd. That is the web's order — `drop` on the
+        // target, then `dragend` on the source — and it is the only order that lets a source ask "did my
+        // drag land?" in onDragEnd.
+        //
+        // It used to be the other way around, and the failure was a good one: a wire dragged onto a port
+        // connected AND opened the create-node menu. The port decides which happened by comparing its
+        // connection count against a snapshot taken at drag start, so running onDragEnd first meant it
+        // always saw the count from before the drop and always concluded the wire had landed on nothing.
+        // Both outcomes then happened, in that order, and the menu looked like it had opened for no
+        // reason rather than like an ordering bug.
+        //
+        // Only payload drags are affected: a positional drag (resize, marquee, node move) dispatches no
+        // Drop at all, so its onDragEnd is still the first thing to run.
         if (droppedPayload != null && droppedOn != null && window != null) {
             window.getInputHandler().sendInputEvent(droppedOn,
                     new DragEvent.Drop(droppedOn, window.getInputHandler().pointerPosition(),
                             dragSource, droppedPayload));
         }
+
+        listener.onDragEnd(local.x(), local.y());
+        clear();
     }
 
     /**

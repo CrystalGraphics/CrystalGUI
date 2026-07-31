@@ -16,6 +16,7 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIDragController;
+import com.crystalgui.ui.input.UIInputHandler;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import org.joml.Vector2f;
@@ -54,8 +55,15 @@ import java.util.List;
  */
 public class GraphView extends CanvasView implements UndoScope {
 
-    /** Logical px, before zoom. */
-    private static final float DEFAULT_WIRE_WIDTH = 2f;
+    /**
+     * Logical px, before zoom — Unity's wire is a hairline, and this used to be twice it.
+     *
+     * <p>The error was easy to make and worth recording: the reference screenshots are at 100%, while
+     * the harness runs at {@code uiScale} 2, so a "2px" wire drew four physical pixels against Unity's
+     * one and a half. A logical width compared against a physical reference is off by exactly the scale
+     * factor, and looks merely "a bit heavy" rather than obviously wrong.</p>
+     */
+    private static final float DEFAULT_WIRE_WIDTH = 1f;
 
     /**
      * The floor a wire's on-screen thickness will not go below, in <b>physical-ish logical px after
@@ -68,7 +76,7 @@ public class GraphView extends CanvasView implements UndoScope {
      * shader. Keeping it out of the shader means the stroke maths stays linear and every other consumer
      * of {@code curve()} is unaffected.</p>
      */
-    private static final float MIN_WIRE_SCREEN_WIDTH = 1.25f;
+    private static final float MIN_WIRE_SCREEN_WIDTH = 1f;
 
     private final List<GraphConnection> connections = new ArrayList<>();
     private final List<GraphConnection> connectionsView = Collections.unmodifiableList(connections);
@@ -102,6 +110,12 @@ public class GraphView extends CanvasView implements UndoScope {
 
     /** The rubber band. A child of the VIEWPORT, not the plane — see {@link #marqueeElement()}. */
     private final UIElement marquee = new UIElement();
+
+    /** The wire under the pointer, or null. Drives the hover thickening — a wire cannot carry {@code
+     * :hover} itself, having no element. */
+    @Getter
+    @Nullable
+    private GraphConnection hoveredWire;
 
     private boolean marqueeActive;
     private float marqueeStartX, marqueeStartY;
@@ -141,14 +155,63 @@ public class GraphView extends CanvasView implements UndoScope {
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled() || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
+            // Not a real pointer press. Space/Enter on a focused element synthesize a mouse press so
+            // Button and friends get keyboard activation for free, and this view has to be focusable for
+            // its command keys to resolve at all — so Enter arrived here as a left-click at wherever the
+            // cursor happened to be and started a rubber band. It could not be dismissed either: a
+            // marquee ends through the real pointer-up path, which a synthesized Up never reaches.
+            //
+            // A marquee means "the pointer went down HERE", which is not something a key can mean.
+            if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
             // A press that reached the graph itself landed on empty canvas: a node claims its own press
             // in the capture phase, and a port claims one before that. So this is the marquee's press —
             // unless a wire is under it, which is the only thing here that is drawn but not an element.
             if (isInsidePromotedChild(event.getTarget())) return;
+            // A press inside a NODE is never the canvas's, even when the node did not claim it.
+            //
+            // GraphNode stops propagation only for presses it turns into a move-drag; a press on its
+            // controls it deliberately ignores, so the widget underneath can have it — and that press
+            // then arrived here and was read as "empty canvas". This view would take pointer focus and
+            // start a marquee WITH POINTER CAPTURE, which is fatal to any control in a node: the capture
+            // swallows the release, and the focus change closes whatever popover the press just opened.
+            // A Dropdown in a node looked completely dead because of it.
+            //
+            // Asking about the target rather than relying on every node to stop propagation is the
+            // robust half: a widget that legitimately wants a press to pass through should not have to
+            // know that letting it through starts a rubber band three levels up.
+            if (isInsideNode(event.getTarget())) return;
             if (beginMarqueeOrPickWire(event.getPosition().x(), event.getPosition().y())) {
                 event.stopPropagation();
             }
         }, false, true);
+
+        // A wire is painted, not laid out, so nothing in the hit-test tree knows where it is and it can
+        // never receive a :hover of its own — the same trade that makes pickWire exist for presses. The
+        // pointer position has to be re-tested against the curves each time it moves.
+        this.events.getGroup(MouseEvent.Move.class).attachListener((el, event) -> {
+            GraphConnection was = hoveredWire;
+            hoveredWire = isInsidePromotedChild(event.getTarget())
+                    ? null
+                    : wireAt(event.getPosition().x(), event.getPosition().y());
+            // Nothing to invalidate — the layer repaints every frame and reads this directly. Kept as a
+            // field rather than recomputed in paint so the pick runs once per move, not once per frame.
+            if (was != hoveredWire) markTreeDirty();
+        }, false, true);
+    }
+
+    /** Whether {@code target} is this graph's own node, or anything inside one. */
+    private boolean isInsideNode(@Nullable UIElement target) {
+        for (UIElement element = target; element != null && element != this; element = element.getParent()) {
+            if (element instanceof GraphNode) return true;
+        }
+        return false;
+    }
+
+    /** The wire under a viewport-space point, or null. */
+    @Nullable
+    public GraphConnection wireAt(float rawX, float rawY) {
+        Vector2f world = screenToWorld(rawX, rawY);
+        return wireLayer.pickWire(world.x(), world.y());
     }
 
     /** On the rubber band, so a theme owns its look. */

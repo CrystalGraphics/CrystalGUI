@@ -97,6 +97,11 @@ public class Popover extends UIElement {
     private float pointX, pointY;
     private boolean anchoredToPoint;
 
+    /** True once {@link #moveTo} has been called — the popup is where the user put it, not where its
+     * anchor says. Cleared by every show, so this survives a drag but not a reopen. */
+    @Getter
+    private boolean freelyPositioned;
+
     /** Focus to hand back on close — the same restore {@code Dialog} does, for the same reason: a menu
      * that swallows your place in the page is worse than one that never took focus. */
     @Nullable
@@ -144,6 +149,7 @@ public class Popover extends UIElement {
     public Popover showFor(UIElement anchor, @Nullable UIElement invoker) {
         this.anchor = anchor;
         this.anchoredToPoint = false;
+        this.freelyPositioned = false;
         setPopoverInvoker(invoker != null ? invoker : anchor);
         return open();
     }
@@ -165,6 +171,7 @@ public class Popover extends UIElement {
         this.pointY = rootY;
         this.anchoredToPoint = true;
         this.anchor = null;
+        this.freelyPositioned = false;
         setPopoverInvoker(invoker);
         return open();
     }
@@ -298,9 +305,28 @@ public class Popover extends UIElement {
 
     // ── Placement ───────────────────────────────────────────────────────────
 
+    /**
+     * Moves this popup to a point in root space and <b>detaches it from its anchor</b> — what a drag on a
+     * title bar calls.
+     *
+     * <p>This does not break the "only {@code AnchoredPlacement} writes {@code left}/{@code top} on an
+     * anchored popup" rule; it is how a popup stops being anchored. {@link #reposition()} goes quiet from
+     * here on, so there is still exactly one writer at any moment — which is the property that mattered.
+     * Without the handover the placement ticker simply overwrites the drag every frame and the popup
+     * appears nailed down.</p>
+     *
+     * <p>Re-showing re-anchors: {@link #showFor} and {@link #showAt} both clear this, so a menu you moved
+     * once does not open in that spot forever afterwards.</p>
+     */
+    public Popover moveTo(float rootLeft, float rootTop) {
+        freelyPositioned = true;
+        StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.left(rootLeft).top(rootTop));
+        return this;
+    }
+
     /** Re-runs placement against the current anchor. */
     public void reposition() {
-        if (!open) return;
+        if (!open || freelyPositioned) return;
         if (anchoredToPoint) {
             AnchoredPlacement.placeAtPoint(this, pointX, pointY, preferredSide, offset);
         } else if (anchor != null) {

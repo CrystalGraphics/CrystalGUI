@@ -2203,6 +2203,56 @@ document on screen.
 
 </details>
 
+### 6.2.6b Category tree, wire polish, and the Unity fidelity pass · `DONE` (2026-07-31)
+
+> **Shipped**: `NodeMenuTree` (headless, 11 tests) files the create menu's offers under their categories;
+> the menu now drives a `TreeView` with a draggable "Create Node" header, keyboard, and search that
+> flattens. Wire hover, additive node ring states, and a palette matched to Unity by pixel-sampling.
+
+#### Four engine bugs, none of them in the graph
+
+1. **`UIDragController` fired `onDragEnd` before `DragEvent.Drop`.** A wire dropped on a valid port
+   connected *and* opened the create menu, because the port decides "did I land?" by comparing its
+   connection count against a drag-start snapshot and always read it before the drop. Now drop-then-end,
+   which is the web's order and the only one where that question is answerable.
+2. **Keyboard activation was indistinguishable from a click.** Space/Enter synthesize a `MouseEvent.Down`
+   so `Button` gets keyboard support free; `GraphView` must be focusable for its commands, so Enter
+   started a marquee that could not be released (a marquee ends through the real pointer-up path).
+   Synthesized clicks now carry `detail == 0`, the DOM's own signal.
+3. **Wire picking measured distance to the sample points, not the segments between them.** Evenly-spaced
+   dead zones along every long wire; 141 of 201 points on the curve were unpickable. Tolerance is now
+   zoom-independent too.
+4. **`GraphNode.setSelected` was public.** The gallery called it directly, so a node painted as selected
+   while `GraphSelection` had never heard of it — and nothing could clear it, since `clearSilently()`
+   only walks the set. Package-private now, as `Tab.setSelected` already was.
+
+#### What the fidelity pass taught, and it is all one lesson
+
+Matching a reference by **sampling pixels** rather than by eye found things no amount of looking would:
+that the header and input panel are the same colour, that the preview matches the body, that Unity's
+surface alpha is 0.824 (solvable from one surface over two backdrops). But the recurring trap was
+compositing arithmetic — **a base colour is not the colour you see**, and changing the alpha silently
+moves every colour unless the bases are re-solved. That went wrong twice, and the second time only
+because the two port columns paint over the *band*, not the canvas: the backdrop of a translucent
+surface is whatever is directly behind it.
+
+Three geometry traps worth the same billing:
+
+- **A separator cannot be drawn by either of the two things it separates** — padding a column paints the
+  strip in the column's own colour, so it reads as a taller panel. Tried at 1px and 3px; both looked
+  like no padding at all.
+- **`UIText` decides once whether it self-sizes** (`contentBoxWidth() <= 0` on its first pass), so
+  "give this text a minimum size" and "let the box grow to fit it" are mutually exclusive on one element.
+  That is why the port floor sits on the row.
+- **A virtualised row's geometry is written from Java at DEFAULT origin**, which every stylesheet origin
+  beats — a `height` or `padding-left` rule does not adjust a `TreeView`, it breaks it.
+
+#### Deliberately not done
+
+Category **sorting by frequency**, and a preview seam matching the reference's fourth separator. The one
+knowing divergence from Unity is surface alpha: `0x76` against their `0xD2`, so wires stay visible behind
+a node.
+
 ### 6.2.7 Node previews · `TODO` · **has an engine question in it**
 
 The thumbnail in every reference screenshot. The widget half is trivial — a preview slot that paints a
