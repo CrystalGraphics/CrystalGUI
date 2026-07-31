@@ -3080,6 +3080,47 @@ public class TextEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>The horizontal bar does not vanish when you scroll to the end of the file.</b>
+     *
+     * <p>Content width is measured from the REALISED lines, because a virtualised editor cannot know the
+     * widest line in a document without shaping every one of them. Measuring only what is on screen meant
+     * scrolling to the end — where the last rows are a closing brace and a blank — collapsed the width and
+     * took the bar away underneath the pointer.</p>
+     */
+    @Test
+    public void theHorizontalBarSurvivesScrollingToTheEnd() {
+        StringBuilder document = new StringBuilder();
+        document.append("x".repeat(4000)).append(NL);
+        for (int i = 0; i < 40; i++) document.append("}").append(NL);
+        build(document.toString());
+        editor.setScrollBeyondLastLine(false);
+        showEditor();
+
+        float wideAtTop = editor.getScrollWidth();
+        assertTrue("the long line must overflow to begin with", wideAtTop > editor.getClientWidth());
+
+        editor.setScrollImmediate(0f, editor.getScrollHeight());
+        showEditor();
+
+        assertTrue("and the content must still be wider than the viewport at the bottom, was "
+                + editor.getScrollWidth(), editor.getScrollWidth() > editor.getClientWidth());
+    }
+
+    /** But a shorter document gives the width back — the memory is not a high-water mark. */
+    @Test
+    public void deletingTheLongLineGivesTheWidthBack() {
+        build("x".repeat(4000) + NL + "short");
+        showEditor();
+        assertTrue(editor.getScrollWidth() > editor.getClientWidth());
+
+        editor.setText("short" + NL + "short");
+        showEditor();
+
+        assertTrue("a shorter document must report a smaller width, was " + editor.getScrollWidth(),
+                editor.getScrollWidth() <= editor.getClientWidth());
+    }
+
+    /**
      * <b>Zooming keeps the line you were on.</b>
      *
      * <p>{@code scrollTop} is a PIXEL count, so leaving it alone across a font change silently

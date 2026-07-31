@@ -157,6 +157,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Clips everything drawn in document coordinates — see {@link #textViewport()}. */
     private UIElement textViewport;
 
+    /** Widest line realised since the last edit, font change or reprojection. */
+    private float widestSeen;
+
     /** The font the whitespace markers were last styled for. */
     private String markerFontKey;
 
@@ -381,6 +384,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // Rebuilding on a line-count change was the remaining half of the flicker: pressing Enter
             // recycled every line, and recycling clears highlights that are only republished after the
             // frame's style pass.
+            forgetWidestLine();
             reprojectAfterEdit(change);
             rebindRealisedLines();
             // A document that shrank can leave a selection pointing past its end, and the caret then
@@ -1009,22 +1013,33 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * ones, and the text now lives inside a scroll-exempt viewport. Without this the editor reports zero
      * content width, the horizontal bar never appears, and a long line simply cannot be scrolled to.</p>
      *
-     * <p>Realised lines only, which is what the inherited version effectively measured too — its children
-     * were the realised lines. A virtualised editor cannot know the widest line in the document without
-     * measuring every one of them.</p>
+     * <p><b>The widest line SEEN, not the widest currently on screen.</b> A virtualised editor cannot know
+     * the widest line in the document without measuring every one of them, which for a large file means
+     * shaping every one of them. So this remembers the widest it has realised so far — and remembering is
+     * what makes the bar stable: measuring only the realised lines meant scrolling to the end of a file,
+     * where the last rows are a brace and a blank, collapsed the content width and the horizontal bar
+     * disappeared underneath the pointer.</p>
+     *
+     * <p>The memory is reset whenever it could be wrong — an edit, a font change, a reprojection — rather
+     * than being allowed to ratchet up forever. Deleting the one long line in a file must give the width
+     * back, and a high-water mark that never falls would not.</p>
      */
     @Override
     public float getScrollWidth() {
         if (textViewport == null) return 0f;
-        float max = 0f;
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
             ProjectedLines.ModelPosition model = modelAt(viewLine);
             float end = xOfView(viewLine, projectionAt(viewLine).maxColumn(model.viewLineInRow()));
-            max = Math.max(max, textOriginX() + end + 1f);
+            widestSeen = Math.max(widestSeen, textOriginX() + end + 1f);
         }
-        return max;
+        return widestSeen;
+    }
+
+    /** Forgets the widest line, so a shorter document reports a smaller scroll width. */
+    private void forgetWidestLine() {
+        widestSeen = 0f;
     }
 
     @Override
@@ -2408,6 +2423,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * {@link ProjectedLines#rowsChanged} instead, which is why typing does not pay this.</p>
      */
     private void reproject() {
+        forgetWidestLine();
         float width = softWrap ? wrapWidthPx() : -1f;
         projectedWrapWidth = width;
         // No font yet means no measurement, and guessing one would wrap against a width that is about to
