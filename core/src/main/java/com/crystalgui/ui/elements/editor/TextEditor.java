@@ -769,9 +769,23 @@ public class TextEditor extends ScrollerView {
         float caretX = textOriginX() + widthOf(point.row(), point.column());
         final float ink = textHeight();
         final float caretTop = textOriginY() + point.row() * height + (height - ink) / 2f;
-        StyleGroup.defaultPipeline(caretElement.getStyle().getLayoutGroup(),
+        // THE CARET'S RIGHT EDGE SITS ON THE BOUNDARY -- it does not start there, and it does not
+        // straddle it.
+        //
+        // A character boundary in a bitmap font is where the NEXT glyph's ink begins: the advance is ink
+        // plus trailing space, and there is no left side bearing. So the whole of the clear gap lies to
+        // the LEFT of the boundary, and it is one logical pixel wide.
+        //
+        // Drawing rightwards from the boundary covers the next glyph's first ink column. Centring on it
+        // is worse, not better: at uiScale 2 a 1px caret is two physical pixels and a Minecraft 'i' is
+        // barely wider than that, so a centred caret buries the whole letter -- which is exactly what
+        // the first attempt did. Right-aligning to the boundary puts the caret in the gap and cannot
+        // overlap the glyph that follows it at any scale.
+        final float caretWidth = Math.max(1f, getStyle().getGeneralGroup().caretWidth());
+        final float caretLeft = caretX - caretWidth;
+        StyleGroup.importantPipeline(caretElement.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(caretX).top(caretTop).height(ink));
+                        .left(caretLeft).top(caretTop).width(caretWidth).height(ink));
 
         int used = 0;
         if (hasSelection()) {
