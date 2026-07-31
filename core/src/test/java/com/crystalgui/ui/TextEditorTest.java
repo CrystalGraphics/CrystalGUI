@@ -2497,10 +2497,18 @@ public class TextEditorTest extends UiTestBase {
         int edges = countOf(TextEditor.GUTTER_EDGE_CLASS);
         assertEquals("one element, not one per row", 1, edges);
 
+        // Where the gutter's box ends. It is a BORDER: floating it in the middle of the code margin read
+        // as a stray rule with a gap either side rather than as the gutter ending.
+        float gutterRight = editor.getRuntimeCache().getX()
+                + editor.getTaffyLayout().border().left + editor.getTaffyLayout().padding().left
+                + editor.getGutterWidth();
+
         for (UIElement child : editor.getChildren()) {
             if (!child.hasClass(TextEditor.GUTTER_EDGE_CLASS)) continue;
             assertEquals("and it spans the whole viewport", editor.getViewportHeight(),
                     child.getTaffyLayout().contentBoxHeight(), 1f);
+            assertEquals("and sits on the gutter's right edge",
+                    gutterRight, child.getRuntimeCache().getX(), 1f);
         }
     }
 
