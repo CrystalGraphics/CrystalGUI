@@ -504,10 +504,26 @@ texteditor .__current-line__ {
 
 /* Indent guides sit BEHIND the text but in front of the current-line band, so a guide still reads on the
  * row the caret is on. Deliberately dim: a guide the eye can follow when it looks for it and ignores when
- * it does not is the whole design brief, and one that competes with the code is worse than none. */
+ * it does not is the whole design brief, and one that competes with the code is worse than none.
+ *
+ * These start at indent level ONE. Level zero is the gutter's edge below, not a guide — see there. */
 texteditor .__indent-guide__ {
     background-color: #2F3540;
     z-index: -1;
+}
+
+/* THE GUTTER'S RIGHT EDGE. One element, full viewport height, sitting in the gutter's margin-right.
+ *
+ * This is what the level-zero indent guide was pretending to be, and the distinction is the whole reason
+ * the guides used to break: an indent guide is drawn per row from THAT ROW's indentation, so a line at
+ * indent 0 has none and the vertical run stopped dead wherever the code reached column 0 — the letter
+ * sitting there looked like it had cut the line in half. An edge is structural: one element spanning the
+ * viewport, which no line of code can interrupt.
+ *
+ * Same colour as an indent guide on purpose, so the two read as one continuous system. */
+texteditor .__gutter-edge__ {
+    background-color: #2F3540;
+    z-index: 4;
 }
 
 /* Whitespace markers are text, not a fill, so they take a colour rather than a background. Dimmer than
