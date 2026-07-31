@@ -1,5 +1,6 @@
 package com.crystalgui.ui.input;
 
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
@@ -82,6 +83,10 @@ public final class UIDragController {
     private UIElement source;
     private DragListener listener;
     private float startX, startY;
+
+    /** The mouse button holding this drag open. Released, it ends the drag; any other button's release
+     * is ignored. @see #startDrag(UIElement, float, float, int, DragListener) */
+    private int button = CgMouseCodes.LEFT_BUTTON;
 
     @Nullable
     private Object payload;
@@ -170,7 +175,22 @@ public final class UIDragController {
     /** Positional drag — no payload, no drop targeting, activates immediately. What Slider,
      * Scroller and SplitView use, unchanged. */
     public void startDrag(UIElement source, float mouseX, float mouseY, DragListener listener) {
-        begin(source, mouseX, mouseY, listener, null, 0f);
+        begin(source, mouseX, mouseY, listener, null, 0f, CgMouseCodes.LEFT_BUTTON);
+    }
+
+    /**
+     * Positional drag driven by a button other than the left one — the middle-button pan a
+     * {@code CanvasView} does.
+     *
+     * <p>The button has to be declared because <b>a drag ends when the button that started it is
+     * released</b>, and {@link UIInputHandler} has no other way to know which that was. It used to
+     * assume button 0 unconditionally, which is invisible for every left-button drag in the engine and
+     * fatal for any other: the release arrives, nothing ends the drag, pointer capture is dropped
+     * because no button is down — and the drag keeps consuming mouse movement forever, with the view
+     * sliding around under a pointer nobody is pressing.</p>
+     */
+    public void startDrag(UIElement source, float mouseX, float mouseY, int button, DragListener listener) {
+        begin(source, mouseX, mouseY, listener, null, 0f, button);
     }
 
     /**
@@ -178,13 +198,13 @@ public final class UIDragController {
      * the pointer has moved far enough, so a click on a draggable element is still a click.
      */
     public void startDrag(UIElement source, float mouseX, float mouseY, Object payload, DragListener listener) {
-        begin(source, mouseX, mouseY, listener, payload, DEFAULT_THRESHOLD_PX);
+        begin(source, mouseX, mouseY, listener, payload, DEFAULT_THRESHOLD_PX, CgMouseCodes.LEFT_BUTTON);
     }
 
     /** As above, with an explicit activation distance in physical pixels. */
     public void startDrag(UIElement source, float mouseX, float mouseY, Object payload,
                           float thresholdPx, DragListener listener) {
-        begin(source, mouseX, mouseY, listener, payload, Math.max(0f, thresholdPx));
+        begin(source, mouseX, mouseY, listener, payload, Math.max(0f, thresholdPx), CgMouseCodes.LEFT_BUTTON);
     }
 
     /**
@@ -196,7 +216,7 @@ public final class UIDragController {
      * the conversion to the source's local space happens here.</p>
      */
     private void begin(UIElement source, float mouseX, float mouseY, DragListener listener,
-                       @Nullable Object payload, float thresholdPx) {
+                       @Nullable Object payload, float thresholdPx, int button) {
         // A second startDrag while one is live used to overwrite the state outright: the previous
         // drag's listener never heard that it ended, its drop target stayed highlighted, and its
         // ghost stayed promoted. Cancelling first gives the old drag the same defined teardown it
@@ -207,6 +227,7 @@ public final class UIDragController {
         this.listener = listener;
         this.payload = payload;
         this.threshold = thresholdPx;
+        this.button = button;
         this.activated = thresholdPx <= 0f;
         this.pressPhysX = mouseX;
         this.pressPhysY = mouseY;
@@ -247,6 +268,11 @@ public final class UIDragController {
 
     public UIElement getSource() {
         return source;
+    }
+
+    /** The button whose release ends this drag. Meaningless while {@link #isDragging()} is false. */
+    public int getButton() {
+        return button;
     }
 
     @Nullable
@@ -435,6 +461,7 @@ public final class UIDragController {
         activated = false;
         dropAccepted = false;
         threshold = 0f;
+        button = CgMouseCodes.LEFT_BUTTON;
         // The ghost itself is NOT cleared: it belongs to the caller, who set it once and expects it
         // to still be theirs for the next drag.
     }

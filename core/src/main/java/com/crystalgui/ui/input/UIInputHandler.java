@@ -512,7 +512,12 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
             boolean wasPressTarget = target == lastPressedElement;
             if (this.lastPressedElement != null && buttonOrdinal == 0) this.lastPressedElement.setPressed(false);
             emitMouseUp(target, buttonOrdinal, detail, wasPressTarget);
-            if (buttonOrdinal == 0 && dragController.isDragging()) {
+            // The button that STARTED the drag, not button 0. Identical for every left-button drag in
+            // the engine, and the difference between working and hanging for any other: a middle-button
+            // pan would otherwise never be told its button came back up, while the implicit capture
+            // release below still fired — leaving a live drag consuming every mouse move with no button
+            // held at all.
+            if (dragController.isDragging() && buttonOrdinal == dragController.getButton()) {
                 var pos = hoverFrameData.eventPosition();
                 dragController.endDrag(pos.x(), pos.y());
             }

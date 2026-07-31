@@ -609,6 +609,75 @@ on `UIElement`; if the web expresses it as an element, make it a widget.**
 
 ---
 
+## 12b. `CanvasView` — the pan/zoom plane
+
+`com.crystalgui.ui.elements.canvas` · tag `canvasview` · `cgui-gallery` → **canvas** page · P6.2.2
+
+An unbounded plane viewed through a fixed window: wheel-zoom about the cursor, middle- or
+Space+left-drag to pan, `fitToContent()`, and off-screen culling. The substrate the node graph sits
+on, and deliberately not graph-specific — nodes, ports and wires are 6.2.3's.
+
+```java
+CanvasView canvas = new CanvasView();
+canvas.addNode(box, 120f, 80f);              // world coordinates
+canvas.zoomAt(2f, event.getPosition().x(), event.getPosition().y());
+canvas.fitToContent(30f);
+Vector2f world = canvas.screenToWorld(rawX, rawY);
+```
+
+```
+CanvasView            overflow: hidden — the window, and the element gestures are read on
+  └── __content__     absolutely positioned, carries translate(pan) scale(zoom)
+        └── nodes     the caller's elements, positioned in world coordinates
+```
+
+- **It is a viewport, so it refuses public children.** A child of the viewport would sit outside the
+  transform and stay nailed to the screen while everything else panned. Use `content()` or `addNode`.
+- **A positive wheel notch means the wheel rolled *down*, so it zooms out.** The sign is not
+  guessable and the only thing in the repo that states it is `ScrollerView`, which grows `scrollTop`
+  by a positive delta. Taking it at face value ships a canvas that zooms in when you scroll down —
+  wrong in a way every user notices immediately and no test catches, because a test written from the
+  implementation agrees with the implementation. Pinned by asserting both consumers in one test.
+- **Zoom is CSS `transform`**, which is layout-free by construction — scaling the plane cannot reflow
+  anything, and `UITransform.applyTo` is shared by the render pose and the hit-test chain, so clicks
+  follow the picture with no code in the widget. That is why this is a few hundred lines.
+- **`transform-origin` is pinned to `0 0` at IMPORTANT.** It defaults to 50% and every conversion here
+  assumes the plane scales about its top-left; a theme setting it would offset the whole canvas by
+  half a viewport, scaled. Pinned rather than compensated for, so there is one answer rather than two.
+- **`pan` is measured after zoom** — a screen-space offset, not a world one. That is what makes a pan
+  drag a plain addition of the pointer delta at any zoom. `centerOnWorld` is there for when you
+  genuinely want world units.
+- **A bare left-drag does not pan.** It is reserved for 6.2.4's marquee. Middle-drag always pans;
+  Space+left is the escape hatch for a mouse with no usable middle button (Figma/Blender/Photoshop's
+  answer). The gesture is read in the **capture** phase so it beats whatever is under the cursor.
+- **Three coordinate spaces**: world (what you author), logical (what `RuntimeCache.getX()` and
+  `screenToLocal` speak), physical (raw pointer pixels). `screenToWorld` crosses all three;
+  `worldToViewport` returns *logical*, not physical, and says so.
+
+### Culling skips paint, not layout
+
+Off-screen nodes get `opacity: 0` at IMPORTANT origin, which `drawSubtree` early-returns on.
+`display: none` is the obvious choice and is wrong here: a culled node's layout collapses, and its
+layout rect is precisely the input the cull decision is computed from — so it could never be
+un-culled without a cache of where it used to be, which goes stale the moment anything moves it.
+Keeping layout live makes the decision self-correcting on every tick, and costs no relayout as nodes
+cross the viewport edge, which panning does constantly. What is given up is layout cost for
+off-screen nodes, which is the smaller half: layout recomputes only when dirty, paint happens every
+frame.
+
+The pass runs from a `UIFrameTicker` rather than only on view changes, because a node can move
+without the view moving and the canvas gets no notification of a child's layout change. It is one
+AABB test per node.
+
+> **A node is culled by its box, so anything that paints outside its box must declare the region it
+> draws in.** The gallery's wire layer is the case: it paints Béziers across the whole graph from an
+> element whose natural size is `auto`, i.e. 0×0 at world origin — so it would be culled the instant
+> you panned off that one point, taking every wire with it while every node stayed visible. Giving it
+> the grid's extent fixes it *and* makes the cull correct: the wires now disappear exactly when no
+> wire is on screen. 6.2.3's real wire layer inherits this.
+
+---
+
 ## 13. Harness scenes
 
 ```bash
