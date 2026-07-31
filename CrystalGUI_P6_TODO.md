@@ -1266,6 +1266,16 @@ pattern: `register` / `bindDefaults` / `install`.
 enumerating commands; these are the widget's own keys on the widget's own element, and an editor that does
 nothing on `Mod+D` is broken rather than neutral.
 
+> **Undo moved too, and it was the last holdout.** `Ctrl+Z`/`Ctrl+Y` stayed in `handleKey` on the
+> reasoning that a widget may pre-empt an application command — which is exactly the shape this section
+> deleted everywhere else, and it made `edit.undo` **the one command in the engine that could be remapped
+> and still not move**. The editor now calls `UndoCommands.register` and binds `Mod+Z`/`Mod+Shift+Z`/`Mod+Y`
+> on its own element, reusing `edit.undo`/`edit.redo` rather than inventing `editor.undo` beside them —
+> two commands for one concept would put two entries in every menu with nothing to say which the keystroke
+> ran. Moving it also surfaced a latent gap: **the selection clamp was a hand-written line in the `Ctrl+Z`
+> handler**, so undo from a menu or the palette never clamped at all. It now sits on the buffer's change
+> signal, where every route in is covered.
+
 Four tests pin what §H is actually *for* — every other key test would pass equally against the hard-coded
 version: the actions are registered with labels, an action can be **remapped** (and the old chord stops
 working), a menu can ask for the accelerator, and a command that cannot run says so rather than firing

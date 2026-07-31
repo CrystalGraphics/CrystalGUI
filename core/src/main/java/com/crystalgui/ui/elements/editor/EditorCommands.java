@@ -91,6 +91,12 @@ public final class EditorCommands {
 
     /** Registers every editor command. Idempotent — re-registering the same ids is a no-op. */
     public static void register(CommandRegistry registry) {
+        // edit.undo/edit.redo are UndoCommands' ids, not ours, and they already resolve the right history
+        // through UndoScope.nearest -- which from a focused editor finds that editor's own buffer. Calling
+        // its registrar rather than declaring editor.undo beside it keeps ONE command per concept, so a
+        // menu and the palette cannot show two entries that do the same thing. Idempotent at both ends.
+        com.crystalgui.core.undo.UndoCommands.register(registry);
+
         if (registry.contains(PREFIX + "deleteLines")) return;
 
         // ── Multi-caret ─────────────────────────────────────────────────────────────────────────
@@ -202,6 +208,16 @@ public final class EditorCommands {
         keymap.bind("Mod+F3", PREFIX + "findWordUnderCaret");
 
         keymap.bind("Alt+Z", PREFIX + "toggleSoftWrap");
+
+        // Bound on the EDITOR, using UndoCommands' own chords and ids. A host that also installs undo at
+        // the root gets the same command either way, and the inner binding simply wins while focus is
+        // here -- there is no conflict to resolve because both routes end at UndoScope.nearest.
+        keymap.bind(com.crystalgui.core.undo.UndoCommands.UNDO_CHORD,
+                com.crystalgui.core.undo.UndoCommands.UNDO);
+        keymap.bind(com.crystalgui.core.undo.UndoCommands.REDO_CHORD,
+                com.crystalgui.core.undo.UndoCommands.REDO);
+        keymap.bind(com.crystalgui.core.undo.UndoCommands.REDO_CHORD_ALT,
+                com.crystalgui.core.undo.UndoCommands.REDO);
     }
 
     /** Registers the commands and binds the defaults on {@code editor}'s own keymap. */

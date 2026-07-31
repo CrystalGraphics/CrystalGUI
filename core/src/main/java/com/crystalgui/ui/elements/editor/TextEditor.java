@@ -316,6 +316,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // frame's style pass.
             reprojectAfterEdit(change);
             rebindRealisedLines();
+            // A document that shrank can leave a selection pointing past its end, and the caret then
+            // indexes a row that is not there. Clamped HERE rather than at the keystroke that caused it,
+            // because undo is no longer the only way in: edit.undo from a menu or the palette, a
+            // programmatic setText, and a server-pushed change all arrive through this one signal. It was
+            // a hand-written line in the Ctrl+Z handler, which is precisely why moving that binding to the
+            // keymap would otherwise have taken the clamp with it.
+            selections.clampTo(buffer.length());
             onChanged.emit(buffer.toString());
         });
 
@@ -617,17 +624,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // and the binding could never fire, so remapping would silently do nothing.
 
         if (ctrl) {
-            if (key == CgKeyCodes.KEY_Z) {
-                if (shift) buffer.redo();
-                else buffer.undo();
-                clampSelectionToDocument();
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_Y) {
-                buffer.redo();
-                clampSelectionToDocument();
-                return true;
-            }
+            // Undo and redo are NOT here either. They were the last modified chord still hard-coded, on
+            // the reasoning that a widget may pre-empt an application command -- but that is exactly the
+            // shape this section deleted everywhere else, and it made `edit.undo` the one command in the
+            // engine that could be remapped and still not move. They are now bound on this editor's own
+            // keymap to edit.undo/edit.redo, the ids UndoCommands already owns; inventing editor.undo
+            // beside them would put two commands for one concept in every menu.
             if (key == CgKeyCodes.KEY_HOME) {
                 moveCaretTo(0, shift);
                 return true;
