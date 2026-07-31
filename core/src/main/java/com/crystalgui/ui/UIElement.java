@@ -600,6 +600,17 @@ public class UIElement {
     }
 
     /**
+     * Whether this element and its subtree take pointer events — CSS {@code pointer-events}.
+     *
+     * <p>Worth reading as well as writing: "visible but not clickable" and "clickable but not visible" are
+     * both real states and neither is inferable from geometry or opacity, so anything asserting on one has
+     * nothing else to ask.</p>
+     */
+    public boolean isHitTest() {
+        return hitTest;
+    }
+
+    /**
      * The HTML {@code inert} attribute — makes this element <b>and its whole subtree</b> non-interactive
      * without hiding it.
      *
