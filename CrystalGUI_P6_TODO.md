@@ -1334,23 +1334,206 @@ the picture. What is missing is the widget, the input gestures, and the culling.
 
 </details>
 
-### 6.2.3 Node and port widgets · `TODO`
+### 6.2.3 Node and port widgets · `TODO` · **next**
 
-A node box (title, collapsible body, a column of input ports and output ports) and a port that can be
-dragged from to start a connection.
+**The look is the specification, and it is Unity Shader Graph's.** Settled 2026-07-31 against three
+reference screenshots plus Unity's own documentation. This is not "inspired by" — the target is that a
+screenshot of ours and a screenshot of theirs differ in content, not in construction. That is worth
+being literal about, because "make it look like Unity" is otherwise the kind of instruction that
+produces something 80% right and permanently unsatisfying.
 
-Drag-to-connect is `UIDragController` with a payload and `preventDefault()` acceptance on `DragOver` — the
-existing rejection-by-default protocol is exactly right for "this port will not accept a vec3".
+#### Anatomy
+
+```
+┌───────────────────────────────┐  ← 1px border, ~4px radius. SELECTED: cyan ring, same radius
+│ Position                    ⌄ │  ← title bar: lighter than body, collapse chevron at top-right
+├───────────────────────────────┤
+│                      Out(3) ● │  ← output row: label right-aligned, dot ON the border
+├───────────────────────────────┤
+│ ● A(3)               Out(3) ● │  ← a row can carry one input and one output
+│ ● B(3)                        │
+├───────────────────────────────┤
+│ Space            [ World  ▾ ] │  ← a CONTROL: no port, just a widget. Dropdown/TextField/Slider
+├───────────────────────────────┤
+│ ▓▓▓▓▓▓ preview ▓▓▓▓▓▓         │  ← preview slot, its own toggle, revealed on hover
+└───────────────────────────────┘
+     ● X  0.9 ●─────                ← an UNCONNECTED input carries an inline editor of its own type
+```
+
+#### The palette, and why none of it may be written in Java
+
+Unity assigns a colour per data type and applies it **to the port and to every edge leaving it**, which
+is what makes a dense graph readable at a glance — you can see that a float is feeding a vec3 slot
+without reading a single label.
+
+| Data type | Colour | | Data type | Colour |
+|---|---|---|---|---|
+| Float | light blue | | Boolean | purple |
+| Vector 2 | green | | Texture 2D / 3D / Array / Cubemap | red |
+| Vector 3 | **yellow** | | Gradient, SamplerState, Virtual Texture | grey |
+| Vector 4 | pink | | Matrix 2 / 3 / 4 | blue |
+
+Both reference screenshots agree with that table — `Out(3)` and its wires are yellow, `Noise Scale(1)`
+and its wire are light blue — which is the useful confirmation that the docs describe the shipping
+product rather than an older revision.
+
+**Every one of these is a CSS class, not a constant.** `.port.type-vec3 { background: … }` in a
+`graph.css` theme, with `default.css` carrying only the functional geometry (dot size, row height, the
+fact that a port row is `flex-direction: row`). This is the standing no-colours-in-Java rule, and here
+it pays twice over: the type set is CrystalShader's, not CrystalGUI's, so a hard-coded palette would
+put GLSL's type system inside a general-purpose editor framework — the exact mistake `CgStyleSpan`'s
+javadoc is quoted about elsewhere in this file.
+
+#### Four behaviours the screenshots cannot show, taken from Unity's docs
+
+These are the ones that would have been discovered late and expensively.
+
+1. **One edge per input port; many per output.** So connecting to an occupied input is a *replace*, not
+   a reject — and the implicit disconnect has to travel through the same command as a manual one, or
+   undo quietly forgets it.
+2. **An unconnected input carries an inline editor of its own type** — the `X 0.9` field in the third
+   screenshot. Not decoration: it is how a graph is usable before everything is wired. Bound ports
+   instead show a purpose-built control (Unity's example is a UV-channel dropdown), which is the same
+   seam as our `PortType` supplying its own editor.
+3. **Collapsing a node hides its unconnected ports**, not just its body. Getting this wrong gives a
+   collapsed node that is still a metre tall in a busy graph, which defeats the feature entirely.
+4. **Dropping an edge on empty canvas opens the node-creation menu**, pre-filtered to types that can
+   accept it. That is 6.2.6's job, but the drop path has to leave room for it now.
+
+#### The widgets
+
+| Class | Role |
+|---|---|
+| `GraphNode` | The box. Composite, refuses public children. `titleBar()`, `addInput/addOutput`, `addControl`, `preview()`, `setCollapsed` |
+| `NodePort` | One port: direction, `PortType`, label, the `__dot__` internal child, `isConnected()` |
+| `PortRow` | The left-input/right-output pairing — one Taffy row rather than two columns, so a row's label baselines line up |
+| `NodeWireLayer` | Paints every wire, and owns wire picking |
+| `PortType` | SPI: id, label, compatibility, and the editor an unconnected input should show |
+| `GraphConnection` | A source/target port pair — the view-side edge, distinct from 6.2.5's model edge |
+
+LDLib2's own toolkit decomposes almost identically (`NodeElement`, `NodeTitleElement`,
+`PortContainerElement`, `PortElement`, `PortConstantEditorElement`, `WireElement`, `WireDragHelper`),
+which is good evidence the split is the natural one rather than ours.
+
+#### Types are data, not an enum
+
+`PortType` is an interface with an id, a display label, `isCompatibleWith(other)`, and a factory for the
+inline editor. CrystalGUI ships nothing but the interface and a registry; CrystalShader registers
+`float`, `vec2`, `vec3`, `vec4`, `mat3`, `mat4`, `sampler2D`. The manifesto is explicit that the graph
+is *"a visual editor for the `.shader` file format"* whose nodes each compile to a GLSL function — so
+the type system is GLSL's, and `core/` must not learn it. The registry maps id → CSS class, which is
+what keeps the palette in the theme.
+
+#### Drag-to-connect
+
+`UIDragController` with the source port as payload; a target accepts by calling `preventDefault()` on
+`DragOver` when `isCompatibleWith` says so. **Rejection is already the default** — the one good idea
+kept from HTML5 DnD — so "this port will not accept a vec3" needs no new mechanism, and acceptance is
+re-evaluated every frame rather than latched, which is exactly right for a rule that depends on what is
+under the cursor.
+
+The live wire is drawn by the wire layer, **not** by a drag ghost. A ghost is an element that follows
+the pointer; a wire is a curve between two points, one of which is the pointer. Escape already cancels
+a drag before anything else sees it.
+
+#### Wires: one layer, not an element each
+
+An element per wire would give `:hover` and `:checked` for free, and costs a Taffy node, a layout pass
+and a draw-call switch per edge. One layer paints every wire in a single `ctx.curve()` batch and owns
+picking analytically — distance to a quadratic, the CPU twin of `sdf_bezier`. A thousand-edge graph is
+then a thousand instances in one flush rather than a thousand elements.
+
+What that gives up is per-wire CSS state, which has to be re-implemented as data the layer holds. Worth
+it, and worth writing down as a deliberate trade rather than discovering later that wires cannot be
+styled by a stylesheet the way everything else in this engine can.
+
+#### Six traps, named now
+
+1. **A wire's endpoint is the port dot's live world centre**, read through the transform chain — never a
+   cached point. The same lesson as `resizeOriginLeft()` reading the live Taffy inset, and as
+   `AnchoredPlacement` taking anchor geometry from the transform chain rather than the layout box.
+2. **A connect must update the node in place, never rebuild it.** The mouse is *on* the port at that
+   moment: rebuilding detaches the element under the cursor and every later frame feeds the drag
+   garbage. This froze the table header once already.
+3. **Stroke width scales with the pose**, so a 2px wire is 2 *logical* px at any zoom — which means at
+   zoom 0.2 it is a fifth of a pixel and the graph looks empty. Wants a screen-space minimum width.
+   Open question below.
+4. **Pointer deltas belong to the viewport, not the plane** — 6.2.2's lesson, and dragging a node is the
+   next place it applies.
+5. **A port's hit target must be larger than its dot.** The dot is ~8px; a fingertip target is not. Pad
+   the port element and keep the dot decorative, or connecting becomes a precision exercise.
+6. **The wire layer must declare the region it paints**, or culling — which tests a node's *box* — bins
+   every wire the moment the view leaves world origin. Already hit and fixed once, in the gallery.
+
+#### Deliverables
+
+- `ui/elements/graph/`: `GraphNode`, `NodePort`, `PortRow`, `NodeWireLayer`, `PortType`, `PortRegistry`.
+- Functional geometry in `default.css`; the Unity palette and chrome in a new `graph.css`.
+- Tests: compatible/incompatible drop, replace-on-occupied-input, collapse hides unconnected ports,
+  port anchors correct under pan+zoom, wire picking, and the port hit target being bigger than the dot.
+- The gallery's `canvas` page grown from coloured boxes into a real four-node graph.
+
+#### Open questions
+
+| Question | Notes |
+|---|---|
+| Minimum wire width in screen space? | A pose-scaled stroke vanishes when zoomed out. Clamping in the shader is one line but makes width non-linear; clamping in Java needs the zoom, which the wire layer can ask its canvas for. Prefer the latter — it keeps the shader honest. |
+| Does selection live on the node or in a model? | 6.2.4 answers it, but 6.2.3 must not decide it accidentally by storing a boolean on `GraphNode`. |
+| `:checked` for a selected node, or a class? | A real widget can override `isChecked()` and get `graphnode:checked` free. `ListView` chose a class only because its rows are arbitrary caller elements. |
 
 ### 6.2.4 Selection, marquee, and graph editing · `TODO`
 
 Box-select, multi-select, move-many, delete, duplicate, and connection re-routing. Sits on 6.1.9's command
 stack — this is where undo stops being optional.
 
+- **The marquee is a screen-space rectangle over a world-space test.** Drawn in the viewport (so it stays
+  a crisp 1px at any zoom), but the hit test converts its two corners to world and asks each node's
+  `WorldRect`. Drawing it in the plane instead would scale the dashes with the zoom.
+- **Left-drag on empty canvas is already reserved for this** — 6.2.2 deliberately refused to spend it on
+  panning, which is the whole reason that decision is written down there.
+- **Selection is a model, not a flag per node**: a set plus a signal, so an inspector panel and the
+  canvas can both read it without either owning it.
+- **Every mutation is a command** — `AddNode`, `DeleteSelection`, `MoveNodes`, `Connect`, `Disconnect`.
+  A drag of forty nodes is *one* `MoveNodes` command coalesced at drag end, not forty, or undo becomes
+  useless in exactly the situation it matters.
+- **Blocked on 6.1.9's implementation**, which lands with 6.1.6. This is the one 6.2 item that genuinely
+  waits for the 6.1 track.
+
 ### 6.2.5 Graph document model and serialization · `TODO`
 
 Nodes, ports, typed connections, validation, and round-tripping through `serialization/`. The point at which
 this stops being a UI demo and becomes the shader graph's actual data.
+
+- **The model is headless.** It belongs in `headlessTest`, with no CrystalGraphics core on the classpath —
+  a dedicated server authoring or validating a graph is exactly the case `ServerUiSession` exists for, and
+  the absence is what proves it.
+- **Validation is the model's, not the widget's**: type compatibility, one-edge-per-input, and **cycle
+  detection**. The manifesto's compiler topologically sorts the graph, so a cycle is not a rendering
+  artifact — it is a graph that cannot compile, and the editor should refuse to create one at connect time
+  rather than fail at compile time with nothing pointing at the culprit.
+- **Content-addressed, like `UIDescriptionCodec`**: fixed field order, insertion-ordered maps, absent
+  optionals omitted. Same reasoning — a graph that hashes identically is a graph that need not be resent.
+- **The view binds; the model never imports the view.** With one hard constraint from 6.2.3's trap list:
+  the view must apply model changes **in place**, because rebuilding on every change would detach whatever
+  the pointer is currently dragging.
+
+### 6.2.6 Node library and creation menu · `TODO`
+
+Unity's "drop an edge on empty canvas and get a filtered node menu", plus a searchable library panel.
+`Menu`/`MenuItem` and `TextField` already exist; what is missing is the node-type registry to search and
+the filtering rule (*"only nodes with a port that accepts a vec3"*). Small, and it is the difference
+between a demo and something usable.
+
+### 6.2.7 Node previews · `TODO` · **has an engine question in it**
+
+The thumbnail in every reference screenshot. The widget half is trivial — a preview slot that paints a
+`CgUiDrawable`, exactly like every other background in this engine. The real work is upstream: each
+preview is *a live render of the graph up to that node*, which means an offscreen target per visible node
+and a compile per node.
+
+That is CrystalShader's problem, not CrystalGUI's, and the seam is already the right shape:
+`CgUiPaintContext` owns a layer FBO pool, and a preview is a texture. **6.2.3 should ship the slot and
+leave it empty** rather than inventing a preview pipeline the graph compiler will later replace.
 
 ---
 
@@ -1371,8 +1554,12 @@ this stops being a UI demo and becomes the shader graph's actual data.
 
 6.1.10 file SPI ──► 6.1.11 docking ──► 6.1.12 chrome
 
-6.2.1 CgCurveRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──► 6.2.4 editing ──► 6.2.5 model
-      (done)              (done)
+6.2.1 CgCurveRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──┬─► 6.2.4 editing ──► 6.2.5 model
+      (done)              (done)             (next)            │        ▲
+                                                               ├─► 6.2.6 node library
+                                                               └─► 6.2.7 previews (slot only;
+6.1.9 command/undo ────────────────────────────────────────────────────┘   the pipeline is
+                                                                            CrystalShader's)
 ```
 
 **Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → ~~6.1.6~~ →
@@ -1395,10 +1582,36 @@ item that can run in parallel with 6.1's remaining work.
 | ~~Do widgets mutate models directly, or emit commands?~~ | ~~6.1.9~~ | **Answered: both, split on document vs view state.** See 6.1.9. Settled while three widgets had chosen rather than a dozen, which is the whole reason it was the gate. |
 | Fixed-height rows only for the first virtualised pass? | 6.1.3, **and now 6.1.7** | Still deferred. 6.1.6 shipped without soft wrap for exactly this reason, so the wrapped code lines in 6.1.7 are what will force it — it is no longer a question that can be deferred again. |
 | Does the code editor need multi-cursor? | 6.1.7 | Cheap to design for, expensive to retrofit. Worth an early yes/no. |
+| ~~What should a node look like?~~ | ~~6.2.3~~ | **Answered: Unity Shader Graph's, literally.** Anatomy, the type→colour palette, and four behaviours the screenshots could not show are all recorded in 6.2.3. |
+| How does a wire stay visible when zoomed out? | 6.2.3 | A pose-scaled stroke is sub-pixel at low zoom. Clamp in Java against the canvas's zoom, not in the shader. |
+| Who owns selection — the node, or a selection model? | 6.2.3 / 6.2.4 | 6.2.4 decides, but 6.2.3 must not settle it by accident with a boolean field on `GraphNode`. |
 
 ---
 
 ## Changelog
+
+- **2026-07-31** — **6.2.3–6.2.7 planned in full, and the node's appearance settled: Unity Shader
+  Graph's, literally.** Grounded in three reference screenshots, Unity's own Port/Node/Data-Types
+  documentation, and LDLib2's node toolkit.
+  - **The palette is the load-bearing part of the look**, not the box: a colour per data type, applied
+    to the port *and to every edge leaving it*, is what makes a dense graph readable without reading a
+    label. It therefore lives in a `graph.css` theme — a hard-coded palette would also put GLSL's type
+    system inside a general-purpose editor framework, which is the wrong module for it.
+  - **Four behaviours came from the docs that the screenshots could not show**, each of which would have
+    been expensive to discover late: one edge per input but many per output (so connecting to an
+    occupied input is a *replace*, and the implicit disconnect must be the same command as a manual
+    one); an unconnected input carries an inline editor of its own type; collapsing hides unconnected
+    ports rather than only the body; and dropping an edge on empty canvas opens a filtered
+    node-creation menu.
+  - **Wires are one layer, not an element each** — a deliberate trade recorded as a trade: it buys one
+    batched `ctx.curve()` flush and no Taffy node per edge, and it costs per-wire CSS state, which has
+    to be re-implemented as data.
+  - **Two items split out rather than smuggled in**: the node library (6.2.6) and previews (6.2.7). The
+    preview thumbnail is in every screenshot, but it is a live render of the graph up to that node —
+    CrystalShader's pipeline, not a widget. 6.2.3 ships the slot empty.
+  - **Six traps named in advance**, five of them already paid for elsewhere in this project: live
+    anchors from the transform chain, never rebuilding what is under a drag, deltas measured in the
+    viewport, the wire layer declaring the region it paints, and a hit target bigger than its dot.
 
 - **2026-07-31** — **6.2.2 pan/zoom canvas done, built in parallel with 6.1.6.** `CanvasView` +
   `WorldRect`, 18 tests, and a **canvas page in `cgui-gallery`** whose wires are drawn with 6.2.1's
