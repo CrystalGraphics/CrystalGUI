@@ -1045,6 +1045,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return this;
     }
 
+    /** The gutter's laid-out width — where the code starts, relative to the editor's padding edge. */
+    public float getGutterWidth() {
+        return gutterWidth;
+    }
+
     public boolean isGutterVisible() {
         return gutterVisible;
     }
@@ -1719,12 +1724,46 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * on screen, so the text does not shift sideways as you scroll past line 99 into line 100 — which is
      * the kind of thing that reads as the editor being unstable rather than as a gutter resizing.</p>
      */
+    /**
+     * The gutter's total width — <b>three</b> parts, following IntelliJ's.
+     *
+     * <pre>
+     *   |&lt;- pad -&gt;|&lt;- digits, right-aligned -&gt;|&lt;----- fold column ----&gt;| code
+     * </pre>
+     *
+     * <p>The fold column is the part that was missing, and it is not decoration. Without it the gutter
+     * ends exactly where the text begins, so the first glyph of an unindented line sits <em>on</em> the
+     * gutter's edge — a {@code p} with its descender crossing the border. Every editor leaves this gap;
+     * IntelliJ and VS Code both fill it with fold arrows, which is also where one would go here.</p>
+     *
+     * <p>Derived from the font size rather than fixed, so the gutter stays proportionate when the editor
+     * is zoomed — the numbers inside it scale, and a constant gap would look generous at 8px and cramped
+     * at 24.</p>
+     */
     private float measureGutter() {
         if (!gutterVisible) return 0f;
+        return gutterNumberWidth() + gutterFoldWidth();
+    }
+
+    /** The numbers' own column: a little breathing room, then the digits. */
+    private float gutterNumberWidth() {
+        if (!gutterVisible) return 0f;
         int digits = Math.max(2, String.valueOf(Math.max(1, buffer.lineCount())).length());
-        var general = getStyle().getGeneralGroup();
         float digitWidth = CgTextLayout.of("0", resolveFamily()).build().totalWidth();
-        return digits * digitWidth + Math.max(4f, general.fontSize() * 0.75f);
+        float fontSize = getStyle().getGeneralGroup().fontSize();
+        return Math.max(2f, fontSize * 0.4f) + digits * digitWidth;
+    }
+
+    /**
+     * The clear column between the numbers and the code.
+     *
+     * <p>Wide on purpose. It is what pushes the numbers towards the left edge of the gutter and away from
+     * the text, which is the whole reason IntelliJ's gutter reads as a margin rather than as a column of
+     * numbers jammed against the code.</p>
+     */
+    private float gutterFoldWidth() {
+        if (!gutterVisible) return 0f;
+        return Math.max(8f, getStyle().getGeneralGroup().fontSize() * 1.6f);
     }
 
     /** The vertical equivalent, for the same reason. */
@@ -2475,9 +2514,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
                             .fontFamily(getStyle().getGeneralGroup().fontFamily()));
             // Scroll-exempt, so the offset has to be subtracted by hand -- see the field's note.
             final float top = textOriginY() + viewLine * height - getScrollTop();
+            // The NUMBERS' column, not the whole gutter. Spanning the full width right-aligns the digits
+            // against the code instead of against the fold column, which is what put them a few pixels
+            // from the first glyph.
+            final float numberWidth = gutterNumberWidth();
             StyleGroup.defaultPipeline(number.getStyle().getLayoutGroup(),
                     l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                            .left(0f).top(top).width(width).height(height));
+                            .left(0f).top(top).width(numberWidth).height(height));
         }
         for (int i = used; i < lineNumbers.size(); i++) hide(lineNumbers.get(i));
         insetHorizontalBarPastGutter();
