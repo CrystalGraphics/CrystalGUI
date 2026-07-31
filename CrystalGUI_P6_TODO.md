@@ -1293,6 +1293,23 @@ characters and draw the wrong glyph — a failure no test asserting on offsets w
 a JDK 18+ toolchain that already defaults to UTF-8. It is why `BreakOpportunities` had previously *avoided*
 its CJK literals.
 
+> **The level-0 "indent guide" was the gutter's border all along.** Three rounds of spacing fixes could
+> not stop an unindented line appearing to cut the guide column, because spacing was never the problem: a
+> row at indent 0 has `ceil(0 / indentSize)` = **zero** guides, so the vertical run genuinely stopped
+> there. In IntelliJ that line runs unbroken through line 1 of a file — which an indent guide cannot do.
+> It is the gutter's edge. Guides now start at **level 1**, and the edge is one scroll-exempt element
+> spanning the viewport, sitting **on** the gutter's box edge with the code margin between it and the
+> first glyph. `IndentLevels` is untouched; this is purely which of its levels renders as a guide.
+
+> **Per-frame work must scale with the viewport, not the document.** The decorations shipped with three
+> costs that did not: `textOriginX()` read the cascade (**78 style lookups per frame** on a 32-line file
+> with every decoration off, because it is called per line, guide, marker, caret and band); indent guides
+> called `guidesFor(doc, row, row, …)` per row, throwing away the carry-forward and rescanning the
+> document for every blank line; and every whitespace marker re-pushed its font every frame. Whitespace
+> `all` went 1716 → 551 µs, plain 360 → 180 µs. `EditorFrameCostTest` pins the *shape* — a 4000-row
+> document must cost about what a 40-row one does — because an absolute millisecond budget is a flaky
+> test on someone else's machine and a ratio measured back to back in one JVM is not.
+
 **§G is done. 6.1.7b is closed.**
 
 #### H. All of it through the keymap · `DONE` (2026-07-31)
