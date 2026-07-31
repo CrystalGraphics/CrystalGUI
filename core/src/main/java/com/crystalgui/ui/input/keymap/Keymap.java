@@ -69,6 +69,25 @@ public final class Keymap {
         return this;
     }
 
+    /**
+     * Removes only the binding of {@code chord} to {@code commandId} — what a sheet's {@code "-command"}
+     * entry does.
+     *
+     * <p>Targeted rather than clearing the chord, because a user removing one default must not silently
+     * take some other extension's binding on the same key with it.</p>
+     */
+    public Keymap unbind(KeyChord chord, String commandId) {
+        bindings.removeIf(binding -> binding.getChord().equals(chord)
+                && binding.getCommandId().equals(commandId));
+        return this;
+    }
+
+    /** Applies a sheet to this scope — see {@link KeymapSheet}. */
+    public Keymap load(KeymapSheet sheet) {
+        sheet.applyTo(this);
+        return this;
+    }
+
     public Keymap clear() {
         bindings.clear();
         return this;
