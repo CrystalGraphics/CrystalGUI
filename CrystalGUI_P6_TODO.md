@@ -2413,7 +2413,20 @@ Category **sorting by frequency**, and a preview seam matching the reference's f
 knowing divergence from Unity is surface alpha: `0x76` against their `0xD2`, so wires stay visible behind
 a node.
 
-### 6.2.7 Node previews · `TODO` · **has an engine question in it**
+### 6.2.7 Node previews · `MOVED to 6.3.7` (2026-07-31)
+
+> **Moved rather than done, and the reason is ordering.** A preview is *a live render of the graph up to
+> that node* — so it needs a graph **compiler** to exist, and until one does a preview can only be a
+> placeholder. It also needs the one genuinely new GL capability in the area (per-node offscreen
+> targets), which belongs with the rest of the CrystalGraphics work rather than stranded at the end of a
+> widget track.
+>
+> **6.2 closes here**, 6.2.1–6.2.6 done. See `CrystalGUI_P6.3_SHADER_NODE_GRAPH_TODO.md`.
+
+<details>
+<summary>The original 6.2.7 plan</summary>
+
+### 6.2.7 Node previews · **has an engine question in it**
 
 The thumbnail in every reference screenshot. The widget half is trivial — a preview slot that paints a
 `CgUiDrawable`, exactly like every other background in this engine. The real work is upstream: each
@@ -2423,6 +2436,8 @@ and a compile per node.
 That is CrystalShader's problem, not CrystalGUI's, and the seam is already the right shape:
 `CgUiPaintContext` owns a layer FBO pool, and a preview is a texture. **6.2.3 should ship the slot and
 leave it empty** rather than inventing a preview pipeline the graph compiler will later replace.
+
+</details>
 
 ---
 
