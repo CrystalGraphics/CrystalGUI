@@ -2761,6 +2761,147 @@ public class TextEditorTest extends UiTestBase {
                 editor.getGutterWidth() > small);
     }
 
+    // ── 6.1.7b: zoom ─────────────────────────────────────────────
+
+    @Test
+    public void zoomingChangesTheFontSizeByWholePoints() {
+        build("x");
+        showEditor();
+        float before = editor.getFontSize();
+
+        key(CgKeyCodes.KEY_EQUALS, CgModifiers.CTRL);
+        showEditor();
+        assertEquals("one point up", Math.round(before) + 1, Math.round(editor.getFontSize()));
+
+        key(CgKeyCodes.KEY_MINUS, CgModifiers.CTRL);
+        key(CgKeyCodes.KEY_MINUS, CgModifiers.CTRL);
+        showEditor();
+        assertEquals("and two down", Math.round(before) - 1, Math.round(editor.getFontSize()));
+    }
+
+    /**
+     * <b>Zoom must beat the sheet.</b> {@code default.css} sets {@code * { font-size: 10 }}, and a
+     * {@code *} rule at USER_AGENT beats an inline write at any specificity — so the size is written at
+     * IMPORTANT origin, the same trap {@code syncLineFonts} documents for the lines.
+     */
+    @Test
+    public void zoomSurvivesTheUserAgentSheet() {
+        build("x");
+        showEditor();
+        editor.setFontSize(24f);
+        showEditor();
+        assertEquals(24f, editor.getFontSize(), 0.5f);
+    }
+
+    @Test
+    public void zoomIsClampedAtBothEnds() {
+        build("x");
+        showEditor();
+        editor.setFontSize(1000f);
+        assertEquals(TextEditor.MAX_FONT_SIZE, editor.getFontSize(), 0.5f);
+        editor.setFontSize(-5f);
+        assertEquals(TextEditor.MIN_FONT_SIZE, editor.getFontSize(), 0.5f);
+    }
+
+    /** Reset goes back to the size the sheet gave it, not to a constant. */
+    @Test
+    public void resetReturnsToTheSheetsSize() {
+        build("x");
+        showEditor();
+        float original = editor.getFontSize();
+
+        editor.setFontSize(30f);
+        showEditor();
+        key(CgKeyCodes.KEY_0, CgModifiers.CTRL);
+        showEditor();
+
+        assertEquals(original, editor.getFontSize(), 0.5f);
+    }
+
+    /** The indicator reports the size, and names the size reset will return to. */
+    @Test
+    public void theIndicatorReportsTheSizeAndTheResetTarget() {
+        build("x");
+        showEditor();
+        float original = Math.round(editor.getFontSize());
+
+        key(CgKeyCodes.KEY_EQUALS, CgModifiers.CTRL);
+        showEditor();
+
+        String label = null;
+        String reset = null;
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.ZOOM_INDICATOR_CLASS)) continue;
+            for (UIElement part : child.getChildren()) {
+                if (part.hasClass(TextEditor.ZOOM_LABEL_CLASS)) label = ((UIText) part).getText();
+                if (part.hasClass(TextEditor.ZOOM_RESET_CLASS)) {
+                    reset = ((UIText) part.getChildren().get(0)).getText();
+                }
+            }
+        }
+        assertEquals("Font size: " + (int) (original + 1) + "px", label);
+        assertEquals("Reset to " + (int) original + "px", reset);
+    }
+
+    /**
+     * <b>The indicator does not scale with the zoom.</b> It is chrome describing the text, not part of
+     * it — scaling it made the label unreadable at the minimum size and oversized at the maximum, which
+     * is the one thing it exists to be legible at. {@code font-size} is inheritable, so this only holds
+     * because the sheet gives the label a <em>specified</em> value; the widget pushes no font onto it.
+     */
+    @Test
+    public void theIndicatorDoesNotScaleWithTheEditorsFont() {
+        build("x");
+        showEditor();
+        key(CgKeyCodes.KEY_EQUALS, CgModifiers.CTRL);
+        showEditor();
+
+        UIText label = null;
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.ZOOM_INDICATOR_CLASS)) continue;
+            for (UIElement part : child.getChildren()) {
+                if (part.hasClass(TextEditor.ZOOM_LABEL_CLASS)) label = (UIText) part;
+            }
+        }
+        assertNotNull(label);
+        float chromeSmall = label.getStyle().getGeneralGroup().fontSize();
+
+        editor.setFontSize(40f);
+        showEditor();
+        editor.zoomBy(1);
+        showEditor();
+
+        assertEquals("the editor is much larger now", 41f, editor.getFontSize(), 0.5f);
+        assertEquals("but the indicator is not", chromeSmall,
+                label.getStyle().getGeneralGroup().fontSize(), 0.5f);
+    }
+
+    /**
+     * <b>A faded indicator must not be clickable.</b> Opacity is paint, not hit testing — without this
+     * the reset button stays live over the text for as long as the element exists.
+     */
+    @Test
+    public void theIndicatorStopsBeingClickableWhenItFades() {
+        build("x");
+        editor.setZoomIndicatorSeconds(0.01f);
+        showEditor();
+        key(CgKeyCodes.KEY_EQUALS, CgModifiers.CTRL);
+        showEditor();
+
+        UIElement indicator = null;
+        for (UIElement child : editor.getChildren()) {
+            if (child.hasClass(TextEditor.ZOOM_INDICATOR_CLASS)) indicator = child;
+        }
+        assertNotNull(indicator);
+        assertTrue("shown while holding", indicator.hasClass(TextEditor.SHOWN_CLASS));
+
+        editor.tickFrame(1f);
+        settle();
+
+        assertFalse("the hold expired", indicator.hasClass(TextEditor.SHOWN_CLASS));
+        assertFalse("and it is no longer hittable", indicator.isHitTest());
+    }
+
     /** The editor is a composite: its lines and caret are its own, and callers do not add children. */
     @Test
     public void theEditorRefusesPublicChildren() {

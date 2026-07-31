@@ -96,6 +96,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String WHITESPACE_CLASS = "__whitespace__";
     public static final String RULER_CLASS = "__ruler__";
     public static final String GUTTER_EDGE_CLASS = "__gutter-edge__";
+    public static final String ZOOM_INDICATOR_CLASS = "__zoom-indicator__";
+    public static final String ZOOM_LABEL_CLASS = "__zoom-label__";
+    public static final String ZOOM_RESET_CLASS = "__zoom-reset__";
+    /** Present while the zoom indicator is holding; its removal is what the fade transitions on. */
+    public static final String SHOWN_CLASS = "__shown__";
     public static final String LINE_NUMBER_CLASS = "__line-number__";
     public static final String CURRENT_LINE_CLASS = "__current-line__";
 
@@ -154,6 +159,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** The shaped width of one digit, and the font it was measured in. */
     private float digitWidth = -1f;
     private String digitWidthFontKey;
+
+    /** The size the sheet gave this editor, captured on the first zoom so reset has a target. */
+    private float baseFontSize = -1f;
+
+    /** Seconds the zoom indicator has left on screen; zero means hidden. */
+    private float zoomIndicatorSeconds;
+    private UIElement zoomIndicator;
+    private UIText zoomLabel;
+    private com.crystalgui.ui.elements.Button zoomResetButton;
 
     // ── §G view decorations ─────────────────────────────────────────────────────────────────────
 
@@ -2026,6 +2040,168 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return scrollBeyondLastLine;
     }
 
+    // ── Zoom ────────────────────────────────────────────────────────────────────────────────────
+
+    /** Smallest and largest the editor will zoom to. Below 4 the glyphs are unreadable; above 96 one
+     * screenful is a handful of words and every cached row measurement is being thrown away. */
+    public static final float MIN_FONT_SIZE = 4f;
+    public static final float MAX_FONT_SIZE = 96f;
+
+    /**
+     * How long the size indicator stays up after the last zoom, before it starts fading.
+     *
+     * <p>Roughly IntelliJ's. The <b>fade itself is not here</b> — the widget only holds a class on the
+     * indicator and drops it when the hold expires; {@code default.css} owns how long the fade takes and
+     * what it eases on. A timing in Java would be the same mistake the gutter's metrics were.</p>
+     */
+    private float zoomIndicatorHoldSeconds = 4f;
+
+    /**
+     * Sets the editor's font size.
+     *
+     * <p>Written at {@code IMPORTANT} origin, and it has to be: {@code default.css} sets
+     * {@code * { font-size: 10 }}, and a {@code *} rule at USER_AGENT beats an inline write at any
+     * specificity — the same trap {@code syncLineFonts} documents for the lines themselves. Everything
+     * measured from the font is invalidated here rather than left to notice on its own: row metrics, the
+     * text height, the cached digit width, and the wrap projection, which is computed in pixels.</p>
+     */
+    public TextEditor setFontSize(float size) {
+        float clamped = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size));
+        if (baseFontSize < 0f) baseFontSize = getStyle().getGeneralGroup().fontSize();
+        StyleGroup.importantPipeline(getStyle().getGeneralGroup(), g -> g.fontSize(clamped));
+        measuredRows.clear();
+        measuredFontKey = null;
+        textHeight = -1f;
+        digitWidth = -1f;
+        markerFontKey = null;
+        reproject();
+        invalidateWindow();
+        return this;
+    }
+
+    public float getFontSize() {
+        return getStyle().getGeneralGroup().fontSize();
+    }
+
+    /**
+     * Zooms by {@code steps} whole points, and shows the size — {@code Mod+=} and {@code Mod+-}.
+     *
+     * <p>A point at a time rather than a ratio. A multiplicative step is the obvious choice and is wrong
+     * at this scale: 1.1x on a 10px editor is 11, then 12.1, and the rounding makes two presses do the
+     * work of one or of three unpredictably. Whole points are what the indicator reports, so what it says
+     * and what a press does agree.</p>
+     */
+    public TextEditor zoomBy(int steps) {
+        setFontSize(Math.round(getFontSize()) + steps);
+        showZoomIndicator();
+        return this;
+    }
+
+    /** Back to the size the sheet gave it — {@code Mod+0}. */
+    public TextEditor resetZoom() {
+        if (baseFontSize > 0f) setFontSize(baseFontSize);
+        showZoomIndicator();
+        return this;
+    }
+
+    /** How long the size indicator holds before fading. The fade's own duration is CSS. */
+    public TextEditor setZoomIndicatorSeconds(float seconds) {
+        this.zoomIndicatorHoldSeconds = Math.max(0f, seconds);
+        return this;
+    }
+
+    /** Shows the current size and restarts the hold — pressing zoom again keeps it up. */
+    private void showZoomIndicator() {
+        zoomIndicatorSeconds = zoomIndicatorHoldSeconds;
+        zoomIndicator();
+        zoomLabel.setText("Font size: " + Math.round(getFontSize()) + "px");
+        // The reset button names the size it will go back to, as IntelliJ's does. That is the whole
+        // reason it is worth showing: "reset" alone does not say what you are getting, and after three
+        // presses nobody remembers what the sheet said.
+        zoomResetButton.setText("Reset to " + Math.round(baseFontSize > 0f ? baseFontSize : getFontSize())
+                + "px");
+        // A faded indicator must not be clickable. Opacity is paint, not hit testing -- without this the
+        // reset button stays live over the text for as long as the element exists.
+        zoomIndicator.setHitTest(true);
+        // addClass invalidates the style match itself, so the transition sees the change.
+        zoomIndicator.addClass(SHOWN_CLASS);
+        markTreeDirty();
+    }
+
+    /**
+     * Counts the hold down and hands the fade to the cascade.
+     *
+     * <p>Dropping the class rather than writing an opacity is what keeps the timing in the sheet: the
+     * transition on {@code opacity} runs because the computed value changed, and the widget never learns
+     * how long it takes.</p>
+     */
+    private void advanceZoomIndicator(float deltaSeconds) {
+        if (zoomIndicatorSeconds <= 0f) return;
+        zoomIndicatorSeconds -= deltaSeconds;
+        if (zoomIndicatorSeconds > 0f) return;
+        zoomIndicatorSeconds = 0f;
+        if (zoomIndicator != null) {
+            zoomIndicator.removeClass(SHOWN_CLASS);
+            zoomIndicator.setHitTest(false);
+        }
+    }
+
+    private UIElement zoomIndicator() {
+        if (zoomIndicator == null) {
+            zoomIndicator = new UIElement();
+            zoomIndicator.addClass(ZOOM_INDICATOR_CLASS);
+            zoomIndicator.markAsInternal();
+            zoomIndicator.setScrollExempt(true);
+
+            zoomLabel = new UIText("");
+            zoomLabel.addClass(ZOOM_LABEL_CLASS);
+            zoomLabel.setHitTest(false);
+            zoomIndicator.addChild(zoomLabel);
+
+            zoomResetButton = new com.crystalgui.ui.elements.Button("");
+            zoomResetButton.addClass(ZOOM_RESET_CLASS);
+            zoomResetButton.attachListener(this::resetZoom);
+            zoomIndicator.addChild(zoomResetButton);
+
+            addInternalChild(zoomIndicator);
+        }
+        return zoomIndicator;
+    }
+
+    /**
+     * Parks the indicator at the bottom of the viewport, centred.
+     *
+     * <p>Where IntelliJ puts it, and it is the right place for the same reason: the caret is almost never
+     * there, so the thing telling you about the text does not sit on top of the text you are reading.</p>
+     */
+    private void layOutZoomIndicator() {
+        if (zoomIndicator == null) return;
+        // THE INDICATOR'S OWN SIZE, from the sheet -- never the editor's. It is chrome describing the
+        // text, not part of it, so scaling it with the zoom made it unreadable at 4px and oversized at
+        // 40. IntelliJ's stays put for the same reason. The widget pushes no font here at all; it reads
+        // what the cascade gave the label and measures against that.
+        final float chrome = zoomLabel.getStyle().getGeneralGroup().fontSize();
+        // Measured from both children, because the reset button's label changes with the default size and
+        // a box narrower than its content clips it -- the same definite-width rule the lines follow.
+        final float width = textWidthOf(zoomLabel.getText(), chrome)
+                + textWidthOf(zoomResetButton.getText(), chrome) + chrome * 4f;
+        final float height = chrome * 2f;
+        final float left = Math.max(textOriginX(), (getClientWidth() - width) / 2f);
+        final float top = Math.max(0f, viewportHeight() - height - chrome * 0.6f);
+
+        StyleGroup.defaultPipeline(zoomIndicator.getStyle().getLayoutGroup(),
+                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                        .left(left).top(top).width(width).height(height));
+    }
+
+    /** The shaped width of a string at a given size, in the editor's family. */
+    private float textWidthOf(String text, float size) {
+        if (text == null || text.isEmpty()) return 0f;
+        CgFontFamily family = FontFamilyCache.resolve(
+                getStyle().getGeneralGroup().fontFamily(), Math.round(Math.max(1f, size)));
+        return CgTextLayout.of(text, family).build().totalWidth();
+    }
+
     /** Visual rows — the same as the row count when wrap is off. */
     public int viewLineCount() {
         return Math.max(1, projections.viewLineCount());
@@ -2322,6 +2498,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         super.tickFrame(deltaSeconds);
         updateWindow();
         advanceCaretBlink(deltaSeconds);
+        advanceZoomIndicator(deltaSeconds);
         autoScrollDuringDrag(deltaSeconds);
         return true;
     }
@@ -2402,6 +2579,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         layOutIndentGuides(first, last);
         layOutWhitespace(first, last);
         layOutRulers();
+        layOutZoomIndicator();
         layOutCurrentLine();
         layOutCaretAndSelection(first, last);
     }

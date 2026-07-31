@@ -164,6 +164,15 @@ public final class EditorCommands {
                 .run(on(TextEditor::findWordUnderCaret)));
 
         // ── View ────────────────────────────────────────────────────────────────────────────────
+        registry.register(Command.of(PREFIX + "zoomIn", "Zoom In")
+                .run(on(editor -> editor.zoomBy(1)))
+                .enabledWhen(when(editor -> editor.getFontSize() < TextEditor.MAX_FONT_SIZE)));
+        registry.register(Command.of(PREFIX + "zoomOut", "Zoom Out")
+                .run(on(editor -> editor.zoomBy(-1)))
+                .enabledWhen(when(editor -> editor.getFontSize() > TextEditor.MIN_FONT_SIZE)));
+        registry.register(Command.of(PREFIX + "zoomReset", "Reset Zoom")
+                .run(on(TextEditor::resetZoom)));
+
         registry.register(Command.of(PREFIX + "toggleSoftWrap", "Toggle Soft Wrap")
                 // Not undoable, and it must not be: wrapping is a view setting and the document is
                 // byte-identical either way. See the boundary note on UndoStack.
@@ -208,6 +217,15 @@ public final class EditorCommands {
         keymap.bind("Mod+F3", PREFIX + "findWordUnderCaret");
 
         keymap.bind("Alt+Z", PREFIX + "toggleSoftWrap");
+
+        // VS Code's chords. Both spellings of each, because the numeric keypad is a different key code
+        // and a laptop without one is the common case -- binding a command twice costs nothing.
+        keymap.bind("Mod+Equals", PREFIX + "zoomIn");
+        keymap.bind("Mod+Add", PREFIX + "zoomIn");
+        keymap.bind("Mod+Minus", PREFIX + "zoomOut");
+        keymap.bind("Mod+Subtract", PREFIX + "zoomOut");
+        keymap.bind("Mod+0", PREFIX + "zoomReset");
+        keymap.bind("Mod+Numpad0", PREFIX + "zoomReset");
 
         // Bound on the EDITOR, using UndoCommands' own chords and ids. A host that also installs undo at
         // the root gets the same command either way, and the inner binding simply wins while focus is

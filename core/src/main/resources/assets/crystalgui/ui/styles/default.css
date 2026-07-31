@@ -534,6 +534,59 @@ texteditor .__whitespace__ {
     white-space: nowrap;
 }
 
+/* THE ZOOM INDICATOR. IntelliJ's: a small bar at the bottom of the viewport reporting the size, with a
+ * button back to the default. Bottom-centre because the caret is almost never there, so the thing telling
+ * you about the text does not sit on the text you are reading.
+ *
+ * The HOLD is the widget's (it is a countdown, not a property); the FADE is here. TextEditor only adds and
+ * removes __shown__, and the transition below runs because the computed opacity changed — so how long the
+ * fade takes and what it eases on stay in the sheet, and the widget never learns either.
+ *
+ * flex-direction: row, because the engine's Taffy default is COLUMN and the label would otherwise sit
+ * above the button rather than beside it. */
+texteditor .__zoom-indicator__ {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap-all: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+    background-color: #2B303B;
+    border-radius: 3px;
+    z-index: 7;
+    opacity: 0;
+    transition: opacity 0.45s;
+}
+
+texteditor .__zoom-indicator__.__shown__ {
+    opacity: 1;
+}
+
+/* FIXED SIZE, declared here rather than inherited. font-size is inheritable, so without a specified
+ * value these would take the editor's — which zoom rewrites at IMPORTANT — and the indicator would shrink
+ * to unreadable at 4px and balloon at 40. It describes the text; it is not part of it. */
+texteditor .__zoom-label__ {
+    font-size: 10;
+    color: #C8CDD4;
+    white-space: nowrap;
+}
+
+/* A link, not a raised button — it is one action inside a transient bar, and a chunky button there reads
+ * as a dialog. Accent-coloured for the same reason a link is. */
+texteditor .__zoom-reset__ {
+    font-size: 10;
+    background: #00000000;
+    color: #4A9EFF;
+    white-space: nowrap;
+    padding-left: 2px;
+    padding-right: 2px;
+    min-height: 0px;
+}
+texteditor .__zoom-reset__:hover {
+    background: #00000000;
+    color: #7FBCFF;
+}
+
 /* A column ruler spans the viewport and does not scroll vertically -- TextEditor marks it scroll-exempt
  * and subtracts the horizontal offset by hand, exactly as the gutter does. */
 texteditor .__ruler__ {
@@ -1178,6 +1231,10 @@ graphnode .__control-row__ {
 /* The preview slot has a height even while empty, because 6.2.7 fills it with a render and a node
  * that changed size the moment previews arrived would move every wire in the graph. */
 graphnode .__preview__ { height: 78px; }
+/* The rendered thumbnail fills its slot. Explicit because the slot is a flex COLUMN with the project's
+ * flex-shrink: 0 default, so a child with no size of its own would lay out at zero and paint nothing —
+ * which is indistinguishable from a preview that has not rendered yet. */
+graphnode .__preview__ .__preview-image__ { width: 100%; height: 100%; }
 
 /* Unity's rule, and the reason collapse is worth having: a collapsed node is its title bar plus the
  * wires that actually attach to it. `nodeport:blank` is "unconnected" — see NodePort.isBlank(). */
