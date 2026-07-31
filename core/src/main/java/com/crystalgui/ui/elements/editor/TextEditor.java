@@ -97,6 +97,14 @@ public class TextEditor extends ScrollerView {
 
     private boolean selecting;
 
+    /**
+     * Blink period in seconds — one full off-and-on cycle. Chromium's is 1.06s; the exact number is less
+     * important than being slow enough not to distract and fast enough to read as a caret.
+     */
+    private float blinkPeriodSeconds = 1.06f;
+    private float blinkClock;
+    private boolean caretShown = true;
+
     // Measurement cache, keyed by the text it measured — see prefixWidths.
     private final Map<Integer, float[]> measuredRows = new HashMap<>();
     private String measuredFontKey = "";
@@ -191,6 +199,7 @@ public class TextEditor extends ScrollerView {
         // recycling them all and rebuilding on each arrow key is pure waste, and it left the realised set
         // momentarily empty, which is why the gallery's status line read "0 lines realised" immediately
         // after a click. Only the caret and the bands need to move.
+        restartCaretBlink();
         layOutCaretAndSelection(firstRealised, lastRealised);
         markTreeDirty();
         onSelectionChanged.emit();
@@ -212,6 +221,7 @@ public class TextEditor extends ScrollerView {
         this.anchor = next;
         this.caret = next;
         preferredColumn = -1;
+        restartCaretBlink();
         ensureCaretVisible();
         onSelectionChanged.emit();
     }
@@ -361,16 +371,19 @@ public class TextEditor extends ScrollerView {
                 moveVertically(visibleRowCount(), shift);
                 return true;
             case CgKeyCodes.KEY_HOME:
-                moveCaretTo(buffer.document().lineStartOffset(caretPoint().row()), shift);
+                moveCaretTo(smartHomeOffset(), shift);
                 return true;
             case CgKeyCodes.KEY_END:
                 moveCaretTo(buffer.document().lineEndOffset(caretPoint().row()), shift);
                 return true;
             case CgKeyCodes.KEY_BACK:
-                deleteSelectionOr(Math.max(0, caret - 1), caret);
+                // Ctrl+Backspace deletes the word before the caret, which is the same boundary
+                // Ctrl+Left moves to -- so the two agree by construction rather than by two rules that
+                // have to be kept in step.
+                deleteSelectionOr(ctrl ? previousWordBoundary(caret) : Math.max(0, caret - 1), caret);
                 return true;
             case CgKeyCodes.KEY_DELETE:
-                deleteSelectionOr(caret, Math.min(buffer.length(), caret + 1));
+                deleteSelectionOr(caret, ctrl ? nextWordBoundary(caret) : Math.min(buffer.length(), caret + 1));
                 return true;
             case CgKeyCodes.KEY_RETURN:
                 insertAtCaret("\n");
@@ -439,6 +452,25 @@ public class TextEditor extends ScrollerView {
         return i;
     }
 
+    /**
+     * Home goes to the first non-blank character, and to column 0 only if already there.
+     *
+     * <p>"Smart home", and every code editor has it: in indented code the useful position is the start of
+     * the text, not the start of the indentation. Pressing it twice still gets you to column 0, so
+     * nothing is taken away.</p>
+     */
+    private int smartHomeOffset() {
+        int row = caretPoint().row();
+        int lineStart = buffer.document().lineStartOffset(row);
+        String text = buffer.line(row);
+        int indent = 0;
+        while (indent < text.length() && Character.isWhitespace(text.charAt(indent))) indent++;
+        // A whitespace-only line has no "first non-blank"; treat its end as column 0 rather than sending
+        // the caret past everything.
+        if (indent >= text.length()) return lineStart;
+        return caret == lineStart + indent ? lineStart : lineStart + indent;
+    }
+
     private void selectWordAt(int offset) {
         setSelection(previousWordBoundary(Math.min(offset + 1, buffer.length())), nextWordBoundary(offset));
     }
@@ -453,6 +485,46 @@ public class TextEditor extends ScrollerView {
      * text drawn over the top of itself; the property's own accessor documents the multiplier and it is
      * still the obvious thing to get wrong, so the conversion lives here in one place.</p>
      */
+    /**
+     * Advances the blink and shows or hides the caret.
+     *
+     * <p>Hidden outright when the editor is not focused: a caret in an unfocused editor claims a text
+     * cursor that no keystroke would reach. And the phase is <b>reset by any edit or caret move</b>
+     * ({@link #restartCaretBlink()}), so the caret is always solid at the instant you type — a caret that
+     * happened to be in its off phase would otherwise vanish exactly when it is being looked for.</p>
+     */
+    private void advanceCaretBlink(float deltaSeconds) {
+        boolean focused = isFocused();
+        boolean shown;
+        if (!focused) {
+            shown = false;
+        } else if (blinkPeriodSeconds <= 0f) {
+            shown = true;
+        } else {
+            blinkClock = (blinkClock + deltaSeconds) % blinkPeriodSeconds;
+            shown = blinkClock < blinkPeriodSeconds / 2f;
+        }
+        if (shown == caretShown) return;
+        caretShown = shown;
+        final float opacity = shown ? 1f : 0f;
+        StyleGroup.importantPipeline(caretElement.getStyle().getGeneralGroup(), g -> g.opacity(opacity));
+    }
+
+    /** Makes the caret solid again and restarts the cycle. Called from every edit and every caret move. */
+    private void restartCaretBlink() {
+        blinkClock = 0f;
+        if (caretShown) return;
+        caretShown = true;
+        StyleGroup.importantPipeline(caretElement.getStyle().getGeneralGroup(), g -> g.opacity(1f));
+    }
+
+    /** Seconds per full blink cycle; {@code 0} keeps the caret solid. */
+    public TextEditor setCaretBlinkSeconds(float seconds) {
+        this.blinkPeriodSeconds = Math.max(0f, seconds);
+        restartCaretBlink();
+        return this;
+    }
+
     public float lineHeight() {
         var general = getStyle().getGeneralGroup();
         float multiplier = general.lineHeight();
@@ -658,16 +730,35 @@ public class TextEditor extends ScrollerView {
         updateWindow();
     }
 
+    /**
+     * <b>Always keeps ticking</b>, unlike {@link ScrollerView#tickFrame}, which returns
+     * {@code isAnimating()} and is therefore dropped the moment a smooth scroll settles.
+     *
+     * <p>Two things need a heartbeat rather than an event. The caret blinks, which is time-driven and has
+     * nothing to fire it. And {@link #syncLineFonts()} has to notice a cascade change — swapping the
+     * theme does not resize the editor, so no layout pass runs, and without a tick the lines kept the
+     * font they were given under the previous sheet: the gallery's editor stayed in the Ore font after
+     * switching to the default theme while every other widget changed.</p>
+     *
+     * <p>The work per tick is two early-outs when nothing moved: {@code updateWindow} returns immediately
+     * on an unchanged range, and the font push no-ops on an unchanged value.</p>
+     */
     @Override
     public boolean tickFrame(float deltaSeconds) {
-        boolean keep = super.tickFrame(deltaSeconds);
+        super.tickFrame(deltaSeconds);
         updateWindow();
-        return keep;
+        advanceCaretBlink(deltaSeconds);
+        return true;
     }
 
     /** Realises exactly the rows on screen, plus {@link #OVERSCAN} either side. */
     public void updateWindow() {
-        if (getAttachedWindow() == null) return;
+        var window = getAttachedWindow();
+        if (window == null) return;
+        // ScrollerView registers its ticker only when a scroll begins, so an editor that has never been
+        // scrolled would never tick — and the caret would never blink. Registration is a HashSet insert,
+        // so repeating it is free and there is deliberately no unregister in the SPI.
+        window.registerTicker(this);
 
         float height = lineHeight();
         int count = buffer.lineCount();

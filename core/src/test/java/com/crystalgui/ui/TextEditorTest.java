@@ -234,6 +234,157 @@ public class TextEditorTest extends UiTestBase {
         assertTrue("but not to the end", editor.caretPoint().row() < 199);
     }
 
+    // ── Word-wise deletion and smart Home ───────────────────────────────────────────────────────
+
+    /**
+     * <b>Ctrl+Backspace deletes to the same boundary Ctrl+Left moves to.</b> Sharing the boundary
+     * function rather than writing a second rule is the point: two rules for "where does a word start"
+     * drift, and the drift shows up as a delete that removes one character more or less than the cursor
+     * would have skipped.
+     */
+    @Test
+    public void ctrlBackspaceDeletesTheWordBeforeTheCaret() {
+        build("alpha beta gamma");
+        editor.setCaret(16);
+        key(CgKeyCodes.KEY_BACK, CgModifiers.CTRL);
+        assertEquals("alpha beta ", editor.getText());
+        key(CgKeyCodes.KEY_BACK, CgModifiers.CTRL);
+        assertEquals("alpha ", editor.getText());
+    }
+
+    @Test
+    public void ctrlDeleteRemovesTheWordAfterTheCaret() {
+        build("alpha beta gamma");
+        editor.setCaret(0);
+        key(CgKeyCodes.KEY_DELETE, CgModifiers.CTRL);
+        assertEquals(" beta gamma", editor.getText());
+    }
+
+    @Test
+    public void plainBackspaceStillRemovesOneCharacter() {
+        build("abc");
+        editor.setCaret(3);
+        key(CgKeyCodes.KEY_BACK);
+        assertEquals("ab", editor.getText());
+    }
+
+    /** Home goes to the first non-blank, and only to column 0 when already there. */
+    @Test
+    public void homeTogglesBetweenTheIndentAndColumnZero() {
+        build("    indented line");
+        editor.setCaret(10);
+
+        key(CgKeyCodes.KEY_HOME);
+        assertEquals("first press lands on the text, not the indentation",
+                new TextPoint(0, 4), editor.caretPoint());
+        key(CgKeyCodes.KEY_HOME);
+        assertEquals("pressing again still reaches column 0",
+                new TextPoint(0, 0), editor.caretPoint());
+    }
+
+    /**
+     * <b>Switching theme must change the editor's font, driven only by the ordinary frame loop.</b>
+     *
+     * <p>Reported from the gallery: every other widget picked up the default theme and the editor stayed
+     * in the Ore font. The editor forces its own font onto its lines (a universal {@code * } rule in a
+     * theme would otherwise beat inheritance), and that push lives in {@code updateWindow} — which runs
+     * from the frame ticker or a layout change. A theme swap does not resize the editor, so no layout
+     * pass fires; and {@code ScrollerView.tickFrame} returns {@code isAnimating()}, so the ticker had
+     * already been dropped once scrolling settled. Nothing was left to notice.</p>
+     *
+     * <p>This test deliberately never calls {@code updateWindow()} or {@code tickFrame()} itself. An
+     * earlier version of the blink tests did, which is why they could not catch this at all.</p>
+     */
+    @Test
+    public void removingAThemeSheetChangesTheFontThroughTheNormalFrameLoop() {
+        editor = new TextEditor("line of text");
+        editor.layout(l -> l.width(300).height(120));
+        UIElement root = new UIElement().layout(l -> l.width(300).height(200));
+        root.addChild(editor);
+        window = new UIWindow(Ui.of(root));
+        window.init(600, 400);
+        input = window.getInputHandler();
+
+        var themed = com.crystalgui.style.sheet.StyleSheet.parse(
+                "* { font-family: \"crystalgui:ui/fonts/Minecraft.otf\"; }");
+        window.getStyleEngine().addStylesheet(themed);
+        settle();
+        settle();
+        assertTrue("the themed font should be in force first",
+                String.valueOf(lineFontFamily()).contains("Minecraft"));
+
+        window.getStyleEngine().removeStylesheet(themed);
+        // Only ordinary frames from here -- no updateWindow(), no tickFrame().
+        for (int i = 0; i < 5; i++) window.updateWithoutPainting();
+
+        assertFalse("the line kept the removed theme's font: " + lineFontFamily(),
+                String.valueOf(lineFontFamily()).contains("Minecraft"));
+    }
+
+    private Object lineFontFamily() {
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.LINE_CLASS)) continue;
+            return child.getChildren().get(0).getStyle().getGeneralGroup().fontFamily();
+        }
+        throw new AssertionError("no line realised");
+    }
+
+    // ── Caret blink ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>The blink restarts on input.</b> A caret that happened to be in its off phase would otherwise
+     * vanish at the exact moment it is being looked for — while typing.
+     */
+    @Test
+    public void typingMakesTheCaretSolidAgain() {
+        build("abc");
+        editor.tickFrame(0.9f);   // well into the off phase
+        assertFalse("the caret should be hidden mid-cycle", caretVisible());
+
+        type("d");
+        assertTrue("typing restarts the cycle solid", caretVisible());
+    }
+
+    @Test
+    public void theCaretBlinksWhileFocused() {
+        build("abc");
+        editor.tickFrame(0.0f);
+        assertTrue(caretVisible());
+        editor.tickFrame(0.7f);
+        assertFalse("half a period in, the caret is off", caretVisible());
+        editor.tickFrame(0.6f);
+        assertTrue("and on again after a full cycle", caretVisible());
+    }
+
+    /** A caret in an unfocused editor claims a text cursor no keystroke would reach. */
+    @Test
+    public void anUnfocusedEditorShowsNoCaret() {
+        build("abc");
+        editor.tickFrame(0.0f);
+        assertTrue(caretVisible());
+
+        input.blurIfFocused(editor);
+        editor.tickFrame(0.0f);
+        assertFalse("an unfocused editor must not show a caret", caretVisible());
+    }
+
+    @Test
+    public void blinkingCanBeTurnedOff() {
+        build("abc");
+        editor.setCaretBlinkSeconds(0f);
+        editor.tickFrame(5f);
+        assertTrue("a zero period means a solid caret", caretVisible());
+    }
+
+    private boolean caretVisible() {
+        for (UIElement child : editor.getChildren()) {
+            if (child.hasClass(TextEditor.CARET_CLASS)) {
+                return child.getStyle().getGeneralGroup().opacity() > 0.5f;
+            }
+        }
+        throw new AssertionError("no caret element");
+    }
+
     // ── Undo, through the keyboard ──────────────────────────────────────────────────────────────
 
     @Test
