@@ -68,6 +68,9 @@ public class TextEditor extends ScrollerView {
     /** Emitted when the caret or selection moves. */
     public final Signal.Action onSelectionChanged = new Signal.Action();
 
+    /** Emitted when the set of realised lines changes — i.e. on a scroll that moves the window. */
+    public final Signal.Action onWindowChanged = new Signal.Action();
+
     private final TextBuffer buffer;
 
     private final Map<Integer, UIElement> realisedLines = new HashMap<>();
@@ -183,7 +186,12 @@ public class TextEditor extends ScrollerView {
         // A deliberate caret move ends the current undo step: the next keystroke is a new thought, and
         // the buffer has no way to know the caret moved.
         buffer.breakUndoCoalescing();
-        invalidateWindow();
+        // NOT invalidateWindow(). The text did not change, so every realised line is still correct --
+        // recycling them all and rebuilding on each arrow key is pure waste, and it left the realised set
+        // momentarily empty, which is why the gallery's status line read "0 lines realised" immediately
+        // after a click. Only the caret and the bands need to move.
+        layOutCaretAndSelection(firstRealised, lastRealised);
+        markTreeDirty();
         onSelectionChanged.emit();
         return this;
     }
@@ -566,6 +574,7 @@ public class TextEditor extends ScrollerView {
             }
             firstRealised = first;
             lastRealised = last;
+            onWindowChanged.emit();
         }
         layOutCaretAndSelection(first, last);
     }
@@ -580,8 +589,16 @@ public class TextEditor extends ScrollerView {
             line.addChild(new UIText(""));
         }
         final float top = row * lineHeight();
+        // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
+        // a zero-width line lays its text out as though it had no extent -- which shaved the first
+        // character off every row on screen. Wide enough for the text, and at least the viewport, so a
+        // selection band on a short line still reads as a band and horizontal scrolling has something to
+        // scroll.
+        float[] widths = prefixWidths(row);
+        final float width = Math.max(getClientWidth(), widths[widths.length - 1] + 1f);
         StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(),
-                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE).top(top).left(0f));
+                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                        .top(top).left(0f).width(width).height(lineHeight()));
         ((UIText) line.getChildren().get(0)).setText(buffer.line(row));
         if (line.getParent() == null) addInternalChild(line);
         return line;
@@ -602,6 +619,7 @@ public class TextEditor extends ScrollerView {
      * writes a colour in Java.</p>
      */
     private void layOutCaretAndSelection(int firstRow, int lastRow) {
+        if (lastRow < firstRow) return; // nothing realised yet; updateWindow will call again
         float height = lineHeight();
         TextPoint point = buffer.offsetToPoint(caret);
         float caretX = textOriginX() + widthOf(point.row(), point.column());
