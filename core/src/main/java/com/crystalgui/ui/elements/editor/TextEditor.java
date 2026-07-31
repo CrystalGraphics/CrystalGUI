@@ -95,6 +95,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String INDENT_GUIDE_CLASS = "__indent-guide__";
     public static final String WHITESPACE_CLASS = "__whitespace__";
     public static final String RULER_CLASS = "__ruler__";
+    public static final String GUTTER_EDGE_CLASS = "__gutter-edge__";
     public static final String LINE_NUMBER_CLASS = "__line-number__";
     public static final String CURRENT_LINE_CLASS = "__current-line__";
 
@@ -153,6 +154,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private final List<UIElement> indentGuides = new ArrayList<>();
     private final List<UIElement> whitespaceMarks = new ArrayList<>();
     private final List<UIElement> rulerLines = new ArrayList<>();
+    private final List<UIElement> gutterEdge = new ArrayList<>();
 
     private final Map<Integer, UIElement> realisedLines = new HashMap<>();
     private final Deque<UIElement> linePool = new ArrayDeque<>();
@@ -2354,6 +2356,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         syncLineFonts();
         refreshHighlights(first, last);
         layOutGutter(first, last);
+        layOutGutterEdge();
         layOutIndentGuides(first, last);
         layOutWhitespace(first, last);
         layOutRulers();
@@ -2586,17 +2589,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // The NUMBERS' column, not the whole gutter. Spanning the full width right-aligns the digits
             // against the code instead of against the fold column, which is what put them a few pixels
             // from the first glyph.
-            // left(0), because an absolute inset is PADDING-BOX relative -- the gutter's own padding-left
-            // already places the digits, so adding it again here would double the margin.
+            // The inset is applied BY HAND. An absolute inset here turns out to be border-box relative,
+            // not padding-box -- left(0) put the digits exactly on the gutter's border, which is the
+            // "numbers kissing the edge" report. The value still comes from the sheet; only the placing
+            // is the widget's.
             //
             // The width comes from the CACHED measurement and is never recomputed here. gutterWidth is a
             // field updated only when it moves, so measuring the digits afresh at layout time meant the
             // two could disagree on any frame where the font had not resolved: the numbers got a
             // zero-width box and every one of them piled up in the same place.
+            final float numberLeft = gutterPadLeft();
             final float numberWidth = gutterNumbersWidth;
             StyleGroup.defaultPipeline(number.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE)
-                            .left(0f).top(top).width(numberWidth).height(height));
+                            .left(numberLeft).top(top).width(numberWidth).height(height));
         }
         for (int i = used; i < lineNumbers.size(); i++) hide(lineNumbers.get(i));
         insetHorizontalBarPastGutter();
@@ -2738,7 +2744,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // higher z-index and painted straight over it: the guides simply vanished from every
             // unindented row. Half the margin keeps the guide in the gap that exists for it.
             final float nudge = codeLeftPad() * 0.5f;
-            for (int level = 0; level < levels && used < MAX_INDENT_GUIDES; level++) {
+            // FROM LEVEL 1. Level 0 is not an indent guide at all -- it is the gutter's right edge, drawn
+            // once for the whole viewport by layOutGutterEdge. Drawing it per row was what made it break
+            // at every unindented line: such a line has zero guides, so the run stopped wherever the code
+            // reached column 0, and the letter there looked like it had cut the line. As an edge it is one
+            // element, full height, and cannot be interrupted by anything.
+            for (int level = 1; level < levels && used < MAX_INDENT_GUIDES; level++) {
                 final float left = textOriginX() + level * step - nudge;
                 // Past the right edge there is nothing to guide, and the elements are better spent on
                 // rows that are visible.
@@ -2803,6 +2814,35 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
         }
         hideFrom(whitespaceMarks, used);
+    }
+
+    /**
+     * The gutter's right edge — one line, full height, never interrupted.
+     *
+     * <p>What the indent-guide column at level 0 was pretending to be. In IntelliJ this line runs the
+     * whole document unbroken, including past lines at indent 0 that have no indentation to guide; an
+     * indent guide cannot do that, because it is drawn per row from that row's own indent. Making it the
+     * gutter's edge makes it structural: it is one element, it spans the viewport, and no line of code can
+     * break it.</p>
+     *
+     * <p>Scroll-exempt for the same reason the gutter is — it marks a horizontal boundary, which does not
+     * move when the document scrolls vertically.</p>
+     */
+    private void layOutGutterEdge() {
+        if (!gutterVisible) {
+            hideFrom(gutterEdge, 0);
+            return;
+        }
+        UIElement edge = decorationAt(gutterEdge, 0, GUTTER_EDGE_CLASS, false);
+        edge.setScrollExempt(true);
+        // Centred in the code margin, which is the gap that exists between the gutter's painted box and
+        // the first glyph -- so it touches neither.
+        final float left = textOriginX() - codeLeftPad() * 0.5f;
+        final float height = viewportHeight();
+        StyleGroup.defaultPipeline(edge.getStyle().getLayoutGroup(),
+                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                        .left(left).top(0f).width(1f).height(height));
+        hideFrom(gutterEdge, 1);
     }
 
     /**

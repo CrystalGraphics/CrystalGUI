@@ -2468,14 +2468,49 @@ public class TextEditorTest extends UiTestBase {
         assertEquals(0, countOf(TextEditor.INDENT_GUIDE_CLASS));
     }
 
-    /** One guide per level, so a three-level file draws 0 + 1 + 2. */
+    /**
+     * One guide per level <b>from level one</b> — level zero is the gutter's edge, not a guide.
+     *
+     * <p>So a file at indents 0, 1, 2, 3 draws 0 + 0 + 1 + 2 guides. The rows that draw nothing are the
+     * point: their only level is the one the edge already covers, running the full height of the
+     * viewport where a per-row guide would stop at the first unindented line.</p>
+     */
     @Test
-    public void indentGuidesDrawOnePerLevel() {
-        build("a" + NL + "    b" + NL + "        c");
+    public void indentGuidesDrawOnePerLevelAboveTheFirst() {
+        build("a" + NL + "    b" + NL + "        c" + NL + "            d");
         editor.setIndentGuidesVisible(true);
         showEditor();
 
-        assertEquals("0 + 1 + 2", 3, countOf(TextEditor.INDENT_GUIDE_CLASS));
+        assertEquals("0 + 0 + 1 + 2", 3, countOf(TextEditor.INDENT_GUIDE_CLASS));
+    }
+
+    /**
+     * <b>The gutter's edge is one element spanning the viewport</b>, and it is what the level-zero guide
+     * used to pretend to be. Being structural rather than per-row is exactly what stops a line at indent
+     * zero breaking it.
+     */
+    @Test
+    public void theGutterEdgeIsOneUnbrokenLine() {
+        build("    a" + NL + "public class B {" + NL + "    c");
+        showEditor();
+
+        int edges = countOf(TextEditor.GUTTER_EDGE_CLASS);
+        assertEquals("one element, not one per row", 1, edges);
+
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.GUTTER_EDGE_CLASS)) continue;
+            assertEquals("and it spans the whole viewport", editor.getViewportHeight(),
+                    child.getTaffyLayout().contentBoxHeight(), 1f);
+        }
+    }
+
+    /** With no gutter there is no gutter edge — it is the gutter's border, not a text decoration. */
+    @Test
+    public void hidingTheGutterHidesItsEdge() {
+        build("    a");
+        editor.setGutterVisible(false);
+        showEditor();
+        assertEquals(0, countOf(TextEditor.GUTTER_EDGE_CLASS));
     }
 
     /**
@@ -2485,7 +2520,9 @@ public class TextEditorTest extends UiTestBase {
      */
     @Test
     public void aBlankLineInsideABlockStillDrawsItsGuides() {
-        build("    a" + NL + NL + "    c");
+        // Two levels deep, so there is a level-one guide to see -- at one level the only guide is the
+        // gutter's edge and the blank-line rule has nothing to draw.
+        build("        a" + NL + NL + "        c");
         editor.setIndentGuidesVisible(true);
         showEditor();
 
@@ -2630,6 +2667,14 @@ public class TextEditorTest extends UiTestBase {
         float textStart = editor.getGutterWidth();
         assertTrue("the numbers must stop short of the code: numbers end " + numbersEnd
                 + ", text starts " + textStart, textStart - numbersEnd >= 4f);
+
+        // AND clear of the LEFT edge. The widest number in the file fills the digit field exactly, so
+        // without a margin it sits on the border -- which is what the gutter's padding-left is for.
+        float gutterLeft = editor.getRuntimeCache().getX()
+                + editor.getTaffyLayout().border().left + editor.getTaffyLayout().padding().left;
+        assertTrue("a number at " + number.getRuntimeCache().getX()
+                        + " is touching the gutter's left edge at " + gutterLeft,
+                number.getRuntimeCache().getX() - gutterLeft >= 2f);
     }
 
     /**
