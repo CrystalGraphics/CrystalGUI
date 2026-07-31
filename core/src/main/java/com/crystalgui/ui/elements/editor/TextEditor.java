@@ -11,7 +11,15 @@ import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.text.ChangeSet;
+import com.crystalgui.text.Change;
+import com.crystalgui.text.Selection;
+import com.crystalgui.text.SelectionModel;
 import com.crystalgui.text.TextBuffer;
+import com.crystalgui.text.syntax.SyntaxToken;
+import com.crystalgui.text.syntax.SyntaxTokenizer;
+import com.crystalgui.ui.text.HighlightRegistry;
+import com.crystalgui.ui.text.TextRange;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.ScrollerView;
@@ -25,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -61,6 +70,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String LINE_CLASS = "__line__";
     public static final String CARET_CLASS = "__caret__";
     public static final String SELECTION_CLASS = "__selection__";
+    public static final String GUTTER_CLASS = "__gutter__";
+    public static final String LINE_NUMBER_CLASS = "__line-number__";
+    public static final String CURRENT_LINE_CLASS = "__current-line__";
 
     /** Rows kept realised beyond the viewport, so a scroll does not expose an unpainted band. */
     private static final int OVERSCAN = 3;
@@ -79,14 +91,64 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private final Map<Integer, UIElement> realisedLines = new HashMap<>();
     private final Deque<UIElement> linePool = new ArrayDeque<>();
     private final List<UIElement> selectionBands = new ArrayList<>();
-    private final UIElement caretElement = new UIElement();
+
+    /** One element per caret, pooled — a multi-caret edit that shrinks back to one must not churn them. */
+    private final List<UIElement> caretElements = new ArrayList<>();
+
+    /**
+     * The gutter, and the line numbers inside it.
+     *
+     * <p><b>Scroll-exempt, with its numbers positioned by hand.</b> The gutter must hold still
+     * horizontally while scrolling vertically with the text, and a scroll offset in this engine is a pose
+     * translate applied to every non-exempt child — it cannot apply on one axis only. So the gutter opts
+     * out of both and subtracts {@code scrollTop} itself. Letting it scroll normally would slide the
+     * numbers sideways the moment a line is wider than the viewport.</p>
+     */
+    private final UIElement gutter = new UIElement();
+    private final List<UIElement> lineNumbers = new ArrayList<>();
+    private boolean gutterVisible = true;
+    private float gutterWidth;
+
+    /** A band behind the primary caret's row. An ordinary child, so it scrolls with the text. */
+    private final UIElement currentLine = new UIElement();
+
+    /**
+     * The language, or {@link SyntaxTokenizer#NONE}.
+     *
+     * <p>The editor knows nothing about any language: it asks for named ranges over the rows it is about
+     * to draw and publishes them under those names. What a {@code "keyword"} looks like is a stylesheet's
+     * business, through {@code ::highlight(keyword)}.</p>
+     */
+    private SyntaxTokenizer tokenizer = SyntaxTokenizer.NONE;
+    private int highlightedFrom = -1;
+    private int highlightedTo = -1;
+    private boolean highlightsDirty = true;
+
+    /** Search hits, in document offsets. Published under {@code ::highlight(search)}. */
+    private final List<TextRange> searchMatches = new ArrayList<>();
+    private int currentMatch = -1;
+    private String lastQuery = "";
+    private boolean lastQueryCaseSensitive;
+
+    /** The two bracket positions when the caret is on a bracket, or {@code null}. */
+    private int[] bracketPair;
+
+    /** One indent level, in spaces. */
+    private int indentWidth = 4;
 
     private int firstRealised = -1;
     private int lastRealised = -1;
 
-    /** Caret and selection anchor, both UTF-16 offsets. Equal means an empty selection. */
-    private int caret;
-    private int anchor;
+    /**
+     * Every caret in the document, sorted and non-overlapping.
+     *
+     * <p>A list rather than a pair of offsets from the outset. Retrofitting it would mean rewriting every
+     * movement method here, since each of them reads and writes the caret directly — and the layer below
+     * is already built for it: several non-overlapping changes in one {@link ChangeSet} is precisely what
+     * a multi-caret edit is, and {@code ChangeSet.of} refuses overlaps, which is the same invariant
+     * {@link SelectionModel} maintains.</p>
+     */
+    private final SelectionModel selections = new SelectionModel();
 
     /**
      * The column vertical movement aims for, or -1 to take it from the caret.
@@ -123,12 +185,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // exactly this mistake once already.
         setFocusPolicy(FocusPolicy.CLICK);
 
-        caretElement.addClass(CARET_CLASS);
-        caretElement.setHitTest(false);
-        caretElement.markAsInternal();
-        addInternalChild(caretElement);
+
+        currentLine.addClass(CURRENT_LINE_CLASS);
+        currentLine.setHitTest(false);
+        currentLine.markAsInternal();
+        addInternalChild(currentLine);
+
+        gutter.addClass(GUTTER_CLASS);
+        gutter.setHitTest(false);
+        gutter.markAsInternal();
+        gutter.setScrollExempt(true);
+        addInternalChild(gutter);
 
         buffer.onChanged.connect(change -> {
+            // The tokenizer hears about the edit BEFORE the next query, so an incremental one can update
+            // what it holds. Applying the edit is cheap and must be synchronous; the expensive reparse is
+            // the implementation's business. See SyntaxTokenizer#edited.
+            tokenizer.edited(buffer.document(), change);
+            highlightsDirty = true;
             measuredRows.clear();
             invalidateWindow();
             onChanged.emit(buffer.toString());
@@ -169,30 +243,70 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     // ── Caret and selection ─────────────────────────────────────────────────────────────────────
 
+    /** The primary caret — the one that scrolls into view and that single-caret API reports. */
     public int getCaret() {
-        return caret;
+        return selections.primary().head();
     }
 
     public int getAnchor() {
-        return anchor;
+        return selections.primary().anchor();
     }
 
     public int getSelectionStart() {
-        return Math.min(anchor, caret);
+        return selections.primary().start();
     }
 
     public int getSelectionEnd() {
-        return Math.max(anchor, caret);
+        return selections.primary().end();
     }
 
+    /** True when <b>any</b> caret has a range, not merely the primary one. */
     public boolean hasSelection() {
-        return anchor != caret;
+        return selections.hasSelection();
     }
 
+    /** Every caret, sorted and non-overlapping. */
+    public SelectionModel selections() {
+        return selections;
+    }
+
+    public int caretCount() {
+        return selections.count();
+    }
+
+    /**
+     * The selected text.
+     *
+     * <p>With several carets the ranges are joined by newlines, which is what every editor puts on the
+     * clipboard — and what makes a multi-caret copy paste back into a multi-caret paste sensibly.</p>
+     */
     public String getSelectedText() {
-        return hasSelection()
-                ? buffer.document().slice(getSelectionStart(), getSelectionEnd()).toString()
-                : "";
+        StringBuilder out = new StringBuilder();
+        for (Selection selection : selections.all()) {
+            if (selection.isEmpty()) continue;
+            if (out.length() > 0) out.append('\n');
+            out.append(buffer.document().slice(selection.start(), selection.end()));
+        }
+        return out.toString();
+    }
+
+    /** Adds another caret, leaving the existing ones in place. */
+    public TextEditor addCaret(int offset) {
+        selections.add(Selection.caret(clampOffset(offset)));
+        afterSelectionChange();
+        return this;
+    }
+
+    /** Drops every caret but the primary — what Escape does. */
+    public TextEditor collapseCarets() {
+        if (!selections.isMultiple()) return this;
+        selections.collapseToPrimary();
+        afterSelectionChange();
+        return this;
+    }
+
+    private int clampOffset(int offset) {
+        return Math.max(0, Math.min(offset, buffer.length()));
     }
 
     /** Moves the caret, collapsing the selection to it. */
@@ -200,62 +314,87 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return setSelection(offset, offset);
     }
 
+    /** Collapses to a single selection. Every plain click and most API calls do this. */
     public TextEditor setSelection(int anchorOffset, int caretOffset) {
-        int length = buffer.length();
-        int newAnchor = Math.max(0, Math.min(anchorOffset, length));
-        int newCaret = Math.max(0, Math.min(caretOffset, length));
-        if (newAnchor == anchor && newCaret == caret) return this;
-        this.anchor = newAnchor;
-        this.caret = newCaret;
-        // A deliberate caret move ends the current undo step: the next keystroke is a new thought, and
-        // the buffer has no way to know the caret moved.
-        buffer.breakUndoCoalescing();
-        // NOT invalidateWindow(). The text did not change, so every realised line is still correct --
-        // recycling them all and rebuilding on each arrow key is pure waste, and it left the realised set
-        // momentarily empty, which is why the gallery's status line read "0 lines realised" immediately
-        // after a click. Only the caret and the bands need to move.
-        restartCaretBlink();
-        layOutCaretAndSelection(firstRealised, lastRealised);
-        markTreeDirty();
-        onSelectionChanged.emit();
+        Selection wanted = new Selection(clampOffset(anchorOffset), clampOffset(caretOffset));
+        if (!selections.isMultiple() && selections.primary().equals(wanted)) return this;
+        selections.set(wanted);
+        afterSelectionChange();
         return this;
     }
 
     public TextPoint caretPoint() {
-        return buffer.offsetToPoint(caret);
+        return buffer.offsetToPoint(getCaret());
+    }
+
+    /** The shared tail of every selection change: end the undo run, re-place the carets, repaint. */
+    private void afterSelectionChange() {
+        buffer.breakUndoCoalescing();
+        updateBracketMatch();
+        highlightsDirty = true;
+        restartCaretBlink();
+        layOutCaretAndSelection(firstRealised, lastRealised);
+        markTreeDirty();
+        onSelectionChanged.emit();
     }
 
     // ── Editing ─────────────────────────────────────────────────────────────────────────────────
 
-    /** Replaces the selection (or inserts at the caret) and puts the caret after the inserted text. */
+    /**
+     * Replaces every selection (or inserts at every caret) with {@code text}.
+     *
+     * <p><b>One {@link ChangeSet} for all of them, not one edit per caret.</b> Applying them one at a time
+     * would invalidate the later offsets after the first, and would put each caret's edit on the undo
+     * stack separately — so a single keystroke at five carets would take five undos to reverse. As one
+     * change set it is one edit, one undo step, and every caret is carried through it by the same mapping
+     * that carries an anchor.</p>
+     */
     public void insertAtCaret(String text) {
-        int from = getSelectionStart();
-        int to = getSelectionEnd();
-        buffer.replace(from, to, text);
-        int next = from + text.length();
-        this.anchor = next;
-        this.caret = next;
+        List<Change> changes = new ArrayList<>(selections.count());
+        for (Selection selection : selections.all()) {
+            changes.add(new Change(selection.start(), selection.end(), text));
+        }
+        applyEdit(changes);
+    }
+
+    /**
+     * Deletes at every caret. {@code from}/{@code to} are used only for a <em>single</em> empty caret —
+     * the backspace-and-delete case, where the range depends on which key was pressed.
+     */
+    private void deleteSelectionOr(int from, int to) {
+        List<Change> changes = new ArrayList<>(selections.count());
+        boolean anySelection = selections.hasSelection();
+        for (Selection selection : selections.all()) {
+            if (anySelection) {
+                if (!selection.isEmpty()) changes.add(Change.delete(selection.start(), selection.end()));
+            } else {
+                // Every empty caret deletes the same way the pressed key says, relative to itself.
+                int offset = selection.head();
+                int delta = to - from;
+                int start = from <= selections.primary().head() && to <= selections.primary().head()
+                        ? offset - delta : offset;
+                int end = start + delta;
+                if (start >= 0 && end <= buffer.length() && end > start) {
+                    changes.add(Change.delete(start, end));
+                }
+            }
+        }
+        applyEdit(changes);
+    }
+
+    /** Applies a set of per-caret changes as one edit, then carries the carets through it. */
+    private void applyEdit(List<Change> changes) {
+        changes.removeIf(Change::isEmpty);
+        if (changes.isEmpty()) return;
+        ChangeSet edit = ChangeSet.of(buffer.length(), changes);
+        buffer.edit(edit);
+        selections.mapThrough(edit).collapseEachToHead();
         preferredColumn = -1;
         restartCaretBlink();
         ensureCaretVisible();
         onSelectionChanged.emit();
     }
 
-    private void deleteSelectionOr(int from, int to) {
-        if (hasSelection()) {
-            from = getSelectionStart();
-            to = getSelectionEnd();
-        }
-        from = Math.max(0, from);
-        to = Math.min(buffer.length(), to);
-        if (from >= to) return;
-        buffer.delete(from, to);
-        this.anchor = from;
-        this.caret = from;
-        preferredColumn = -1;
-        ensureCaretVisible();
-        onSelectionChanged.emit();
-    }
 
     // ── Input ───────────────────────────────────────────────────────────────────────────────────
 
@@ -301,7 +440,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 // around silently: this is the one place in the widget where a modifier is read outside
                 // the event that caused it.
                 boolean extend = CgModifiers.hasShift(CgPlatform.input().getCurrentModifiers());
-                setSelection(extend ? anchor : offset, offset);
+                if (CgModifiers.hasAlt(CgPlatform.input().getCurrentModifiers())) {
+                    // Alt+Click adds a caret, as in VS Code. Ctrl is not used for this because Ctrl+Click
+                    // is already "go to definition" everywhere it appears, and 6.1.7 will want it.
+                    addCaret(offset);
+                } else {
+                    setSelection(extend ? getAnchor() : offset, offset);
+                }
                 selecting = true;
                 var window = getAttachedWindow();
                 if (window != null) window.getInputHandler().setPointerCapture(this);
@@ -312,7 +457,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         events.getGroup(MouseEvent.Move.class).attachListener((el, event) -> {
             if (!selecting) return;
-            setSelection(anchor, offsetAt(event.getPosition().x(), event.getPosition().y()));
+            setSelection(getAnchor(), offsetAt(event.getPosition().x(), event.getPosition().y()));
         }, false, false);
 
         events.getGroup(MouseEvent.Up.class).attachListener((el, event) -> selecting = false, false, false);
@@ -347,7 +492,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             if (key == CgKeyCodes.KEY_C || key == CgKeyCodes.KEY_X) {
                 if (hasSelection()) {
                     CgPlatform.input().setClipboard(getSelectedText());
-                    if (key == CgKeyCodes.KEY_X) deleteSelectionOr(caret, caret);
+                    if (key == CgKeyCodes.KEY_X) deleteSelections();
                 }
                 return true;
             }
@@ -368,10 +513,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         switch (key) {
             case CgKeyCodes.KEY_LEFT:
-                moveCaretTo(ctrl ? previousWordBoundary(caret) : Math.max(0, caret - 1), shift);
+                moveEach(head -> ctrl ? previousWordBoundary(head) : Math.max(0, head - 1), shift);
                 return true;
             case CgKeyCodes.KEY_RIGHT:
-                moveCaretTo(ctrl ? nextWordBoundary(caret) : Math.min(buffer.length(), caret + 1), shift);
+                moveEach(head -> ctrl ? nextWordBoundary(head) : Math.min(buffer.length(), head + 1), shift);
                 return true;
             case CgKeyCodes.KEY_UP:
                 moveVertically(-1, shift);
@@ -386,25 +531,34 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 moveVertically(visibleRowCount(), shift);
                 return true;
             case CgKeyCodes.KEY_HOME:
-                moveCaretTo(smartHomeOffset(), shift);
+                moveEach(this::smartHomeOffset, shift);
                 return true;
             case CgKeyCodes.KEY_END:
-                moveCaretTo(buffer.document().lineEndOffset(caretPoint().row()), shift);
+                moveEach(head -> buffer.document().lineEndOffset(buffer.offsetToPoint(head).row()), shift);
+                return true;
+            case CgKeyCodes.KEY_ESCAPE:
+                // Only claims the key when there is something to collapse, so Escape still reaches a
+                // dialog or a popover above the editor when there is only one caret.
+                if (!selections.isMultiple()) return false;
+                collapseCarets();
                 return true;
             case CgKeyCodes.KEY_BACK:
-                // Ctrl+Backspace deletes the word before the caret, which is the same boundary
-                // Ctrl+Left moves to -- so the two agree by construction rather than by two rules that
-                // have to be kept in step.
-                deleteSelectionOr(ctrl ? previousWordBoundary(caret) : Math.max(0, caret - 1), caret);
+                // Ctrl+Backspace deletes to the same boundary Ctrl+Left moves to, so the two agree by
+                // construction rather than by two rules that have to be kept in step.
+                deleteEach(head -> new int[] {
+                        ctrl ? previousWordBoundary(head) : Math.max(0, head - 1), head });
                 return true;
             case CgKeyCodes.KEY_DELETE:
-                deleteSelectionOr(caret, ctrl ? nextWordBoundary(caret) : Math.min(buffer.length(), caret + 1));
+                deleteEach(head -> new int[] {
+                        head, ctrl ? nextWordBoundary(head) : Math.min(buffer.length(), head + 1) });
                 return true;
             case CgKeyCodes.KEY_RETURN:
-                insertAtCaret("\n");
+                insertNewlineWithIndent();
                 return true;
             case CgKeyCodes.KEY_TAB:
-                insertAtCaret("    ");
+                if (shift) outdentSelectedLines();
+                else if (selections.hasSelection()) indentSelectedLines();
+                else insertAtCaret(spaces(indentWidth));
                 return true;
             default:
                 return false;
@@ -412,19 +566,59 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     private void clampSelectionToDocument() {
-        int length = buffer.length();
-        this.anchor = Math.min(anchor, length);
-        this.caret = Math.min(caret, length);
+        selections.clampTo(buffer.length());
         ensureCaretVisible();
         onSelectionChanged.emit();
     }
 
     // ── Movement ────────────────────────────────────────────────────────────────────────────────
 
+    /** Absolute move — collapses to one caret, which is what Ctrl+Home/End mean. */
     private void moveCaretTo(int offset, boolean extend) {
         preferredColumn = -1;
-        setSelection(extend ? anchor : offset, offset);
+        setSelection(extend ? getAnchor() : offset, offset);
         ensureCaretVisible();
+    }
+
+    /**
+     * Moves <b>every</b> caret by a function of its own head.
+     *
+     * <p>Every horizontal and line-relative movement goes through here, so "does this work with several
+     * carets?" stops being a question that has to be asked once per key.</p>
+     */
+    private void moveEach(java.util.function.IntUnaryOperator move, boolean extend) {
+        preferredColumn = -1;
+        selections.transform(selection -> {
+            int head = Math.max(0, Math.min(move.applyAsInt(selection.head()), buffer.length()));
+            return extend ? selection.withHead(head) : Selection.caret(head);
+        });
+        afterSelectionChange();
+        ensureCaretVisible();
+    }
+
+    /** Deletes a per-caret range given as {@code {from, to}}. */
+    private void deleteEach(java.util.function.IntFunction<int[]> range) {
+        if (selections.hasSelection()) {
+            deleteSelections();
+            return;
+        }
+        List<Change> changes = new ArrayList<>(selections.count());
+        for (Selection selection : selections.all()) {
+            int[] span = range.apply(selection.head());
+            int from = Math.max(0, Math.min(span[0], buffer.length()));
+            int to = Math.max(from, Math.min(span[1], buffer.length()));
+            if (to > from) changes.add(Change.delete(from, to));
+        }
+        applyEdit(changes);
+    }
+
+    /** Deletes every non-empty selection. */
+    private void deleteSelections() {
+        List<Change> changes = new ArrayList<>(selections.count());
+        for (Selection selection : selections.all()) {
+            if (!selection.isEmpty()) changes.add(Change.delete(selection.start(), selection.end()));
+        }
+        applyEdit(changes);
     }
 
     /**
@@ -434,15 +628,21 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * dragged inward by the shortest line passed through.</p>
      */
     private void moveVertically(int rows, boolean extend) {
-        TextPoint point = caretPoint();
-        int column = preferredColumn >= 0 ? preferredColumn : point.column();
-        int row = Math.max(0, Math.min(buffer.lineCount() - 1, point.row() + rows));
-        int offset = buffer.pointToOffset(new TextPoint(row, column));
-
-        setSelection(extend ? anchor : offset, offset);
-        // Set AFTER the move: setSelection clears nothing, but moveCaretTo does, and keeping the
-        // assignment here means only the horizontal paths reset it.
-        preferredColumn = column;
+        // A shared preferred column only makes sense with one caret; with several, each keeps its own,
+        // because they start in different columns and a single remembered value would drag them together.
+        final int shared = selections.isMultiple() ? -1 : preferredColumn;
+        final int[] usedColumn = { -1 };
+        selections.transform(selection -> {
+            TextPoint point = buffer.offsetToPoint(selection.head());
+            int column = shared >= 0 ? shared : point.column();
+            usedColumn[0] = column;
+            int row = Math.max(0, Math.min(buffer.lineCount() - 1, point.row() + rows));
+            int offset = buffer.pointToOffset(new TextPoint(row, column));
+            return extend ? selection.withHead(offset) : Selection.caret(offset);
+        });
+        afterSelectionChange();
+        // Set AFTER the move, so only the horizontal paths reset it.
+        preferredColumn = selections.isMultiple() ? -1 : usedColumn[0];
         ensureCaretVisible();
     }
 
@@ -474,16 +674,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * the text, not the start of the indentation. Pressing it twice still gets you to column 0, so
      * nothing is taken away.</p>
      */
-    private int smartHomeOffset() {
-        int row = caretPoint().row();
+    private int smartHomeOffset(int head) {
+        int row = buffer.offsetToPoint(head).row();
         int lineStart = buffer.document().lineStartOffset(row);
         String text = buffer.line(row);
         int indent = 0;
         while (indent < text.length() && Character.isWhitespace(text.charAt(indent))) indent++;
-        // A whitespace-only line has no "first non-blank"; treat its end as column 0 rather than sending
-        // the caret past everything.
+        // A whitespace-only line has no "first non-blank"; treat its start as the answer rather than
+        // sending the caret past everything on it.
         if (indent >= text.length()) return lineStart;
-        return caret == lineStart + indent ? lineStart : lineStart + indent;
+        return head == lineStart + indent ? lineStart : lineStart + indent;
     }
 
     private void selectWordAt(int offset) {
@@ -522,7 +722,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         if (shown == caretShown) return;
         caretShown = shown;
         final float opacity = shown ? 1f : 0f;
-        StyleGroup.importantPipeline(caretElement.getStyle().getGeneralGroup(), g -> g.opacity(opacity));
+        for (UIElement caret : caretElements) {
+            StyleGroup.importantPipeline(caret.getStyle().getGeneralGroup(), g -> g.opacity(opacity));
+        }
     }
 
     /** Makes the caret solid again and restarts the cycle. Called from every edit and every caret move. */
@@ -530,7 +732,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         blinkClock = 0f;
         if (caretShown) return;
         caretShown = true;
-        StyleGroup.importantPipeline(caretElement.getStyle().getGeneralGroup(), g -> g.opacity(1f));
+        for (UIElement caret : caretElements) {
+            StyleGroup.importantPipeline(caret.getStyle().getGeneralGroup(), g -> g.opacity(1f));
+        }
     }
 
     /** Seconds per full blink cycle; {@code 0} keeps the caret solid. */
@@ -586,7 +790,408 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * front and the caret trailed the glyph it had just moved past.</p>
      */
     private float textOriginX() {
-        return getTaffyLayout().padding().left;
+        return getTaffyLayout().padding().left + gutterWidth;
+    }
+
+    /** Whether the line-number gutter is shown. */
+    public TextEditor setGutterVisible(boolean visible) {
+        if (this.gutterVisible == visible) return this;
+        this.gutterVisible = visible;
+        measuredRows.clear();
+        invalidateWindow();
+        return this;
+    }
+
+    public boolean isGutterVisible() {
+        return gutterVisible;
+    }
+
+    public float gutterWidth() {
+        return gutterWidth;
+    }
+
+    /** Sets the language. Pass {@link SyntaxTokenizer#NONE} for plain text. */
+    public TextEditor setTokenizer(SyntaxTokenizer newTokenizer) {
+        if (this.tokenizer == newTokenizer) return this;
+        this.tokenizer = newTokenizer == null ? SyntaxTokenizer.NONE : newTokenizer;
+        highlightsDirty = true;
+        highlightedFrom = -1;
+        highlightedTo = -1;
+        return this;
+    }
+
+    public SyntaxTokenizer tokenizer() {
+        return tokenizer;
+    }
+
+    /**
+     * Re-highlights the rows on screen.
+     *
+     * <p><b>Bounded to the realised rows.</b> The editor already knows which lines exist as elements, so
+     * the query covers those and nothing else — highlighting cost is proportional to the viewport rather
+     * than to the file, which is the same argument the virtualised list is built on and what Zed does by
+     * capping a query at 16KB.</p>
+     *
+     * <p><b>A {@link HighlightRegistry} belongs to a {@code UIText}, not to a document</b>, and its ranges
+     * are offsets into <em>that element's</em> string. So document-relative tokens are clipped to each
+     * line and rebased onto it. That is also what makes a token spanning many lines — a block comment —
+     * work: it is one token, distributed as one clipped range per line it crosses, rather than a range
+     * that would read as running off the end of every line but the last.</p>
+     *
+     * <p>A dotted capture is <b>also</b> published under its general form, so {@code function.builtin}
+     * still colours as {@code function} in a theme that has not named the specialisation. An unstyled
+     * capture renders as plain text, which reads as the highlighter failing rather than the theme being
+     * incomplete.</p>
+     */
+    private void refreshHighlights(int firstRow, int lastRow) {
+        if (lastRow < firstRow || realisedLines.isEmpty()) return;
+
+        int from = buffer.document().lineStartOffset(Math.max(0, firstRow));
+        int to = buffer.document().lineEndOffset(Math.min(lastRow, buffer.lineCount() - 1));
+        if (!highlightsDirty && from == highlightedFrom && to == highlightedTo) return;
+        highlightedFrom = from;
+        highlightedTo = to;
+        highlightsDirty = false;
+
+        List<SyntaxToken> tokens = tokenizer == SyntaxTokenizer.NONE
+                ? List.<SyntaxToken>of()
+                : tokenizer.tokenize(buffer.document(), from, to);
+        for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
+            int row = entry.getKey();
+            if (row < 0 || row >= buffer.lineCount()) continue;
+            int lineStart = buffer.document().lineStartOffset(row);
+            int lineEnd = buffer.document().lineEndOffset(row);
+
+            Map<String, List<TextRange>> byName = new LinkedHashMap<>();
+            addDocumentRanges(byName, "search", searchMatches, lineStart, lineEnd);
+            if (bracketPair != null) {
+                addDocumentRanges(byName, "bracket", List.of(
+                        TextRange.of(bracketPair[0], bracketPair[0] + 1),
+                        TextRange.of(bracketPair[1], bracketPair[1] + 1)), lineStart, lineEnd);
+            }
+            for (SyntaxToken token : tokens) {
+                int start = Math.max(token.start(), lineStart);
+                int end = Math.min(token.end(), lineEnd);
+                if (end <= start) continue;
+                TextRange range = TextRange.of(start - lineStart, end - lineStart);
+                byName.computeIfAbsent(token.name(), key -> new ArrayList<>()).add(range);
+                String general = token.generalName();
+                if (general != null) {
+                    byName.computeIfAbsent(general, key -> new ArrayList<>()).add(range);
+                }
+            }
+
+            HighlightRegistry highlights = textOf(entry.getValue()).highlights();
+            for (String name : new ArrayList<>(highlights.names())) {
+                if (!byName.containsKey(name)) highlights.remove(name);
+            }
+            for (Map.Entry<String, List<TextRange>> named : byName.entrySet()) {
+                highlights.set(named.getKey(), named.getValue());
+            }
+        }
+    }
+
+    // ── Indentation ─────────────────────────────────────────────────────────────────────────────
+
+    /** Spaces per indent level. */
+    public TextEditor setIndentWidth(int width) {
+        this.indentWidth = Math.max(1, width);
+        return this;
+    }
+
+    public int getIndentWidth() {
+        return indentWidth;
+    }
+
+    private static String spaces(int howMany) {
+        StringBuilder out = new StringBuilder(howMany);
+        for (int i = 0; i < howMany; i++) out.append(' ');
+        return out.toString();
+    }
+
+    /**
+     * Enter, carrying the current line's indentation onto the new one — and one level further after an
+     * opening brace.
+     *
+     * <p>Computed <b>per caret</b>, because with several carets on differently indented lines a single
+     * shared indent would be wrong for all but one of them. The rule is deliberately syntactic and dumb:
+     * copy the leading whitespace, add a level if the line ends in an opener. A real indent engine needs
+     * the tree, which is what step 6 of the plan puts behind the tokenizer seam.</p>
+     */
+    private void insertNewlineWithIndent() {
+        List<Change> changes = new ArrayList<>(selections.count());
+        for (Selection selection : selections.all()) {
+            int row = buffer.offsetToPoint(selection.start()).row();
+            String line = buffer.line(row);
+            int indent = 0;
+            while (indent < line.length() && (line.charAt(indent) == ' ' || line.charAt(indent) == '\t')) {
+                indent++;
+            }
+            String carried = line.substring(0, Math.min(indent, Math.max(0,
+                    selection.start() - buffer.document().lineStartOffset(row))));
+            String trimmed = line.trim();
+            boolean opens = trimmed.endsWith("{") || trimmed.endsWith("(") || trimmed.endsWith("[");
+            String insert = "\n" + carried + (opens ? spaces(indentWidth) : "");
+            changes.add(new Change(selection.start(), selection.end(), insert));
+        }
+        applyEdit(changes);
+    }
+
+    /** Adds one indent level to the start of every line touched by a selection. */
+    private void indentSelectedLines() {
+        List<Change> changes = new ArrayList<>();
+        for (int row : touchedRows()) {
+            changes.add(Change.insert(buffer.document().lineStartOffset(row), spaces(indentWidth)));
+        }
+        applyEditKeepingSelection(changes);
+    }
+
+    /** Removes up to one indent level from every line touched by a selection. */
+    private void outdentSelectedLines() {
+        List<Change> changes = new ArrayList<>();
+        for (int row : touchedRows()) {
+            int lineStart = buffer.document().lineStartOffset(row);
+            String line = buffer.line(row);
+            int remove = 0;
+            while (remove < indentWidth && remove < line.length() && line.charAt(remove) == ' ') remove++;
+            if (remove == 0 && !line.isEmpty() && line.charAt(0) == '\t') remove = 1;
+            if (remove > 0) changes.add(Change.delete(lineStart, lineStart + remove));
+        }
+        applyEditKeepingSelection(changes);
+    }
+
+    /** Every row any selection touches, ascending and without repeats. */
+    private List<Integer> touchedRows() {
+        java.util.TreeSet<Integer> rows = new java.util.TreeSet<>();
+        for (Selection selection : selections.all()) {
+            int first = buffer.offsetToPoint(selection.start()).row();
+            int last = buffer.offsetToPoint(selection.end()).row();
+            for (int row = first; row <= last; row++) rows.add(row);
+        }
+        return new ArrayList<>(rows);
+    }
+
+    /**
+     * Applies an edit and carries the selections through it <b>without</b> collapsing them.
+     *
+     * <p>Indenting a block must leave the block selected, or the obvious next action — pressing Tab again
+     * — indents one line instead of the block. {@link #applyEdit} collapses on purpose, because typing
+     * replaces a selection; these two want opposite things from the same machinery.</p>
+     */
+    private void applyEditKeepingSelection(List<Change> changes) {
+        changes.removeIf(Change::isEmpty);
+        if (changes.isEmpty()) return;
+        ChangeSet edit = ChangeSet.of(buffer.length(), changes);
+        buffer.edit(edit);
+        selections.mapThrough(edit);
+        restartCaretBlink();
+        ensureCaretVisible();
+        onSelectionChanged.emit();
+    }
+
+    // ── Bracket matching ────────────────────────────────────────────────────────────────────────
+
+    private static final String OPENERS = "([{";
+    private static final String CLOSERS = ")]}";
+
+    /**
+     * Finds the bracket at the caret and its partner, or clears the pair.
+     *
+     * <p>Looks at the character <em>before</em> the caret as well as the one after it, which is what makes
+     * the highlight appear when you have just typed a closing brace — the common case, and the one where
+     * it is most useful.</p>
+     */
+    private void updateBracketMatch() {
+        bracketPair = null;
+        if (selections.isMultiple() || selections.hasSelection()) return;
+        int caret = getCaret();
+        int found = matchAt(caret);
+        if (found < 0 && caret > 0) found = matchAt(caret - 1);
+        if (found >= 0) bracketPair = new int[] { found, matchingBracket(found) };
+        if (bracketPair != null && bracketPair[1] < 0) bracketPair = null;
+    }
+
+    private int matchAt(int offset) {
+        if (offset < 0 || offset >= buffer.length()) return -1;
+        char c = buffer.document().charAt(offset);
+        return OPENERS.indexOf(c) >= 0 || CLOSERS.indexOf(c) >= 0 ? offset : -1;
+    }
+
+    /**
+     * The partner of the bracket at {@code offset}, or -1.
+     *
+     * <p>Bounded by {@link #BRACKET_SCAN_LIMIT}: an unmatched brace at the top of a large file would
+     * otherwise make every caret move scan the entire document, and a search that finds nothing is
+     * indistinguishable from one that was stopped early — except in how long it took.</p>
+     */
+    private int matchingBracket(int offset) {
+        char bracket = buffer.document().charAt(offset);
+        int openIndex = OPENERS.indexOf(bracket);
+        boolean forward = openIndex >= 0;
+        char partner = forward ? CLOSERS.charAt(openIndex) : OPENERS.charAt(CLOSERS.indexOf(bracket));
+        int step = forward ? 1 : -1;
+        int depth = 0;
+        int limit = Math.min(BRACKET_SCAN_LIMIT, buffer.length());
+        for (int i = 0, at = offset; i < limit; i++, at += step) {
+            if (at < 0 || at >= buffer.length()) return -1;
+            char c = buffer.document().charAt(at);
+            if (c == bracket) depth++;
+            else if (c == partner && --depth == 0) return at;
+        }
+        return -1;
+    }
+
+    private static final int BRACKET_SCAN_LIMIT = 16 * 1024;
+
+    // ── Find and replace ────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Finds every occurrence and publishes them under {@code ::highlight(search)}.
+     *
+     * <p>Whole-document rather than viewport-bounded, unlike syntax highlighting, and for a reason: the
+     * match <em>count</em> is the answer the user wants, and "3 of 47" cannot be computed from what is on
+     * screen. The ranges themselves are still only rendered for realised rows.</p>
+     *
+     * @return how many matches there are
+     */
+    public int find(String query, boolean caseSensitive) {
+        searchMatches.clear();
+        currentMatch = -1;
+        lastQuery = query == null ? "" : query;
+        lastQueryCaseSensitive = caseSensitive;
+        if (lastQuery.isEmpty()) {
+            highlightsDirty = true;
+            return 0;
+        }
+
+        String haystack = buffer.toString();
+        String needle = lastQuery;
+        if (!caseSensitive) {
+            haystack = haystack.toLowerCase(java.util.Locale.ROOT);
+            needle = needle.toLowerCase(java.util.Locale.ROOT);
+        }
+        int at = haystack.indexOf(needle);
+        while (at >= 0) {
+            searchMatches.add(TextRange.of(at, at + needle.length()));
+            // Advance by one, not by the match length: overlapping matches of "aa" in "aaa" are two hits,
+            // which is what every editor reports.
+            at = haystack.indexOf(needle, at + 1);
+        }
+        highlightsDirty = true;
+        return searchMatches.size();
+    }
+
+    public int matchCount() {
+        return searchMatches.size();
+    }
+
+    /** Which match is selected, 1-based for display, or 0 when none is. */
+    public int currentMatchNumber() {
+        return currentMatch < 0 ? 0 : currentMatch + 1;
+    }
+
+    /** Selects the next match after the caret, wrapping. */
+    public boolean findNext() {
+        if (searchMatches.isEmpty()) return false;
+        int caret = getCaret();
+        int next = 0;
+        for (int i = 0; i < searchMatches.size(); i++) {
+            if (searchMatches.get(i).start() > caret) {
+                next = i;
+                break;
+            }
+            next = (i == searchMatches.size() - 1) ? 0 : next;
+        }
+        return selectMatch(next);
+    }
+
+    /** Selects the previous match before the caret, wrapping. */
+    public boolean findPrevious() {
+        if (searchMatches.isEmpty()) return false;
+        int caret = getSelectionStart();
+        int previous = searchMatches.size() - 1;
+        for (int i = searchMatches.size() - 1; i >= 0; i--) {
+            if (searchMatches.get(i).start() < caret) {
+                previous = i;
+                break;
+            }
+        }
+        return selectMatch(previous);
+    }
+
+    private boolean selectMatch(int index) {
+        if (index < 0 || index >= searchMatches.size()) return false;
+        currentMatch = index;
+        TextRange match = searchMatches.get(index);
+        setSelection(match.start(), match.end());
+        ensureCaretVisible();
+        return true;
+    }
+
+    /** Replaces the selected match and finds the next. */
+    public boolean replaceCurrent(String replacement) {
+        if (currentMatch < 0 || currentMatch >= searchMatches.size()) return false;
+        TextRange match = searchMatches.get(currentMatch);
+        buffer.replace(match.start(), match.end(), replacement == null ? "" : replacement);
+        buffer.breakUndoCoalescing();
+        find(lastQuery, lastQueryCaseSensitive);
+        return true;
+    }
+
+    /**
+     * Replaces every match as <b>one</b> edit.
+     *
+     * <p>One {@link ChangeSet} rather than a loop of replacements: a loop would invalidate every later
+     * offset after the first, and would put each replacement on the undo stack separately — so undoing a
+     * replace-all would take one press per match.</p>
+     *
+     * @return how many were replaced
+     */
+    public int replaceAll(String replacement) {
+        if (searchMatches.isEmpty()) return 0;
+        String text = replacement == null ? "" : replacement;
+        List<Change> changes = new ArrayList<>(searchMatches.size());
+        for (TextRange match : searchMatches) {
+            changes.add(new Change(match.start(), match.end(), text));
+        }
+        int replaced = changes.size();
+        ChangeSet edit = ChangeSet.of(buffer.length(), changes);
+        buffer.edit(edit);
+        buffer.breakUndoCoalescing();
+        selections.mapThrough(edit).collapseEachToHead();
+        find(lastQuery, lastQueryCaseSensitive);
+        return replaced;
+    }
+
+    /** Clips document-relative ranges to one line and rebases them onto it. */
+    private static void addDocumentRanges(Map<String, List<TextRange>> byName, String name,
+                                          List<TextRange> ranges, int lineStart, int lineEnd) {
+        for (TextRange range : ranges) {
+            int start = Math.max(range.start(), lineStart);
+            int end = Math.min(range.end(), lineEnd);
+            if (end <= start) continue;
+            byName.computeIfAbsent(name, key -> new ArrayList<>())
+                    .add(TextRange.of(start - lineStart, end - lineStart));
+        }
+    }
+
+    private static UIText textOf(UIElement line) {
+        return (UIText) line.getChildren().get(0);
+    }
+
+    /**
+     * How wide the gutter needs to be for the largest line number it will show.
+     *
+     * <p>Sized from the <b>digit count of the last line</b> rather than from the widest number currently
+     * on screen, so the text does not shift sideways as you scroll past line 99 into line 100 — which is
+     * the kind of thing that reads as the editor being unstable rather than as a gutter resizing.</p>
+     */
+    private float measureGutter() {
+        if (!gutterVisible) return 0f;
+        int digits = Math.max(2, String.valueOf(Math.max(1, buffer.lineCount())).length());
+        var general = getStyle().getGeneralGroup();
+        float digitWidth = CgTextLayout.of("0", resolveFamily()).build().totalWidth();
+        return digits * digitWidth + Math.max(4f, general.fontSize() * 0.75f);
     }
 
     /** The vertical equivalent, for the same reason. */
@@ -719,7 +1324,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private float textHeight = -1f;
 
     private void ensureCaretVisible() {
-        TextPoint point = buffer.offsetToPoint(caret);
+        TextPoint point = buffer.offsetToPoint(getCaret());
         float height = lineHeight();
         float top = point.row() * height;
         if (top < getScrollTop()) setScrollTop(top);
@@ -777,6 +1382,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         float height = lineHeight();
         int count = buffer.lineCount();
+        // Before anything is placed: the gutter's width moves textOriginX, so a change here has to be
+        // known before rows, carets and bands are positioned or they land a gutter-width out for a frame.
+        float wantedGutter = measureGutter();
+        if (Math.abs(wantedGutter - gutterWidth) > 0.5f) {
+            gutterWidth = wantedGutter;
+            firstRealised = -1;
+            lastRealised = -1;
+        }
         int first = Math.max(0, (int) (getScrollTop() / height) - OVERSCAN);
         float viewport = getClientHeight();
         int last = viewport <= 0f
@@ -796,9 +1409,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
             firstRealised = first;
             lastRealised = last;
+            highlightsDirty = true;
             onWindowChanged.emit();
         }
         syncLineFonts();
+        refreshHighlights(first, last);
+        layOutGutter(first, last);
+        layOutCurrentLine();
         layOutCaretAndSelection(first, last);
     }
 
@@ -855,6 +1472,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     private void recycleLine(UIElement line) {
+        // A pooled line reused for a different row would otherwise keep the old row's highlights, which
+        // is worse than none: the ranges are offsets into a string that has been replaced.
+        textOf(line).highlights().clear();
         removeInternalChild(line);
         linePool.addLast(line);
     }
@@ -870,60 +1490,156 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private void layOutCaretAndSelection(int firstRow, int lastRow) {
         if (lastRow < firstRow) return; // nothing realised yet; updateWindow will call again
+
+        int caretsUsed = 0;
+        int bandsUsed = 0;
+        for (Selection selection : selections.all()) {
+            caretsUsed = placeCaret(selection, caretsUsed);
+            bandsUsed = placeBands(selection, firstRow, lastRow, bandsUsed);
+        }
+        // Anything left over from a larger set of carets is collapsed rather than removed: these are
+        // pooled, and a multi-caret edit that shrinks back to one would otherwise churn elements every
+        // keystroke.
+        for (int i = caretsUsed; i < caretElements.size(); i++) hide(caretElements.get(i));
+        for (int i = bandsUsed; i < selectionBands.size(); i++) hide(selectionBands.get(i));
+    }
+
+    /**
+     * Places one caret.
+     *
+     * <p><b>The caret's right edge sits on the character boundary</b> — it does not start there, and it
+     * does not straddle it. A boundary in a bitmap font is where the <em>next</em> glyph's ink begins: the
+     * advance is ink plus trailing space and there is no left side bearing, so the whole of the clear gap
+     * lies to the left of it. Drawing rightwards covers the next glyph's first ink column, and centring is
+     * worse still — at uiScale 2 a 1px caret is two physical pixels and a Minecraft {@code i} is barely
+     * wider than that, so a centred caret buries the letter.</p>
+     */
+    private int placeCaret(Selection selection, int index) {
+        TextPoint point = buffer.offsetToPoint(selection.head());
         float height = lineHeight();
-        TextPoint point = buffer.offsetToPoint(caret);
-        float caretX = textOriginX() + widthOf(point.row(), point.column());
         final float ink = textHeight();
-        final float caretTop = textOriginY() + point.row() * height + (height - ink) / 2f;
-        // THE CARET'S RIGHT EDGE SITS ON THE BOUNDARY -- it does not start there, and it does not
-        // straddle it.
-        //
-        // A character boundary in a bitmap font is where the NEXT glyph's ink begins: the advance is ink
-        // plus trailing space, and there is no left side bearing. So the whole of the clear gap lies to
-        // the LEFT of the boundary, and it is one logical pixel wide.
-        //
-        // Drawing rightwards from the boundary covers the next glyph's first ink column. Centring on it
-        // is worse, not better: at uiScale 2 a 1px caret is two physical pixels and a Minecraft 'i' is
-        // barely wider than that, so a centred caret buries the whole letter -- which is exactly what
-        // the first attempt did. Right-aligning to the boundary puts the caret in the gap and cannot
-        // overlap the glyph that follows it at any scale.
         final float caretWidth = Math.max(1f, getStyle().getGeneralGroup().caretWidth());
-        final float caretLeft = caretX - caretWidth;
-        StyleGroup.importantPipeline(caretElement.getStyle().getLayoutGroup(),
+        final float left = textOriginX() + widthOf(point.row(), point.column()) - caretWidth;
+        final float top = textOriginY() + point.row() * height + (height - ink) / 2f;
+
+        UIElement caret = caretAt(index);
+        StyleGroup.importantPipeline(caret.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(caretLeft).top(caretTop).width(caretWidth).height(ink));
+                        .left(left).top(top).width(caretWidth).height(ink));
+        return index + 1;
+    }
 
+    /** Places the highlight bands for one selection, one per visible row it covers. */
+    private int placeBands(Selection selection, int firstRow, int lastRow, int index) {
+        if (selection.isEmpty()) return index;
+        float height = lineHeight();
+        TextPoint start = buffer.offsetToPoint(selection.start());
+        TextPoint end = buffer.offsetToPoint(selection.end());
+
+        for (int row = Math.max(firstRow, start.row()); row <= Math.min(lastRow, end.row()); row++) {
+            int lineLength = buffer.line(row).length();
+            int from = row == start.row() ? start.column() : 0;
+            int to = row == end.row() ? end.column() : lineLength;
+            float left = textOriginX() + widthOf(row, from);
+            // A selected line break shows as a sliver past the end of the text, which is how every editor
+            // signals "the newline is in the selection too".
+            float right = textOriginX() + widthOf(row, to) + (row < end.row() ? height * 0.4f : 0f);
+
+            final float bandInk = textHeight();
+            final float top = textOriginY() + row * height + (height - bandInk) / 2f;
+            final float bandLeft = left;
+            final float width = Math.max(1f, right - left);
+            StyleGroup.defaultPipeline(bandAt(index++).getStyle().getLayoutGroup(),
+                    l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                            .left(bandLeft).top(top).width(width).height(bandInk));
+        }
+        return index;
+    }
+
+    /** Places the gutter box and one number per visible row. */
+    private void layOutGutter(int firstRow, int lastRow) {
+        if (!gutterVisible) {
+            hide(gutter);
+            for (UIElement number : lineNumbers) hide(number);
+            return;
+        }
+        final float width = gutterWidth;
+        final float left = getTaffyLayout().padding().left;
+        final float viewport = Math.max(0f, getClientHeight());
+        StyleGroup.defaultPipeline(gutter.getStyle().getLayoutGroup(),
+                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                        .left(left).top(0f).width(width).height(viewport));
+
+        float height = lineHeight();
         int used = 0;
-        if (hasSelection()) {
-            TextPoint start = buffer.offsetToPoint(getSelectionStart());
-            TextPoint end = buffer.offsetToPoint(getSelectionEnd());
-            for (int row = Math.max(firstRow, start.row()); row <= Math.min(lastRow, end.row()); row++) {
-                int lineLength = buffer.line(row).length();
-                int from = row == start.row() ? start.column() : 0;
-                int to = row == end.row() ? end.column() : lineLength;
-                float left = textOriginX() + widthOf(row, from);
-                // A selected line break shows as a sliver past the end of the text, which is how every
-                // editor signals "the newline is in the selection too".
-                float right = textOriginX() + widthOf(row, to) + (row < end.row() ? height * 0.4f : 0f);
+        for (int row = Math.max(0, firstRow); row <= Math.min(lastRow, buffer.lineCount() - 1); row++) {
+            UIElement number = numberAt(used++);
+            ((UIText) number.getChildren().get(0)).setText(String.valueOf(row + 1));
+            StyleGroup.importantPipeline(number.getChildren().get(0).getStyle().getGeneralGroup(),
+                    g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
+                            .fontFamily(getStyle().getGeneralGroup().fontFamily()));
+            // Scroll-exempt, so the offset has to be subtracted by hand -- see the field's note.
+            final float top = textOriginY() + row * height - getScrollTop();
+            StyleGroup.defaultPipeline(number.getStyle().getLayoutGroup(),
+                    l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                            .left(0f).top(top).width(width).height(height));
+        }
+        for (int i = used; i < lineNumbers.size(); i++) hide(lineNumbers.get(i));
+    }
 
-                UIElement band = bandAt(used++);
-                final float bandInk = textHeight();
-                final float top = textOriginY() + row * height + (height - bandInk) / 2f;
-                final float width = Math.max(1f, right - left);
-                StyleGroup.defaultPipeline(band.getStyle().getLayoutGroup(),
-                        l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                                .left(left).top(top).width(width).height(bandInk));
-            }
+    /**
+     * Places the current-line band behind the primary caret's row.
+     *
+     * <p>Hidden while there is a selection, which is what every editor does: two overlapping highlights
+     * on the same row read as a rendering fault rather than as two pieces of information.</p>
+     */
+    private void layOutCurrentLine() {
+        if (selections.hasSelection() || !isFocused()) {
+            hide(currentLine);
+            return;
         }
-        for (int i = used; i < selectionBands.size(); i++) {
-            StyleGroup.defaultPipeline(selectionBands.get(i).getStyle().getLayoutGroup(),
-                    l -> l.width(0f).height(0f));
+        float height = lineHeight();
+        int row = buffer.offsetToPoint(getCaret()).row();
+        final float top = textOriginY() + row * height;
+        final float left = textOriginX();
+        final float width = Math.max(1f, getClientWidth() - gutterWidth);
+        StyleGroup.defaultPipeline(currentLine.getStyle().getLayoutGroup(),
+                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                        .left(left).top(top).width(width).height(height));
+    }
+
+    private UIElement numberAt(int index) {
+        while (lineNumbers.size() <= index) {
+            UIElement number = new UIElement();
+            number.addClass(LINE_NUMBER_CLASS);
+            number.setHitTest(false);
+            number.markAsInternal();
+            number.addChild(new UIText(""));
+            gutter.addInternalChild(number);
+            lineNumbers.add(number);
         }
+        return lineNumbers.get(index);
+    }
+
+    private void hide(UIElement element) {
+        StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(), l -> l.width(0f).height(0f));
     }
 
     private float widthOf(int row, int column) {
         float[] widths = prefixWidths(row);
         return widths[Math.max(0, Math.min(widths.length - 1, column))];
+    }
+
+    private UIElement caretAt(int index) {
+        while (caretElements.size() <= index) {
+            UIElement caret = new UIElement();
+            caret.addClass(CARET_CLASS);
+            caret.setHitTest(false);
+            caret.markAsInternal();
+            addInternalChild(caret);
+            caretElements.add(caret);
+        }
+        return caretElements.get(index);
     }
 
     private UIElement bandAt(int index) {

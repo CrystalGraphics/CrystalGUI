@@ -977,10 +977,41 @@ construction; sharing it would mean generalising every method on it while it sta
 
 </details>
 
-### 6.1.7 Code editor · `PLANNED` (2026-07-31)
+### 6.1.7 Code editor · `DONE` (2026-07-31), except the GLSL grammar
 
 6.1.6 plus a gutter, line numbers, current-line highlight, syntax highlighting (6.1.1), bracket matching,
 indent handling, and find/replace. The widget must not know what any particular language is.
+
+> **Shipped.** `VariableHeightStrategy`; `Selection`/`SelectionModel` and multi-cursor throughout
+> `TextEditor`; gutter, line numbers and current-line highlight; the `SyntaxTokenizer` SPI with
+> `KeywordTokenizer` (Java + GLSL); bracket matching; indent, outdent and auto-indent; find/replace; and
+> the `syntax-treesitter` module running the real Java grammar against the local fork. 195 tests across
+> the item, all green.
+>
+> **What the plan got right, and what it did not anticipate:**
+>
+> - **A `HighlightRegistry` belongs to a `UIText`, not to a document.** The plan assumed capture names
+>   could be published once per document; they cannot. Ranges are offsets into *one element's* string, so
+>   document-relative tokens are clipped to each line and rebased onto it. That is also what makes a block
+>   comment work: one token, distributed as one clipped range per line it crosses.
+> - **A pooled line must have its highlights cleared on recycle.** A line reused for another row keeps
+>   ranges that are offsets into a string that no longer exists — worse than no highlighting.
+> - **The lexer must start scanning at a line boundary, and look back for an open block comment.** A
+>   viewport-bounded query starting wherever the first visible row happens to begin would read the inside
+>   of a string literal as code. Scrolling into the middle of a long comment is the case that proves it.
+> - **`setSelection` had an inlined copy of the post-change work**, so bracket matching silently never ran
+>   from it. Collapsed into one path. Two code paths doing "the same thing" is how one of them rots.
+> - **The tree-sitter query resource path needs its `assets/` prefix**, and the failure mode was a *skipped*
+>   test suite rather than a red one — the `Assume` that makes a missing native honest also hides a plain
+>   bug behind it. Worth knowing that the two look identical from the outside.
+>
+> **Not delivered: the GLSL grammar (step 8).** `tree-sitter-glsl` is not in the fork, and adding it means
+> adding a subproject there and cross-compiling its native with Zig — a change to a different repository
+> and a toolchain this session cannot verify. `KeywordTokenizer.glsl()` covers GLSL in the meantime, which
+> is the fallback path working as designed rather than a stub.
+>
+> **Also still absent: soft wrap.** `VariableHeightStrategy` is the piece it was blocked on and it is now
+> here, but the editor does not yet wrap — that is 6.1.6 scope, unblocked rather than done.
 
 #### The two gates, decided
 
@@ -1085,7 +1116,8 @@ rather than writing a second time in the other direction. Getting it wrong is in
    range; query cursors pooled.
 6. Bracket matching and indent handling from the tree.
 7. Find/replace.
-8. GLSL grammar added to the fork.
+8. GLSL grammar added to the fork. **Outstanding** — needs a subproject in the fork and a Zig
+   cross-compile of its native, which is a change to a different repository.
 
 #### Risk
 
@@ -1682,25 +1714,84 @@ styled by a stylesheet the way everything else in this engine can.
 
 </details>
 
-### 6.2.4 Selection, marquee, and graph editing · `TODO`
+### 6.2.4 Selection, marquee, and graph editing · `TODO` · **next**
 
-Box-select, multi-select, move-many, delete, duplicate, and connection re-routing. Sits on 6.1.9's command
-stack — this is where undo stops being optional.
+Box-select, multi-select, move-many and delete, all recording into 6.1.9's stack. **Researched
+2026-07-31** against Unity Shader Graph's shortcut reference, Blender's node editor, Unreal's Blueprint
+editor and Figma, because every one of these behaviours is a convention rather than a derivable answer,
+and getting a convention wrong is the kind of thing a user feels immediately and cannot name.
 
-- **The marquee is a screen-space rectangle over a world-space test.** Drawn in the viewport (so it stays
-  a crisp 1px at any zoom), but the hit test converts its two corners to world and asks each node's
-  `WorldRect`. Drawing it in the plane instead would scale the dashes with the zoom.
-- **Left-drag on empty canvas is already reserved for this** — 6.2.2 deliberately refused to spend it on
-  panning, which is the whole reason that decision is written down there.
-- **Selection is a model, not a flag per node**: a set plus a signal, so an inspector panel and the
-  canvas can both read it without either owning it.
-- **Every mutation is a command** — `AddNode`, `DeleteSelection`, `MoveNodes`, `Connect`, `Disconnect`.
-  A drag of forty nodes is *one* `MoveNodes` command coalesced at drag end, not forty, or undo becomes
-  useless in exactly the situation it matters.
-- ~~**Blocked on 6.1.9's implementation**~~ — **unblocked 2026-07-31**: `core/undo/` now exists
-  (`Edit`, `CompositeEdit`, `UndoStack`), built out of this track because 6.1.6/6.1.7 are heavy. A
-  forty-node drag is one `beginTransaction`/`endTransaction` pair, and a rewire is the disconnect and
-  the connect inside one.
+#### What the research settled
+
+**1. Selection is not undoable — and this is a real disagreement, not an obvious call.** Blender records
+selection in its undo history, and is criticised for it in almost the same words every time: it is
+*"counter to basically all other applications"*. Figma carries an open request for a *preference*. Silo
+splits the difference by putting selection undo on its own shortcut (`Ctrl+Shift+Z`). The case in favour
+is real and worth stating: losing a laborious multi-selection to one misclick is genuinely painful.
+
+We follow the majority — selection is view state, exactly as 6.1.9's boundary already says — and answer
+the real complaint the way VS Code does instead: **undoing an edit restores the selection that edit
+applied to**, because the edit knows what it touched. That gives back the case people actually lose
+without putting a click in the history.
+
+**2. Marquee modifiers are settled across the industry**: plain drag replaces the selection,
+`Shift+drag` adds (toggles), `Alt+drag` subtracts. Same in Blender, Unreal and Figma.
+
+**3. A node is selected by being *touched*, not by being enclosed.** No vendor documents this, so it is
+a decision: at any zoom where a node is larger than the viewport, an enclose-only rule makes it
+unselectable by marquee. CAD's direction-dependent convention (left-to-right encloses, right-to-left
+crosses) is rejected — it is powerful, unguessable, and belongs to a domain where precision beats
+discoverability.
+
+**4. Unity's shortcut set is worth matching**, since it is the reference for the whole look: `Ctrl+D`
+duplicate, `Ctrl+C`/`X`/`V`, `Delete` removes, **`F` frames the selection**, **`A` frames everything**,
+`Space` opens the create-node menu, `Ctrl+P` toggles collapsed. Two of those land free — `F`/`A` are
+`fitToContent` over a rect we already compute, and `Ctrl+P` is the collapse 6.2.3 shipped.
+
+**5. Duplicated nodes become the new selection.** Unity's own issue tracker files the opposite as a bug,
+and Figma and Illustrator agree. The copy is offset so it does not hide the original.
+
+#### The finding that changes the scope: duplicate cannot be built yet
+
+**A `GraphNode` is a widget the caller built.** It has whatever ports, controls and preview the caller
+gave it, in whatever arrangement — so the view cannot clone one. There is no general "copy this element
+tree" in this engine and there should not be: a control inside a node may hold a binding, a listener, or
+a reference to something outside the graph entirely.
+
+Duplicate therefore needs either the **document model** (6.2.5 — copy the data, rebuild the widget) or
+the **node library** (6.2.6 — a registered factory per node type). Both are a mechanism 6.2.4 does not
+have, so **duplicate, copy and paste are deferred**, and 6.2.4 ships selection, marquee, move-many and
+delete. That is the honest split, and it is better found here than three hours into an implementation
+that had assumed a clone.
+
+Delete is unaffected: removing a node needs no factory, only its wires unwound in one transaction — and
+`removeNode` already does exactly that.
+
+#### Deliverables
+
+| Piece | Notes |
+|---|---|
+| `GraphSelection` | An insertion-ordered set plus a signal, owned by `GraphView`. Replaces the boolean-per-node placeholder 6.2.3 left, which was explicitly the smallest thing that worked |
+| Marquee | A `__marquee__` element in the **viewport** (screen space, so it stays a crisp 1px at any zoom) over a **world-space** hit test against each node's `WorldRect` |
+| Move-many | Dragging any selected node moves the whole selection, as one transaction. Dragging an *unselected* node selects it first — every editor does this, and the alternative is a drag that appears to do nothing |
+| Delete | `graph.delete`, on `Delete` and `Backspace`. Selected nodes, their wires, and any selected wires, in one transaction |
+| Select all / none | `graph.selectAll` on `Ctrl+A`; `Escape` clears |
+| Frame | `graph.frameSelection` on `F`, `graph.frameAll` on `A` — `fitToContent` over the selection's union |
+| Wire selection | Analytic picking — distance to the quadratic, the CPU twin of `sdf_bezier`. The layer is `hitTest(false)`, so the canvas asks it to pick before starting a marquee |
+
+#### Traps, named now
+
+1. **A press on a node must not clear the selection it is part of.** Clicking one of five selected nodes
+   to drag them all is the single most common gesture in a graph editor, and the naive "press selects
+   only this" implementation breaks it. The rule everyone uses: on *press*, select-only if the node is
+   not already selected; on *release without a drag*, select-only regardless.
+2. **The marquee must not start on a node** — 6.2.2 gave the canvas the left-drag, and the node claims
+   it in the capture phase, so the ordering already works. It has to keep working.
+3. **Selection survives an undo, and must not be reconstructed from stale elements.** A deleted node's
+   widget is out of the tree; the selection has to drop it or it pins a detached subtree and re-adds it
+   on the next move.
+4. **Escape is already spoken for** by a live drag and the close-watcher stack. Clearing the selection
+   is the lowest-priority claim on it and must not pre-empt either.
 
 ### 6.2.5 Graph document model and serialization · `TODO`
 
@@ -1766,7 +1857,7 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
 ```
 
 **Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → ~~6.1.6~~ →
-**6.1.7 (next)** → 6.1.8, then 6.1.10-12, then the 6.2 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done,
+~~6.1.7~~ → **6.1.8 (next)**, then 6.1.10-12, then the 6.2 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done,
 see 6.1.9; its implementation lands with 6.1.6.
 
 ~~6.2.1 is the one item that can be pulled forward at any time~~ — and it was, along with **6.2.2**, which
@@ -1784,7 +1875,7 @@ item that can run in parallel with 6.1's remaining work.
 | ~~Are `CgShapedParagraph`'s style spans drivable without backend work?~~ | ~~6.1.1~~ | **Answered: yes, entirely.** The backend was already complete; 6.1.1 was a translation layer. |
 | What *is* the filesystem in a Minecraft context — resource packs, world data, server storage? | 6.1.10 | Shape the SPI around what the client can be handed, not around POSIX. |
 | ~~Do widgets mutate models directly, or emit commands?~~ | ~~6.1.9~~ | **Answered: both, split on document vs view state.** See 6.1.9. Settled while three widgets had chosen rather than a dozen, which is the whole reason it was the gate. |
-| Fixed-height rows only for the first virtualised pass? | 6.1.3, **and now 6.1.7** | Still deferred. 6.1.6 shipped without soft wrap for exactly this reason, so the wrapped code lines in 6.1.7 are what will force it — it is no longer a question that can be deferred again. |
+| ~~Fixed-height rows only for the first virtualised pass?~~ | ~~6.1.3, 6.1.7~~ | **Answered: `VariableHeightStrategy` shipped with 6.1.7 step 1.** Soft wrap itself is still not implemented in the editor — unblocked rather than done. |
 | ~~Does the code editor need multi-cursor?~~ | ~~6.1.7~~ | **Answered: yes, designed in from the start.** `TextEditor` holds caret/anchor as two ints and every movement method touches them, so retrofitting means rewriting all of them; `ChangeSet` already models a multi-cursor edit exactly. |
 | ~~What should a node look like?~~ | ~~6.2.3~~ | **Answered: Unity Shader Graph's, literally.** Anatomy, the type→colour palette, and four behaviours the screenshots could not show are all recorded in 6.2.3. |
 | How does a wire stay visible when zoomed out? | 6.2.3 | A pose-scaled stroke is sub-pixel at low zoom. Clamp in Java against the canvas's zoom, not in the shader. |

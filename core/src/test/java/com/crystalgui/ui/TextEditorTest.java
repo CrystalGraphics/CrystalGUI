@@ -8,6 +8,7 @@ import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Before;
 import com.crystalgui.text.TextPoint;
+import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.editor.TextEditor;
 import com.crystalgui.ui.input.UIInputHandler;
 import org.junit.Test;
@@ -329,6 +330,426 @@ public class TextEditorTest extends UiTestBase {
         throw new AssertionError("no line realised");
     }
 
+    // ── Indentation ──────────────────────────────────────────────
+
+    /**
+     * <b>Enter carries the current line's indentation, per caret.</b> With several carets on differently
+     * indented lines a single shared indent would be wrong for all but one of them, which is why the
+     * indent is computed inside the per-caret loop rather than once.
+     */
+    @Test
+    public void enterCarriesTheIndentation() {
+        build("    indented");
+        editor.setCaret(editor.getText().length());
+
+        key(CgKeyCodes.KEY_RETURN);
+
+        assertEquals("    indented" + NL + "    ", editor.getText());
+    }
+
+    @Test
+    public void enterAfterAnOpeningBraceAddsALevel() {
+        build("  if (x) {");
+        editor.setCaret(editor.getText().length());
+
+        key(CgKeyCodes.KEY_RETURN);
+
+        assertEquals("  if (x) {" + NL + "      ", editor.getText());
+    }
+
+    @Test
+    public void tabIndentsEveryLineOfASelection() {
+        build("one" + NL + "two" + NL + "three");
+        editor.setSelection(0, editor.getText().length());
+
+        key(CgKeyCodes.KEY_TAB);
+
+        assertEquals("    one" + NL + "    two" + NL + "    three", editor.getText());
+    }
+
+    /** Indenting must leave the block selected, or pressing Tab again indents one line instead. */
+    @Test
+    public void indentingKeepsTheBlockSelected() {
+        build("one" + NL + "two");
+        editor.setSelection(0, editor.getText().length());
+
+        key(CgKeyCodes.KEY_TAB);
+        assertTrue("the block is still selected", editor.hasSelection());
+        key(CgKeyCodes.KEY_TAB);
+
+        assertEquals("        one" + NL + "        two", editor.getText());
+    }
+
+    @Test
+    public void shiftTabOutdents() {
+        build("        one" + NL + "    two");
+        editor.setSelection(0, editor.getText().length());
+
+        key(CgKeyCodes.KEY_TAB, CgModifiers.SHIFT);
+
+        assertEquals("    one" + NL + "two", editor.getText());
+    }
+
+    @Test
+    public void outdentingAnUnindentedLineDoesNothing() {
+        build("one");
+        editor.setSelection(0, 3);
+        key(CgKeyCodes.KEY_TAB, CgModifiers.SHIFT);
+        assertEquals("one", editor.getText());
+    }
+
+    // ── Bracket matching ─────────────────────────────────────────
+
+    @Test
+    public void theBracketUnderTheCaretFindsItsPartner() {
+        build("if (a + b) {}");
+        editor.setCaret(3);   // on the '('
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertTrue("the pair should be highlighted", lineHasHighlight(0, "bracket"));
+    }
+
+    /** Looking at the character before the caret is what makes it work as you type a closing brace. */
+    @Test
+    public void aJustTypedClosingBracketMatches() {
+        build("(a)");
+        editor.setCaret(3);   // just after the ')'
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertTrue(lineHasHighlight(0, "bracket"));
+    }
+
+    @Test
+    public void anUnmatchedBracketHighlightsNothing() {
+        build("(a");
+        editor.setCaret(1);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertFalse(lineHasHighlight(0, "bracket"));
+    }
+
+    // ── Find and replace ─────────────────────────────────────────
+
+    @Test
+    public void findReportsEveryMatch() {
+        build("cat dog cat bird cat");
+        assertEquals(3, editor.find("cat", true));
+        assertEquals(3, editor.matchCount());
+    }
+
+    @Test
+    public void findIsCaseInsensitiveWhenAsked() {
+        build("Cat cat CAT");
+        assertEquals(1, editor.find("cat", true));
+        assertEquals(3, editor.find("cat", false));
+    }
+
+    /** Overlapping hits are separate hits — "aa" occurs twice in "aaa", as every editor reports. */
+    @Test
+    public void overlappingMatchesAreCountedSeparately() {
+        build("aaa");
+        assertEquals(2, editor.find("aa", true));
+    }
+
+    @Test
+    public void findNextWalksTheMatchesAndWraps() {
+        build("cat dog cat");
+        editor.find("cat", true);
+        editor.setCaret(0);
+
+        assertTrue(editor.findNext());
+        assertEquals(8, editor.getSelectionStart());
+        assertTrue("and wraps back to the first", editor.findNext());
+        assertEquals(0, editor.getSelectionStart());
+    }
+
+    @Test
+    public void replaceCurrentReplacesTheSelectedMatch() {
+        build("cat dog cat");
+        editor.find("cat", true);
+        editor.setCaret(0);
+        editor.findNext();
+
+        assertTrue(editor.replaceCurrent("fish"));
+        assertEquals("cat dog fish", editor.getText());
+    }
+
+    /**
+     * <b>Replace-all is ONE edit.</b> A loop of replacements would invalidate every later offset after
+     * the first, and would take one undo press per match to reverse.
+     */
+    @Test
+    public void replaceAllIsASingleUndoStep() {
+        build("cat dog cat bird cat");
+        editor.find("cat", true);
+
+        assertEquals(3, editor.replaceAll("fish"));
+        assertEquals("fish dog fish bird fish", editor.getText());
+
+        key(CgKeyCodes.KEY_Z, CgModifiers.CTRL);
+        assertEquals("one undo reverses the lot", "cat dog cat bird cat", editor.getText());
+    }
+
+    @Test
+    public void replacingWithALongerStringKeepsLaterMatchesCorrect() {
+        build("a a a");
+        editor.find("a", true);
+        editor.replaceAll("xyz");
+        assertEquals("xyz xyz xyz", editor.getText());
+    }
+
+    @Test
+    public void searchHitsAreHighlighted() {
+        build("find me here");
+        editor.find("me", true);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertTrue(lineHasHighlight(0, "search"));
+    }
+
+    // ── Syntax highlighting ──────────────────────────────────────
+
+    @Test
+    public void aTokenizerPublishesNamedHighlights() {
+        build("int x = 1; // note");
+        editor.setTokenizer(com.crystalgui.text.syntax.KeywordTokenizer.java());
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertTrue("types are captured", lineHasHighlight(0, "type"));
+        assertTrue("and comments", lineHasHighlight(0, "comment"));
+    }
+
+    /**
+     * <b>A block comment spanning several lines highlights each of them.</b> A registry belongs to one
+     * text element and its ranges are offsets into that element's string, so a document-relative token
+     * has to be clipped and rebased per line — otherwise it reads as running off the end of every line
+     * but the last.
+     */
+    @Test
+    public void aMultiLineTokenIsClippedOntoEachLine() {
+        build("/* one" + NL + "two" + NL + "three */");
+        editor.setTokenizer(com.crystalgui.text.syntax.KeywordTokenizer.java());
+        settle();
+        editor.updateWindow();
+        settle();
+
+        for (int row = 0; row < 3; row++) {
+            assertTrue("row " + row + " is inside the comment", lineHasHighlight(row, "comment"));
+        }
+    }
+
+    /** A pooled line reused for another row must not keep the old row's ranges. */
+    @Test
+    public void recyclingALineClearsItsHighlights() {
+        StringBuilder document = new StringBuilder("// a comment" + NL);
+        for (int i = 0; i < 300; i++) document.append("plain ").append(i).append(NL);
+        build(document.toString());
+        editor.setTokenizer(com.crystalgui.text.syntax.KeywordTokenizer.java());
+        settle();
+        editor.updateWindow();
+        settle();
+        assertTrue(lineHasHighlight(0, "comment"));
+
+        editor.setScrollTop(2000f);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        for (var entry : realisedRowsOf(editor).entrySet()) {
+            UIText text = (UIText) entry.getValue().getChildren().get(0);
+            assertTrue("row " + entry.getKey() + " kept a stale comment highlight",
+                    text.highlights().get("comment").isEmpty());
+        }
+    }
+
+    private java.util.Map<Integer, UIElement> realisedRowsOf(TextEditor target) {
+        java.util.Map<Integer, UIElement> rows = new java.util.LinkedHashMap<>();
+        int index = 0;
+        for (UIElement child : target.getChildren()) {
+            if (child.hasClass(TextEditor.LINE_CLASS)) rows.put(index++, child);
+        }
+        return rows;
+    }
+
+    /** Whether the realised line showing {@code row} carries any range under {@code name}. */
+    private boolean lineHasHighlight(int row, String name) {
+        String wanted = editor.buffer().line(row);
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.LINE_CLASS)) continue;
+            UIText text = (UIText) child.getChildren().get(0);
+            if (!text.getText().equals(wanted)) continue;
+            if (!text.highlights().get(name).isEmpty()) return true;
+        }
+        return false;
+    }
+
+    // ── Gutter and current line ──────────────────────────────────
+
+    @Test
+    public void theGutterNumbersTheVisibleLines() {
+        build("one" + NL + "two" + NL + "three");
+        settle();
+        editor.updateWindow();
+        settle();
+
+        java.util.List<String> numbers = new java.util.ArrayList<>();
+        collectNumbers(editor, numbers);
+        assertEquals(java.util.List.of("1", "2", "3"), numbers);
+    }
+
+    /**
+     * <b>The gutter is sized from the digit count of the LAST line, not the widest number on screen.</b>
+     * Sized from what is visible, the text would shift sideways as you scrolled past line 99 into line
+     * 100 — which reads as the editor being unstable rather than as a gutter resizing.
+     */
+    @Test
+    public void theGutterIsWideEnoughForTheLastLineNotJustTheVisibleOnes() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 1000; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        settle();
+        editor.updateWindow();
+        settle();
+
+        float atTop = editor.gutterWidth();
+        editor.setScrollTop(4000f);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertEquals("the gutter must not resize as you scroll", atTop, editor.gutterWidth(), 0.5f);
+        assertTrue("and it must be wide enough for four digits", atTop > 0f);
+    }
+
+    @Test
+    public void hidingTheGutterGivesTheTextItsWidthBack() {
+        build("one" + NL + "two");
+        settle();
+        editor.updateWindow();
+        settle();
+        assertTrue(editor.gutterWidth() > 0f);
+
+        editor.setGutterVisible(false);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertEquals(0f, editor.gutterWidth(), 0.01f);
+    }
+
+    private void collectNumbers(UIElement root, java.util.List<String> out) {
+        for (UIElement child : root.getChildren()) {
+            if (child.hasClass(TextEditor.LINE_NUMBER_CLASS)) {
+                UIText label = (UIText) child.getChildren().get(0);
+                if (child.getRuntimeCache().getHeight() > 0f) out.add(label.getText());
+            }
+            collectNumbers(child, out);
+        }
+    }
+
+    // ── Multi-cursor ─────────────────────────────────────────────
+
+    /**
+     * <b>Typing at several carets is ONE edit, not one per caret.</b> Applied separately the later offsets
+     * would be invalidated by the first, and a single keystroke would take N undos to reverse. As one
+     * {@code ChangeSet} it is one edit, one undo step, and every caret is carried through it by the same
+     * mapping that carries an anchor.
+     */
+    @Test
+    public void typingAtSeveralCaretsInsertsAtAllOfThem() {
+        build("aa" + NL + "bb" + NL + "cc");
+        editor.setCaret(0);
+        editor.addCaret(3);
+        editor.addCaret(6);
+        assertEquals(3, editor.caretCount());
+
+        type("X");
+
+        assertEquals("Xaa" + NL + "Xbb" + NL + "Xcc", editor.getText());
+        assertEquals("still three carets", 3, editor.caretCount());
+    }
+
+    @Test
+    public void oneUndoReversesAMultiCaretEdit() {
+        build("aa" + NL + "bb");
+        editor.setCaret(0);
+        editor.addCaret(3);
+        type("X");
+        assertEquals("Xaa" + NL + "Xbb", editor.getText());
+
+        key(CgKeyCodes.KEY_Z, CgModifiers.CTRL);
+        assertEquals("one keystroke, one undo", "aa" + NL + "bb", editor.getText());
+    }
+
+    @Test
+    public void arrowKeysMoveEveryCaret() {
+        build("aaa" + NL + "bbb");
+        editor.setCaret(0);
+        editor.addCaret(4);
+
+        key(CgKeyCodes.KEY_RIGHT);
+
+        assertEquals(2, editor.caretCount());
+        assertEquals(1, editor.selections().all().get(0).head());
+        assertEquals(5, editor.selections().all().get(1).head());
+    }
+
+    /** Carets driven onto the same offset are one caret, or every later keystroke doubles. */
+    @Test
+    public void caretsThatCollideMerge() {
+        build("ab");
+        editor.setCaret(0);
+        editor.addCaret(1);
+
+        key(CgKeyCodes.KEY_END);
+
+        assertEquals(1, editor.caretCount());
+    }
+
+    @Test
+    public void escapeCollapsesToThePrimaryCaret() {
+        build("aa" + NL + "bb");
+        editor.setCaret(0);
+        editor.addCaret(3);
+        assertEquals(2, editor.caretCount());
+
+        key(CgKeyCodes.KEY_ESCAPE);
+
+        assertEquals(1, editor.caretCount());
+    }
+
+    @Test
+    public void backspaceAppliesAtEveryCaret() {
+        build("ab" + NL + "cd");
+        editor.setCaret(2);
+        editor.addCaret(5);
+
+        key(CgKeyCodes.KEY_BACK);
+
+        assertEquals("a" + NL + "c", editor.getText());
+    }
+
+    /** Copying several selections joins them by newline, as every editor does. */
+    @Test
+    public void copyingSeveralSelectionsJoinsThemWithNewlines() {
+        build("one two three");
+        editor.selections().setAll(java.util.List.of(
+                new com.crystalgui.text.Selection(0, 3),
+                new com.crystalgui.text.Selection(4, 7)), 0);
+
+        assertEquals("one" + NL + "two", editor.getSelectedText());
+    }
+
     // ── Caret blink ─────────────────────────────────────────────────────────────────────────────
 
     /**
@@ -507,6 +928,9 @@ public class TextEditorTest extends UiTestBase {
     @Test
     public void linesAndCaretShareTheContentBoxOrigin() {
         editor = new TextEditor("abc");
+        // The gutter is off here on purpose: this test is about the padding-versus-border origin, and a
+        // gutter would add a third term to the expectation and stop it testing the thing it is named for.
+        editor.setGutterVisible(false);
         editor.layout(l -> l.width(300).height(120).paddingLeft(10f).borderLeft(2f));
         editor.generalStyle(g -> g.fontSize(8f).lineHeight(1.25f));
         UIElement root = new UIElement().layout(l -> l.width(300).height(200));
