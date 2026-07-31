@@ -1126,7 +1126,7 @@ The native shipping story is the real one. Loader jars already bundle JNI for
 configuration across four targets, and the mc modules are not in this build today. Keeping tree-sitter in
 its own module means `core/` and the harness stay unaffected either way.
 
-### 6.1.7b Code editor — the rest of the foundations · `DONE` (2026-07-31), except view items and the keymap
+### 6.1.7b Code editor — the rest of the foundations · `DONE` (2026-07-31), except the remaining view items
 
 6.1.7 was marked done against this plan's checklist rather than against "is this an editor anyone would
 use". Audited against that question instead, and the gaps were real — one of them undercut a feature
@@ -1231,13 +1231,45 @@ spaces where two suffice.
 
 **Still deferred:** indent guides, visible whitespace, a column ruler, scroll-past-end. None started.
 
-#### H. All of it through the keymap · `TODO`
+#### H. All of it through the keymap · `DONE` (2026-07-31)
 
-Every command above registered as a `Command` against 6.1.2's registry rather than switch cases in
-`handleKey`, so they are rebindable, discoverable in the palette, and reachable from a menu. The editor
-still hard-codes its keys, which was fine for a dozen and is not for sixty. **This is the largest remaining
-item in 6.1.7b** and the reason the commands were built as `public void` methods on the widget rather than
-inlined into `handleKey` — each is already a nullary action waiting for a registration.
+`EditorCommands` — 24 commands under an `editor.` prefix, registered against **6.1.2's existing registry**
+and bound on the editor element's own `keymap()`. Shaped after `UndoCommands`, which is the established
+pattern: `register` / `bindDefaults` / `install`.
+
+> **6.1.2 had already built the whole keymap** — `KeyStroke`, `KeyChord`, `KeyBinding`, `Keymap`,
+> `KeymapResolver`, `KeymapSheet`, wired into `UIInputHandler`, with 702 lines of tests. I wrote a second
+> one in `core/keymap/` before finding it, and threw it away. §H's own text says "against 6.1.2's
+> registry" and I did not read my own plan. **The standing "do not reinvent" rule applies to this
+> repository too, and checking takes one `find`.** The existing design is also better: scope is the DOM
+> tree, so a binding is live whenever focus is inside its element, and a text field's `Mod+A` beats the
+> window's without either knowing the other exists — `when`-clause specificity obtained structurally.
+
+**Where the line falls, and why it is not arbitrary.** It is the resolver's own typing guard:
+
+| | Handled by | Why |
+|---|---|---|
+| **Modified chords** — `Mod+D`, `Alt+Up`, `Mod+Shift+K` | commands | They are *named actions*, and a non-Shift modifier fires unambiguously inside a text field |
+| **Bare keys** — arrows, Home, End, Backspace, Enter, Tab, typing | `TextEditor.handleKey` | They are what the widget *is*, as Space is for `Button`. The resolver skips bare bindings while typing precisely because a bare key belongs to the thing being typed into |
+
+> **The native cases had to be deleted, not left as a fallback.** The resolver runs *after* dispatch and
+> only on an unconsumed event, so a `return true` in `handleKey` eats the key and the binding can never
+> fire — remapping would silently do nothing. For the same reason the surviving bare-key cases now yield
+> when Alt is held (`Alt+Up` is always somebody's binding) and on `Ctrl+Enter`, while `Ctrl+Arrow` and
+> `Ctrl+Home/End` stay native because they genuinely *are* movement.
+
+> **A wrong key name throws at bind time.** `"Mod+Enter"` does not parse — `CgKeyCodes` has no
+> `KEY_ENTER`, only `KEY_RETURN` and `KEY_NUMPADENTER`. Loud beats a binding that never fires.
+
+**Installed by the editor itself**, unlike `UndoCommands` which is explicitly never automatic. Undo is an
+*application* concern bound at the root, and a window that acquired it silently would surprise anything
+enumerating commands; these are the widget's own keys on the widget's own element, and an editor that does
+nothing on `Mod+D` is broken rather than neutral.
+
+Four tests pin what §H is actually *for* — every other key test would pass equally against the hard-coded
+version: the actions are registered with labels, an action can be **remapped** (and the old chord stops
+working), a menu can ask for the accelerator, and a command that cannot run says so rather than firing
+empty. All four mutation-checked.
 
 #### The extraction, and why it is not cosmetic
 

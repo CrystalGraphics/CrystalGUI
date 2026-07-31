@@ -122,6 +122,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Rows before the edit in flight, so its line-count delta names the rows to reproject. */
     private int previousLineCount = 1;
 
+    /** Whether {@link EditorCommands} has been installed for this editor — see {@code updateWindow}. */
+    private boolean commandsInstalled;
+
     private final Map<Integer, UIElement> realisedLines = new HashMap<>();
     private final Deque<UIElement> linePool = new ArrayDeque<>();
     private final List<UIElement> selectionBands = new ArrayList<>();
@@ -601,70 +604,19 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         boolean alt = CgModifiers.hasAlt(modifiers);
 
-        // Alt-based line operations. Checked before the ctrl block because Ctrl+Alt+Up/Down is a
-        // multi-caret command, not a line move -- the two would otherwise both claim the arrow keys.
-        if (alt && !ctrl) {
-            switch (key) {
-                case CgKeyCodes.KEY_UP:
-                    if (shift) duplicateLines(-1);
-                    else moveLines(-1);
-                    return true;
-                case CgKeyCodes.KEY_DOWN:
-                    if (shift) duplicateLines(1);
-                    else moveLines(1);
-                    return true;
-                case CgKeyCodes.KEY_A:
-                    if (shift) {
-                        toggleBlockComment();
-                        return true;
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        if (ctrl && alt) {
-            if (key == CgKeyCodes.KEY_UP) {
-                addCaretOnAdjacentLine(-1);
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_DOWN) {
-                addCaretOnAdjacentLine(1);
-                return true;
-            }
-        }
+        // THE NAMED ACTIONS ARE NOT HERE ANY MORE. Every modified chord -- Mod+D, Alt+Up, Mod+Shift+K,
+        // Mod+Slash, Mod+C/X/V, F3 and the rest -- is an EditorCommands command bound on this element's
+        // own keymap, so it is rebindable, reachable from a menu and listable in a palette. See §H.
+        //
+        // What remains below is the keys that are not actions: cursor movement, deletion, Enter, Tab and
+        // typing. That line is the resolver's own, not one invented here -- it skips bare bindings while
+        // an element is taking text input, because a bare key belongs to the thing being typed into.
+        //
+        // The resolver runs AFTER dispatch and only on an unconsumed event, which is exactly why these
+        // cases had to be deleted rather than left as a fallback: a `return true` here consumes the key
+        // and the binding could never fire, so remapping would silently do nothing.
 
         if (ctrl) {
-            if (key == CgKeyCodes.KEY_D) {
-                addCaretAtNextOccurrence();
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_L) {
-                if (shift) selectAllOccurrences();
-                else selectLine();
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_K && shift) {
-                deleteLines();
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_J) {
-                joinLines();
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_SLASH) {
-                toggleLineComment();
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_RETURN) {
-                insertLine(shift ? -1 : 1);
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_F3) {
-                findWordUnderCaret();
-                return true;
-            }
             if (key == CgKeyCodes.KEY_Z) {
                 if (shift) buffer.redo();
                 else buffer.undo();
@@ -674,22 +626,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
             if (key == CgKeyCodes.KEY_Y) {
                 buffer.redo();
                 clampSelectionToDocument();
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_A) {
-                setSelection(0, buffer.length());
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_C || key == CgKeyCodes.KEY_X) {
-                if (hasSelection()) {
-                    CgPlatform.input().setClipboard(getSelectedText());
-                    if (key == CgKeyCodes.KEY_X) deleteSelections();
-                }
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_V) {
-                String pasted = CgPlatform.input().getClipboard();
-                if (pasted != null && !pasted.isEmpty()) insertAtCaret(pasted);
                 return true;
             }
             if (key == CgKeyCodes.KEY_HOME) {
@@ -702,11 +638,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
         }
 
-        if (key == CgKeyCodes.KEY_F3) {
-            if (shift) findPrevious();
-            else findNext();
-            return true;
-        }
+        // THE NATIVE KEYS MUST YIELD TO A MODIFIED CHORD. The resolver runs only on an UNCONSUMED event,
+        // so a `case KEY_UP: ... return true` below would eat Alt+Up before `editor.moveLineUp` could ever
+        // see it -- and remapping would silently do nothing. Alt is never part of native movement, so an
+        // Alt-held arrow is always somebody's binding; Ctrl+Enter likewise, while Ctrl+Arrow and
+        // Ctrl+Home/End genuinely ARE native movement and stay here.
+        if (alt) return false;
+        if (ctrl && key == CgKeyCodes.KEY_RETURN) return false;
 
         switch (key) {
             case CgKeyCodes.KEY_LEFT:
@@ -825,8 +763,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
         applyEdit(changes);
     }
 
-    /** Deletes every non-empty selection. */
-    private void deleteSelections() {
+    /** Deletes every non-empty selection — public because {@code editor.cut} is a command. */
+    public void deleteSelections() {
         List<Change> changes = new ArrayList<>(selections.count());
         for (Selection selection : selections.all()) {
             if (!selection.isEmpty()) changes.add(Change.delete(selection.start(), selection.end()));
@@ -2124,6 +2062,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // scrolled would never tick — and the caret would never blink. Registration is a HashSet insert,
         // so repeating it is free and there is deliberately no unregister in the SPI.
         window.registerTicker(this);
+        // The editor's own named actions, on the editor's own keymap. Installed here rather than left to
+        // the host — unlike UndoCommands, which is an APPLICATION concern bound at the root and would be
+        // a surprise if a window acquired it silently. These are the widget's own keys, and an editor
+        // that does nothing on Mod+D is broken rather than neutral. Both halves are idempotent.
+        if (!commandsInstalled) {
+            EditorCommands.install(window, this);
+            commandsInstalled = true;
+        }
 
         float height = lineHeight();
         // Before anything is placed: the gutter's width moves textOriginX, so a change here has to be
