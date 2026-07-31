@@ -222,6 +222,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private final UIElement currentLine = new UIElement();
 
     /**
+     * The current-line band's other half, inside the gutter.
+     *
+     * <p><b>Two elements rather than one wide one</b>, because the gutter and the code area are separately
+     * stacked: the gutter paints an opaque background above the text so a long line scrolled sideways
+     * passes behind the numbers, which means a single band drawn behind everything is simply covered in
+     * the gutter region, and one drawn in front of everything hides the numbers. A band inside the gutter
+     * sits in the gutter's own stacking context — beneath its numbers, above its background — which is
+     * the only place it can be both visible and behind the digits.</p>
+     */
+    private final UIElement currentLineGutter = new UIElement();
+
+    /**
      * The language, or {@link SyntaxTokenizer#NONE}.
      *
      * <p>The editor knows nothing about any language: it asks for named ranges over the rows it is about
@@ -354,6 +366,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         currentLine.setHitTest(false);
         currentLine.markAsInternal();
         textViewport().addInternalChild(currentLine);
+        currentLineGutter.addClass(CURRENT_LINE_CLASS);
+        currentLineGutter.setHitTest(false);
+        currentLineGutter.markAsInternal();
+        gutter.addInternalChild(currentLineGutter);
 
         gutter.addClass(GUTTER_CLASS);
         gutter.setHitTest(false);
@@ -3049,6 +3065,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private void layOutCurrentLine() {
         if (selections.hasSelection() || !isFocused()) {
             hide(currentLine);
+            hide(currentLineGutter);
             return;
         }
         float height = lineHeight();
@@ -3065,6 +3082,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
         StyleGroup.defaultPipeline(currentLine.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                         .left(left).top(top).width(width).height(bandHeight));
+
+        // The gutter half. Its parent is scroll-exempt, so it subtracts the offset by hand exactly as the
+        // numbers beside it do -- and it spans the gutter's whole box, including the fold column, so the
+        // band reads as one strip across the editor rather than two with a seam.
+        final float gutterBandWidth = getTaffyLayout().padding().left + gutterWidth;
+        StyleGroup.defaultPipeline(currentLineGutter.getStyle().getLayoutGroup(),
+                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                        .left(0f).top(top).width(gutterBandWidth).height(bandHeight));
     }
 
     private UIElement numberAt(int index) {
