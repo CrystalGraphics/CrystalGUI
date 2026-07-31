@@ -642,12 +642,106 @@ teaching paint to bail on it. Cheap to describe, and genuinely useful the moment
 
 Not scheduled against anything — it blocks nothing, and nothing blocks it.
 
-### 6.1.4 Tree · `TODO`
+### 6.1.4 Tree · `DONE` (2026-07-31)
 
-Expand/collapse, selection (single and range), keyboard navigation per the ARIA APG tree pattern, and
-drag-reorder. Built on 6.1.3 — a tree is a flattened virtualised list plus an expansion model.
+Expand/collapse, selection, ARIA keyboard navigation, over a virtualised list. Feeds the resource/file
+browser, the outline view, and the graph view's node-library palette.
 
-Feeds the resource/file browser, the outline view, and the graph view's node-library palette.
+#### A tree is a flattened list, and that is not a shortcut
+
+[VS Code's own stack](https://github.com/microsoft/vscode/wiki/Lists-And-Trees) is a composition over its
+list: `IndexTree` maps tree splices onto list splices, `ObjectTree` wraps that in a friendlier
+`setChildren`, and `AsyncDataTree` adds lazily-discovered models. Four layers, all resting on the virtual
+list at the bottom.
+
+We want the outcome rather than the layering. `TreeView<T>` flattens the currently-visible nodes into a
+linear model and hands it to {@code ListView}, which already provides virtualisation, recycling,
+selection, focus-by-index and the scroll machinery. Expanding a node re-flattens; that is the entire
+mechanism.
+
+**The consequence worth stating**: everything 6.1.3 fought for is inherited rather than re-fought. A tree
+over a hundred thousand nodes realises a dozen rows, focus survives recycling, and the scrollbar reflects
+the flattened count — none of which is Tree code.
+
+#### Pull-based data source, which is `AsyncDataTree`'s idea minus the async
+
+```java
+TreeDataSource<Path> source = new TreeDataSource<>() {
+    public List<Path> roots()                { … }
+    public List<Path> children(Path parent)  { … }
+    public boolean hasChildren(Path item)    { … }
+};
+```
+
+A file explorer does not know a folder's children until it is opened, so children are **asked for on
+expand** rather than supplied up front. A fully-known tree is expressible this way too, at no cost — so
+pull-based is strictly more general and no harder. `hasChildren` is separate from `children().isEmpty()`
+precisely because a folder can be known to be expandable without being read.
+
+**Not async.** VS Code needs promises because a file system is remote-ish and a UI thread cannot block;
+here the realistic sources are in-memory. When something genuinely needs it, the seam is this interface —
+which is why it is an interface rather than a concrete node type.
+
+#### The keyboard contract, from the APG, exactly
+
+[The tree pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/) is fiddlier than the listbox and
+the asymmetry is the part that gets implemented wrong:
+
+| Key | On a collapsed node | On an expanded node | On a leaf |
+|---|---|---|---|
+| **Right** | opens it, **focus does not move** | moves focus to the first child | nothing |
+| **Left** | moves focus to the parent | closes it | moves focus to the parent |
+
+Up/Down move through *visible* nodes without opening or closing anything — which is exactly
+{@code ListView}'s existing behaviour over the flattened model, so it costs nothing. Home/End likewise.
+Enter activates. `*` expands every sibling at the current level (the APG marks it optional; cheap here
+because it is one re-flatten).
+
+#### Deliverables
+
+- `ui/elements/tree/`: `TreeDataSource<T>`, `TreeRow<T>`, `TreeRenderer<T>`, `TreeView<T>`.
+- Flattening with an expansion set; re-flatten on expand/collapse and on a source change.
+- Depth indentation applied by the view, plus `__expanded__`/`__collapsed__`/`__leaf__` state classes so a
+  theme draws the twisty without the renderer knowing the rules.
+- Tests: flattening respects expansion; the APG table above, row by row; expanding a huge subtree does not
+  realise it; selection and focus survive a collapse that removes the focused row.
+- Harness: a `tree` gallery page over a deep synthetic hierarchy, with the realised counter visible.
+
+#### Built
+
+`ui/elements/tree/`: `TreeDataSource<T>`, `TreeRow<T>`, `TreeRenderer<T>`, `TreeView<T>`. 16 tests, a
+`tree` gallery page over a synthetic 8,000-node hierarchy.
+
+**Building it on the list paid exactly as hoped.** `TreeView` is one class: flatten, expand/collapse,
+Left/Right, indentation. Virtualisation, recycling, selection, focus-by-index, the scroll machinery and
+the whole Up/Down/Home/End/Space/Enter key set are *inherited*, and the APG's "Up/Down move through
+visible nodes without opening anything" is satisfied by the flattening rather than by any code — the
+model **is** the visible set.
+
+Two seams opened on `ListView` for it, both small and both justified: `handleNavigationKey` became
+protected so a subclass can take a key first, and `moveFocusTo` likewise so Left/Right route through the
+same path arrows do — otherwise those two keys would skip the scroll and the selection-follows-focus rule
+every other key obeys.
+
+**Re-flattening is wholesale, not incremental**, and that is a deliberate trade. An incremental splice
+would be less work on a large tree, but every operation would need its own correct splice computation —
+which is precisely the "sub-optimal API" VS Code's own wiki says `IndexTree` suffers from. One code path
+cannot get out of step, and the list on the other side is virtualised, so the cost is a list of records
+rather than of elements.
+
+Mutation-checked on the part most likely to be "simplified" later: making Right always move focus and
+Left always collapse — the naive reading — turns exactly `rightOnACollapsedNodeOpensItWithoutMovingFocus`
+and `leftOnAChildMovesToItsParent` red.
+
+#### Deliberately not built
+
+- **Async loading.** The seam exists; nothing needs it.
+- **Compressed nodes** (VS Code collapses single-child chains like `a/b/c` into one row). A genuine
+  nicety, and pure addition later.
+- **Typeahead.** The APG asks for it, and it belongs on `ListView` rather than here — it is as useful in a
+  flat list — so it is filed as a `ListView` follow-up rather than a Tree feature.
+- **Drag-reorder.** Wants the drag controller and a drop-position model; separable.
+
 
 ### 6.1.5 Table / data grid · `TODO`
 
