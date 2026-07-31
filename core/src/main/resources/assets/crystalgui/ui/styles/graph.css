@@ -1,0 +1,134 @@
+/* CrystalGUI — node graph theme.
+ *
+ * The Unity Shader Graph look, deliberately and literally: the target is that a screenshot of ours and
+ * a screenshot of theirs differ in content, not in construction. Load it on top of default.css, which
+ * carries the geometry this file assumes:
+ *
+ *     window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+ *     window.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:graph"));
+ *
+ * WHY THE PALETTE IS THE IMPORTANT HALF. Unity gives each data type a colour and applies it to the port
+ * AND to every edge leaving it. That is what makes a dense graph readable at a glance — you can see a
+ * float feeding a vec3 slot without reading a single label. The box is just a box; the colour coding is
+ * the feature.
+ *
+ * HOW A WIRE GETS ITS COLOUR FROM HERE. `CgCurveRenderer` needs an ARGB int, so something has to hand
+ * it a number. `NodePort.typeColor()` reads back the computed `border-color` of `.__dot__` — so the
+ * number's source is still this stylesheet, and adding a type is a rule here plus a `PortType`
+ * registration, with no Java colour anywhere. `border-color` rather than `background-color` because an
+ * unconnected dot is hollow: its fill is transparent exactly where a theme author would be surprised to
+ * find the wire colour had gone missing.
+ *
+ * TYPE COLOURS. Unity's, from its Data Types documentation: Float light blue, Vector 2 green,
+ * Vector 3 yellow, Vector 4 pink, Matrix blue, Boolean purple, textures red, and grey for the
+ * opaque handles (Gradient, SamplerState, Virtual Texture). The ids below are conventions, not
+ * something core/ knows — a consumer registers whatever `PortType.id()` values it likes and adds the
+ * matching rules. */
+
+graphview {
+    background: #1E1E1E;
+}
+
+/* ── The node box ──────────────────────────────────────────────────────────────────────────────── */
+
+/* THE NODE PAINTS NO BACKGROUND OF ITS OWN. Each region paints its own instead, and the port band
+ * paints NOTHING — so a wire, which is drawn under every node, is visible right through that band and
+ * reads as reaching its dot rather than being cut off at the border. That is Unity's own construction,
+ * and it is the difference between "a wire near a port" and "a wire plugged into a port".
+ *
+ * The consequence to know about: a region that forgets to paint itself is see-through, and a node whose
+ * last region is the port band has a transparent bottom edge. That is correct here (the border still
+ * outlines it) and would be a surprise anywhere else, which is why the regions are all named together
+ * below rather than left to inherit. */
+graphnode {
+    background: #00000000;
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: #1A1A1A;
+    color: #C4C4C4;
+    font-size: 8;
+}
+
+/* Selection: the cyan ring. Sits on `:checked`, which GraphNode publishes by overriding isChecked() —
+ * so selecting a node is a state change in Java and an appearance change here, with no colour crossing
+ * the boundary. */
+graphnode:checked {
+    border-color: #44C0FF;
+    border-width: 2px;
+}
+
+/* The title bar carries the node's top corners itself, because the root no longer paints a background
+ * to round. Without this a square bar sits over a rounded border and the two disagree at exactly the
+ * two corners a user looks at first. 4px, not 5: it is inset by the 1px border. */
+graphnode .__title-bar__ {
+    background: #3C3C3C;
+    color: #D4D4D4;
+    border-top-left-radius-x: 4px;
+    border-top-left-radius-y: 4px;
+    border-top-right-radius-x: 4px;
+    border-top-right-radius-y: 4px;
+}
+graphnode .__title__ { font-size: 9; }
+graphnode .__collapse__ { color: #9A9A9A; }
+graphnode .__collapse__:hover { color: #E0E0E0; }
+
+/* Everything below the ports paints itself. The port band is the deliberate omission — see the note on
+ * `graphnode` above. */
+graphnode .__controls__ { background: #2B2B2B; }
+graphnode .__control-row__ { color: #B4B4B4; }
+
+/* Darker than the body, as in the reference — the preview is a render target, not part of the chrome —
+ * and it carries the bottom corners for the same reason the title bar carries the top ones. */
+graphnode .__preview__ {
+    background: #232323;
+    border-bottom-left-radius-x: 4px;
+    border-bottom-left-radius-y: 4px;
+    border-bottom-right-radius-x: 4px;
+    border-bottom-right-radius-y: 4px;
+}
+
+/* ── Ports ─────────────────────────────────────────────────────────────────────────────────────── */
+
+nodeport { color: #C4C4C4; }
+nodeport:hover .__label__ { color: #FFFFFF; }
+
+/* The type palette. `border-color` is the type's colour and the wire's; the fill follows it, and is
+ * knocked back out below while the port is unconnected.
+ *
+ * Vector 3 is YELLOW and Vector 4 is PINK. They are adjacent in Unity's own table, easy to transpose,
+ * and a transposed pair looks entirely plausible in a screenshot — while vec3 is the type a shader
+ * graph carries most (positions, normals, colours), so it is the one a user reads as "the main
+ * signal". Worth checking against the reference rather than against memory. */
+nodeport.type-float .__dot__,
+nodeport.type-vec1 .__dot__    { border-color: #84E4E7; background-color: #84E4E7; }
+nodeport.type-vec2 .__dot__    { border-color: #9AEF92; background-color: #9AEF92; }
+nodeport.type-vec3 .__dot__    { border-color: #FFF44F; background-color: #FFF44F; }
+nodeport.type-vec4 .__dot__    { border-color: #FBCBF4; background-color: #FBCBF4; }
+nodeport.type-bool .__dot__    { border-color: #9C4FFF; background-color: #9C4FFF; }
+nodeport.type-mat2 .__dot__,
+nodeport.type-mat3 .__dot__,
+nodeport.type-mat4 .__dot__    { border-color: #8FC1DF; background-color: #8FC1DF; }
+nodeport.type-texture2d .__dot__,
+nodeport.type-texture3d .__dot__,
+nodeport.type-cubemap .__dot__ { border-color: #FF8B8B; background-color: #FF8B8B; }
+nodeport.type-gradient .__dot__,
+nodeport.type-sampler .__dot__ { border-color: #C1C1C1; background-color: #C1C1C1; }
+
+/* Connected: filled. Unconnected: hollow, showing the ring only.
+ *
+ * This must come AFTER every type rule above. All of them are one class plus one class plus a type
+ * selector, so specificity ties and source order decides — declared earlier, the type's fill would win
+ * and every port would look permanently connected. That is invisible until you wire one up and nothing
+ * changes. */
+nodeport:blank .__dot__ { background-color: #00000000; }
+
+/* The inline editor on an unconnected input. Narrow, because it shares the row with a label and a dot
+ * inside a 168px node. */
+nodeport .__editor__ {
+    width: 46px;
+    height: 12px;
+    background: #1E1E1E;
+    border-radius: 2px;
+    color: #D4D4D4;
+    font-size: 7;
+}

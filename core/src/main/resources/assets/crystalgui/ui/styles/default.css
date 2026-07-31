@@ -1042,6 +1042,15 @@ nodeport {
     height: 16px;
 }
 nodeport.__output__ { justify-content: flex-end; }
+/* The label takes the slack and truncates rather than overflowing.
+ *
+ * Both are needed and neither is optional. flex-shrink is 0 in this engine, so a label wider than its
+ * half of the node keeps its measured width and spills straight across the output column — which is
+ * exactly what "Sampling Coordinates(3)" did on top of "Value(1)". A zero basis plus flex-grow gives it
+ * the space that is actually there, and `text-overflow` truncates what is left over. The property has
+ * to sit on the UIText itself (it does not inherit), which the label is. */
+nodeport .__label__ { flex-grow: 1; width: 0; text-overflow: ellipsis; }
+nodeport.__output__ .__label__ { text-align: right; }
 nodeport .__dot__ {
     width: 8px;
     height: 8px;

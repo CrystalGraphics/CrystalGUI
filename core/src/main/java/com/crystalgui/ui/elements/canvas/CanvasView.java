@@ -112,6 +112,9 @@ public class CanvasView extends UIElement implements UIFrameTicker {
      * the un-cull path from writing to every node on every tick. */
     private final Set<UIElement> culled = new HashSet<>();
 
+    /** @see #setCullExempt(UIElement, boolean) */
+    private final Set<UIElement> cullExempt = new HashSet<>();
+
     private boolean ticking;
 
     /** Fires after any change to pan or zoom, from any source. Zero-arg because a listener that cares
@@ -348,6 +351,36 @@ public class CanvasView extends UIElement implements UIFrameTicker {
         return culled.contains(node);
     }
 
+    /**
+     * Exempts an element from culling entirely — for a <b>painter</b> rather than a node.
+     *
+     * <p>Culling asks an element's box where it is, which is the right question for a node and the
+     * wrong one for something that draws across the whole plane: a wire layer's box says nothing about
+     * where its wires are, so left cullable it disappears the moment the view leaves its own origin,
+     * taking everything it draws with it. An exempt element is expected to cull its own drawing, where
+     * it knows what it is drawing.</p>
+     *
+     * <p>Deliberately a set on the canvas rather than a flag on {@code UIElement}: it is a fact about
+     * this canvas's relationship with that child, not a property of the element. The same shape as
+     * {@code setScrollExempt}, which is on the element only because scrolling is an ambient capability
+     * of every element and culling is not.</p>
+     */
+    public CanvasView setCullExempt(UIElement node, boolean exempt) {
+        if (exempt) {
+            cullExempt.add(node);
+            // It may already be culled from a previous pass; the exemption has to undo that or it stays
+            // invisible forever, which is the bug this method exists to prevent.
+            applyCulled(node, false);
+        } else {
+            cullExempt.remove(node);
+        }
+        return this;
+    }
+
+    public boolean isCullExempt(UIElement node) {
+        return cullExempt.contains(node);
+    }
+
     public int culledCount() {
         return culled.size();
     }
@@ -364,6 +397,7 @@ public class CanvasView extends UIElement implements UIFrameTicker {
         if (!cullingEnabled) return;
         WorldRect view = visibleWorldRect().expand(cullMargin);
         for (UIElement child : content.getChildren()) {
+            if (cullExempt.contains(child)) continue;
             applyCulled(child, !view.intersects(worldBoundsOf(child)));
         }
         // A node removed from the plane while culled would otherwise keep its forced opacity — and

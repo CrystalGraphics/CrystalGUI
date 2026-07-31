@@ -678,6 +678,73 @@ AABB test per node.
 
 ---
 
+## 12c. The node graph — `GraphView`, `GraphNode`, `NodePort`
+
+`com.crystalgui.ui.elements.graph` · tags `graphview` / `graphnode` / `nodeport` ·
+`cgui-gallery` → **graph** page · P6.2.3
+
+Unity Shader Graph's construction, literally: a title bar, two port columns, controls, a preview slot,
+and wires that take their colour from the ports they leave.
+
+```java
+GraphView graph = new GraphView();
+GraphNode position = new GraphNode("Position");
+NodePort out = position.addOutput(VEC3, "Out");
+position.addControl("Space", spaceDropdown());
+position.preview();                       // the slot is created on first ask
+graph.addNode(position, 20f, 30f);
+graph.connect(out, add.addInput(VEC3, "A"));
+```
+
+`GraphView extends CanvasView`, so it inherits pan, zoom, fit and culling — and **reports the tag
+`graphview`, which matches no `canvasview` rule**. The viewport's structural styling is written from
+Java at DEFAULT origin precisely so the subclass gets it for real.
+
+### Ports
+
+- **`PortType` is an interface, not an enum.** The types a shader graph carries are GLSL's, and the
+  manifesto is explicit that the graph is a visual editor for the `.shader` format — so CrystalGUI ships
+  the interface and the registry, and the consumer ships `float`/`vec3`/`sampler2D`. Compatibility is
+  asked of the *source* type and is deliberately asymmetric: GLSL promotes a float to a vec3 and does
+  not demote.
+- **`type.cssClass()` is `type-<id>`**, carried by the port. The palette — dot and wire alike — is
+  therefore a stylesheet's business. `NodePort.typeColor()` reads the dot's computed `border-color`
+  back out of the cascade, which is what keeps the number's source in CSS even though
+  `CgCurveRenderer` needs an int.
+- **One edge per input, many per output.** Dropping onto an occupied input *replaces*; the displaced
+  edge leaves through the same `disconnect()` as a manual one, so 6.2.4 can make the pair one undoable
+  command.
+- **`nodeport:blank` means unconnected** — `isBlank()` is overridden. It drives the hollow-vs-filled dot
+  and whether the type's inline editor shows, so both are CSS rather than Java.
+- **The dot is decorative; the port is the target.** The dot is 8px and a pointer is not, so the dot and
+  label are `setHitTest(false)` and the port's padding is the hit area.
+
+### Nodes
+
+- **The node paints no background.** Each region paints its own and the port band paints *none*, so a
+  wire — drawn under every node — shows through and reads as plugged into its dot rather than cut off
+  at the border. The title bar and preview carry the corner radii the root no longer paints.
+- **Collapse hides unconnected ports**, not just the body — a stylesheet rule over `nodeport:blank`.
+- **Selection is `:checked`** via an overridden `isChecked()`. The flag on the node is view state;
+  6.2.4 owns the model, and `GraphView.selectNode` is the smallest click behaviour that works until
+  then.
+- **Dragging moves it in place** — `left`/`top` are rewritten, nothing is rebuilt. The node is a safe
+  drag source (unlike the plane in a pan) because layout is not in the transform matrix, so its own
+  coordinate space stands still while it moves through it.
+- **Clicking focuses it, by asking.** `FocusPolicy.CLICK` is not enough: the input handler focuses the
+  exact element hit, which is the title bar. See the note in `GraphNode.focusOnPress`.
+
+### Wires
+
+One `NodeWireLayer` paints all of them in a single `ctx.curve()` batch — a trade: no Taffy node or
+draw-call boundary per edge, at the cost of per-wire CSS state. It sits at world (0,0), which makes its
+own origin the plane origin, and is **cull-exempt** (`CanvasView.setCullExempt`) because culling asks an
+element's box where it is and a painter's box says nothing about where it draws. It culls per wire
+instead. Stroke width is clamped against the canvas's zoom so a pose-scaled 2px wire does not vanish at
+0.2×.
+
+---
+
 ## 13. Harness scenes
 
 ```bash

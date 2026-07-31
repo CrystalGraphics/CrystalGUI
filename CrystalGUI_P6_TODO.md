@@ -1334,7 +1334,57 @@ the picture. What is missing is the widget, the input gestures, and the culling.
 
 </details>
 
-### 6.2.3 Node and port widgets · `TODO` · **next**
+### 6.2.3 Node and port widgets · `DONE` (2026-07-31)
+
+> **Shipped as `ui/elements/graph/`** — `GraphView`, `GraphNode`, `NodePort`, `NodeWireLayer`,
+> `GraphConnection`, `PortType`/`BasicPortType`/`PortTypeRegistry`, `PortDirection` — with 18 tests, a
+> new `crystalgui:graph` theme, functional geometry in `default.css`, and the gallery's canvas page
+> rebuilt as the reference graph (Position + Normal Vector → Perlin noise → Add).
+>
+> **The plan held: all six named traps were paid for in advance and none of them bit.** What the plan
+> did *not* contain is the interesting part.
+>
+> - **Nodes could not be moved, because nobody had said they should be.** The plan listed dragging a
+>   node under "traps" — deltas belong to the viewport — and never as a deliverable, so it was built
+>   with wires draggable and nodes nailed down. Found in three seconds by the first person to look at
+>   it. The lesson is not about nodes: a trap list is not a feature list, and an item whose
+>   *deliverables* section omits something will ship without it however carefully the risk was
+>   analysed.
+> - **A node is a safe drag source, and the reasoning is worth keeping.** 6.2.2 established that a pan
+>   must drag from the viewport, because the drag changes the plane's *transform* and every listener
+>   coordinate is converted through the source's transform. Moving a node changes `left`/`top`, which
+>   are layout, and layout is not in the matrix — so the node's own space stands still while the node
+>   moves through it. The two cases look identical and are opposites.
+> - **`FocusPolicy.CLICK` does not focus a composite**, because the input handler focuses the *exact*
+>   element hit — and a press on a node lands on its title bar. Every other composite dodges this by
+>   making its parts `setHitTest(false)`, which is unavailable when a part is itself interactive. The
+>   DOM's rule is to focus the nearest focusable *ancestor*; ours does not walk. `GraphNode` calls
+>   `requestFocus` itself and the engine gap is recorded as an open question below.
+> - **The empty preview slot made every node a tall dark box.** Shipping the slot but not the pipeline
+>   was the right call; attaching it unconditionally was not. `preview()` now creates it on first ask,
+>   so a node that has nothing to show is the height of its ports.
+> - **A long port label overflowed into the opposite column**, because `flex-shrink` is 0 in this
+>   engine: "Sampling Coordinates(3)" printed straight across "Value(1)". Zero basis plus `flex-grow`
+>   plus `text-overflow: ellipsis` on the label — which has to sit on the `UIText` itself, since it does
+>   not inherit.
+> - **The node paints no background of its own.** Asked for after seeing it: the port band must be
+>   transparent so a wire, drawn under every node, shows through and reads as *plugged into* its dot
+>   rather than stopping at the border. Each region paints itself instead, and the title bar and preview
+>   carry the corner radii the root no longer paints — otherwise a square bar sits over a rounded border
+>   at exactly the two corners a user looks at first.
+>
+> **The palette seam works exactly as designed**, which is the part worth reusing: `NodePort.typeColor()`
+> reads the dot's computed `border-color` back out of the cascade, so `CgCurveRenderer` gets its ARGB int
+> and the colours still live in a stylesheet. Adding a type is a `PortType` and a CSS rule, with no Java
+> colour anywhere — and a `float → vec3` promotion draws as a light-blue-to-yellow gradient for free,
+> because the instance record already carried two colours.
+>
+> **Deliberately not done here.** No marquee, no multi-select beyond Shift-click, no delete, no undo —
+> all 6.2.4, which is the one item that genuinely waits for 6.1.9's command stack. No node library
+> (6.2.6) and no preview pipeline (6.2.7).
+
+<details>
+<summary>The design, as planned — accurate except where the notes above supersede it</summary>
 
 **The look is the specification, and it is Unity Shader Graph's.** Settled 2026-07-31 against three
 reference screenshots plus Unity's own documentation. This is not "inspired by" — the target is that a
@@ -1477,9 +1527,12 @@ styled by a stylesheet the way everything else in this engine can.
 
 | Question | Notes |
 |---|---|
-| Minimum wire width in screen space? | A pose-scaled stroke vanishes when zoomed out. Clamping in the shader is one line but makes width non-linear; clamping in Java needs the zoom, which the wire layer can ask its canvas for. Prefer the latter — it keeps the shader honest. |
-| Does selection live on the node or in a model? | 6.2.4 answers it, but 6.2.3 must not decide it accidentally by storing a boolean on `GraphNode`. |
-| `:checked` for a selected node, or a class? | A real widget can override `isChecked()` and get `graphnode:checked` free. `ListView` chose a class only because its rows are arbitrary caller elements. |
+| ~~Minimum wire width in screen space?~~ | **Answered: clamped in Java, against the canvas's zoom** (`GraphView.getWireWidth`). The shader stays linear and every other `curve()` consumer is unaffected. |
+| ~~Does selection live on the node or in a model?~~ | **Deferred honestly**: a boolean on the node plus `GraphView.selectNode`, which is the smallest click behaviour that works. 6.2.4's model replaces the list rather than fighting a second source of truth. |
+| ~~`:checked` for a selected node, or a class?~~ | **Answered: `:checked`.** `GraphNode` overrides `isChecked()`, so the cyan ring is a theme rule. |
+| **Should click-focus walk up to the nearest focusable ancestor?** | New, and an engine question rather than a graph one. The DOM does walk — that is why clicking a `<button>`'s inner text focuses the button. `emitMouseDown` focuses the exact element hit, so any composite with an *interactive* child (a node's title bar carries the collapse chevron, so it cannot be `setHitTest(false)`) never gets focus from a click. `GraphNode` compensates by calling `requestFocus` itself. Fixing the handler would cover every composite at once and changes focus behaviour engine-wide, so it wants doing deliberately — and not while the text editor is mid-rewrite. |
+
+</details>
 
 ### 6.2.4 Selection, marquee, and graph editing · `TODO`
 
@@ -1555,7 +1608,7 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
 6.1.10 file SPI ──► 6.1.11 docking ──► 6.1.12 chrome
 
 6.2.1 CgCurveRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──┬─► 6.2.4 editing ──► 6.2.5 model
-      (done)              (done)             (next)            │        ▲
+      (done)              (done)             (done)            │        ▲
                                                                ├─► 6.2.6 node library
                                                                └─► 6.2.7 previews (slot only;
 6.1.9 command/undo ────────────────────────────────────────────────────┘   the pipeline is
@@ -1589,6 +1642,27 @@ item that can run in parallel with 6.1's remaining work.
 ---
 
 ## Changelog
+
+- **2026-07-31** — **6.2.3 done: nodes, ports and wires, to Unity Shader Graph's spec.** 18 tests, a
+  `crystalgui:graph` theme, and the gallery's canvas page rebuilt as the reference graph.
+  - **The palette seam works**, which is the reusable part: `NodePort.typeColor()` reads the port dot's
+    computed `border-color` back out of the cascade, so the curve renderer gets its ARGB int while the
+    colours stay in a stylesheet. Adding a type is a `PortType` plus a CSS rule and no Java colour — and
+    a `float -> vec3` promotion draws as a gradient for free, because the instance record already
+    carried two colours.
+  - **Every one of the six named traps was paid for in advance and none of them bit.** What shipped
+    broken was the thing that was in the *trap* list and not the *deliverable* list: nodes could not be
+    moved. A risk analysed carefully is still not a feature.
+  - **A node is a safe drag source; the plane is not** — and the two look identical. A pan changes the
+    plane's transform, and listener coordinates are converted through the source's transform; moving a
+    node changes `left`/`top`, which are layout, and layout is not in the matrix.
+  - **`FocusPolicy.CLICK` does not focus a composite**, because the handler focuses the exact element
+    hit and a press on a node lands on its title bar. Other composites dodge it with
+    `setHitTest(false)`, which is unavailable when the part is itself interactive. Recorded as an open
+    engine question rather than fixed engine-wide mid-flight.
+  - **The node paints no background** so the port band is transparent and a wire reads as plugged into
+    its dot rather than stopping at the border. Each region paints itself; the title bar and preview
+    carry the corner radii the root gave up.
 
 - **2026-07-31** — **6.2.3–6.2.7 planned in full, and the node's appearance settled: Unity Shader
   Graph's, literally.** Grounded in three reference screenshots, Unity's own Port/Node/Data-Types
