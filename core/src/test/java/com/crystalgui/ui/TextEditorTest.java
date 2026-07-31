@@ -2136,6 +2136,87 @@ public class TextEditorTest extends UiTestBase {
                 + editor.viewLineCount(), editor.viewLineCount() > before);
     }
 
+    // ── 6.1.7b §H: the keys are commands ─────────────────────────────
+    //
+    // The point of §H is not that the shortcuts work -- they did before, as switch cases. It is that they
+    // are now NAMED, REBINDABLE and DISCOVERABLE. These four test exactly that, and nothing else here can:
+    // every other key test would pass equally against the hard-coded version.
+
+    /** Every action is registered under a stable id, which is what a command palette enumerates. */
+    @Test
+    public void theEditorsActionsAreRegisteredAsCommands() {
+        build("one" + NL + "two");
+        settle();
+        editor.updateWindow();
+        settle();
+
+        var commands = window.getCommands();
+        assertTrue(commands.contains("editor.deleteLines"));
+        assertTrue(commands.contains("editor.toggleLineComment"));
+        assertTrue(commands.contains("editor.addCaretAtNextOccurrence"));
+        assertTrue(commands.contains("editor.toggleSoftWrap"));
+        assertNotNull("a palette needs a label to render", commands.get("editor.deleteLines").getLabel());
+    }
+
+    /**
+     * <b>The whole point of §H.</b> Rebinding is editing data, not Java — and the old chord must stop
+     * working, which is what proves the action is no longer hard-coded.
+     */
+    @Test
+    public void anActionCanBeRemapped() {
+        build("one" + NL + "two" + NL + "three");
+        settle();
+        editor.updateWindow();
+        settle();
+
+        editor.keymap().unbind("Mod+Shift+K");
+        editor.keymap().bind("Mod+Shift+Q", "editor.deleteLines");
+        editor.setCaret(0);
+        settle();
+
+        key(CgKeyCodes.KEY_K, CgModifiers.CTRL | CgModifiers.SHIFT);
+        assertEquals("the old chord is gone", 3, rowsOf(editor.getText()));
+
+        key(CgKeyCodes.KEY_Q, CgModifiers.CTRL | CgModifiers.SHIFT);
+        assertEquals("and the new one works", 2, rowsOf(editor.getText()));
+    }
+
+    /** A menu item needs the chord to render beside its label. */
+    @Test
+    public void aCommandReportsTheChordThatWouldFireIt() {
+        build("x");
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertNotNull("a menu item must be able to show its accelerator",
+                com.crystalgui.ui.input.keymap.Keymap.acceleratorFor(editor, "editor.deleteLines"));
+    }
+
+    /**
+     * <b>Enablement is the command's, not the keystroke's.</b> Cut with nothing selected must report that
+     * it did not run, so the same answer greys out a menu item.
+     */
+    @Test
+    public void aCommandThatCannotRunReportsSoRatherThanFiringEmpty() {
+        build("one" + NL + "two");
+        settle();
+        editor.updateWindow();
+        settle();
+        editor.setCaret(0);
+        settle();
+
+        var context = com.crystalgui.core.command.CommandContext.of(editor);
+        assertFalse("nothing is selected, so cut is not applicable",
+                window.getCommands().run("editor.cut", context));
+
+        editor.setSelection(0, 3);
+        settle();
+        assertTrue("with a selection it runs", window.getCommands().run("editor.cut", context));
+        assertEquals("one", clipboard);
+        assertEquals("and the text is gone from the document", NL + "two", editor.getText());
+    }
+
     /** The editor is a composite: its lines and caret are its own, and callers do not add children. */
     @Test
     public void theEditorRefusesPublicChildren() {
