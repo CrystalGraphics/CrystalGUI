@@ -49,6 +49,42 @@ public class HighlightTest extends UiTestBase {
         window.calculateLayout();
     }
 
+    // ── text-decoration-line on the element itself ───────────────────────────
+
+    /**
+     * <b>An element's own {@code text-decoration-line} must reach the paint.</b>
+     *
+     * <p>It resolved through the cascade and inherited correctly and then went nowhere: decorations were
+     * only ever read off a {@code ::highlight()} style, so {@code text-decoration-line: underline} on a
+     * label was a no-op that looked like a missing CSS feature. Asserting the computed value passes
+     * against exactly that version, which is why this asserts the <b>span</b> instead.</p>
+     */
+    @Test
+    public void anElementsOwnUnderlineReachesTheShapedText() {
+        UIText plain = build(SENTENCE, null);
+        assertEquals("no decoration, no spans -- ordinary labels stay on the unspanned path",
+                0, plain.styleSpanCount());
+
+        UIText underlined = build(SENTENCE, "text { text-decoration-line: underline; }");
+        assertTrue("an underline must produce a span to carry it",
+                underlined.styleSpanCount() > 0);
+    }
+
+    /** The decoration also covers the parts no highlight claims, rather than only the gaps between them. */
+    @Test
+    public void anUnderlineSurvivesAlongsideHighlights() {
+        UIText text = build(SENTENCE,
+                "text { text-decoration-line: underline; }"
+                        + " text::highlight(word) { color: #FF0000; }");
+        text.highlights().set("word", java.util.List.of(TextRange.of(4, 9)));
+        settle();
+        settle();
+
+        // Before, during and after the highlight: three runs, and the two outer ones carry the underline.
+        assertTrue("the underline must still cover the unhighlighted text, got "
+                + text.styleSpanCount() + " spans", text.styleSpanCount() >= 3);
+    }
+
     // ── The selector ─────────────────────────────────────────────────────────
 
     /**

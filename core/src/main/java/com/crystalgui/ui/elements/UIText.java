@@ -123,6 +123,9 @@ public final class UIText extends UIElement {
     });
 
     private CgShapedParagraph shapedParagraph;
+
+    /** The decoration the retained paragraph was shaped for — part of the cache key. */
+    private Set<TextDecorationLine> shapedForDecorations = Collections.emptySet();
     private String shapedForText;
     private CgFontFamily shapedForFamily;
     /** The resolved highlight styles the retained paragraph was shaped against.
@@ -225,12 +228,18 @@ public final class UIText extends UIElement {
         String currentText = text.get();
         CgFontFamily currentFamily = resolveFamily();
         Map<String, HighlightStyle> currentHighlights = resolveHighlightStyles();
+        // THE DECORATION IS PART OF THE KEY. It becomes a span, and a span changes the shaping -- so
+        // leaving it out means an underline appearing on :hover never re-shapes and simply never draws,
+        // because the text, the font and the highlights are all still exactly what they were.
+        Set<TextDecorationLine> currentDecorations = ownDecorations();
         if (shapedParagraph == null || !currentText.equals(shapedForText) || currentFamily != shapedForFamily
-                || !currentHighlights.equals(shapedForHighlights)) {
+                || !currentHighlights.equals(shapedForHighlights)
+                || !currentDecorations.equals(shapedForDecorations)) {
             shapedParagraph = shape(currentText, currentFamily, currentHighlights, false);
             shapedForText = currentText;
             shapedForFamily = currentFamily;
             shapedForHighlights = currentHighlights;
+            shapedForDecorations = currentDecorations;
             shadowParagraph = null;
         }
         return shapedParagraph;
@@ -276,6 +285,23 @@ public final class UIText extends UIElement {
         return CgTextLayout.of(new CgStyledText(content, spans), resolveGroup()).shape();
     }
 
+    /**
+     * How many style spans the last shaping used — zero meaning the plain, unspanned path.
+     *
+     * <p>Public for the same reason {@link #displayedText()} is: it is the <b>only</b> way to observe
+     * that a {@code text-decoration-line} or a {@code ::highlight()} actually reached the paint. Both
+     * resolve through the cascade whether or not anything draws them, so a test asserting on the computed
+     * value passes against a version that renders nothing — which is precisely how an underline that had
+     * never worked went unnoticed.</p>
+     *
+     * <p>Computed on demand rather than recorded at shaping time, so it answers for the <em>current</em>
+     * style rather than for whenever the retained paragraph was last built. A decoration changes no
+     * geometry, so it is picked up when something next shapes — which is a paint, not a layout.</p>
+     */
+    public int styleSpanCount() {
+        return toCgSpans(resolveHighlightStyles(), text.get().length(), false).size();
+    }
+
     private CgFontFamilyGroup resolveGroup() {
         var general = getStyle().getGeneralGroup();
         return FontFamilyCache.resolveGroup(general.fontFamily(), Math.round(general.fontSize()));
@@ -294,7 +320,21 @@ public final class UIText extends UIElement {
      * can actually express, and it is at least deterministic and explainable.</p>
      */
     private List<CgStyleSpan> toCgSpans(Map<String, HighlightStyle> styles, int limit, boolean shadow) {
-        if (styles.isEmpty()) return Collections.emptyList();
+        // The ELEMENT'S OWN text-decoration-line, which nothing used to paint. It resolved through the
+        // cascade and inherited correctly and then went nowhere, because decorations were only ever read
+        // off a ::highlight() style -- so `text-decoration-line: underline` on a label was a no-op that
+        // looked like a missing CSS feature. A link is the obvious consumer.
+        //
+        // Expressed as a span over whatever the highlights do not cover. That does mean a decorated label
+        // takes the STYLED shaping path, which AGENTS.md warns shifts text by a fraction of a pixel
+        // against the unspanned one -- acceptable here precisely because it happens only when a
+        // decoration is actually set, so ordinary labels are untouched.
+        Set<CgTextDecoration> base = toCgDecorations(ownDecorations());
+        if (styles.isEmpty() && base.isEmpty()) return Collections.emptyList();
+        if (styles.isEmpty()) {
+            return limit <= 0 ? Collections.emptyList()
+                    : List.of(new CgStyleSpan(0, limit, false, false, base, 0, null, 0f));
+        }
 
         // Winner per character, then run-length encoded — the only way to get disjoint spans out of
         // ranges that may overlap across names.
@@ -309,14 +349,32 @@ public final class UIText extends UIElement {
 
         List<CgStyleSpan> out = new ArrayList<>();
         int runStart = -1;
+        int uncoveredFrom = 0;
         for (int i = 0; i <= limit; i++) {
             HighlightStyle here = i < limit ? perChar[i] : null;
             HighlightStyle previous = runStart < 0 ? null : perChar[runStart];
             if (here == previous) continue;
-            if (previous != null) out.add(toCgSpan(previous, runStart, i, shadow));
+            if (previous != null) {
+                // Anything between the last highlight and this one carries the element's own decoration.
+                if (!base.isEmpty() && runStart > uncoveredFrom) {
+                    out.add(new CgStyleSpan(uncoveredFrom, runStart, false, false, base, 0, null, 0f));
+                }
+                out.add(toCgSpan(previous, runStart, i, shadow));
+                uncoveredFrom = i;
+            }
             runStart = here == null ? -1 : i;
         }
+        if (!base.isEmpty() && uncoveredFrom < limit) {
+            out.add(new CgStyleSpan(uncoveredFrom, limit, false, false, base, 0, null, 0f));
+        }
         return out;
+    }
+
+    /** This element's own {@code text-decoration-line}, as the cascade resolved it. */
+    private Set<TextDecorationLine> ownDecorations() {
+        Set<TextDecorationLine> lines = getStyle().getGeneralGroup()
+                .getValueSave(com.crystalgui.style.property.StylePropertyRegistry.TEXT_DECORATION_LINE);
+        return lines == null ? Collections.emptySet() : lines;
     }
 
     private static CgStyleSpan toCgSpan(HighlightStyle style, int start, int end, boolean shadow) {
