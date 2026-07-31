@@ -847,7 +847,52 @@ divider **redistributes width between two adjacent columns** — a different ope
 | Flexible column widths, or fixed only? | Fixed is predictable and enough for a details view. A `weight` axis is additive, but only if decided before the resize maths is written. |
 
 
-### 6.1.6 Multi-line text buffer and editor · `TODO` · **the large one**
+### 6.1.6 Multi-line text buffer and editor · `DONE` (2026-07-31) · **the large one**
+
+> **Shipped.** `com.crystalgui.text` — `TextSummary`, `TextPoint`, `Rope`, `Change`, `ChangeSet`,
+> `TextBuffer` — plus `ui/elements/editor/TextEditor`, `texteditor` rules in `default.css`, an `editor`
+> gallery page, and 47 tests across `headlessTest` (the document model) and `test` (the widget).
+>
+> **The design below held, with one correction that mattered.** It claimed Zed's `SumTree` could be taken
+> without its CRDT and anchors would come along anyway. They do not: Zed's `Anchor` is a CRDT artifact —
+> a Lamport timestamp naming the insertion that produced the surrounding text — so dropping the CRDT drops
+> the mechanism. CodeMirror's `mapPos`/`compose`/`invert` supplied the replacement, which is what the split
+> between the two projects in this section is actually for.
+>
+> Five things the plan did not anticipate:
+>
+> - **Composition coarsens position mapping, and cannot not.** Mapping through `compose(a, b)` does *not*
+>   always equal mapping through `a` then `b`: when two replaced regions end up adjacent with no surviving
+>   original text between them, they merge — correctly, in original coordinates — and a position on the
+>   former boundary becomes interior to a deletion. The composed edit still produces a byte-identical
+>   document, which is the property undo rests on. Pinned as intended behaviour rather than deleted, along
+>   with what *is* guaranteed: a coalesced run of keystrokes maps the caret exactly.
+> - **`line-height` is a unitless multiplier of font size**, as in CSS — not a pixel height. Reading it as
+>   pixels compiles, runs, and draws every row on top of the last.
+> - **`markAsInternal()` is for a widget's parts, never the widget.** Calling it on `TextEditor` itself hid
+>   the whole thing from traversal and focus. `ListView` made the same mistake once already.
+> - **`updateWithoutPainting()` does no input handling**, so it never sets `firstFrameOver` — and
+>   `consumeKeyboardEvent` early-returns until that is set. A test that only advances frames drops every
+>   key before dispatch, and the widget looks completely dead while being perfectly correct.
+> - **Modifiers come from the platform, not the event.** `UIInputHandler` reads
+>   `CgPlatform.input().getCurrentModifiers()`, so synthesising a Shift key-down does nothing; a test sets
+>   the mask by being the platform. `MouseEvent` carries no mask at all, which is why shift-click asks the
+>   platform directly.
+>
+> **Soft wrap is deliberately absent rather than stubbed.** Wrapping makes a line occupy a variable number
+> of visual rows, so the window can no longer be derived by dividing scroll offset by row height — it needs
+> the variable-height virtualisation 6.1.3 deferred. There is no `setSoftWrap`, because a toggle that
+> silently did nothing is worse than an absent one; this engine already paid for that with highlight
+> properties that resolved and never painted. **This is the one item of 6.1.6's stated scope not
+> delivered**, and 6.1.7's wrapped code lines are what will force it.
+>
+> **Known duplication, deliberately left.** `TextEditor` windows its own lines instead of extending
+> `ListView`, which windows over an `ObservableList` — mirroring rope-derived rows into a list would be a
+> second copy of the document that can drift. The seam worth extracting is "window over N fixed-height
+> rows"; it becomes worth extracting when 6.1.7's gutter needs a third copy.
+
+<details><summary>Original design</summary>
+
 
 > **Design settled 2026-07-31, after research.** Storage is a **rope over a summary B+ tree** (Zed's
 > `SumTree`). Edits, anchors and undo are **change sets with position mapping** (CodeMirror 6). Those are
@@ -929,6 +974,8 @@ construction; sharing it would mean generalising every method on it while it sta
 > Honest scoping note: this is the largest widget in any UI toolkit. It is placed sixth so that it consumes
 > three finished foundations rather than growing its own private versions of them, which is the failure mode
 > to watch for.
+
+</details>
 
 ### 6.1.7 Code editor · `TODO`
 
@@ -1208,7 +1255,59 @@ Harness-testable in isolation, independent of everything in 6.1, and roughly a d
 
 </details>
 
-### 6.2.2 Pan/zoom canvas · `TODO`
+### 6.2.2 Pan/zoom canvas · `DONE` (2026-07-31)
+
+> **Shipped as `CanvasView` + `WorldRect` in `ui/elements/canvas/`**, with 17 tests, a `canvasview`
+> rule in `default.css`, and a `cgui-canvas` harness scene that draws node wires through
+> `ctx.curve()` — the first thing in the engine that looks like a node graph.
+>
+> **The sketch below was right about the hard part being done already**, and that held: zoom is a
+> CSS `transform` on one internal `__content__` child, so the plane scales without reflowing anything
+> and clicks follow the picture with no code in the widget at all. What the sketch did not anticipate
+> was any of the following.
+>
+> - **A drag only ever ended on button 0.** `UIInputHandler` hard-coded it, which is invisible for
+>   every drag the engine had until now — Slider, Scroller, SplitView, the resizers and the payload
+>   drags are all left-button — and fatal for the first one that is not. A middle-drag pan starts
+>   correctly, pans correctly, and then never ends: the release arrives, nothing tells the controller,
+>   and the implicit pointer-capture release still fires because no button is down. The result is a
+>   live drag consuming every mouse move with nothing held, i.e. the canvas sliding around on its own.
+>   `startDrag` now takes the button, defaulting to left, and the handler compares against it. Found by
+>   the one test that released the middle button rather than assuming symmetry.
+> - **The drag source must be the viewport, never the plane.** Every coordinate a `DragListener`
+>   receives is converted through the source's own transform — so dragging *from* the thing being
+>   panned moves the frame the delta is measured in, and the view accelerates away from the cursor
+>   instead of following it. Cheap to get wrong, because the plane is the obvious source.
+> - **`transform-origin` defaults to 50%, and that silently breaks every conversion.** The plane must
+>   scale about its own top-left or world↔screen is off by half a viewport times the zoom. Pinned at
+>   IMPORTANT rather than compensated for: one answer instead of two, and a theme cannot take it back.
+>   Pinned by its own test, because the failure looks *internally consistent* — the picture is fine,
+>   the clicks are fine, and only the relationship between them is wrong.
+> - **Culling wants `opacity: 0`, not `display: none`.** This is the finding worth keeping. A culled
+>   node's layout rect is precisely the input its own cull decision is computed from, so collapsing its
+>   layout means it can never be un-culled without a cache of where it used to be — and that cache goes
+>   stale the moment anything moves a node while it is invisible. `opacity: 0` short-circuits
+>   `drawSubtree` at the top, keeps layout live, and makes the decision self-correcting on every tick.
+>   It also costs no relayout as nodes cross the viewport edge, which panning does constantly. What is
+>   given up is layout cost for off-screen nodes, and that is the smaller half: layout recomputes only
+>   when dirty, paint happens every frame.
+> - **Pan is measured after zoom**, because the transform is `translate(pan) scale(zoom)` in CSS's
+>   left-to-right order. That makes a pan drag a plain addition of the pointer delta at any zoom, with
+>   no division to get subtly wrong at the extremes. `centerOnWorld` covers the cases that genuinely
+>   want world units.
+> - **A bare left-drag deliberately does not pan.** It is 6.2.4's marquee, and handing it to panning
+>   now would mean taking it back later. Middle-drag always pans; Space+left is the escape hatch, read
+>   as held state through `CgPlatform.input()` rather than as an event. The gesture is read in the
+>   **capture** phase, so it beats whatever node is under the cursor — bubbling would make space-drag
+>   work everywhere except over the nodes, i.e. everywhere except where you want to grab.
+>
+> **Deliberately not done here.** No grid background: a tiled background on `__content__` is in world
+> space and therefore scales and slides with the view for free, so it is a theme's line of CSS rather
+> than a widget feature. No zoom-to-fit-selection (there is no selection until 6.2.4), no inertia, and
+> no minimap.
+
+<details>
+<summary>Original sketch — retained; accurate as far as it went</summary>
 
 A viewport widget: wheel-zoom about the cursor, middle-drag or space-drag to pan, fit-to-content, and
 culling of off-screen nodes.
@@ -1216,6 +1315,8 @@ culling of off-screen nodes.
 `transform` already does the hard part — it is layout-free, so scaling the canvas cannot reflow anything,
 and `UITransform.applyTo` is shared between the hit-test chain and the render `PoseStack`, so clicks follow
 the picture. What is missing is the widget, the input gestures, and the culling.
+
+</details>
 
 ### 6.2.3 Node and port widgets · `TODO`
 
@@ -1255,14 +1356,17 @@ this stops being a UI demo and becomes the shader graph's actual data.
 6.1.10 file SPI ──► 6.1.11 docking ──► 6.1.12 chrome
 
 6.2.1 CgCurveRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──► 6.2.4 editing ──► 6.2.5 model
+      (done)              (done)
 ```
 
-**Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → **6.1.6 (next)** →
-6.1.7 → 6.1.8, then 6.1.10-12, then the 6.2 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done,
+**Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → ~~6.1.6~~ →
+**6.1.7 (next)** → 6.1.8, then 6.1.10-12, then the 6.2 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done,
 see 6.1.9; its implementation lands with 6.1.6.
 
-6.2.1 is the one item that can be pulled forward at any time — it is self-contained, depends on nothing in
-6.1, and is harness-testable on its own.
+~~6.2.1 is the one item that can be pulled forward at any time~~ — and it was, along with **6.2.2**, which
+turned out to share the same property: the canvas depends on `transform`, the drag controller and the curve
+renderer, none of which 6.1 touches. The 6.2 chain is now unblocked as far as **6.2.3**, which is the next
+item that can run in parallel with 6.1's remaining work.
 
 ---
 
@@ -1273,12 +1377,33 @@ see 6.1.9; its implementation lands with 6.1.6.
 | ~~Are `CgShapedParagraph`'s style spans drivable without backend work?~~ | ~~6.1.1~~ | **Answered: yes, entirely.** The backend was already complete; 6.1.1 was a translation layer. |
 | What *is* the filesystem in a Minecraft context — resource packs, world data, server storage? | 6.1.10 | Shape the SPI around what the client can be handed, not around POSIX. |
 | ~~Do widgets mutate models directly, or emit commands?~~ | ~~6.1.9~~ | **Answered: both, split on document vs view state.** See 6.1.9. Settled while three widgets had chosen rather than a dozen, which is the whole reason it was the gate. |
-| Fixed-height rows only for the first virtualised pass? | 6.1.3 | Variable height is needed for wrapped code lines, so it is deferred rather than skipped. |
+| Fixed-height rows only for the first virtualised pass? | 6.1.3, **and now 6.1.7** | Still deferred. 6.1.6 shipped without soft wrap for exactly this reason, so the wrapped code lines in 6.1.7 are what will force it — it is no longer a question that can be deferred again. |
 | Does the code editor need multi-cursor? | 6.1.7 | Cheap to design for, expensive to retrofit. Worth an early yes/no. |
 
 ---
 
 ## Changelog
+
+- **2026-07-31** — **6.2.2 pan/zoom canvas done, built in parallel with 6.1.6.** `CanvasView` +
+  `WorldRect`, 17 tests, a `cgui-canvas` harness scene whose wires are drawn with 6.2.1's `ctx.curve()`
+  from inside the transformed plane.
+  - **The design's premise held**: zoom is one CSS `transform` on one internal child, and because
+    `UITransform.applyTo` is shared by the render pose and the hit-test chain, clicks follow the picture
+    with no widget code. The load-bearing test is the one that takes a world coordinate through the
+    widget's own conversion and asks the *engine's* hit-tester what is under the resulting pixel.
+  - **An engine bug fell out of it: a drag only ever ended on button 0.** Every drag in the engine so
+    far is left-button, so nothing had exercised it. A middle-drag pan started, panned, and then never
+    stopped — the release told nobody while pointer capture was released anyway, leaving a live drag
+    eating mouse movement with no button held. `startDrag` now takes the button.
+  - **Cull by skipping paint, not layout.** `display: none` collapses the very layout rect the cull
+    decision reads, so a culled node can only come back via a cache that goes stale whenever something
+    moves. `opacity: 0` keeps the decision self-correcting and costs no relayout at the viewport edge,
+    which is where panning spends all its time.
+  - **`transform-origin` had to be pinned**, because its 50% default breaks every conversion *without
+    breaking the picture* — the canvas stays internally consistent and only the world↔screen mapping is
+    wrong, which is the shape of bug that survives a demo.
+  - **The bare left-drag was left alone on purpose**, reserved for 6.2.4's marquee rather than spent on
+    a second way to pan.
 
 - **2026-07-31** — **6.2.1 `CgCurveRenderer` done, pulled forward and built in parallel with 6.1.2.**
   Entirely inside CrystalGraphics, so it shared no file with the 6.1 work except this one.
