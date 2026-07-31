@@ -221,13 +221,9 @@ public final class EditorCommands {
         // VS Code's chords. Both spellings of each, because the numeric keypad is a different key code
         // and a laptop without one is the common case -- and one call rather than two, so the pair cannot
         // drift apart when somebody edits only the line they were looking at.
-        keymap.bindAll("Mod+Equals, Mod+Add", PREFIX + "zoomIn");
-        keymap.bindAll("Mod+Minus, Mod+Subtract", PREFIX + "zoomOut");
+        keymap.bindAll("Mod+WheelUp, Mod+Equals, Mod+Add", PREFIX + "zoomIn");
+        keymap.bindAll("Mod+WheelDown, Mod+Minus, Mod+Subtract", PREFIX + "zoomOut");
         keymap.bindAll("Mod+0, Mod+Numpad0", PREFIX + "zoomReset");
-        // Ctrl+wheel, as every editor has it -- and as a BINDING, so it is remappable and shows
-        // up in a palette beside the keyboard chords rather than being hard-coded input.
-        keymap.bindAll("Mod+WheelUp", PREFIX + "zoomIn");
-        keymap.bindAll("Mod+WheelDown", PREFIX + "zoomOut");
 
         // Bound on the EDITOR, using UndoCommands' own chords and ids. A host that also installs undo at
         // the root gets the same command either way, and the inner binding simply wins while focus is
