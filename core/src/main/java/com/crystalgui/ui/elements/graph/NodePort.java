@@ -235,6 +235,9 @@ public class NodePort extends UIElement {
         if (view == null || window == null) return false;
 
         view.beginPendingWire(this);
+        // Snapshotted so onDragEnd can tell a wire that landed from one that did not: a drop on a port
+        // fires DragEvent.Drop (and therefore connects) before the drag ends.
+        final int startingConnections = getConnectionCount();
         window.getInputHandler().getDragController().startDrag(this, rawX, rawY, this,
                 new UIDragController.DragListener() {
                     @Override
@@ -244,12 +247,14 @@ public class NodePort extends UIElement {
 
                     @Override
                     public void onDragEnd(float mx, float my) {
-                        view.endPendingWire();
+                        view.endPendingWire(NodePort.this, mx, my,
+                                getConnectionCount() > startingConnections);
                     }
 
                     @Override
                     public void onDragCancel() {
-                        view.endPendingWire();
+                        // Escape is a cancel, never an invitation to create something.
+                        view.endPendingWire(NodePort.this, 0f, 0f, true);
                     }
                 });
         return true;

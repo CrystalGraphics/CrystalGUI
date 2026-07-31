@@ -1126,6 +1126,76 @@ The native shipping story is the real one. Loader jars already bundle JNI for
 configuration across four targets, and the mc modules are not in this build today. Keeping tree-sitter in
 its own module means `core/` and the harness stay unaffected either way.
 
+### 6.1.7b Code editor — the rest of the foundations · `IN PROGRESS` (2026-07-31) · **next**
+
+6.1.7 was marked done against this plan's checklist rather than against "is this an editor anyone would
+use". Audited against that question instead, and the gaps are real — one of them undercuts a feature
+already built.
+
+**Keybindings follow VS Code's defaults** throughout. These are conventions, not derivable answers, and a
+wrong one is felt immediately and cannot be named — the same reasoning 6.2.4 used for its shortcut set.
+
+#### A. The text model is wrong for real files
+
+- **CRLF is unhandled.** `Rope`/`TextSummary` count `'\n'` and neither mentions `'\r'`, so a Windows file
+  carries a stray carriage return on every line. Detect the dominant ending on load, normalise to `\n`
+  internally, and restore it on save — the model stays single-ending, which is what keeps every offset in
+  the engine meaning one thing.
+- **Tabs are not a character the editor understands.** Indent is spaces-only. A tab needs a rendered width
+  (to the next tab stop, not a fixed advance) or every file that uses them misaligns.
+- **Read-only mode.** Absent, and a viewer is the first thing a file browser needs.
+
+#### B. Multi-cursor is unreachable
+
+Built, and creatable only by Alt+Click — `addCaret` has exactly one call site. Missing the two ways anyone
+actually makes carets:
+
+- `Ctrl+D` — add a caret at the next occurrence of the selection (or the word under the caret)
+- `Ctrl+Shift+L` — a caret at every occurrence
+- `Ctrl+Alt+Up/Down` — a caret on the line above/below
+
+#### C. Line operations, the highest-frequency edits after typing
+
+`Alt+Up/Down` move, `Shift+Alt+Up/Down` copy, `Ctrl+Shift+K` delete, `Ctrl+Enter` / `Ctrl+Shift+Enter`
+insert below/above, `Ctrl+L` select line, join lines.
+
+#### D. Typing aids
+
+- **Auto-closing brackets and quotes**, with **type-over**: typing `)` where a `)` already sits moves past
+  it rather than inserting a second. Without type-over auto-closing is worse than not having it.
+- **Surround**: typing a bracket with a selection wraps it instead of replacing it.
+- **Smart backspace** — at the head of an indent, delete a whole level rather than one space.
+- **Dedent on close** — typing `}` re-indents its line to match its opener.
+
+#### E. Comments need a language descriptor
+
+`Ctrl+/` and block comment toggling need to know a language's comment tokens — as do auto-close pairs and
+indent triggers. That is a `Language` value (comment tokens, bracket pairs, word characters), separate from
+the `SyntaxTokenizer` that colours it. Two different questions about the same language, and conflating them
+would make the tree-sitter backend responsible for things a grammar does not describe.
+
+#### F. Search has no keyboard at all
+
+`Ctrl+F`, `F3`/`Shift+F3`, `Ctrl+H` — the entire interface in every editor, and currently API-only. Plus
+whole-word and regex, and search-within-selection.
+
+#### G. View
+
+**Soft wrap** (unblocked by `VariableHeightStrategy`, still not delivered), indent guides, visible
+whitespace, a column ruler, and scroll-past-end.
+
+#### H. All of it through the keymap
+
+Every command above registered as a `Command` against 6.1.2's registry rather than switch cases in
+`handleKey`, so they are rebindable, discoverable in the palette, and reachable from a menu. The editor
+currently hard-codes its keys, which was fine for a dozen and is not for sixty.
+
+#### Explicitly out of scope
+
+Debugger, LSP, IntelliSense, minimap, git gutter. Folding is deferred with them: done properly it wants the
+syntax tree, and indentation-based folding is the kind of approximation that is wrong exactly where code is
+interesting.
+
 ### 6.1.8 Configurator · `TODO`
 
 Point it at an object, get an editing UI. Annotation-driven, concept borrowed from LDLib2 — which has the
@@ -2001,12 +2071,137 @@ The reason 6.2.4 could not build them. With a document they are ordinary:
 | Subgraphs? | LDLib2 has `ISubgraphNode`; the manifesto implies them. A node whose type resolves to another document. Deferred, but the id scheme must not preclude it. |
 | Does the document own node *positions*? | Yes here — but note that position is view state by 6.1.9's boundary, and a moved node is nonetheless something a reload should give back. The resolution is that position is document data with no undo-relevance debate: `MoveNodeEdit` already records it. |
 
-### 6.2.6 Node library and creation menu · `TODO`
+### 6.2.6 Node library and creation menu · `DONE` (2026-07-31)
 
-Unity's "drop an edge on empty canvas and get a filtered node menu", plus a searchable library panel.
-`Menu`/`MenuItem` and `TextField` already exist; what is missing is the node-type registry to search and
-the filtering rule (*"only nodes with a port that accepts a vec3"*). Small, and it is the difference
-between a demo and something usable.
+> **Shipped**: `NodeType` + `NodeTypeRegistry` (headless, 10 tests), `NodeWidgetFactory` with its
+> placeholder path, `NodeCreationMenu` (14 tests), `graph.createNode` on Space, the contextual menu on a
+> wire dropped over empty canvas, and the gallery's graph page rebuilt on a real six-type library.
+>
+> **The research held.** Entries are **(type, port) pairs** rather than types, so choosing one creates
+> the node *and* lands the wire in one undo step; search matches synonyms because the type declares
+> them; and the filter asks the document's own compatibility rule, so a float output is offered the vec3
+> inputs it may legally promote into.
+>
+> **The placeholder path earned its keep immediately.** Four of the gallery's six types have no custom
+> widget at all — they are built from the document's stored ports — which is the same mechanism as
+> "opened without the plugin" and means a library is usable before anyone writes a factory.
+>
+> #### Eleven bugs, all found by looking, and they fall into two families
+>
+> Not one was in the library logic the headless tests cover. They were **seams between a promoted popup
+> and the canvas underneath it**, and **CSS idioms applied in the wrong container context** — and the
+> second family is the more embarrassing, because this file already contains the notes that predict them.
+>
+> **The promoted-child family.** The menu is the graph's DOM child, promoted to the top layer, so its
+> input still travels *through* the graph:
+>
+> - A press on the search box or the resize handle was stolen by the canvas, which treated it as a press
+>   on empty background, cleared the selection and started a marquee with pointer capture. The rows
+>   worked, because their own handler stops propagation — which made it look arbitrary rather than
+>   systematic.
+> - The wheel over the menu zoomed the graph. `ScrollerView` only claims the wheel *while it actually
+>   scrolls*, deliberately, so a short list or one at its end chains outward.
+> - Light dismiss never fired, because the graph was named as the menu's **invoker** — and an invoker
+>   counts as part of its own popover, the carve-out that stops a dropdown button being dismissed by the
+>   press that opens it. Naming the whole canvas made every press "inside" the menu.
+>
+> The guard now lives on `CanvasView`, because it is one rule for every background gesture: **pan, zoom
+> and marquee all ask it.** Three gestures, three separate discoveries of the same thing.
+>
+> **The wrong-container family:**
+>
+> - The list carried `height: 0` + `flex-grow: 1` — correct inside a *definite*-height container, a no-op
+>   inside a content-sized popover. It collapsed to nothing and the menu opened as a search box above a
+>   void.
+> - Entries were centred and clipped at both ends because the row had no `flex-direction`, and Taffy's
+>   default here is COLUMN, so `align-items: center` centred them *across* the row.
+> - Making it resizable without `overflow: hidden` let the rows paint past the border — which this file
+>   already says: *anything resizable should normally also set overflow*. Clipping it then needed a
+>   `min-height`, or it could be dragged smaller than its own search box.
+> - A fixed width clipped the longest labels; it now sizes to its widest row between a floor and a
+>   ceiling.
+>
+> #### Two design corrections that came from the reference, not from a crash
+>
+> - **The port band is translucent, not absent.** Painting nothing let the canvas through as a hole; the
+>   ask was "somewhat transparent" and the answer was an alpha, not a presence/absence choice.
+> - **Stacking is interaction history, not selection state.** `graphnode:checked { z-index }` raised a
+>   node only while selected, so deselecting dropped it back behind whatever was added after it.
+>   `GraphView.raise` now assigns an ever-increasing z-index on press and leaves it there, which is what
+>   every editor does.
+>
+> #### One test that was worse than no test
+>
+> The first regression guard for the collapsed list measured the *rows* — and a 13px row inside a
+> 0-height parent still measures 13px, it is merely clipped. It passed with the bug in place. It was only
+> caught by **re-introducing the bug to check the test failed**, which is now the habit worth keeping:
+> counting elements proves they exist, not that anyone can see them, and anything whose failure mode is
+> "renders as nothing" needs a measurement *of the thing that collapsed*.
+>
+> #### Deliberately not done
+>
+> A **category tree** — `NodeType.category` exists, search already matches it, and the paths are already
+> hierarchical (`Input/Geometry`), so `TreeView` would slot straight in, flattening while a query is
+> typed as Unity does. Six types fit a flat list; sixty will not. And a **draggable** menu: compatible
+> with light dismiss (a press on its own title bar is a press *inside*), but it only pays off if the menu
+> is something you keep open — which is a docked library panel, and 6.1.11's territory.
+
+<details>
+<summary>The plan, as researched — implemented as written</summary>
+
+#### What the research settled
+
+**1. The contextual menu filters by the dragged edge's type — and lists ports, not just nodes.** Unity
+*"filters the available nodes and only shows those that use the Data Type of a selected edge, listing
+every available Port on nodes that match"*. So an entry is a **(type, port) pair**, and picking one
+creates the node *and* makes the connection in a single step. That is a materially better interaction
+than "create a node, then wire it yourself", and it is a different data shape: the menu is built from
+ports, not from types.
+
+**2. Search matches names and synonyms.** Unity's box *"filters the listed nodes by name parts and
+synonyms based on industry terms"* — so `Add` is findable by typing `plus`, and a shader author who
+learned the word somewhere else still finds the node. Synonyms are a field on the type, not a search
+feature bolted on later.
+
+**3. Two triggers, both already reserved.** `Space` opens it at the cursor (Unity's shortcut reference),
+and dropping a wire on empty canvas opens it filtered (the path 6.2.3 deliberately left open).
+
+#### The registry is the missing piece three items need
+
+`NodeTypeRegistry` is not only the menu's backing store. **The view migration needs it too** — a
+document knows a `typeId`, and turning that into a `GraphNode` widget is exactly what a factory does —
+and so does duplicate, which is why 6.2.4 had to defer. Building it here unblocks both.
+
+The split follows the model/view line already drawn:
+
+| Where | What |
+|---|---|
+| `com.crystalgui.graph.NodeType` | id, label, category, synonyms, port template, default properties. **Headless** — `create(x, y)` returns a `NodeData`, so a server can build a node without a widget in sight |
+| `com.crystalgui.graph.NodeTypeRegistry` | id → type, plus the two queries the menu asks: text search, and "which (type, port) pairs accept a `vec3` output?" |
+| `ui.elements.graph.NodeWidgetFactory` | typeId → `GraphNode`. The UI half, registered separately, so the model never learns what a widget is |
+
+**A missing factory is not an error.** It falls back to a placeholder built from the document's stored
+ports — the same mechanism that makes an unknown node type survive a load. A graph with no factories at
+all still renders structurally, which is both the "mod not installed" case and the cheapest way to see a
+document on screen.
+
+#### Deliverables
+
+- `NodeType`, `NodeTypeRegistry` with search and compatible-port filtering, tested in `headlessTest`.
+- `NodeCreationMenu` — a `Popover` with a `TextField` and a filtered list, built from `Menu`/`MenuItem`.
+- Both triggers, and create-and-connect as **one** undo transaction.
+- The gallery's graph page gets a real library to add from.
+
+#### Traps
+
+1. **The menu must open where the wire was dropped**, not where the pointer ended up after the popup
+   placed itself — `AnchoredPlacement` owns position, and nothing else may write `left`/`top`.
+2. **Create-and-connect is one step.** Two undo presses to remove a node you just made is the same
+   failure as forty presses to undo one drag.
+3. **The filter asks the document's `TypeCompatibility`**, not equality — or a float output would offer
+   nothing on a graph whose consumer promotes.
+
+</details>
 
 ### 6.2.7 Node previews · `TODO` · **has an engine question in it**
 
@@ -2040,14 +2235,14 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
 
 6.2.1 CgCurveRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──┬─► 6.2.4 editing ──► 6.2.5 model
       (done)              (done)             (done)         (done)      ▲
-                                                               ├─► 6.2.6 node library
+                                                               ├─► 6.2.6 node library (done)
                                                                └─► 6.2.7 previews (slot only;
 6.1.9 command/undo ────────────────────────────────────────────────────┘   the pipeline is
                                                                             CrystalShader's)
 ```
 
 **Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → ~~6.1.6~~ →
-~~6.1.7~~ → **6.1.8 (next)**, then 6.1.10-12, then the 6.2 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done,
+~~6.1.7~~ → **6.1.7b (next)** → 6.1.8, then 6.1.10-12, then the 6.2 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done,
 see 6.1.9; its implementation lands with 6.1.6.
 
 ~~6.2.1 is the one item that can be pulled forward at any time~~ — and it was, along with **6.2.2**, which
@@ -2074,6 +2269,29 @@ item that can run in parallel with 6.1's remaining work.
 ---
 
 ## Changelog
+
+- **2026-07-31** — **6.2.5's model and 6.2.6 done: the graph is a document, and nodes can be created
+  from a library.** `com.crystalgui.graph` (17 tests) plus `NodeType`/`NodeTypeRegistry` (10) and the
+  create menu (14).
+  - **The manifesto's "no separate formats" had to be resolved before any code existed**: the user's
+    file stays `.shader`, CrystalGUI ships a generic typed document because the settled scope is a
+    general-purpose editor framework, and CrystalShader maps between them. The obligation is that the
+    document must *express* what the compiler needs — stable ids usable as a GLSL prefix, type ids,
+    typed ports — with no GLSL in `core/`.
+  - **Ids are stored, unlike the UI tree's**, whose own docs record that inserting renumbers everything
+    after it. For a graph that is fatal, because edges reference ids.
+  - **Unknown node types survive a load**, ports and edges intact — a deliberate divergence from
+    `ElementRegistry`, which throws on an unknown tag. Eating somebody's graph because a plugin is
+    missing is far worse than showing a grey box, and the same mechanism gives the create menu its
+    placeholder widgets.
+  - **Eleven bugs in the menu, every one found by looking rather than by CI**, and they were two
+    families: a promoted popup's input travelling through the canvas beneath it (press, wheel, and
+    light dismiss, each discovered separately), and CSS idioms applied in the wrong container context —
+    a zero flex basis where nothing could grow, a missing `flex-direction` against a COLUMN default, a
+    resizable box with no `overflow`. The second family is predicted by notes already in this file.
+  - **One regression test was worse than none.** It measured the rows rather than the container that
+    collapsed, and passed with the bug in place; it was caught only by re-introducing the bug to check
+    the test failed. Worth making a habit.
 
 - **2026-07-31** — **6.1.9 done: the undo half, built from the 6.2 track.** `core/undo/` — `Edit`,
   `CompositeEdit`, `UndoStack` — with 20 tests in `headlessTest`, so the mechanism is provably free of

@@ -4,6 +4,9 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.graph.NodeData;
+import com.crystalgui.graph.NodeTypeRegistry;
+import com.crystalgui.graph.TypeCompatibility;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
@@ -141,6 +144,7 @@ public class GraphView extends CanvasView implements UndoScope {
             // A press that reached the graph itself landed on empty canvas: a node claims its own press
             // in the capture phase, and a port claims one before that. So this is the marquee's press —
             // unless a wire is under it, which is the only thing here that is drawn but not an element.
+            if (isInsidePromotedChild(event.getTarget())) return;
             if (beginMarqueeOrPickWire(event.getPosition().x(), event.getPosition().y())) {
                 event.stopPropagation();
             }
@@ -234,6 +238,31 @@ public class GraphView extends CanvasView implements UndoScope {
             if (child instanceof GraphNode node) found.add(node);
         }
         return found;
+    }
+
+    // ── Stacking ────────────────────────────────────────────────────────────
+
+    /** Monotonic, so the most recently raised node always outranks every node raised before it. */
+    private int raiseCounter;
+
+    /**
+     * Brings {@code node} to the front, permanently.
+     *
+     * <p><b>Raising is interaction history, not selection state.</b> The first attempt keyed stacking off
+     * {@code :checked} in the theme, which put a selected node on top and then dropped it back the moment
+     * something else was selected — so a node you had deliberately brought forward sank behind a
+     * neighbour again as soon as you clicked away. Every editor treats "the last node you touched" as
+     * the top one and leaves it there.</p>
+     *
+     * <p>An ever-increasing {@code z-index} rather than reordering the children: the engine already sorts
+     * and hit-tests by it, so paint order and click order stay the same answer, and nothing about the
+     * tree moves — which matters because the node is under the pointer at the exact moment it is raised.
+     * Written at IMPORTANT because it is runtime state, the same as a scrollbar thumb's position.</p>
+     */
+    public GraphView raise(GraphNode node) {
+        final int next = ++raiseCounter;
+        StyleGroup.importantPipeline(node.getStyle().getGeneralGroup(), g -> g.zIndex(next));
+        return this;
     }
 
     // ── Selection ───────────────────────────────────────────────────────────
@@ -668,8 +697,142 @@ public class GraphView extends CanvasView implements UndoScope {
         wireLayer.updatePending(planeX, planeY);
     }
 
-    void endPendingWire() {
+    /**
+     * Ends the wire drag. When it landed on nothing and a library is set, this is where the contextual
+     * create-node menu opens - the path 6.2.3 deliberately left room for.
+     *
+     * @param planeX where the wire was dropped, in the plane's own space
+     */
+    void endPendingWire(NodePort from, float planeX, float planeY, boolean connected) {
         wireLayer.endPending();
+        if (connected || creationMenu == null) return;
+        offerNodeFor(from, planeX, planeY);
+    }
+
+    // -- The node library ----------------------------------------------------
+
+    @Nullable
+    private NodeCreationMenu creationMenu;
+
+    @Nullable
+    @Getter
+    private NodeTypeRegistry nodeLibrary;
+
+    @Nullable
+    private NodeWidgetFactory nodeFactory;
+
+    private TypeCompatibility typeRule = TypeCompatibility.EXACT;
+
+    /** Where the node the menu is about to create will land, and what it should wire to. */
+    private float pendingWorldX, pendingWorldY;
+
+    @Nullable
+    private NodePort pendingFrom;
+
+    /**
+     * Gives this graph a library to create nodes from, and a factory to build their widgets.
+     *
+     * <p>Both belong to the consumer: the library is the thing a shader graph and a dialogue graph
+     * disagree about, and the factory is what turns a type id into the particular box somebody designed.
+     * With neither set the graph still works entirely - you simply cannot add a node from inside it.</p>
+     */
+    public GraphView setNodeLibrary(NodeTypeRegistry library, NodeWidgetFactory factory,
+                                    TypeCompatibility rule) {
+        this.nodeLibrary = library;
+        this.nodeFactory = factory;
+        this.typeRule = rule == null ? TypeCompatibility.EXACT : rule;
+        NodeCreationMenu menu = new NodeCreationMenu(library);
+        menu.onChosen.connect(this::createFromOffer);
+        addInternalChild(menu);
+        this.creationMenu = menu;
+        return this;
+    }
+
+    /** The create-node menu, once a library has been set. */
+    @Nullable
+    public NodeCreationMenu creationMenu() {
+        return creationMenu;
+    }
+
+    /** Opens the menu unfiltered, at a world position - what Space does. */
+    public GraphView openCreationMenu(float worldX, float worldY) {
+        if (creationMenu == null) return this;
+        pendingFrom = null;
+        pendingWorldX = worldX;
+        pendingWorldY = worldY;
+        Vector2f at = rootPositionOfWorld(worldX, worldY);
+        // NO invoker. The invoker is deliberately treated as part of its own popover -- that carve-out
+        // exists so a dropdown button is not dismissed by the very press that opens it -- and naming the
+        // graph as invoker therefore made every press anywhere on the canvas count as a press INSIDE the
+        // menu, so light dismiss never fired. This menu has no invoker: a gesture opened it, not a button.
+        creationMenu.openAll(at.x(), at.y(), null);
+        return this;
+    }
+
+    private void offerNodeFor(NodePort from, float planeX, float planeY) {
+        if (creationMenu == null) return;
+        pendingFrom = from;
+        // The drag reports PLANE space (the port's own), which is world plus the plane's origin - and the
+        // wire layer sits at world (0,0), so its origin is that offset. The same conversion the layer
+        // itself uses, rather than a second one that could drift from it.
+        float ox = wireLayer.getRuntimeCache().getX(), oy = wireLayer.getRuntimeCache().getY();
+        pendingWorldX = planeX - ox;
+        pendingWorldY = planeY - oy;
+
+        Vector2f at = rootPositionOfWorld(pendingWorldX, pendingWorldY);
+        // Invoker null -- see openCreationMenu.
+        if (from.getDirection().isOutput()) {
+            creationMenu.openForOutput(from.getType().id(), typeRule, at.x(), at.y(), null);
+        } else {
+            creationMenu.openForInput(from.getType().id(), typeRule, at.x(), at.y(), null);
+        }
+    }
+
+    /**
+     * World -> the root-relative logical coordinates a promoted popover is positioned in.
+     *
+     * <p>Through {@code worldToViewport}, so the menu opens where the wire was dropped <em>on screen</em>
+     * rather than where it would be at zoom 1. A promoted element's containing block is the root, which
+     * is why the root's own origin comes off at the end.</p>
+     */
+    private Vector2f rootPositionOfWorld(float worldX, float worldY) {
+        Vector2f onScreen = worldToViewport(worldX, worldY);
+        UIWindow window = getAttachedWindow();
+        if (window == null) return onScreen;
+        var rootCache = window.ui.rootElement.getRuntimeCache();
+        return new Vector2f(onScreen.x() - rootCache.getX(), onScreen.y() - rootCache.getY());
+    }
+
+    /**
+     * Creates the chosen node and, when the menu was opened by a dropped wire, connects it - as
+     * <b>one</b> undo step.
+     *
+     * <p>Two presses to undo a node you just made is the same failure as forty presses to undo one drag,
+     * and for the same reason: the user did one thing.</p>
+     */
+    private void createFromOffer(NodeTypeRegistry.Offer offer) {
+        if (nodeFactory == null) return;
+        NodeData data = offer.type().create(pendingWorldX, pendingWorldY);
+        GraphNode node = nodeFactory.create(offer.type(), data);
+
+        undoStack.beginTransaction("create " + offer.type().label());
+        try {
+            addNode(node, pendingWorldX, pendingWorldY);
+            undoStack.push(new AddNodeEdit(this, node, pendingWorldX, pendingWorldY, true));
+            NodePort source = pendingFrom;
+            if (source != null && offer.port() != null) {
+                for (NodePort port : node.getPorts()) {
+                    if (port.getName().startsWith(offer.port().portId())) {
+                        connect(source, port);
+                        break;
+                    }
+                }
+            }
+        } finally {
+            undoStack.endTransaction();
+        }
+        pendingFrom = null;
+        selection.selectOnly(node);
     }
 
     // ── Wire geometry ───────────────────────────────────────────────────────

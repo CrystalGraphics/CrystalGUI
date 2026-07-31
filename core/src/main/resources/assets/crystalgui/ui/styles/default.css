@@ -1112,6 +1112,76 @@ nodeport:blank .__editor__ { display: flex; }
  * is being drawn by. Its look is the theme's. */
 graphview .__marquee__ { }
 
+/* The create-node menu. A Popover, so dismissal, the top layer and focus restore are already handled --
+ * what is left is the geometry it cannot function without: a width, a bounded list that scrolls rather
+ * than growing past the screen, and rows tall enough to hit. */
+nodecreationmenu {
+    /* Sized to its WIDEST ROW, between a floor and a ceiling.
+       A fixed width clipped "Perlin noise 3D - Sampling Coordinates" while wasting space on "Add - A",
+       and a label a user cannot read is a row they cannot choose. `auto` here means max-content, since a
+       popover is content-sized; the floor stops a library of short names producing a sliver, and the
+       ceiling stops one pathological label producing a menu wider than the window. */
+    width: auto;
+    max-width: 320px;
+    /* The floor a drag cannot go below. Expressed as min-width/min-height rather than as a clamp in the
+       resizer, deliberately: those are the spec's only constraints on `resize` and Taffy already applies
+       them, so a resizer that clamped as well would be a second mechanism able to disagree.
+
+       46px is the search box plus a row, which is the point below which this stops being a menu -- drag
+       it smaller and you get a clipped search bar and nothing to pick from, since `overflow: hidden` now
+       (correctly) hides what will not fit. */
+    min-width: 170px;
+    min-height: 46px;
+    /* Trailing handles only -- Popover refuses the leading four, because AnchoredPlacement owns left/top
+       on an anchored popup and a second writer fights it every frame. That leaves the bottom-right
+       corner, which is CSS's own default grabber and what Unity offers.
+
+       `overflow: hidden` is NOT optional beside it. A resize writes an explicit height, and without a
+       clip the rows simply carried on painting past the border and over the canvas below -- which is
+       exactly what a menu dragged shorter did. This engine's own notes say a resizable box should set
+       overflow; that is the half browsers get for free by restricting `resize` to scroll containers. */
+    resize: both;
+    overflow: hidden;
+    flex-direction: column;
+    padding-all: 3px;
+    gap-all: 2px;
+}
+nodecreationmenu .__search__ { width: 100%; height: 14px; }
+/* NO zero basis here, and that is the opposite of the advice everywhere else in this file.
+ *
+ * `height: 0` + `flex-grow: 1` is right inside a container with a DEFINITE height, where growing means
+ * taking the space left over. This popover is content-sized, so there is no leftover space to take and
+ * the list simply stayed 0px tall -- the menu opened showing its search box and nothing else, which is
+ * precisely what it looked like. Auto height plus a max-height gives the wanted behaviour directly: as
+ * tall as its rows, until it would be taller than the screen, then it scrolls. */
+/* flex-shrink: 1 is a deliberate departure from this engine's default of 0. The menu is resizable, so
+ * its content has to give way when it is dragged shorter -- and the list is the part that should, because
+ * it can scroll. Left at 0 the rows keep their full height inside a smaller box and spill (or, now,
+ * are clipped away entirely, which is worse: they would be unreachable). */
+nodecreationmenu .__items__ {
+    width: 100%;
+    max-height: 160px;
+    flex-direction: column;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+/* flex-direction: row is NOT optional, and its absence is why the labels came out centred and clipped
+   on both sides: Taffy's default here is COLUMN, so `align-items: center` was centring them across the
+   row rather than down it. The two properties read as a pair and only one of them was written. */
+nodecreationmenu .__entry__ {
+    width: 100%;
+    height: 13px;
+    flex-direction: row;
+    padding-left: 4px;
+    padding-right: 4px;
+    justify-content: flex-start;
+    align-items: center;
+    /* A label past the ceiling clips at its own row rather than escaping the menu. */
+    overflow: hidden;
+    cursor: pointer;
+}
+nodecreationmenu .__empty__ { padding-all: 4px; }
+
 /* `pointer` marks anything clickable, as it does on the web for links and buttons. */
 button, checkbox, switch, tab, dropdown, menuitem { cursor: pointer; }
 /* Not set on `textfield`: `cursor: auto` already resolves to `text` over an editable element, which

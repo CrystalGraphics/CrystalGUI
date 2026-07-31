@@ -149,7 +149,11 @@ public class GraphNode extends UIElement {
             if (isInsideControls(event.getTarget())) return;
 
             GraphView view = graphView();
-            if (view != null) view.selectNode(this, isShiftHeld());
+            if (view != null) {
+                view.selectNode(this, isShiftHeld());
+                // Touching a node brings it forward and LEAVES it there -- see GraphView.raise.
+                view.raise(this);
+            }
             focusOnPress();
 
             if (!movable) return;

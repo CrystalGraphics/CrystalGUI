@@ -115,6 +115,23 @@ public class Popover extends UIElement {
         applyOpenState();
     }
 
+    /**
+     * <b>Never</b> — so a resizable popover gets the trailing handles only.
+     *
+     * <p>A popover is absolutely positioned, which would normally earn it all eight resize handles. It
+     * must not have the leading four: {@code AnchoredPlacement} is the single writer of {@code left} and
+     * {@code top} on an anchored popup, and a top or left handle moves the box by writing exactly those.
+     * Two writers means the handle and the placement fight every frame.</p>
+     *
+     * <p>What is left is the bottom, the right and the bottom-right corner — which is also CSS's own
+     * default grabber, and what Unity's Create Node window offers. The constraint and the convention
+     * happen to agree.</p>
+     */
+    @Override
+    protected boolean canMoveResizeOrigin() {
+        return false;
+    }
+
     public Popover setMode(Mode mode) {
         this.mode = mode == null ? Mode.AUTO : mode;
         return this;
