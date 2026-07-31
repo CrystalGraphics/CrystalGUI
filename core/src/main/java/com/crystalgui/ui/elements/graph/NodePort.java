@@ -237,6 +237,10 @@ public class NodePort extends UIElement {
         view.beginPendingWire(this);
         // Snapshotted so onDragEnd can tell a wire that landed from one that did not: a drop on a port
         // fires DragEvent.Drop (and therefore connects) before the drag ends.
+        //
+        // That ordering is a real guarantee of UIDragController and not an assumption — it was written
+        // here first and was FALSE, which made a wire dropped on a valid port connect and open the
+        // create-node menu at the same time. See UIDragController.endDrag.
         final int startingConnections = getConnectionCount();
         window.getInputHandler().getDragController().startDrag(this, rawX, rawY, this,
                 new UIDragController.DragListener() {

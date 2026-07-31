@@ -12,6 +12,8 @@ import com.crystalgui.ui.elements.graph.NodeCreationMenu;
 import com.crystalgui.ui.elements.graph.NodePort;
 import com.crystalgui.ui.elements.graph.NodeWidgetFactory;
 import com.crystalgui.ui.elements.graph.PortType;
+import com.crystalgui.ui.elements.UIText;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -127,7 +129,93 @@ public class NodeCreationMenuTest extends UiTestBase {
         graph.openCreationMenu(100f, 100f);
         frame();
 
-        assertEquals(2, menu.entries().size());
+        // Both types are in "Math", so what is on screen is the folder plus its two children. Counting
+        // OFFERS rather than rows is what a caller means by "every type" — rows include structure.
+        assertEquals(2, menu.visibleOffers().size());
+        assertEquals("the folder is a row too", 3, menu.visibleEntries().size());
+        assertTrue(menu.visibleEntries().get(0).isCategory());
+    }
+
+    /**
+     * <b>A small library opens ready to use; folders only appear once they earn their keep.</b>
+     *
+     * <p>Unity collapses everything by default, which is right for its several hundred nodes and pure
+     * friction for six — two clicks to reach a list that would have fitted on screen whole. Below the
+     * threshold every folder starts open, so a small library behaves exactly like the flat list it was
+     * before the tree existed.</p>
+     */
+    @Test
+    public void aSmallLibraryStartsFullyExpandedAndALargeOneDoesNot() {
+        NodeCreationMenu menu = graph.creationMenu();
+        graph.openCreationMenu(0f, 0f);
+        frame();
+        assertEquals("2 offers is well under the threshold", 2, menu.visibleOffers().size());
+
+        for (int i = 0; i < menu.getAutoExpandThreshold() + 2; i++) {
+            library.register(NodeType.of("shader.Bulk" + i).label("Bulk" + i).category("Bulk")
+                    .out("Out", "vec3"));
+        }
+        graph.openCreationMenu(0f, 0f);
+        frame();
+
+        assertTrue("past the threshold the folders stay shut", menu.visibleOffers().isEmpty());
+        assertEquals("only the two top-level folders show", 2, menu.visibleEntries().size());
+        assertTrue("but everything is still reachable", menu.allOffers().size() > menu.getAutoExpandThreshold());
+    }
+
+    /**
+     * <b>Typing flattens.</b>
+     *
+     * <p>A result set is ranked, not filed. Leaving matches buried under collapsed folders is exactly
+     * what the user typed in order to avoid.</p>
+     */
+    @Test
+    public void aQueryDropsTheFoldersEntirely() {
+        NodeCreationMenu menu = graph.creationMenu();
+        graph.openCreationMenu(0f, 0f);
+        frame();
+        assertTrue("browsing shows structure", menu.visibleEntries().get(0).isCategory());
+        assertTrue("and offers no default action, because the top row is a folder",
+                menu.treeView().getSelectedIndices().isEmpty());
+
+        menu.searchField().setText("Add");
+        frame();
+
+        assertEquals(1, menu.visibleEntries().size());
+        assertFalse("searching shows results", menu.visibleEntries().get(0).isCategory());
+        assertEquals("Add", menu.visibleEntries().get(0).label());
+        // The command-palette rule: with a query, Enter takes the best match without an arrow press.
+        assertEquals("a query highlights its top match", java.util.Set.of(0),
+                menu.treeView().getSelectedIndices());
+
+        menu.searchField().setText("");
+        frame();
+        assertTrue("and clearing the query gives the highlight back up",
+                menu.treeView().getSelectedIndices().isEmpty());
+    }
+
+    /** A category row opens and closes rather than creating anything — the one thing that would be a
+     * disaster to get wrong, since both kinds of row look alike and sit in the same list. */
+    @Test
+    public void pressingACategoryTogglesItInsteadOfCreatingANode() {
+        NodeCreationMenu menu = graph.creationMenu();
+        graph.openCreationMenu(0f, 0f);
+        frame();
+        int nodesBefore = graph.nodes().size();
+
+        boolean[] chose = { false };
+        menu.onChosen.connect(offer -> chose[0] = true);
+        menu.treeView().collapseAll();
+        frame();
+
+        assertEquals("collapsed to the one folder", 1, menu.visibleEntries().size());
+        pressCentreOf(menu.entries().get(0));
+        frame();
+
+        assertFalse("a folder is not a node", chose[0]);
+        assertEquals(nodesBefore, graph.nodes().size());
+        assertEquals("it opened instead", 3, menu.visibleEntries().size());
+        assertTrue("and it is still open", menu.isOpen());
     }
 
     /**
@@ -144,12 +232,12 @@ public class NodeCreationMenuTest extends UiTestBase {
         frame();
 
         assertEquals("Add.A and Add.B; Step.Edge takes a float and a vec3 does not promote to one",
-                2, menu.entries().size());
+                2, menu.visibleOffers().size());
 
         menu.openForOutput("float", PROMOTES, 10f, 10f, graph);
         frame();
         assertEquals("a float promotes into both vec3 inputs and fits Step.Edge",
-                3, menu.entries().size());
+                3, menu.visibleOffers().size());
     }
 
     /**
@@ -279,15 +367,17 @@ public class NodeCreationMenuTest extends UiTestBase {
     }
 
     /**
-     * <b>The menu is as wide as its widest row.</b>
+     * <b>A long label is contained rather than allowed to widen the menu — and this is a deliberate
+     * regression from the content-sized version.</b>
      *
-     * <p>A fixed width clipped {@code "Perlin noise 3D - Sampling Coordinates"} while wasting space on
-     * {@code "Add - A"}, and a row whose label cannot be read is a row nobody can choose. Sized to
-     * content between a floor and a ceiling — the ceiling exists so one pathological label cannot
-     * produce a menu wider than the window.</p>
+     * <p>The menu used to size itself to its widest row. A {@code TreeView} cannot support that: it is
+     * virtualised, so its rows are {@code position: absolute} and contribute to neither intrinsic axis,
+     * and a box content-sized around one measures as empty. The menu therefore opens at a definite size
+     * inside the same floor and ceiling as before, stays resizable, and a label past the edge ellipsizes
+     * at its own row. Unity's Create Node window makes the same trade.</p>
      */
     @Test
-    public void theMenuWidensToFitItsLongestEntry() {
+    public void aLongLabelIsContainedRatherThanWideningTheMenu() {
         library.register(NodeType.of("shader.LongOne")
                 .label("Perlin noise 3D with a very long name indeed")
                 .in("Sampling Coordinates", "vec3"));
@@ -300,18 +390,14 @@ public class NodeCreationMenuTest extends UiTestBase {
 
         NodeCreationMenu menu = graph.creationMenu();
         float menuWidth = menu.getRuntimeCache().getWidth();
-        assertTrue("wider than the floor, because a long row demanded it: " + menuWidth,
-                menuWidth > 170f);
-        assertTrue("but never wider than the ceiling: " + menuWidth, menuWidth <= 320f);
+        assertTrue("inside the floor and the ceiling: " + menuWidth, menuWidth >= 169f && menuWidth <= 320f);
 
-        // And a short library stays at the floor rather than collapsing to the text.
-        library.clear();
-        library.register(NodeType.of("shader.Add").label("Add").in("A", "vec3"));
-        graph.openCreationMenu(0f, 0f);
-        frame();
-        frame();
-        assertTrue("short labels must not produce a sliver: " + menu.getRuntimeCache().getWidth(),
-                menu.getRuntimeCache().getWidth() >= 169f);
+        // The row that carries the long label must not push past its own menu.
+        float menuRight = menu.getRuntimeCache().getX() + menuWidth;
+        for (UIElement entry : menu.entries()) {
+            float right = entry.getRuntimeCache().getX() + entry.getRuntimeCache().getWidth();
+            assertTrue("a row escaped the menu: " + right + " vs " + menuRight, right <= menuRight + 0.5f);
+        }
     }
 
     /**
@@ -326,12 +412,16 @@ public class NodeCreationMenuTest extends UiTestBase {
         frame();
         frame();
 
-        UIElement row = graph.creationMenu().entries().get(0);
-        UIElement label = row.getChildren().get(0);
-        float inset = label.getRuntimeCache().getX() - row.getRuntimeCache().getX();
+        NodeCreationMenu menu = graph.creationMenu();
+        UIElement row = menu.entries().get(0);
+        float rowWidth = row.getRuntimeCache().getWidth();
+        float inset = labelXOfRow(menu, 0) - row.getRuntimeCache().getX();
 
-        assertTrue("a label centred in its row is a label clipped at both ends; inset was " + inset,
-                inset < 8f);
+        // The twisty sits before the label, so the label is legitimately inset a little. What must never
+        // happen is CENTRING, which is what a missing flex-direction produced.
+        assertTrue("the label is left-aligned after the twisty, not centred; inset was " + inset
+                        + " in a row " + rowWidth + " wide",
+                inset > 0f && inset < Math.max(20f, rowWidth * 0.25f));
     }
 
     /**
@@ -374,17 +464,305 @@ public class NodeCreationMenuTest extends UiTestBase {
         assertFalse("clicking outside must dismiss it", graph.creationMenu().isOpen());
     }
 
+    /**
+     * <b>Depth is visible.</b>
+     *
+     * <p>A tree whose rows all start at the same x is a list with extra rows in it. The indent comes from
+     * {@code TreeView}, written at DEFAULT origin, which is the weakest there is — so any sheet rule
+     * setting {@code padding-left} on a row silently flattens the whole thing, and it still looks like a
+     * plausible menu. Asserting the *difference* between depths is the only thing that catches it.</p>
+     */
+    @Test
+    public void deeperRowsAreIndentedFurther() {
+        library.clear();
+        library.register(NodeType.of("shader.Position").label("Position").category("Input/Geometry")
+                .out("Out", "vec3"));
+        // The theme too, because that is what the harness runs and a sheet at a stronger origin is
+        // precisely how this breaks.
+        window.getStyleEngine().addStylesheet(
+                com.crystalgui.style.sheet.StyleSheetRegistry.of("crystalgui:graph"));
+        graph.openCreationMenu(0f, 0f);
+        frame();
+        frame();
+
+        NodeCreationMenu menu = graph.creationMenu();
+        assertEquals("Input > Geometry > Position", 3, menu.visibleEntries().size());
+
+        float depth0 = labelXOfRow(menu, 0);
+        float depth1 = labelXOfRow(menu, 1);
+        float depth2 = labelXOfRow(menu, 2);
+
+        assertTrue("depth 1 must sit right of depth 0: " + depth0 + " vs " + depth1, depth1 > depth0 + 4f);
+        assertTrue("depth 2 must sit right of depth 1: " + depth1 + " vs " + depth2, depth2 > depth1 + 4f);
+    }
+
+    /** The twisty has to be a glyph the bundled font can actually draw — U+25B6/U+25BC are not, and a
+     * missing glyph is a blank advance, so the marker silently disappears. */
+    @Test
+    public void expandableRowsDrawATwisty() {
+        library.clear();
+        library.register(NodeType.of("shader.Position").label("Position").category("Input").out("Out", "vec3"));
+        graph.openCreationMenu(0f, 0f);
+        frame();
+        frame();
+
+        NodeCreationMenu menu = graph.creationMenu();
+        UIText folderTwisty = (UIText) menu.entries().get(0).getChildren().get(0);
+        UIText leafTwisty = (UIText) menu.entries().get(1).getChildren().get(0);
+
+        assertEquals("an open folder points down", "v", folderTwisty.getText());
+        assertTrue("and a leaf draws no marker", leafTwisty.getText().trim().isEmpty());
+
+        menu.treeView().collapseAll();
+        frame();
+        assertEquals("a closed folder points right", ">",
+                ((UIText) menu.entries().get(0).getChildren().get(0)).getText());
+    }
+
+    /**
+     * <b>Up/Down and Enter drive the list while the search box keeps focus.</b>
+     *
+     * <p>Reported from the harness: the arrows did nothing. Moving focus into the tree is the obvious fix
+     * and is wrong twice — it stops you typing, and it would not have worked anyway, because a
+     * {@code ListView} sets no focus policy and {@code requestFocus} refuses a {@code FocusPolicy.NONE}
+     * element silently. Forwarding the keys keeps one focus owner.</p>
+     */
+    @Test
+    public void arrowsAndEnterDriveTheListWithoutStealingFocus() {
+        library.clear();
+        library.register(NodeType.of("shader.Add").label("Add").out("Out", "vec3"));
+        library.register(NodeType.of("shader.Step").label("Step").out("Out", "vec3"));
+        graph.openCreationMenu(0f, 0f);
+        frame();
+
+        NodeCreationMenu menu = graph.creationMenu();
+        assertTrue("the box owns focus from the start", menu.searchField().isFocused());
+        assertEquals(2, menu.visibleEntries().size());
+        assertTrue("browsing highlights nothing", menu.treeView().getSelectedIndices().isEmpty());
+
+        pressKey(CgKeyCodes.KEY_DOWN);
+        frame();
+        assertTrue("the box must KEEP focus, or you cannot carry on typing",
+                menu.searchField().isFocused());
+        assertEquals("the first arrow lands on the first row, not the second",
+                java.util.Set.of(0), menu.treeView().getSelectedIndices());
+
+        pressKey(CgKeyCodes.KEY_DOWN);
+        frame();
+        assertEquals(java.util.Set.of(1), menu.treeView().getSelectedIndices());
+
+        pressKey(CgKeyCodes.KEY_UP);
+        frame();
+        assertEquals(java.util.Set.of(0), menu.treeView().getSelectedIndices());
+
+        pressKey(CgKeyCodes.KEY_UP);
+        frame();
+        assertEquals("clamped at the top rather than wrapping to the end",
+                java.util.Set.of(0), menu.treeView().getSelectedIndices());
+
+        int before = graph.nodes().size();
+        pressKey(CgKeyCodes.KEY_RETURN);
+        frame();
+        assertEquals("Enter creates the highlighted row", before + 1, graph.nodes().size());
+        assertFalse("and the menu closes behind it", menu.isOpen());
+    }
+
+    /**
+     * <b>Opening or closing a folder leaves the highlight on that folder.</b>
+     *
+     * <p>Reported from the harness as "Enter defocuses it", and the name is the interesting part: nothing
+     * to do with focus. {@code toggleExpanded} re-flattens the model, {@code refresh()} clears before it
+     * re-adds, and {@code ListView} drops any selection a model change invalidated — so every index goes
+     * with the clear. The row came back unhighlighted, and the next arrow press restarted from the top.</p>
+     */
+    @Test
+    public void togglingAFolderKeepsTheHighlightOnIt() {
+        library.clear();
+        library.register(NodeType.of("shader.A").label("A").category("Alpha").out("Out", "vec3"));
+        library.register(NodeType.of("shader.B").label("B").category("Beta").out("Out", "vec3"));
+        graph.openCreationMenu(0f, 0f);
+        frame();
+
+        NodeCreationMenu menu = graph.creationMenu();
+        assertEquals("Alpha, A, Beta, B", 4, menu.visibleEntries().size());
+
+        pressKey(CgKeyCodes.KEY_DOWN);
+        frame();
+        assertEquals("standing on the Alpha folder", java.util.Set.of(0),
+                menu.treeView().getSelectedIndices());
+
+        pressKey(CgKeyCodes.KEY_RETURN);
+        frame();
+        assertEquals("the folder closed", 3, menu.visibleEntries().size());
+        assertEquals("and it is still the highlighted row",
+                java.util.Set.of(0), menu.treeView().getSelectedIndices());
+
+        pressKey(CgKeyCodes.KEY_RETURN);
+        frame();
+        assertEquals("re-opened", 4, menu.visibleEntries().size());
+        assertEquals(java.util.Set.of(0), menu.treeView().getSelectedIndices());
+
+        // And the arrows carry on from there rather than restarting at the top.
+        pressKey(CgKeyCodes.KEY_DOWN);
+        frame();
+        assertEquals(java.util.Set.of(1), menu.treeView().getSelectedIndices());
+        assertTrue("all of it without ever leaving the search box", menu.searchField().isFocused());
+    }
+
+    /**
+     * <b>A dragged menu stays where it was put, and a reopened one goes back to its anchor.</b>
+     *
+     * <p>The interesting half is that it stays. A {@code Popover} re-runs {@code AnchoredPlacement} from
+     * a per-frame ticker, so anything else writing {@code left}/{@code top} is overwritten within one
+     * frame and the menu looks nailed down. Moving it by hand therefore has to <em>detach</em> it from
+     * its anchor rather than fight it — which keeps the "one writer of left/top" rule intact instead of
+     * breaking it.</p>
+     */
+    @Test
+    public void theMenuCanBeMovedAndStaysPutUntilReopened() {
+        NodeCreationMenu menu = graph.creationMenu();
+        graph.openCreationMenu(40f, 40f);
+        frame();
+        frame();
+
+        assertNotNull("there has to be something to drag it by", menu.titleBar());
+        assertFalse(menu.isFreelyPositioned());
+        float anchoredLeft = menu.getRuntimeCache().getX();
+
+        menu.moveTo(200f, 150f);
+        // Several frames, because the placement ticker gets a go on every one of them.
+        frame();
+        frame();
+        frame();
+
+        assertTrue(menu.isFreelyPositioned());
+        float movedLeft = menu.getRuntimeCache().getX();
+        assertTrue("the placement ticker dragged it back to its anchor: " + movedLeft
+                        + " vs anchored " + anchoredLeft,
+                Math.abs(movedLeft - anchoredLeft) > 1f);
+
+        // Reopening re-anchors — a menu moved once must not open in that spot forever.
+        graph.openCreationMenu(40f, 40f);
+        frame();
+        frame();
+        assertFalse(menu.isFreelyPositioned());
+        assertEquals("back to where its anchor puts it",
+                anchoredLeft, menu.getRuntimeCache().getX(), 1f);
+    }
+
+    /**
+     * <b>A wire dropped on a valid port connects and the menu stays shut.</b>
+     *
+     * <p>It used to do both, which looked like the menu opening for no reason. The cause was ordering in
+     * {@code UIDragController}: {@code onDragEnd} ran <em>before</em> {@code DragEvent.Drop}, so the port
+     * compared its connection count against the drag-start snapshot, saw no change, and concluded the
+     * wire had landed on empty canvas — then the drop fired and connected. The web's order is drop, then
+     * dragend, and it is the only one that lets a source ask "did my drag land?" at all.</p>
+     *
+     * <p>Driven through {@code consumeMouseEvent} end to end, because every unit-level test of this
+     * passed while the gesture was broken.</p>
+     */
+    @Test
+    public void droppingAWireOnAPortConnectsWithoutOpeningTheMenu() {
+        GraphNode from = new GraphNode("From");
+        NodePort out = from.addOutput(VEC3, "Out");
+        graph.addNode(from, 10f, 10f);
+
+        GraphNode to = new GraphNode("To");
+        NodePort in = to.addInput(VEC3, "In");
+        graph.addNode(to, 200f, 10f);
+        frame();
+        frame();
+
+        dragBetween(out, in);
+        frame();
+
+        assertTrue("the wire must land", out.isConnected());
+        assertEquals(1, graph.getConnections().size());
+        assertFalse("and the create menu must not appear on a successful connection",
+                graph.creationMenu().isOpen());
+    }
+
+    /** The mirror: dropped on nothing, the menu is exactly what should appear. */
+    @Test
+    public void droppingAWireOnEmptyCanvasStillOpensTheMenu() {
+        GraphNode from = new GraphNode("From");
+        NodePort out = from.addOutput(VEC3, "Out");
+        graph.addNode(from, 10f, 10f);
+        frame();
+        frame();
+
+        var start = centreOf(out);
+        var empty = new org.joml.Vector2f(start.x() + 40f, start.y() + 220f);
+        window.getInputHandler().consumeMouseEvent(new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
+                Math.round(start.x()), Math.round(start.y()), 0, 0,
+                com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON, true, 0f, 11L));
+        frame();
+        window.getInputHandler().consumeMouseEvent(new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
+                Math.round(empty.x()), Math.round(empty.y()), 0, 0, -1, false, 0f, 12L));
+        frame();
+        window.getInputHandler().consumeMouseEvent(new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
+                Math.round(empty.x()), Math.round(empty.y()), 0, 0,
+                com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON, false, 0f, 13L));
+        frame();
+
+        assertFalse(out.isConnected());
+        assertTrue("a wire dropped on nothing is exactly when the menu should offer something",
+                graph.creationMenu().isOpen());
+    }
+
+    private org.joml.Vector2f centreOf(UIElement element) {
+        var cache = element.getRuntimeCache();
+        return com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
+    }
+
+    private void dragBetween(UIElement fromPort, UIElement toPort) {
+        var a = centreOf(fromPort);
+        var b = centreOf(toPort);
+        window.getInputHandler().consumeMouseEvent(new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
+                Math.round(a.x()), Math.round(a.y()), 0, 0,
+                com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON, true, 0f, 21L));
+        frame();
+        window.getInputHandler().consumeMouseEvent(new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
+                Math.round(b.x()), Math.round(b.y()), 0, 0, -1, false, 0f, 22L));
+        frame();
+        window.getInputHandler().consumeMouseEvent(new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
+                Math.round(b.x()), Math.round(b.y()), 0, 0,
+                com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON, false, 0f, 23L));
+    }
+
+    private void pressKey(int keyCode) {
+        window.getInputHandler().consumeKeyboardEvent(
+                new com.crystalgraphics.platform.input.CgSystemInput.Keyboard.Event(
+                        '\0', keyCode, true, false, 0L));
+    }
+
+    private void pressCentreOf(UIElement element) {
+        var cache = element.getRuntimeCache();
+        var at = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
+        window.getInputHandler().consumeMouseEvent(new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
+                Math.round(at.x()), Math.round(at.y()), 0, 0,
+                com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON, true, 0f, 7L));
+    }
+
+    private static float labelXOfRow(NodeCreationMenu menu, int index) {
+        UIElement row = menu.entries().get(index);
+        return row.getChildren().get(1).getRuntimeCache().getX();
+    }
+
     @Test
     public void typingNarrowsTheList() {
         NodeCreationMenu menu = graph.creationMenu();
         graph.openCreationMenu(0f, 0f);
         frame();
-        assertEquals(2, menu.entries().size());
+        assertEquals(2, menu.visibleOffers().size());
 
         menu.searchField().setText("plus");
         frame();
 
-        assertEquals("'plus' is Add's synonym", 1, menu.entries().size());
+        assertEquals("'plus' is Add's synonym", 1, menu.visibleOffers().size());
     }
 
     /**

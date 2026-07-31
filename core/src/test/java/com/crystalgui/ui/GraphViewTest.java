@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.data.Transform2D;
@@ -503,6 +504,374 @@ public class GraphViewTest extends UiTestBase {
         graph.setZoom(4f);
         assertEquals("zoomed IN the base width stands, or wires would thin out",
                 atOne, graph.getWireWidth(), 1e-4f);
+    }
+
+    /**
+     * <b>A long port name widens the node; it never wraps.</b>
+     *
+     * <p>Unity's rule — {@code "Sampling Coordinates(3)"} sits on one line and the node is simply wider.
+     * Two separate things had to be wrong for it to wrap, and each looked harmless alone: the label
+     * declared {@code text-overflow: ellipsis} with no {@code white-space}, and ellipsis only ever applies
+     * to text that cannot wrap, so it silently never fired; and every box between the label and the node
+     * carried a zero flex basis, which contributes nothing to a container's max-content size, so the node
+     * could not have grown even once the text stopped wrapping.</p>
+     *
+     * <p>The row is a fixed 16px, so a wrapped label drew outside its own port row and stopped lining up
+     * with the dot that names it — which is what made it obvious on screen.</p>
+     */
+    @Test
+    public void aLongPortNameWidensTheNodeInsteadOfWrapping() {
+        GraphNode shortNames = node("Short", 0f, 0f);
+        shortNames.addInput(VEC3, "In");
+        shortNames.addOutput(VEC3, "Out");
+
+        GraphNode longNames = node("Perlin noise 3D", 0f, 140f);
+        NodePort longPort = longNames.addInput(VEC3, "Sampling Coordinates");
+        longNames.addOutput(FLOAT, "Value");
+        frame();
+        frame();
+        frame();
+
+        float narrow = shortNames.getRuntimeCache().getWidth();
+        float wide = longNames.getRuntimeCache().getWidth();
+
+        assertTrue("short names sit at the floor: " + narrow, narrow >= 133f && narrow <= 135f);
+        assertTrue("a long port name must widen the node, not wrap inside it: " + wide, wide > narrow);
+        assertTrue("but never past the ceiling: " + wide, wide <= 320f);
+
+        // The label stays on ONE line. Its row is 16px tall, so a second line is both taller than the row
+        // and taller than the font — measuring the label is what catches it, since a wrapped label is
+        // still present, still correct, and still the right width.
+        UIElement label = longPort.querySelector("." + NodePort.LABEL_CLASS);
+        assertNotNull(label);
+        assertTrue("the port label wrapped to a second line: " + label.getRuntimeCache().getHeight(),
+                label.getRuntimeCache().getHeight() <= 16f);
+    }
+
+    /**
+     * <b>The input column hugs its content, the output column takes the slack, and the two always meet.</b>
+     *
+     * <p>Three layouts were tried and the first two are each visibly wrong. Two halves gives a node with
+     * no inputs an empty input panel — a rect drawn for something that does not exist — and pins the
+     * output panel at 50% however short {@code "Out"} is. Two huggers leaves a <em>hole</em> between the
+     * panels on any node whose ports are narrower than {@code min-width}, with the node's own background
+     * showing through the middle. Growing only the output column fixes all three at once.</p>
+     */
+    @Test
+    public void portColumnsSizeToTheirContentAndVanishWhenEmpty() {
+        GraphNode outputOnly = node("Position", 0f, 0f);
+        outputOnly.addOutput(VEC3, "Out");
+
+        GraphNode both = node("Perlin noise 3D", 0f, 140f);
+        both.addInput(VEC3, "Sampling Coordinates");
+        both.addOutput(FLOAT, "Value");
+        frame();
+        frame();
+        frame();
+
+        UIElement emptyInputs = outputOnly.querySelector("." + GraphNode.INPUTS_CLASS);
+        assertNotNull(emptyInputs);
+        assertEquals("a node with no inputs must not paint an input panel",
+                0f, emptyInputs.getRuntimeCache().getWidth(), 0.5f);
+
+        // The output column tracks its label rather than taking half the node.
+        UIElement wideInputs = both.querySelector("." + GraphNode.INPUTS_CLASS);
+        UIElement narrowOutputs = both.querySelector("." + GraphNode.OUTPUTS_CLASS);
+        float nodeWidth = both.getRuntimeCache().getWidth();
+        assertTrue("'Sampling Coordinates' is much longer than 'Value', so the columns cannot be equal",
+                wideInputs.getRuntimeCache().getWidth() > narrowOutputs.getRuntimeCache().getWidth());
+        assertTrue("and neither is simply half the node: " + narrowOutputs.getRuntimeCache().getWidth()
+                        + " of " + nodeWidth,
+                Math.abs(narrowOutputs.getRuntimeCache().getWidth() - nodeWidth * 0.5f) > 1f);
+
+        // Exactly one 1px seam between them — no more (two content-hugging columns left a hole with the
+        // node's own background showing through) and no less (they have to be visibly separated).
+        assertEquals("the columns must be separated by the 1px seam and nothing wider",
+                wideInputs.getRuntimeCache().getX() + wideInputs.getRuntimeCache().getWidth() + 1f,
+                narrowOutputs.getRuntimeCache().getX(), 0.5f);
+
+        // And on a node with no inputs the output panel spans the whole band, so it reads as one
+        // uniform surface rather than a stripe pinned to the right.
+        UIElement loneOutputs = outputOnly.querySelector("." + GraphNode.OUTPUTS_CLASS);
+        assertTrue("an inputless node's band is all output panel: " + loneOutputs.getRuntimeCache().getWidth(),
+                loneOutputs.getRuntimeCache().getWidth() > outputOnly.getRuntimeCache().getWidth() * 0.9f);
+    }
+
+    /**
+     * <b>A one-letter port name still gets a panel worth looking at.</b>
+     *
+     * <p>Unity's {@code A(3)}/{@code B(3)} column holds roughly 40–50% of the node rather than
+     * shrink-wrapping two characters. The floor sits on the port <em>row</em>: on the column it would
+     * also apply to a node with no inputs, and on the label it would tell {@code UIText} an ancestor had
+     * sized it, which permanently disables the grow-to-fit above.</p>
+     */
+    @Test
+    public void shortPortNamesStillGetASubstantialInputPanel() {
+        GraphNode add = node("Add", 0f, 0f);
+        add.addInput(VEC3, "A");
+        add.addInput(VEC3, "B");
+        add.addOutput(VEC3, "Out");
+        frame();
+        frame();
+        frame();
+
+        float nodeWidth = add.getRuntimeCache().getWidth();
+        float inputsWidth = add.querySelector("." + GraphNode.INPUTS_CLASS).getRuntimeCache().getWidth();
+        float share = inputsWidth / nodeWidth;
+
+        assertTrue("two characters must not shrink-wrap to a sliver; share was " + share,
+                share >= 0.35f && share <= 0.6f);
+    }
+
+    /**
+     * <b>Enter must not start a rubber band.</b>
+     *
+     * <p>Space/Enter on a focused element synthesize a {@code MouseEvent.Down}/{@code Up} so that
+     * {@code Button} and {@code Checkbox} get keyboard activation with no keyboard code of their own.
+     * {@code GraphView} has to be focusable for its command keys to resolve, so it received that press
+     * as a left-click at wherever the cursor happened to be — and started a marquee that could not be
+     * ended, because a marquee is released through the real pointer-up path which the synthesized Up
+     * never reaches. It stayed on screen through the key release and every frame after.</p>
+     *
+     * <p>The signal is the DOM's: a keyboard-synthesized click carries {@code detail == 0}, and a real
+     * press can never be 0 because the first one is 1.</p>
+     */
+    @Test
+    public void enterOnTheFocusedGraphDoesNotStartAMarquee() {
+        node("A", 20f, 20f);
+        window.getInputHandler().requestFocus(graph);
+        frame();
+        assertSame(graph, window.getInputHandler().getFocusedElement());
+
+        pressKey(CgKeyCodes.KEY_RETURN, true);
+        frame();
+        assertFalse("Enter is not a pointer press", graph.isMarqueeActive());
+
+        pressKey(CgKeyCodes.KEY_RETURN, false);
+        frame();
+        assertFalse("and nothing is left behind on release", graph.isMarqueeActive());
+
+        // Space has press-and-hold semantics and takes the same path, so it must be covered too.
+        pressKey(CgKeyCodes.KEY_SPACE, true);
+        frame();
+        assertFalse("nor is Space", graph.isMarqueeActive());
+        pressKey(CgKeyCodes.KEY_SPACE, false);
+        frame();
+        assertFalse(graph.isMarqueeActive());
+
+        // A real press still does start one — the guard must not have disabled the feature.
+        press(physicalCenterOf(graph));
+        frame();
+        assertTrue("a genuine pointer press still begins a marquee", graph.isMarqueeActive());
+    }
+
+    /**
+     * <b>Hovering a wire marks it; selecting one is a different state again.</b>
+     *
+     * <p>A wire is painted rather than laid out, so it has no element and can never carry {@code :hover}
+     * or {@code :checked} — both states have to be tracked by re-testing the pointer against the curves.
+     * Hover thickens only, selection thickens <em>and</em> recolours to the accent, because "you would
+     * hit this one" and "this one is the subject of your next command" must stay tellable apart.</p>
+     */
+    @Test
+    public void aWireCanBeHoveredIndependentlyOfBeingSelected() {
+        GraphNode from = node("From", 0f, 0f);
+        GraphNode to = node("To", 260f, 0f);
+        NodePort out = from.addOutput(VEC3, "Out");
+        NodePort in = to.addInput(VEC3, "In");
+        graph.connect(out, in);
+        frame();
+        frame();
+
+        assertNull("nothing is hovered to begin with", graph.getHoveredWire());
+
+        // Driven through the real pointer path rather than by computing world coordinates, which is both
+        // closer to the thing being tested and avoids a space mix-up: dotCenter() is PLANE space, not
+        // world, and pickWire converts by adding the layer's own origin.
+        //
+        // The midpoint of the two dots is exactly on the curve: for a cubic whose control points are the
+        // endpoints offset horizontally, B(0.5) = (P0 + 3P1 + 3P2 + P3)/8 collapses to (P0 + P3)/2 — the
+        // horizontal pulls cancel.
+        Vector2f dotA = physicalCenterOf(out.querySelector("." + NodePort.DOT_CLASS));
+        Vector2f dotB = physicalCenterOf(in.querySelector("." + NodePort.DOT_CLASS));
+        mouseTo(new Vector2f((dotA.x() + dotB.x()) * 0.5f, (dotA.y() + dotB.y()) * 0.5f));
+        frame();
+
+        assertNotNull("moving over a wire must mark it hovered", graph.getHoveredWire());
+        assertNull("and hovering is not selecting", graph.getSelection().wire());
+
+        // Far below both nodes, where no wire runs.
+        mouseTo(new Vector2f(dotA.x(), dotA.y() + 200f));
+        frame();
+        assertNull("and it clears when the pointer leaves", graph.getHoveredWire());
+    }
+
+    /**
+     * <b>Every point along a wire is pickable, not just the ones near a sample.</b>
+     *
+     * <p>Picking measures the pointer against a polyline sampled off the cubic. Measuring to the sample
+     * <em>points</em> makes the tolerance depend on their spacing: on a long wire the 24 samples sit tens
+     * of units apart, so a point exactly on the curve halfway between two of them is further from the
+     * nearest sample than the tolerance allows. That produces evenly-spaced dead spots — the wire is
+     * plainly under the cursor and cannot be hit — which reads as random flakiness.</p>
+     *
+     * <p>A single-point test cannot see this; it passes or fails on where that one point happened to
+     * fall. Sweeping the whole length is the only version that catches it, and the wire is made long on
+     * purpose, because the gap between samples is what scales with length.</p>
+     */
+    @Test
+    public void everyPointAlongAWireIsPickable() {
+        GraphNode from = node("From", 0f, 0f);
+        GraphNode to = node("To", 900f, 260f);
+        NodePort out = from.addOutput(VEC3, "Out");
+        NodePort in = to.addInput(VEC3, "In");
+        graph.connect(out, in);
+        frame();
+        frame();
+
+        // The drawn curve, reconstructed exactly as NodeWireLayer builds it: horizontal tangents pulled
+        // half the horizontal separation. Plane space, which is what pickWire takes once the layer's own
+        // origin is removed.
+        Vector2f a = out.dotCenter(), b = in.dotCenter();
+        float ox = graph.wireLayer().getRuntimeCache().getX();
+        float oy = graph.wireLayer().getRuntimeCache().getY();
+        float pull = Math.max(24f, Math.abs(b.x() - a.x()) * 0.5f);
+
+        int misses = 0;
+        for (int i = 0; i <= 200; i++) {
+            float t = i / 200f, u = 1f - t;
+            float x = u * u * u * a.x() + 3f * u * u * t * (a.x() + pull)
+                    + 3f * u * t * t * (b.x() - pull) + t * t * t * b.x();
+            float y = u * u * u * a.y() + 3f * u * u * t * a.y()
+                    + 3f * u * t * t * b.y() + t * t * t * b.y();
+            if (graph.wireLayer().pickWire(x - ox, y - oy) == null) misses++;
+        }
+
+        assertEquals("points sitting exactly on the drawn curve must all pick it", 0, misses);
+    }
+
+    /**
+     * <b>Hover and selection are additive, and the combined rule really matches.</b>
+     *
+     * <p>Unity draws three distinct states: a muted 1px ring on hover, the 2px accent on selection, and a
+     * 3px accent when both. The risk worth a test is not the widths but the <em>selector</em> —
+     * {@code graphnode:hover} and {@code graphnode:checked} both weigh 11, so which wins between them is
+     * decided by source order rather than specificity, and a compound {@code :checked:hover} that failed
+     * to match would silently leave a hovered selection looking exactly like an unhovered one.</p>
+     */
+    @Test
+    public void hoverAndSelectionStackIntoThreeDistinctRings() {
+        GraphNode node = node("N", 20f, 20f);
+        node.addOutput(VEC3, "Out");
+        frame();
+        frame();
+
+        float plain = outlineWidthOf(node);
+
+        graph.getSelection().selectOnly(node);
+        frame();
+        float selected = outlineWidthOf(node);
+
+        mouseTo(physicalCenterOf(node));
+        // TWO frames, and the second is not padding. Hover is resolved in endFrame(), so the element is
+        // not marked hovered until this frame is over, and the selector re-match that reads it happens in
+        // the NEXT frame's calculateStyle. Reading after one frame measures the state before the hover —
+        // which showed up here as the combined rule appearing not to match at all.
+        frame();
+        frame();
+        float selectedAndHovered = outlineWidthOf(node);
+
+        graph.getSelection().clear();
+        frame();
+        frame();
+        float hoveredOnly = outlineWidthOf(node);
+
+        assertEquals("an idle node has no ring", 0f, plain, 0.01f);
+        assertEquals("hover alone is the thin one", 1f, hoveredOnly, 0.01f);
+        assertEquals("selection alone is the accent", 2f, selected, 0.01f);
+        assertEquals("and the two ADD rather than one replacing the other",
+                3f, selectedAndHovered, 0.01f);
+    }
+
+    private static float outlineWidthOf(UIElement element) {
+        var value = element.getStyle().getComputed(
+                com.crystalgui.style.property.StylePropertyRegistry.OUTLINE_WIDTH);
+        return value == null ? 0f : value.resolve(0f);
+    }
+
+    /**
+     * <b>A press on a control inside a node belongs to the control, not to the canvas.</b>
+     *
+     * <p>{@code GraphNode} stops propagation only for presses it turns into a move-drag; a press on its
+     * controls it deliberately ignores so the widget underneath can have it. That press then reached
+     * {@code GraphView}, which read it as empty canvas and started a marquee <em>with pointer capture</em>
+     * while taking pointer focus — the capture swallows the release and the focus change closes whatever
+     * popover the press just opened, so a {@code Dropdown} in a node was completely dead.</p>
+     */
+    @Test
+    public void pressingAControlInsideANodeDoesNotStartAMarquee() {
+        GraphNode node = node("N", 20f, 20f);
+        node.addOutput(VEC3, "Out");
+        UIElement control = new UIElement().layout(l -> l.width(40).height(12));
+        node.addControl("Space", control);
+        frame();
+        frame();
+
+        press(physicalCenterOf(control));
+        frame();
+
+        assertFalse("the canvas must not rubber-band from inside a node", graph.isMarqueeActive());
+        assertNotSame("nor steal focus from what was pressed",
+                graph, window.getInputHandler().getFocusedElement());
+
+        release(physicalCenterOf(control));
+        frame();
+        assertFalse(graph.isMarqueeActive());
+    }
+
+    /**
+     * <b>Clicking a second node selects it ALONE.</b>
+     *
+     * <p>Driven through {@code consumeMouseEvent}, because the model-level call is already covered and
+     * was not where this broke: reported from the harness as every clicked node staying lit, so the
+     * selection only ever grew.</p>
+     */
+    @Test
+    public void clickingASecondNodeDeselectsTheFirst() {
+        GraphNode first = node("First", 20f, 20f);
+        first.addOutput(VEC3, "Out");
+        GraphNode second = node("Second", 20f, 160f);
+        second.addOutput(VEC3, "Out");
+        frame();
+        frame();
+
+        press(physicalCenterOf(first));
+        release(physicalCenterOf(first));
+        frame();
+        assertTrue(graph.getSelection().contains(first));
+
+        press(physicalCenterOf(second));
+        release(physicalCenterOf(second));
+        frame();
+
+        assertTrue("the one just clicked is selected", graph.getSelection().contains(second));
+        assertFalse("and the previous one is NOT", graph.getSelection().contains(first));
+        assertEquals(1, graph.selectedNodes().size());
+
+        // The model dropping it is only half the claim. The ring is a `graphnode:checked` rule, and a
+        // pseudo-class is only re-evaluated when something invalidates the match — so a correct model
+        // with a stale cascade leaves the deselected node visibly ringed, which is indistinguishable on
+        // screen from "it is still selected". Reported from the harness as exactly that, so the computed
+        // value is what has to be asserted.
+        frame();
+        assertEquals("the deselected node must lose its ring, not just its model entry",
+                0f, outlineWidthOf(first), 0.01f);
+        assertTrue("and the newly selected one must have gained one", outlineWidthOf(second) > 0f);
+    }
+
+    private void pressKey(int keyCode, boolean down) {
+        window.getInputHandler().consumeKeyboardEvent(
+                new CgSystemInput.Keyboard.Event('\0', keyCode, down, false, 0L));
     }
 
     private static TaffyDisplay displayOf(UIElement element) {

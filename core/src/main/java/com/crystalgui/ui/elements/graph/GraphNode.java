@@ -406,7 +406,20 @@ public class GraphNode extends UIElement {
     }
 
     /** @see #isChecked() */
-    public GraphNode setSelected(boolean value) {
+    /**
+     * <b>Package-private on purpose: {@link GraphSelection} is the only legitimate caller.</b>
+     *
+     * <p>This writes the node's own flag and nothing else, so calling it directly desynchronises the
+     * widget from the model — and the failure is not symmetric. A node set selected this way is drawn
+     * with the ring while the selection is <em>empty</em>, and can never be cleared afterwards, because
+     * {@code clearSilently()} only deselects the nodes the set actually holds. The gallery opened its
+     * graph page this way and the ring then survived every click on every other node; only a marquee
+     * cleared it, since a marquee adds the node to the set before dropping it properly.</p>
+     *
+     * <p>Same shape as {@code Tab.setSelected}, which is package-private for the same reason: state that
+     * a collection owns must not be settable on the member.</p>
+     */
+    GraphNode setSelected(boolean value) {
         if (this.selected == value) return this;
         this.selected = value;
         // The pseudo-class idiom: tell the cascade its identity changed, or graphnode:checked never
