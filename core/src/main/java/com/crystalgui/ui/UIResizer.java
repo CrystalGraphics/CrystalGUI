@@ -88,6 +88,13 @@ final class UIResizer extends UIElement {
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE));
 
+        // AND EXEMPT FROM THE SCROLL OFFSET. A handle is pinned to its parent's VISIBLE edge -- that is
+        // what "resize this element" means -- but a scroll offset here is a pose translate applied to
+        // every non-exempt child, so on a scrollable element the handles slid away with the content.
+        // Scrolling down by one line carried the bottom-right grabber up out of the corner, and the
+        // corner stopped responding: the handle was still there, just no longer where the corner is.
+        setScrollExempt(true);
+
         onMouseDown.attachListener((el, event) -> beginResize(event.getPosition().x(), event.getPosition().y()),
                 false, false);
     }
