@@ -387,6 +387,47 @@ public class TextEditorTest extends UiTestBase {
                 contentLeft, caret.getRuntimeCache().getX(), 0.5f);
     }
 
+    /**
+     * <b>A line must render in the font the editor measures with.</b>
+     *
+     * <p>Caret positions are prefix widths, so a font disagreement is a <em>scale</em> error that grows
+     * with the column — the caret drifts further from its glyph the further along the line it sits, and
+     * text is inserted where the caret really is rather than where it appears. {@code ore.css} carries a
+     * universal rule ({@code * { font-size: 10 }}) which matches the line's own text element, and a
+     * <em>specified</em> value beats an inherited one, so the editor measured at 8 while its lines drew
+     * at 10.</p>
+     *
+     * <p>This installs a universal rule deliberately, because that is the shape of the sheet that broke
+     * it — no test without one could see this.</p>
+     */
+    @Test
+    public void linesRenderInTheFontTheEditorMeasuresWith() {
+        editor = new TextEditor("hello world");
+        editor.layout(l -> l.width(300).height(120));
+        editor.generalStyle(g -> g.fontSize(8f));
+
+        UIElement root = new UIElement().layout(l -> l.width(300).height(200));
+        root.addChild(editor);
+        window = new UIWindow(Ui.of(root));
+        window.init(600, 400);
+        input = window.getInputHandler();
+        // The rule that caused it: universal, so it matches the line's text directly.
+        window.getStyleEngine().addStylesheet(
+                com.crystalgui.style.sheet.StyleSheet.parse("* { font-size: 10; }"));
+        settle();
+        editor.updateWindow();
+        settle();
+
+        UIElement line = null;
+        for (UIElement child : editor.getChildren()) {
+            if (child.hasClass(TextEditor.LINE_CLASS)) line = child;
+        }
+        assertNotNull(line);
+        float lineFont = line.getChildren().get(0).getStyle().getGeneralGroup().fontSize();
+        assertEquals("the line must not draw at a size the editor did not measure with",
+                editor.getStyle().getGeneralGroup().fontSize(), lineFont, 0.01f);
+    }
+
     @Test
     public void theScrollableHeightCoversEveryLine() {
         StringBuilder document = new StringBuilder();
