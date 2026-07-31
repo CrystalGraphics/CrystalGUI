@@ -3323,6 +3323,52 @@ public class TextEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>Scrolled text runs under the gutter's border, not into a gap before it.</b>
+     *
+     * <p>The clip starts at the gutter's EDGE; the text's own margin lives inside it. Putting the clip at
+     * the text origin instead — where the first glyph sits — ate a margin's worth of every line scrolled
+     * sideways, so glyphs vanished a few pixels short of the border rather than passing beneath it.</p>
+     *
+     * <p>Asserted as a relationship between the clip and the text rather than as a pixel: the margin is a
+     * CSS value a theme may change, so an absolute figure would pin the sheet rather than the rule.</p>
+     */
+    @Test
+    public void theTextClipsAtTheGutterEdgeNotAtTheTextOrigin() {
+        build("x".repeat(400));
+        showEditor();
+
+        UIElement viewport = childWithClass(TextEditor.TEXT_VIEWPORT_CLASS);
+        UIElement line = linesOf().get(0);
+
+        float clipLeft = viewport.getRuntimeCache().getX();
+        float gutterRight = editor.getRuntimeCache().getX()
+                + editor.getTaffyLayout().border().left + editor.getTaffyLayout().padding().left
+                + editor.getGutterWidth();
+
+        assertEquals("the clip must begin where the gutter ends", gutterRight, clipLeft, 1f);
+        assertTrue("and the unscrolled text must sit a margin inside it, not on it",
+                line.getRuntimeCache().getX() > clipLeft);
+    }
+
+    /** Scrolling sideways moves the text towards the border rather than off a nearer edge. */
+    @Test
+    public void scrollingSidewaysMovesTextTowardsTheGutterBorder() {
+        build("x".repeat(400));
+        showEditor();
+
+        UIElement viewport = childWithClass(TextEditor.TEXT_VIEWPORT_CLASS);
+        UIElement line = linesOf().get(0);
+        float gapBefore = line.getRuntimeCache().getX() - viewport.getRuntimeCache().getX();
+
+        editor.setScrollImmediate(20f, 0f);
+        showEditor();
+
+        float gapAfter = linesOf().get(0).getRuntimeCache().getX() - viewport.getRuntimeCache().getX();
+        assertEquals("the text moved by exactly the scroll", gapBefore - 20f, gapAfter, 1f);
+        assertTrue("and it is now past the clip's edge, i.e. under the border", gapAfter < 0f);
+    }
+
+    /**
      * <b>Zooming keeps the line you were on.</b>
      *
      * <p>{@code scrollTop} is a PIXEL count, so leaving it alone across a font change silently
