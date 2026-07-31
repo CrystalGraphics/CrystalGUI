@@ -3083,7 +3083,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         for (int viewLine = firstLine; viewLine <= lastLine; viewLine++) {
             int row = modelAt(viewLine).row();
             int levels = levelsByRow[Math.max(0, Math.min(row - firstRow, levelsByRow.length - 1))];
-            final float top = textOriginY() + viewLine * height;
+            final float top = textOriginY() + viewLine * height - getScrollTop();
 
             // Half the CODE MARGIN left of the indent stop -- never half a space. A space is wider than
             // the margin, so nudging by one put the level-0 guide underneath the gutter, which has a
