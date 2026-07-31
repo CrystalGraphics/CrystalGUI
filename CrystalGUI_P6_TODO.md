@@ -511,6 +511,36 @@ one frame, by which point the row is where it belongs and `scrollIntoView` is co
 Both mutation-checked: realising every row, or taking `getScrollHeight` from the children, each turns six
 of the thirteen tests red.
 
+#### Built
+
+`ui/elements/table/`: `TableColumn<T>`, `TableCellRenderer<T>`, `SortOrder`, `TableView<T>`. 16 tests, a
+`table` gallery page over 2,000 synthetic assets.
+
+**All three open questions answered, and all three the fuller option:**
+
+- **Three-state sort.** Ascending → descending → *original order*. Free, because sorting produces a view
+  and never touches the source — so the unsorted order was never lost. Explorer and Finder offer two
+  states and cannot get you back.
+- **Selection keys on the ITEM, not the index** — and this is the one thing the table could not inherit
+  from `ListView`. Indices are exactly what a sort invalidates: a user who selected three files would own
+  three *different* ones after one header click. `ListView` stays index-based, correctly, because a
+  `TreeRow` is a record rebuilt on every flatten and has no stable identity to key on.
+- **Fixed and flexible widths both**, with weight deciding the leftover share. Dragging a flexible column
+  **pins** it — a column that sprang back on release would be maddening, and it is what every file
+  manager does.
+
+**Two seams opened on `ListView`**: `invalidateWindow()` became protected, and a new
+`setSelectedIndices(Collection)` so a subclass keying selection on something more stable can re-derive it
+in one emit rather than one per row.
+
+**The display-side assertion was written first this time**, per the note after 6.1.4 —
+`cellsShowTheSortedOrderNotJustTheModel` is deliberately the first test in the file. It is the test that
+would have caught all three of this session's re-bind bugs, which hid behind suites that only ever asked
+the model.
+
+Mutation-checked: making selection index-based, or the sort two-state, each turns exactly its own test
+red.
+
 #### Open questions
 
 | Question | Why it matters |
@@ -743,13 +773,79 @@ and `leftOnAChildMovesToItsParent` red.
 - **Drag-reorder.** Wants the drag controller and a drop-position model; separable.
 
 
-### 6.1.5 Table / data grid · `TODO`
+### 6.1.5 Table · `DONE` (2026-07-31)
 
-Resizable and reorderable columns, sortable headers, row selection. Also on 6.1.3. The "details" half of a
-file browser, and the shape most property tables want.
+Columns, a header, resizable widths, sortable headers, row selection — over the virtualised list. The
+"details" half of a file browser, and the shape most property tables want.
 
-`resize` already exists as an element capability and should be reused for the column dividers rather than
-grown a second time — same reasoning that made `SplitView` use the drag controller.
+#### Row-focused, not cell-focused — and that is the decision
+
+The [APG separates two roles](https://www.w3.org/WAI/ARIA/apg/patterns/grid/), and they are not
+interchangeable:
+
+| Role | Focus | Keyboard |
+|---|---|---|
+| **`grid`** | a **cell** | arrows move cell-by-cell; Home/End go to the first/last cell *in the row*; Ctrl+Home/End to the grid's corners; **Shift+Space** selects the row containing the focused cell |
+| **`table`** | nothing — static content | none |
+
+Our two motivating cases pull opposite ways. A file browser's details view selects **files**: arrowing
+should move between rows, and no user has ever wanted to arrow into the "date modified" column. A
+property inspector genuinely edits **cells**.
+
+**Build the row-focused one.** It is what a details view, a search-results list and a diff summary all
+are — a list that happens to have columns — and it inherits `ListView`'s entire keyboard and selection
+contract unchanged, exactly as the Tree did. A property inspector is closer to a *form* than a grid, and
+6.1.8's Configurator is the right home for it.
+
+**Cell-level focus is the ARIA `grid` role and a later addition, not a different design.** The seam is a
+`TableColumn` already knowing how to render a cell; making cells focusable is additive. Building it
+speculatively would mean a roving tabindex across two axes for a case nothing has asked for.
+
+#### A table is a sorted list with columns
+
+Same composition the Tree used, which is the point of having built the list first:
+
+```java
+TableView<Person> table = new TableView<>(people);      // an ObservableList
+table.addColumn(TableColumn.of("Name", Person::name).width(120).sortable());
+table.addColumn(TableColumn.of("Size", Person::size).width(60).sortable(comparingLong(...)));
+```
+
+- **`TableView<T>` owns a derived model.** Sorting produces a *view order* rather than mutating the
+  caller's list — a table must not reorder somebody else's data because a header was clicked. Same shape
+  as `TreeView`'s flattened model: the caller supplies a source, the view supplies what the list sees.
+- **Columns own cell rendering.** A default text cell from a value function covers most of it; a column
+  may supply its own renderer for an icon, a progress bar or a colour swatch.
+- **The header is a sibling of the list, not a row in it.** A header that scrolled away with the content
+  would be wrong, and making row 0 special would poison every index in the selection model.
+
+#### Column resize uses the drag controller, not CSS `resize`
+
+**Correcting an earlier note in this file**, which said to reuse the `resize` element capability. That
+was wrong on inspection: CSS `resize` changes *one* element's own size by dragging its edges. A column
+divider **redistributes width between two adjacent columns** — a different operation, and the one
+`SplitView`'s divider already performs. So it uses `UIDragController` the way `SplitView` does, and the
+`__divider__` idiom comes with it.
+
+#### Deliverables
+
+- `ui/elements/table/`: `TableColumn<T>`, `TableView<T>`, `TableCellRenderer<T>`.
+- Header with sort indicators; click to sort, click again to reverse, and a third state worth deciding
+  (see open questions).
+- Draggable dividers, with a minimum width so a column cannot be dragged to nothing.
+- Tests: sorting reorders the view and **never the source**; a column's width change re-lays the rows;
+  selection survives a re-sort by *item* rather than by index; the header does not scroll; a model change
+  re-binds visible cells (the bug that cost 6.1.4 — this time asserted on the display first).
+- Harness: a `table` gallery page over a synthetic file listing, sortable and resizable.
+
+#### Open questions
+
+| Question | Why it matters |
+|---|---|
+| Does clicking a sorted header a third time restore the *unsorted* order? | Explorer and Finder say no (two states); VS Code and most data grids say yes (three). Three needs the view to remember source order, which it already does. |
+| Does selection survive a re-sort? | It must, and that means selection has to key on the **item**, not the flattened index — a divergence from `ListView`, whose selection is index-based. Possibly the one place this cannot simply inherit. |
+| Flexible column widths, or fixed only? | Fixed is predictable and enough for a details view. A `weight` axis is additive, but only if decided before the resize maths is written. |
+
 
 ### 6.1.6 Multi-line text buffer and editor · `TODO` · **the large one**
 
@@ -820,7 +916,136 @@ Toolbar, status bar, breadcrumbs, command palette. All composition over finished
 The grand goal's actual substrate. Blocked on 6.1 for its container, and on 6.2.1 for its ability to draw
 anything at all.
 
-### 6.2.1 `CgCurveRenderer` · `TODO` · **the one true engine gap**
+### 6.2.1 `CgCurveRenderer` · `DONE` (2026-07-31) · **the one true engine gap**
+
+> **Shipped, and wired through to CrystalGUI.** `CgCurveRenderer` + `CgCurveSplitter` in `gl/render/`,
+> `CgBindingPoints.CURVE_RENDERER`, the `curve` `#pragma cg_use` token, `CG_CURVE_*` in `cg_env.glsl`,
+> `sdf_bezier`/`sdf_segment` in `sdf.glsl`, the shared `lib/stroke.glsl`, shipped
+> `crystalgraphics:shaders/curve.shader` **and** `crystalgui:shaders/gui_curve.shader`,
+> `CgUiRenderer.curve()` + `CgUiPaintContext.curve()`, 11 GL-free tests in `CgCurveRendererSplitTest`,
+> a `curve-renderer-test` harness scene and a 15-row scrolling `curve` gallery page. Both suites green.
+>
+> Three things landed on the CrystalGUI side that the backend plan did not anticipate:
+>
+> - **Quads and curves cannot both be live**, so `CgUiPaintContext` flushes the outgoing path on every
+>   switch. That is painter's order, not tidiness: queued quads surviving a switch would draw *after*
+>   the curves regardless of submission order, so a stroke under a panel would jump on top — and only
+>   when the two happened to batch together, which reads as a widget z-order bug. Because every switch
+>   flushes, at most one path holds pending work, which is what makes `flush()` safe over both in any
+>   order **and** what keeps `pushScissor`/`popScissor` (which both flush) correct for curves.
+> - **`endFrame()` ended the batch without flushing**, silently dropping anything still queued. Harmless
+>   while every draw path flushed eagerly, but `ctx.quad()`/`ctx.curve()` are public and documented as
+>   "submit queues, flush draws", so a caller batching strokes and letting the frame end was using the
+>   API exactly as described and losing them. Now flushes first.
+> - **`CgBufferWriter.color(field, argb)`** replaced four hand-rolled shift-and-divide helpers in each
+>   of the two renderers. Pinned bit-identical to the `/ 255f` it replaced, because `CgQuadRenderer` is
+>   the path every glyph in the engine draws through.
+>
+> **`gui_curve.shader` is not redundant with `curve.shader`, and this was challenged and checked.** They
+> differ in exactly three things — `DepthTest ALWAYS` vs `LEQUAL`, the `_LayerOpacity` property, and the
+> one line that multiplies it in — and a Pass's `RenderState` is fixed at author time, so a keyword
+> variant cannot express the difference. What *was* wrong is that the fragment body was duplicated
+> verbatim; it now lives once in `lib/stroke.glsl`. The cap logic in there was wrong three separate
+> times, so two copies of it was a live hazard rather than a stylistic one.
+>
+> **A fourth bug, found only by watching an animation.** A narrow band of missing stroke travelled
+> along the gallery's node wires for a frame or two, roughly every 2.8 seconds. Two causes, both in
+> `sdf_bezier`'s three-real-roots branch:
+>
+> - **`acos()` of an argument marginally outside `[-1,1]` is NaN**, and analytically-valid does not
+>   mean valid in floating point near the branch boundary. The NaN reached `t`, and from there both
+>   the coverage and the caller's gradient mix, so the fragment vanished rather than being imprecise.
+>   Now clamped.
+> - **The real trigger was flatness.** The wires animate `sag` through zero every 2.86s — matching the
+>   observed period exactly — and at `sag ≈ 0` the split segments flatten, `bb = |A-2B+C|²` shrinks,
+>   `kk = 1/bb` blows up and the solve destabilises. The degenerate test only caught *exact*
+>   degeneracy, leaving a band of near-flat curvature where the answer was unstable. There is now an
+>   absolute sub-pixel-flatness test alongside the relative one, routing those to the exact segment
+>   distance.
+>
+> **Nearly-flat is not a rare shape** — splitting a cubic into quadratics produces flat segments by
+> construction, so everything drawn with `cubic()` lives in that band. Which is why only the node wires
+> showed it, and why "it works on the arcs" proved nothing.
+
+> **Known untested path: the TBO fallback.** The curve buffer is read from the *fragment* stage, which
+> no other engine buffer does. Both stages' sources are covered by `ShippedShaderStagePurityTest` on
+> both paths, but only whichever path the dev machine's GPU selects has actually run — on GL 3.3
+> hardware this becomes a `samplerBuffer` fetch in fragment that nothing has executed.
+> `--mode=shader-compile-audit` on such a GPU is the check.
+>
+> The design below held up as written. Five things it did not anticipate, each of which cost a
+> real debugging step or would have:
+>
+> - **A straight line divides by zero.** Quilez's quadratic solve divides by `dot(b,b)` where
+>   `b = A - 2B + C`, which is *exactly* zero when the control point is the midpoint — i.e. what
+>   `line()` constructs on every call. So the degenerate case is the **common** path, not an edge
+>   case. `sdf_bezier` falls back to `sdf_segment` below a scale-relative threshold; without it every
+>   straight stroke is NaN, which most drivers render as invisible or as garbage, with nothing logged.
+> - **The fragment stage needs the control points, and the v2f DSL has no `flat` qualifier.** Only the
+>   compiler-generated `cg_InstanceId` is flat. Resolved by having the fragment re-read
+>   `CURVE_DATA(CG_INSTANCE_ID)` directly, which works on both buffer paths with no compiler change —
+>   `appendAttachedBuffers` already runs for the fragment source. This is the one structural
+>   difference from `CG_QUAD_*`, which is vertex-only.
+> - **A round cap is the zero-work case; butt and square are the ones that cost something.** Clamping
+>   `t` to `[0,1]` means anything past an endpoint measures distance *to* that endpoint — which is a
+>   half-disc. So the enum order is misleading: `CAP_BUTT` needs an extra half-plane cut, `CAP_ROUND`
+>   needs nothing.
+>   - **And that cut must be applied in *signed* space** — after subtracting the half-width, not
+>     against the raw unsigned distance. Intersecting a half-plane against an unsigned distance
+>     compares two quantities on different scales, so the cut only bites more than a half-width past
+>     the endpoint, where the radial term has already hidden the pixel. **`CAP_BUTT` becomes an exact
+>     no-op and all three styles render as round.** This shipped, passed every test, logged nothing,
+>     and was caught only by looking at the harness — the standing "every item lands with a harness
+>     scene" rule earning its keep on the first item that tested it.
+>   - **And then square caps were still wrong, for a second, unrelated reason.** Past an endpoint the
+>     clamped `t` makes the SDF radial, so the cap region is a *disc* of radius `halfWidth` — and
+>     cutting a disc with a half-plane at exactly `halfWidth` cuts it at its own tangent point, which
+>     removes nothing. `CAP_SQUARE` was therefore forced to be pixel-identical to `CAP_ROUND`, not
+>     approximately but necessarily. The cap region needs a **box metric** (perpendicular distance
+>     across, tangential distance along); butt is that box ending flush, square the same box extended.
+>   - **A square cap also cannot be bounded by `halfWidth` of padding.** Its corner is at
+>     `h·tangent + h·normal`, so on a 45° stroke it reaches `h·√2` along a single axis while the
+>     derived bounding box is axis-aligned. Padding is now `h·√2`. The failure is invisible for
+>     horizontal and vertical strokes — i.e. exactly what a test row reaches for first.
+>   - The caps row now draws hairline ticks at each bar's nominal endpoints, and a second group of
+>     45° capped strokes. Without the ticks, "all three look rounded" and "all three are correct"
+>     look the same; without the diagonal group, nothing in the scene can see the padding bug.
+>   - **Three cap bugs in a row, each surviving the previous fix, all found by eye and none by a
+>     test.** Worth remembering when 6.2.3 draws its first port connector: an SDF that is subtly wrong
+>     renders something confident and plausible, and the harness is the only thing that disagrees.
+> - **Pure maths on the renderer class is unreachable without a GL context.** `CgCurveRenderer` holds
+>   a `static final CgShaderBuffer`, so *calling a static method on it at all* triggers class-init and
+>   throws before `CgRenderPipeline.init()`. The cubic splitting therefore lives in its own
+>   `CgCurveSplitter` — the same hazard `CgEngineBufferRegistry`'s method-reference seeding exists to
+>   dodge, reached from the other direction. Found by ten tests failing identically with
+>   `ExceptionInInitializerError`.
+> - **Widths do not transform with a baked pose.** Baking the pose into the control points scales the
+>   geometry while a scalar half-width beside it does not, so a zoomed canvas would draw correct
+>   curves wearing wrong-thickness strokes. `submit()` scales widths and feather by the pose's uniform
+>   scale; widths are documented as **post-pose units**, and a non-uniform scale takes `max(sx, sy)`
+>   so a stroke thickens rather than vanishing under an anisotropic zoom.
+>
+> Two deliberate departures from the sketch below:
+>
+> - **No `vec2 dash` field.** Dashing needs arc length plus the closest-point parameter, which is a
+>   materially larger fragment shader than everything else here, and nothing in 6.2 consumes it. The
+>   record is 21 logical floats rather than 23 — and since STD430 pads each `vec3` to 16 bytes, it
+>   lands on exactly **96 bytes, the same stride as `CgQuadRenderer`'s**, with no trailing waste. An
+>   unused field that silently does nothing is the failure mode `CgStyleSpan`'s javadoc is quoted
+>   about; adding dash later is an ordinary additive change.
+> - **`curve.shader` ships in CrystalGraphics**, alongside `text.shader` rather than as a
+>   harness-only asset. `ShippedShaderStagePurityTest` and `--mode=shader-compile-audit` both walk
+>   *shipped* shaders only, so shipping it is what puts automated coverage on the very AMD
+>   vertex-stage trap point 4 below warns about. It reads `cg_ProjMatrix` like `gui_quad.shader`
+>   rather than carrying a private UBO like `text.shader`, so it costs **no** third UBO binding point.
+>
+> **v1 is planar.** The vertex stage derives its bounding quad as the AABB of the control hull, which
+> is correct and conservative for any 2D pose including a rotating one, but degenerates for a pose
+> that rotates out of the XY plane. Control points stay `vec3` so 3D is additive rather than a schema
+> break. Nothing in 6.2 needs a 3D wire.
+
+<details>
+<summary>Original design sketch — retained; accurate except where the notes above supersede it</summary>
 
 **Lives in CrystalGraphics**, per the ownership boundary: this is backend rendering capability, not UI
 orchestration. Designed to mirror `CgQuadRenderer`'s API exactly, and instanced.
@@ -892,6 +1117,8 @@ Plus `retainedCurve()` alongside `retainedQuad()`, `pose(Matrix4f)` baked at `su
 
 Harness-testable in isolation, independent of everything in 6.1, and roughly a day's work.
 
+</details>
+
 ### 6.2.2 Pan/zoom canvas · `TODO`
 
 A viewport widget: wheel-zoom about the cursor, middle-drag or space-drag to pan, fit-to-content, and
@@ -941,7 +1168,7 @@ this stops being a UI demo and becomes the shader graph's actual data.
 6.2.1 CgCurveRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──► 6.2.4 editing ──► 6.2.5 model
 ```
 
-**Recommended sequence:** ~~6.1.1~~ → **6.1.2 (planned)** → 6.1.3 → 6.1.4 → 6.1.5 → 6.1.6 → 6.1.7 → 6.1.8, with 6.1.9's
+**Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → **6.1.6 (next)** → 6.1.3 → 6.1.4 → 6.1.5 → 6.1.6 → 6.1.7 → 6.1.8, with 6.1.9's
 *design* settled before 6.1.6 starts, then 6.1.10–12, then the 6.2 chain.
 
 6.2.1 is the one item that can be pulled forward at any time — it is self-contained, depends on nothing in
@@ -962,6 +1189,29 @@ this stops being a UI demo and becomes the shader graph's actual data.
 ---
 
 ## Changelog
+
+- **2026-07-31** — **6.2.1 `CgCurveRenderer` done, pulled forward and built in parallel with 6.1.2.**
+  Entirely inside CrystalGraphics, so it shared no file with the 6.1 work except this one.
+  - **The design survived contact intact** — quadratic-as-primitive, the instance schema, and all four
+    supporting pieces landed as sketched. What the sketch missed were consequences, not choices.
+  - **The degenerate case turned out to be the common case.** A straight line is a quadratic whose
+    control point is the midpoint, which is precisely the input that makes the analytic Bézier SDF
+    divide by zero. Every `line()` call hits it. Guarded with a segment fallback; unguarded it is NaN,
+    which draws as nothing or as garbage and logs neither.
+  - **A curve needs its instance data in the fragment stage**, unlike a quad — the stroke is a
+    per-pixel SDF. The `.shader` v2f DSL offers no `flat` qualifier, so the fragment re-reads the
+    buffer through `CG_INSTANCE_ID`. No compiler change was needed; `appendAttachedBuffers` already
+    emits into both stages. Verified by reading the emitter rather than by running a driver.
+  - **Pure maths on a class holding a static GPU buffer is unreachable headlessly.** Ten unit tests
+    failed identically with `ExceptionInInitializerError` because calling *any* static method on
+    `CgCurveRenderer` initializes its `CgShaderBuffer`. Split into `CgCurveSplitter`. This is the same
+    hazard `CgEngineBufferRegistry`'s method-reference seeding exists to avoid, arrived at from the
+    opposite direction — worth expecting the next time a renderer grows a helper.
+  - **Dash was cut rather than reserved.** It needs arc length, nothing consumes it, and a field that
+    is carried faithfully and then ignored is the exact failure `CgStyleSpan`'s javadoc records.
+  - **`curve.shader` ships in CrystalGraphics**, not the harness — because the stage-purity test and
+    the compile audit only walk shipped shaders, so shipping it is what makes the AMD vertex-stage
+    trap a caught regression rather than a documented hope.
 
 - **2026-07-31** — **6.1.1 rebuilt as the CSS Custom Highlight API, after it was challenged for not
   matching the web.** The first version shipped green and on screen, and was still the wrong design.
