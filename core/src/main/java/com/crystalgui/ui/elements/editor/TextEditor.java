@@ -2368,11 +2368,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Width of the code area — the client box, less the gutter and whatever the vertical bar covers. */
     private float textViewportWidth() {
-        return Math.max(0f, getClientWidth() - textOriginX() - verticalBarThickness());
+        return Math.max(0f, getClientWidth() - textViewportLeft() - verticalBarThickness());
+    }
+
+    /**
+     * Where the clip starts — the gutter's edge, NOT where the text starts.
+     *
+     * <p>The two differ by {@link #codeLeftPad}, and putting the clip at the text origin instead ate a
+     * margin's worth of every line scrolled sideways: the glyphs vanished a few pixels before the border
+     * rather than passing under it. IntelliJ's run right up to the gutter and disappear beneath it, which
+     * is what a clip at the border does and what a clip at the text origin cannot.</p>
+     *
+     * <p>So the margin lives INSIDE the viewport: everything drawn in it is inset by {@code codeLeftPad}
+     * from its left edge, which is where the unscrolled first glyph sits. Same screen position as before,
+     * a margin's more room to scroll into.</p>
+     */
+    private float textViewportLeft() {
+        return textOriginX() - codeLeftPad();
     }
 
     private void layOutTextViewport() {
-        final float left = textOriginX();
+        final float left = textViewportLeft();
         final float width = textViewportWidth();
         final float height = viewportHeight();
         StyleGroup.defaultPipeline(textViewport().getStyle().getLayoutGroup(),
@@ -2834,7 +2850,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private void layOutLine(int viewLine, UIElement line) {
         final float top = textOriginY() + viewLine * lineHeight() - getScrollTop();
-        final float left = carriedIndentPx(viewLine) - getScrollLeft();
+        final float left = codeLeftPad() + carriedIndentPx(viewLine) - getScrollLeft();
         // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
         // a zero-width line lays its text out as though it had no extent -- which shaved the first
         // character off every row on screen. Wide enough for the text, and at least the viewport, so a
@@ -2909,7 +2925,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // the single most visible way a soft-wrap caret goes wrong, and the reason Affinity exists.
         ProjectedLines.ViewPosition view = projections.toViewPosition(
                 buffer.document(), selection.head(), LineProjection.Affinity.LEFT);
-        final float left = xOfView(view.viewLine(), view.column()) - caretWidth - getScrollLeft();
+        final float left = codeLeftPad() + xOfView(view.viewLine(), view.column()) - caretWidth
+                - getScrollLeft();
         final float top = textOriginY() + view.viewLine() * height + (height - ink) / 2f
                 - getScrollTop();
 
@@ -2952,13 +2969,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     .toViewPosition(to - buffer.document().lineStartOffset(modelAt(viewLine).row()),
                             LineProjection.Affinity.LEFT);
 
-            float left = xOfView(viewLine, fromView.column()) - getScrollLeft();
+            float left = codeLeftPad() + xOfView(viewLine, fromView.column()) - getScrollLeft();
             // A selected line break shows as a sliver past the end of the text, which is how every editor
             // signals "the newline is in the selection too". A soft wrap is NOT a line break, so the
             // sliver is only drawn where the selection genuinely continues onto another document row.
             boolean continuesPastRow = selection.end() > lineEnd
                     && modelAt(viewLine).viewLineInRow() == projectionAt(viewLine).viewLineCount() - 1;
-            float right = xOfView(viewLine, toView.column()) - getScrollLeft()
+            float right = codeLeftPad() + xOfView(viewLine, toView.column()) - getScrollLeft()
                     + (continuesPastRow ? height * 0.4f : 0f);
 
             final float bandInk = textHeight();
@@ -3224,7 +3241,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // reached column 0, and the letter there looked like it had cut the line. As an edge it is one
             // element, full height, and cannot be interrupted by anything.
             for (int level = 1; level < levels && used < MAX_INDENT_GUIDES; level++) {
-                final float left = level * step - nudge - getScrollLeft();
+                final float left = codeLeftPad() + level * step - nudge - getScrollLeft();
                 // Past the right edge there is nothing to guide, and the elements are better spent on
                 // rows that are visible.
                 if (left > textViewportWidth()) break;
@@ -3280,7 +3297,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
                 LineProjection.ViewPosition at =
                         projection.toViewPosition(column, LineProjection.Affinity.RIGHT);
-                final float left = xOfView(viewLine, at.column()) - getScrollLeft();
+                final float left = codeLeftPad() + xOfView(viewLine, at.column()) - getScrollLeft();
                 UIElement mark = decorationAt(whitespaceMarks, used++, WHITESPACE_CLASS, true, true);
                 UIText label = (UIText) mark.getChildren().get(0);
                 label.setText(String.valueOf(marker));
@@ -3353,8 +3370,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int used = 0;
         for (int column : rulers) {
             if (column <= 0) continue;
-            final float left = column * advance - getScrollLeft();
-            if (left < 0f || left > textViewportWidth()) continue;
+            final float left = codeLeftPad() + column * advance - getScrollLeft();
+            if (left < codeLeftPad() || left > textViewportWidth()) continue;
             UIElement rule = decorationAt(rulerLines, used++, RULER_CLASS, false, true);
             StyleGroup.defaultPipeline(rule.getStyle().getLayoutGroup(),
                     l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
