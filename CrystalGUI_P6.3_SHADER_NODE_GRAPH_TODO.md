@@ -165,14 +165,26 @@ into the emitted GLSL. Both were guesses in the first draft; both are what Godot
 positioned*: Godot's node ids are ints assigned by the editor, while `GraphIds` are stable, stored, and
 already guaranteed to be legal GLSL identifiers.
 
-**5. Dynamic port types are the reason nodes are code** — see the settled decision above. **This is a
-gap in our current model**: `PortSpec` carries a fixed `typeId`, so `Add` on vec3 and `Add` on float are
-two different node types today. Unity resolves it with dynamic vectors. Deciding this is a prerequisite
-for 6.3.2, not a detail of it.
+**5. Dynamic port types are the reason nodes are code** — see the settled decision above.
+
+> **Resolved 2026-07-31, by where the IR lives rather than by a decision.** This was written as a
+> prerequisite for 6.3.2, on the grounds that CrystalGUI's `PortSpec` carries a fixed `typeId` and would
+> need a `dynamic` member. Putting `CgShaderGraph` in CrystalGraphics removes the question: dynamic is a
+> property of `CgShaderNode`, and `com.crystalgui.graph` did not change at all. The editor can still
+> resolve a concrete type for colouring, because it depends on CrystalGraphics and calls the same code.
 
 ## The items
 
-### 6.3.1 Materials from generated source · `TODO` · **the blocker**
+### 6.3.1 Materials from generated source · `DONE` (2026-07-31)
+
+> **Shipped**: `CgMaterial.fromSource(String)`, keyed on `CgContentHash` of the source. Smaller than
+> planned because both ends were already designed for it — `recompile()` documented "No-op when
+> resourcePath is null (programmatic / shader-graph shaders)" and `CgMaterial.fromShader` was annotated
+> for exactly this. Only the middle was missing.
+>
+> Hot reload skips generated shaders: F3+T means "re-read the files" and these have none. Their source
+> cannot change without the owner emitting different text, which is a different hash and so a different
+> asset. **10 GL-free tests.**
 
 Everything else is gated on this. `CgMaterialShader` must be constructible from a source string with no
 file behind it.
@@ -201,7 +213,24 @@ file behind it.
 
 ---
 
-### 6.3.2 `CgShaderNode` — the node type as data · `TODO`
+### 6.3.2 `CgShaderNode` — the node type as an interface · `DONE` (2026-07-31)
+
+> **Shipped**: `CgShaderType` (+ promotion and widening), `CgShaderPort`, `CgShaderNode`,
+> `CgNodeCodeContext`, `CgTemplateShaderNode`, `CgShaderDomain` — in `com.crystalgraphics.shadergraph`.
+>
+> **The blocker dissolved rather than being decided.** Putting the IR in CrystalGraphics means dynamic
+> port types are a property of `CgShaderNode`, so `com.crystalgui.graph` did not change at all — the
+> editor can still resolve a concrete type for colouring, because it depends on CrystalGraphics and can
+> call the same code.
+>
+> **`CgShaderType` is deliberately NOT `CgMaterialProperty.Type`.** The latter is a property-authoring
+> vocabulary carrying two names (`color` compiles to `vec4`, `Range` to `float`) plus storage semantics;
+> this one is what flows along a wire and needs matrices, `DYNAMIC` and promotion rules. They are bridged
+> by the GLSL name and pinned by `CgShaderTypeBridgeTest` so they cannot drift.
+>
+> That test immediately earned its keep: **GLSL spells it `bool`, a Properties block spells it
+> `boolean`**, so emitting the GLSL name produces a file the parser rejects. Hence
+> `CgShaderType.propertyTypeName()`.
 
 A declarative node definition, loaded from `assets/{ns}/shaders/nodes/*.json`.
 
@@ -257,7 +286,24 @@ present in the graph. This is not tidiness — it is the answer to a cost that o
 
 ---
 
-### 6.3.3 `CgGraphCompiler` — graph to `.shader` · `TODO` · **the core**
+### 6.3.3 `CgGraphCompiler` — graph to GLSL · `DONE` (2026-07-31)
+
+> **Shipped**, with all six rules from the plan met: namespacing (`node_<id>_<port>`), compiler-emitted
+> casts, unconnected inputs as literals, root-parameterised dead-code elimination, and deterministic
+> output. **16 GL-free tests.**
+>
+> **Godot's inversion is the whole design.** A node is handed already-resolved variable names and
+> returns a snippet; it never sees the graph, so it cannot namespace wrongly or depend on emission order.
+> That is why the compiler is short.
+>
+> **Dynamic ports resolve TOGETHER**, to the widest type reaching the node — `Multiply(float, vec3)` is
+> vec3 throughout. Per-port resolution would make the output a float whenever the first input happened to
+> be one, a bug that depends on wiring order and is unreproducible.
+>
+> **Errors accumulate and name their node**, and every emitted line records its owner
+> (`Result.ownerOfLine`) so a driver error can point at a node rather than at a line the user never wrote.
+> Designed in from the first commit, as the plan insisted — it is free while emitting and impossible
+> afterwards.
 
 Topologically ordered emission. `GraphDocument.topologicalOrder()` already provides the ordering, and
 cycle rejection already happened at connect time, so the compiler may assume a DAG.
@@ -284,7 +330,24 @@ cycle rejection already happened at connect time, so the compiler may assume a D
 
 ---
 
-### 6.3.4 Domains, and the vertex/fragment split · `TODO`
+### 6.3.4 Domains, and the vertex/fragment split · `DONE` (2026-07-31)
+
+> **Shipped**: `CgShaderDomain` and the stage assignment in `CgShaderEmitter`. A node feeding
+> `BaseColor` that declares `VERTEX` is **hoisted** into the vertex stage together with its dependencies,
+> and its value crosses as a `v2f` varying — which is what the hand-written format already does, so this
+> is a mapping rather than an invention.
+>
+> **The asymmetry is enforced, not smoothed over.** Vertex data reaches the fragment stage through a
+> varying; fragment data cannot reach the vertex stage at all, because the vertex shader has already run.
+> A fragment-only node feeding the vertex stage is an error naming both nodes.
+>
+> **Why declared and not inferred**: `fwidth`, `discard` and `gl_FragCoord` are fragment-only, and this
+> engine has already shipped that exact bug once — `sdf.glsl`'s `fwidth` reached the vertex stage, NVIDIA
+> accepted it, AMD refused, and the whole UI gallery was unlaunchable on that hardware.
+>
+> **The bug the tests caught**: the fragment stage was re-emitting the hoisted nodes, so `cg_Position`
+> appeared in a fragment body. `compileFrom` grew an `alreadyEmitted` set — those nodes contribute
+> **names but no code**, which is what lets two stages share one compiler.
 
 The graph has two domains. A node declares which it can live in; most are `any`. A **Varying** node
 moves a value from vertex to fragment and generates a `v2f` field — which maps 1:1 onto the `.shader`
@@ -300,7 +363,19 @@ format's own `struct v2f`, so this is a mapping rather than an invention.
 
 ---
 
-### 6.3.5 The master node · `TODO`
+### 6.3.5 The master node · `DONE` (2026-07-31)
+
+> **Shipped**: `CgMasterNode` (ports `Position` and `BaseColor`, plus `#type`, `Queue`, `Tags` and
+> `Properties`) and `CgShaderEmitter`, which writes a complete `.shader`. **6 tests**, and the load-bearing
+> one asserts the output **parses** through the real `CgShaderParser` — substring assertions would pass
+> happily while emitting a file the parser rejects.
+>
+> The master answers 6.2.5's deferred blackboard question without a second concept: graph-level settings
+> live on the node that represents the graph's result, exactly as Unity's Master Stack does.
+>
+> It emits **nothing** itself — its inputs become `gl_Position` and `fragColor`, written by the emitter,
+> because only the emitter knows which stage is being written. A node is handed resolved names and
+> nothing else.
 
 What a graph terminates in. Unity's Master Stack has a Vertex block and a Fragment block; ours needs at
 minimum a fragment colour and a vertex position, plus the `RenderState`/`Tags`/`Queue` that a `.shader`
@@ -404,7 +479,6 @@ expensive, and it needs both the compiler and generated materials to be real rat
 
 | Question | Notes |
 |---|---|
-| **Dynamic port types** — does `Add` exist once, or once per arity? | **The prerequisite for 6.3.2.** Unity's math nodes take any vector width and resolve the output from the inputs; our `PortSpec.typeId` is fixed, so today that is four node types per operation. Needs either a `dynamic` type resolved at compile time (and a matching connect-time rule) or an accepted explosion in the library. |
 | Subgraphs — a node whose type resolves to another graph document | 6.2.5 left the id scheme deliberately open to this. It is how a node library becomes user-extensible without JSON. Wants a decision before 6.3.2 freezes the node format. |
 | Does a generated shader go to disk at all? | Not needed at runtime once 6.3.1 exists. But "export this graph as a `.shader` I can hand-edit" is a genuinely useful one-way door, and costs nothing once the emitter exists. |
 | How does a graph declare its `RenderState`, `Queue` and `Tags`? | Proposed: on the master node (6.3.5). The alternative is document-level properties, which is a second concept for the same job. |
