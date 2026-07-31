@@ -44,6 +44,33 @@ public final class Keymap {
         return bind(KeyChord.parse(chord), commandId);
     }
 
+    /**
+     * Binds several alternative chords to one command — {@code "Mod+Equals, Mod+Add"}.
+     *
+     * <p><b>Comma-separated, because space is already taken.</b> A space separates the strokes of a
+     * <em>sequence</em> ({@code "Mod+K Mod+S"}), so alternatives need a different separator or
+     * {@code "Mod+K Mod+S, F1"} could not be told from a three-stroke chord. Split on the comma first,
+     * then each part on whitespace, and both meanings survive in one string.</p>
+     *
+     * <p>VS Code has no equivalent — its keybindings file takes one entry per chord and you repeat the
+     * command. That is fine for a JSON file a user edits and verbose in Java, where the same six
+     * bindings were six lines that had to be kept in step by eye. IntelliJ, which lists multiple
+     * shortcuts per action, is the better model here.</p>
+     *
+     * <p>Returns the {@link Keymap} rather than a binding, since there is no single one to return. Where
+     * a per-binding modifier is needed — {@link KeyBinding#allowWhileTyping()} — bind that chord on its
+     * own with {@link #bind}.</p>
+     */
+    public Keymap bindAll(String chords, String commandId) {
+        if (chords == null || chords.isBlank()) {
+            throw new IllegalArgumentException("bindAll needs at least one chord");
+        }
+        for (String chord : chords.split(",")) {
+            if (!chord.isBlank()) bind(KeyChord.parse(chord.trim()), commandId);
+        }
+        return this;
+    }
+
     public KeyBinding bind(KeyChord chord, String commandId) {
         if (commandId == null || commandId.isEmpty()) {
             throw new IllegalArgumentException("A binding needs a command id — see Keymap.bind");
