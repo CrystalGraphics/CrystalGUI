@@ -415,8 +415,13 @@ texteditor {
 /* A line must not wrap: the editor's whole windowing model is that row N sits at N * lineHeight, and a
  * wrapped line silently breaks that arithmetic rather than looking wrong. Soft wrap needs the
  * variable-height virtualisation deferred in 6.1.3. */
+/* justify-content centres on the MAIN axis, and the engine's default flex-direction is column -- so
+ * this is what puts the text in the middle of its row rather than at the top of it. The caret and the
+ * selection bands are centred on the same axis from the font's own ink height, so all three agree
+ * however tall line-height is. */
 texteditor .__line__ {
     white-space: nowrap;
+    justify-content: center;
     z-index: 1;
 }
 

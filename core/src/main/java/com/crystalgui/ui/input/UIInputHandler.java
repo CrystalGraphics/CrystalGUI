@@ -542,7 +542,10 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         final ButtonState buttonState = getMouseButtonState(buttonOrdinal);
         if (buttonState == null) return;
         if (event.state() && target != lastPressedElement) buttonState.resetDetail();
-        buttonState.setState(event.state(), event.millis());
+        // Position matters as well as time. The guard above only catches a click that lands on a
+        // DIFFERENT element, so two clicks on the same large element -- two words in one text editor,
+        // two spots in one text field -- counted as a double-click however far apart they were.
+        buttonState.setState(event.state(), event.millis(), event.x(), event.y());
     }
 
     private void emitMouseDown(UIElement targetElement, int buttonId, int detail) {
