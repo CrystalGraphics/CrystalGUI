@@ -93,6 +93,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String SELECTION_CLASS = "__selection__";
     public static final String GUTTER_CLASS = "__gutter__";
     public static final String INDENT_GUIDE_CLASS = "__indent-guide__";
+    /** Added to the one guide belonging to the block the caret is in — see {@code layOutIndentGuides}. */
+    public static final String ACTIVE_GUIDE_CLASS = "__active__";
     public static final String WHITESPACE_CLASS = "__whitespace__";
     public static final String RULER_CLASS = "__ruler__";
     public static final String GUTTER_EDGE_CLASS = "__gutter-edge__";
@@ -3172,6 +3174,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int[] levelsByRow = IndentLevels.guidesFor(buffer.document(), firstRow, lastRow,
                 indentWidth, tabSize, offSideLanguage);
 
+        // WHICH BLOCK THE CARET IS IN, once for the whole pass. Bounded by the visible rows, so a long
+        // file costs the viewport rather than the document -- the same reason guidesFor takes a range.
+        //
+        // Scoped from the CARET and not from the pointer: it answers "where am I editing", which is the
+        // question the current-line band answers too, and hovering must not move it.
+        IndentLevels.ActiveGuide active = IndentLevels.activeGuideFor(buffer.document(),
+                buffer.offsetToPoint(getCaret()).row(), firstRow, lastRow,
+                indentWidth, tabSize, offSideLanguage);
+
         for (int viewLine = firstLine; viewLine <= lastLine; viewLine++) {
             int row = modelAt(viewLine).row();
             int levels = levelsByRow[Math.max(0, Math.min(row - firstRow, levelsByRow.length - 1))];
@@ -3193,6 +3204,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 // rows that are visible.
                 if (left > textViewportWidth()) break;
                 UIElement guide = decorationAt(indentGuides, used++, INDENT_GUIDE_CLASS, false, true);
+                // Pooled, so the class has to be re-decided every frame rather than set once: this
+                // element described a different row and level a moment ago. addClass/removeClass no-op on
+                // an unchanged set, so a frame where nothing moved writes nothing.
+                if (active.covers(row, level)) guide.addClass(ACTIVE_GUIDE_CLASS);
+                else guide.removeClass(ACTIVE_GUIDE_CLASS);
                 StyleGroup.defaultPipeline(guide.getStyle().getLayoutGroup(),
                         l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                                 .left(left).top(top).width(1f).height(height));

@@ -3120,6 +3120,85 @@ public class TextEditorTest extends UiTestBase {
                 editor.getScrollWidth() <= editor.getClientWidth());
     }
 
+    /** A small file with one nested block, for the active-guide tests. */
+    private void buildBlock() {
+        build("class A {" + NL + "    void f() {" + NL + "        body();" + NL + "    }" + NL + "}");
+        editor.setIndentGuidesVisible(true);
+        showEditor();
+    }
+
+    private int activeGuideCount() {
+        int n = 0;
+        for (UIElement guide : allWithClass(TextEditor.INDENT_GUIDE_CLASS)) {
+            if (guide.getTaffyLayout().contentBoxHeight() <= 0f) continue;
+            if (guide.hasClass(TextEditor.ACTIVE_GUIDE_CLASS)) n++;
+        }
+        return n;
+    }
+
+    /**
+     * <b>Exactly one block is active, and it is the caret's.</b> Ported behaviour from Monaco's
+     * {@code getActiveIndentGuide}; this pins that the model actually reaches the elements.
+     */
+    @Test
+    public void theBlockTheCaretIsInHasAnActiveGuide() {
+        buildBlock();
+
+        editor.setCaret(0);
+        showEditor();
+        assertEquals("at the top level nothing is inside a block", 0, activeGuideCount());
+
+        // Into `body();`, two levels deep.
+        editor.setCaret(editor.getText().indexOf("body"));
+        showEditor();
+        assertTrue("the enclosing block must light up", activeGuideCount() > 0);
+    }
+
+    /** Moving the caret out of the block puts the highlight out with it. */
+    @Test
+    public void theActiveGuideFollowsTheCaret() {
+        buildBlock();
+        editor.setCaret(editor.getText().indexOf("body"));
+        showEditor();
+        assertTrue(activeGuideCount() > 0);
+
+        editor.setCaret(0);
+        showEditor();
+        assertEquals("nothing encloses the first line", 0, activeGuideCount());
+    }
+
+    /**
+     * <b>A pooled guide must drop the class when it is reused.</b> The elements are recycled across rows
+     * and levels, so a guide that was active a frame ago and is now describing an unrelated row would stay
+     * bright — a stale highlight wandering the file as you scroll.
+     */
+    @Test
+    public void arecycledGuideDoesNotStayActive() {
+        // TWO levels deep on purpose: level 0 is the gutter's edge rather than a guide element, so a
+        // singly-indented block has no guide for the highlight to land on.
+        StringBuilder document = new StringBuilder("class A {" + NL + "    void f() {" + NL);
+        for (int i = 0; i < 60; i++) document.append("        a();").append(NL);
+        document.append("    }").append(NL).append("}").append(NL);
+        for (int i = 0; i < 60; i++) document.append("b();").append(NL);
+        build(document.toString());
+        editor.setIndentGuidesVisible(true);
+        showEditor();
+
+        editor.setCaret(editor.getText().indexOf("a();"));
+        showEditor();
+        assertTrue("inside the block to begin with", activeGuideCount() > 0);
+
+        // Scroll well past the block, into the unindented tail. Nothing there is inside anything.
+        editor.setScrollImmediate(0f, 100f * editor.lineHeight());
+        showEditor();
+
+        for (UIElement guide : allWithClass(TextEditor.INDENT_GUIDE_CLASS)) {
+            if (guide.getTaffyLayout().contentBoxHeight() <= 0f) continue;
+            assertFalse("a recycled guide kept the active class",
+                    guide.hasClass(TextEditor.ACTIVE_GUIDE_CLASS));
+        }
+    }
+
     /**
      * <b>Zooming keeps the line you were on.</b>
      *
