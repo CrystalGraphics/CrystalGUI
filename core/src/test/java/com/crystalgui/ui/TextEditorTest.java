@@ -2480,11 +2480,66 @@ public class TextEditorTest extends UiTestBase {
         assertEquals("one per row, the blank one included", 3, countOf(TextEditor.INDENT_GUIDE_CLASS));
     }
 
+    /**
+     * <b>Every indent guide is drawn clear of the gutter.</b>
+     *
+     * <p>The gutter sits at a higher z-index and paints an opaque background, so a guide nudged even
+     * slightly too far left disappears entirely rather than looking wrong — which is exactly what
+     * happened when the level-0 guide was offset by half a <em>space</em> instead of half the code
+     * margin. A space is wider than the margin, so it landed underneath.</p>
+     */
+    @Test
+    public void everyIndentGuideIsDrawnClearOfTheGutter() {
+        build("a" + NL + "    b" + NL + "        c");
+        editor.setIndentGuidesVisible(true);
+        showEditor();
+
+        float gutterRight = editor.getRuntimeCache().getX()
+                + editor.getTaffyLayout().border().left + editor.getTaffyLayout().padding().left
+                + editor.getGutterWidth();
+
+        int seen = 0;
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.INDENT_GUIDE_CLASS)) continue;
+            if (child.getTaffyLayout().contentBoxHeight() <= 0f) continue;
+            seen++;
+            assertTrue("a guide at " + child.getRuntimeCache().getX()
+                            + " is under the gutter, which ends at " + gutterRight,
+                    child.getRuntimeCache().getX() >= gutterRight);
+        }
+        assertTrue("there must be guides to check", seen > 0);
+    }
+
     @Test
     public void whitespaceIsInvisibleUntilAskedFor() {
         build("  a  b  ");
         showEditor();
         assertEquals(0, countOf(TextEditor.WHITESPACE_CLASS));
+    }
+
+    /**
+     * <b>Turning whitespace back off must actually erase the markers.</b>
+     *
+     * <p>Asserting on the box was not enough and this is why: a pooled decoration is retired by collapsing
+     * it to zero size, which hides a <em>fill</em> but not a glyph — the {@code UIText} inside it has no
+     * clipping of its own and kept painting. The line numbers get away with the same trick only because
+     * the gutter around them sets {@code overflow: hidden}. So this reads the text, not the geometry.</p>
+     */
+    @Test
+    public void turningWhitespaceOffErasesTheMarkers() {
+        build("  a  b  ");
+        editor.setRenderWhitespace(com.crystalgui.text.view.RenderWhitespace.ALL);
+        showEditor();
+        assertTrue("markers must be showing first", countOf(TextEditor.WHITESPACE_CLASS) > 0);
+
+        editor.setRenderWhitespace(com.crystalgui.text.view.RenderWhitespace.NONE);
+        showEditor();
+
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.WHITESPACE_CLASS)) continue;
+            assertEquals("a retired marker must carry no glyph",
+                    "", ((UIText) child.getChildren().get(0)).getText());
+        }
     }
 
     /** Boundary mode: leading, trailing and runs — never a lone space between two words. */
@@ -2563,6 +2618,37 @@ public class TextEditorTest extends UiTestBase {
         float textStart = editor.getGutterWidth();
         assertTrue("the numbers must stop short of the code: numbers end " + numbersEnd
                 + ", text starts " + textStart, textStart - numbersEnd >= 4f);
+    }
+
+    /**
+     * <b>Every visible line number occupies its own box, at its own height.</b>
+     *
+     * <p>The regression this exists for: the numbers' width was measured afresh at layout time while the
+     * gutter's width was a cached field, so on any frame where the font had not resolved the two
+     * disagreed — the numbers got a zero-width box and every one of them piled up in the same place,
+     * drawing over each other. Zero width is invisible to an assertion about the gutter's total width,
+     * which is why that test passed throughout.</p>
+     */
+    @Test
+    public void everyLineNumberGetsARealBox() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 40; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        editor.setIndentGuidesVisible(true);
+        showEditor();
+
+        int seen = 0;
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
+            for (UIElement number : child.getChildren()) {
+                if (!number.hasClass(TextEditor.LINE_NUMBER_CLASS)) continue;
+                if (number.getTaffyLayout().contentBoxHeight() <= 0f) continue;
+                seen++;
+                assertTrue("a number with no width piles up on its neighbours",
+                        number.getTaffyLayout().contentBoxWidth() > 0f);
+            }
+        }
+        assertTrue("several numbers must be on screen, not " + seen, seen > 3);
     }
 
     /** The gap scales with the font, so the gutter stays proportionate when the editor is zoomed. */

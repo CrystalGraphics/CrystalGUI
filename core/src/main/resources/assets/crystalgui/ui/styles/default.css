@@ -466,10 +466,12 @@ texteditor .__gutter__ {
     overflow: hidden;
 }
 
+/* Right-aligned within a box TextEditor sizes to the digits and insets by the gutter's own margin, so
+ * the widest number in the file stops short of the border instead of touching it. No padding here: the
+ * geometry is the widget's, and a padding-right would eat into the margin it just reserved. */
 texteditor .__line-number__ {
     justify-content: center;
     align-items: flex-end;
-    padding-right: 4px;
     color: #5C6570;
     white-space: nowrap;
 }
