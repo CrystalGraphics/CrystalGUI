@@ -17,10 +17,18 @@ import com.crystalgui.text.Selection;
 import com.crystalgui.text.SelectionModel;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.syntax.SyntaxToken;
+import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.text.HighlightRegistry;
 import com.crystalgui.ui.text.TextRange;
 import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.WordClassifier;
+import com.crystalgui.text.WordOperations;
+import com.crystalgui.text.cursor.CursorColumns;
+import com.crystalgui.text.cursor.LineOperations;
+import com.crystalgui.text.cursor.MouseSelection;
+import com.crystalgui.text.cursor.MoveOperations;
+import com.crystalgui.text.cursor.TypeOperations;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
@@ -136,6 +144,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** One indent level, in spaces. */
     private int indentWidth = 4;
 
+    /**
+     * What the editor needs to know about the language in order to EDIT it — comment tokens, bracket
+     * pairs, indent triggers. Separate from the tokenizer, which only knows how to colour it: a
+     * tree-sitter grammar has no query that says {@code //} starts a comment.
+     */
+    private Language language = Language.PLAIN;
+
+    /** Read-only refuses every mutation while leaving navigation, selection and copying alone. */
+    private boolean readOnly;
+
+    private boolean autoCloseBrackets = true;
+
+    /**
+     * What counts as a word — VS Code's separator set, where {@code _} is a word character.
+     *
+     * <p>Per-editor rather than global because languages disagree: {@code $} is part of an identifier in
+     * one and punctuation in the next, which is why VS Code makes it a language-scoped option.</p>
+     */
+    private WordClassifier wordClassifier = WordClassifier.DEFAULT;
+
     private int firstRealised = -1;
     private int lastRealised = -1;
 
@@ -151,15 +179,38 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private final SelectionModel selections = new SelectionModel();
 
     /**
-     * The column vertical movement aims for, or -1 to take it from the caret.
+     * The column each caret aims for while moving vertically — one per caret, not one shared.
      *
-     * <p>Without it, moving down through a short line and back up lands somewhere other than where it
-     * started — the caret is dragged inward by the short line and has forgotten where it came from. Every
-     * editor keeps this, and it is reset by any horizontal movement or edit.</p>
+     * <p>VS Code calls this {@code leftoverVisibleColumns} and keeps it <b>per cursor</b>. A single shared
+     * value is wrong the moment there are two carets in different columns: whichever moved last imposes
+     * its column on the others, and a rectangular block of carets collapses into a ragged one after a
+     * single Down. Reset by any horizontal movement or edit, which is what makes "down, down, up" return
+     * to where it started while "down, right, up" does not.</p>
+     *
+     * <p>Indices line up with {@code selections.all()}. When a move merges carets the lengths stop
+     * matching, and the goals are dropped rather than guessed at — a wrong goal is worse than none.</p>
      */
-    private int preferredColumn = -1;
+    private int[] goalColumns = new int[0];
 
     private boolean selecting;
+
+    /**
+     * What a drag is extending by — ported from VS Code's mouse handler, which keeps the click count for
+     * the whole drag rather than only for the press that started it.
+     *
+     * <p>A drag started by a double-click extends <b>by word</b>, and one started by a triple-click
+     * extends <b>by line</b>. Dropping back to character granularity the moment the pointer moves is the
+     * usual mistake, and it makes double-click-drag — the standard way to select a phrase — behave as if
+     * the double-click never happened.</p>
+     */
+    private int dragGranularity = 1;
+
+    /** The anchor a drag extends from, in document offsets: {@code {start, end}} of the initial unit. */
+    private int[] dragAnchor;
+
+    /** Last pointer position in this element's space, for autoscroll while dragging. */
+    private float pointerX, pointerY;
+    private boolean pointerInside;
 
     /**
      * Blink period in seconds — one full off-and-on cycle. Chromium's is 1.06s; the exact number is less
@@ -169,9 +220,21 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private float blinkClock;
     private boolean caretShown = true;
 
-    // Measurement cache, keyed by the text it measured — see prefixWidths.
-    private final Map<Integer, float[]> measuredRows = new HashMap<>();
+    /**
+     * Per-row measurement, keyed by row and dropped wholesale on any edit.
+     *
+     * <p>Holds the <b>displayed</b> text — tabs expanded to their stops — alongside the two maps between
+     * document columns and display indices. See {@link RowMetrics}.</p>
+     */
+    private final Map<Integer, RowMetrics> measuredRows = new HashMap<>();
     private String measuredFontKey = "";
+
+    /** Spaces per tab stop. Separate from {@link #indentWidth}, exactly as VS Code separates the two. */
+    private int tabSize = 4;
+
+    /** One row's expanded display text and column maps, plus the measured x of each display index. */
+    private record RowMetrics(CursorColumns.Line line, float[] widths) {
+    }
 
     public TextEditor() {
         this("");
@@ -204,7 +267,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
             tokenizer.edited(buffer.document(), change);
             highlightsDirty = true;
             measuredRows.clear();
-            invalidateWindow();
+            // NOT invalidateWindow() unless the line COUNT changed.
+            //
+            // Recycling every line on every keystroke clears each one's highlights -- recycleLine has to,
+            // since a pooled line reused for another row would keep offsets into a string that no longer
+            // exists. The ranges are republished during updateWindow, which runs AFTER calculateStyle in
+            // the frame, so the cascade only sees them next frame: for one frame every line rendered with
+            // no highlight style at all, which is the whole editor's colour flickering on every keystroke.
+            //
+            // Rebind in place, ALWAYS -- including when a line was added or removed.
+            //
+            // The realised map is keyed by ROW INDEX, not by identity, so re-reading each row's text gives
+            // every element the right content however much the rows shifted. Element identity does not
+            // need to follow the text. What the window may need is to grow or shrink, and updateWindow
+            // already recomputes that range every frame.
+            //
+            // Rebuilding on a line-count change was the remaining half of the flicker: pressing Enter
+            // recycled every line, and recycling clears highlights that are only republished after the
+            // frame's style pass.
+            rebindRealisedLines();
             onChanged.emit(buffer.toString());
         });
 
@@ -384,12 +465,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Applies a set of per-caret changes as one edit, then carries the carets through it. */
     private void applyEdit(List<Change> changes) {
+        if (readOnly) return;
         changes.removeIf(Change::isEmpty);
         if (changes.isEmpty()) return;
         ChangeSet edit = ChangeSet.of(buffer.length(), changes);
         buffer.edit(edit);
         selections.mapThrough(edit).collapseEachToHead();
-        preferredColumn = -1;
+        clearGoalColumns();
         restartCaretBlink();
         ensureCaretVisible();
         onSelectionChanged.emit();
@@ -424,7 +506,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
             char typed = event.getCharacter();
             if (typed != '\0' && !Character.isISOControl(typed)) {
-                insertAtCaret(String.valueOf(typed));
+                typeCharacter(typed);
                 event.stopPropagation();
             }
         }, false, false);
@@ -432,35 +514,49 @@ public class TextEditor extends ScrollerView implements UndoScope {
         events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled()) return;
             int offset = offsetAt(event.getPosition().x(), event.getPosition().y());
-            if (event.getDetail() >= 2) {
-                selectWordAt(offset);
+            // Click count drives GRANULARITY, and the granularity is remembered for the whole drag --
+            // see dragGranularity. 1 = character, 2 = word, 3 = line, as in VS Code's mouse handler.
+            int clicks = Math.min(3, Math.max(1, event.getDetail()));
+            boolean extend = CgModifiers.hasShift(CgPlatform.input().getCurrentModifiers());
+            boolean addCaret = CgModifiers.hasAlt(CgPlatform.input().getCurrentModifiers());
+
+            if (addCaret && clicks == 1) {
+                // Alt+Click adds a caret, as in VS Code. Ctrl is left alone because Ctrl+Click is
+                // "go to definition" everywhere it appears.
+                addCaret(offset);
+                dragGranularity = 1;
+                dragAnchor = new int[] { offset, offset };
             } else {
-                // A MouseEvent carries no modifier mask -- only KeyboardEvent does -- so shift-click has
-                // to ask the platform for the live modifier state. Worth noting rather than working
-                // around silently: this is the one place in the widget where a modifier is read outside
-                // the event that caused it.
-                boolean extend = CgModifiers.hasShift(CgPlatform.input().getCurrentModifiers());
-                if (CgModifiers.hasAlt(CgPlatform.input().getCurrentModifiers())) {
-                    // Alt+Click adds a caret, as in VS Code. Ctrl is not used for this because Ctrl+Click
-                    // is already "go to definition" everywhere it appears, and 6.1.7 will want it.
-                    addCaret(offset);
+                dragGranularity = clicks;
+                dragAnchor = unitAt(offset, clicks);
+                if (extend) {
+                    setSelection(getAnchor(), offset);
                 } else {
-                    setSelection(extend ? getAnchor() : offset, offset);
+                    setSelection(dragAnchor[0], dragAnchor[1]);
                 }
-                selecting = true;
-                var window = getAttachedWindow();
-                if (window != null) window.getInputHandler().setPointerCapture(this);
             }
+
+            selecting = true;
+            var window = getAttachedWindow();
+            if (window != null) window.getInputHandler().setPointerCapture(this);
             requestFocusHere();
             event.stopPropagation();
         }, false, false);
 
         events.getGroup(MouseEvent.Move.class).attachListener((el, event) -> {
+            var local = screenToLocal(event.getPosition().x(), event.getPosition().y());
+            pointerX = local.x() - getRuntimeCache().getX();
+            pointerY = local.y() - getRuntimeCache().getY();
+            pointerInside = true;
             if (!selecting) return;
-            setSelection(getAnchor(), offsetAt(event.getPosition().x(), event.getPosition().y()));
+            extendDragTo(offsetAt(event.getPosition().x(), event.getPosition().y()));
         }, false, false);
 
-        events.getGroup(MouseEvent.Up.class).attachListener((el, event) -> selecting = false, false, false);
+        events.getGroup(MouseEvent.Up.class).attachListener((el, event) -> {
+            selecting = false;
+            dragGranularity = 1;
+            dragAnchor = null;
+        }, false, false);
     }
 
     private void requestFocusHere() {
@@ -473,7 +569,72 @@ public class TextEditor extends ScrollerView implements UndoScope {
         boolean shift = CgModifiers.hasShift(modifiers);
         boolean ctrl = CgModifiers.hasCtrl(modifiers) || CgModifiers.hasSuper(modifiers);
 
+        boolean alt = CgModifiers.hasAlt(modifiers);
+
+        // Alt-based line operations. Checked before the ctrl block because Ctrl+Alt+Up/Down is a
+        // multi-caret command, not a line move -- the two would otherwise both claim the arrow keys.
+        if (alt && !ctrl) {
+            switch (key) {
+                case CgKeyCodes.KEY_UP:
+                    if (shift) duplicateLines(-1);
+                    else moveLines(-1);
+                    return true;
+                case CgKeyCodes.KEY_DOWN:
+                    if (shift) duplicateLines(1);
+                    else moveLines(1);
+                    return true;
+                case CgKeyCodes.KEY_A:
+                    if (shift) {
+                        toggleBlockComment();
+                        return true;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (ctrl && alt) {
+            if (key == CgKeyCodes.KEY_UP) {
+                addCaretOnAdjacentLine(-1);
+                return true;
+            }
+            if (key == CgKeyCodes.KEY_DOWN) {
+                addCaretOnAdjacentLine(1);
+                return true;
+            }
+        }
+
         if (ctrl) {
+            if (key == CgKeyCodes.KEY_D) {
+                addCaretAtNextOccurrence();
+                return true;
+            }
+            if (key == CgKeyCodes.KEY_L) {
+                if (shift) selectAllOccurrences();
+                else selectLine();
+                return true;
+            }
+            if (key == CgKeyCodes.KEY_K && shift) {
+                deleteLines();
+                return true;
+            }
+            if (key == CgKeyCodes.KEY_J) {
+                joinLines();
+                return true;
+            }
+            if (key == CgKeyCodes.KEY_SLASH) {
+                toggleLineComment();
+                return true;
+            }
+            if (key == CgKeyCodes.KEY_RETURN) {
+                insertLine(shift ? -1 : 1);
+                return true;
+            }
+            if (key == CgKeyCodes.KEY_F3) {
+                findWordUnderCaret();
+                return true;
+            }
             if (key == CgKeyCodes.KEY_Z) {
                 if (shift) buffer.redo();
                 else buffer.undo();
@@ -511,12 +672,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
         }
 
+        if (key == CgKeyCodes.KEY_F3) {
+            if (shift) findPrevious();
+            else findNext();
+            return true;
+        }
+
         switch (key) {
             case CgKeyCodes.KEY_LEFT:
-                moveEach(head -> ctrl ? previousWordBoundary(head) : Math.max(0, head - 1), shift);
+                moveHorizontally(-1, shift, ctrl);
                 return true;
             case CgKeyCodes.KEY_RIGHT:
-                moveEach(head -> ctrl ? nextWordBoundary(head) : Math.min(buffer.length(), head + 1), shift);
+                moveHorizontally(1, shift, ctrl);
                 return true;
             case CgKeyCodes.KEY_UP:
                 moveVertically(-1, shift);
@@ -531,10 +698,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 moveVertically(visibleRowCount(), shift);
                 return true;
             case CgKeyCodes.KEY_HOME:
-                moveEach(this::smartHomeOffset, shift);
+                moveEach(head -> MoveOperations.smartHome(buffer.document(), head), shift);
                 return true;
             case CgKeyCodes.KEY_END:
-                moveEach(head -> buffer.document().lineEndOffset(buffer.offsetToPoint(head).row()), shift);
+                moveEach(head -> MoveOperations.lineEnd(buffer.document(), head), shift);
                 return true;
             case CgKeyCodes.KEY_ESCAPE:
                 // Only claims the key when there is something to collapse, so Escape still reaches a
@@ -546,7 +713,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 // Ctrl+Backspace deletes to the same boundary Ctrl+Left moves to, so the two agree by
                 // construction rather than by two rules that have to be kept in step.
                 deleteEach(head -> new int[] {
-                        ctrl ? previousWordBoundary(head) : Math.max(0, head - 1), head });
+                        ctrl ? previousWordBoundary(head)
+                             : TypeOperations.backspaceFrom(buffer.document(), head, indentWidth),
+                        head });
                 return true;
             case CgKeyCodes.KEY_DELETE:
                 deleteEach(head -> new int[] {
@@ -575,8 +744,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Absolute move — collapses to one caret, which is what Ctrl+Home/End mean. */
     private void moveCaretTo(int offset, boolean extend) {
-        preferredColumn = -1;
+        clearGoalColumns();
         setSelection(extend ? getAnchor() : offset, offset);
+        ensureCaretVisible();
+    }
+
+    private void moveHorizontally(int direction, boolean extend, boolean byWord) {
+        clearGoalColumns();
+        selections.setAll(MoveOperations.horizontal(buffer.document(), selections.all(),
+                direction, extend, byWord, wordClassifier), selections.primaryIndex());
+        afterSelectionChange();
         ensureCaretVisible();
     }
 
@@ -587,7 +764,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * carets?" stops being a question that has to be asked once per key.</p>
      */
     private void moveEach(java.util.function.IntUnaryOperator move, boolean extend) {
-        preferredColumn = -1;
+        clearGoalColumns();
         selections.transform(selection -> {
             int head = Math.max(0, Math.min(move.applyAsInt(selection.head()), buffer.length()));
             return extend ? selection.withHead(head) : Selection.caret(head);
@@ -628,22 +805,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * dragged inward by the shortest line passed through.</p>
      */
     private void moveVertically(int rows, boolean extend) {
-        // A shared preferred column only makes sense with one caret; with several, each keeps its own,
-        // because they start in different columns and a single remembered value would drag them together.
-        final int shared = selections.isMultiple() ? -1 : preferredColumn;
-        final int[] usedColumn = { -1 };
-        selections.transform(selection -> {
-            TextPoint point = buffer.offsetToPoint(selection.head());
-            int column = shared >= 0 ? shared : point.column();
-            usedColumn[0] = column;
-            int row = Math.max(0, Math.min(buffer.lineCount() - 1, point.row() + rows));
-            int offset = buffer.pointToOffset(new TextPoint(row, column));
-            return extend ? selection.withHead(offset) : Selection.caret(offset);
-        });
+        var result = MoveOperations.vertical(buffer.document(), selections.all(), goalColumns, rows, extend);
+        selections.setAll(result.selections(), selections.primaryIndex());
+        // Only keep the goals if nothing merged; otherwise the indices no longer line up.
+        goalColumns = selections.count() == result.goalColumns().length ? result.goalColumns() : new int[0];
         afterSelectionChange();
-        // Set AFTER the move, so only the horizontal paths reset it.
-        preferredColumn = selections.isMultiple() ? -1 : usedColumn[0];
         ensureCaretVisible();
+    }
+
+    private void clearGoalColumns() {
+        if (goalColumns.length != 0) goalColumns = new int[0];
     }
 
     private int visibleRowCount() {
@@ -674,21 +845,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return Math.max(0f, verticalScroller().getRuntimeCache().getWidth());
     }
 
-    /** Word boundaries in the CSS/browser sense: runs of letters-or-digits, everything else a break. */
+    /**
+     * Word-right — the END of the next word, per {@link WordOperations}.
+     *
+     * <p>These used to classify with {@code Character.isLetterOrDigit}, which makes {@code _} a separator
+     * and so splits {@code foo_bar} into two words, and they materialised the whole document with
+     * {@code toString()} on every keypress. Both are fixed by the port.</p>
+     */
     private int nextWordBoundary(int from) {
-        String text = buffer.toString();
-        int i = from;
-        while (i < text.length() && !Character.isLetterOrDigit(text.charAt(i))) i++;
-        while (i < text.length() && Character.isLetterOrDigit(text.charAt(i))) i++;
-        return i;
+        return WordOperations.nextWordEnd(buffer.document(), from, wordClassifier);
     }
 
+    /** Word-left — the START of the previous word. Deliberately not the mirror of the above. */
     private int previousWordBoundary(int from) {
-        String text = buffer.toString();
-        int i = from;
-        while (i > 0 && !Character.isLetterOrDigit(text.charAt(i - 1))) i--;
-        while (i > 0 && Character.isLetterOrDigit(text.charAt(i - 1))) i--;
-        return i;
+        return WordOperations.previousWordStart(buffer.document(), from, wordClassifier);
     }
 
     /**
@@ -698,20 +868,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * the text, not the start of the indentation. Pressing it twice still gets you to column 0, so
      * nothing is taken away.</p>
      */
-    private int smartHomeOffset(int head) {
-        int row = buffer.offsetToPoint(head).row();
-        int lineStart = buffer.document().lineStartOffset(row);
-        String text = buffer.line(row);
-        int indent = 0;
-        while (indent < text.length() && Character.isWhitespace(text.charAt(indent))) indent++;
-        // A whitespace-only line has no "first non-blank"; treat its start as the answer rather than
-        // sending the caret past everything on it.
-        if (indent >= text.length()) return lineStart;
-        return head == lineStart + indent ? lineStart : lineStart + indent;
-    }
 
+    /** Double-click selection, using the ported {@link WordOperations#wordAt}. */
     private void selectWordAt(int offset) {
-        setSelection(previousWordBoundary(Math.min(offset + 1, buffer.length())), nextWordBoundary(offset));
+        int[] word = WordOperations.wordAt(buffer.document(), offset, wordClassifier);
+        if (word == null) {
+            setCaret(offset);
+            return;
+        }
+        setSelection(word[0], word[1]);
     }
 
     // ── Geometry ────────────────────────────────────────────────────────────────────────────────
@@ -792,11 +957,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Document offset nearest a point in this element's own space. */
     public int offsetAt(float screenX, float screenY) {
         var local = screenToLocal(screenX, screenY);
-        float relativeY = local.y() - getRuntimeCache().getY() - textOriginY() + getScrollTop();
+        return offsetAtLocal(local.x() - getRuntimeCache().getX(), local.y() - getRuntimeCache().getY());
+    }
+
+    /** The same, from coordinates already relative to this element's top-left. */
+    private int offsetAtLocal(float localX, float localY) {
+        float relativeY = localY - textOriginY() + getScrollTop();
         int row = Math.max(0, Math.min(buffer.lineCount() - 1, (int) (relativeY / lineHeight())));
 
-        float relativeX = local.x() - getRuntimeCache().getX() + getScrollLeft() - textOriginX();
-        float[] widths = prefixWidths(row);
+        float relativeX = localX + getScrollLeft() - textOriginX();
+        RowMetrics metrics = rowMetrics(row);
+        float[] widths = metrics.widths();
         int best = 0;
         float bestDistance = Float.MAX_VALUE;
         for (int i = 0; i < widths.length; i++) {
@@ -806,7 +977,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 best = i;
             }
         }
-        return buffer.document().lineStartOffset(row) + best;
+        // The nearest DISPLAY index, mapped back to a document column. Without the map a click past a
+        // tab lands as many columns too far right as the tab was wide.
+        int column = metrics.line().columnOf(best);
+        return buffer.document().lineStartOffset(row) + column;
     }
 
     /**
@@ -936,6 +1110,42 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return indentWidth;
     }
 
+    public TextEditor setLanguage(Language newLanguage) {
+        this.language = newLanguage == null ? Language.PLAIN : newLanguage;
+        return this;
+    }
+
+    public Language language() {
+        return language;
+    }
+
+    /**
+     * Read-only refuses edits but not navigation, selection or copying.
+     *
+     * <p>Enforced in {@link #applyEdit} — the single place every mutation funnels through — rather than at
+     * each key. A per-key check is a list to keep in step with the key handler, and the failure when one
+     * is missed is a read-only document that quietly changed.</p>
+     */
+    public TextEditor setReadOnly(boolean value) {
+        this.readOnly = value;
+        return this;
+    }
+
+    public boolean isReadOnly() {
+        return readOnly;
+    }
+
+    public TextEditor setAutoCloseBrackets(boolean value) {
+        this.autoCloseBrackets = value;
+        return this;
+    }
+
+    /** Overrides the word-separator set — see {@link WordClassifier#DEFAULT_SEPARATORS}. */
+    public TextEditor setWordSeparators(String separators) {
+        this.wordClassifier = new WordClassifier(separators);
+        return this;
+    }
+
     private static String spaces(int howMany) {
         StringBuilder out = new StringBuilder(howMany);
         for (int i = 0; i < howMany; i++) out.append(' ');
@@ -972,25 +1182,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Adds one indent level to the start of every line touched by a selection. */
     private void indentSelectedLines() {
-        List<Change> changes = new ArrayList<>();
-        for (int row : touchedRows()) {
-            changes.add(Change.insert(buffer.document().lineStartOffset(row), spaces(indentWidth)));
-        }
-        applyEditKeepingSelection(changes);
+        applyEditKeepingSelection(new ArrayList<>(
+                LineOperations.indent(buffer.document(), touchedRows(), indentWidth)));
     }
 
     /** Removes up to one indent level from every line touched by a selection. */
     private void outdentSelectedLines() {
-        List<Change> changes = new ArrayList<>();
-        for (int row : touchedRows()) {
-            int lineStart = buffer.document().lineStartOffset(row);
-            String line = buffer.line(row);
-            int remove = 0;
-            while (remove < indentWidth && remove < line.length() && line.charAt(remove) == ' ') remove++;
-            if (remove == 0 && !line.isEmpty() && line.charAt(0) == '\t') remove = 1;
-            if (remove > 0) changes.add(Change.delete(lineStart, lineStart + remove));
-        }
-        applyEditKeepingSelection(changes);
+        applyEditKeepingSelection(new ArrayList<>(
+                LineOperations.outdent(buffer.document(), touchedRows(), indentWidth)));
     }
 
     /** Every row any selection touches, ascending and without repeats. */
@@ -1012,6 +1211,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * replaces a selection; these two want opposite things from the same machinery.</p>
      */
     private void applyEditKeepingSelection(List<Change> changes) {
+        if (readOnly) return;
         changes.removeIf(Change::isEmpty);
         if (changes.isEmpty()) return;
         ChangeSet edit = ChangeSet.of(buffer.length(), changes);
@@ -1021,6 +1221,250 @@ public class TextEditor extends ScrollerView implements UndoScope {
         ensureCaretVisible();
         onSelectionChanged.emit();
     }
+
+    // ── Mouse selection ─────────────────────────────────────────────────────────────────────────
+
+    private int[] unitAt(int offset, int clicks) {
+        return MouseSelection.unitAt(buffer.document(), offset, clicks, wordClassifier);
+    }
+
+    private void extendDragTo(int offset) {
+        if (dragAnchor == null) {
+            setSelection(getAnchor(), offset);
+            return;
+        }
+        Selection extended = MouseSelection.extend(
+                buffer.document(), dragAnchor, offset, dragGranularity, wordClassifier);
+        setSelection(extended.anchor(), extended.head());
+    }
+
+    /**
+     * Scrolls while a selection drag is held outside the viewport.
+     *
+     * <p>Without it a drag simply stops at the edge, and selecting more than a screenful needs a scroll
+     * with the other hand. The rate grows with how far outside the pointer is — a fixed step feels
+     * unresponsive near the edge and uncontrollable far from it.</p>
+     */
+    private void autoScrollDuringDrag(float deltaSeconds) {
+        if (!selecting || !pointerInside) return;
+        float viewport = viewportHeight();
+        float outside = 0f;
+        if (pointerY < 0f) outside = pointerY;
+        else if (pointerY > viewport) outside = pointerY - viewport;
+        if (outside == 0f) return;
+
+        // Roughly a line per 10px outside per second, which is about what VS Code feels like.
+        float step = Math.signum(outside) * Math.min(Math.abs(outside), 200f) * deltaSeconds * 1.5f;
+        setScrollImmediate(getScrollLeft(), getScrollTop() + step);
+        extendDragTo(offsetAtLocal(pointerX, Math.max(0f, Math.min(pointerY, viewport))));
+    }
+
+    // ── Typing aids ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * One typed character, with the three behaviours that make brackets bearable.
+     *
+     * <ul>
+     *   <li><b>Surround</b> — an opener typed over a selection wraps it instead of replacing it. Replacing
+     *       is what a bare insert would do, and losing a selection to a stray bracket is unrecoverable
+     *       without undo.</li>
+     *   <li><b>Type-over</b> — a closer typed where that closer already sits steps past it. Without this,
+     *       auto-closing is actively worse than not having it: you get {@code ()} and then {@code ())}
+     *       because typing the close you expected to need inserts a second one.</li>
+     *   <li><b>Auto-close</b> — an opener inserts its partner behind the caret.</li>
+     * </ul>
+     */
+    private void typeCharacter(char typed) {
+        if (readOnly) return;
+        Character closer = language.closerFor(typed);
+
+        if (selections.hasSelection() && closer != null) {
+            applyEditKeepingSelection(new ArrayList<>(
+                    TypeOperations.surround(selections.all(), typed, closer)));
+            return;
+        }
+        if (autoCloseBrackets && language.isCloser(typed)
+                && TypeOperations.nextCharIs(buffer.document(), selections.all(), typed)) {
+            moveEach(head -> head + 1, false);
+            return;
+        }
+        if (autoCloseBrackets && closer != null && TypeOperations.shouldAutoClose(
+                buffer.document(), selections.all(), typed, language, wordClassifier)) {
+            insertAtCaret(String.valueOf(typed) + closer);
+            // Put the caret between the pair rather than after it.
+            moveEach(head -> head - 1, false);
+            return;
+        }
+        insertAtCaret(String.valueOf(typed));
+    }
+
+
+
+
+
+
+    // ── Multi-caret commands ────────────────────────────────────────────────────────────────────
+
+    /**
+     * Adds a caret at the next occurrence of the current selection — {@code Ctrl+D}.
+     *
+     * <p>With an empty caret it selects the word under it first, which is what makes the key usable from
+     * a bare caret: press once to select the word, again for the next one. Wraps, so the last occurrence
+     * leads back to the first rather than doing nothing.</p>
+     */
+    public boolean addCaretAtNextOccurrence() {
+        Selection primary = selections.primary();
+        if (primary.isEmpty()) {
+            int[] word = WordOperations.wordAt(buffer.document(), primary.head(), wordClassifier);
+            if (word == null) return false;
+            setSelection(word[0], word[1]);
+            return true;
+        }
+
+        String needle = buffer.document().slice(primary.start(), primary.end()).toString();
+        if (needle.isEmpty()) return false;
+        String haystack = buffer.toString();
+
+        int from = selections.all().get(selections.count() - 1).end();
+        int at = haystack.indexOf(needle, from);
+        if (at < 0) at = haystack.indexOf(needle);
+        if (at < 0) return false;
+        for (Selection existing : selections.all()) {
+            if (existing.start() == at) return false;   // already have this one
+        }
+        selections.add(new Selection(at, at + needle.length()));
+        afterSelectionChange();
+        ensureCaretVisible();
+        return true;
+    }
+
+    /** A caret at every occurrence of the selection — {@code Ctrl+Shift+L}. */
+    public int selectAllOccurrences() {
+        Selection primary = selections.primary();
+        if (primary.isEmpty() && !addCaretAtNextOccurrence()) return 0;
+        primary = selections.primary();
+        String needle = buffer.document().slice(primary.start(), primary.end()).toString();
+        if (needle.isEmpty()) return 0;
+
+        String haystack = buffer.toString();
+        List<Selection> found = new ArrayList<>();
+        int at = haystack.indexOf(needle);
+        while (at >= 0) {
+            found.add(new Selection(at, at + needle.length()));
+            at = haystack.indexOf(needle, at + needle.length());
+        }
+        if (found.isEmpty()) return 0;
+        selections.setAll(found, found.size() - 1);
+        afterSelectionChange();
+        ensureCaretVisible();
+        return found.size();
+    }
+
+    /**
+     * A caret on the line above or below every existing one — {@code Ctrl+Alt+Up/Down}.
+     *
+     * <p>Columns are kept, so a column of carets stays a column even down a ragged block; a line too short
+     * to reach the column contributes a caret at its end rather than none, which is what keeps the set
+     * rectangular enough to type into.</p>
+     */
+    public boolean addCaretOnAdjacentLine(int direction) {
+        List<Selection> added = new ArrayList<>(selections.all());
+        boolean any = false;
+        for (Selection selection : selections.all()) {
+            TextPoint point = buffer.offsetToPoint(selection.head());
+            int row = point.row() + direction;
+            if (row < 0 || row >= buffer.lineCount()) continue;
+            added.add(Selection.caret(buffer.pointToOffset(new TextPoint(row, point.column()))));
+            any = true;
+        }
+        if (!any) return false;
+        selections.setAll(added, added.size() - 1);
+        afterSelectionChange();
+        ensureCaretVisible();
+        return true;
+    }
+
+    // ── Line operations ─────────────────────────────────────────────────────────────────────────
+
+    /** Selects the whole line (or extends to the next one when it is already selected) — {@code Ctrl+L}. */
+    public void selectLine() {
+        Selection primary = selections.primary();
+        int firstRow = buffer.offsetToPoint(primary.start()).row();
+        int lastRow = buffer.offsetToPoint(primary.end()).row();
+        int start = buffer.document().lineStartOffset(firstRow);
+        int end = Math.min(buffer.length(), buffer.document().lineEndOffset(lastRow) + 1);
+        if (primary.start() == start && primary.end() == end && lastRow + 1 < buffer.lineCount()) {
+            end = Math.min(buffer.length(), buffer.document().lineEndOffset(lastRow + 1) + 1);
+        }
+        setSelection(start, end);
+    }
+
+    /** Deletes every line any caret touches — {@code Ctrl+Shift+K}. */
+    public void deleteLines() {
+        applyEdit(new ArrayList<>(LineOperations.delete(buffer.document(), touchedRows())));
+    }
+
+    /** Copies every touched line above or below itself — {@code Shift+Alt+Up/Down}. */
+    public void duplicateLines(int direction) {
+        applyEditKeepingSelection(new ArrayList<>(
+                LineOperations.duplicate(buffer.document(), touchedRows(), direction)));
+    }
+
+    /** Moves every touched line up or down one — {@code Alt+Up/Down}. */
+    public void moveLines(int direction) {
+        LineOperations.Move move = LineOperations.move(buffer.document(), touchedRows(), direction);
+        if (move == null) return;
+
+        List<Selection> moved = new ArrayList<>();
+        for (Selection selection : selections.all()) {
+            moved.add(new Selection(selection.anchor() + move.shift(), selection.head() + move.shift()));
+        }
+        applyEditKeepingSelection(new ArrayList<>(List.of(move.change())));
+        selections.setAll(moved, selections.primaryIndex());
+        afterSelectionChange();
+        ensureCaretVisible();
+    }
+
+    /** Opens a line below (or above) each caret — {@code Ctrl+Enter}. */
+    public void insertLine(int direction) {
+        applyEdit(new ArrayList<>(
+                LineOperations.insertLine(buffer.document(), touchedRows(), direction)));
+    }
+
+    /** Joins each touched line with the one after it. */
+    public void joinLines() {
+        applyEdit(new ArrayList<>(LineOperations.join(buffer.document(), touchedRows())));
+    }
+
+    // ── Comments ────────────────────────────────────────────────────────────────────────────────
+
+    /** Toggles the line comment on every touched line — {@code Ctrl+/}. */
+    public void toggleLineComment() {
+        applyEditKeepingSelection(new ArrayList<>(
+                LineOperations.toggleLineComment(buffer.document(), touchedRows(), language)));
+    }
+
+    /** Wraps or unwraps the selection in a block comment. */
+    public void toggleBlockComment() {
+        if (!language.hasBlockComment()) return;
+        Selection primary = selections.primary();
+        if (primary.isEmpty()) {
+            toggleLineComment();
+            return;
+        }
+        String open = language.blockCommentStart();
+        String close = language.blockCommentEnd();
+        String selected = buffer.document().slice(primary.start(), primary.end()).toString();
+        String replacement = selected.startsWith(open) && selected.endsWith(close)
+                ? selected.substring(open.length(), selected.length() - close.length())
+                : open + selected + close;
+        applyEditKeepingSelection(new ArrayList<>(List.of(
+                new Change(primary.start(), primary.end(), replacement))));
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
+
+
 
     // ── Bracket matching ────────────────────────────────────────────────────────────────────────
 
@@ -1112,6 +1556,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         highlightsDirty = true;
         return searchMatches.size();
+    }
+
+    /** Searches for the word under the caret — {@code Ctrl+F3}. */
+    public boolean findWordUnderCaret() {
+        Selection primary = selections.primary();
+        int start = primary.start();
+        int end = primary.end();
+        if (primary.isEmpty()) {
+            int[] word = WordOperations.wordAt(buffer.document(), primary.head(), wordClassifier);
+            if (word == null) return false;
+            start = word[0];
+            end = word[1];
+        }
+        if (end <= start) return false;
+        find(buffer.document().slice(start, end).toString(), false);
+        return findNext();
     }
 
     public int matchCount() {
@@ -1240,7 +1700,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * rather than where it would sit in the fully-shaped line. Cached per row and dropped wholesale on
      * any edit, since a row's index is not stable across one.</p>
      */
-    private float[] prefixWidths(int row) {
+    private RowMetrics rowMetrics(int row) {
         var general = getStyle().getGeneralGroup();
         String fontKey = general.fontFamily() + "/" + general.fontSize();
         if (!fontKey.equals(measuredFontKey)) {
@@ -1248,7 +1708,30 @@ public class TextEditor extends ScrollerView implements UndoScope {
             measuredFontKey = fontKey;
             textHeight = -1f;
         }
-        return measuredRows.computeIfAbsent(row, r -> caretOffsets(buffer.line(r), resolveFamily()));
+        return measuredRows.computeIfAbsent(row, r -> measureRow(buffer.line(r)));
+    }
+
+    private float[] prefixWidths(int row) {
+        return rowMetrics(row).widths();
+    }
+
+    /** Expands tabs through {@link CursorColumns} and measures the result. */
+    private RowMetrics measureRow(String line) {
+        CursorColumns.Line expanded = CursorColumns.expand(line, tabSize);
+        CgFontFamily family = FontFamilyCache.resolve(getStyle().getGeneralGroup().fontFamily(),
+                Math.round(getStyle().getGeneralGroup().fontSize()));
+        return new RowMetrics(expanded, caretOffsets(expanded.display(), family));
+    }
+
+    public TextEditor setTabSize(int size) {
+        this.tabSize = Math.max(1, size);
+        measuredRows.clear();
+        invalidateWindow();
+        return this;
+    }
+
+    public int getTabSize() {
+        return tabSize;
     }
 
     private CgFontFamily resolveFamily() {
@@ -1369,10 +1852,36 @@ public class TextEditor extends ScrollerView implements UndoScope {
         else if (top + height > getScrollTop() + viewport) {
             setScrollImmediate(getScrollLeft(), top + height - viewport);
         }
-        invalidateWindow();
+        // NOT invalidateWindow(). Scrolling changes which rows are on screen, and updateWindow already
+        // recomputes that range every frame -- realising what has come into view and recycling what has
+        // left. Tearing the whole window down here recycled every line on every keystroke, which clears
+        // their highlights and is the other half of the colour flicker.
+        markTreeDirty();
     }
 
     // ── Virtualised rendering ───────────────────────────────────────────────────────────────────
+
+    /** Row count when the window was last built — see the note in the edit listener. */
+    private int lineCountAtLastWindow = -1;
+
+    /** Re-reads the text of every realised line without recycling it, so highlights survive the edit. */
+    private void rebindRealisedLines() {
+        for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
+            int row = entry.getKey();
+            if (row < 0 || row >= buffer.lineCount()) continue;
+            UIText label = textOf(entry.getValue());
+            String text = rowMetrics(row).line().display();
+            // setText already no-ops on an unchanged string, so an edit on one line costs one re-shape
+            // rather than one per visible row.
+            label.setText(text);
+        }
+        markTreeDirty();
+    }
+
+    private void rebuildWindowForLineCountChange() {
+        lineCountAtLastWindow = buffer.lineCount();
+        invalidateWindow();
+    }
 
     protected void invalidateWindow() {
         firstRealised = -1;
@@ -1406,6 +1915,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         super.tickFrame(deltaSeconds);
         updateWindow();
         advanceCaretBlink(deltaSeconds);
+        autoScrollDuringDrag(deltaSeconds);
         return true;
     }
 
@@ -1447,6 +1957,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
             firstRealised = first;
             lastRealised = last;
+            lineCountAtLastWindow = count;
             highlightsDirty = true;
             onWindowChanged.emit();
         }
@@ -1499,12 +2010,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // character off every row on screen. Wide enough for the text, and at least the viewport, so a
         // selection band on a short line still reads as a band and horizontal scrolling has something to
         // scroll.
-        float[] widths = prefixWidths(row);
+        float[] widths = rowMetrics(row).widths();
         final float width = Math.max(getClientWidth(), widths[widths.length - 1] + 1f);
         StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                         .top(top).left(textOriginX()).width(width).height(lineHeight()));
-        ((UIText) line.getChildren().get(0)).setText(buffer.line(row));
+        // The DISPLAY text, with tabs expanded to their stops -- see RowMetrics.
+        ((UIText) line.getChildren().get(0)).setText(rowMetrics(row).line().display());
         if (line.getParent() == null) addInternalChild(line);
         return line;
     }
@@ -1685,9 +2197,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
         StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(), l -> l.width(0f).height(0f));
     }
 
+    /** X of a document column, via its display index — see {@link RowMetrics}. */
     private float widthOf(int row, int column) {
-        float[] widths = prefixWidths(row);
-        return widths[Math.max(0, Math.min(widths.length - 1, column))];
+        RowMetrics metrics = rowMetrics(row);
+        int index = metrics.line().displayIndexOf(column);
+        float[] widths = metrics.widths();
+        return widths[Math.max(0, Math.min(index, widths.length - 1))];
     }
 
     private UIElement caretAt(int index) {

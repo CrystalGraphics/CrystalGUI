@@ -1126,69 +1126,99 @@ The native shipping story is the real one. Loader jars already bundle JNI for
 configuration across four targets, and the mc modules are not in this build today. Keeping tree-sitter in
 its own module means `core/` and the harness stay unaffected either way.
 
-### 6.1.7b Code editor — the rest of the foundations · `IN PROGRESS` (2026-07-31) · **next**
+### 6.1.7b Code editor — the rest of the foundations · `DONE` (2026-07-31), except view items and the keymap
 
 6.1.7 was marked done against this plan's checklist rather than against "is this an editor anyone would
-use". Audited against that question instead, and the gaps are real — one of them undercuts a feature
+use". Audited against that question instead, and the gaps were real — one of them undercut a feature
 already built.
 
 **Keybindings follow VS Code's defaults** throughout. These are conventions, not derivable answers, and a
 wrong one is felt immediately and cannot be named — the same reasoning 6.2.4 used for its shortcut set.
 
-#### A. The text model is wrong for real files
+> ### None of the behaviour here was invented. It was ported.
+>
+> **`com.crystalgui.text.cursor` is a port of VS Code's `vs/editor/common/cursor/`** — `CursorColumns`,
+> `MoveOperations`, `TypeOperations`, `LineOperations`, `MouseSelection`, all MIT, all attributed in their
+> class javadoc against the file they came from. `WordClassifier` is `wordCharacterClassifier.ts`, down to
+> `USUAL_WORD_SEPARATORS` and the decision that `_` is a word character. The `Rope`/`TextSummary` pair is
+> Zed's `SumTree` shape (read, not copied — Zed is GPL-3.0 and copying it would impose GPL on this repo),
+> and `ChangeSet` is CodeMirror 6's, which is MIT and which uses UTF-16 offsets exactly as Java does.
+>
+> **This is now the standing rule for the whole project.** Every one of the rules below was learned by
+> someone shipping it to millions of users, and none of them is derivable — that auto-close fires on an
+> allowlist rather than a denylist, that a plain arrow collapses a selection to its edge regardless of
+> which way the gesture went, that a mixed comment block comments out rather than half-toggling, that a
+> backwards word-drag unions with the anchor word. Each is one line, each is invisible when wrong, and each
+> would have been got wrong from first principles.
 
-- **CRLF is unhandled.** `Rope`/`TextSummary` count `'\n'` and neither mentions `'\r'`, so a Windows file
-  carries a stray carriage return on every line. Detect the dominant ending on load, normalise to `\n`
-  internally, and restore it on save — the model stays single-ending, which is what keeps every offset in
-  the engine meaning one thing.
-- **Tabs are not a character the editor understands.** Indent is spaces-only. A tab needs a rendered width
-  (to the next tab stop, not a fixed advance) or every file that uses them misaligns.
-- **Read-only mode.** Absent, and a viewer is the first thing a file browser needs.
+#### A. The text model is wrong for real files · `DONE`
 
-#### B. Multi-cursor is unreachable
+- **CRLF** — `LineEnding` detects the dominant ending on load, normalises to `\n` internally, restores it
+  in `TextBuffer.textWithOriginalLineEndings()`. The model stays single-ending, which is what keeps every
+  offset in the engine meaning one thing.
+- **Tabs** — `CursorColumns` expands to the next tab **stop**, not a fixed advance, and carries both maps
+  (`columnToDisplay`, `displayToColumn`) so a click inside a tab lands on one side of it rather than in the
+  middle of nothing.
+- **Read-only** — `setReadOnly`.
 
-Built, and creatable only by Alt+Click — `addCaret` has exactly one call site. Missing the two ways anyone
-actually makes carets:
+#### B. Multi-cursor is unreachable · `DONE`
 
-- `Ctrl+D` — add a caret at the next occurrence of the selection (or the word under the caret)
-- `Ctrl+Shift+L` — a caret at every occurrence
-- `Ctrl+Alt+Up/Down` — a caret on the line above/below
+`Ctrl+D` next occurrence, `Ctrl+Shift+L` every occurrence, `Ctrl+Alt+Up/Down` a caret on the adjacent line.
 
-#### C. Line operations, the highest-frequency edits after typing
+> **Each caret keeps its own goal column** — `MoveOperations.vertical` takes and returns an `int[]`, and
+> drops it only when a merge makes the indices stop lining up. Shared goals look correct until the second
+> vertical press, which is exactly why this needed a headless test to see.
 
-`Alt+Up/Down` move, `Shift+Alt+Up/Down` copy, `Ctrl+Shift+K` delete, `Ctrl+Enter` / `Ctrl+Shift+Enter`
-insert below/above, `Ctrl+L` select line, join lines.
+#### C. Line operations · `DONE`
 
-#### D. Typing aids
+`Alt+Up/Down` move, `Shift+Alt+Up/Down` copy, `Ctrl+Shift+K` delete, `Ctrl+Enter`/`Ctrl+Shift+Enter` insert
+below/above, `Ctrl+L` select line, join, indent/outdent, `Ctrl+/`.
 
-- **Auto-closing brackets and quotes**, with **type-over**: typing `)` where a `)` already sits moves past
-  it rather than inserting a second. Without type-over auto-closing is worse than not having it.
-- **Surround**: typing a bracket with a selection wraps it instead of replacing it.
-- **Smart backspace** — at the head of an indent, delete a whole level rather than one space.
-- **Dedent on close** — typing `}` re-indents its line to match its opener.
+> **A line move is one replacement of the span covering both rows, not two edits.** Two would be two undo
+> steps, and the second would be described against a document the first had already changed.
 
-#### E. Comments need a language descriptor
+#### D. Typing aids · `DONE`
 
-`Ctrl+/` and block comment toggling need to know a language's comment tokens — as do auto-close pairs and
-indent triggers. That is a `Language` value (comment tokens, bracket pairs, word characters), separate from
-the `SyntaxTokenizer` that colours it. Two different questions about the same language, and conflating them
-would make the tree-sitter backend responsible for things a grammar does not describe.
+Auto-close with type-over, surround, smart backspace, dedent on close. `AUTO_CLOSE_BEFORE` is VS Code's
+allowlist verbatim.
 
-#### F. Search has no keyboard at all
+#### E. Comments need a language descriptor · `DONE`
 
-`Ctrl+F`, `F3`/`Shift+F3`, `Ctrl+H` — the entire interface in every editor, and currently API-only. Plus
-whole-word and regex, and search-within-selection.
+`Language` — comment tokens, bracket pairs, self-closing quotes — separate from the `SyntaxTokenizer` that
+colours it. Two different questions about the same language; conflating them would make the tree-sitter
+backend responsible for things a grammar does not describe.
 
-#### G. View
+#### F. Search · `DONE`, except regex
 
-**Soft wrap** (unblocked by `VariableHeightStrategy`, still not delivered), indent guides, visible
-whitespace, a column ruler, and scroll-past-end.
+`Ctrl+F`, `F3`/`Shift+F3`, `Ctrl+H`, `Ctrl+F3` (word under caret), and the count is whole-document because
+"3 of 47" cannot be computed from what is on screen. **Regex and whole-word are still not implemented** —
+`find` is plain substring, and search-within-selection has no UI.
 
-#### H. All of it through the keymap
+#### G. View · `DEFERRED`
+
+**Soft wrap** (unblocked by `VariableHeightStrategy`, still not delivered — deliberately stopped short of
+it), indent guides, visible whitespace, a column ruler, and scroll-past-end. None of these are started.
+
+#### H. All of it through the keymap · `TODO`
 
 Every command above registered as a `Command` against 6.1.2's registry rather than switch cases in
 `handleKey`, so they are rebindable, discoverable in the palette, and reachable from a menu. The editor
-currently hard-codes its keys, which was fine for a dozen and is not for sixty.
+still hard-codes its keys, which was fine for a dozen and is not for sixty. **This is the largest remaining
+item in 6.1.7b** and the reason the commands were built as `public void` methods on the widget rather than
+inlined into `handleKey` — each is already a nullary action waiting for a registration.
+
+#### The extraction, and why it is not cosmetic
+
+`TextEditor` reached **2556 lines — larger than the entire `com.crystalgui.text` package combined** —
+because the ported algorithms went in as private methods. Pulling them into `text/cursor/` took it to 2237
+and made them reachable without a `UIWindow`, fonts, a style engine or an input handler.
+
+> **The new headless suite found a real bug within minutes of existing.** `LineOperations.delete` left a
+> blank line behind when deleting the **last** row: it has no trailing newline to take, so it must swallow
+> the one *before* it instead. The widget test never caught it because it only ever deleted a middle line,
+> and as a window test the last-line case would have been another simulated key sequence — as a direct call
+> it is one assertion. Porting the algorithms without porting the module boundaries kept the algorithms and
+> threw away the testability that keeps them correct.
 
 #### Explicitly out of scope
 
@@ -1916,7 +1946,48 @@ Delete is unaffected: removing a node needs no factory, only its wires unwound i
 
 </details>
 
-### 6.2.5 Graph document model and serialization · `IN PROGRESS` (2026-07-31)
+### 6.2.5 Graph document model and serialization · `DONE` (2026-07-31)
+
+> **The view migration landed too.** `GraphView` now projects a `GraphDocument`: `GraphNode` carries a
+> `nodeId`, `NodePort` a `portId` distinct from its drawn label, all three `Edit`s key on ids, and
+> `syncFromDocument()` applies a changeset in place. 13 tests in `GraphDocumentViewTest`, plus save and
+> reload buttons on the gallery's graph page so the round-trip is testable by hand.
+>
+> **Behaviour deliberately unchanged** — every 6.2.3/6.2.4/6.2.6 test passed without edits.
+>
+> #### Four bugs, and three of them were about identity rather than data
+>
+> The topology was right on the first try; what kept going missing was *which node this is*.
+>
+> 1. **`NodeWidgetFactory` never bound what it built.** Every node reloaded as a placeholder titled
+>    `crystalgui:widget` with its controls gone. The binding belongs in the factory, not at the call
+>    sites: a registered builder is a consumer's lambda that ignores the data and just builds a widget,
+>    so every builder that forgot would reproduce it.
+> 2. **Ports added after `addNode` never reached the document.** `addNode(n, x, y); n.addOutput(...)` is
+>    the order 6.2.3's own examples use, and the `NodeData` was derived once at add time — so the port
+>    existed on screen, could be wired, and was absent from every save.
+> 3. **That fix's first guard rejected exactly what it served.** It tested `widget.getTypeId() != null`,
+>    but binding *sets* the type id to `WIDGET_AUTHORED_TYPE`. The **document** decides whether a node is
+>    widget-authored, not the widget.
+> 4. **The changeset net-collapses, which the write-through broke.** The view's own add sat pending, so a
+>    later remove cancelled it instead of recording a removal — the changeset said "nothing happened"
+>    while the view still held the widget. The view now drains the changeset whenever it writes through,
+>    so it only ever holds changes the view has *not* applied.
+>
+> #### The re-entrancy worth remembering
+>
+> `CanvasView.addNode` calls `moveNode` **polymorphically**, so applying a changeset re-entered the
+> override, wrote through, and drained the changeset mid-drain — adding the first node silently wiped the
+> pending edges. `syncFromDocument` snapshots every list before applying anything.
+>
+> #### The honest limit
+>
+> A node built as a widget rather than registered as a type keeps its ports and (now) its title, but its
+> controls and preview cannot come back — those are Java the document never saw. Register a type if you
+> want a node to survive a reload whole.
+
+<details>
+<summary>The original plan, kept for the research it records</summary>
 
 > **The model has landed; the view migration has not.** Shipped: `com.crystalgui.graph` —
 > `GraphDocument`, `NodeData`, `PortSpec`, `PortRef`, `EdgeData`, `GraphChangeset`, `GraphIds`,
@@ -2070,6 +2141,8 @@ The reason 6.2.4 could not build them. With a document they are ordinary:
 | Where do graph-level properties (a blackboard) live? | Unity has one, LDLib2 has `IVariable`, and the manifesto needs *"properties declared in nodes bubble up to the `.shader` Properties block"*. Probably a document-level list, but it is a second kind of thing and can wait for a consumer. |
 | Subgraphs? | LDLib2 has `ISubgraphNode`; the manifesto implies them. A node whose type resolves to another document. Deferred, but the id scheme must not preclude it. |
 | Does the document own node *positions*? | Yes here — but note that position is view state by 6.1.9's boundary, and a moved node is nonetheless something a reload should give back. The resolution is that position is document data with no undo-relevance debate: `MoveNodeEdit` already records it. |
+
+</details>
 
 ### 6.2.6 Node library and creation menu · `DONE` (2026-07-31)
 
@@ -2292,8 +2365,9 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
 ```
 
 **Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → ~~6.1.6~~ →
-~~6.1.7~~ → **6.1.7b (next)** → 6.1.8, then 6.1.10-12, then the 6.2 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done,
-see 6.1.9; its implementation lands with 6.1.6.
+~~6.1.7~~ → ~~6.1.7b~~ (bar soft wrap and the keymap) → **6.1.8 (next)**, then 6.1.10-12, then the 6.2
+chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done, see 6.1.9; its implementation lands with
+6.1.6.
 
 ~~6.2.1 is the one item that can be pulled forward at any time~~ — and it was, along with **6.2.2**, which
 turned out to share the same property: the canvas depends on `transform`, the drag controller and the curve
@@ -2319,6 +2393,32 @@ item that can run in parallel with 6.1's remaining work.
 ---
 
 ## Changelog
+
+- **2026-07-31** — **6.1.7b done: the editor's foundations, ported rather than invented.** CRLF, tabs,
+  read-only, multi-cursor creation, the line operations, the typing aids, `Language`, and search's
+  keyboard. Soft wrap and the keymap registration are deliberately left; see 6.1.7b §G and §H.
+  - **The standing rule this established: do not reinvent what VS Code or Zed already got right.**
+    `com.crystalgui.text.cursor` is a port of `vs/editor/common/cursor/` with per-class attribution,
+    `WordClassifier` is `wordCharacterClassifier.ts`, `ChangeSet` is CodeMirror 6's. Zed was **read, not
+    copied** — it is GPL-3.0 and copying it would impose GPL on this repo, so `Rope`/`TextSummary` take
+    its `SumTree` *shape* and nothing else. VS Code, Monaco and CodeMirror are MIT and safe to port.
+  - **Every rule ported is one line and invisible when wrong.** Auto-close fires on an *allowlist*
+    (`;:.,=}])> \n\t`) not a denylist, so it still opens before `$foo` and `#define`. A plain arrow key
+    collapses a selection to its edge regardless of which way the gesture went. A partly-commented block
+    comments *out* rather than half-toggling. A backwards word-drag unions with the anchor word so the
+    anchor stays whole. None of these are derivable, and all of them would have been got wrong.
+  - **`TextEditor` hit 2556 lines — larger than the whole of `com.crystalgui.text` — because the ported
+    algorithms went in as private methods.** Extracting them to `text/cursor/` (2237 lines, five classes,
+    589) made them reachable without a `UIWindow`, fonts, a style engine or an input handler.
+  - **The extraction paid for itself immediately.** The new headless suite's first run failed on
+    `deletingTheLastLineTakesThePrecedingNewline`: the last row has no trailing newline to take, so it
+    must swallow the one *before* it, and it did not. The widget test never saw it because it only ever
+    deleted a middle line. The same suite pins the per-caret goal column, which needed *two* simulated key
+    presses to expose through the widget and is one assertion as a direct call — the first vertical move
+    behaves identically whether goals are shared or per-caret.
+  - **Porting the algorithms without porting the module boundaries is only half the port.** The
+    boundaries are what keeps the algorithms correct; VS Code has `cursorMoveOperations.ts` as its own
+    file for the same reason.
 
 - **2026-07-31** — **6.2.5's model and 6.2.6 done: the graph is a document, and nodes can be created
   from a library.** `com.crystalgui.graph` (17 tests) plus `NodeType`/`NodeTypeRegistry` (10) and the

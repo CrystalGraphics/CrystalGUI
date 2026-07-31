@@ -1023,6 +1023,42 @@ The things that are invisible from any single class and expensive to rediscover.
 
 # Global coding rules
 
+## Port, don't reinvent
+
+**Anything that has been solved thousands of times — text editing, cursor movement, click and drag
+selection, undo coalescing, layout — is ported from a battle-tested source and fine-tuned for this
+codebase. It is not derived from first principles.**
+
+These behaviours are *conventions, not derivable answers*. Each is one line, each is invisible when
+wrong, and each was learned by shipping to millions of users. Four from `text/cursor/` alone:
+
+| Rule | What happens without it |
+|---|---|
+| Auto-close fires on an **allowlist** (`;:.,=}])> \n\t`), never a denylist | "suppress before a letter" still opens a pair before `$foo` and `#define` |
+| A plain arrow collapses a selection to its **edge**, regardless of which way the gesture went | Left-then-right on a backwards selection walks the caret instead of collapsing |
+| A partly-commented block **comments out**, it does not half-toggle | Selecting a block with one commented line inverts half of it |
+| A backwards word-drag **unions with the anchor word** | Word-granularity drag eats into the word it started on and stops feeling like words |
+
+### Licences are load-bearing here
+
+| Source | Licence | What you may do |
+|---|---|---|
+| VS Code / Monaco, CodeMirror 6 | **MIT** | **Port the code.** Attribute in the class javadoc, naming the source file. |
+| **Zed** | **GPL-3.0** | **Read for shape only.** Copying it would impose GPL on this repository. `Rope`/`TextSummary` take `SumTree`'s *design*; not a line of its code. |
+
+### Port the module boundaries too
+
+`com.crystalgui.text.cursor` mirrors VS Code's `vs/editor/common/cursor/` file-for-file —
+`CursorColumns`, `MoveOperations`, `TypeOperations`, `LineOperations`, `MouseSelection`.
+
+> This is not tidiness. The same logic first went in as private methods on `TextEditor`, which reached
+> **2556 lines, larger than the entire `com.crystalgui.text` package combined**, and could only be
+> reached through a `UIWindow` with fonts, a style engine and an input handler. Extracting it exposed a
+> real bug within minutes — deleting the *last* line left a blank line, because the last row has no
+> trailing newline to take and must swallow the one before it instead. The widget test never caught it:
+> it only ever deleted a middle line. **Porting the algorithms without the boundaries keeps the
+> algorithms and throws away the testability that keeps them correct.**
+
 ## CrystalGraphics ownership boundary
 
 **CrystalGraphics owns the rendering backend. CrystalGUI consumes it.**

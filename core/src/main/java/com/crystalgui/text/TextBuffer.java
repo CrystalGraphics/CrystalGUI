@@ -53,12 +53,47 @@ public final class TextBuffer {
         this(Rope.EMPTY);
     }
 
+    /**
+     * Takes text in whatever line ending it arrived with, and normalises it.
+     *
+     * <p>See {@link LineEnding}: the buffer is always LF internally, because every offset in the engine
+     * counts a break as ONE unit and a {@code 
+} would make that sometimes two. The original ending
+     * is remembered so {@link #textWithOriginalLineEndings()} can put it back, which is why editing a
+     * Windows file does not silently convert it.</p>
+     */
     public TextBuffer(CharSequence text) {
-        this(Rope.of(text));
+        this.lineEnding = LineEnding.detect(text == null ? "" : text);
+        this.document = Rope.of(LineEnding.normalise(text == null ? "" : text));
     }
 
     public TextBuffer(Rope document) {
         this.document = document == null ? Rope.EMPTY : document;
+    }
+
+    private LineEnding lineEnding = LineEnding.LF;
+
+    /** The ending this document arrived with — what a save should write back. */
+    public LineEnding lineEnding() {
+        return lineEnding;
+    }
+
+    public TextBuffer setLineEnding(LineEnding ending) {
+        this.lineEnding = ending == null ? LineEnding.LF : ending;
+        return this;
+    }
+
+    /** The document written back in the ending it came with. What a save writes; never what it edits. */
+    public String textWithOriginalLineEndings() {
+        return lineEnding.applyTo(document.toString());
+    }
+
+    /** Replaces the whole document, re-detecting the line ending — i.e. loading a file. */
+    public void load(CharSequence text) {
+        String incoming = text == null ? "" : text.toString();
+        this.lineEnding = LineEnding.detect(incoming);
+        replace(0, length(), LineEnding.normalise(incoming));
+        breakUndoCoalescing();
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────────────────────────

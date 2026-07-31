@@ -696,6 +696,688 @@ public class TextEditorTest extends UiTestBase {
         }
     }
 
+    /**
+     * <b>Typing must not strip the highlights off the whole document for a frame.</b>
+     *
+     * <p>Every edit used to call {@code invalidateWindow()}, which recycles every realised line — and
+     * recycling has to clear a line's highlights, since a pooled line reused for another row would keep
+     * offsets into a string that no longer exists. The ranges were republished during
+     * {@code updateWindow}, which runs <em>after</em> {@code calculateStyle} in the frame, so the cascade
+     * only saw them on the next one: for a frame every line rendered with no highlight style at all. On
+     * screen that is the entire editor's colour flickering on each keystroke.</p>
+     *
+     * <p>The test asserts the two things that together prevent it: the line elements survive the edit,
+     * and their highlights are never emptied.</p>
+     */
+    @Test
+    public void typingDoesNotDropTheHighlightsForAFrame() {
+        build("int x = 1;" + NL + "int y = 2;");
+        editor.setTokenizer(com.crystalgui.text.syntax.KeywordTokenizer.java());
+        settle();
+        editor.updateWindow();
+        settle();
+
+        java.util.List<UIElement> before = linesOf();
+        assertFalse(before.isEmpty());
+        assertFalse("a type range should be present to begin with",
+                ((UIText) before.get(0).getChildren().get(0)).highlights().get("type").isEmpty());
+
+        // The edit is applied WITHOUT running another frame, and the assertion happens before one runs.
+        // That is the whole point: lines are pooled, so after a settle the same instances come back with
+        // their highlights restored -- the empty window exists only INSIDE the frame, which is exactly
+        // where the cascade sees it and exactly why the flicker is invisible to a test that settles first.
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(0, 9)));
+        editor.insertAtCaret("2");
+
+        assertEquals("the line elements must survive an edit that changes no line count",
+                before, linesOf());
+        assertFalse("the highlights must never be emptied, even for one frame",
+                ((UIText) before.get(0).getChildren().get(0)).highlights().get("type").isEmpty());
+    }
+
+    /**
+     * <b>Pressing Enter must not drop the highlights either.</b> The first fix spared edits that kept the
+     * line count and still rebuilt on one that changed it — so typing was smooth and Enter still flashed.
+     * The realised map is keyed by row index, so rebinding by row is correct however far the rows shifted.
+     */
+    @Test
+    public void addingALineDoesNotDropTheHighlights() {
+        build("int x = 1;" + NL + "int y = 2;");
+        editor.setTokenizer(com.crystalgui.text.syntax.KeywordTokenizer.java());
+        settle();
+        editor.updateWindow();
+        settle();
+
+        UIElement first = linesOf().get(0);
+        assertFalse(((UIText) first.getChildren().get(0)).highlights().get("type").isEmpty());
+
+        editor.setCaret(editor.getText().length());
+        editor.insertAtCaret(NL + "int z = 3;");
+
+        assertFalse("Enter must not empty the highlights any more than typing does",
+                ((UIText) first.getChildren().get(0)).highlights().get("type").isEmpty());
+    }
+
+    /** The window still grows to cover a new row. */
+    @Test
+    public void addingALineRebuildsTheWindow() {
+        build("one" + NL + "two");
+        settle();
+        editor.updateWindow();
+        settle();
+        int before = linesOf().size();
+
+        editor.setCaret(3);
+        key(CgKeyCodes.KEY_RETURN);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertEquals("a new row exists", before + 1, linesOf().size());
+    }
+
+    private java.util.List<UIElement> linesOf() {
+        java.util.List<UIElement> out = new java.util.ArrayList<>();
+        for (UIElement child : editor.getChildren()) {
+            if (child.hasClass(TextEditor.LINE_CLASS)) out.add(child);
+        }
+        return out;
+    }
+
+    // ── 6.1.7b: line endings, read-only, language ────────────────
+
+    /**
+     * <b>CRLF must not reach the buffer.</b> Every offset in the engine counts a break as ONE unit, so a
+     * {@code \r\n} would make it sometimes two and every piece of offset arithmetic wrong by the number
+     * of preceding lines. Normalised in, remembered, restored out — which is why editing a Windows file
+     * does not silently convert it.
+     */
+    @Test
+    public void crlfIsNormalisedInAndRestoredOut() {
+        com.crystalgui.text.TextBuffer buffer = new com.crystalgui.text.TextBuffer("a\r\nb\r\nc");
+
+        assertEquals("the document itself is LF", "a" + NL + "b" + NL + "c", buffer.toString());
+        assertEquals(3, buffer.lineCount());
+        assertEquals(com.crystalgui.text.LineEnding.CRLF, buffer.lineEnding());
+        assertEquals("a\r\nb\r\nc", buffer.textWithOriginalLineEndings());
+    }
+
+    @Test
+    public void aLoneCarriageReturnIsAlsoALineBreak() {
+        com.crystalgui.text.TextBuffer buffer = new com.crystalgui.text.TextBuffer("a\rb");
+        assertEquals(2, buffer.lineCount());
+    }
+
+    /** Mixed files exist; one stray CRLF must not convert an otherwise Unix file on save. */
+    @Test
+    public void theDominantLineEndingWins() {
+        assertEquals(com.crystalgui.text.LineEnding.LF,
+                com.crystalgui.text.LineEnding.detect("a\nb\nc\r\nd"));
+        assertEquals(com.crystalgui.text.LineEnding.CRLF,
+                com.crystalgui.text.LineEnding.detect("a\r\nb\r\nc\nd"));
+    }
+
+    /**
+     * <b>Read-only is enforced where every edit funnels through</b>, not at each key. A per-key check is a
+     * list to keep in step with the handler, and the failure when one is missed is a read-only document
+     * that quietly changed.
+     */
+    @Test
+    public void readOnlyRefusesEveryEditPath() {
+        build("locked");
+        editor.setReadOnly(true);
+        editor.setCaret(3);
+
+        type("X");
+        key(CgKeyCodes.KEY_BACK);
+        key(CgKeyCodes.KEY_RETURN);
+        key(CgKeyCodes.KEY_TAB);
+        editor.setSelection(0, 6);
+        key(CgKeyCodes.KEY_DELETE);
+
+        assertEquals("locked", editor.getText());
+        assertTrue("but selection still works", editor.hasSelection());
+    }
+
+    // ── 6.1.7b: ported sticky columns, tabs, auto-close ──────────
+
+    /**
+     * <b>The goal column is per caret, not shared.</b> VS Code keeps {@code leftoverVisibleColumns} on
+     * each cursor; one shared value means whichever caret moved last imposes its column on the others, and
+     * a rectangular block of carets collapses into a ragged one after a single Down.
+     */
+    @Test
+    public void eachCaretKeepsItsOwnGoalColumn() {
+        build("aaaaaaaa" + NL + "bb" + NL + "cccccccc" + NL + "dd" + NL + "eeeeeeee" + NL + "ffffffff");
+        // One caret at column 6, another at column 2, each above a SHORT line so both get clamped and
+        // then have to recover their own column.
+        editor.selections().setAll(java.util.List.of(
+                com.crystalgui.text.Selection.caret(6),
+                com.crystalgui.text.Selection.caret(editor.buffer().pointToOffset(new TextPoint(2, 2)))), 0);
+
+        // TWO moves, deliberately. On the first the goals are still unset, so a shared goal and a
+        // per-caret one behave identically -- the difference only appears once a goal has been stored,
+        // which is exactly what a one-press test cannot see.
+        key(CgKeyCodes.KEY_DOWN);
+        key(CgKeyCodes.KEY_DOWN);
+
+        assertEquals(2, editor.caretCount());
+        assertEquals("the first caret recovered its own column 6",
+                new TextPoint(2, 6), editor.buffer().offsetToPoint(editor.selections().all().get(0).head()));
+        assertEquals("the second kept column 2 rather than inheriting the first's",
+                new TextPoint(4, 2), editor.buffer().offsetToPoint(editor.selections().all().get(1).head()));
+    }
+
+    /** Down through a short line and back up returns to the original column. */
+    @Test
+    public void theGoalColumnSurvivesAShortLine() {
+        build("long line here" + NL + "x" + NL + "another long one");
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(0, 12)));
+
+        key(CgKeyCodes.KEY_DOWN);
+        key(CgKeyCodes.KEY_DOWN);
+        assertEquals(new TextPoint(2, 12), editor.caretPoint());
+
+        key(CgKeyCodes.KEY_UP);
+        key(CgKeyCodes.KEY_UP);
+        assertEquals("and back up to where it started", new TextPoint(0, 12), editor.caretPoint());
+    }
+
+    /** A horizontal move forgets the goal, which is why "down, right, up" does not return. */
+    @Test
+    public void aHorizontalMoveClearsTheGoalColumn() {
+        build("long line here" + NL + "x" + NL + "another long one");
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(0, 12)));
+
+        key(CgKeyCodes.KEY_DOWN);
+        key(CgKeyCodes.KEY_RIGHT);
+        key(CgKeyCodes.KEY_UP);
+
+        assertNotEquals("the goal must not survive a horizontal move",
+                new TextPoint(0, 12), editor.caretPoint());
+    }
+
+    /**
+     * <b>A tab advances to its stop, not by one character.</b> VS Code's {@code CursorColumns} separates a
+     * column (an offset into the line) from a visible column (where it lands), and without that every
+     * tab-indented file misaligns — the caret walks one position per tab while the text jumps a stop.
+     */
+    @Test
+    public void aTabAdvancesToItsStop() {
+        build("	x");
+        editor.setTabSize(4);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        UIText line = null;
+        for (UIElement child : editor.getChildren()) {
+            if (child.hasClass(TextEditor.LINE_CLASS)) line = (UIText) child.getChildren().get(0);
+        }
+        assertNotNull(line);
+        assertEquals("the displayed text expands the tab to its stop", "    x", line.getText());
+        assertEquals("but the document still holds a tab", 2, editor.getText().length());
+    }
+
+    @Test
+    public void aTabMidLineAdvancesToTheNextStopNotByFour() {
+        build("ab	c");
+        editor.setTabSize(4);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        UIText line = null;
+        for (UIElement child : editor.getChildren()) {
+            if (child.hasClass(TextEditor.LINE_CLASS)) line = (UIText) child.getChildren().get(0);
+        }
+        assertNotNull(line);
+        assertEquals("two characters in, the tab fills only to column 4", "ab  c", line.getText());
+    }
+
+    /**
+     * <b>Auto-close uses an allowlist of what may follow.</b> The naive rule ("not before a letter or
+     * digit") still opens a pair before {@code $foo} or {@code #define}; listing what may follow is both
+     * stricter and shorter, and it is the list VS Code ships.
+     */
+    @Test
+    public void autoCloseOnlyFiresBeforeTheAllowedCharacters() {
+        build("$foo");
+        editor.setLanguage(com.crystalgui.text.syntax.Language.java());
+        editor.setCaret(0);
+        type("(");
+        assertEquals("no pair before a $", "($foo", editor.getText());
+
+        build("; rest");
+        editor.setLanguage(com.crystalgui.text.syntax.Language.java());
+        editor.setCaret(0);
+        type("(");
+        assertEquals("but a pair before a semicolon", "(); rest", editor.getText());
+    }
+
+    /** An apostrophe in prose must not become a pair. */
+    @Test
+    public void aQuoteAfterAWordDoesNotAutoClose() {
+        build("dont ");
+        editor.setLanguage(com.crystalgui.text.syntax.Language.java());
+        editor.setCaret(4);
+
+        type("'");
+
+        assertEquals("dont' ", editor.getText());
+    }
+
+    // ── 6.1.7b: ported mouse selection ───────────────────────────
+
+    /** A press at a document offset, with a click count, through the real input handler. */
+    private void pressWithClicks(int offset, int clicks) {
+        settle();
+        editor.updateWindow();
+        settle();
+        float scale = window.getUiScale();
+        var point = editor.buffer().offsetToPoint(offset);
+        float x = editor.getRuntimeCache().getX() + editor.gutterWidth() + 4f + point.column() * 4f;
+        float y = editor.getRuntimeCache().getY() + point.row() * editor.lineHeight() + 2f;
+        for (int i = 0; i < clicks; i++) {
+            input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                    Math.round(x * scale), Math.round(y * scale), 0, 0, 0, true, 0f, 10L + i));
+            input.beginFrame();
+            input.endFrame();
+            input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                    Math.round(x * scale), Math.round(y * scale), 0, 0, 0, false, 0f, 11L + i));
+            input.beginFrame();
+            input.endFrame();
+        }
+        settle();
+    }
+
+    /**
+     * <b>A triple-click selects the line.</b> Click count picks a GRANULARITY rather than a separate
+     * action — one click a caret, two a word, three a line — which is how VS Code's mouse handler is
+     * structured and what lets the same code serve the press and every drag update after it.
+     */
+    @Test
+    public void tripleClickSelectsTheLine() {
+        build("alpha beta" + NL + "second line");
+        pressWithClicks(2, 3);
+
+        assertTrue("something should be selected", editor.hasSelection());
+        assertEquals("the selection starts at the line start", 0, editor.getSelectionStart());
+        assertTrue("and covers the line", editor.getSelectionEnd() >= "alpha beta".length());
+    }
+
+    @Test
+    public void doubleClickSelectsTheWordUnderIt() {
+        build("alpha beta gamma");
+        pressWithClicks(7, 2);
+
+        assertEquals("beta", editor.getSelectedText());
+    }
+
+    @Test
+    public void aSingleClickJustPlacesTheCaret() {
+        build("alpha beta");
+        pressWithClicks(3, 1);
+        assertFalse(editor.hasSelection());
+    }
+
+    // ── 6.1.7b: ported cursor semantics ──────────────────────────
+
+    /**
+     * <b>A plain Left with a selection cancels it at the START — it does not move.</b>
+     *
+     * <p>Ported from VS Code's {@code MoveOperations.moveLeft}. Moving one character from the head — the
+     * obvious implementation, and what this did — lands the caret one character <em>inside</em> the text
+     * you just deselected. It is wrong in the way people feel without being able to name, which is
+     * exactly the class of thing worth porting rather than inventing.</p>
+     */
+    @Test
+    public void leftWithASelectionCollapsesToItsStart() {
+        build("abcdefgh");
+        editor.setSelection(2, 6);
+
+        key(CgKeyCodes.KEY_LEFT);
+
+        assertFalse(editor.hasSelection());
+        assertEquals("the caret lands on the selection start, not one left of the head",
+                2, editor.getCaret());
+    }
+
+    @Test
+    public void rightWithASelectionCollapsesToItsEnd() {
+        build("abcdefgh");
+        editor.setSelection(2, 6);
+
+        key(CgKeyCodes.KEY_RIGHT);
+
+        assertFalse(editor.hasSelection());
+        assertEquals(6, editor.getCaret());
+    }
+
+    /** A reversed selection collapses to the same edges — direction of the gesture must not matter here. */
+    @Test
+    public void aReversedSelectionCollapsesToTheSameEdges() {
+        build("abcdefgh");
+        editor.setSelection(6, 2);
+        key(CgKeyCodes.KEY_RIGHT);
+        assertEquals(6, editor.getCaret());
+    }
+
+    /** Shift+Left still EXTENDS from the head rather than collapsing. */
+    @Test
+    public void shiftLeftStillExtends() {
+        build("abcdefgh");
+        editor.setSelection(2, 6);
+
+        key(CgKeyCodes.KEY_LEFT, CgModifiers.SHIFT);
+
+        assertTrue(editor.hasSelection());
+        assertEquals(5, editor.getCaret());
+    }
+
+    /** Word moves do NOT take the collapse shortcut — they move by word from the active position. */
+    @Test
+    public void ctrlLeftWithASelectionStillMovesByWord() {
+        build("alpha beta gamma");
+        editor.setSelection(6, 10);
+
+        key(CgKeyCodes.KEY_LEFT, CgModifiers.CTRL);
+
+        assertEquals("it moved to a word start rather than parking on the selection edge",
+                6, editor.getCaret());
+    }
+
+    /** Underscores are word characters, so Ctrl+Right crosses them. */
+    @Test
+    public void wordMovementTreatsUnderscoresAsPartOfTheWord() {
+        build("some_long_name tail");
+        editor.setCaret(0);
+
+        key(CgKeyCodes.KEY_RIGHT, CgModifiers.CTRL);
+
+        assertEquals(14, editor.getCaret());
+    }
+
+    @Test
+    public void doubleClickSelectsAWholeIdentifier() {
+        build("call some_long_name(x)");
+        editor.setCaret(0);
+        editor.selections().set(new com.crystalgui.text.Selection(8, 8));
+        // Through the same helper double-click uses.
+        int[] word = com.crystalgui.text.WordOperations.wordAt(
+                editor.buffer().document(), 8, com.crystalgui.text.WordClassifier.DEFAULT);
+        assertNotNull(word);
+        assertEquals(5, word[0]);
+        assertEquals(19, word[1]);
+    }
+
+    // ── 6.1.7b: multi-caret commands ─────────────────────────────
+
+    /**
+     * <b>Ctrl+D is what makes multi-cursor reachable.</b> Before this the only way to make a second caret
+     * was Alt+Click — the model was built and all but unusable.
+     */
+    @Test
+    public void ctrlDSelectsTheWordThenAddsTheNextOccurrence() {
+        build("foo bar foo baz foo");
+        editor.setCaret(1);
+
+        key(CgKeyCodes.KEY_D, CgModifiers.CTRL);
+        assertEquals("first press selects the word", "foo", editor.getSelectedText());
+        assertEquals(1, editor.caretCount());
+
+        key(CgKeyCodes.KEY_D, CgModifiers.CTRL);
+        assertEquals("second adds the next occurrence", 2, editor.caretCount());
+        key(CgKeyCodes.KEY_D, CgModifiers.CTRL);
+        assertEquals(3, editor.caretCount());
+    }
+
+    @Test
+    public void typingWithCaretsFromCtrlDEditsEveryOccurrence() {
+        build("foo bar foo");
+        editor.setCaret(0);
+        key(CgKeyCodes.KEY_D, CgModifiers.CTRL);
+        key(CgKeyCodes.KEY_D, CgModifiers.CTRL);
+
+        type("X");
+
+        assertEquals("X bar X", editor.getText());
+    }
+
+    @Test
+    public void ctrlShiftLSelectsEveryOccurrence() {
+        build("a x a x a");
+        editor.setSelection(0, 1);
+
+        key(CgKeyCodes.KEY_L, CgModifiers.CTRL | CgModifiers.SHIFT);
+
+        assertEquals(3, editor.caretCount());
+    }
+
+    @Test
+    public void ctrlAltDownAddsACaretBelow() {
+        build("one" + NL + "two" + NL + "three");
+        editor.setCaret(1);
+
+        key(CgKeyCodes.KEY_DOWN, CgModifiers.CTRL | CgModifiers.ALT);
+
+        assertEquals(2, editor.caretCount());
+        assertEquals("and it keeps the column", 1, editor.selections().all().get(1).head() - 4);
+    }
+
+    // ── 6.1.7b: line operations ──────────────────────────────────
+
+    @Test
+    public void altDownMovesTheLineDown() {
+        build("one" + NL + "two" + NL + "three");
+        editor.setCaret(0);
+
+        key(CgKeyCodes.KEY_DOWN, CgModifiers.ALT);
+
+        assertEquals("two" + NL + "one" + NL + "three", editor.getText());
+    }
+
+    @Test
+    public void altUpMovesTheLineUp() {
+        build("one" + NL + "two" + NL + "three");
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(1, 0)));
+
+        key(CgKeyCodes.KEY_UP, CgModifiers.ALT);
+
+        assertEquals("two" + NL + "one" + NL + "three", editor.getText());
+    }
+
+    @Test
+    public void movingTheFirstLineUpDoesNothing() {
+        build("one" + NL + "two");
+        editor.setCaret(0);
+        key(CgKeyCodes.KEY_UP, CgModifiers.ALT);
+        assertEquals("one" + NL + "two", editor.getText());
+    }
+
+    @Test
+    public void shiftAltDownDuplicatesTheLine() {
+        build("one" + NL + "two");
+        editor.setCaret(0);
+
+        key(CgKeyCodes.KEY_DOWN, CgModifiers.ALT | CgModifiers.SHIFT);
+
+        assertEquals("one" + NL + "one" + NL + "two", editor.getText());
+    }
+
+    @Test
+    public void ctrlShiftKDeletesTheLine() {
+        build("one" + NL + "two" + NL + "three");
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(1, 0)));
+
+        key(CgKeyCodes.KEY_K, CgModifiers.CTRL | CgModifiers.SHIFT);
+
+        assertEquals("one" + NL + "three", editor.getText());
+    }
+
+    @Test
+    public void ctrlEnterOpensALineBelow() {
+        build("    indented");
+        editor.setCaret(2);
+
+        key(CgKeyCodes.KEY_RETURN, CgModifiers.CTRL);
+
+        assertEquals("and carries the indent", "    indented" + NL + "    ", editor.getText());
+    }
+
+    @Test
+    public void ctrlLSelectsTheLine() {
+        build("one" + NL + "two");
+        editor.setCaret(1);
+
+        key(CgKeyCodes.KEY_L, CgModifiers.CTRL);
+
+        assertEquals("one" + NL, editor.getSelectedText());
+    }
+
+    @Test
+    public void ctrlJJoinsTheNextLineUp() {
+        build("one" + NL + "    two");
+        editor.setCaret(0);
+
+        key(CgKeyCodes.KEY_J, CgModifiers.CTRL);
+
+        assertEquals("the indentation is collapsed to one space", "one two", editor.getText());
+    }
+
+    // ── 6.1.7b: comments ─────────────────────────────────────────
+
+    @Test
+    public void ctrlSlashTogglesTheLineComment() {
+        build("int x;");
+        editor.setLanguage(com.crystalgui.text.syntax.Language.java());
+        editor.setCaret(0);
+
+        key(CgKeyCodes.KEY_SLASH, CgModifiers.CTRL);
+        assertEquals("// int x;", editor.getText());
+
+        key(CgKeyCodes.KEY_SLASH, CgModifiers.CTRL);
+        assertEquals("int x;", editor.getText());
+    }
+
+    /**
+     * <b>A mixed block comments out rather than half-toggling.</b> Every editor does this, and it is the
+     * only rule that behaves sensibly: a selection where one line is already commented should end up
+     * fully commented.
+     */
+    @Test
+    public void aPartlyCommentedBlockCommentsOut() {
+        build("// one" + NL + "two");
+        editor.setLanguage(com.crystalgui.text.syntax.Language.java());
+        editor.setSelection(0, editor.getText().length());
+
+        key(CgKeyCodes.KEY_SLASH, CgModifiers.CTRL);
+
+        assertEquals("// // one" + NL + "// two", editor.getText());
+    }
+
+    @Test
+    public void aLanguageWithoutCommentsIgnoresTheKey() {
+        build("plain");
+        editor.setCaret(0);
+        key(CgKeyCodes.KEY_SLASH, CgModifiers.CTRL);
+        assertEquals("plain", editor.getText());
+    }
+
+    // ── 6.1.7b: typing aids ──────────────────────────────────────
+
+    @Test
+    public void bracketsAutoClose() {
+        build("");
+        editor.setLanguage(com.crystalgui.text.syntax.Language.java());
+        type("(");
+        assertEquals("()", editor.getText());
+        assertEquals("and the caret sits between them", 1, editor.getCaret());
+    }
+
+    /**
+     * <b>Type-over is what makes auto-closing bearable.</b> Without it you type {@code (}, get {@code ()},
+     * type the {@code )} you expected to need, and end up with {@code ())}.
+     */
+    @Test
+    public void typingAClosingBracketStepsOverIt() {
+        build("");
+        editor.setLanguage(com.crystalgui.text.syntax.Language.java());
+        type("(");
+        type(")");
+
+        assertEquals("()", editor.getText());
+        assertEquals(2, editor.getCaret());
+    }
+
+    @Test
+    public void typingABracketOverASelectionSurroundsIt() {
+        build("value");
+        editor.setLanguage(com.crystalgui.text.syntax.Language.java());
+        editor.setSelection(0, 5);
+
+        type("(");
+
+        assertEquals("a selection must not be replaced by the bracket", "(value)", editor.getText());
+    }
+
+    /** An opener before a word means "wrap this", not "make an empty pair in front of it". */
+    @Test
+    public void anOpenerBeforeAWordDoesNotAutoClose() {
+        build("word");
+        editor.setLanguage(com.crystalgui.text.syntax.Language.java());
+        editor.setCaret(0);
+
+        type("(");
+
+        assertEquals("(word", editor.getText());
+    }
+
+    @Test
+    public void backspaceInIndentationRemovesAWholeLevel() {
+        build("        text");
+        editor.setCaret(8);
+
+        key(CgKeyCodes.KEY_BACK);
+
+        assertEquals("    text", editor.getText());
+    }
+
+    @Test
+    public void backspaceInsideTextStillRemovesOneCharacter() {
+        build("    abcd");
+        editor.setCaret(8);
+
+        key(CgKeyCodes.KEY_BACK);
+
+        assertEquals("    abc", editor.getText());
+    }
+
+    // ── 6.1.7b: search keys ──────────────────────────────────────
+
+    @Test
+    public void f3WalksTheMatches() {
+        build("cat dog cat");
+        editor.find("cat", true);
+        editor.setCaret(0);
+
+        key(CgKeyCodes.KEY_F3);
+        assertEquals(8, editor.getSelectionStart());
+        key(CgKeyCodes.KEY_F3, CgModifiers.SHIFT);
+        assertEquals(0, editor.getSelectionStart());
+    }
+
+    @Test
+    public void ctrlF3SearchesTheWordUnderTheCaret() {
+        build("alpha beta alpha");
+        editor.setCaret(1);
+
+        key(CgKeyCodes.KEY_F3, CgModifiers.CTRL);
+
+        assertEquals(2, editor.matchCount());
+        assertEquals("alpha", editor.getSelectedText());
+    }
+
     // ── Scrollbars ───────────────────────────────────────────────
 
     /**
