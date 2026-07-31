@@ -457,8 +457,28 @@ texteditor .__selection__ {
  * horizontally while scrolling vertically, and a scroll offset here is a pose translate that cannot
  * apply on one axis only. z-index above the lines so a long line scrolled sideways passes behind the
  * numbers rather than through them. */
+/* THE GUTTER'S THREE METRICS LIVE HERE, and TextEditor reads them back off the laid-out box. They were
+ * Java constants of the `max(6f, fontSize * 0.9f)` kind, which is precisely what this file exists to
+ * prevent — a pixel value in a widget belongs in the user-agent sheet, where a theme can change it and
+ * where the three can be compared side by side.
+ *
+ *   padding-left   the margin before the digits. The digits are right-aligned in a field sized to the
+ *                  widest number the file can reach, so without this the number that fills the field
+ *                  exactly (10 in a two-digit file) sits flush on the border.
+ *   padding-right  the fold column: the clear space between the numbers and the code. This is what makes
+ *                  the gutter read as a margin rather than as digits jammed against the text, and it is
+ *                  where a fold arrow goes when there is one.
+ *   margin-right   the gap between the gutter's painted box and the first character. Margin, not padding,
+ *                  and the distinction is load-bearing: it is space OUTSIDE the background, which is the
+ *                  only reason the level-0 indent guide can sit in it without the gutter painting over it.
+ *
+ * The line numbers are positioned with left: 0, and an absolute inset is padding-box relative — so
+ * padding-left places them and must not be added again in Java. */
 texteditor .__gutter__ {
     z-index: 6;
+    padding-left: 4px;
+    padding-right: 14px;
+    margin-right: 7px;
     background-color: #1A1D23;
     /* Clips its own numbers. The gutter stops above the horizontal scrollbar, but the numbers inside it
      * are positioned by hand from the scroll offset, so without this the one at the boundary is drawn
