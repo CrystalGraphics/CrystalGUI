@@ -45,7 +45,10 @@ public class ShaderGraphBridgeTest extends UiTestBase {
     public void theShaderNodesBecomeAnEditorLibrary() {
         NodeTypeRegistry library = library();
 
-        assertEquals("five built-ins plus the master", 6, library.size());
+        // Derived rather than hard-coded: the node library is meant to grow, and a magic number here
+        // turns every new built-in into a test failure that says nothing about the bridge.
+        assertEquals("every shader node plus the master",
+                CgShaderNodeRegistry.builtins().all().size() + 1, library.size());
         assertNotNull(library.get("cg:math/multiply"));
         assertNotNull(library.get(ShaderGraphBridge.MASTER_TYPE));
         assertEquals("Multiply", library.get("cg:math/multiply").label());
@@ -118,8 +121,8 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         GraphDocument document = new GraphDocument();
         document.setTypeCompatibility(ShaderGraphBridge.GLSL_PROMOTION);
 
-        NodeData colour = document.addNode(library.get("cg:input/color").create(0f, 0f));
-        NodeData time = document.addNode(library.get("cg:input/time").create(0f, 120f));
+        NodeData colour = document.addNode(library.get("cg:input/basic/color").create(0f, 0f));
+        NodeData time = document.addNode(library.get("cg:input/basic/time").create(0f, 120f));
         NodeData multiply = document.addNode(library.get("cg:math/multiply").create(200f, 40f));
         NodeData master = document.addNode(library.get(ShaderGraphBridge.MASTER_TYPE).create(400f, 40f));
 
@@ -149,7 +152,7 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         GraphDocument document = new GraphDocument();
         document.setTypeCompatibility(ShaderGraphBridge.GLSL_PROMOTION);
         NodeData floatNode = document.addNode(
-                library.get("cg:input/float").create(0f, 0f).withProperty("Value", "0.25"));
+                library.get("cg:input/basic/float").create(0f, 0f).withProperty("X", "0.25"));
         NodeData master = document.addNode(library.get(ShaderGraphBridge.MASTER_TYPE).create(200f, 0f));
         document.link(floatNode, "Out", master, CgMasterNode.BASE_COLOR);
 
@@ -169,7 +172,7 @@ public class ShaderGraphBridgeTest extends UiTestBase {
     public void aDocumentWithNoMasterIsReported() {
         NodeTypeRegistry library = library();
         GraphDocument document = new GraphDocument();
-        document.addNode(library.get("cg:input/color").create(0f, 0f));
+        document.addNode(library.get("cg:input/basic/color").create(0f, 0f));
 
         CgShaderEmitter.Result result = ShaderGraphBridge.compile(
                 document, CgShaderNodeRegistry.builtins(), new CgMasterNode());

@@ -1214,7 +1214,7 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
  * contributes nothing to a container's max-content, so the node could never grow. */
 graphnode {
     width: auto;
-    min-width: 134px;
+    min-width: 96px;
     max-width: 320px;
     flex-direction: column;
 }
@@ -1353,7 +1353,7 @@ nodeport.__output__ { padding-left: 10px; padding-right: 5px; }
  * decides ONCE from `contentBoxWidth() <= 0` whether it sizes itself — hand it a width up front and it
  * never pushes its measured one, so the node loses the ability to grow to fit long names. The row is
  * safe only because the label does not grow. */
-nodeport.__input__ { min-width: 64px; }
+nodeport.__input__ { min-width: 43px; }
 nodeport.__output__ { justify-content: flex-end; }
 /* `white-space: nowrap` is what makes `text-overflow` mean anything — ellipsis applies only to text that
  * cannot wrap, so without it the label silently takes a second line inside a fixed-height row. Declare
@@ -1478,3 +1478,62 @@ nodecreationmenu .__empty__ { padding-all: 4px; }
 button, checkbox, switch, tab, dropdown, menuitem { cursor: pointer; }
 /* Not set on `textfield`: `cursor: auto` already resolves to `text` over an editable element, which
  * is the spec's own rule and needs no declaration. */
+
+/* THE FOLD ARROW. Lives in the gutter's right column — the clear strip between the numbers and the code
+ * that gutterFoldWidth already reserves, which is where every editor puts it.
+ *
+ * Dim by default and bright on hover, IntelliJ's and VS Code's shared behaviour: an arrow on every
+ * foldable row is a lot of furniture, so it recedes until the pointer is near it. It never disappears
+ * entirely, unlike VS Code's, because a control that is invisible until hovered cannot be found by
+ * someone who does not already know it is there.
+ *
+ * z-index 5: above the gutter's background and its current-line band, below the numbers' own layer. */
+/* THE FOLD COLUMN. The arrows' container, and the reason it exists is hit testing rather than layout:
+ * the gutter is setHitTest(false) and that applies to its whole subtree, so an arrow parented there can
+ * never be clicked. This strip is a sibling of the gutter drawn over the same column.
+ *
+ * z-index 7 to clear the gutter (6). It does not overlap the scrollbars, which share that level. */
+texteditor .__fold-column__ {
+    z-index: 7;
+}
+
+texteditor .__fold__ {
+    justify-content: center;
+    align-items: center;
+    color: #4A515C;
+    cursor: pointer;
+    z-index: 5;
+}
+
+texteditor .__fold__:hover {
+    color: #A9B2BF;
+}
+
+/* A collapsed region's arrow stays lit whether or not it is hovered — it is now reporting state, not
+ * offering an action, and a hidden block whose only marker faded out is a block you cannot find. */
+texteditor .__fold__.__collapsed__ {
+    color: #A9B2BF;
+}
+
+/* THE PLACEHOLDER. Drawn after a collapsed region's header, standing in for the rows it hides — the only
+ * thing distinguishing `void f() { ⋯ }` from a function with an empty body.
+ *
+ * A background as well as a colour, because it has to read as a CONTROL rather than as punctuation
+ * someone typed. VS Code boxes it for the same reason. */
+/* THE FOLD MARKER LAYER. Mirrors the text viewport's box and clipping, but answers the mouse -- the
+ * viewport is setHitTest(false) and that covers its subtree, so a clickable chip cannot live in it.
+ *
+ * z-index 1: above the text, below the gutter (6) and the bars (7), so a chip clips against them. */
+texteditor .__fold-marker-layer__ {
+    overflow: hidden;
+    z-index: 1;
+}
+
+texteditor .__fold-placeholder__ {
+    color: #8A94A3;
+    background-color: #2A303A;
+    padding-left: 4px;
+    padding-right: 4px;
+    white-space: nowrap;
+    z-index: 1;
+}

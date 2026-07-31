@@ -356,6 +356,25 @@ public class GraphNode extends UIElement {
         return port;
     }
 
+    /**
+     * The port with this {@code portId}, either direction, or null.
+     *
+     * <p>Matched on the <b>id</b>, never {@link NodePort#getName()} — that returns the drawn label, which
+     * carries the arity ({@code "Value(4)"}) and is whatever a theme decided to render. Comparing it
+     * silently matches nothing, which is not an error anywhere: a caller looking up a port just gets null
+     * and quietly falls back.</p>
+     */
+    @Nullable
+    public NodePort portNamed(String portId) {
+        for (NodePort port : getInputPorts()) {
+            if (port.getPortId().equals(portId)) return port;
+        }
+        for (NodePort port : getOutputPorts()) {
+            if (port.getPortId().equals(portId)) return port;
+        }
+        return null;
+    }
+
     public List<NodePort> getInputPorts() {
         return Collections.unmodifiableList(inputPorts);
     }

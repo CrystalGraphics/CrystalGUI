@@ -204,6 +204,11 @@ nodeport:hover .__label__ { color: #FFFFFF; }
  * and a transposed pair looks entirely plausible in a screenshot — while vec3 is the type a shader
  * graph carries most (positions, normals, colours), so it is the one a user reads as "the main
  * signal". Worth checking against the reference rather than against memory. */
+/* A dynamic port takes its type from whatever is connected, so it has no colour of its own until the
+ * compiler resolves one. Neutral grey states that honestly — colouring it as float would be a lie in the
+ * one direction that matters, since float is the NARROWEST numeric type and reads as "scalar only". */
+nodeport.type-dynamic .__dot__ { border-color: #B4B4B4; background-color: #B4B4B4; }
+
 nodeport.type-float .__dot__,
 nodeport.type-vec1 .__dot__    { border-color: #84E4E7; background-color: #84E4E7; }
 nodeport.type-vec2 .__dot__    { border-color: #9AEF92; background-color: #9AEF92; }
@@ -229,9 +234,13 @@ nodeport:blank .__dot__ { background-color: #00000000; }
 
 /* The inline editor on an unconnected input. Narrow, because it shares the row with a label and a dot
  * inside a 168px node. */
+/* Narrow on purpose. These hold a component of a vector — "0", "0.5", "-1.2" — not prose, and the field
+ * sharing its row with a label and a dot is what sets the node's width. Unity's are about this size for
+ * the same reason: four or five characters is the whole vocabulary. */
 nodeport .__editor__ {
-    width: 46px;
-    height: 12px;
+    width: 24px;
+    height: 11px;
+    padding-all: 2px;
     background: #1E1E1E;
     border-radius: 2px;
     color: #D4D4D4;
