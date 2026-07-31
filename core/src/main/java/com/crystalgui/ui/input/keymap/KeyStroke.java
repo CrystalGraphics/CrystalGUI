@@ -135,6 +135,11 @@ public record KeyStroke(int key, int modifiers) {
         BY_NAME.put("ENTER", BY_NAME.get("RETURN"));
         BY_NAME.put("ESC", BY_NAME.get("ESCAPE"));
         BY_NAME.put("DEL", BY_NAME.get("DELETE"));
+        // The name every user, every keymap file and every other editor writes. The reflected name is
+        // BACK, because CgKeyCodes is LWJGL2-shaped and LWJGL2 called it KEY_BACK — which is an
+        // implementation detail of a backend leaking into a user-facing string. Missing this alias
+        // crashed a scene at startup on the first binding that wanted it.
+        BY_NAME.put("BACKSPACE", BY_NAME.get("BACK"));
         BY_NAME.put("PLUS", BY_NAME.get("ADD"));
         BY_NAME.values().removeIf(value -> value == null);
     }

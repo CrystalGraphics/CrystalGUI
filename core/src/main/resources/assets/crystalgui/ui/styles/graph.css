@@ -87,6 +87,14 @@ graphnode .__preview__ {
     border-bottom-right-radius-y: 4px;
 }
 
+/* The rubber band. Drawn in the VIEWPORT rather than the plane, so this 1px border stays 1px at any
+ * zoom — a band inside the transform would be four physical pixels at 4x and invisible at 0.25x. */
+graphview .__marquee__ {
+    background-color: #2C79C433;
+    border-width: 1px;
+    border-color: #44C0FF;
+}
+
 /* ── Ports ─────────────────────────────────────────────────────────────────────────────────────── */
 
 nodeport { color: #C4C4C4; }
