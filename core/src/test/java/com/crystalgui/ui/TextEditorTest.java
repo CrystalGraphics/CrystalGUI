@@ -2028,9 +2028,65 @@ public class TextEditorTest extends UiTestBase {
 
         assertTrue("there must be something to wrap", editor.viewLineCount() > 1);
 
-        // The TEXT's own extent, measured in the editor's font -- not the line box, which is deliberately
-        // stretched to at least the viewport so a selection band reads as a band and would therefore pass
-        // this assertion however far the glyphs overflowed it.
+        // The TEXT's own extent, not the line box -- which is deliberately stretched to at least the
+        // viewport so a selection band reads as a band, and would therefore pass however far the glyphs
+        // overflowed it.
+        assertEveryPaintedLineFits();
+    }
+
+    /**
+     * <b>Resizing must reflow.</b> A wrap width is derived from the viewport, so a narrower editor has to
+     * wrap into more rows — and the rows already on screen have to be re-read, not left holding the text
+     * the old projection gave them.
+     */
+    @Test
+    public void resizingTheEditorReflowsTheWrap() {
+        build(longLine());
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+        int before = editor.viewLineCount();
+        assertTrue("it must already wrap", before > 1);
+
+        editor.layout(l -> l.width(150));
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertTrue("half the width must produce more visual rows: " + before + " -> "
+                + editor.viewLineCount(), editor.viewLineCount() > before);
+        assertEveryPaintedLineFits();
+    }
+
+    /**
+     * The other half of the same failure, and the one the screenshot showed: after a reflow the realised
+     * lines kept the text the <em>old</em> projection gave them, so a continuation displayed the next
+     * row's content and everything overflowed the new, narrower box.
+     */
+    @Test
+    public void aReflowRebindsTheLinesAlreadyOnScreen() {
+        build(longLine());
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        editor.layout(l -> l.width(150));
+        settle();
+        editor.updateWindow();
+        settle();
+
+        StringBuilder painted = new StringBuilder();
+        for (UIElement line : linesOf()) {
+            painted.append(((UIText) line.getChildren().get(0)).getText());
+        }
+        assertEquals("the painted rows must still reconstruct the document",
+                editor.getText(), painted.toString());
+    }
+
+    /** Measures painted text in the editor's own font against the box it goes in. */
+    private void assertEveryPaintedLineFits() {
         var general = editor.getStyle().getGeneralGroup();
         var family = com.crystalgui.render.text.FontFamilyCache.resolve(
                 general.fontFamily(), Math.round(general.fontSize()));
