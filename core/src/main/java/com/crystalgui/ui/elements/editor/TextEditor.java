@@ -2649,6 +2649,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
             highlightsDirty = true;
             onWindowChanged.emit();
         }
+        // EVERY FRAME, not only when the realised set changes. The lines live in a scroll-exempt viewport
+        // now, so they no longer get the scroll translate for free -- their `top` is baked in by
+        // layOutLine and has to be re-derived from the current offset. Without this the gutter and the bar
+        // scrolled while the text stood still.
+        //
+        // Cheap enough to do unconditionally: setText no-ops on an unchanged string and
+        // replaceOrPutCandidate no-ops on an unchanged value, so a frame that did not scroll writes
+        // nothing. It is also the rebinding path, not the recycling one -- recycling every frame is what
+        // cleared highlights and made the colours flicker.
+        rebindRealisedLines();
         syncLineFonts();
         refreshHighlights(first, last);
         layOutGutter(first, last);
