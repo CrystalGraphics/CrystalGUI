@@ -593,7 +593,35 @@ public class TextEditor extends ScrollerView {
             lastRealised = last;
             onWindowChanged.emit();
         }
+        syncLineFonts();
         layOutCaretAndSelection(first, last);
+    }
+
+    /**
+     * Forces every realised line to render in the font the editor measures with.
+     *
+     * <p><b>Caret positions are prefix widths, so a font disagreement is a SCALE error that grows with
+     * the column</b> — the caret drifts further left of the glyph it belongs to the further along the
+     * line it goes, and text is inserted where the caret really is rather than where it appears. The ore
+     * theme drew lines at font-size 10 while the editor measured at 8, because {@code font-size} is
+     * inheritable but a sheet targeting {@code text} sets a <em>specified</em> value, and a specified
+     * value beats an inherited one.</p>
+     *
+     * <p>Pushed here rather than at realise time, and at {@code IMPORTANT} origin so no sheet can
+     * reintroduce the disagreement. Timing is the reason: at realise time the editor's own computed style
+     * may not be resolved yet, and an IMPORTANT write of the wrong value would then stick forever — which
+     * is exactly what happened on the first attempt, pinning every line at the initial 16px. Re-pushing
+     * each pass is cheap because {@code replaceOrPutCandidate} no-ops on an unchanged value, and it is
+     * self-correcting once the cascade settles.</p>
+     */
+    private void syncLineFonts() {
+        var general = getStyle().getGeneralGroup();
+        final float size = general.fontSize();
+        final var family = general.fontFamily();
+        for (UIElement line : realisedLines.values()) {
+            StyleGroup.importantPipeline(line.getChildren().get(0).getStyle().getGeneralGroup(),
+                    g -> g.fontSize(size).fontFamily(family));
+        }
     }
 
     private UIElement realiseLine(int row) {

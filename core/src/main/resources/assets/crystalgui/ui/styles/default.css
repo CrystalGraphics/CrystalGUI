@@ -403,6 +403,13 @@ texteditor {
 texteditor {
     overflow: auto;
     line-height: 1.4;
+    /* Text must not sit flush against the editor's own edge. At uiScale 2 a 1px border is two physical
+     * pixels, and a Minecraft-font `l` is about that wide of actual ink -- so a flush first glyph is
+     * painted over by the border and the line reads as ".ine 0" instead of "line 0". This is geometry,
+     * not taste, which is why it is in the user-agent sheet; TextEditor derives its text origin, its
+     * caret and its hit testing from exactly this padding. */
+    padding-left: 3px;
+    padding-right: 3px;
 }
 
 /* A line must not wrap: the editor's whole windowing model is that row N sits at N * lineHeight, and a
