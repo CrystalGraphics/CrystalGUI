@@ -1032,16 +1032,6 @@ public class UIElement {
         return this;
     }
 
-    /**
-     * Whether this child is excluded from its parent's scroll offset.
-     *
-     * <p>True for a scrollbar, and for a table's pinned header — anything that lives inside the
-     * scrollport but must not move with it.</p>
-     */
-    public boolean isScrollExempt() {
-        return scrollExempt;
-    }
-
     /** Whether {@code overflow} makes this a scroll container ({@code hidden}/{@code scroll}/
      * {@code auto} — not {@code clip}, and not {@code visible}). */
     public boolean isScrollContainer() {

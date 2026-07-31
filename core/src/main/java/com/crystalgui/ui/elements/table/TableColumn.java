@@ -138,8 +138,19 @@ public final class TableColumn<T> {
     }
 
     /** Resolved width for layout: the pixel width plus this column's share of {@code leftover}. */
+    /**
+     * This column's width once the leftover space has been shared out.
+     *
+     * <p><b>The {@code minWidth} floor applies to the flexible branch too</b>, and leaving it off is
+     * what let the gallery's Name column collapse to nothing: {@code width(0).flexible()} means its
+     * entire width is share-of-leftover, so growing a fixed neighbour drove it straight to zero and its
+     * cells rendered as a sliver of clipped text. Worse, {@link TableView} reserves
+     * {@code getMinWidth()} for a flexible neighbour when deciding how far a drag may go — so without
+     * the floor here the ceiling was computed against a minimum layout did not honour, and the two
+     * disagreed by exactly the amount the column had over-collapsed.</p>
+     */
     float resolvedWidth(float leftover, float totalWeight) {
-        if (weight <= 0f || totalWeight <= 0f || leftover <= 0f) return width;
-        return width + leftover * (weight / totalWeight);
+        if (weight <= 0f || totalWeight <= 0f) return width;
+        return Math.max(minWidth, width + Math.max(0f, leftover) * (weight / totalWeight));
     }
 }
