@@ -373,7 +373,15 @@ tab:disabled {
  * a jump-per-notch reads as broken in a UI at this scale — this is the engine making a nicer default,
  * and any consumer can put it back with `scroll-behavior: auto`. Dragging a thumb stays instant
  * regardless; see ScrollerView. `scroll-duration` is ours, not CSS — browsers hard-code their curve. */
-scrollerview {
+/* `listview` is named alongside `scrollerview` in every rule below, and it is not optional.
+ *
+ * A widget's cascade identity is its TAG, never its Java supertype: ListView extends ScrollerView but
+ * reports `listview`, so `scrollerview { }` does not match it. Without these the scrollbars exist as
+ * elements, get no width from anywhere, and are simply invisible — a 100,000-row list that scrolls with
+ * no thumb to show where you are. The same trap made `Dropdown` lay out at zero height until this file
+ * named it. */
+scrollerview,
+listview {
     scroll-behavior: smooth;
     scroll-duration: 0.18;
 }
@@ -431,17 +439,20 @@ scroller .__tail__:hover {
 
 /* The little square where the two bars meet — `::-webkit-scrollbar-corner` in a browser. Shown only
  * when both bars are visible; ScrollerView sizes it from their measured thicknesses. */
-scrollerview .__corner__ {
+scrollerview .__corner__,
+listview .__corner__ {
     background: #2A2A2A;
 }
 
-scrollerview .__v-scroller__ {
+scrollerview .__v-scroller__,
+listview .__v-scroller__ {
     width: 8px;
     top: 0;
     right: 0;
     bottom: 0;
 }
-scrollerview .__h-scroller__ {
+scrollerview .__h-scroller__,
+listview .__h-scroller__ {
     height: 8px;
     left: 0;
     right: 0;

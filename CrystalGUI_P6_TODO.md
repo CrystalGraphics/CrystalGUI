@@ -520,17 +520,127 @@ of the thirteen tests red.
 | Should `default.css`-style *default bindings* ship in a user-agent keymap sheet? | Consistent with `StyleSheet.DEFAULT`, and it is where `Tab`/`Escape`/`Space` activation would eventually belong — but those live in `UIInputHandler` today and moving them is a separate, riskier change. |
 
 
-### 6.1.3 Virtualised list view · `TODO` · **foundation**
+### 6.1.3 Virtualised list view · `DONE` (2026-07-31) · **foundation**
 
-A windowed view over a data model that materialises only the visible range plus a small overscan, recycling
-elements as it scrolls.
+A windowed view over a data model that materialises only the visible range plus a small overscan,
+recycling elements as it scrolls. The Tree, the Table, the code editor's lines and the command palette
+all sit on this, which is why it is scheduled before any of them.
 
-- Fixed row height first; variable height (needed for wrapped code lines) as a second pass with a measured
-  offset index.
-- The recycling contract is the hard part: what is guaranteed about a recycled element's state, and how a
-  consumer binds data to it without leaking the previous row's listeners.
-- Interacts with `smooth scroll`, `scrollIntoView`, and `getMaxScroll*`, all of which currently assume real
-  children.
+**It is a widget *shape*, not an optimisation.** Tempting to treat "make lists fast" as something to
+retrofit; it is not. A virtualised view is a window over a *model* with element recycling, which is a
+different API from "add children to a `ScrollerView`" — deciding it late means rewriting every consumer.
+
+#### The web has a native answer now, and it is not this
+
+`content-visibility: auto` plus `contain-intrinsic-size` is Chromium's own mechanism: it turns on layout,
+style and paint containment and **skips both layout and paint** for off-screen content, while keeping the
+elements in the DOM and in the accessibility tree. `contain-intrinsic-size` supplies a placeholder size so
+the scrollbar does not jump as content is realised.
+
+That is a genuinely better answer than virtualisation *for the cases it covers*, because nothing lies:
+find-in-page works, Tab reaches the content, `querySelector` finds it, focus survives scrolling.
+
+**It is not sufficient here, for one reason:** every element remains a real Taffy node. A 200k-line file or
+a directory of 10k entries costs 200k nodes of memory and 200k entries in every tree walk, whatever we skip
+per frame. `content-visibility` scales to *hundreds*; the editor branch needs *hundreds of thousands*.
+
+> **Two mechanisms, but not a Frankenstein** — they answer different questions.
+> `content-visibility` answers *"should I do rendering work for an element that exists?"*; virtualisation
+> answers *"should this element exist at all?"* Both is coherent. What must stay crisp is the boundary,
+> and the boundary is memory: if the element count is bounded and modest, keep it real.
+
+**`content-visibility` is worth having and is NOT part of this item.** It is a style property, ambient on
+any element, and it would help every long page in the engine rather than only lists. Filed as its own item
+(6.1.3b) because implementing it means teaching Taffy to substitute an intrinsic size for a skipped
+subtree, which has nothing in common with the work below.
+
+#### Prior art, and the verdict
+
+| Source | What it contributes |
+|---|---|
+| **VS Code's `ListView`** | The **renderer-template split**, and it is the single best idea available: `renderTemplate(container)` builds the row's structure and wires its listeners **once**; `renderElement(item, index, template)` binds data into an existing template; `disposeTemplate` tears it down. This is what makes recycling safe rather than a listener leak waiting to happen. |
+| **UIKit's `UITableView`** | Originated cell reuse (`dequeueReusableCell`) and, more usefully, `prepareForReuse` — the explicit acknowledgement that a recycled cell carries state it must shed. |
+| **Anchor-based virtual lists** ([judi.systems](https://judi.systems/shirei/blog/virtual-list/)) | The best treatment of the genuinely hard case — variable heights that are not known until measured. An anchor `(index, offset)` plus an average-height estimate, walked forward or backward, with distinct handling for *smooth* scrolling (keep the anchor, accumulate) versus *random-access* scrolling (re-derive the anchor from the average). |
+| **TanStack Virtual / react-window** | Prefix-sum array + binary search for the *measured* case; `resetAfterIndex` for invalidation. The maths, once heights are actually known. |
+| **Flutter slivers, Qt model/view** | Confirmation that model/view separation with a per-row delegate is the universal shape. No new ideas beyond VS Code's, and a heavier vocabulary. |
+| **Angular CDK** | `itemSize` *strategies* as a pluggable axis — fixed, then autosize — rather than one algorithm trying to cover both. Worth copying as a shape. |
+
+#### The design
+
+```java
+ListView<String> list = new ListView<>(model);            // model is an ObservableList<T>
+list.setRenderer(new ListRenderer<String>() {
+    public UIElement createTemplate() { … }               // ONCE per recycled element — wire listeners here
+    public void bind(String item, int index, UIElement template) { … }   // per row, per scroll — data only
+});
+```
+
+- **The model is `ObservableList<T>`**, which already exists in `core/property` with a `Change<T>` signal.
+  No new model type, and its change events are exactly the invalidation the view needs.
+- **`ListRenderer` is VS Code's split**, renamed. The whole contract lives in which method you put things
+  in: structure and listeners in `createTemplate`, data in `bind`. That is what makes "how does a consumer
+  bind data without leaking the previous row's listeners" a non-question rather than a rule to remember.
+- **Rows are internal children** of the view, like every other widget's structure, so public traversal and
+  `UIDescriptionCodec` do not see the realised window and mistake it for the content.
+
+#### Height strategies, fixed first
+
+`FixedHeightStrategy` covers the overwhelming majority and makes offset→index a division. Variable height
+is a second pass, and is deferred rather than skipped because **wrapped code lines need it** and 6.1.7
+therefore does. The anchor-based approach above is the design to port when that lands; the prefix-sum
+version only applies once every height is genuinely known, which for wrapped text it never is.
+
+Strategies are pluggable (Angular CDK's shape) so the second one is an addition rather than a rewrite of
+the first.
+
+#### What virtualisation genuinely breaks, and the answer for each
+
+This is the honest cost, and every item is a place a consumer will be surprised:
+
+| Breaks | Answer |
+|---|---|
+| **Focus on a scrolled-away row** — the element is recycled out from under it | Track the focused **index**, not the element; restore focus when that index is realised again. VS Code does exactly this, and without it a keyboard user loses their place on every scroll. |
+| **`querySelector` cannot find unrealised rows** | Accept and document. It is inherent: the element does not exist. A consumer wanting "the row for item X" asks the view by index, not the tree. |
+| **`scrollIntoView` on a row that does not exist** | An index-based `scrollToIndex(int)` on the view. The existing element-based method stays for realised rows. |
+| **`getScrollHeight` assumes real children** | Comes from the model — `count × itemSize`, or the strategy's estimate. This is the one place the existing scroll machinery must be taught something new. |
+| **Serialization** | A virtualised view serializes its *model state*, never its realised window. Writing out the visible fifteen rows of a ten-thousand-row list is worse than writing nothing. |
+| **Smooth scroll and `clampScroll`** | Already route through `getMaxScroll*`, so they follow from the row above for free. Worth a test each rather than an assumption. |
+
+#### Deliverables
+
+- `ui/elements/ListView<T>`, `ListRenderer<T>`, `ItemSizeStrategy` + `FixedHeightStrategy`.
+- Recycling pool, overscan, and the model-change → invalidation path.
+- Focus-by-index restoration.
+- Tests: only the visible window is realised; scrolling recycles rather than allocates; a model change
+  updates without a full rebuild; `scrollHeight` tracks the model not the children; focus survives a row
+  being recycled and returns when it is realised again; an empty model; a model shorter than the viewport.
+- Harness: a `list` gallery page with 100k rows, a live realised-element count, and a focus-survives-scroll
+  row — the count is the only way to *see* that virtualisation is happening at all.
+
+#### Open questions
+
+| Question | Why it matters |
+|---|---|
+| Does `ListView` own its scrolling, or sit inside a `ScrollerView`? | Scrolling is an ambient element capability here, so owning it would be the divergence. But the view must know its own scroll offset to decide the window, which means reading it from an ancestor every frame. |
+| Recycle by pool, or realise/destroy? | A pool is faster and is what every reference does; destroy-and-recreate is far simpler and may be fast enough given how cheap a `UIElement` is. Worth measuring before assuming. |
+| Overscan: fixed count or measured from scroll velocity? | Fixed is predictable; velocity-based hides more latency. Start fixed, and only revisit with a real measurement. |
+
+
+### 6.1.3b CSS `content-visibility` · `TODO`
+
+The web's own answer to "stop doing rendering work for what nobody can see": layout, style and paint
+containment plus skipping the subtree entirely when it is off-screen, with `contain-intrinsic-size`
+standing in for its size so the scrollbar does not jump.
+
+Split out of 6.1.3 because it shares nothing with it in implementation. Virtualisation decides whether an
+element **exists**; this decides whether an existing element is **worked on**. It is a style property,
+ambient on any element, and it helps every long page in the engine rather than only lists — a tall
+`Dialog`, a deep settings panel, a `SplitView` pane scrolled out of view.
+
+The work is teaching Taffy to substitute `contain-intrinsic-size` for a subtree it is told to skip, and
+teaching paint to bail on it. Cheap to describe, and genuinely useful the moment any page gets long.
+
+Not scheduled against anything — it blocks nothing, and nothing blocks it.
 
 ### 6.1.4 Tree · `TODO`
 
