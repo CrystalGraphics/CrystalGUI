@@ -24,11 +24,18 @@ import javax.annotation.Nullable;
  * the focused element. No global stack is consulted and none exists — see {@link UndoStack}'s note on
  * being per document rather than per window.</p>
  *
- * <h3>A widget may still pre-empt it</h3>
- * <p>{@code TextEditor} handles Ctrl+Z in its own key handler and calls {@code stopPropagation()}, which
- * consumes the keystroke before the keymap resolver ever runs — so the two coexist rather than firing
- * twice. That ordering is the engine's, not a coincidence to rely on quietly: the resolver deliberately
- * runs after dispatch so a focused control gets first refusal on its own keys.</p>
+ * <h3>A widget binds these, it does not re-implement them</h3>
+ * <p>{@code TextEditor} used to handle Ctrl+Z in its own key handler and consume the keystroke before the
+ * resolver ever ran. That worked, and it made {@code edit.undo} <b>the one command in the engine that
+ * could be remapped and still not move</b> — the resolver only sees an unconsumed event, so the editor ate
+ * the key whatever the keymap said. It now calls {@link #register} and binds {@link #UNDO_CHORD} and
+ * friends on its <em>own</em> element instead, so focus scoping does the work: the editor's binding wins
+ * while focus is inside it, an application-wide binding covers everywhere else, and both routes end at the
+ * same {@link UndoScope#nearest} lookup.</p>
+ *
+ * <p>That is the general rule for any widget with a history — <b>bind these ids, do not invent your
+ * own.</b> An {@code editor.undo} beside {@code edit.undo} would put two entries for one concept in every
+ * menu and palette, and nothing would say which the keystroke ran.</p>
  */
 public final class UndoCommands {
 

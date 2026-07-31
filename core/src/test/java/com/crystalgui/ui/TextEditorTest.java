@@ -2217,6 +2217,87 @@ public class TextEditorTest extends UiTestBase {
         assertEquals("and the text is gone from the document", NL + "two", editor.getText());
     }
 
+    /**
+     * Undo reaches the editor's own history through {@code edit.undo} — the id {@code UndoCommands}
+     * already owns, not a second {@code editor.undo} beside it.
+     */
+    @Test
+    public void undoIsTheSharedCommandNotAnEditorSpecificOne() {
+        build("one");
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertTrue("the shared id", window.getCommands().contains("edit.undo"));
+        assertFalse("and no duplicate concept", window.getCommands().contains("editor.undo"));
+    }
+
+    /** <b>The regression this move exists to prevent:</b> undo was remappable and still did not move. */
+    @Test
+    public void undoCanBeRemapped() {
+        build("");
+        settle();
+        editor.updateWindow();
+        settle();
+        editor.setCaret(0);
+        type("abc");
+        settle();
+        assertEquals("abc", editor.getText());
+
+        editor.keymap().unbind("Mod+Z");
+        editor.keymap().bind("Mod+U", "edit.undo");
+
+        key(CgKeyCodes.KEY_Z, CgModifiers.CTRL);
+        assertEquals("the old chord no longer undoes", "abc", editor.getText());
+
+        key(CgKeyCodes.KEY_U, CgModifiers.CTRL);
+        assertEquals("the new one does", "", editor.getText());
+    }
+
+    /** Undo still works out of the box, through the keymap rather than a switch case. */
+    @Test
+    public void ctrlZStillUndoesThroughTheKeymap() {
+        build("");
+        settle();
+        editor.updateWindow();
+        settle();
+        editor.setCaret(0);
+        type("hello");
+        settle();
+
+        key(CgKeyCodes.KEY_Z, CgModifiers.CTRL);
+        assertEquals("", editor.getText());
+
+        key(CgKeyCodes.KEY_Y, CgModifiers.CTRL);
+        assertEquals("and Ctrl+Y redoes", "hello", editor.getText());
+    }
+
+    /**
+     * <b>A shrinking document must not leave a caret past its end.</b> The clamp used to be a hand-written
+     * line in the Ctrl+Z handler, so moving that binding to the keymap would have taken it with it — it
+     * now sits on the buffer's change signal, where every route in is covered.
+     */
+    @Test
+    public void undoingPastTheCaretClampsTheSelection() {
+        build("");
+        settle();
+        editor.updateWindow();
+        settle();
+        editor.setCaret(0);
+        type("a long line of text");
+        settle();
+        editor.setCaret(editor.getText().length());
+        settle();
+
+        // Through the command, not the keystroke -- a menu or the palette is exactly the route that had
+        // no clamp of its own.
+        window.getCommands().run("edit.undo", com.crystalgui.core.command.CommandContext.of(editor));
+        settle();
+
+        assertTrue("the caret must be inside the document, not past where the text used to end",
+                editor.getCaret() <= editor.getText().length());
+    }
+
     /** The editor is a composite: its lines and caret are its own, and callers do not add children. */
     @Test
     public void theEditorRefusesPublicChildren() {
