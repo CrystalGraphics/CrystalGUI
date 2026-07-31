@@ -849,8 +849,78 @@ divider **redistributes width between two adjacent columns** — a different ope
 
 ### 6.1.6 Multi-line text buffer and editor · `TODO` · **the large one**
 
-The plain-text half: a line-based buffer (piece table or gap buffer), caret and selection across lines,
-word-wise and page navigation, soft-wrap toggle, and undo with edit coalescing.
+> **Design settled 2026-07-31, after research.** Storage is a **rope over a summary B+ tree** (Zed's
+> `SumTree`). Edits, anchors and undo are **change sets with position mapping** (CodeMirror 6). Those are
+> two projects' answers to two *different* problems and the split is deliberate — the reasoning, including
+> the part where the first draft of this decision was wrong, is below.
+
+#### Storage: a rope over a summary tree, not a piece table
+
+Every node caches a **summary** of its subtree, so a seek by any summarised dimension — byte offset,
+UTF-16 offset, **line/column** — is O(log n) with no side structure. Line/column is the one that decides
+it: 6.1.3 already gives us a virtualised list, the editor renders through it, and its hottest query is
+therefore *"lines 4000-4050 and their extents"*.
+
+**Why not the piece table, given the standing "closest to the web" directive.** Because VS Code's own
+write-up says why they picked it, and the reasons do not transfer:
+
+- They chose it on **open-time memory**. Their line array cost ~600 MB for a 35 MB file — 20x — because
+  every line was an object. We are not competing against that baseline.
+- Line lookup in a piece table is **O(n)** — it walks characters from the start. They fixed it by bolting
+  on a **red-black tree caching line-break counts per node**. That is precisely the second structure a
+  summary tree makes unnecessary, and a second structure is a second thing to keep correct across every
+  edit.
+- It **degrades with edit count**: pieces are never coalesced, so a long session becomes tens of thousands
+  of nodes. They judged that acceptable because `getLineContent` was under 1% of their frame. Ours is not
+  the same frame — we re-shape through `CgShapedParagraph`.
+
+So this is a case where the directive loses, and it loses on *evidence* rather than taste: Monaco's
+structure is a good answer to a question about V8 string limits and file-open memory, and we are asking a
+different question.
+
+#### Edits, anchors and undo: change sets, not CRDT anchors
+
+**The first draft of this decision said "take Zed's SumTree, not its CRDT, and we get anchors anyway."
+That was wrong, and it is recorded because the error is instructive.** Zed's `Anchor` is a *CRDT artifact*:
+a Lamport timestamp identifying the insertion that produced the surrounding text, plus an offset into it
+and a bias. Anchors survive edits there **because** every insertion has a globally unique identity. Drop
+the CRDT and that mechanism goes with it.
+
+The non-CRDT answer, and the better fit here, is CodeMirror 6's:
+
+| Piece | Role |
+|---|---|
+| `ChangeSet` | A described edit: positions plus inserted text. Data, not a closure. |
+| `mapPos(pos, assoc, mapMode)` | Maps any position *through* a change. `assoc` is the insertion bias (before/after); `mapMode` decides what a deletion spanning the position means — a valid position, or nothing. |
+| `compose` | Two sequential changes become one. |
+| `invert` | The opposite change, given the document it applied to. |
+| `RangeSet.map(changes)` | A whole set of decorated ranges mapped through one change. |
+
+An anchor stops being a stored identity and becomes *a position plus a rule for mapping it*. Less powerful
+than Zed's — it cannot reconcile concurrent edits — and exactly as powerful as we need.
+
+#### Coordinates are UTF-16, and that is not arbitrary
+
+Zed measures in **UTF-8 bytes** because Rust strings are UTF-8. CodeMirror measures in **UTF-16 code
+units** because JS strings are. **Java strings are UTF-16**, so the CodeMirror coordinate model maps 1:1
+onto `String`/`CharSequence` while Zed's would need a conversion at every boundary — including every call
+into `CgShapedParagraph`. The summary should still carry a UTF-8 dimension for anything that serialises,
+which is free once summaries compose.
+
+#### What this hands the already-shipped work
+
+`RangeSet.map` is the same operation `ui/text/TextRange` + `HighlightRegistry` (6.1.1) need in order to
+survive an edit — a highlight *is* a decorated range. So 6.1.1's ranges become mappable rather than needing
+recomputation on every keystroke, which is what a find-as-you-type highlight actually requires.
+
+#### The genuinely unsolved part
+
+Not the rope. `UIText` today retains one `CgShapedParagraph` and rebuilds it only when the text or the
+resolved font family changes. An editor invalidates **one line out of thousands** per keystroke, so that
+model inverts: shaping has to become per-line and cached against a line identity that survives edits —
+another consumer of anchors, and the reason it is called out here rather than discovered in 6.1.7.
+
+Everything else stands: caret and selection across lines, word-wise and page navigation, soft-wrap toggle.
 
 Explicitly **not** an extension of `TextField`. That widget's caret and selection logic is single-line by
 construction; sharing it would mean generalising every method on it while it stays in use. A common
@@ -882,11 +952,30 @@ This is what a node's property panel is made of.
 
 ### 6.1.9 Command and undo system · `TODO`
 
-A command stack with coalescing, labels for a history panel, and a decision on whether commands are
-serializable (they should be, given `serialization/` exists and a server-authored editor is a real target).
+> **Design settled 2026-07-31**, because 6.1.6 could not start without it.
 
-Small, and could move earlier — see the standing decision above. Its *design* must precede 6.1.6, even if
-its implementation lands alongside.
+**Document state is edited through commands. View state is mutated directly.** The boundary: anything a
+reload should give back is a command; anything that is purely how you are *looking* at the document is not.
+Scroll offset, selection, column widths, expanded tree nodes — not commands. This is where VS Code,
+Photoshop and Godot's `UndoRedo` all draw it, and it is why re-sorting a table is undoable in none of them.
+
+That boundary is chosen partly because it **grandfathers the three widgets already shipped**: everything
+`ListView`, `TreeView` and `TableView` mutate today is view state, so none of them changes. Had the answer
+been "everything is a command", the retrofit would have been real — it is cheap only because there are
+three of them rather than a dozen, which is exactly why this was the gate on 6.1.6.
+
+**Undo is not a separate mechanism.** A text command carries a `ChangeSet`; undo is `changeSet.invert(doc)`
+and redo is the change itself. Coalescing is `compose` over a time-and-intent window, not a bespoke merge
+rule per command type. The stack stores changes, so it cannot drift from the document the way a stack of
+closures can.
+
+**Commands are serializable, and that is why the question was easy.** A `ChangeSet` is *data* — offsets and
+inserted text — not a lambda, so it goes through `serialization/` unchanged, which is what the
+server-authored editor target needs. A command shaped as "a closure that knows how to undo itself" would
+have made this hard; this shape makes it not a question.
+
+Labels for a history panel come free, since a command is already a record rather than a pair of function
+pointers.
 
 ### 6.1.10 File system SPI and browser · `TODO`
 
@@ -1168,8 +1257,9 @@ this stops being a UI demo and becomes the shader graph's actual data.
 6.2.1 CgCurveRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──► 6.2.4 editing ──► 6.2.5 model
 ```
 
-**Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → **6.1.6 (next)** → 6.1.3 → 6.1.4 → 6.1.5 → 6.1.6 → 6.1.7 → 6.1.8, with 6.1.9's
-*design* settled before 6.1.6 starts, then 6.1.10–12, then the 6.2 chain.
+**Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → **6.1.6 (next)** →
+6.1.7 → 6.1.8, then 6.1.10-12, then the 6.2 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done,
+see 6.1.9; its implementation lands with 6.1.6.
 
 6.2.1 is the one item that can be pulled forward at any time — it is self-contained, depends on nothing in
 6.1, and is harness-testable on its own.
@@ -1182,7 +1272,7 @@ this stops being a UI demo and becomes the shader graph's actual data.
 |---|---|---|
 | ~~Are `CgShapedParagraph`'s style spans drivable without backend work?~~ | ~~6.1.1~~ | **Answered: yes, entirely.** The backend was already complete; 6.1.1 was a translation layer. |
 | What *is* the filesystem in a Minecraft context — resource packs, world data, server storage? | 6.1.10 | Shape the SPI around what the client can be handed, not around POSIX. |
-| Do widgets mutate models directly, or emit commands? | 6.1.9, and the API of everything after it | Near-irreversible once a dozen widgets have chosen. |
+| ~~Do widgets mutate models directly, or emit commands?~~ | ~~6.1.9~~ | **Answered: both, split on document vs view state.** See 6.1.9. Settled while three widgets had chosen rather than a dozen, which is the whole reason it was the gate. |
 | Fixed-height rows only for the first virtualised pass? | 6.1.3 | Variable height is needed for wrapped code lines, so it is deferred rather than skipped. |
 | Does the code editor need multi-cursor? | 6.1.7 | Cheap to design for, expensive to retrofit. Worth an early yes/no. |
 
