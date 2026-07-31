@@ -2274,13 +2274,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
         final float width = textWidthOf(zoomLabel.getText(), chrome)
                 + textWidthOf(zoomResetButton.getText(), chrome) + chrome * 4f;
         final float height = chrome * 2f;
-        final float left = Math.max(textOriginX(), (getClientWidth() - width) / 2f);
+        // Centred on the CLIENT box, not on the code area. textOriginX moves with the gutter, which grows
+        // with the font -- so anchoring to it made the indicator slide sideways on the very gesture it is
+        // reporting.
+        final float left = Math.max(0f, (getClientWidth() - width) / 2f);
         // A BOTTOM inset, not a computed top. Every position here is derived from the PREVIOUS frame's
         // layout, which is fine for anything anchored to the top -- a height change does not move it. This
         // is anchored to the bottom, so a resize moved it by the full delta for one frame and then
         // corrected: the visible flick downwards and back. Taffy resolves a bottom inset against the
         // container's height at layout time, so there is no stale value to be wrong with.
-        final float bottom = horizontalBarThickness() + chrome * 0.6f;
+        //
+        // And a CONSTANT one. It used to add horizontalBarThickness(), which is zero or eight depending on
+        // whether the content currently overflows -- a term that TOGGLES on the very gesture this reports,
+        // since zooming changes how wide the text is. That is what made it flick on every zoom rather than
+        // only on a resize. Sized to clear the bar outright instead, so the answer never depends on
+        // whether the bar is there.
+        final float bottom = chrome * 1.6f;
 
         StyleGroup.defaultPipeline(zoomIndicator.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)

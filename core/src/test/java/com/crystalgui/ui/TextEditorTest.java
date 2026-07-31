@@ -3048,6 +3048,38 @@ public class TextEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>The indicator sits the same distance from the bottom whether or not a scrollbar is showing.</b>
+     *
+     * <p>The symptom was "it flickers every three zoom-ins", and the periodicity is the diagnosis: a jump
+     * that happens every few steps rather than every frame is a THRESHOLD being crossed, not a stale
+     * read. Zooming widens the text, and every few steps it crosses the viewport width and the horizontal
+     * bar appears or disappears — so a bottom inset that added {@code horizontalBarThickness()} moved by
+     * the bar's whole height on exactly the gesture it was reporting.</p>
+     */
+    @Test
+    public void theZoomIndicatorDoesNotMoveWhenTheScrollbarAppears() {
+        build("short");
+        showEditor();
+        editor.zoomBy(1);
+        showEditor();
+
+        UIElement indicator = childWithClass(TextEditor.ZOOM_INDICATOR_CLASS);
+        float gapNarrow = (editor.getRuntimeCache().getY() + editor.getRuntimeCache().getHeight())
+                - (indicator.getRuntimeCache().getY() + indicator.getRuntimeCache().getHeight());
+
+        // Long enough to overflow and bring the horizontal bar in.
+        editor.setText("x".repeat(4000));
+        showEditor();
+        editor.zoomBy(1);
+        showEditor();
+
+        float gapWide = (editor.getRuntimeCache().getY() + editor.getRuntimeCache().getHeight())
+                - (indicator.getRuntimeCache().getY() + indicator.getRuntimeCache().getHeight());
+
+        assertEquals("the bar coming and going must not move it", gapNarrow, gapWide, 1f);
+    }
+
+    /**
      * <b>Zooming keeps the line you were on.</b>
      *
      * <p>{@code scrollTop} is a PIXEL count, so leaving it alone across a font change silently
