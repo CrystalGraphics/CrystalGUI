@@ -29,6 +29,11 @@ import com.crystalgui.text.cursor.LineOperations;
 import com.crystalgui.text.cursor.MouseSelection;
 import com.crystalgui.text.cursor.MoveOperations;
 import com.crystalgui.text.cursor.TypeOperations;
+import com.crystalgui.text.wrap.LineBreaksComputer;
+import com.crystalgui.text.wrap.LineProjection;
+import com.crystalgui.text.wrap.MonospaceLineBreaks;
+import com.crystalgui.text.wrap.ProjectedLines;
+import com.crystalgui.text.wrap.WrapIndent;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
@@ -95,6 +100,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public final Signal.Action onWindowChanged = new Signal.Action();
 
     private final TextBuffer buffer;
+
+    /**
+     * Model rows projected onto visual rows.
+     *
+     * <p><b>Always present, even with soft wrap off</b>, in which case every projection is the trivial
+     * one and view line <i>n</i> is row <i>n</i>. There is deliberately no second code path: a
+     * wrapped/unwrapped branch through the painting, hit testing, caret and gutter code would be six
+     * places for the two to drift apart, and the unwrapped half is the one that is exercised constantly
+     * and so would stay right while the other rotted. VS Code's view model is unconditional for the same
+     * reason.</p>
+     */
+    private final ProjectedLines projections = new ProjectedLines(LineBreaksComputer.none());
+
+    private boolean softWrap = false;
+    private WrapIndent wrapIndent = WrapIndent.SAME;
+
+    /** The wrap width the current projection was built against, so a resize can be detected. */
+    private float projectedWrapWidth = -1f;
+
+    /** Rows before the edit in flight, so its line-count delta names the rows to reproject. */
+    private int previousLineCount = 1;
 
     private final Map<Integer, UIElement> realisedLines = new HashMap<>();
     private final Deque<UIElement> linePool = new ArrayDeque<>();
@@ -285,9 +311,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // Rebuilding on a line-count change was the remaining half of the flicker: pressing Enter
             // recycled every line, and recycling clears highlights that are only republished after the
             // frame's style pass.
+            reprojectAfterEdit(change);
             rebindRealisedLines();
             onChanged.emit(buffer.toString());
         });
+
+        previousLineCount = buffer.lineCount();
+        projections.rebuild(buffer.document());
 
         installInput();
     }
@@ -698,10 +728,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 moveVertically(visibleRowCount(), shift);
                 return true;
             case CgKeyCodes.KEY_HOME:
-                moveEach(head -> MoveOperations.smartHome(buffer.document(), head), shift);
+                // Wrapped, Home goes to the start of the VIEW line first -- the same rule smart home
+                // already follows within a row: the nearest useful stop, then the further one.
+                moveEach(head -> softWrap && !atViewLineStart(head)
+                        ? MoveOperations.viewLineStart(buffer.document(), projections, head)
+                        : MoveOperations.smartHome(buffer.document(), head), shift);
                 return true;
             case CgKeyCodes.KEY_END:
-                moveEach(head -> MoveOperations.lineEnd(buffer.document(), head), shift);
+                moveEach(head -> softWrap
+                        ? MoveOperations.viewLineEnd(buffer.document(), projections, head)
+                        : MoveOperations.lineEnd(buffer.document(), head), shift);
                 return true;
             case CgKeyCodes.KEY_ESCAPE:
                 // Only claims the key when there is something to collapse, so Escape still reaches a
@@ -805,7 +841,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * dragged inward by the shortest line passed through.</p>
      */
     private void moveVertically(int rows, boolean extend) {
-        var result = MoveOperations.vertical(buffer.document(), selections.all(), goalColumns, rows, extend);
+        // Wrapped, Up/Down move by VISUAL row -- otherwise a long paragraph is one keypress tall.
+        var result = softWrap
+                ? MoveOperations.verticalInView(buffer.document(), projections, selections.all(),
+                        goalColumns, rows, extend)
+                : MoveOperations.vertical(buffer.document(), selections.all(), goalColumns, rows, extend);
         selections.setAll(result.selections(), selections.primaryIndex());
         // Only keep the goals if nothing merged; otherwise the indices no longer line up.
         goalColumns = selections.count() == result.goalColumns().length ? result.goalColumns() : new int[0];
@@ -815,6 +855,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     private void clearGoalColumns() {
         if (goalColumns.length != 0) goalColumns = new int[0];
+    }
+
+    /** Whether a caret already sits at the start of its own view line — what makes Home a toggle. */
+    private boolean atViewLineStart(int head) {
+        return head == MoveOperations.viewLineStart(buffer.document(), projections, head);
     }
 
     private int visibleRowCount() {
@@ -951,7 +996,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     @Override
     public float getScrollHeight() {
-        return buffer.lineCount() * lineHeight() + horizontalBarThickness();
+        return viewLineCount() * lineHeight() + horizontalBarThickness();
     }
 
     /** Document offset nearest a point in this element's own space. */
@@ -960,17 +1005,38 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return offsetAtLocal(local.x() - getRuntimeCache().getX(), local.y() - getRuntimeCache().getY());
     }
 
-    /** The same, from coordinates already relative to this element's top-left. */
+    /**
+     * The same, from coordinates already relative to this element's top-left.
+     *
+     * <p>Resolves through the <b>view line</b>, so a click on a wrapped continuation lands in the middle
+     * of its row rather than at the row's start. The x search is still over the row's prefix widths —
+     * rebased by the view line's origin — for the reason {@link #xOfView} gives.</p>
+     */
     private int offsetAtLocal(float localX, float localY) {
         float relativeY = localY - textOriginY() + getScrollTop();
-        int row = Math.max(0, Math.min(buffer.lineCount() - 1, (int) (relativeY / lineHeight())));
+        int viewLine = Math.max(0, Math.min(viewLineCount() - 1, (int) (relativeY / lineHeight())));
 
-        float relativeX = localX + getScrollLeft() - textOriginX();
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        LineProjection projection = projectionAt(viewLine);
+        int row = model.row();
+
+        // The search runs only over this view line's own span, so a click past the end of a wrapped
+        // segment clamps to that segment's end rather than jumping to a same-x position further down the
+        // row -- which is what makes clicking in the blank area right of a wrap feel correct.
+        int fromColumn = projection.viewLineStart(model.viewLineInRow());
+        int toColumn = projection.viewLineEnd(model.viewLineInRow());
+
         RowMetrics metrics = rowMetrics(row);
         float[] widths = metrics.widths();
-        int best = 0;
+        float origin = widthOf(row, fromColumn);
+        float relativeX = localX + getScrollLeft() - textOriginX() - carriedIndentPx(viewLine) + origin;
+
+        int fromIndex = Math.max(0, Math.min(metrics.line().displayIndexOf(fromColumn), widths.length - 1));
+        int toIndex = Math.max(fromIndex, Math.min(metrics.line().displayIndexOf(toColumn), widths.length - 1));
+
+        int best = fromIndex;
         float bestDistance = Float.MAX_VALUE;
-        for (int i = 0; i < widths.length; i++) {
+        for (int i = fromIndex; i <= toIndex; i++) {
             float distance = Math.abs(widths[i] - relativeX);
             if (distance < bestDistance) {
                 bestDistance = distance;
@@ -1050,11 +1116,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * capture renders as plain text, which reads as the highlighter failing rather than the theme being
      * incomplete.</p>
      */
-    private void refreshHighlights(int firstRow, int lastRow) {
-        if (lastRow < firstRow || realisedLines.isEmpty()) return;
+    private void refreshHighlights(int firstViewLine, int lastViewLine) {
+        if (lastViewLine < firstViewLine || realisedLines.isEmpty()) return;
 
-        int from = buffer.document().lineStartOffset(Math.max(0, firstRow));
-        int to = buffer.document().lineEndOffset(Math.min(lastRow, buffer.lineCount() - 1));
+        int from = viewLineStartOffset(Math.max(0, firstViewLine));
+        int to = viewLineEndOffset(Math.max(0, Math.min(lastViewLine, viewLineCount() - 1)));
         if (!highlightsDirty && from == highlightedFrom && to == highlightedTo) return;
         highlightedFrom = from;
         highlightedTo = to;
@@ -1064,10 +1130,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 ? List.<SyntaxToken>of()
                 : tokenizer.tokenize(buffer.document(), from, to);
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
-            int row = entry.getKey();
-            if (row < 0 || row >= buffer.lineCount()) continue;
-            int lineStart = buffer.document().lineStartOffset(row);
-            int lineEnd = buffer.document().lineEndOffset(row);
+            int viewLine = entry.getKey();
+            if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            // Ranges are offsets into the UIText this line owns, and that text is one VIEW line -- so a
+            // wrapped row's second half must publish ranges relative to where IT starts. Using the row's
+            // start would push every colour on a continuation line left by the width of everything above
+            // it, which reads as the highlighter losing sync rather than as a coordinate bug.
+            int lineStart = viewLineStartOffset(viewLine);
+            int lineEnd = viewLineEndOffset(viewLine);
 
             Map<String, List<TextRange>> byName = new LinkedHashMap<>();
             addDocumentRanges(byName, "search", searchMatches, lineStart, lineEnd);
@@ -1726,12 +1796,135 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public TextEditor setTabSize(int size) {
         this.tabSize = Math.max(1, size);
         measuredRows.clear();
+        reproject();
         invalidateWindow();
         return this;
     }
 
     public int getTabSize() {
         return tabSize;
+    }
+
+    // ── Soft wrap ───────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Wraps long lines to the viewport instead of scrolling horizontally.
+     *
+     * <p><b>A view setting, not an edit.</b> The document is untouched — no newline is inserted, nothing
+     * is reflowed on disk, and {@link #getText()} returns the same string either way. That is the entire
+     * distinction between soft and hard wrap, and it is the same document-versus-view boundary the undo
+     * stack draws: toggling this is not undoable, because there is nothing to undo.</p>
+     */
+    public TextEditor setSoftWrap(boolean value) {
+        if (softWrap == value) return this;
+        this.softWrap = value;
+        // Horizontal scrolling is meaningless once nothing overflows, and leaving a stale offset behind
+        // would shift every line sideways with no bar left to bring them back.
+        if (value) setScrollLeft(0f);
+        reproject();
+        invalidateWindow();
+        return this;
+    }
+
+    public boolean isSoftWrap() {
+        return softWrap;
+    }
+
+    /** How much of a row's indentation its continuation lines carry. Default {@link WrapIndent#SAME}. */
+    public TextEditor setWrapIndent(WrapIndent indent) {
+        this.wrapIndent = indent == null ? WrapIndent.NONE : indent;
+        reproject();
+        invalidateWindow();
+        return this;
+    }
+
+    public WrapIndent getWrapIndent() {
+        return wrapIndent;
+    }
+
+    /** Visual rows — the same as the row count when wrap is off. */
+    public int viewLineCount() {
+        return Math.max(1, projections.viewLineCount());
+    }
+
+    /**
+     * The width, in columns, that lines wrap at.
+     *
+     * <p>Derived from the viewport and the <b>measured advance of a space</b> rather than assumed. The
+     * breaks computer is column-based (VS Code's, ported), and a column is only a pixel width once a font
+     * has resolved — before that {@code advance} is 0 and the division would be infinite, hence the
+     * floor.</p>
+     */
+    private int wrapColumns() {
+        float width = getClientWidth() - gutterWidth - verticalBarThickness();
+        float advance = spaceAdvance();
+        if (!(width > 0f) || !(advance > 0f)) return Integer.MAX_VALUE;
+        return Math.max(8, (int) (width / advance));
+    }
+
+    /** The advance of one space in the editor's measured font — the column unit. */
+    private float spaceAdvance() {
+        CgFontFamily family = resolveFamily();
+        if (family == null) return 0f;
+        float[] widths = caretOffsets(" ", family);
+        return widths.length > 1 ? widths[1] : 0f;
+    }
+
+    /**
+     * Rebuilds every projection.
+     *
+     * <p>O(rows), and unavoidable on a width change — a new wrap width invalidates every row at once, so
+     * there is no incremental answer. Per-edit reprojection goes through
+     * {@link ProjectedLines#rowsChanged} instead, which is why typing does not pay this.</p>
+     */
+    private void reproject() {
+        projectedWrapWidth = softWrap ? wrapColumns() : -1f;
+        projections.setComputer(
+                softWrap && projectedWrapWidth < Integer.MAX_VALUE
+                        ? new MonospaceLineBreaks((int) projectedWrapWidth, tabSize, wrapIndent)
+                        : LineBreaksComputer.none(),
+                buffer.document());
+    }
+
+    /** Reprojects only if the wrap width actually moved — called every frame, so it must be cheap. */
+    private void reprojectIfWidthChanged() {
+        if (!softWrap) return;
+        float wanted = wrapColumns();
+        if (Math.abs(wanted - projectedWrapWidth) >= 1f) reproject();
+    }
+
+    /**
+     * Reprojects the rows an edit touched, rather than the document.
+     *
+     * <p>Typing is one edit on one row, so reprojecting everything per keystroke would make it
+     * O(document) — the cost soft wrap is most often accused of. The row range is derived from the
+     * <em>line-count delta</em>: an edit that changed the count by {@code d} replaced one row with
+     * {@code 1 + d} of them, which covers Enter, a paste, and a multi-line delete alike.</p>
+     *
+     * <p>Multi-caret edits touch several disjoint rows and are not worth the bookkeeping, so they take the
+     * whole-document path. {@link ProjectedLines#rowsChanged} also reprojects wholesale whenever the row
+     * arithmetic disagrees with the document, so a wrong answer here is slow rather than incorrect.</p>
+     */
+    private void reprojectAfterEdit(ChangeSet change) {
+        int lineCount = buffer.lineCount();
+        int delta = lineCount - previousLineCount;
+        previousLineCount = lineCount;
+        // NO `if (!softWrap) return`. The projection is the source of truth for the view line count in
+        // BOTH states -- with wrap off it is simply the identity -- so skipping maintenance here leaves a
+        // stale index and the window stops growing when a line is added. Caught by an existing test, and
+        // it is the exact failure the "no second code path" note on the field warns about: the shortcut
+        // looks free precisely because the unwrapped case is the one that appears to need nothing.
+
+        List<Change> changes = change.changes();
+        if (changes.size() != 1) {
+            projections.rebuild(buffer.document());
+            return;
+        }
+        int at = Math.max(0, Math.min(change.mapPos(changes.get(0).from(), -1), buffer.length()));
+        int row = buffer.document().offsetToPoint(at).row();
+        int removed = delta >= 0 ? 1 : 1 - delta;
+        int added = delta >= 0 ? 1 + delta : 1;
+        projections.rowsChanged(buffer.document(), row, removed, added);
     }
 
     private CgFontFamily resolveFamily() {
@@ -1840,9 +2033,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private float textHeight = -1f;
 
     private void ensureCaretVisible() {
-        TextPoint point = buffer.offsetToPoint(getCaret());
         float height = lineHeight();
-        float top = point.row() * height;
+        float top = viewLineOf(getCaret(), LineProjection.Affinity.LEFT) * height;
         // IMMEDIATE, not the smooth scroll the sheet asks for. `scroll-behavior: smooth` is right for a
         // wheel or a scrollIntoView, and wrong for following a caret: the caret has already moved, so an
         // eased scroll means it is off screen for the length of the animation and every keystroke chases
@@ -1867,19 +2059,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Re-reads the text of every realised line without recycling it, so highlights survive the edit. */
     private void rebindRealisedLines() {
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
-            int row = entry.getKey();
-            if (row < 0 || row >= buffer.lineCount()) continue;
-            UIText label = textOf(entry.getValue());
-            String text = rowMetrics(row).line().display();
+            int viewLine = entry.getKey();
+            if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            UIElement line = entry.getValue();
+            UIText label = textOf(line);
             // setText already no-ops on an unchanged string, so an edit on one line costs one re-shape
             // rather than one per visible row.
-            label.setText(text);
+            label.setText(viewLineDisplayText(viewLine));
+            // The carried indent moves when the row's own indentation changes, and an edit that reflows
+            // this row can turn a continuation line into a first line or the reverse -- so the left inset
+            // is re-pushed here, not only at realise time.
+            final float left = textOriginX() + carriedIndentPx(viewLine);
+            StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(), l -> l.left(left));
         }
         markTreeDirty();
     }
 
     private void rebuildWindowForLineCountChange() {
-        lineCountAtLastWindow = buffer.lineCount();
+        lineCountAtLastWindow = viewLineCount();
         invalidateWindow();
     }
 
@@ -1929,7 +2126,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         window.registerTicker(this);
 
         float height = lineHeight();
-        int count = buffer.lineCount();
         // Before anything is placed: the gutter's width moves textOriginX, so a change here has to be
         // known before rows, carets and bands are positioned or they land a gutter-width out for a frame.
         float wantedGutter = measureGutter();
@@ -1938,6 +2134,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
             firstRealised = -1;
             lastRealised = -1;
         }
+        // The gutter's width feeds the wrap width, so this must follow it -- otherwise the first frame
+        // after the gutter grows a digit wraps against the old width and every line shifts next frame.
+        int beforeReproject = viewLineCount();
+        reprojectIfWidthChanged();
+        if (viewLineCount() != beforeReproject) {
+            firstRealised = -1;
+            lastRealised = -1;
+        }
+
+        int count = viewLineCount();
         int first = Math.max(0, (int) (getScrollTop() / height) - OVERSCAN);
         float viewport = viewportHeight();
         int last = viewport <= 0f
@@ -1952,8 +2158,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     iterator.remove();
                 }
             }
-            for (int row = first; row <= last; row++) {
-                if (!realisedLines.containsKey(row)) realisedLines.put(row, realiseLine(row));
+            for (int viewLine = first; viewLine <= last; viewLine++) {
+                if (!realisedLines.containsKey(viewLine)) {
+                    realisedLines.put(viewLine, realiseLine(viewLine));
+                }
             }
             firstRealised = first;
             lastRealised = last;
@@ -1995,7 +2203,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
     }
 
-    private UIElement realiseLine(int row) {
+    private UIElement realiseLine(int viewLine) {
         UIElement line = linePool.pollFirst();
         if (line == null) {
             line = new UIElement();
@@ -2004,19 +2212,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
             line.markAsInternal();
             line.addChild(new UIText(""));
         }
-        final float top = textOriginY() + row * lineHeight();
+        final float top = textOriginY() + viewLine * lineHeight();
+        final float left = textOriginX() + carriedIndentPx(viewLine);
         // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
         // a zero-width line lays its text out as though it had no extent -- which shaved the first
         // character off every row on screen. Wide enough for the text, and at least the viewport, so a
         // selection band on a short line still reads as a band and horizontal scrolling has something to
         // scroll.
-        float[] widths = rowMetrics(row).widths();
+        float[] widths = rowMetrics(modelAt(viewLine).row()).widths();
         final float width = Math.max(getClientWidth(), widths[widths.length - 1] + 1f);
         StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .top(top).left(textOriginX()).width(width).height(lineHeight()));
+                        .top(top).left(left).width(width).height(lineHeight()));
         // The DISPLAY text, with tabs expanded to their stops -- see RowMetrics.
-        ((UIText) line.getChildren().get(0)).setText(rowMetrics(row).line().display());
+        ((UIText) line.getChildren().get(0)).setText(viewLineDisplayText(viewLine));
         if (line.getParent() == null) addInternalChild(line);
         return line;
     }
@@ -2065,12 +2274,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * wider than that, so a centred caret buries the letter.</p>
      */
     private int placeCaret(Selection selection, int index) {
-        TextPoint point = buffer.offsetToPoint(selection.head());
         float height = lineHeight();
         final float ink = textHeight();
         final float caretWidth = Math.max(1f, getStyle().getGeneralGroup().caretWidth());
-        final float left = textOriginX() + widthOf(point.row(), point.column()) - caretWidth;
-        final float top = textOriginY() + point.row() * height + (height - ink) / 2f;
+        // LEFT affinity: a caret that arrived at a wrap point by moving forwards or by pressing End
+        // belongs at the end of the line it came from, not blinking at the start of the next one. This is
+        // the single most visible way a soft-wrap caret goes wrong, and the reason Affinity exists.
+        ProjectedLines.ViewPosition view = projections.toViewPosition(
+                buffer.document(), selection.head(), LineProjection.Affinity.LEFT);
+        final float left = textOriginX() + xOfView(view.viewLine(), view.column()) - caretWidth;
+        final float top = textOriginY() + view.viewLine() * height + (height - ink) / 2f;
 
         UIElement caret = caretAt(index);
         StyleGroup.importantPipeline(caret.getStyle().getLayoutGroup(),
@@ -2079,24 +2292,49 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return index + 1;
     }
 
-    /** Places the highlight bands for one selection, one per visible row it covers. */
-    private int placeBands(Selection selection, int firstRow, int lastRow, int index) {
+    /**
+     * Places the highlight bands for one selection, one per visible <b>view line</b> it covers.
+     *
+     * <p>A wrapped row needs a band per visual row, not one band per document row — a single band spanning
+     * a wrap would be a rectangle covering text that is not selected. Working in view space makes the
+     * wrapped and unwrapped cases the same code; the only thing that changes is how many bands a row
+     * produces.</p>
+     */
+    private int placeBands(Selection selection, int firstViewLine, int lastViewLine, int index) {
         if (selection.isEmpty()) return index;
         float height = lineHeight();
-        TextPoint start = buffer.offsetToPoint(selection.start());
-        TextPoint end = buffer.offsetToPoint(selection.end());
+        // The selection's own ends resolve with the affinity that keeps a zero-width band off the line
+        // below: a selection ending exactly at a wrap belongs to the line it visually ends on.
+        int startView = viewLineOf(selection.start(), LineProjection.Affinity.RIGHT);
+        int endView = viewLineOf(selection.end(), LineProjection.Affinity.LEFT);
 
-        for (int row = Math.max(firstRow, start.row()); row <= Math.min(lastRow, end.row()); row++) {
-            int lineLength = buffer.line(row).length();
-            int from = row == start.row() ? start.column() : 0;
-            int to = row == end.row() ? end.column() : lineLength;
-            float left = textOriginX() + widthOf(row, from);
+        for (int viewLine = Math.max(firstViewLine, startView);
+             viewLine <= Math.min(lastViewLine, endView); viewLine++) {
+            if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            int lineStart = viewLineStartOffset(viewLine);
+            int lineEnd = viewLineEndOffset(viewLine);
+            int from = Math.max(lineStart, selection.start());
+            int to = Math.min(lineEnd, selection.end());
+            if (to < from) continue;
+
+            LineProjection.ViewPosition fromView = projectionAt(viewLine)
+                    .toViewPosition(from - buffer.document().lineStartOffset(modelAt(viewLine).row()),
+                            LineProjection.Affinity.RIGHT);
+            LineProjection.ViewPosition toView = projectionAt(viewLine)
+                    .toViewPosition(to - buffer.document().lineStartOffset(modelAt(viewLine).row()),
+                            LineProjection.Affinity.LEFT);
+
+            float left = textOriginX() + xOfView(viewLine, fromView.column());
             // A selected line break shows as a sliver past the end of the text, which is how every editor
-            // signals "the newline is in the selection too".
-            float right = textOriginX() + widthOf(row, to) + (row < end.row() ? height * 0.4f : 0f);
+            // signals "the newline is in the selection too". A soft wrap is NOT a line break, so the
+            // sliver is only drawn where the selection genuinely continues onto another document row.
+            boolean continuesPastRow = selection.end() > lineEnd
+                    && modelAt(viewLine).viewLineInRow() == projectionAt(viewLine).viewLineCount() - 1;
+            float right = textOriginX() + xOfView(viewLine, toView.column())
+                    + (continuesPastRow ? height * 0.4f : 0f);
 
             final float bandInk = textHeight();
-            final float top = textOriginY() + row * height + (height - bandInk) / 2f;
+            final float top = textOriginY() + viewLine * height + (height - bandInk) / 2f;
             final float bandLeft = left;
             final float width = Math.max(1f, right - left);
             StyleGroup.defaultPipeline(bandAt(index++).getStyle().getLayoutGroup(),
@@ -2125,14 +2363,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         float height = lineHeight();
         int used = 0;
-        for (int row = Math.max(0, firstRow); row <= Math.min(lastRow, buffer.lineCount() - 1); row++) {
+        for (int viewLine = Math.max(0, firstRow); viewLine <= Math.min(lastRow, viewLineCount() - 1); viewLine++) {
+            // ONE NUMBER PER DOCUMENT ROW, on the row's first view line. Numbering every view line would
+            // report line counts the file does not have, and repeating the row's number down its
+            // continuations reads as the editor being stuck. Both are what a blank continuation avoids.
+            ProjectedLines.ModelPosition model = modelAt(viewLine);
+            if (model.viewLineInRow() != 0) continue;
+            int row = model.row();
             UIElement number = numberAt(used++);
             ((UIText) number.getChildren().get(0)).setText(String.valueOf(row + 1));
             StyleGroup.importantPipeline(number.getChildren().get(0).getStyle().getGeneralGroup(),
                     g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
                             .fontFamily(getStyle().getGeneralGroup().fontFamily()));
             // Scroll-exempt, so the offset has to be subtracted by hand -- see the field's note.
-            final float top = textOriginY() + row * height - getScrollTop();
+            final float top = textOriginY() + viewLine * height - getScrollTop();
             StyleGroup.defaultPipeline(number.getStyle().getLayoutGroup(),
                     l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                             .left(0f).top(top).width(width).height(height));
@@ -2172,12 +2416,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         float height = lineHeight();
         int row = buffer.offsetToPoint(getCaret()).row();
-        final float top = textOriginY() + row * height;
+        // THE WHOLE WRAPPED ROW, not the one view line the caret is on. The band answers "which line am I
+        // editing", and a line that wraps is still one line -- highlighting a third of it would make the
+        // band look like it had come unstuck from the caret whenever the caret moved along a long row.
+        final float top = textOriginY() + projections.firstViewLineOfRow(row) * height;
+        final float bandHeight = height * projections.projectionOf(row).viewLineCount();
         final float left = textOriginX();
         final float width = Math.max(1f, getClientWidth() - gutterWidth - verticalBarThickness());
         StyleGroup.defaultPipeline(currentLine.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(left).top(top).width(width).height(height));
+                        .left(left).top(top).width(width).height(bandHeight));
     }
 
     private UIElement numberAt(int index) {
@@ -2203,6 +2451,95 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int index = metrics.line().displayIndexOf(column);
         float[] widths = metrics.widths();
         return widths[Math.max(0, Math.min(index, widths.length - 1))];
+    }
+
+    // ── View space ──────────────────────────────────────────────────────────────────────────────
+    //
+    // Everything below converts between the document (rows, offsets) and what is on screen (view lines,
+    // x). With soft wrap off every one of these is an identity and costs a lookup; there is deliberately
+    // no fast path around them, because a second path is what lets the two disagree.
+
+    private ProjectedLines.ModelPosition modelAt(int viewLine) {
+        return projections.modelAt(viewLine);
+    }
+
+    private LineProjection projectionAt(int viewLine) {
+        return projections.projectionOf(modelAt(viewLine).row());
+    }
+
+    /** The document offset at which a view line's text begins. */
+    private int viewLineStartOffset(int viewLine) {
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        return buffer.document().lineStartOffset(model.row())
+                + projectionAt(viewLine).viewLineStart(model.viewLineInRow());
+    }
+
+    /** The document offset at which a view line's text ends, excluding any newline. */
+    private int viewLineEndOffset(int viewLine) {
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        return buffer.document().lineStartOffset(model.row())
+                + projectionAt(viewLine).viewLineEnd(model.viewLineInRow());
+    }
+
+    /** Which view line a document offset paints on. */
+    private int viewLineOf(int offset, LineProjection.Affinity affinity) {
+        return projections.toViewPosition(buffer.document(), offset, affinity).viewLine();
+    }
+
+    /**
+     * The pixel indent a continuation line carries.
+     *
+     * <p>Measured as the width of the row's own leading whitespace rather than multiplied out from a
+     * column count, so it lines up with the text above it in whatever font actually resolved. Columns are
+     * the right unit for <em>deciding</em> the break — they are what the ported computer works in — and
+     * the wrong unit for drawing it.</p>
+     */
+    private float carriedIndentPx(int viewLine) {
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        if (model.viewLineInRow() == 0) return 0f;
+        int columns = projectionAt(viewLine).wrappedIndent();
+        if (columns <= 0) return 0f;
+        String row = buffer.line(model.row());
+        int blank = 0;
+        while (blank < row.length() && (row.charAt(blank) == ' ' || row.charAt(blank) == '\t')) blank++;
+        return widthOf(model.row(), blank);
+    }
+
+    /**
+     * The x of a column on a view line, relative to {@code textOriginX()}.
+     *
+     * <p><b>Measured against the whole row, then rebased</b> — never against the view line's own text.
+     * A tab's stop depends on where it sits in the <em>row</em>, so measuring a continuation line on its
+     * own puts every tab after a wrap at the wrong stop. VS Code carries a parallel
+     * {@code breakOffsetsVisibleColumn} array to solve this; rebasing the row's prefix widths needs no
+     * extra state, and state that exists only to mirror another array is state that goes stale.</p>
+     */
+    private float xOfView(int viewLine, int column) {
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        LineProjection projection = projectionAt(viewLine);
+        int inRow = projection.toModelOffset(model.viewLineInRow(), column);
+        float origin = widthOf(model.row(), projection.viewLineStart(model.viewLineInRow()));
+        return widthOf(model.row(), inRow) - origin + carriedIndentPx(viewLine);
+    }
+
+    /**
+     * The text painted on a view line — a slice of the row's <b>already tab-expanded</b> display string.
+     *
+     * <p>Slicing the expanded string rather than expanding the slice is what keeps tab stops right after a
+     * wrap, for the same reason {@link #xOfView} rebases rather than remeasures.</p>
+     */
+    private String viewLineDisplayText(int viewLine) {
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        LineProjection projection = projectionAt(viewLine);
+        if (projection.isUnwrapped()) return rowMetrics(model.row()).line().display();
+
+        CursorColumns.Line line = rowMetrics(model.row()).line();
+        String display = line.display();
+        int from = line.displayIndexOf(projection.viewLineStart(model.viewLineInRow()));
+        int to = line.displayIndexOf(projection.viewLineEnd(model.viewLineInRow()));
+        from = Math.max(0, Math.min(from, display.length()));
+        to = Math.max(from, Math.min(to, display.length()));
+        return display.substring(from, to);
     }
 
     private UIElement caretAt(int index) {

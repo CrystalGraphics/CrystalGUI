@@ -5,6 +5,8 @@ import com.crystalgui.text.Selection;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.WordClassifier;
 import com.crystalgui.text.WordOperations;
+import com.crystalgui.text.wrap.LineProjection;
+import com.crystalgui.text.wrap.ProjectedLines;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -88,6 +90,67 @@ public final class MoveOperations {
             next[i] = goal;
         }
         return new Vertical(moved, next);
+    }
+
+    /**
+     * Up/Down through <b>visual</b> rows, for a soft-wrapped view.
+     *
+     * <p>The difference is not cosmetic. With wrap on, Down must reach the next line <em>on screen</em>;
+     * skipping to the next document row means a long paragraph is one keypress tall and the caret jumps
+     * a screenful, which is the behaviour every editor was judged on and none of them ships.</p>
+     *
+     * <p>The goal column becomes a <b>view</b> column, so a caret travelling down a wrapped paragraph
+     * holds its horizontal place the same way it does through unwrapped rows. Both halves fall out of
+     * doing the arithmetic in view space and converting once at each end.</p>
+     */
+    public static Vertical verticalInView(Rope document, ProjectedLines projections,
+                                          List<Selection> selections, int[] goals,
+                                          int rows, boolean extend) {
+        int[] previous = goals != null && goals.length == selections.size()
+                ? goals : filled(selections.size());
+        int lastViewLine = Math.max(0, projections.viewLineCount() - 1);
+
+        List<Selection> moved = new ArrayList<>(selections.size());
+        int[] next = new int[selections.size()];
+        for (int i = 0; i < selections.size(); i++) {
+            Selection selection = selections.get(i);
+            ProjectedLines.ViewPosition view = projections.toViewPosition(
+                    document, selection.head(), LineProjection.Affinity.LEFT);
+            int goal = previous[i] >= 0 ? previous[i] : view.column();
+            int target = Math.max(0, Math.min(lastViewLine, view.viewLine() + rows));
+
+            // Clamp to the target line's own extent: a short view line must not swallow the goal, or the
+            // caret slides to the start of the line below on the way past.
+            ProjectedLines.ModelPosition model = projections.modelAt(target);
+            LineProjection projection = projections.projectionOf(model.row());
+            int column = Math.max(projection.minColumn(model.viewLineInRow()),
+                    Math.min(goal, projection.maxColumn(model.viewLineInRow())));
+
+            int offset = projections.toDocumentOffset(document, target, column);
+            moved.add(extend ? selection.withHead(offset) : Selection.caret(offset));
+            next[i] = goal;
+        }
+        return new Vertical(moved, next);
+    }
+
+    /** The start of the caret's own view line — Home, when wrapped. */
+    public static int viewLineStart(Rope document, ProjectedLines projections, int head) {
+        ProjectedLines.ViewPosition view = projections.toViewPosition(
+                document, head, LineProjection.Affinity.RIGHT);
+        ProjectedLines.ModelPosition model = projections.modelAt(view.viewLine());
+        LineProjection projection = projections.projectionOf(model.row());
+        return projections.toDocumentOffset(document, view.viewLine(),
+                projection.minColumn(model.viewLineInRow()));
+    }
+
+    /** The end of the caret's own view line — End, when wrapped. */
+    public static int viewLineEnd(Rope document, ProjectedLines projections, int head) {
+        ProjectedLines.ViewPosition view = projections.toViewPosition(
+                document, head, LineProjection.Affinity.LEFT);
+        ProjectedLines.ModelPosition model = projections.modelAt(view.viewLine());
+        LineProjection projection = projections.projectionOf(model.row());
+        return projections.toDocumentOffset(document, view.viewLine(),
+                projection.maxColumn(model.viewLineInRow()));
     }
 
     private static int[] filled(int size) {
