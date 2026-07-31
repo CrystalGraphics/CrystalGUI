@@ -3251,6 +3251,78 @@ public class TextEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>The current-line band reaches across the gutter.</b>
+     *
+     * <p>It is two elements, not one wide one, and that is forced by the stacking: the gutter paints an
+     * opaque background above the text so a long line scrolled sideways passes behind the numbers — so a
+     * single band behind everything is covered in the gutter region, and one in front of everything hides
+     * the numbers. A band inside the gutter sits in the gutter's own context, beneath its digits and above
+     * its background, which is the only place it can be both.</p>
+     */
+    @Test
+    public void theCurrentLineBandCoversTheGutterToo() {
+        build("one" + NL + "    two" + NL + "three");
+        editor.setCaret(editor.getText().indexOf("two"));
+        showEditor();
+
+        java.util.List<UIElement> bands = allWithClass(TextEditor.CURRENT_LINE_CLASS);
+        int drawn = 0;
+        float leftmost = Float.MAX_VALUE;
+        float rightmost = 0f;
+        for (UIElement band : bands) {
+            if (band.getTaffyLayout().contentBoxHeight() <= 0f) continue;
+            drawn++;
+            leftmost = Math.min(leftmost, band.getRuntimeCache().getX());
+            rightmost = Math.max(rightmost,
+                    band.getRuntimeCache().getX() + band.getRuntimeCache().getWidth());
+        }
+
+        assertEquals("one band for the gutter, one for the code", 2, drawn);
+        assertEquals("and together they start at the editor's own edge",
+                editor.getRuntimeCache().getX(), leftmost, 1f);
+        assertTrue("and reach past the gutter into the text",
+                rightmost > editor.getRuntimeCache().getX() + editor.getGutterWidth());
+    }
+
+    /** Both halves go away together when there is a selection — two bands must not disagree. */
+    @Test
+    public void bothHalvesOfTheBandHideTogether() {
+        build("one" + NL + "    two" + NL + "three");
+        editor.setCaret(editor.getText().indexOf("two"));
+        showEditor();
+        assertEquals(2, countOf(TextEditor.CURRENT_LINE_CLASS));
+
+        editor.setSelection(0, 5);
+        showEditor();
+
+        assertEquals("a selection replaces the band, in both halves", 0,
+                countOf(TextEditor.CURRENT_LINE_CLASS));
+    }
+
+    /** And the gutter half tracks the scroll, since its parent is scroll-exempt. */
+    @Test
+    public void theGutterBandTracksTheScroll() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 200; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        editor.setCaret(editor.getText().indexOf("line 40"));
+        showEditor();
+
+        java.util.List<UIElement> before = allWithClass(TextEditor.CURRENT_LINE_CLASS);
+        float spread = Math.abs(before.get(0).getRuntimeCache().getY()
+                - before.get(1).getRuntimeCache().getY());
+        assertEquals("the two halves must sit on the same row", 0f, spread, 1f);
+
+        editor.setScrollImmediate(0f, 20f * editor.lineHeight());
+        showEditor();
+
+        java.util.List<UIElement> after = allWithClass(TextEditor.CURRENT_LINE_CLASS);
+        float spreadAfter = Math.abs(after.get(0).getRuntimeCache().getY()
+                - after.get(1).getRuntimeCache().getY());
+        assertEquals("and still after scrolling", 0f, spreadAfter, 1f);
+    }
+
+    /**
      * <b>Zooming keeps the line you were on.</b>
      *
      * <p>{@code scrollTop} is a PIXEL count, so leaving it alone across a font change silently
