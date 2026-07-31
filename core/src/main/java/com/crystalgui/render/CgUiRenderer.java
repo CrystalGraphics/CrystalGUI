@@ -1,6 +1,7 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.api.material.CgMaterial;
+import com.crystalgraphics.gl.render.CgCurveRenderer;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
 
 /**
@@ -30,27 +31,49 @@ import com.crystalgraphics.gl.render.CgQuadRenderer;
 public final class CgUiRenderer {
 
     private final CgQuadRenderer renderer;
+    private final CgCurveRenderer curveRenderer;
     private final CgUiPaintContext ctx;
 
     CgUiRenderer(CgUiPaintContext ctx) {
         this.renderer = CgQuadRenderer.create();
+        this.curveRenderer = CgCurveRenderer.create();
         this.ctx = ctx;
     }
 
     void begin() {
         renderer.begin();
+        curveRenderer.begin();
     }
 
     void end() {
         renderer.end();
+        curveRenderer.end();
     }
 
     /**
-     * Flushes the queued instances — this is the only point at which anything is uploaded or drawn.
-     * {@code submit()} alone never touches the GPU.
+     * Flushes whatever is queued on either path — the only point at which anything is uploaded or
+     * drawn. {@code submit()} alone never touches the GPU.
+     *
+     * <p>Flushing both is safe in either order because <b>at most one path ever holds pending work</b>:
+     * {@link CgUiPaintContext} flushes the outgoing path when it switches between quads and curves,
+     * which it must do anyway to swap the bound material. An empty flush is a cheap early return.</p>
      */
     public void flush() {
         renderer.flush();
+        curveRenderer.flush();
+    }
+
+    /**
+     * Flushes only the quad path. Called by {@link CgUiPaintContext} when switching to curves —
+     * the quads must reach the GPU while <em>their</em> material is still bound.
+     */
+    void flushQuads() {
+        renderer.flush();
+    }
+
+    /** Flushes only the curve path, for the same reason in the other direction. */
+    void flushCurves() {
+        curveRenderer.flush();
     }
 
     /**
@@ -63,6 +86,18 @@ public final class CgUiRenderer {
      */
     public void useMaterial(CgMaterial material) {
         renderer.useMaterial(material);
+    }
+
+    /**
+     * The curve-path equivalent of {@link #useMaterial(CgMaterial)}.
+     *
+     * <p>Separate because {@link CgCurveRenderer} has its own instance buffer and its own
+     * bind/unbind bookkeeping — a curve material and a quad material are never interchangeable, and
+     * a single {@code useMaterial} taking both would silently let a caller submit quads against
+     * {@code gui_curve.shader}, which declares no {@code QUAD_DATA} and would draw nothing.</p>
+     */
+    public void useCurveMaterial(CgMaterial material) {
+        curveRenderer.useMaterial(material);
     }
 
     /**
@@ -102,6 +137,32 @@ public final class CgUiRenderer {
     }
 
     /**
+     * Starts a Bézier stroke, <b>with this context's pose already applied</b> — the curve-path twin
+     * of {@link #quad()}, and the single place the {@code PoseStack} is bound to a curve.
+     *
+     * <p>Same reasoning throughout: {@code CgCurveRenderer.curve()} resets its scratch instance
+     * (clearing {@code pose} back to {@code null}), so the pose is re-applied on every call rather
+     * than being sticky, and callers keep passing plain logical-space coordinates.</p>
+     *
+     * <p><b>Stroke widths follow the pose's scale.</b> {@code CgCurveRenderer.Curve#submit} bakes the
+     * pose into the control points and scales {@code width}/{@code feather} by its uniform scale, so
+     * a width passed here is in the same logical units as the coordinates — a 2px stroke stays 2
+     * logical px at any {@code uiScale}, exactly as a 2px border does. That is the behaviour a caller
+     * expects and the reason widths are not passed pre-scaled.</p>
+     *
+     * <p>Positions are written unrounded, for the identical reason spelled out on {@link #quad()} —
+     * and more so here, since a curve's antialiased edge is derived from a continuous distance field
+     * and snapping its control points would quantise the whole stroke, not just its extremities.</p>
+     *
+     * <p>CPU-side only — {@code submit()} queues, {@link #flush()} draws.</p>
+     */
+    public CgCurveRenderer.Curve curve() {
+        if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit curves outside beginFrame()/endFrame()");
+
+        return curveRenderer.curve().pose(ctx.getPoseStack().last().pose());
+    }
+
+    /**
      * Releases what this renderer owns.
      *
      * <p>Called by {@link CgUiPaintContext#destroy()}. {@link CgQuadRenderer#delete()} only unbinds
@@ -110,5 +171,6 @@ public final class CgUiRenderer {
      */
     void delete() {
         renderer.delete();
+        curveRenderer.delete();
     }
 }

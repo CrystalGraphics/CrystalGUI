@@ -53,7 +53,7 @@ public class ListViewTest extends UiTestBase {
             @Override
             public void bind(String item, int index, UIElement template) {
                 bindCalls++;
-                template.setId("row-" + index);
+                template.setId(item);
             }
         });
 
@@ -174,6 +174,49 @@ public class ListViewTest extends UiTestBase {
         settle();
 
         assertEquals(heightBefore + 10f, list.getScrollHeight(), 0.01f);
+    }
+
+    /**
+     * <b>A model change must re-bind the rows on screen, not merely resize the scroll range.</b>
+     *
+     * <p>The bug this exists for: {@code updateWindow} only realises an index it is not already holding,
+     * so resetting the range markers left every visible row still showing whatever it was last bound to.
+     * The model changed underneath and the screen did not move.</p>
+     *
+     * <p>It survived because the original test asserted {@code getScrollHeight()} — which reads the model
+     * directly and was therefore always right. Asserting the model proves nothing about the display; this
+     * asserts what a row actually says.</p>
+     */
+    @Test
+    public void aModelChangeReBindsTheVisibleRows() {
+        build(20);
+        assertEquals("item 0", boundTextOf(0));
+
+        model.set(0, "CHANGED");
+        settle();
+
+        assertEquals("the row on screen shows the new value", "CHANGED", boundTextOf(0));
+    }
+
+    /** Inserting at the top shifts every following row's content by one — the case an index-keyed
+     * realised map gets wrong most visibly. */
+    @Test
+    public void insertingAtTheTopReBindsEverythingBelow() {
+        build(20);
+        assertEquals("item 0", boundTextOf(0));
+
+        model.add(0, "NEW FIRST");
+        settle();
+
+        assertEquals("NEW FIRST", boundTextOf(0));
+        assertEquals("what used to be row 0 is now row 1", "item 0", boundTextOf(1));
+    }
+
+    /** What the renderer last wrote into the row at {@code index} — the display, not the model. */
+    private String boundTextOf(int index) {
+        UIElement row = list.realisedRows().get(index);
+        assertNotNull("row " + index + " is not realised", row);
+        return row.getId();
     }
 
     @Test

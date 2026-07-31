@@ -13,6 +13,7 @@ import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgraphics.gl.render.CgCurveRenderer;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
@@ -95,6 +96,14 @@ public final class CgUiPaintContext {
     private final CgMaterial boxModelMaterial;
 
     /**
+     * Shared material for every Bézier stroke — {@code gui_curve.shader}, the curve twin of
+     * {@code gui_quad.shader}. Distinct from CrystalGraphics' own {@code curve.shader} because the UI
+     * needs {@code DepthTest ALWAYS} and a {@code _LayerOpacity} property, neither of which belongs
+     * in the backend's reference material.
+     */
+    private final CgMaterial curveMaterial;
+
+    /**
      * Dedicated material for {@link #blitLayer}, distinct from {@link #boxModelMaterial}.
      * A visual-layer FBO is always cleared fully transparent before anything paints into it, so
      * at every partially-covered pixel its stored color ends up premultiplied by its own alpha —
@@ -168,6 +177,25 @@ public final class CgUiPaintContext {
     private CgMaterial currentMaterial;
 
     /**
+     * Which of the two instanced paths is currently bound. Quads and curves have separate instance
+     * buffers and separate materials, and GL has exactly one program bound at a time, so they cannot
+     * both be live.
+     *
+     * <p><b>The switch has to flush, and that is a correctness requirement rather than a tidiness
+     * one.</b> The UI paints in painter's order: whatever is submitted later must land on top.
+     * Letting queued quads survive a switch to curves would draw them after the curves regardless of
+     * submission order, so a stroke under a panel would jump on top of it — and only when the two
+     * happened to batch together, which makes it look like a z-order bug in the widget rather than a
+     * batching bug here.</p>
+     *
+     * <p>Because every switch flushes the outgoing path, <b>at most one path ever holds pending
+     * work</b>, which is what makes {@link CgUiRenderer#flush()} safe to run over both in any order.</p>
+     */
+    private enum InstancePath { QUAD, CURVE }
+
+    private InstancePath activePath = InstancePath.QUAD;
+
+    /**
      * Current layer-compositing opacity (distinct from {@link #color}'s tint — see
      * {@code gui_quad.shader}'s doc comment). Every UI-facing material declares a
      * {@code _LayerOpacity} property; {@link #withMaterial} keeps whichever material is
@@ -186,11 +214,12 @@ public final class CgUiPaintContext {
         this.poseStack = new PoseStack();
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
+        this.curveMaterial = CgMaterial.load("crystalgui:shaders/gui_curve.shader");
         this.layerBlitMaterial = CgMaterial.load("crystalgui:shaders/gui_layer_blit.shader");
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
         this.textRenderer = CgTextRenderer.createManualSized().poseStack(this.poseStack)
                                           .restoreStateWith(() -> {
-                renderer.useMaterial(boxModelMaterial);
+                bindQuadPath(boxModelMaterial);
                 currentTexture = null;
             });
     }
@@ -260,7 +289,7 @@ public final class CgUiPaintContext {
 
         poseStack.pushPose();
         renderer.begin();
-        renderer.useMaterial(boxModelMaterial);
+        bindQuadPath(boxModelMaterial);
         currentMaterial = boxModelMaterial;
         currentTexture = null;
         scissorStack.reset();
@@ -300,6 +329,15 @@ public final class CgUiPaintContext {
         // No explicit unbind: CgQuadRenderer owns bind/unbind (see CgUiRenderer#useMaterial), and the
         // PROGRAM slot saved by beginFrame's CgGlScope restores whatever program was bound before the
         // UI painted anyway — which is the restoration that actually matters to the 3D pipeline.
+        // Flush BEFORE end(): both renderers' flush() early-returns once begun is false, so anything
+        // still queued at this point would be dropped without a word. Nothing hit that while every
+        // draw path flushed eagerly (fillRect/drawImage both do), but ctx.quad()/ctx.curve() are
+        // public and explicitly documented as "submit() queues, flush() draws" — so a caller batching
+        // a few strokes and letting the frame end is using the API exactly as described. Drawing them
+        // is the only defensible reading; the pose stack is still intact here and flush() reads none
+        // of it anyway, since the pose was baked at submit() time.
+        renderer.flush();
+
         currentMaterial = null;
         currentTexture = null;
         frameActive = false;
@@ -403,7 +441,81 @@ public final class CgUiPaintContext {
      * white, so a solid fill needs neither.</p>
      */
     public CgQuadRenderer.Quad quad() {
+        beginQuadPath();
         return renderer.quad();
+    }
+
+    /**
+     * Starts a Bézier stroke, with this context's pose already applied — the curve counterpart to
+     * {@link #quad()}, and identical in every convention that matters.
+     *
+     * <pre>{@code
+     * ctx.curve().line(x0, y0, x1, y1).width(2f).color(argb).submit();
+     * ctx.curve().from(x0, y0).via(cx, cy).to(x1, y1).width(4f, 1f).colors(a, b).submit();
+     * ctx.flush();   // submit() only queues — this is what draws
+     * }</pre>
+     *
+     * <p>Widths and coordinates are both in logical units: the pose's scale is applied to the stroke
+     * width as well as the geometry, so a 2px stroke stays 2 logical px at any {@code uiScale},
+     * exactly as a 2px border does.</p>
+     *
+     * <p><b>Never call {@code .pose(...)} on the result</b> — {@link CgUiRenderer#curve()} has already
+     * applied it, and overwriting it silently drops {@code uiScale} and the element transform. Same
+     * rule, same reason, as {@link #quad()}.</p>
+     *
+     * <p>The returned object is {@code CgCurveRenderer}'s shared per-renderer scratch instance, so
+     * build it and {@code submit()} in one expression rather than holding it — the next
+     * {@code curve()} call resets and reuses it. Use {@code retainedCurve()} on the renderer for
+     * something held across frames.</p>
+     *
+     * <p>Calling this switches the bound material to {@code gui_curve.shader}, flushing any queued
+     * quads first so painter's order is preserved; the next {@link #quad()} switches back. Alternating
+     * the two per element therefore costs a draw call each way — batch strokes together where it is
+     * convenient, but correctness never depends on doing so.</p>
+     */
+    public CgCurveRenderer.Curve curve() {
+        beginCurvePath();
+        return renderer.curve();
+    }
+
+    /**
+     * Makes the quad path current, flushing and unbinding the curve path if it was.
+     *
+     * <p>Rebinds {@link #currentMaterial} rather than {@link #boxModelMaterial}: a {@link
+     * #withMaterial} body that draws a curve and then a quad must come back to <em>its own</em>
+     * material, not to the default one, or the rest of that body silently renders with the wrong
+     * shader.</p>
+     */
+    private void beginQuadPath() {
+        if (activePath == InstancePath.QUAD) return;
+        renderer.flushCurves();
+        // bindQuadPath sets activePath itself — the one place it is assigned for this path.
+        bindQuadPath(currentMaterial != null ? currentMaterial : boxModelMaterial);
+        currentTexture = null;
+    }
+
+    /** Makes the curve path current, flushing and unbinding the quad path if it was. */
+    private void beginCurvePath() {
+        if (activePath == InstancePath.CURVE) return;
+        renderer.flushQuads();
+        activePath = InstancePath.CURVE;
+        // Layer opacity is a material property, so it has to be re-applied on the material actually
+        // being bound — the value living on boxModelMaterial says nothing about this one.
+        curveMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+        renderer.useCurveMaterial(curveMaterial);
+        currentTexture = null;
+    }
+
+    /**
+     * Binds a quad-path material and records that the quad path is now current.
+     *
+     * <p>Every quad-material bind in this class goes through here so {@link #activePath} cannot drift
+     * out of step with what GL actually has bound — the failure that would produce is a draw against
+     * the wrong shader, which renders something rather than failing.</p>
+     */
+    private void bindQuadPath(CgMaterial material) {
+        renderer.useMaterial(material);
+        activePath = InstancePath.QUAD;
     }
 
     /**
@@ -506,15 +618,15 @@ public final class CgUiPaintContext {
         // it the draw would run with whatever was dirty from the *previous* use of this material:
         // invisible for a static drawable repeating identical values, badly wrong for two instances
         // alternating every frame, which is exactly the cross-fade bug this ordering was written to fix.
-        renderer.useMaterial(material);
+        bindQuadPath(material);
         drawBody.run();
-        renderer.useMaterial(material);
+        bindQuadPath(material);
         flush();
 
         // Properties before the bind here, so the restored box-model material uploads the current
         // layer opacity on this bind rather than trailing a frame behind.
         boxModelMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
-        renderer.useMaterial(boxModelMaterial);
+        bindQuadPath(boxModelMaterial);
         currentMaterial = boxModelMaterial;
         currentTexture = null;
     }
@@ -540,12 +652,12 @@ public final class CgUiPaintContext {
         // effect on whatever it wraps.
         layerOpacity = previous * opacity;
         currentMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
-        renderer.useMaterial(currentMaterial);
+        bindQuadPath(currentMaterial);
         drawBody.run();
         flush();
         layerOpacity = previous;
         currentMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
-        renderer.useMaterial(currentMaterial);
+        bindQuadPath(currentMaterial);
     }
 
     // ── Visual layers ────────────────────────────────────────────────────────

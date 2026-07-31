@@ -224,10 +224,20 @@ public class ListView<T> extends ScrollerView {
 
     // ── The window ──────────────────────────────────────────────────────────
 
-    /** Rebuilds on the next settled layout. Cheap enough to call on every model change. */
+    /**
+     * Rebuilds on the next settled layout, <b>re-binding every realised row</b>.
+     *
+     * <p>Resetting the range markers alone is not enough, and the failure is nasty: {@link #updateWindow()}
+     * only calls {@code realise} for an index it is not already holding, so rows already in the map keep
+     * whatever they were last bound to. The model changes underneath and the screen does not move.</p>
+     *
+     * <p>That is exactly how a tree came out looking broken — expanding a node re-flattened the model
+     * correctly, the row count changed, keyboard navigation acted on the new rows, and the display kept
+     * showing the old ones. The elements are recycled rather than destroyed, so the cost is a re-bind of a
+     * dozen rows, which is what a model change means anyway.</p>
+     */
     private void invalidateWindow() {
-        firstRealised = -1;
-        lastRealised = -1;
+        recycleAll();
         markTreeDirty();
     }
 
@@ -468,7 +478,7 @@ public class ListView<T> extends ScrollerView {
      *
      * @return true if the key was ours, so the caller can stop it propagating
      */
-    private boolean handleNavigationKey(KeyboardEvent.Down event) {
+    protected boolean handleNavigationKey(KeyboardEvent.Down event) {
         int count = model.size();
         int current = focusedIndex < 0 ? 0 : focusedIndex;
         int page = Math.max(1, (int) (getClientHeight() / Math.max(1f, sizeStrategy.sizeOf(current))) - 1);
@@ -524,8 +534,12 @@ public class ListView<T> extends ScrollerView {
      * the user's and leaves the selection alone. */
     private boolean suppressFocusSelection;
 
-    /** Moves the focused index, scrolls it into view, and updates the selection unless Ctrl says not to. */
-    private void moveFocusTo(int index, boolean extend, boolean focusOnly) {
+    /** Moves the focused index, scrolls it into view, and updates the selection unless Ctrl says not to.
+     *
+     * <p>Protected because {@code TreeView} moves focus for Left/Right too — to a parent or a first child
+     * — and must do it through the same path, or those two keys would skip the scroll and the
+     * selection-follows-focus rule that every other key obeys.</p> */
+    protected void moveFocusTo(int index, boolean extend, boolean focusOnly) {
         suppressFocusSelection = true;
         try {
             setFocusedIndex(index);

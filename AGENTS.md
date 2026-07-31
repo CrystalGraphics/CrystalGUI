@@ -732,7 +732,21 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIWindow`. Eve
 | Group | Methods |
 |---|---|
 | Frame | `beginFrame(w,h)` / `endFrame()` — save/restore GL via `CgGlScope`, ortho projection, bind `crystalgui:shaders/gui_quad.shader`, reset `ScissorStack` |
-| Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
+| Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
+
+> **`curve()` is `quad()`'s twin, and switching between them flushes.** Bézier strokes go through
+> `CgCurveRenderer` with their own instance buffer and their own material (`gui_curve.shader`), and GL
+> binds one program at a time — so the two cannot both be live. Every switch flushes the outgoing path,
+> which is a **painter's-order requirement, not tidiness**: letting queued quads survive a switch would
+> draw them after the curves regardless of submission order, so a stroke under a panel would jump on top
+> — and only when the two happened to batch together, which reads as a z-order bug in the widget rather
+> than a batching bug in the context. Because every switch flushes, at most one path ever holds pending
+> work, which is what makes `CgUiRenderer.flush()` safe to run over both in any order. Alternating them
+> per element costs a draw call each way; correctness never depends on batching.
+>
+> `curve()` applies the `PoseStack` exactly as `quad()` does — **never call `.pose(...)` on the result** —
+> and stroke widths are scaled by the pose too, so a 2px stroke stays 2 *logical* px at any `uiScale`,
+> the same as a 2px border.
 
 > `quad()` returns `CgQuadRenderer.Quad` — `ctx.quad().at(x,y).size(w,h).uv(...).color(argb).submit()`,
 > then `flush()` to draw (`submit()` only queues). **Never call `.pose(...)` on it**: `CgUiRenderer.quad()`
@@ -760,13 +774,16 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIWindow`. Eve
 
 ## Supporting classes
 
-- **`CgUiRenderer`** — thin wrapper over CrystalGraphics' `CgQuadRenderer`: instanced unit quads whose
-  per-instance record (`origin` + `right`/`up` edge vectors, UVs, colour) lives in a class-wide
-  SSBO/TBO. The `PoseStack` matrix is baked in at `submit()` time by `Quad.pose(...)` — three
-  transforms per quad rather than four corners, and affine-correct under `transform:`. **Material
-  bind/unbind is owned by `CgQuadRenderer.useMaterial()`**, which must be called before any `submit()`
-  and again every frame; never call `material.bind()` yourself. Text goes through the same renderer
-  (CrystalGraphics' `CgTextRenderer` owns its own `CgQuadRenderer` instance).
+- **`CgUiRenderer`** — thin wrapper over CrystalGraphics' `CgQuadRenderer` **and `CgCurveRenderer`**:
+  instanced unit quads whose per-instance record (`origin` + `right`/`up` edge vectors, UVs, colour)
+  lives in a class-wide SSBO/TBO. The `PoseStack` matrix is baked in at `submit()` time by
+  `Quad.pose(...)` — three transforms per quad rather than four corners, and affine-correct under
+  `transform:`. **Material bind/unbind is owned by `CgQuadRenderer.useMaterial()`**, which must be
+  called before any `submit()` and again every frame; never call `material.bind()` yourself. Text goes
+  through the same renderer (CrystalGraphics' `CgTextRenderer` owns its own `CgQuadRenderer` instance).
+  The curve half mirrors all of it — `curve()` applies the pose, `useCurveMaterial()` binds, and
+  `flushQuads()`/`flushCurves()` exist so `CgUiPaintContext` can flush one path without the other when
+  it switches between them.
 - **`ScissorStack`** — allocation-free nested clip stack (`int[64]`, 16 levels × 4 ints), applied via
   CrystalGraphics' `CgGL` facade. **No LWJGL imports** — the old "V3.x legacy, raw GL11, scheduled for
   deletion" note is obsolete.
@@ -1150,6 +1167,19 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `shaders/gui_quad.shader` | Default material bound by `beginFrame`. |
 | `shaders/gui_rounded_rect.shader` | SDF rounded rects. |
 | `shaders/gui_layer_blit.shader` | Visual-layer FBO composite. |
+| `shaders/gui_curve.shader` | Bézier strokes, via `ctx.curve()`. Declares `#pragma cg_use curve`, not `quad`. |
+
+> **`gui_curve.shader` holds no stroke maths** — it `#include`s `crystalgraphics:shaders/lib/stroke.glsl`,
+> which is shared verbatim with the engine's own `curve.shader`. The two materials differ in exactly
+> three things: `DepthTest ALWAYS` (UI paints in painter's order over whatever the world left in the
+> depth buffer — `LEQUAL` is right for a 3D stroke and wrong here), the `_LayerOpacity` property, and the
+> one line that multiplies it in. **A Pass's `RenderState` is fixed at author time and cannot vary per
+> keyword variant**, which is why this cannot collapse into one material with a `#pragma cg_feature` —
+> the same constraint `text.shader` documents about its own depth state.
+>
+> It was briefly a full copy of the fragment body, which is worth recording because the cap logic in
+> there was wrong three separate times: two copies means the fourth fix lands in one file and the other
+> keeps the bug, silently, while still rendering something plausible.
 
 > **All three declare `#pragma cg_use quad`, and any new CrystalGUI shader must too.** Everything
 > here draws through `CgQuadRenderer`, whose per-instance buffer supplies `CG_QUAD_WORLD_POS` /
