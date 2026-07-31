@@ -72,9 +72,20 @@ public class NodePort extends UIElement {
      */
     private int connectionCount;
 
+    /**
+     * The document's {@code PortSpec.portId} for this port — what an {@code EdgeData} points at.
+     *
+     * <p>Distinct from {@link #getName()}, which is the <em>drawn</em> label and carries the arity
+     * ({@code "Out(3)"}). An edge that referenced the label would break the moment a type's arity
+     * changed, or a theme decided to render the name differently.</p>
+     */
+    @Getter
+    private final String portId;
+
     public NodePort(PortDirection direction, PortType type, String name) {
         this.direction = direction;
         this.type = type;
+        this.portId = name;
 
         addClass(direction.isInput() ? INPUT_CLASS : OUTPUT_CLASS);
         // The type's CSS hook. This is what makes the palette a stylesheet's business — including the

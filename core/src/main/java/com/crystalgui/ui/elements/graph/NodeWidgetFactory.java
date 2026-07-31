@@ -47,7 +47,12 @@ public interface NodeWidgetFactory {
      * one piece of information that tells a user which plugin they are missing.</p>
      */
     static GraphNode placeholder(@Nullable NodeType type, NodeData data, PortTypeRegistryLookup types) {
-        GraphNode node = new GraphNode(type != null ? type.label() : data.typeId());
+        // A node authored as a widget has no library type to take a label from, so it stores its own —
+        // see GraphView.dataFor. Without this it would reload titled "crystalgui:widget", which is true
+        // and useless.
+        String stored = data.properties().get(TITLE_PROPERTY);
+        String label = type != null ? type.label() : stored != null ? stored : data.typeId();
+        GraphNode node = new GraphNode(label);
         if (type == null) node.addClass(UNKNOWN_TYPE_CLASS);
         for (PortSpec spec : data.ports()) {
             PortType portType = types.lookup(spec.typeId());
@@ -58,6 +63,10 @@ public interface NodeWidgetFactory {
 
     /** On a node whose type is not registered, so a theme can mark it as missing rather than broken. */
     String UNKNOWN_TYPE_CLASS = "__unknown-type__";
+
+    /** Property key under which a widget-authored node keeps its own title, since it has no library
+     * type to take one from. */
+    String TITLE_PROPERTY = "title";
 
     /**
      * Resolves a document's {@code typeId} string to a {@link PortType}, which is what a port needs in
@@ -116,8 +125,16 @@ public interface NodeWidgetFactory {
             PortTypeRegistryLookup lookup = types;
             return (type, data) -> {
                 Function<NodeData, GraphNode> builder = registered.get(data.typeId());
-                if (builder != null) return builder.apply(data);
-                return placeholder(type != null ? type : library.get(data.typeId()), data, lookup);
+                GraphNode node = builder != null
+                        ? builder.apply(data)
+                        : placeholder(type != null ? type : library.get(data.typeId()), data, lookup);
+                // Bound HERE, not at the call sites. A registered builder is a consumer's lambda and
+                // usually ignores the data entirely (it just builds its widget), so leaving this to the
+                // builder means every one of them has to remember — and the ones that forget produce a
+                // node the document files under "authored as a widget", which then reloads as a
+                // placeholder titled by that pseudo-type. The gallery hit exactly that.
+                node.bindToDocument(data.id(), data.typeId());
+                return node;
             };
         }
     }
