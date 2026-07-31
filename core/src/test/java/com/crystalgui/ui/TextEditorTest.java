@@ -3020,6 +3020,34 @@ public class TextEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>Resizing must not move the zoom indicator.</b>
+     *
+     * <p>It is anchored to the BOTTOM of the editor, and every position in {@code updateWindow} is derived
+     * from the previous frame's layout. That is harmless for anything anchored to the top — a height
+     * change does not move it — but a computed {@code top} against a stale {@code clientHeight} moved this
+     * by the full resize delta for one frame and then corrected, which read as a flick downwards and
+     * back. A {@code bottom} inset is resolved by Taffy at layout time, so there is no stale value.</p>
+     */
+    @Test
+    public void resizingDoesNotMoveTheZoomIndicator() {
+        build("x");
+        showEditor();
+        editor.zoomBy(1);
+        showEditor();
+
+        UIElement indicator = childWithClass(TextEditor.ZOOM_INDICATOR_CLASS);
+        float gapBefore = (editor.getRuntimeCache().getY() + editor.getRuntimeCache().getHeight())
+                - (indicator.getRuntimeCache().getY() + indicator.getRuntimeCache().getHeight());
+
+        editor.layout(l -> l.height(220));
+        showEditor();
+
+        float gapAfter = (editor.getRuntimeCache().getY() + editor.getRuntimeCache().getHeight())
+                - (indicator.getRuntimeCache().getY() + indicator.getRuntimeCache().getHeight());
+        assertEquals("it must stay the same distance from the bottom edge", gapBefore, gapAfter, 1f);
+    }
+
+    /**
      * <b>Zooming keeps the line you were on.</b>
      *
      * <p>{@code scrollTop} is a PIXEL count, so leaving it alone across a font change silently
