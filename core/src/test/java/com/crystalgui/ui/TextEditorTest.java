@@ -3199,6 +3199,57 @@ public class TextEditorTest extends UiTestBase {
         }
     }
 
+    /** Names published under {@code ::highlight(...)} by the line holding {@code offset}. */
+    private java.util.Set<String> highlightNamesAt(int offset) {
+        int row = 0;
+        String text = editor.getText();
+        for (int i = 0; i < offset && i < text.length(); i++) {
+            if (text.charAt(i) == '\n') row++;
+        }
+        int wanted = row;
+        int seen = 0;
+        for (UIElement line : linesOf()) {
+            if (seen++ != wanted) continue;
+            return ((UIText) line.getChildren().get(0)).highlights().names();
+        }
+        return java.util.Set.of();
+    }
+
+    /**
+     * <b>The caret matches a bracket from either side of it.</b>
+     *
+     * <p>What every editor does, and what makes the feature usable: after typing an opening brace the
+     * caret is <em>past</em> it, so a match that only fired when the caret sat directly on the character
+     * would never fire at the moment you most want it.</p>
+     */
+    @Test
+    public void aBracketMatchesFromEitherSideOfTheCaret() {
+        build("class A {" + NL + "    x();" + NL + "}");
+        showEditor();
+
+        int brace = editor.getText().indexOf('{');
+
+        editor.setCaret(brace);
+        showEditor();
+        assertTrue("standing before the brace", highlightNamesAt(brace).contains("bracket"));
+
+        editor.setCaret(brace + 1);
+        showEditor();
+        assertTrue("and just after it", highlightNamesAt(brace).contains("bracket"));
+    }
+
+    /** Both halves of the pair are marked, not only the one under the caret. */
+    @Test
+    public void bothBracketsOfThePairAreMarked() {
+        build("class A {" + NL + "    x();" + NL + "}");
+        showEditor();
+        editor.setCaret(editor.getText().indexOf('{') + 1);
+        showEditor();
+
+        int closing = editor.getText().lastIndexOf('}');
+        assertTrue("the partner must be marked too", highlightNamesAt(closing).contains("bracket"));
+    }
+
     /**
      * <b>Zooming keeps the line you were on.</b>
      *

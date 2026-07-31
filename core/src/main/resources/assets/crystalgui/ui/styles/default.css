@@ -529,6 +529,19 @@ texteditor .__indent-guide__ {
     z-index: -1;
 }
 
+/* THE MATCHING BRACKET PAIR, marked whenever the caret is on either side of one.
+ *
+ * This belongs in the user-agent sheet by the same rule as the caret and the selection band: the widget
+ * PUBLISHES the ranges whether or not anything styles them, so with no rule the feature is fully working
+ * and completely invisible — which is not "unthemed", it is broken. It was exactly that until now.
+ *
+ * A COLOUR on the glyph, not a background behind it. IntelliJ tints the brace itself, and the reason is
+ * legibility rather than taste: a background has to fight the current-line band, which is drawn under the
+ * very line a bracket match is most often looked at, and a subtle fill loses that fight completely. */
+texteditor text::highlight(bracket) {
+    color: #4EC9A0;
+}
+
 /* THE ACTIVE GUIDE — the block the caret is actually inside, which IntelliJ draws brighter than the rest.
  *
  * Brighter, not thicker or a different hue: the guides are a background layer the eye is meant to be able
@@ -1285,6 +1298,11 @@ graphnode .__control-row__ {
     /* A floor, not a cap — the row holds whatever widget a node puts in it. */
     min-height: 25px;
 }
+/* A field widget takes the slack next to its label. `width: 0` is the basis it grows FROM — this
+ * engine's flex-shrink defaults to 0, so a widget sized by its content would keep that width and a
+ * text field with nothing typed in it collapses to a sliver. */
+graphnode .__control-row__ textfield,
+graphnode .__control-row__ dropdown { width: 0; flex-grow: 1; }
 /* The preview slot has a height even while empty, because 6.2.7 fills it with a render and a node
  * that changed size the moment previews arrived would move every wire in the graph. */
 /* Tall enough to be roughly square against the 134px min-width, because the render target IS square
