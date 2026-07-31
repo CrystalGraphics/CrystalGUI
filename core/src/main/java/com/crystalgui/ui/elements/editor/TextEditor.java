@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.editor;
 
 import com.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -520,17 +521,115 @@ public class TextEditor extends ScrollerView {
         if (!fontKey.equals(measuredFontKey)) {
             measuredRows.clear();
             measuredFontKey = fontKey;
+            textHeight = -1f;
         }
-        return measuredRows.computeIfAbsent(row, r -> {
-            String text = buffer.line(r);
-            CgFontFamily family = FontFamilyCache.resolve(general.fontFamily(), Math.round(general.fontSize()));
-            float[] widths = new float[text.length() + 1];
-            for (int i = 1; i <= text.length(); i++) {
-                widths[i] = CgTextLayout.of(text.substring(0, i), family).build().totalWidth();
-            }
-            return widths;
-        });
+        return measuredRows.computeIfAbsent(row, r -> caretOffsets(buffer.line(r), resolveFamily()));
     }
+
+    private CgFontFamily resolveFamily() {
+        var general = getStyle().getGeneralGroup();
+        return FontFamilyCache.resolve(general.fontFamily(), Math.round(general.fontSize()));
+    }
+
+    /**
+     * The x of every caret position on a line, taken from the <b>same shaped run the renderer draws</b>.
+     *
+     * <p>The obvious implementation — {@code width(text.substring(0, i))} for each i, which is what
+     * {@code TextField} does — re-shapes a fresh string per caret position, and shaping is not a
+     * per-character mapping. Kerning between the last glyph of the prefix and the first glyph after it
+     * simply does not exist in the prefix, so every caret lands a fraction off, and the error is
+     * different at every position rather than a constant that could be nudged out. That is the
+     * "not exactly before or after the character" this replaced.</p>
+     *
+     * <p>Shaping the line once and accumulating per-glyph advances gives the positions the renderer
+     * actually used, so the caret sits exactly on a glyph boundary by construction.</p>
+     *
+     * <p><b>Clusters are UTF-8 byte offsets</b> — HarfBuzz's convention, and documented as such on
+     * {@code CgShapedRun} — while every offset in this widget is a UTF-16 code unit. They coincide for
+     * ASCII, which is exactly why a conversion is easy to skip and then wrong only for the text that
+     * needed it most.</p>
+     */
+    private static float[] caretOffsets(String text, CgFontFamily family) {
+        float[] xs = new float[text.length() + 1];
+        java.util.Arrays.fill(xs, -1f);
+        xs[0] = 0f;
+        if (text.isEmpty()) return xs;
+
+        int[] utf16ForByte = utf16IndexByUtf8Byte(text);
+        float x = 0f;
+        for (java.util.List<CgShapedRun> lineRuns : CgTextLayout.of(text, family).build().lines()) {
+            for (CgShapedRun run : lineRuns) {
+                float[] advances = run.advancesX();
+                int[] clusters = run.clusterIds();
+                for (int glyph = 0; glyph < advances.length; glyph++) {
+                    int cluster = glyph < clusters.length ? clusters[glyph] : -1;
+                    if (cluster >= 0 && cluster < utf16ForByte.length) {
+                        int index = utf16ForByte[cluster];
+                        // First glyph of a cluster wins: a ligature covers several source characters and
+                        // the caret belongs at its leading edge, not partway through one glyph.
+                        if (index >= 0 && index < xs.length && xs[index] < 0f) xs[index] = x;
+                    }
+                    x += advances[glyph];
+                }
+            }
+        }
+        xs[text.length()] = x;
+        // Anything inside a multi-character cluster keeps the position of the cluster it belongs to.
+        for (int i = 1; i < xs.length; i++) {
+            if (xs[i] < 0f) xs[i] = xs[i - 1];
+        }
+        return xs;
+    }
+
+    /** For each UTF-8 byte offset of {@code text}, the UTF-16 index it starts at, or -1 mid-sequence. */
+    private static int[] utf16IndexByUtf8Byte(String text) {
+        int[] map = new int[utf8Length(text) + 1];
+        java.util.Arrays.fill(map, -1);
+        int bytes = 0;
+        for (int i = 0; i < text.length(); ) {
+            int codePoint = text.codePointAt(i);
+            map[bytes] = i;
+            bytes += utf8LengthOf(codePoint);
+            i += Character.charCount(codePoint);
+        }
+        map[map.length - 1] = text.length();
+        return map;
+    }
+
+    private static int utf8Length(String text) {
+        int total = 0;
+        for (int i = 0; i < text.length(); ) {
+            int codePoint = text.codePointAt(i);
+            total += utf8LengthOf(codePoint);
+            i += Character.charCount(codePoint);
+        }
+        return total;
+    }
+
+    private static int utf8LengthOf(int codePoint) {
+        if (codePoint < 0x80) return 1;
+        if (codePoint < 0x800) return 2;
+        if (codePoint < 0x10000) return 3;
+        return 4;
+    }
+
+    /**
+     * The ink height of a line of text, used to size and centre the caret and the selection bands.
+     *
+     * <p>Sizing them to the full row instead makes both overhang the text by the leading, which reads as
+     * a caret that is not on the line it belongs to — and the taller the {@code line-height}, the worse
+     * it looks. Taken from the font's own ascender and descender so it tracks the font rather than a
+     * guessed fraction of the row.</p>
+     */
+    private float textHeight() {
+        if (textHeight < 0f) {
+            var metrics = CgTextLayout.of("Xg", resolveFamily()).build().metrics();
+            textHeight = Math.abs(metrics.getAscender()) + Math.abs(metrics.getDescender());
+        }
+        return Math.min(lineHeight(), Math.max(1f, textHeight));
+    }
+
+    private float textHeight = -1f;
 
     private void ensureCaretVisible() {
         TextPoint point = buffer.offsetToPoint(caret);
@@ -668,9 +767,11 @@ public class TextEditor extends ScrollerView {
         float height = lineHeight();
         TextPoint point = buffer.offsetToPoint(caret);
         float caretX = textOriginX() + widthOf(point.row(), point.column());
+        final float ink = textHeight();
+        final float caretTop = textOriginY() + point.row() * height + (height - ink) / 2f;
         StyleGroup.defaultPipeline(caretElement.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(caretX).top(textOriginY() + point.row() * height).height(height));
+                        .left(caretX).top(caretTop).height(ink));
 
         int used = 0;
         if (hasSelection()) {
@@ -686,11 +787,12 @@ public class TextEditor extends ScrollerView {
                 float right = textOriginX() + widthOf(row, to) + (row < end.row() ? height * 0.4f : 0f);
 
                 UIElement band = bandAt(used++);
-                final float top = textOriginY() + row * height;
+                final float bandInk = textHeight();
+                final float top = textOriginY() + row * height + (height - bandInk) / 2f;
                 final float width = Math.max(1f, right - left);
                 StyleGroup.defaultPipeline(band.getStyle().getLayoutGroup(),
                         l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                                .left(left).top(top).width(width).height(height));
+                                .left(left).top(top).width(width).height(bandInk));
             }
         }
         for (int i = used; i < selectionBands.size(); i++) {

@@ -428,6 +428,47 @@ public class TextEditorTest extends UiTestBase {
                 editor.getStyle().getGeneralGroup().fontSize(), lineFont, 0.01f);
     }
 
+    /**
+     * <b>A double-click is close in space as well as in time.</b>
+     *
+     * <p>{@code ButtonState} counted multi-clicks on elapsed time alone. {@code UIInputHandler} resets
+     * the counter when the click lands on a <em>different element</em>, which hides the problem for
+     * buttons — but two clicks inside one large element are the same element however far apart they are.
+     * So double-clicking a word and then clicking a different word reported {@code detail == 2}, and the
+     * editor selected the second word instead of putting a caret in it.</p>
+     */
+    @Test
+    public void clickingAWordAfterDoubleClickingAnotherDoesNotSelectIt() {
+        build("alpha beta gamma delta");
+        settle();
+        editor.updateWindow();
+        settle();
+
+        int near = editor.getCaret();
+        // Two presses at the same spot: a genuine double-click, which selects a word.
+        pressAt(4, 4);
+        pressAt(4, 4);
+        assertTrue("a real double-click still selects a word", editor.hasSelection());
+
+        // A third press well away from the first two, inside the multi-click interval.
+        pressAt(120, 4);
+        assertFalse("a click elsewhere is a click, not a double-click", editor.hasSelection());
+        assertNotEquals(near, editor.getCaret());
+    }
+
+    private void pressAt(int x, int y) {
+        float scale = window.getUiScale();
+        int px = Math.round((editor.getRuntimeCache().getX() + x) * scale);
+        int py = Math.round((editor.getRuntimeCache().getY() + y) * scale);
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(px, py, 0, 0, 0, true, 0f, 10L));
+        input.beginFrame();
+        input.endFrame();
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(px, py, 0, 0, 0, false, 0f, 11L));
+        input.beginFrame();
+        input.endFrame();
+        settle();
+    }
+
     @Test
     public void theScrollableHeightCoversEveryLine() {
         StringBuilder document = new StringBuilder();
