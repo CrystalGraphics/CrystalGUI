@@ -410,15 +410,22 @@ texteditor {
  * variable-height virtualisation deferred in 6.1.3. */
 texteditor .__line__ {
     white-space: nowrap;
+    z-index: 1;
 }
 
+/* THE Z-INDICES ARE LOAD-BEARING, not decoration. Equal-z siblings paint in insertion order, and the
+ * caret is created in the constructor while lines are realised later -- so without this the caret paints
+ * UNDER every line and reads as a caret that lags a character behind whatever was just typed. Stacking it
+ * explicitly is also what lets the bands sit behind the glyphs they highlight rather than over them. */
 texteditor .__caret__ {
     width: 1px;
     background-color: #E6E6E6;
+    z-index: 2;
 }
 
 texteditor .__selection__ {
     background-color: #2C5A8C;
+    z-index: 0;
 }
 
 /* Functional geometry for the table's own structure. Nothing here is decoration — a theme owns all of

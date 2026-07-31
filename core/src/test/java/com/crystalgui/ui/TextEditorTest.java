@@ -342,6 +342,51 @@ public class TextEditorTest extends UiTestBase {
         assertEquals("the same line elements must survive a caret move", before, after);
     }
 
+    /**
+     * <b>Text, caret and hit testing must all use the same horizontal origin, and it is the padding
+     * box.</b>
+     *
+     * <p>Taffy places an absolutely positioned child relative to its containing block's padding box, so
+     * an inset of 0 already sits after the border — while the scrollport clips to the <em>content</em>
+     * box. Lines placed at 0 therefore began inside the padding and lost their first characters, and the
+     * caret, which added border and padding, sat further right than the text it was meant to be inside.
+     * A single editor with both a border and padding is the only configuration that separates the three
+     * candidate origins, which is why it took a screenshot to find.</p>
+     */
+    @Test
+    public void linesAndCaretShareTheContentBoxOrigin() {
+        editor = new TextEditor("abc");
+        editor.layout(l -> l.width(300).height(120).paddingLeft(10f).borderLeft(2f));
+        editor.generalStyle(g -> g.fontSize(8f).lineHeight(1.25f));
+        UIElement root = new UIElement().layout(l -> l.width(300).height(200));
+        root.addChild(editor);
+        window = new UIWindow(Ui.of(root));
+        window.init(600, 400);
+        input = window.getInputHandler();
+        settle();
+        editor.updateWindow();
+        settle();
+
+        float contentLeft = editor.getRuntimeCache().getX()
+                + editor.getTaffyLayout().border().left + editor.getTaffyLayout().padding().left;
+
+        UIElement line = null;
+        UIElement caret = null;
+        for (UIElement child : editor.getChildren()) {
+            if (child.hasClass(TextEditor.LINE_CLASS)) line = child;
+            if (child.hasClass(TextEditor.CARET_CLASS)) caret = child;
+        }
+        assertNotNull(line);
+        assertNotNull(caret);
+
+        assertEquals("a line must start at the content box, not inside the padding",
+                contentLeft, line.getRuntimeCache().getX(), 0.5f);
+        editor.setCaret(0);
+        settle();
+        assertEquals("and the caret at column 0 must sit exactly there too",
+                contentLeft, caret.getRuntimeCache().getX(), 0.5f);
+    }
+
     @Test
     public void theScrollableHeightCoversEveryLine() {
         StringBuilder document = new StringBuilder();

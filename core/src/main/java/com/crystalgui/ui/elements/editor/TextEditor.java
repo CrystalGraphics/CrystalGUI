@@ -467,7 +467,7 @@ public class TextEditor extends ScrollerView {
     /** Document offset nearest a point in this element's own space. */
     public int offsetAt(float screenX, float screenY) {
         var local = screenToLocal(screenX, screenY);
-        float relativeY = local.y() - getRuntimeCache().getY() + getScrollTop();
+        float relativeY = local.y() - getRuntimeCache().getY() - textOriginY() + getScrollTop();
         int row = Math.max(0, Math.min(buffer.lineCount() - 1, (int) (relativeY / lineHeight())));
 
         float relativeX = local.x() - getRuntimeCache().getX() + getScrollLeft() - textOriginX();
@@ -484,9 +484,26 @@ public class TextEditor extends ScrollerView {
         return buffer.document().lineStartOffset(row) + best;
     }
 
+    /**
+     * Where the text's left edge sits, in the coordinate space absolutely-positioned children use.
+     *
+     * <p><b>Padding only — deliberately not {@code border + padding}.</b> Taffy places an absolutely
+     * positioned child relative to its containing block's <b>padding box</b>, so an inset of 0 already
+     * starts after the border; adding the border again shifts everything right by exactly that much. The
+     * scrollport, meanwhile, clips to the <em>content</em> box, so a line left at inset 0 begins inside
+     * the padding and has its first characters scissored away.</p>
+     *
+     * <p>Both symptoms came from this one disagreement: with a 2px border and 10px padding the lines sat
+     * at 2 and the caret at 14, while the visible text began at 12. The lines lost a character off the
+     * front and the caret trailed the glyph it had just moved past.</p>
+     */
     private float textOriginX() {
-        var layout = getTaffyLayout();
-        return layout.border().left + layout.padding().left;
+        return getTaffyLayout().padding().left;
+    }
+
+    /** The vertical equivalent, for the same reason. */
+    private float textOriginY() {
+        return getTaffyLayout().padding().top;
     }
 
     /**
@@ -588,7 +605,7 @@ public class TextEditor extends ScrollerView {
             line.markAsInternal();
             line.addChild(new UIText(""));
         }
-        final float top = row * lineHeight();
+        final float top = textOriginY() + row * lineHeight();
         // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
         // a zero-width line lays its text out as though it had no extent -- which shaved the first
         // character off every row on screen. Wide enough for the text, and at least the viewport, so a
@@ -598,7 +615,7 @@ public class TextEditor extends ScrollerView {
         final float width = Math.max(getClientWidth(), widths[widths.length - 1] + 1f);
         StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .top(top).left(0f).width(width).height(lineHeight()));
+                        .top(top).left(textOriginX()).width(width).height(lineHeight()));
         ((UIText) line.getChildren().get(0)).setText(buffer.line(row));
         if (line.getParent() == null) addInternalChild(line);
         return line;
@@ -625,7 +642,7 @@ public class TextEditor extends ScrollerView {
         float caretX = textOriginX() + widthOf(point.row(), point.column());
         StyleGroup.defaultPipeline(caretElement.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(caretX).top(point.row() * height).height(height));
+                        .left(caretX).top(textOriginY() + point.row() * height).height(height));
 
         int used = 0;
         if (hasSelection()) {
@@ -641,7 +658,7 @@ public class TextEditor extends ScrollerView {
                 float right = textOriginX() + widthOf(row, to) + (row < end.row() ? height * 0.4f : 0f);
 
                 UIElement band = bandAt(used++);
-                final float top = row * height;
+                final float top = textOriginY() + row * height;
                 final float width = Math.max(1f, right - left);
                 StyleGroup.defaultPipeline(band.getStyle().getLayoutGroup(),
                         l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
