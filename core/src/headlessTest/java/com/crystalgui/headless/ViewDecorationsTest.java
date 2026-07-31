@@ -125,6 +125,114 @@ public class ViewDecorationsTest {
         assertEquals(1, IndentLevels.guidesFor(document, 2, 2, 4, 4, false)[0]);
     }
 
+
+    // ── The active guide: which block encloses the caret ────────────────────────────────────────
+
+    /** {@code void f() {} } at 0, its body at 1, the close at 0 again. */
+    private static Rope block() {
+        return Rope.of("class A {\n    void f() {\n        body();\n    }\n}");
+    }
+
+    @Test
+    public void insideABlockTheEnclosingScopeIsActive() {
+        Rope document = block();
+        // Row 2 is `body();` at indent 8 -- two levels in.
+        IndentLevels.ActiveGuide guide = IndentLevels.activeGuideFor(document, 2, 0, 4, 4, 4, false);
+
+        assertEquals("the innermost block's own level", 2, guide.indent());
+        assertEquals(2, guide.startRow());
+        assertEquals(2, guide.endRow());
+    }
+
+    /**
+     * <b>On the line that OPENS a scope, the child is active — not the parent.</b>
+     *
+     * <p>One of two carve-outs at distance 1 in the original, and the reason the highlight does not jump
+     * a level every time the caret touches a brace line — which is where it is looked at most.</p>
+     */
+    @Test
+    public void onAnOpeningLineTheChildBlockIsActive() {
+        Rope document = block();
+        // Row 1 is `void f() {` at indent 4. Its own level is 1; the body below is 2.
+        IndentLevels.ActiveGuide guide = IndentLevels.activeGuideFor(document, 1, 0, 4, 4, 4, false);
+
+        assertEquals("the body's level, not this line's", 2, guide.indent());
+        assertEquals(2, guide.startRow());
+    }
+
+    /** And in reverse on the line that closes one. */
+    @Test
+    public void onAClosingLineTheChildBlockIsActive() {
+        Rope document = block();
+        // Row 3 is `}` at indent 4, closing the body above it.
+        IndentLevels.ActiveGuide guide = IndentLevels.activeGuideFor(document, 3, 0, 4, 4, 4, false);
+
+        assertEquals(2, guide.indent());
+        assertEquals(2, guide.endRow());
+    }
+
+    /**
+     * <b>The line that closes a block still activates it.</b>
+     *
+     * <p>Worth stating because it looks like an edge case and is the closing carve-out doing its job: the
+     * final {@code &#125;} of the class is at indent 0, but standing on it highlights the class body it
+     * just closed rather than nothing. Expecting "no scope" here was my mistake, not the port's.</p>
+     */
+    @Test
+    public void theLineClosingABlockActivatesThatBlock() {
+        Rope document = block();
+        IndentLevels.ActiveGuide guide = IndentLevels.activeGuideFor(document, 4, 0, 4, 4, 4, false);
+
+        assertEquals("the class body, not nothing", 1, guide.indent());
+    }
+
+    /** With no block anywhere, nothing is active and the walk stops immediately. */
+    @Test
+    public void aFlatFileHasNoActiveBlock() {
+        Rope document = Rope.of("a();\nb();\nc();");
+        assertEquals(0, IndentLevels.activeGuideFor(document, 1, 0, 2, 4, 4, false).indent());
+    }
+
+    /** The block spans every row it encloses, so the whole run can be drawn brighter. */
+    @Test
+    public void theActiveBlockSpansItsWholeBody() {
+        Rope document = Rope.of("class A {\n    a();\n    b();\n    c();\n}");
+        IndentLevels.ActiveGuide guide = IndentLevels.activeGuideFor(document, 2, 0, 4, 4, 4, false);
+
+        assertEquals(1, guide.indent());
+        assertEquals(1, guide.startRow());
+        assertEquals(3, guide.endRow());
+    }
+
+    /**
+     * <b>{@code covers} answers for the guide, not for the block.</b> Guides are drawn at levels
+     * {@code 0..n-1} for n levels, so the one marking a block of indent n is at level {@code n-1} —
+     * getting that off by one highlights the guide one column over, which looks like a rendering fault.
+     */
+    @Test
+    public void coversMatchesTheGuideLevelNotTheIndentLevel() {
+        IndentLevels.ActiveGuide guide = new IndentLevels.ActiveGuide(1, 3, 2);
+
+        assertTrue(guide.covers(2, 1));
+        assertFalse("not the level above", guide.covers(2, 2));
+        assertFalse("nor a row outside the block", guide.covers(4, 1));
+        assertFalse("and nothing is active at the top level",
+                new IndentLevels.ActiveGuide(0, 0, 0).covers(0, 0));
+    }
+
+    /** The search is bounded by the range given, so a long file costs the viewport and not the document. */
+    @Test
+    public void theSearchIsBoundedByTheRangeAsked() {
+        StringBuilder text = new StringBuilder("class A {\n");
+        for (int i = 0; i < 500; i++) text.append("    line();\n");
+        text.append("}");
+        Rope document = Rope.of(text.toString());
+
+        IndentLevels.ActiveGuide guide = IndentLevels.activeGuideFor(document, 250, 240, 260, 4, 4, false);
+        assertTrue("the block is clipped to the range", guide.startRow() >= 240);
+        assertTrue(guide.endRow() <= 260);
+    }
+
     // ── Whitespace markers ──────────────────────────────────────────────────────────────────────
 
     private static String render(String line, RenderWhitespace mode) {
