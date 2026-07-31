@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.graph.PortDirection;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.UIText;

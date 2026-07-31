@@ -1846,23 +1846,160 @@ Delete is unaffected: removing a node needs no factory, only its wires unwound i
 
 </details>
 
-### 6.2.5 Graph document model and serialization · `TODO`
+### 6.2.5 Graph document model and serialization · `IN PROGRESS` (2026-07-31)
 
-Nodes, ports, typed connections, validation, and round-tripping through `serialization/`. The point at which
-this stops being a UI demo and becomes the shader graph's actual data.
+> **The model has landed; the view migration has not.** Shipped: `com.crystalgui.graph` —
+> `GraphDocument`, `NodeData`, `PortSpec`, `PortRef`, `EdgeData`, `GraphChangeset`, `GraphIds`,
+> `TypeCompatibility`, `GraphCodecs` — with **16 tests in `headlessTest`**, so a server can author and
+> validate a graph with no GL context. Cycle rejection at connect time, topological order, byte-identical
+> round-trip under both `PlainOps` and `JsonOps`, unknown node types surviving a load, and `copyOf` /
+> `merge` (which is what duplicate and paste are made of).
+>
+> **`PortDirection` moved to `com.crystalgui.graph`** — direction is a fact about the data, and the
+> widget now imports it rather than the reverse.
+>
+> **Still to do: repointing `GraphView` at a document.** It currently *is* the model — it owns the edge
+> list, and 6.2.4's edits hold widget references. The migration is the risky half, because those edits
+> must start holding **ids**, and an id has to survive delete-then-undo or every edge referencing it
+> breaks. Left as its own step rather than rushed into the end of the session that built the model.
 
-- **The model is headless.** It belongs in `headlessTest`, with no CrystalGraphics core on the classpath —
-  a dedicated server authoring or validating a graph is exactly the case `ServerUiSession` exists for, and
-  the absence is what proves it.
-- **Validation is the model's, not the widget's**: type compatibility, one-edge-per-input, and **cycle
-  detection**. The manifesto's compiler topologically sorts the graph, so a cycle is not a rendering
-  artifact — it is a graph that cannot compile, and the editor should refuse to create one at connect time
-  rather than fail at compile time with nothing pointing at the culprit.
-- **Content-addressed, like `UIDescriptionCodec`**: fixed field order, insertion-ordered maps, absent
-  optionals omitted. Same reasoning — a graph that hashes identically is a graph that need not be resent.
-- **The view binds; the model never imports the view.** With one hard constraint from 6.2.3's trap list:
-  the view must apply model changes **in place**, because rebuilding on every change would detach whatever
-  the pointer is currently dragging.
+Nodes, ports, typed connections, validation, and round-tripping through `serialization/`. The point at
+which this stops being a UI demo and becomes the shader graph's actual data. **Researched 2026-07-31**
+against Unity's `.shadergraph` format and `GraphData`, LDLib2's node toolkit, our own
+`serialization/` layer and the CrystalShader manifesto.
+
+#### First, a contradiction to resolve: the manifesto says there is no graph format
+
+> *"The text-based `.shader` format is not a 'lower-level alternative' to the node graph. It **IS** the
+> node graph's serialization format, just written by hand. … No separate formats."*
+
+Taken literally that forbids this item. Taken correctly it does not, and the distinction matters
+enough to write down before any code exists:
+
+- **The user's file stays `.shader`.** That claim is about the artefact on disk, and it survives intact.
+- **CrystalGUI ships a generic typed graph document** — nodes, ports, edges, values — because P6's
+  settled scope is *a general-purpose editor framework, with the shader graph as its first client*. A
+  framework whose document model is GLSL is not a framework. And undo, copy/paste, a server-authored
+  graph and a "missing node type" placeholder all need a document, not a compiler.
+- **CrystalShader maps that document to and from `.shader`.** The model is the in-memory IR both the
+  editor and the compiler talk about — which is exactly what the manifesto's Cornerstone 8 already
+  calls for (`CgShaderNode`, `CgShaderGraph`, `CgGraphCompiler`).
+
+The obligation this puts on 6.2.5 is concrete: the document must be able to **express what the
+compiler needs**, or the mapping is lossy and the contradiction becomes real. That means stable ids
+usable as a GLSL namespace prefix, node *type* ids, typed ports, per-node property values, and room for
+a `domain` attribute (the manifesto's vertex/fragment split) — none of which requires `core/` to learn
+a single GLSL type.
+
+#### What the research settled
+
+**1. A flat table with stable ids, not a nested tree.** Unity's `.shadergraph` is a flat list of JSON
+objects, each carrying a string `objectId`, referencing each other by id — with `JsonData<T>` meaning
+*ownership* and `JsonRef<T>` meaning *reference*. That ownership/reference split is worth stealing
+outright: it is the difference between "the document contains this node" and "this edge points at it",
+and it decides what a delete removes.
+
+A graph is not a tree, so nesting it is a lie that costs you at the first node with two consumers.
+
+**2. Ids are stored, and that is the opposite of what the UI tree does.** `NetworkIds` derives ids from
+a document-order walk and transmits nothing — and our own doc states the trade-off plainly: *"this is
+why there is no structural delta yet. Inserting an element renumbers everything after it."* For a
+graph that is fatal, because edges reference ids: adding one node would re-point every edge in the
+file. Ids must be **stored in the document**, generated once, and stable for the life of the node.
+
+Unity's `objectId` is "letters and numbers" and is documented as usable *during shader code
+generation* — which is also our namespacing prefix, per the manifesto's `node_multiply_out` example.
+One id, three jobs: reference, diff, and generated-code namespace.
+
+**3. The view syncs from a changeset; it never rebuilds.** Unity's `GraphData` accumulates
+`m_AddedEdges`/`m_RemovedEdges` for the view to drain; LDLib2 has a `GraphChangeset` doing the same.
+Two independent implementations arriving at the same shape is good evidence — and our own trap list
+demands it anyway: **rebuilding detaches the element under the pointer**, which is how the table header
+froze and what 6.2.3 was warned about.
+
+**4. Validation belongs to the model.** Type compatibility, one-edge-per-input, and **cycle rejection
+at connect time**. The compiler topologically sorts, so a cycle is not a rendering artefact — it is a
+graph that cannot compile, and refusing it at the moment of connection is the only place the user can
+still see which wire caused it.
+
+#### The model
+
+| Type | Shape |
+|---|---|
+| `GraphDocument` | id → `NodeData`, plus the edge list. Headless, no `ui/` imports |
+| `NodeData` | `id`, `typeId`, world `x`/`y`, declared ports, property values |
+| `PortSpec` | `portId`, direction, `typeId` — the port's *identity*, not its widget |
+| `PortRef` | `nodeId` + `portId`; what an edge points at |
+| `EdgeData` | `from` (output `PortRef`) → `to` (input `PortRef`) |
+| `GraphChangeset` | added/removed nodes and edges, plus moved ids — what the view drains |
+
+**Ports are stored per node, even though the node *type* declares them.** The alternative — store only
+the type id and look the ports up — keeps documents smaller and makes a type change authoritative, and
+it is wrong for the case that matters: a document whose node types are not registered (a plugin absent,
+a mod not loaded) must still **open**, keep its edges, and round-trip unchanged rather than being
+silently emptied. Storing the ports is what makes a "missing node" placeholder possible instead of data
+loss. Unity stores them too.
+
+> **This is a deliberate divergence from `ElementRegistry`, which throws on an unknown tag.** That is
+> right for a *UI description*, where an unknown tag means the two sides disagree about code that
+> should be identical. It is wrong for a *document*, where an unknown type means someone opened a file
+> without a plugin — and eating their graph is a far worse outcome than showing a grey box.
+
+#### Serialization
+
+- A `Codec<GraphDocument>` over the existing `Codecs.map(...)` / `Codecs.read(...)` pair, `PlainOps` by
+  default (no Gson on the server path), `JsonOps` for tests and for the clipboard.
+- **Content-addressed like `UIDescriptionCodec`**: fixed field order, insertion-ordered maps, absent
+  optionals omitted rather than written null. That is what makes `ContentHash` meaningful, and a graph
+  can then be sent by hash exactly as a UI description is.
+- Enums by **name, never ordinal** — `Codecs.enumOf` already insists.
+- **A schema version field**, which `UIDescriptionCodec` deliberately does not need: a description is
+  regenerated from live code every time, while a document is written to disk and outlives the code that
+  wrote it. Version it from the first commit or the first format change is a migration with no anchor.
+
+#### The seam, and the migration it implies
+
+`GraphView` currently **is** the model: it owns the edge list, and 6.2.4's edits mutate it directly.
+6.2.5 inverts that — the document owns the data, commands mutate the document, and the view applies the
+resulting changeset in place. Two consequences worth stating before starting:
+
+- **6.2.3/6.2.4's `Edit`s become document edits.** `ConnectEdit`, `AddNodeEdit` and `MoveNodeEdit`
+  already hold data rather than closures, so they translate rather than being rewritten — but they must
+  hold **ids**, not widget references, or an undo after a delete restores an edge pointing at a widget
+  that no longer exists.
+- **An id must survive delete-and-undo.** Deleting a node and undoing must restore the *same* id, or
+  every edge that referenced it breaks. That is a property of the edit, not of the document.
+
+#### What this unblocks: duplicate, copy and paste
+
+The reason 6.2.4 could not build them. With a document they are ordinary:
+
+- **Duplicate** — copy a subgraph of `NodeData` with **fresh ids**, keep edges whose *both* ends are in
+  the copied set, drop the rest, offset the positions, and select the copies. (Unity's own issue tracker
+  files "nodes not selected after duplicating" as a bug; Figma and Illustrator agree.) Dropping external
+  edges is a choice — Blender keeps incoming links — made because a duplicate that silently re-feeds the
+  original's upstream is a graph the user did not draw.
+- **Copy/paste, including across documents** — the same operation with the clipboard as the transport,
+  encoded through `JsonOps`. The clipboard is already a platform seam on `CgInputService`.
+
+#### Deliverables
+
+- `ui/elements/graph/model/`: `GraphDocument`, `NodeData`, `PortSpec`, `PortRef`, `EdgeData`,
+  `GraphChangeset`, `GraphCodecs`.
+- Validation: type compatibility, one-edge-per-input, cycle rejection with the offending edge named.
+- `GraphView` re-pointed at a document, applying changesets in place.
+- Tests in **`headlessTest`** — the absence of CrystalGraphics is the assertion that a server can author
+  and validate a graph.
+- Round-trip and hash-stability tests: encode → decode → encode is byte-identical, and two documents
+  built in different orders hash the same.
+
+#### Open questions
+
+| Question | Notes |
+|---|---|
+| Where do graph-level properties (a blackboard) live? | Unity has one, LDLib2 has `IVariable`, and the manifesto needs *"properties declared in nodes bubble up to the `.shader` Properties block"*. Probably a document-level list, but it is a second kind of thing and can wait for a consumer. |
+| Subgraphs? | LDLib2 has `ISubgraphNode`; the manifesto implies them. A node whose type resolves to another document. Deferred, but the id scheme must not preclude it. |
+| Does the document own node *positions*? | Yes here — but note that position is view state by 6.1.9's boundary, and a moved node is nonetheless something a reload should give back. The resolution is that position is document data with no undo-relevance debate: `MoveNodeEdit` already records it. |
 
 ### 6.2.6 Node library and creation menu · `TODO`
 
@@ -1902,7 +2039,7 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
 6.1.10 file SPI ──► 6.1.11 docking ──► 6.1.12 chrome
 
 6.2.1 CgCurveRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──┬─► 6.2.4 editing ──► 6.2.5 model
-      (done)              (done)             (done)            │        ▲
+      (done)              (done)             (done)         (done)      ▲
                                                                ├─► 6.2.6 node library
                                                                └─► 6.2.7 previews (slot only;
 6.1.9 command/undo ────────────────────────────────────────────────────┘   the pipeline is
