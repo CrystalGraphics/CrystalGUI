@@ -502,6 +502,23 @@ texteditor .__current-line__ {
     z-index: -2;
 }
 
+/* THE TEXT VIEWPORT. Everything drawn in document coordinates lives in here — lines, caret, selection
+ * bands, the current-line band, indent guides, whitespace markers and rulers — and this is what stops any
+ * of them reaching the gutter or the scrollbars.
+ *
+ * overflow: hidden is the entire point of the element. Widening the editor's own padding does NOT work:
+ * drawSubtree scissors to the PADDING box on purpose (real CSS overflow:hidden clips at the padding edge
+ * too), so padding is inside the rect and growing it moves no clip. Scroll-exempt children are inside it
+ * as well — popScissor runs after they are drawn — so the chrome cannot be excluded that way either. The
+ * only way to clip the text and not the gutter is to give the text its own box.
+ *
+ * z-index 0: it holds the text, so it sits where the text used to. The gutter (6) and the bars (7) are
+ * above it, and the current-line band and selection are below via their own negative z inside it. */
+texteditor .__text-viewport__ {
+    overflow: hidden;
+    z-index: 0;
+}
+
 /* Indent guides sit BEHIND the text but in front of the current-line band, so a guide still reads on the
  * row the caret is on. Deliberately dim: a guide the eye can follow when it looks for it and ignores when
  * it does not is the whole design brief, and one that competes with the code is worse than none.

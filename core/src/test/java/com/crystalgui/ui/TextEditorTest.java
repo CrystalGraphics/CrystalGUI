@@ -330,7 +330,7 @@ public class TextEditorTest extends UiTestBase {
     }
 
     private Object lineFontFamily() {
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.LINE_CLASS)) continue;
             return child.getChildren().get(0).getStyle().getGeneralGroup().fontFamily();
         }
@@ -581,7 +581,7 @@ public class TextEditorTest extends UiTestBase {
         settle();
 
         UIText line = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (child.hasClass(TextEditor.LINE_CLASS)) line = (UIText) child.getChildren().get(0);
         }
         assertNotNull("no line was realised", line);
@@ -630,7 +630,7 @@ public class TextEditorTest extends UiTestBase {
     /** Whether the realised line showing {@code row} carries any range under {@code name}. */
     private boolean lineHasHighlight(int row, String name) {
         String wanted = editor.buffer().line(row);
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.LINE_CLASS)) continue;
             UIText text = (UIText) child.getChildren().get(0);
             if (!text.getText().equals(wanted)) continue;
@@ -801,11 +801,42 @@ public class TextEditorTest extends UiTestBase {
     }
 
     private java.util.List<UIElement> linesOf() {
+        return allWithClass(TextEditor.LINE_CLASS);
+    }
+
+    /**
+     * Every descendant carrying {@code name}.
+     *
+     * <p>Recursive since the text moved into {@code __text-viewport__}: the lines, caret, bands, guides
+     * and markers are that element's children now rather than the editor's, so a one-level scan finds
+     * nothing. The gutter's numbers were always a level down, which is why that one already recursed by
+     * hand.</p>
+     */
+    /** Every descendant of the editor, in tree order. */
+    private java.util.List<UIElement> allDescendants() {
         java.util.List<UIElement> out = new java.util.ArrayList<>();
-        for (UIElement child : editor.getChildren()) {
-            if (child.hasClass(TextEditor.LINE_CLASS)) out.add(child);
-        }
+        collectAll(editor, out);
         return out;
+    }
+
+    private static void collectAll(UIElement from, java.util.List<UIElement> out) {
+        for (UIElement child : from.getChildren()) {
+            out.add(child);
+            collectAll(child, out);
+        }
+    }
+
+    private java.util.List<UIElement> allWithClass(String name) {
+        java.util.List<UIElement> out = new java.util.ArrayList<>();
+        collectWithClass(editor, name, out);
+        return out;
+    }
+
+    private static void collectWithClass(UIElement from, String name, java.util.List<UIElement> out) {
+        for (UIElement child : from.getChildren()) {
+            if (child.hasClass(name)) out.add(child);
+            collectWithClass(child, name, out);
+        }
     }
 
     // ── 6.1.7b: line endings, read-only, language ────────────────
@@ -935,7 +966,7 @@ public class TextEditorTest extends UiTestBase {
         settle();
 
         UIText line = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (child.hasClass(TextEditor.LINE_CLASS)) line = (UIText) child.getChildren().get(0);
         }
         assertNotNull(line);
@@ -952,7 +983,7 @@ public class TextEditorTest extends UiTestBase {
         settle();
 
         UIText line = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (child.hasClass(TextEditor.LINE_CLASS)) line = (UIText) child.getChildren().get(0);
         }
         assertNotNull(line);
@@ -1422,10 +1453,9 @@ public class TextEditorTest extends UiTestBase {
     }
 
     private UIElement childWithClass(String name) {
-        for (UIElement child : editor.getChildren()) {
-            if (child.hasClass(name)) return child;
-        }
-        throw new AssertionError("no child with class " + name);
+        java.util.List<UIElement> found = allWithClass(name);
+        if (found.isEmpty()) throw new AssertionError("no child with class " + name);
+        return found.get(0);
     }
 
     /**
@@ -1707,7 +1737,7 @@ public class TextEditorTest extends UiTestBase {
     }
 
     private boolean caretVisible() {
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (child.hasClass(TextEditor.CARET_CLASS)) {
                 return child.getStyle().getGeneralGroup().opacity() > 0.5f;
             }
@@ -1762,7 +1792,7 @@ public class TextEditorTest extends UiTestBase {
         settle();
         editor.updateWindow();
 
-        long lines = editor.getChildren().stream()
+        long lines = allDescendants().stream()
                 .filter(child -> child.hasClass(TextEditor.LINE_CLASS))
                 .count();
         assertTrue("realised " + lines + " lines for a 5001-line document", lines < 60);
@@ -1783,7 +1813,7 @@ public class TextEditorTest extends UiTestBase {
         settle();
 
         int checked = 0;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.LINE_CLASS)) continue;
             assertTrue("a line box collapsed to zero width",
                     child.getRuntimeCache().getWidth() > 1f);
@@ -1808,7 +1838,7 @@ public class TextEditorTest extends UiTestBase {
         settle();
 
         java.util.List<UIElement> before = new java.util.ArrayList<>();
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (child.hasClass(TextEditor.LINE_CLASS)) before.add(child);
         }
         assertFalse(before.isEmpty());
@@ -1817,7 +1847,7 @@ public class TextEditorTest extends UiTestBase {
         key(CgKeyCodes.KEY_RIGHT);
 
         java.util.List<UIElement> after = new java.util.ArrayList<>();
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (child.hasClass(TextEditor.LINE_CLASS)) after.add(child);
         }
         assertEquals("the same line elements must survive a caret move", before, after);
@@ -1856,7 +1886,7 @@ public class TextEditorTest extends UiTestBase {
 
         UIElement line = null;
         UIElement caret = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (child.hasClass(TextEditor.LINE_CLASS)) line = child;
             if (child.hasClass(TextEditor.CARET_CLASS)) caret = child;
         }
@@ -1908,7 +1938,7 @@ public class TextEditorTest extends UiTestBase {
         settle();
 
         UIElement line = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (child.hasClass(TextEditor.LINE_CLASS)) line = child;
         }
         assertNotNull(line);
@@ -2214,7 +2244,7 @@ public class TextEditorTest extends UiTestBase {
         // it has ever needed, so the element count IS the count of numbers asked for -- observable,
         // unlike "is this one currently hidden", which hide() expresses as a zero-sized box.
         int numbers = 0;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
             for (UIElement number : child.getChildren()) {
                 if (number.hasClass(TextEditor.LINE_NUMBER_CLASS)) numbers++;
@@ -2458,8 +2488,7 @@ public class TextEditorTest extends UiTestBase {
 
     private int countOf(String className) {
         int n = 0;
-        for (UIElement child : editor.getChildren()) {
-            if (!child.hasClass(className)) continue;
+        for (UIElement child : allWithClass(className)) {
             // hide() collapses an unused pooled element to zero height, so a laid-out height is what
             // separates "drawn this frame" from "pooled and idle".
             if (child.getTaffyLayout().contentBoxHeight() > 0f) n++;
@@ -2515,7 +2544,7 @@ public class TextEditorTest extends UiTestBase {
                 + editor.getTaffyLayout().border().left + editor.getTaffyLayout().padding().left
                 + editor.getGutterWidth();
 
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.GUTTER_EDGE_CLASS)) continue;
             assertEquals("and it spans the whole viewport", editor.getViewportHeight(),
                     child.getTaffyLayout().contentBoxHeight(), 1f);
@@ -2568,7 +2597,7 @@ public class TextEditorTest extends UiTestBase {
                 + editor.getGutterWidth();
 
         int seen = 0;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.INDENT_GUIDE_CLASS)) continue;
             if (child.getTaffyLayout().contentBoxHeight() <= 0f) continue;
             seen++;
@@ -2604,7 +2633,7 @@ public class TextEditorTest extends UiTestBase {
         editor.setRenderWhitespace(com.crystalgui.text.view.RenderWhitespace.NONE);
         showEditor();
 
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.WHITESPACE_CLASS)) continue;
             assertEquals("a retired marker must carry no glyph",
                     "", ((UIText) child.getChildren().get(0)).getText());
@@ -2632,7 +2661,7 @@ public class TextEditorTest extends UiTestBase {
         showEditor();
 
         int dots = 0;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.WHITESPACE_CLASS)) continue;
             if (child.getTaffyLayout().contentBoxHeight() <= 0f) continue;
             if ("·".equals(((UIText) child.getChildren().get(0)).getText())) dots++;
@@ -2671,7 +2700,7 @@ public class TextEditorTest extends UiTestBase {
         showEditor();
 
         UIElement number = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
             for (UIElement candidate : child.getChildren()) {
                 if (candidate.hasClass(TextEditor.LINE_NUMBER_CLASS)
@@ -2715,7 +2744,7 @@ public class TextEditorTest extends UiTestBase {
         showEditor();
 
         int seen = 0;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
             for (UIElement number : child.getChildren()) {
                 if (!number.hasClass(TextEditor.LINE_NUMBER_CLASS)) continue;
@@ -2748,7 +2777,7 @@ public class TextEditorTest extends UiTestBase {
         editor.setScrollImmediate(0f, editor.getScrollHeight());
         showEditor();
 
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
             for (UIElement number : child.getChildren()) {
                 if (!number.hasClass(TextEditor.LINE_NUMBER_CLASS)) continue;
@@ -2906,7 +2935,7 @@ public class TextEditorTest extends UiTestBase {
 
         String label = null;
         String reset = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.ZOOM_INDICATOR_CLASS)) continue;
             for (UIElement part : child.getChildren()) {
                 if (part.hasClass(TextEditor.ZOOM_LABEL_CLASS)) label = ((UIText) part).getText();
@@ -2932,7 +2961,7 @@ public class TextEditorTest extends UiTestBase {
         showEditor();
 
         UIElement reset = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.ZOOM_INDICATOR_CLASS)) continue;
             for (UIElement part : child.getChildren()) {
                 if (part.hasClass(TextEditor.ZOOM_RESET_CLASS)) reset = part;
@@ -2955,7 +2984,7 @@ public class TextEditorTest extends UiTestBase {
         showEditor();
 
         UIElement reset = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.ZOOM_INDICATOR_CLASS)) continue;
             for (UIElement part : child.getChildren()) {
                 if (part.hasClass(TextEditor.ZOOM_RESET_CLASS)) reset = part;
@@ -2998,7 +3027,7 @@ public class TextEditorTest extends UiTestBase {
         showEditor();
 
         UIText label = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.ZOOM_INDICATOR_CLASS)) continue;
             for (UIElement part : child.getChildren()) {
                 if (part.hasClass(TextEditor.ZOOM_LABEL_CLASS)) label = (UIText) part;
@@ -3030,7 +3059,7 @@ public class TextEditorTest extends UiTestBase {
         showEditor();
 
         UIElement indicator = null;
-        for (UIElement child : editor.getChildren()) {
+        for (UIElement child : allDescendants()) {
             if (child.hasClass(TextEditor.ZOOM_INDICATOR_CLASS)) indicator = child;
         }
         assertNotNull(indicator);

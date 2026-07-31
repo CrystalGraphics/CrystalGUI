@@ -96,6 +96,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String WHITESPACE_CLASS = "__whitespace__";
     public static final String RULER_CLASS = "__ruler__";
     public static final String GUTTER_EDGE_CLASS = "__gutter-edge__";
+    public static final String TEXT_VIEWPORT_CLASS = "__text-viewport__";
     public static final String ZOOM_INDICATOR_CLASS = "__zoom-indicator__";
     public static final String ZOOM_LABEL_CLASS = "__zoom-label__";
     public static final String ZOOM_RESET_CLASS = "__zoom-reset__";
@@ -152,6 +153,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private float cachedPadLeft;
     private float cachedFoldWidth;
     private float cachedCodeLeftPad;
+
+    /** Clips everything drawn in document coordinates — see {@link #textViewport()}. */
+    private UIElement textViewport;
 
     /** The font the whitespace markers were last styled for. */
     private String markerFontKey;
@@ -344,7 +348,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         currentLine.addClass(CURRENT_LINE_CLASS);
         currentLine.setHitTest(false);
         currentLine.markAsInternal();
-        addInternalChild(currentLine);
+        textViewport().addInternalChild(currentLine);
 
         gutter.addClass(GUTTER_CLASS);
         gutter.setHitTest(false);
@@ -997,6 +1001,32 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * scrollable extent is the same thing every editor does by leaving trailing space below the last
      * line.</p>
      */
+    /**
+     * The width of the widest realised line, in editor coordinates.
+     *
+     * <p>Overridden for the same reason {@link #getScrollHeight()} is, and newly <b>necessary</b> rather
+     * than merely tidy: {@code UIElement.getScrollWidth} walks direct children and skips scroll-exempt
+     * ones, and the text now lives inside a scroll-exempt viewport. Without this the editor reports zero
+     * content width, the horizontal bar never appears, and a long line simply cannot be scrolled to.</p>
+     *
+     * <p>Realised lines only, which is what the inherited version effectively measured too — its children
+     * were the realised lines. A virtualised editor cannot know the widest line in the document without
+     * measuring every one of them.</p>
+     */
+    @Override
+    public float getScrollWidth() {
+        if (textViewport == null) return 0f;
+        float max = 0f;
+        for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
+            int viewLine = entry.getKey();
+            if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            ProjectedLines.ModelPosition model = modelAt(viewLine);
+            float end = xOfView(viewLine, projectionAt(viewLine).maxColumn(model.viewLineInRow()));
+            max = Math.max(max, textOriginX() + end + 1f);
+        }
+        return max;
+    }
+
     @Override
     public float getScrollHeight() {
         float content = viewLineCount() * lineHeight();
@@ -2206,6 +2236,49 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return CgTextLayout.of(text, family).build().totalWidth();
     }
 
+    /**
+     * The box every document-coordinate child lives in, and the reason text stops at the gutter.
+     *
+     * <p><b>A container, because nothing cheaper works.</b> The obvious fix is to widen the editor's own
+     * {@code padding-left} so its content box starts where the code does — and it does nothing, because
+     * {@code UIElement.drawSubtree} scissors to the <b>padding box</b>, deliberately ({@code overflow:
+     * hidden} clips at the padding edge in real CSS too). Padding is inside that rect, so growing it moves
+     * no clip at all. Scroll-exempt children are inside it as well: {@code popScissor} runs after they are
+     * drawn. So the only way to clip the text and not the chrome is to give the text its own box.</p>
+     *
+     * <p>Scroll-exempt itself, which is what makes it a <em>window</em> rather than a moving frame — its
+     * rect must hold still while the content behind it moves. The cost is that its children no longer get
+     * the scroll translate for free and subtract the offsets by hand, exactly as the gutter's numbers
+     * already did.</p>
+     */
+    private UIElement textViewport() {
+        if (textViewport == null) {
+            textViewport = new UIElement();
+            textViewport.addClass(TEXT_VIEWPORT_CLASS);
+            // Not hit-tested itself: clicks belong to the editor, which converts them through
+            // offsetAtLocal. A hit-testing box over the whole text would take every press.
+            textViewport.setHitTest(false);
+            textViewport.markAsInternal();
+            textViewport.setScrollExempt(true);
+            addInternalChild(textViewport);
+        }
+        return textViewport;
+    }
+
+    /** Width of the code area — the client box, less the gutter and whatever the vertical bar covers. */
+    private float textViewportWidth() {
+        return Math.max(0f, getClientWidth() - textOriginX() - verticalBarThickness());
+    }
+
+    private void layOutTextViewport() {
+        final float left = textOriginX();
+        final float width = textViewportWidth();
+        final float height = viewportHeight();
+        StyleGroup.defaultPipeline(textViewport().getStyle().getLayoutGroup(),
+                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                        .left(left).top(0f).width(width).height(height));
+    }
+
     /** Visual rows — the same as the row count when wrap is off. */
     public int viewLineCount() {
         return Math.max(1, projections.viewLineCount());
@@ -2579,6 +2652,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         syncLineFonts();
         refreshHighlights(first, last);
         layOutGutter(first, last);
+        layOutTextViewport();
         layOutGutterEdge();
         layOutIndentGuides(first, last);
         layOutWhitespace(first, last);
@@ -2625,7 +2699,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             line.addChild(new UIText(""));
         }
         layOutLine(viewLine, line);
-        if (line.getParent() == null) addInternalChild(line);
+        if (line.getParent() == null) textViewport().addInternalChild(line);
         return line;
     }
 
@@ -2639,8 +2713,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * One routine means a line cannot be positioned two different ways depending on how it got here.</p>
      */
     private void layOutLine(int viewLine, UIElement line) {
-        final float top = textOriginY() + viewLine * lineHeight();
-        final float left = textOriginX() + carriedIndentPx(viewLine);
+        final float top = textOriginY() + viewLine * lineHeight() - getScrollTop();
+        final float left = carriedIndentPx(viewLine) - getScrollLeft();
         // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
         // a zero-width line lays its text out as though it had no extent -- which shaved the first
         // character off every row on screen. Wide enough for the text, and at least the viewport, so a
@@ -2653,7 +2727,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // band both read it.
         LineProjection projection = projectionAt(viewLine);
         ProjectedLines.ModelPosition model = modelAt(viewLine);
-        final float width = Math.max(getClientWidth(),
+        final float width = Math.max(textViewportWidth(),
                 xOfView(viewLine, projection.maxColumn(model.viewLineInRow())) + 1f);
         StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
@@ -2667,7 +2741,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // A pooled line reused for a different row would otherwise keep the old row's highlights, which
         // is worse than none: the ranges are offsets into a string that has been replaced.
         textOf(line).highlights().clear();
-        removeInternalChild(line);
+        textViewport().removeInternalChild(line);
         linePool.addLast(line);
     }
 
@@ -2715,8 +2789,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // the single most visible way a soft-wrap caret goes wrong, and the reason Affinity exists.
         ProjectedLines.ViewPosition view = projections.toViewPosition(
                 buffer.document(), selection.head(), LineProjection.Affinity.LEFT);
-        final float left = textOriginX() + xOfView(view.viewLine(), view.column()) - caretWidth;
-        final float top = textOriginY() + view.viewLine() * height + (height - ink) / 2f;
+        final float left = xOfView(view.viewLine(), view.column()) - caretWidth - getScrollLeft();
+        final float top = textOriginY() + view.viewLine() * height + (height - ink) / 2f
+                - getScrollTop();
 
         UIElement caret = caretAt(index);
         StyleGroup.importantPipeline(caret.getStyle().getLayoutGroup(),
@@ -2757,17 +2832,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     .toViewPosition(to - buffer.document().lineStartOffset(modelAt(viewLine).row()),
                             LineProjection.Affinity.LEFT);
 
-            float left = textOriginX() + xOfView(viewLine, fromView.column());
+            float left = xOfView(viewLine, fromView.column()) - getScrollLeft();
             // A selected line break shows as a sliver past the end of the text, which is how every editor
             // signals "the newline is in the selection too". A soft wrap is NOT a line break, so the
             // sliver is only drawn where the selection genuinely continues onto another document row.
             boolean continuesPastRow = selection.end() > lineEnd
                     && modelAt(viewLine).viewLineInRow() == projectionAt(viewLine).viewLineCount() - 1;
-            float right = textOriginX() + xOfView(viewLine, toView.column())
+            float right = xOfView(viewLine, toView.column()) - getScrollLeft()
                     + (continuesPastRow ? height * 0.4f : 0f);
 
             final float bandInk = textHeight();
-            final float top = textOriginY() + viewLine * height + (height - bandInk) / 2f;
+            final float top = textOriginY() + viewLine * height + (height - bandInk) / 2f
+                    - getScrollTop();
             final float bandLeft = left;
             final float width = Math.max(1f, right - left);
             StyleGroup.defaultPipeline(bandAt(index++).getStyle().getLayoutGroup(),
@@ -2876,10 +2952,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // THE WHOLE WRAPPED ROW, not the one view line the caret is on. The band answers "which line am I
         // editing", and a line that wraps is still one line -- highlighting a third of it would make the
         // band look like it had come unstuck from the caret whenever the caret moved along a long row.
-        final float top = textOriginY() + projections.firstViewLineOfRow(row) * height;
+        final float top = textOriginY() + projections.firstViewLineOfRow(row) * height - getScrollTop();
         final float bandHeight = height * projections.projectionOf(row).viewLineCount();
-        final float left = textOriginX();
-        final float width = Math.max(1f, getClientWidth() - gutterWidth - verticalBarThickness());
+        // Spans the viewport and does NOT move with horizontal scroll: it marks which row is being
+        // edited, which is true of the whole visible width however far sideways the text has gone.
+        final float left = 0f;
+        final float width = Math.max(1f, textViewportWidth());
         StyleGroup.defaultPipeline(currentLine.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                         .left(left).top(top).width(width).height(bandHeight));
@@ -2918,13 +2996,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** A pooled decoration element of the given class, appended as an internal child. */
     private UIElement decorationAt(List<UIElement> pool, int index, String className, boolean withText) {
+        return decorationAt(pool, index, className, withText, false);
+    }
+
+    /**
+     * @param inText whether this decoration is drawn in document coordinates and so belongs inside
+     *               {@link #textViewport()}. Chrome that sits beside the text — the gutter's edge, the
+     *               zoom indicator — stays on the editor, or the viewport would clip it away.
+     */
+    private UIElement decorationAt(List<UIElement> pool, int index, String className, boolean withText,
+                                   boolean inText) {
         while (pool.size() <= index) {
             UIElement element = new UIElement();
             element.addClass(className);
             element.setHitTest(false);
             element.markAsInternal();
             if (withText) element.addChild(new UIText(""));
-            addInternalChild(element);
+            if (inText) textViewport().addInternalChild(element);
+            else addInternalChild(element);
             pool.add(element);
         }
         return pool.get(index);
@@ -2997,11 +3086,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // reached column 0, and the letter there looked like it had cut the line. As an edge it is one
             // element, full height, and cannot be interrupted by anything.
             for (int level = 1; level < levels && used < MAX_INDENT_GUIDES; level++) {
-                final float left = textOriginX() + level * step - nudge;
+                final float left = level * step - nudge - getScrollLeft();
                 // Past the right edge there is nothing to guide, and the elements are better spent on
                 // rows that are visible.
-                if (left > getClientWidth()) break;
-                UIElement guide = decorationAt(indentGuides, used++, INDENT_GUIDE_CLASS, false);
+                if (left > textViewportWidth()) break;
+                UIElement guide = decorationAt(indentGuides, used++, INDENT_GUIDE_CLASS, false, true);
                 StyleGroup.defaultPipeline(guide.getStyle().getLayoutGroup(),
                         l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                                 .left(left).top(top).width(1f).height(height));
@@ -3040,7 +3129,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             boolean continues = model.viewLineInRow() < projection.viewLineCount() - 1;
             boolean[] marked = WhitespaceMarkers.shouldMark(row, renderWhitespace, tabSize, continues);
 
-            final float top = textOriginY() + viewLine * height + (height - ink) / 2f;
+            final float top = textOriginY() + viewLine * height + (height - ink) / 2f - getScrollTop();
             for (int column = from; column < to && used < MAX_WHITESPACE_MARKS; column++) {
                 if (!marked[column]) continue;
                 char marker = WhitespaceMarkers.markerFor(row.charAt(column));
@@ -3048,8 +3137,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
                 LineProjection.ViewPosition at =
                         projection.toViewPosition(column, LineProjection.Affinity.RIGHT);
-                final float left = textOriginX() + xOfView(viewLine, at.column());
-                UIElement mark = decorationAt(whitespaceMarks, used++, WHITESPACE_CLASS, true);
+                final float left = xOfView(viewLine, at.column()) - getScrollLeft();
+                UIElement mark = decorationAt(whitespaceMarks, used++, WHITESPACE_CLASS, true, true);
                 UIText label = (UIText) mark.getChildren().get(0);
                 label.setText(String.valueOf(marker));
                 // The font is pushed only while it is actually settling, not per marker per frame. There
@@ -3121,10 +3210,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int used = 0;
         for (int column : rulers) {
             if (column <= 0) continue;
-            final float left = textOriginX() + column * advance - getScrollLeft();
-            if (left < textOriginX() || left > getClientWidth()) continue;
-            UIElement rule = decorationAt(rulerLines, used++, RULER_CLASS, false);
-            rule.setScrollExempt(true);
+            final float left = column * advance - getScrollLeft();
+            if (left < 0f || left > textViewportWidth()) continue;
+            UIElement rule = decorationAt(rulerLines, used++, RULER_CLASS, false, true);
             StyleGroup.defaultPipeline(rule.getStyle().getLayoutGroup(),
                     l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                             .left(left).top(0f).width(1f).height(height));
@@ -3246,7 +3334,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             caret.addClass(CARET_CLASS);
             caret.setHitTest(false);
             caret.markAsInternal();
-            addInternalChild(caret);
+            textViewport().addInternalChild(caret);
             caretElements.add(caret);
         }
         return caretElements.get(index);
