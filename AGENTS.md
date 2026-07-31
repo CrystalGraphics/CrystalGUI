@@ -838,7 +838,10 @@ int value types.
 | `Menu` | `menu` | `cgui-gallery` (menus page) |
 | `MenuItem` | `menuitem` | `cgui-gallery` (menus page) |
 | `Dropdown` | `dropdown` | `cgui-gallery` (menus page) |
-| `CanvasView` | `canvasview` | `cgui-gallery` (canvas page) |
+| `CanvasView` | `canvasview` | `cgui-gallery` (graph page) |
+| `GraphView` | `graphview` | `cgui-gallery` (graph page) |
+| `GraphNode` | `graphnode` | `cgui-gallery` (graph page) |
+| `NodePort` | `nodeport` | `cgui-gallery` (graph page) |
 | `Scroller` | `scroller` | `cgui-scroller` |
 | `ScrollerView` | `scrollerview` | `cgui-scroller` |
 | `SplitView` | `splitview` | `cgui-splitview` |
@@ -969,6 +972,11 @@ The things that are invisible from any single class and expensive to rediscover.
 | Only `AnchoredPlacement` writes `left`/`top` on an anchored popup | Any other writer fights placement every frame |
 | Transitioning *into* view needs a resting value in the sheet, never a one-frame write from Java | The write is itself transitionable, so the engine eases toward it and the cleanup retargets it back — nothing animates, and no test sees it |
 | `TransitionEngine` advances on `System.nanoTime()`, ignoring the delta it is passed | A test loop cannot step transition time; assert the inputs (resting value, state class, ANIMATION-origin candidate) rather than intermediate values |
+| A wire's colour is **read back out of the cascade** — `NodePort.typeColor()` returns the dot's computed `border-color` | `CgCurveRenderer` needs an ARGB int, so something must hand it a number; reading it from the dot keeps Unity's per-type palette in `graph.css` instead of putting GLSL's type system and its colours in Java. Hard-code it and adding a type means editing two languages |
+| An input port takes **one** edge, an output **many** — so connecting to an occupied input *replaces* | Refusing it looks like correct validation and makes rewiring take two gestures. The displaced edge must leave through the same `disconnect` as a manual one, or 6.2.4's undo will not know it happened |
+| `nodeport:blank` means *unconnected*, and a connect must `invalidateStyleMatch()` | It drives both the hollow-vs-filled dot and whether the inline editor shows. Without the invalidation a pseudo-class is never re-evaluated: the dot stays hollow under a live wire and the editor stays visible beneath it, which reads as a paint bug |
+| Click-focus targets **the exact element hit**, never the nearest focusable ancestor | The DOM focuses the ancestor, which is why clicking a `<button>`'s inner text focuses the button. Every composite here dodges it by making its parts `setHitTest(false)` — unavailable when a part is itself interactive (a node's title bar carries the collapse chevron), so `GraphNode` calls `requestFocus` itself. Fixing `emitMouseDown` to walk up would cover every composite at once |
+| A `graphnode` paints **no background of its own**; each region paints one, and the port band deliberately paints none | That is what lets a wire — drawn under every node — show through and read as plugged into its dot rather than cut off at the border. The cost is that a region which forgets to paint is see-through, so the regions are named together in `graph.css` rather than left to inherit |
 | A drag ends when **the button that started it** is released — `startDrag` takes one, defaulting to left | The handler used to assume button 0 unconditionally: invisible for every left-button drag in the engine, and fatal for any other. A middle-button pan is never told its button came up, while the implicit capture release still fires — so a drag with no button held keeps eating every mouse move, and the canvas slides around on its own |
 | A **positive** `MouseEvent.Scroll` notch means the wheel rolled **down** — `ScrollerView` is the only statement of it, via `setScrollTop(before + delta)` | Any new wheel consumer that takes the sign at face value is inverted. `CanvasView` shipped zooming *in* on scroll-down: nothing failed, because a test written from the implementation agrees with it, and the first person to touch a wheel found it in a second |
 | A pan drag's source is the **viewport**, never the transformed plane | Every `DragListener` coordinate is converted through the source's own transform, so panning the plane you are dragging from moves the frame the delta is measured in — the view accelerates away from the cursor instead of following it |
@@ -1141,6 +1149,8 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
                                MenuItem, Popover, Scroller, ScrollerView, Slider,
                                SplitView, Switch, Tab, TabView, TextField, Tooltip, UIText
     .canvas                    CanvasView (pan/zoom viewport), WorldRect — the node graph's substrate
+    .graph                     GraphView, GraphNode, NodePort, NodeWireLayer, GraphConnection,
+                               PortType (SPI) + BasicPortType + PortTypeRegistry, PortDirection
 
 com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, JsonOps, PlainOps,
                                StateMap, UIDescriptionCodec, ContentHash
@@ -1167,6 +1177,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 |---|---|
 | `ui/styles/default.css` | **User-agent sheet.** Functional geometry for every widget with no theme loaded. |
 | `ui/styles/ore.css` | Minecraft Ore UI theme, ported from LDLib2's `ore.lss`. |
+| `ui/styles/graph.css` | Node-graph theme — Unity Shader Graph's look, including the per-type port palette every wire reads its colour from. |
 | `ui/sprites/ore.json` | Sprite definitions backing `ore.css`. |
 | `textures/gui/ore_styles.png` | Ore theme atlas. |
 | `textures/gui/gdp_styles.png` | **Unreferenced by any code today.** |
