@@ -1219,6 +1219,19 @@ backend responsible for things a grammar does not describe.
 > there. Without it the caret at a wrap point flickers between them, which is the most visible way a soft
 > wrap implementation is wrong. The caret resolves `LEFT`; Home resolves `RIGHT`.
 
+> **Breaking is measured in pixels, not columns — and the first version was not.** It divided the
+> viewport by the advance of a **space** and handed the quotient to the column computer, which is exact
+> in a monospaced font and badly wrong in the proportional one the theme uses: a space is far narrower
+> than an average glyph, so the budget came out far too generous and wrapped lines *still* ran off the
+> right edge and were clipped. It looked like wrapping was broken; it was measuring that was.
+> `ShapedLineBreaks` measures against the same cached row widths the caret and selection bands are placed
+> with, so a break decision and the paint that follows it cannot disagree. **Only a visual check found
+> this** — every test passed — so `noWrappedLineIsWiderThanTheViewport` now measures painted text against
+> the box it goes in, and the original bug reinstated verbatim is one of the mutants it catches.
+>
+> The two computers share `BreakOpportunities`: only the *has it run out of room* test differs, and a
+> duplicated copy of the *where may it break* rules is the mistake `stroke.glsl` already records.
+
 > **Tab stops after a wrap were solved by rebasing, not by more state.** A tab's stop depends on its
 > position in the *row*, so measuring a continuation line's own text puts every tab after a wrap at the
 > wrong stop. VS Code carries a parallel `breakOffsetsVisibleColumn` array for this; here the view line

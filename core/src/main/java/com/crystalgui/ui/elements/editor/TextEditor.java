@@ -31,8 +31,8 @@ import com.crystalgui.text.cursor.MoveOperations;
 import com.crystalgui.text.cursor.TypeOperations;
 import com.crystalgui.text.wrap.LineBreaksComputer;
 import com.crystalgui.text.wrap.LineProjection;
-import com.crystalgui.text.wrap.MonospaceLineBreaks;
 import com.crystalgui.text.wrap.ProjectedLines;
+import com.crystalgui.text.wrap.ShapedLineBreaks;
 import com.crystalgui.text.wrap.WrapIndent;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.ScrollerView;
@@ -124,6 +124,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Whether {@link EditorCommands} has been installed for this editor — see {@code updateWindow}. */
     private boolean commandsInstalled;
+
+    /** Whether the live projection was built with real measurement, or is the no-font fallback. */
+    private boolean projectedWithMeasurement = true;
 
     private final Map<Integer, UIElement> realisedLines = new HashMap<>();
     private final Deque<UIElement> linePool = new ArrayDeque<>();
@@ -1788,26 +1791,43 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /**
-     * The width, in columns, that lines wrap at.
+     * The width, in <b>pixels</b>, that lines wrap at.
      *
-     * <p>Derived from the viewport and the <b>measured advance of a space</b> rather than assumed. The
-     * breaks computer is column-based (VS Code's, ported), and a column is only a pixel width once a font
-     * has resolved — before that {@code advance} is 0 and the division would be infinite, hence the
-     * floor.</p>
+     * <p>Pixels rather than columns, and that is the whole correction. The first version divided this by
+     * the advance of a space and handed the quotient to the column-based computer, which is exact only in
+     * a monospaced font — the theme's IBM Plex Sans is proportional, a space is far narrower than an
+     * average glyph, and the resulting budget was so generous that wrapped lines still ran off the right
+     * edge and were clipped. It read as wrapping being broken; it was measuring that was.</p>
      */
-    private int wrapColumns() {
-        float width = getClientWidth() - gutterWidth - verticalBarThickness();
-        float advance = spaceAdvance();
-        if (!(width > 0f) || !(advance > 0f)) return Integer.MAX_VALUE;
-        return Math.max(8, (int) (width / advance));
+    private float wrapWidthPx() {
+        return getClientWidth() - gutterWidth - verticalBarThickness();
     }
 
-    /** The advance of one space in the editor's measured font — the column unit. */
+    /** The advance of one space in the editor's measured font. */
     private float spaceAdvance() {
         CgFontFamily family = resolveFamily();
         if (family == null) return 0f;
         float[] widths = caretOffsets(" ", family);
         return widths.length > 1 ? widths[1] : 0f;
+    }
+
+    /**
+     * The measured x of every character column of a row, for {@link ShapedLineBreaks}.
+     *
+     * <p>Built from the same {@link RowMetrics} the caret and the selection bands are placed with, so the
+     * width a break decision is made against is the width the text is actually drawn at. Measuring
+     * wrapping separately would let the two disagree, and a break computed against a different metric than
+     * the one that paints is exactly how a wrapped line ends up one glyph over the edge.</p>
+     */
+    private float[] columnOffsetsOf(String line) {
+        RowMetrics metrics = measureRow(line);
+        float[] widths = metrics.widths();
+        float[] out = new float[line.length() + 1];
+        for (int column = 0; column <= line.length(); column++) {
+            int index = metrics.line().displayIndexOf(column);
+            out[column] = widths[Math.max(0, Math.min(index, widths.length - 1))];
+        }
+        return out;
     }
 
     /**
@@ -1818,10 +1838,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * {@link ProjectedLines#rowsChanged} instead, which is why typing does not pay this.</p>
      */
     private void reproject() {
-        projectedWrapWidth = softWrap ? wrapColumns() : -1f;
+        float width = softWrap ? wrapWidthPx() : -1f;
+        projectedWrapWidth = width;
+        // No font yet means no measurement, and guessing one would wrap against a width that is about to
+        // change. Falling back to "no wrapping" for a frame is self-correcting; a wrong projection is not.
+        boolean measurable = softWrap && width > 0f && resolveFamily() != null;
+        projectedWithMeasurement = measurable || !softWrap;
         projections.setComputer(
-                softWrap && projectedWrapWidth < Integer.MAX_VALUE
-                        ? new MonospaceLineBreaks((int) projectedWrapWidth, tabSize, wrapIndent)
+                measurable
+                        ? new ShapedLineBreaks(width, tabSize, wrapIndent, this::columnOffsetsOf)
                         : LineBreaksComputer.none(),
                 buffer.document());
     }
@@ -1829,8 +1854,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Reprojects only if the wrap width actually moved — called every frame, so it must be cheap. */
     private void reprojectIfWidthChanged() {
         if (!softWrap) return;
-        float wanted = wrapColumns();
-        if (Math.abs(wanted - projectedWrapWidth) >= 1f) reproject();
+        float wanted = wrapWidthPx();
+        // The second clause is not redundant. A reproject that ran before the font resolved installed the
+        // no-op computer and recorded the width anyway, so a width test alone would never fire again and
+        // wrapping would stay off forever -- on the one path where the editor is built and shown in the
+        // same frame, which is every harness scene.
+        if (Math.abs(wanted - projectedWrapWidth) >= 1f || !projectedWithMeasurement) reproject();
     }
 
     /**
@@ -2167,8 +2196,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // character off every row on screen. Wide enough for the text, and at least the viewport, so a
         // selection band on a short line still reads as a band and horizontal scrolling has something to
         // scroll.
-        float[] widths = rowMetrics(modelAt(viewLine).row()).widths();
-        final float width = Math.max(getClientWidth(), widths[widths.length - 1] + 1f);
+        // THE VIEW LINE'S OWN EXTENT, not the row's. Sizing a wrapped continuation to the whole row makes
+        // its box run off the viewport by everything above it -- invisible while the text fits inside,
+        // and wrong for anything that measures the box: the horizontal scroll extent and the selection
+        // band both read it.
+        LineProjection projection = projectionAt(viewLine);
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        final float width = Math.max(getClientWidth(),
+                xOfView(viewLine, projection.maxColumn(model.viewLineInRow())) + 1f);
         StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                         .top(top).left(left).width(width).height(lineHeight()));

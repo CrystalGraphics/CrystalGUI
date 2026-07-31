@@ -4,6 +4,7 @@ import com.crystalgui.text.Rope;
 import com.crystalgui.text.wrap.LineBreaksComputer;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.text.wrap.MonospaceLineBreaks;
+import com.crystalgui.text.wrap.ShapedLineBreaks;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.text.wrap.WrapIndent;
 import org.junit.Test;
@@ -187,6 +188,87 @@ public class SoftWrapTest {
     @Test
     public void aBlankLineCarriesNoIndent() {
         assertEquals(0, WrapIndent.INDENT.columnsFor("        ", 4, 80));
+    }
+
+    // ── ShapedLineBreaks: breaking against measured widths ──────────────────────────────────────
+    //
+    // Headless because the measurement is an interface. The editor supplies its own cached row widths;
+    // here a stub gives every character a fixed width, which makes the arithmetic checkable by hand while
+    // exercising the same code path the widget runs.
+
+    /** Every character 10 wide — so a 100-wide viewport fits exactly 10 of them. */
+    private static ShapedLineBreaks.LineMetrics fixedWidth(float perChar) {
+        return line -> {
+            float[] out = new float[line.length() + 1];
+            for (int i = 0; i <= line.length(); i++) out[i] = i * perChar;
+            return out;
+        };
+    }
+
+    @Test
+    public void aShapedLineThatFitsDoesNotWrap() {
+        ShapedLineBreaks breaks = new ShapedLineBreaks(100f, 4, WrapIndent.NONE, fixedWidth(10f));
+        assertTrue(breaks.project("abcdefghij").isUnwrapped());
+    }
+
+    /**
+     * <b>The bug the screenshot showed.</b> Wrapping must be decided against the width the text is
+     * actually drawn at — the column computer divided the viewport by the advance of a <em>space</em>,
+     * which in a proportional font is far narrower than an average glyph, so lines still overflowed.
+     */
+    @Test
+    public void everyShapedViewLineFitsTheWidth() {
+        float width = 100f;
+        ShapedLineBreaks breaks = new ShapedLineBreaks(width, 4, WrapIndent.NONE, fixedWidth(10f));
+        LineProjection projection = breaks.project("alpha beta gamma delta epsilon zeta eta theta");
+
+        assertTrue("it must actually wrap", projection.viewLineCount() > 1);
+        for (int i = 0; i < projection.viewLineCount(); i++) {
+            float measured = (projection.viewLineEnd(i) - projection.viewLineStart(i)) * 10f;
+            assertTrue("view line " + i + " measures " + measured + ", limit " + width, measured <= width);
+        }
+    }
+
+    /**
+     * A width of 70 fits seven characters, which falls <em>inside</em> {@code bbbb} — so a break at 5 can
+     * only come from preferring the word boundary. At 100 the limit lands exactly on one, which would
+     * have made this pass without testing anything.
+     */
+    @Test
+    public void aShapedBreakPrefersAWordBoundary() {
+        ShapedLineBreaks breaks = new ShapedLineBreaks(70f, 4, WrapIndent.NONE, fixedWidth(10f));
+        LineProjection projection = breaks.project("aaaa bbbb cccc");
+        assertEquals("broken after the space, not mid-word at seven", 5, projection.viewLineEnd(0));
+    }
+
+    @Test
+    public void aShapedUnbreakableTokenIsStillSplit() {
+        ShapedLineBreaks breaks = new ShapedLineBreaks(100f, 4, WrapIndent.NONE, fixedWidth(10f));
+        LineProjection projection = breaks.project("aaaaaaaaaaaaaaaaaaaaaaaaa");
+        assertTrue("25 characters at 10 per line must produce several", projection.viewLineCount() >= 3);
+        assertEquals(25, projection.viewLineEnd(projection.viewLineCount() - 1));
+    }
+
+    @Test
+    public void shapedViewLinesConcatenateBackToTheRow() {
+        String text = "alpha beta gamma delta epsilon zeta eta theta iota";
+        ProjectedLines lines = new ProjectedLines(
+                new ShapedLineBreaks(100f, 4, WrapIndent.NONE, fixedWidth(10f)));
+        Rope document = Rope.of(text);
+        lines.rebuild(document);
+
+        StringBuilder rebuilt = new StringBuilder();
+        for (int i = 0; i < lines.viewLineCount(); i++) rebuilt.append(lines.viewLineText(document, i));
+        assertEquals(text, rebuilt.toString());
+    }
+
+    /** The indent guard, in the unit the shaped computer works in. */
+    @Test
+    public void aShapedCarriedIndentIsAbandonedWhenItWouldFillTheLine() {
+        // 12 leading spaces at 10 wide is 120, well past half of a 100-wide viewport.
+        ShapedLineBreaks breaks = new ShapedLineBreaks(100f, 4, WrapIndent.SAME, fixedWidth(10f));
+        LineProjection projection = breaks.project("            some text that has to wrap somewhere");
+        assertEquals("no room for text means no carried indent", 0, projection.wrappedIndent());
     }
 
     // ── ProjectedLines: the document-wide index ─────────────────────────────────────────────────
