@@ -2821,6 +2821,78 @@ public class TextEditorTest extends UiTestBase {
                 numberMoved, lineMoved, 1f);
     }
 
+    /**
+     * <b>Everything in document coordinates moves together when the view scrolls.</b>
+     *
+     * <p>The general form of a bug that landed twice in a row. An element drawn in document coordinates
+     * must be <em>inside</em> the scroll-exempt viewport, whose children subtract the scroll offset by
+     * hand — and one left on the editor instead is scrolled by the pose translate <b>and</b> has the
+     * offset subtracted, so it ends up a screenful away from the text it belongs to. That is what put a
+     * selection band several lines above the word it marked.</p>
+     *
+     * <p>Asserting each one against the <em>gutter</em> rather than against an absolute figure is what
+     * makes this catch a wrong parent: a double-subtracted element moves by twice the scroll, and a
+     * never-moved one by none, and neither matches the row it is supposed to sit on.</p>
+     */
+    @Test
+    public void everythingInDocumentCoordinatesScrollsTogether() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 200; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        editor.setIndentGuidesVisible(true);
+        editor.setSelection(0, 5);
+        showEditor();
+
+        // ALIGNMENT, not deltas. The line elements are POOLED and keyed by view line, so the same
+        // element represents a different row after a scroll -- tracking one across the scroll compares
+        // two unrelated rows and reports nonsense. What must hold either way is that the topmost line,
+        // its gutter number, the caret and the band all sit on the same rows as each other.
+        assertRowsAlign("before scrolling");
+
+        editor.setScrollImmediate(0f, 12f * editor.lineHeight());
+        showEditor();
+
+        assertTrue("the view actually scrolled", editor.getScrollTop() > 0f);
+        assertRowsAlign("after scrolling");
+    }
+
+    /**
+     * The topmost painted line and the topmost gutter number describe the same row, so they must share a
+     * y. A line left outside the viewport is scrolled twice — by the pose translate and by hand — and
+     * lands a screenful from its number; one never repositioned stays put while the number moves.
+     */
+    private void assertRowsAlign(String when) {
+        UIElement number = childWithClass(TextEditor.LINE_NUMBER_CLASS);
+        UIElement line = linesOf().get(0);
+        assertEquals(when + ": the text and its gutter number must sit on the same row",
+                number.getRuntimeCache().getY(), line.getRuntimeCache().getY(), editor.lineHeight());
+    }
+
+    /**
+     * <b>Indent guides are drawn on both sides of a scroll.</b>
+     *
+     * <p>The counts are deliberately not compared: the realised window includes overscan, so a scrolled
+     * editor legitimately has more rows realised than a fresh one. What must hold is that guides exist at
+     * all in both states — a guide layer that only appears once something has moved is the shape a
+     * wrong-parent or a stale-layout bug takes.</p>
+     */
+    @Test
+    public void indentGuidesAreDrawnBeforeAndAfterAScroll() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 200; i++) document.append("            deep").append(i).append(NL);
+        build(document.toString());
+        editor.setIndentGuidesVisible(true);
+        showEditor();
+        int before = countOf(TextEditor.INDENT_GUIDE_CLASS);
+
+        editor.setScrollImmediate(0f, 12f * editor.lineHeight());
+        showEditor();
+        int after = countOf(TextEditor.INDENT_GUIDE_CLASS);
+
+        assertTrue("guides must be drawn before any scroll, got " + before, before > 0);
+        assertTrue("and after one, got " + after, after > 0);
+    }
+
     /** The gap scales with the font, so the gutter stays proportionate when the editor is zoomed. */
     @Test
     public void theGutterGapGrowsWithTheFont() {

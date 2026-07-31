@@ -3356,8 +3356,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
             band.addClass(SELECTION_CLASS);
             band.setHitTest(false);
             band.markAsInternal();
-            // Before the caret, so the caret is not painted underneath its own selection.
-            insertInternalChildAt(band, 0);
+            // IN THE VIEWPORT, like everything else in document coordinates. Left on the editor it was
+            // scrolled by the pose translate AND had the offset subtracted by hand in placeBands, so the
+            // bands sat a screenful away from the text they marked -- selecting a word painted a band
+            // several lines above it.
+            //
+            // Appended rather than inserted first: the sheet already orders these by z-index
+            // (__selection__ at -1, __caret__ at 1), so the caret cannot end up under its own band, and
+            // insertInternalChildAt is not reachable on another element anyway.
+            textViewport().addInternalChild(band);
             selectionBands.add(band);
         }
         return selectionBands.get(index);
