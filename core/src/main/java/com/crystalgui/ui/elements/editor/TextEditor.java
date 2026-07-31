@@ -9,6 +9,9 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.layout.LayoutProperties;
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.text.ChangeSet;
@@ -43,6 +46,8 @@ import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import dev.vfyjxf.taffy.style.TaffyPosition;
+import lombok.Getter;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -134,8 +139,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Whether the live projection was built with real measurement, or is the no-font fallback. */
     private boolean projectedWithMeasurement = true;
 
-    /** The numbers' column, measured whenever {@code gutterWidth} is — the two must never disagree. */
-    private float gutterNumbersLeft;
+    /** The digits' width, measured whenever {@code gutterWidth} is — the two must never disagree. */
     private float gutterNumbersWidth;
 
     // ── §G view decorations ─────────────────────────────────────────────────────────────────────
@@ -168,7 +172,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private final UIElement gutter = new UIElement();
     private final List<UIElement> lineNumbers = new ArrayList<>();
+    @Getter
     private boolean gutterVisible = true;
+    /**
+     * -- GETTER --
+     * The gutter's laid-out width — where the code starts, relative to the editor's padding edge. 
+     */
+    @Getter
     private float gutterWidth;
 
     /** A band behind the primary caret's row. An ordinary child, so it scrolls with the text. */
@@ -1053,10 +1063,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // Zero without a gutter: the margin exists to separate the code FROM the gutter, so with no
         // gutter there is nothing to separate from and the text belongs on the content-box origin.
         if (!gutterVisible) return 0f;
-        // Wide enough for a guide to sit INSIDE it and still read as separate from the text. At 0.45em
-        // the gap was under two pixels, so the level-0 guide and the first glyph were visually the same
-        // column and the letter appeared to cut the guide in half.
-        return Math.max(6f, getStyle().getGeneralGroup().fontSize() * 0.9f);
+        // The gutter's margin-right. Margin is the honest property for it -- it is space OUTSIDE the
+        // gutter's painted box, which is precisely why the level-0 indent guide can live in it without
+        // being covered by the gutter's own background.
+        return gutterMetric(LayoutProperties.MARGIN_RIGHT);
     }
 
     /** Whether the line-number gutter is shown. */
@@ -1068,13 +1078,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return this;
     }
 
-    /** The gutter's laid-out width — where the code starts, relative to the editor's padding edge. */
-    public float getGutterWidth() {
-        return gutterWidth;
-    }
-
-    public boolean isGutterVisible() {
-        return gutterVisible;
+    /** The height available for text — the client box, less whatever the horizontal scrollbar covers. */
+    public float getViewportHeight() {
+        return viewportHeight();
     }
 
     public float gutterWidth() {
@@ -1769,14 +1775,39 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /**
-     * The margin before the digits.
+     * The margin before the digits — the gutter's own {@code padding-left}, from the stylesheet.
      *
      * <p>A widest-number field is right-aligned, so without this the longest number in the file — the one
      * that fills the field exactly — sits flush against the gutter's left edge. Three digits touching the
      * border is what a two-digit file never shows and a hundred-line file always does.</p>
+     *
+     * <p><b>Read back from the cascade rather than computed here</b>, along with {@link #gutterFoldWidth}
+     * and {@link #codeLeftPad}. All three were Java constants of the {@code max(6f, fontSize * 0.9f)}
+     * kind, which is exactly what this project's own rule forbids: a pixel value in a widget belongs in
+     * {@code default.css}. A theme can now change the gutter's proportions without touching Java, and the
+     * three numbers sit next to each other in the sheet where they can be compared.</p>
      */
     private float gutterPadLeft() {
-        return Math.max(3f, getStyle().getGeneralGroup().fontSize() * 0.55f);
+        return gutterMetric(LayoutProperties.PADDING_LEFT);
+    }
+
+    /**
+     * One of the gutter's metrics, as the cascade computed it.
+     *
+     * <p>Read from the <b>computed style</b> rather than from the laid-out box, because
+     * {@code getTaffyLayout()} is protected and the gutter is a plain {@code UIElement} — Java's protected
+     * access does not reach another instance's. Reading the cascade is the better answer anyway: it is
+     * available before the first layout pass, so the gutter is the right width on the frame it appears
+     * rather than on the one after.</p>
+     *
+     * <p>Only absolute lengths are honoured. A percentage here would resolve against the gutter's own
+     * width, which is computed <em>from</em> these three values — so it would be circular, and silently
+     * returning something plausible is worse than ignoring it.</p>
+     */
+    private float gutterMetric(StyleProperty<LengthPercentageAuto> property) {
+        LengthPercentageAuto value = gutter.getStyle().getLayoutGroup().getValueSave(property);
+        if (value == null || value.getType() != LengthPercentageAuto.Type.LENGTH) return 0f;
+        return Math.max(0f, value.getValue());
     }
 
     /** The digits themselves, sized to the widest number the document can reach. */
@@ -1792,15 +1823,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /**
-     * The clear column between the numbers and the code.
+     * The clear column between the numbers and the code — the gutter's {@code padding-right}.
      *
      * <p>Wide on purpose. It is what pushes the numbers towards the left edge of the gutter and away from
      * the text, which is the whole reason IntelliJ's gutter reads as a margin rather than as a column of
-     * numbers jammed against the code.</p>
+     * numbers jammed against the code. It is also where a fold arrow goes, when there is one.</p>
      */
     private float gutterFoldWidth() {
         if (!gutterVisible) return 0f;
-        return Math.max(10f, getStyle().getGeneralGroup().fontSize() * 2.2f);
+        return gutterMetric(LayoutProperties.PADDING_RIGHT);
     }
 
     /** The vertical equivalent, for the same reason. */
@@ -2276,7 +2307,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         float wantedGutter = measureGutter();
         if (Math.abs(wantedGutter - gutterWidth) > 0.5f) {
             gutterWidth = wantedGutter;
-            gutterNumbersLeft = gutterPadLeft();
             gutterNumbersWidth = gutterDigitsWidth();
             firstRealised = -1;
             lastRealised = -1;
@@ -2556,15 +2586,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // The NUMBERS' column, not the whole gutter. Spanning the full width right-aligns the digits
             // against the code instead of against the fold column, which is what put them a few pixels
             // from the first glyph.
-            // From the CACHED measurement, never recomputed here. gutterWidth is a field updated only
-            // when it moves, so measuring the digits afresh at layout time meant the two could disagree
-            // on any frame where the font had not resolved -- the numbers got a zero-width box and every
-            // one of them piled up in the same place.
-            final float numberLeft = gutterNumbersLeft;
+            // left(0), because an absolute inset is PADDING-BOX relative -- the gutter's own padding-left
+            // already places the digits, so adding it again here would double the margin.
+            //
+            // The width comes from the CACHED measurement and is never recomputed here. gutterWidth is a
+            // field updated only when it moves, so measuring the digits afresh at layout time meant the
+            // two could disagree on any frame where the font had not resolved: the numbers got a
+            // zero-width box and every one of them piled up in the same place.
             final float numberWidth = gutterNumbersWidth;
             StyleGroup.defaultPipeline(number.getStyle().getLayoutGroup(),
-                    l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                            .left(numberLeft).top(top).width(numberWidth).height(height));
+                    l -> l.positionType(TaffyPosition.ABSOLUTE)
+                            .left(0f).top(top).width(numberWidth).height(height));
         }
         for (int i = used; i < lineNumbers.size(); i++) hide(lineNumbers.get(i));
         insetHorizontalBarPastGutter();

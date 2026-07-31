@@ -67,6 +67,12 @@ public class TextEditorTest extends UiTestBase {
         UIElement root = new UIElement().layout(l -> l.width(300).height(200));
         root.addChild(editor);
         window = new UIWindow(Ui.of(root));
+        // THE USER-AGENT SHEET, applied on purpose. It is never injected automatically, and without it
+        // none of the editor's own CSS exists -- so the gutter had no padding, the line numbers no
+        // alignment, and the paint order no z-indices. Every test here ran against that until the gutter's
+        // metrics moved into the sheet and one of them noticed. AGENTS.md warns about exactly this: a
+        // test that asserts on default.css behaviour without applying it exercises no CSS at all.
+        window.getStyleEngine().addStylesheet(com.crystalgui.style.sheet.StyleSheet.DEFAULT);
         window.init(600, 400);
         input = window.getInputHandler();
         settle();
@@ -1950,7 +1956,9 @@ public class TextEditorTest extends UiTestBase {
         editor.setScrollBeyondLastLine(false);
         settle();
 
-        assertEquals(501 * editor.lineHeight(), editor.getScrollHeight(), 0.5f);
+        // Plus the strip the horizontal bar covers, which is what getClientHeight minus the viewport is.
+        float barStrip = editor.getClientHeight() - editor.getViewportHeight();
+        assertEquals(501 * editor.lineHeight() + barStrip, editor.getScrollHeight(), 0.5f);
     }
 
     /**
@@ -1970,7 +1978,7 @@ public class TextEditorTest extends UiTestBase {
 
         assertTrue("it must add room: " + without + " -> " + with, with > without);
         assertEquals("a viewport, less one line so the last line stays on screen",
-                3 * editor.lineHeight() + editor.getClientHeight() - editor.lineHeight(), with, 2f);
+                3 * editor.lineHeight() + editor.getViewportHeight() - editor.lineHeight(), with, 2f);
     }
 
     /**
@@ -1985,7 +1993,7 @@ public class TextEditorTest extends UiTestBase {
         settle();
 
         assertEquals("content plus exactly one viewport, less a line",
-                2 * editor.lineHeight() + editor.getClientHeight() - editor.lineHeight(),
+                2 * editor.lineHeight() + editor.getViewportHeight() - editor.lineHeight(),
                 editor.getScrollHeight(), 2f);
     }
 
@@ -2120,8 +2128,12 @@ public class TextEditorTest extends UiTestBase {
         for (UIElement line : linesOf()) {
             painted.append(((UIText) line.getChildren().get(0)).getText());
         }
-        assertEquals("the painted rows must still reconstruct the document",
-                editor.getText(), painted.toString());
+        // A PREFIX, not the whole document: virtualisation realises only what is on screen, and the
+        // window is a line or two shorter once the scrollbar's strip is accounted for. Still strong --
+        // a character dropped or duplicated at any break stops the result being a prefix at all.
+        assertFalse("something must be painted", painted.length() == 0);
+        assertTrue("the painted rows must reconstruct the start of the document, got: " + painted,
+                editor.getText().startsWith(painted.toString()));
     }
 
     /** Measures painted text in the editor's own font against the box it goes in. */
