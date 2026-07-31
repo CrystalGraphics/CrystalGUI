@@ -68,6 +68,9 @@ public class TableView<T> extends ListView<T> {
      */
     private final List<UIElement> headerCells = new ArrayList<>();
 
+    /** The live dividers, parallel to {@link #headerCells} minus the last — repositioned, never rebuilt. */
+    private final List<UIElement> headerDividers = new ArrayList<>();
+
     @Getter @Nullable
     private TableColumn<T> sortedColumn;
     @Getter
@@ -280,14 +283,22 @@ public class TableView<T> extends ListView<T> {
             // column off the edge anyway. A FLEXIBLE one genuinely will give way, down to its minimum.
             reserved += other.getWeight() > 0f ? other.getMinWidth() : other.getWidth();
         }
-        // Dividers take space too, and a ceiling that ignored them would let the last column sit exactly
-        // one divider-width off the edge.
-        reserved += DIVIDER_WIDTH * Math.max(0, columns.size() - 1);
         return Math.max(column.getMinWidth(), getClientWidth() - reserved);
     }
 
-    /** Kept in step with {@code default.css}'s divider width — see {@link #maxWidthFor}. */
-    private static final float DIVIDER_WIDTH = 3f;
+    /**
+     * Half a divider's grab width, used to centre it on the boundary it straddles.
+     *
+     * <p>Dividers are positioned <b>absolutely</b>, deliberately: an in-flow divider consumes header
+     * width the rows do not have, so the header ran {@code (columns - 1) × width} wider than the rows
+     * and every header cell after the first sat progressively right of the column beneath it. Small
+     * enough to read as a styling wobble rather than a layout bug, which is why it survived — "Kind"
+     * three pixels right of "folder" looks like padding.</p>
+     *
+     * <p>Out of flow also matches what a divider <em>is</em>: a grab handle straddling a boundary, not
+     * a column of its own.</p>
+     */
+    private static final float DIVIDER_HALF_WIDTH = 1.5f;
 
     // ── The header ──────────────────────────────────────────────────────────
 
@@ -302,6 +313,7 @@ public class TableView<T> extends ListView<T> {
         // children, which is the guard that stops a caller wiping a widget's own structure.
         for (UIElement child : new ArrayList<>(header.getChildren())) header.removeInternalChild(child);
         headerCells.clear();
+        headerDividers.clear();
         List<Float> widths = resolvedWidths();
 
         for (int i = 0; i < columns.size(); i++) {
@@ -324,17 +336,37 @@ public class TableView<T> extends ListView<T> {
             headerCells.add(cell);
 
             if (column.isResizable() && i < columns.size() - 1) {
-                header.addInternalChild(newDivider(column, i));
+                UIElement divider = newDivider(column, i);
+                header.addInternalChild(divider);
+                headerDividers.add(divider);
+            } else {
+                // A placeholder keeps the list index-aligned with the columns, so repositioning does not
+                // have to re-derive which columns happened to get one.
+                headerDividers.add(null);
             }
         }
+        positionDividers(widths);
     }
 
-    /** Writes the current resolved widths into the existing header cells. */
+    /** Writes the current resolved widths into the existing header cells, and re-centres the dividers. */
     private void updateHeaderWidths() {
         List<Float> widths = resolvedWidths();
         for (int i = 0; i < headerCells.size() && i < widths.size(); i++) {
             final float width = widths.get(i);
             StyleGroup.defaultPipeline(headerCells.get(i).getStyle().getLayoutGroup(), l -> l.width(width));
+        }
+        positionDividers(widths);
+    }
+
+    /** Centres each divider on the boundary between its column and the next. */
+    private void positionDividers(List<Float> widths) {
+        float offset = 0f;
+        for (int i = 0; i < headerDividers.size() && i < widths.size(); i++) {
+            offset += widths.get(i);
+            UIElement divider = headerDividers.get(i);
+            if (divider == null) continue;
+            final float left = offset - DIVIDER_HALF_WIDTH;
+            StyleGroup.defaultPipeline(divider.getStyle().getLayoutGroup(), l -> l.left(left));
         }
     }
 
@@ -362,6 +394,9 @@ public class TableView<T> extends ListView<T> {
     private UIElement newDivider(TableColumn<T> column, int columnIndex) {
         UIElement divider = new UIElement();
         divider.addClass(DIVIDER_CLASS);
+        // Out of flow — see DIVIDER_HALF_WIDTH. positionDividers() supplies the left inset.
+        StyleGroup.defaultPipeline(divider.getStyle().getLayoutGroup(),
+                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE).top(0f).bottom(0f));
         divider.onMouseDown.attachListener((el, event) -> {
             var window = getAttachedWindow();
             if (window == null) return;

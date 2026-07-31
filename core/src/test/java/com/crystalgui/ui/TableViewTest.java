@@ -359,6 +359,60 @@ public class TableViewTest extends UiTestBase {
         input.endFrame();
     }
 
+    /**
+     * <b>A header cell must sit exactly over the column beneath it.</b>
+     *
+     * <p>The dividers used to be in the header's flex flow, so the header ran
+     * {@code (columns - 1) × dividerWidth} wider than the rows and every cell after the first drifted
+     * right of its own column — three pixels, which reads as padding rather than as a bug. Dividers are
+     * absolutely positioned now; this compares the two directly, which is the only way the drift is
+     * visible at all.</p>
+     */
+    @Test
+    public void headerCellsLineUpWithTheCellsBeneathThem() {
+        build("alpha", "bravo");
+        settle();
+        settle();
+
+        UIElement row = table.realisedRows().get(0);
+        assertNotNull(row);
+        for (int i = 0; i < table.getColumns().size(); i++) {
+            float headerLeft = headerCell(i).getRuntimeCache().getX();
+            float cellLeft = row.getChildren().get(i).getRuntimeCache().getX();
+            assertEquals("column " + i + " header is not over its cells",
+                    cellLeft, headerLeft, 0.5f);
+        }
+    }
+
+    /**
+     * <b>A flexible column may not be squeezed below its own minimum.</b>
+     *
+     * <p>{@code width(0).flexible()} means the column's entire width is share-of-leftover, so growing a
+     * fixed neighbour drove it to literally zero — the gallery's Name column rendered as a sliver of
+     * clipped text. The floor was missing only on the flexible branch of {@code resolvedWidth}, which is
+     * also the branch {@code maxWidthFor} reserves {@code minWidth} against, so the drag ceiling was
+     * computed against a minimum layout did not honour.</p>
+     */
+    @Test
+    public void aFlexibleColumnStopsAtItsMinimumRatherThanCollapsing() {
+        build("alpha", "bravo");
+        settle();
+
+        TableColumn<File> flexible = table.getColumns().get(0);
+        flexible.width(0).flexible();
+        // Squeeze the table until the FIXED columns alone overrun it, so there is no leftover left to
+        // share. Driving it through resizeColumnTo instead proves nothing: maxWidthFor already reserves
+        // this very minimum, so that route never reaches the branch with the missing floor.
+        table.layout(l -> l.width(40));
+        settle();
+        settle();
+
+        assertTrue("no leftover to share", table.getClientWidth() < 100f);
+
+        assertTrue("flexible column collapsed to " + table.resolvedWidths().get(0),
+                table.resolvedWidths().get(0) >= flexible.getMinWidth() - 0.5f);
+    }
+
     private UIElement headerOf() {
         for (UIElement child : table.getChildren()) {
             if (child.hasClass(TableView.HEADER_CLASS)) return child;
