@@ -1229,6 +1229,14 @@ backend responsible for things a grammar does not describe.
 > this** — every test passed — so `noWrappedLineIsWiderThanTheViewport` now measures painted text against
 > the box it goes in, and the original bug reinstated verbatim is one of the mutants it catches.
 >
+> **A reflow must rebind the lines already on screen, and "did the count change" is the wrong test.**
+> A resize moves every break while frequently leaving the view line count alone, so a count test rebinds
+> nothing — and the realise loop only ever *adds* view lines it does not have. The lines on screen kept
+> the old projection's text and geometry: a wrapped row's continuation displayed the **next row's** text,
+> and every line overflowed the narrower box. Reprojection now reports whether it ran, and realisation and
+> rebinding share one `layOutLine` so a line cannot be positioned two different ways depending on how it
+> got there.
+>
 > The two computers share `BreakOpportunities`: only the *has it run out of room* test differs, and a
 > duplicated copy of the *where may it break* rules is the mistake `stroke.glsl` already records.
 

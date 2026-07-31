@@ -1851,15 +1851,21 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 buffer.document());
     }
 
-    /** Reprojects only if the wrap width actually moved — called every frame, so it must be cheap. */
-    private void reprojectIfWidthChanged() {
-        if (!softWrap) return;
+    /**
+     * Reprojects only if the wrap width actually moved — called every frame, so it must be cheap.
+     *
+     * @return whether a reprojection ran, so the caller knows the lines on screen are now stale
+     */
+    private boolean reprojectIfWidthChanged() {
+        if (!softWrap) return false;
         float wanted = wrapWidthPx();
         // The second clause is not redundant. A reproject that ran before the font resolved installed the
         // no-op computer and recorded the width anyway, so a width test alone would never fire again and
         // wrapping would stay off forever -- on the one path where the editor is built and shown in the
         // same frame, which is every harness scene.
-        if (Math.abs(wanted - projectedWrapWidth) >= 1f || !projectedWithMeasurement) reproject();
+        if (Math.abs(wanted - projectedWrapWidth) < 1f && projectedWithMeasurement) return false;
+        reproject();
+        return true;
     }
 
     /**
@@ -2030,16 +2036,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
-            UIElement line = entry.getValue();
-            UIText label = textOf(line);
-            // setText already no-ops on an unchanged string, so an edit on one line costs one re-shape
-            // rather than one per visible row.
-            label.setText(viewLineDisplayText(viewLine));
-            // The carried indent moves when the row's own indentation changes, and an edit that reflows
-            // this row can turn a continuation line into a first line or the reverse -- so the left inset
-            // is re-pushed here, not only at realise time.
-            final float left = textOriginX() + carriedIndentPx(viewLine);
-            StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(), l -> l.left(left));
+            // The FULL layout, not just the text. An edit or a reflow can turn a continuation line into a
+            // first line or the reverse, which moves its carried indent and its width -- and after a
+            // resize it moves every one of them.
+            layOutLine(viewLine, entry.getValue());
         }
         markTreeDirty();
     }
@@ -2113,11 +2113,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         // The gutter's width feeds the wrap width, so this must follow it -- otherwise the first frame
         // after the gutter grows a digit wraps against the old width and every line shifts next frame.
-        int beforeReproject = viewLineCount();
-        reprojectIfWidthChanged();
-        if (viewLineCount() != beforeReproject) {
+        //
+        // Keyed on whether a reprojection HAPPENED, not on whether the view line count changed. A resize
+        // moves every break while frequently leaving the count alone, and a count test then rebinds
+        // nothing: the lines on screen keep the old projection's text and geometry, which is a
+        // continuation showing the next row's content and every line overflowing the new width.
+        if (reprojectIfWidthChanged()) {
             firstRealised = -1;
             lastRealised = -1;
+            rebindRealisedLines();
+            highlightsDirty = true;
         }
 
         int count = viewLineCount();
@@ -2189,6 +2194,21 @@ public class TextEditor extends ScrollerView implements UndoScope {
             line.markAsInternal();
             line.addChild(new UIText(""));
         }
+        layOutLine(viewLine, line);
+        if (line.getParent() == null) addInternalChild(line);
+        return line;
+    }
+
+    /**
+     * Puts one line element where its view line is, with that view line's text.
+     *
+     * <p><b>Shared by realisation and rebinding, and that is the point.</b> A reflow leaves every line
+     * already on screen holding the previous projection's text and geometry, and the realise loop only
+     * ever <em>adds</em> view lines it does not have — so a resize repainted stale content: a wrapped
+     * row's continuation showed the <em>next</em> row's text, and everything overflowed the narrower box.
+     * One routine means a line cannot be positioned two different ways depending on how it got here.</p>
+     */
+    private void layOutLine(int viewLine, UIElement line) {
         final float top = textOriginY() + viewLine * lineHeight();
         final float left = textOriginX() + carriedIndentPx(viewLine);
         // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
@@ -2196,6 +2216,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // character off every row on screen. Wide enough for the text, and at least the viewport, so a
         // selection band on a short line still reads as a band and horizontal scrolling has something to
         // scroll.
+        //
         // THE VIEW LINE'S OWN EXTENT, not the row's. Sizing a wrapped continuation to the whole row makes
         // its box run off the viewport by everything above it -- invisible while the text fits inside,
         // and wrong for anything that measures the box: the horizontal scroll extent and the selection
@@ -2207,10 +2228,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                         .top(top).left(left).width(width).height(lineHeight()));
-        // The DISPLAY text, with tabs expanded to their stops -- see RowMetrics.
+        // The DISPLAY text, with tabs expanded to their stops -- see RowMetrics. setText no-ops on an
+        // unchanged string, so rebinding every visible line costs one re-shape per line that moved.
         ((UIText) line.getChildren().get(0)).setText(viewLineDisplayText(viewLine));
-        if (line.getParent() == null) addInternalChild(line);
-        return line;
     }
 
     private void recycleLine(UIElement line) {
