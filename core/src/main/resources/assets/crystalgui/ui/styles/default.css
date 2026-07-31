@@ -419,10 +419,17 @@ texteditor {
  * this is what puts the text in the middle of its row rather than at the top of it. The caret and the
  * selection bands are centred on the same axis from the font's own ink height, so all three agree
  * however tall line-height is. */
+/* THE STACK, bottom to top: current line, selection, text, caret, scrollbars, gutter.
+ *
+ * These are load-bearing, not styling. Equal-z siblings paint in insertion order, and the scrollers are
+ * created by ScrollerView's constructor while the lines are realised later -- so at equal z the text
+ * painted OVER the horizontal bar, and the row straddling the bar's strip spilled across it. The bars
+ * have to be above the text; the gutter has to be above the bars, so a long line scrolled sideways
+ * passes behind the numbers rather than through them. */
 texteditor .__line__ {
     white-space: nowrap;
     justify-content: center;
-    z-index: 1;
+    z-index: 0;
 }
 
 /* THE Z-INDICES ARE LOAD-BEARING, not decoration. Equal-z siblings paint in insertion order, and the
@@ -438,12 +445,12 @@ texteditor {
 
 texteditor .__caret__ {
     background-color: #E6E6E6;
-    z-index: 2;
+    z-index: 1;
 }
 
 texteditor .__selection__ {
     background-color: #2C5A8C;
-    z-index: 0;
+    z-index: -1;
 }
 
 /* The gutter. Scroll-exempt, so TextEditor positions its numbers by hand -- it has to hold still
@@ -451,8 +458,12 @@ texteditor .__selection__ {
  * apply on one axis only. z-index above the lines so a long line scrolled sideways passes behind the
  * numbers rather than through them. */
 texteditor .__gutter__ {
-    z-index: 3;
+    z-index: 6;
     background-color: #1A1D23;
+    /* Clips its own numbers. The gutter stops above the horizontal scrollbar, but the numbers inside it
+     * are positioned by hand from the scroll offset, so without this the one at the boundary is drawn
+     * past the gutter's edge and over the bar. */
+    overflow: hidden;
 }
 
 texteditor .__line-number__ {
@@ -466,7 +477,7 @@ texteditor .__line-number__ {
 /* Behind everything, including the selection bands: it marks a row, it does not compete with them. */
 texteditor .__current-line__ {
     background-color: #232830;
-    z-index: -1;
+    z-index: -2;
 }
 
 /* Functional geometry for the table's own structure. Nothing here is decoration — a theme owns all of
@@ -556,6 +567,14 @@ treeview .__corner__,
 texteditor .__corner__,
 tableview .__corner__ {
     background: #2A2A2A;
+}
+
+/* Above the editor's text, below its gutter -- see the stacking note above. Only the editor needs this:
+ * a list's rows do not overlap its bars. */
+texteditor .__v-scroller__,
+texteditor .__h-scroller__,
+texteditor .__corner__ {
+    z-index: 5;
 }
 
 scrollerview .__v-scroller__,

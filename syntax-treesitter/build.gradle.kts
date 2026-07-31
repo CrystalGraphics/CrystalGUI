@@ -4,10 +4,8 @@
 // libraries, so it defines the SyntaxTokenizer SPI and nothing more. Everything that needs a .dll/.so
 // lives here, and an editor with this module absent simply falls back to the built-in lexer.
 //
-// The tree-sitter binding is consumed as built jars from a local fork rather than from Maven Central,
-// because the official `jtreesitter` requires JDK 23+ and the Foreign Function & Memory API. The fork is
-// `tree-sitter-ng`, JNI-based and compiled to Java 8 bytecode, and its jars bundle the natives for
-// x86_64 Windows/Linux/macOS and aarch64 Linux/macOS.
+// The tree-sitter binding is consumed as jars checked in under lib/, because the official `jtreesitter`
+// requires JDK 23+ and the Foreign Function & Memory API. See lib/tree-sitter/README.md for provenance and licence.
 
 plugins {
     `java-library`
@@ -25,15 +23,19 @@ repositories {
     mavenCentral()
 }
 
-// Overridable, because an absolute path in a build file is a portability bug waiting to happen. Settings
-// only includes this module when the path resolves, so a checkout without the fork builds fine without it.
-val treeSitterHome: String = (findProperty("treeSitterHome") as String?)
-    ?: "${rootDir.parent}/tree-sitter/tree-sitter-ng-v0.26.6"
-
 dependencies {
     api(project(":core"))
-    implementation(files("$treeSitterHome/tree-sitter/build/libs/tree-sitter-0.26.6.jar"))
-    implementation(files("$treeSitterHome/tree-sitter-java/build/libs/tree-sitter-java-0.23.5.jar"))
+
+    // Checked in under lib/ rather than resolved. The official `jtreesitter` needs JDK 23+ and the
+    // Foreign Function & Memory API, which a Java 8 bytecode target cannot use, so these come from a fork
+    // of `tree-sitter-ng` that is JNI-based and compiles to Java 8. They used to be read from a local
+    // checkout through a `treeSitterHome` property, which made the build depend on one machine's
+    // directory layout -- see lib/tree-sitter/README.md.
+    //
+    // The natives are inside the jars: x86_64 Windows/Linux/macOS and aarch64 Linux/macOS. The grammar
+    // jar needs the core jar at runtime, so both are listed.
+    implementation(files(rootProject.file("lib/tree-sitter/tree-sitter-0.26.6.jar")))
+    implementation(files(rootProject.file("lib/tree-sitter/tree-sitter-java-0.23.5.jar")))
 
     testImplementation("junit:junit:4.13.2")
 }

@@ -647,7 +647,31 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     private int visibleRowCount() {
-        return Math.max(1, (int) (getClientHeight() / Math.max(1f, lineHeight())) - 1);
+        return Math.max(1, (int) (viewportHeight() / Math.max(1f, lineHeight())) - 1);
+    }
+
+    /**
+     * The height actually available for text, with the horizontal scrollbar's own strip taken off.
+     *
+     * <p>{@code getClientHeight()} is the whole box: the bars are drawn <em>over</em> the content, the way
+     * an overlay scrollbar works. For a list that is fine, because a row half-hidden behind a bar is still
+     * obviously a row. For an editor it is not — the last line ends up sliced in half by the bar, and it
+     * is the line you are usually typing on, since that is where the caret was scrolled to.</p>
+     */
+    private float viewportHeight() {
+        return Math.max(0f, getClientHeight() - horizontalBarThickness());
+    }
+
+    /** The horizontal bar's thickness when it is showing, otherwise zero. */
+    private float horizontalBarThickness() {
+        if (getMaxScrollLeft() <= 0f) return 0f;
+        return Math.max(0f, horizontalScroller().getRuntimeCache().getHeight());
+    }
+
+    /** The vertical bar's thickness when it is showing, otherwise zero. */
+    private float verticalBarThickness() {
+        if (getMaxScrollTop() <= 0f) return 0f;
+        return Math.max(0f, verticalScroller().getRuntimeCache().getWidth());
     }
 
     /** Word boundaries in the CSS/browser sense: runs of letters-or-digits, everything else a break. */
@@ -751,9 +775,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return Math.max(1f, general.fontSize() * multiplier);
     }
 
+    /**
+     * The document's height, <b>plus the strip the horizontal scrollbar covers</b>.
+     *
+     * <p>Without the extra, the last line can never be scrolled clear of the bar: {@code getMaxScrollTop}
+     * is {@code scrollHeight - getClientHeight()}, and {@code getClientHeight()} is the whole box, so the
+     * scroll clamps exactly one bar-thickness short of where the caret needs it. Adding the strip to the
+     * scrollable extent is the same thing every editor does by leaving trailing space below the last
+     * line.</p>
+     */
     @Override
     public float getScrollHeight() {
-        return buffer.lineCount() * lineHeight();
+        return buffer.lineCount() * lineHeight() + horizontalBarThickness();
     }
 
     /** Document offset nearest a point in this element's own space. */
@@ -1327,9 +1360,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
         TextPoint point = buffer.offsetToPoint(getCaret());
         float height = lineHeight();
         float top = point.row() * height;
-        if (top < getScrollTop()) setScrollTop(top);
-        else if (top + height > getScrollTop() + getClientHeight()) {
-            setScrollTop(top + height - getClientHeight());
+        // IMMEDIATE, not the smooth scroll the sheet asks for. `scroll-behavior: smooth` is right for a
+        // wheel or a scrollIntoView, and wrong for following a caret: the caret has already moved, so an
+        // eased scroll means it is off screen for the length of the animation and every keystroke chases
+        // a viewport that is still catching up with the last one.
+        float viewport = viewportHeight();
+        if (top < getScrollTop()) setScrollImmediate(getScrollLeft(), top);
+        else if (top + height > getScrollTop() + viewport) {
+            setScrollImmediate(getScrollLeft(), top + height - viewport);
         }
         invalidateWindow();
     }
@@ -1391,7 +1429,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             lastRealised = -1;
         }
         int first = Math.max(0, (int) (getScrollTop() / height) - OVERSCAN);
-        float viewport = getClientHeight();
+        float viewport = viewportHeight();
         int last = viewport <= 0f
                 ? first
                 : Math.min(count - 1, (int) ((getScrollTop() + viewport) / height) + OVERSCAN);
@@ -1565,7 +1603,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         final float width = gutterWidth;
         final float left = getTaffyLayout().padding().left;
-        final float viewport = Math.max(0f, getClientHeight());
+        // Stops ABOVE the horizontal bar. The gutter sits at a higher z than the scrollbars so that a
+        // long line scrolled sideways passes behind the numbers -- which also means a full-height gutter
+        // paints over the bar's left end, showing as a dead square in the corner.
+        final float viewport = viewportHeight();
         StyleGroup.defaultPipeline(gutter.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                         .left(left).top(0f).width(width).height(viewport));
@@ -1585,6 +1626,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
                             .left(0f).top(top).width(width).height(height));
         }
         for (int i = used; i < lineNumbers.size(); i++) hide(lineNumbers.get(i));
+        insetHorizontalBarPastGutter();
+    }
+
+    /**
+     * Starts the horizontal scrollbar after the gutter rather than under it.
+     *
+     * <p>The gutter is pinned and does not scroll horizontally, so a bar running beneath it offers to
+     * scroll something that will not move.</p>
+     *
+     * <p>Written at {@code IMPORTANT} origin because {@code ScrollerView} rewrites the bar's geometry
+     * every frame from {@code refreshScrollers}; a lower-origin write would simply lose to it.</p>
+     */
+    private void insetHorizontalBarPastGutter() {
+        UIElement bar = horizontalScroller();
+        if (bar == null) return;
+        final float left = getTaffyLayout().padding().left + gutterWidth;
+        final float width = Math.max(0f, getClientWidth() - left - verticalBarThickness());
+        StyleGroup.importantPipeline(bar.getStyle().getLayoutGroup(),
+                l -> l.left(left).width(width));
     }
 
     /**
@@ -1602,7 +1662,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int row = buffer.offsetToPoint(getCaret()).row();
         final float top = textOriginY() + row * height;
         final float left = textOriginX();
-        final float width = Math.max(1f, getClientWidth() - gutterWidth);
+        final float width = Math.max(1f, getClientWidth() - gutterWidth - verticalBarThickness());
         StyleGroup.defaultPipeline(currentLine.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                         .left(left).top(top).width(width).height(height));

@@ -548,6 +548,45 @@ public class TextEditorTest extends UiTestBase {
         }
     }
 
+    /**
+     * <b>A registered range with no matching rule paints nothing, and looks identical to a broken
+     * tokenizer.</b>
+     *
+     * <p>This is the 6.1.1 lesson in a new coat. There, highlight properties resolved and were never
+     * painted; here the ranges were registered on each line's {@code UIText} while the gallery's selector
+     * named the <em>editor</em> — {@code .ed::highlight(keyword)} — which owns no ranges. Everything
+     * reported success and the screen was monochrome.</p>
+     *
+     * <p>So this asserts the end of the chain: that the style engine resolves a real colour for the
+     * element that actually holds the range. Asserting the registry alone is what let it through.</p>
+     */
+    @Test
+    public void aHighlightRuleActuallyResolvesForTheLineThatOwnsTheRange() {
+        build("int x = 1;");
+        // The CLASS form, because that is exactly what the gallery sheet uses -- testing the tag form
+        // would leave the shipped selector untested and this bug was a wrong selector.
+        editor.addClass("ed");
+        editor.setTokenizer(com.crystalgui.text.syntax.KeywordTokenizer.java());
+        window.getStyleEngine().addStylesheet(com.crystalgui.style.sheet.StyleSheet.parse(
+                ".ed text::highlight(type) { color: #FF8800; }"));
+        settle();
+        editor.updateWindow();
+        settle();
+
+        UIText line = null;
+        for (UIElement child : editor.getChildren()) {
+            if (child.hasClass(TextEditor.LINE_CLASS)) line = (UIText) child.getChildren().get(0);
+        }
+        assertNotNull("no line was realised", line);
+        assertFalse("the tokenizer must have registered a type range",
+                line.highlights().get("type").isEmpty());
+
+        var style = window.getStyleEngine().highlightStyle(line, "type");
+        assertFalse("the rule resolved nothing, so the range would paint in the plain text colour",
+                style.isEmpty());
+        assertEquals(0xFFFF8800, style.color(0xFFFFFFFF));
+    }
+
     /** A pooled line reused for another row must not keep the old row's ranges. */
     @Test
     public void recyclingALineClearsItsHighlights() {
@@ -655,6 +694,159 @@ public class TextEditorTest extends UiTestBase {
             }
             collectNumbers(child, out);
         }
+    }
+
+    // ── Scrollbars ───────────────────────────────────────────────
+
+    /**
+     * Builds an editor whose content overflows on <b>both</b> axes, so both bars are showing.
+     *
+     * <p>The user-agent sheet is installed deliberately: without it the scrollers have no size, and a
+     * test about what the scrollbars cover would pass by there being no scrollbars.</p>
+     */
+    private void buildOverflowing() {
+        StringBuilder document = new StringBuilder();
+        document.append("a line long enough to force horizontal scrolling xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx").append(NL);
+        for (int i = 0; i < 80; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        window.getStyleEngine().addStylesheet(com.crystalgui.style.sheet.StyleSheet.DEFAULT);
+        settle();
+        editor.updateWindow();
+        settle();
+    }
+
+    private UIElement childWithClass(String name) {
+        for (UIElement child : editor.getChildren()) {
+            if (child.hasClass(name)) return child;
+        }
+        throw new AssertionError("no child with class " + name);
+    }
+
+    /**
+     * <b>The gutter must stop above the horizontal scrollbar, not paint over it.</b>
+     *
+     * <p>The gutter sits at a higher z than the scrollbars on purpose, so a long line scrolled sideways
+     * passes behind the numbers rather than through them. The cost of that is a full-height gutter
+     * covering the bar's left end, which shows as a dead square in the corner that no drag responds to.
+     * </p>
+     */
+    @Test
+    public void theGutterStopsAboveTheHorizontalScrollbar() {
+        buildOverflowing();
+
+        UIElement gutter = childWithClass(TextEditor.GUTTER_CLASS);
+        UIElement bar = childWithClass(com.crystalgui.ui.elements.ScrollerView.H_SCROLLER_CLASS);
+        assertTrue("the horizontal bar should be showing for this document",
+                bar.getRuntimeCache().getHeight() > 0f);
+
+        float gutterBottom = gutter.getRuntimeCache().getY() + gutter.getRuntimeCache().getHeight();
+        float barTop = bar.getRuntimeCache().getY();
+        assertTrue("the gutter runs to " + gutterBottom + ", over a bar starting at " + barTop,
+                gutterBottom <= barTop + 0.5f);
+    }
+
+    /**
+     * <b>Scrolling to the caret must leave its line above the horizontal scrollbar.</b>
+     *
+     * <p>The bars are drawn <em>over</em> the content, which is fine for a list — a row half-behind a bar
+     * is still obviously a row. In an editor the hidden line is the one being typed on, because that is
+     * precisely the line the caret was scrolled to.</p>
+     */
+    @Test
+    public void theCaretLineIsNotLeftUnderTheHorizontalScrollbar() {
+        buildOverflowing();
+
+        // Through the keyboard, because that is the path that scrolls: moving the caret keeps it visible,
+        // whereas setCaret() places it without scrolling.
+        key(CgKeyCodes.KEY_END, CgModifiers.CTRL);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        // The bar is scroll-exempt so it is already in viewport space; the caret is an ordinary child in
+        // DOCUMENT space, and the scroll offset is applied at paint time. Comparing them without
+        // converting is comparing two different coordinate systems.
+        float editorTop = editor.getRuntimeCache().getY();
+        UIElement bar = childWithClass(com.crystalgui.ui.elements.ScrollerView.H_SCROLLER_CLASS);
+        float barTop = bar.getRuntimeCache().getY() - editorTop;
+
+        UIElement caret = childWithClass(TextEditor.CARET_CLASS);
+        float caretBottom = caret.getRuntimeCache().getY() - editorTop
+                + caret.getRuntimeCache().getHeight() - editor.getScrollTop();
+        assertTrue("the caret reaches " + caretBottom + ", under a bar starting at " + barTop,
+                caretBottom <= barTop + 0.5f);
+    }
+
+    /**
+     * <b>A resize handle must stay at the element's visible corner after scrolling.</b>
+     *
+     * <p>The handles are absolutely positioned children, and a scroll offset in this engine is a pose
+     * translate applied to every non-exempt child — so they slid away with the content. Scrolling down by
+     * one line carried the bottom-right grabber up out of the corner and the corner stopped responding:
+     * the handle was still there, just no longer where the corner is. It is fixed in {@code UIResizer}
+     * rather than here, because it is true of anything scrollable and resizable, not just an editor.</p>
+     */
+    @Test
+    public void theResizeHandleStaysInTheCornerAfterScrolling() {
+        buildOverflowing();
+        editor.generalStyle(g -> g.resize(com.crystalgui.style.property.visual.Resize.BOTH));
+        settle();
+        editor.updateWindow();
+        settle();
+
+        float scale = window.getUiScale();
+        float cornerX = editor.getRuntimeCache().getX() + editor.getRuntimeCache().getWidth() - 2f;
+        float cornerY = editor.getRuntimeCache().getY() + editor.getRuntimeCache().getHeight() - 2f;
+
+        UIElement before = window.getHoveredElement(cornerX * scale, cornerY * scale);
+        assertNotNull(before);
+        assertTrue("the corner should start out grabbable, found " + before.getClasses(),
+                before.hasClass("__resizer__"));
+
+        editor.setScrollImmediate(0f, 200f);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        UIElement after = window.getHoveredElement(cornerX * scale, cornerY * scale);
+        assertNotNull("nothing at the corner after scrolling", after);
+        assertTrue("after scrolling the corner is " + after.getClasses() + ", not a resize handle",
+                after.hasClass("__resizer__"));
+    }
+
+    /** The horizontal bar is pinned too, or it would scroll out from under the pointer mid-drag. */
+    @Test
+    public void theHorizontalBarStartsAfterTheGutter() {
+        buildOverflowing();
+
+        UIElement bar = childWithClass(com.crystalgui.ui.elements.ScrollerView.H_SCROLLER_CLASS);
+        float barLeft = bar.getRuntimeCache().getX() - editor.getRuntimeCache().getX();
+        assertTrue("the bar starts at " + barLeft + ", under a gutter " + editor.gutterWidth() + " wide",
+                barLeft >= editor.gutterWidth() - 0.5f);
+    }
+
+    /**
+     * <b>The scrollbars must paint above the text.</b>
+     *
+     * <p>Equal-z siblings paint in insertion order, and {@code ScrollerView}'s constructor creates the
+     * scrollers while the lines are realised later — so at equal z the text drew <em>over</em> the
+     * horizontal bar and the row straddling its strip spilled across it. Reserving viewport height does
+     * not help: the overscan rows are realised on purpose and the scrollport clips to the full box.</p>
+     */
+    @Test
+    public void theScrollbarsPaintAboveTheText() {
+        buildOverflowing();
+
+        UIElement bar = childWithClass(com.crystalgui.ui.elements.ScrollerView.H_SCROLLER_CLASS);
+        UIElement line = childWithClass(TextEditor.LINE_CLASS);
+        UIElement gutter = childWithClass(TextEditor.GUTTER_CLASS);
+
+        float barZ = bar.getStyle().getGeneralGroup().zIndex();
+        float lineZ = line.getStyle().getGeneralGroup().zIndex();
+        float gutterZ = gutter.getStyle().getGeneralGroup().zIndex();
+
+        assertTrue("a bar at z=" + barZ + " is not above text at z=" + lineZ, barZ > lineZ);
+        assertTrue("the gutter at z=" + gutterZ + " must stay above the bars", gutterZ > barZ);
     }
 
     // ── Multi-cursor ─────────────────────────────────────────────
