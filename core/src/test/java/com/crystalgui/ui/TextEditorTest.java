@@ -2008,6 +2008,43 @@ public class TextEditorTest extends UiTestBase {
                 editor.getScrollHeight() > editor.lineHeight() * 1.5f);
     }
 
+    /**
+     * <b>Every wrapped line must FIT.</b> The first implementation divided the viewport by the advance of
+     * a space and handed the quotient to the column-based computer — exact in a monospaced font, and
+     * badly wrong in the proportional one the theme actually uses, where a space is far narrower than an
+     * average glyph. The budget came out so generous that wrapped lines still ran off the right edge and
+     * were clipped, which looked like wrapping being broken rather than measuring being wrong.
+     *
+     * <p>Only a visual check found it, so this is the assertion that replaces the eye: measure what is
+     * painted, against the box it is painted into.</p>
+     */
+    @Test
+    public void noWrappedLineIsWiderThanTheViewport() {
+        build(longLine());
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertTrue("there must be something to wrap", editor.viewLineCount() > 1);
+
+        // The TEXT's own extent, measured in the editor's font -- not the line box, which is deliberately
+        // stretched to at least the viewport so a selection band reads as a band and would therefore pass
+        // this assertion however far the glyphs overflowed it.
+        var general = editor.getStyle().getGeneralGroup();
+        var family = com.crystalgui.render.text.FontFamilyCache.resolve(
+                general.fontFamily(), Math.round(general.fontSize()));
+        float limit = editor.getClientWidth();
+
+        for (UIElement line : linesOf()) {
+            String text = ((UIText) line.getChildren().get(0)).getText();
+            if (text.isEmpty()) continue;
+            float width = com.crystalgraphics.api.text.CgTextLayout.of(text, family).build().totalWidth();
+            assertTrue("a view line measuring " + width + " does not fit in " + limit + ": '" + text + "'",
+                    width <= limit);
+        }
+    }
+
     /** One element per <b>visual</b> row, or the continuations are never painted. */
     @Test
     public void everyViewLineIsRealisedAsItsOwnElement() {
