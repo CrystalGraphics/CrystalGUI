@@ -41,6 +41,7 @@ public final class GraphCommands {
     public static final String CLEAR_SELECTION = "graph.clearSelection";
     public static final String FRAME_SELECTION = "graph.frameSelection";
     public static final String FRAME_ALL = "graph.frameAll";
+    public static final String CREATE_NODE = "graph.createNode";
 
     /** World units of breathing room when framing. Not a pixel value in a widget — framing is a view
      * operation with no stylesheet to read, and the number is a margin in the document's own units. */
@@ -74,6 +75,30 @@ public final class GraphCommands {
                 .run(context -> withGraph(context, graph -> graph.frameSelection(FRAME_PADDING)))
                 .enabledWhen(context -> graphFor(context) != null));
 
+        registry.register(Command.of(CREATE_NODE, "Create Node")
+                // At the POINTER, as Unity does. An earlier version opened at the middle of the view on
+                // the reasoning that a command knows who invoked it rather than where the mouse is --
+                // which is wrong: the input handler holds the live pointer position, and a command can
+                // simply ask. The centre of the view is only the fallback for a pointer that is not over
+                // this graph at all, which is possible when the binding fires from elsewhere.
+                .run(context -> withGraph(context, graph -> {
+                    var window = graph.getAttachedWindow();
+                    if (window != null) {
+                        var pointer = window.getInputHandler().pointerPosition();
+                        if (graph.containsScreenPoint(pointer.x(), pointer.y())) {
+                            var world = graph.screenToWorld(pointer.x(), pointer.y());
+                            graph.openCreationMenu(world.x(), world.y());
+                            return;
+                        }
+                    }
+                    var visible = graph.visibleWorldRect();
+                    graph.openCreationMenu(visible.centerX(), visible.centerY());
+                }))
+                .enabledWhen(context -> {
+                    GraphView graph = graphFor(context);
+                    return graph != null && graph.creationMenu() != null;
+                }));
+
         registry.register(Command.of(FRAME_ALL, "Frame All")
                 .run(context -> withGraph(context, graph -> graph.fitToContent(FRAME_PADDING)))
                 .enabledWhen(context -> graphFor(context) != null));
@@ -92,6 +117,7 @@ public final class GraphCommands {
         keymap.bind("Mod+A", SELECT_ALL);
         keymap.bind("Escape", CLEAR_SELECTION);
         keymap.bind("F", FRAME_SELECTION);
+        keymap.bind("Space", CREATE_NODE);
         keymap.bind("A", FRAME_ALL);
     }
 

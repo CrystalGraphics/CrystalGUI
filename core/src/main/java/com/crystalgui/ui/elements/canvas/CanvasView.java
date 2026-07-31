@@ -148,6 +148,7 @@ public class CanvasView extends UIElement implements UIFrameTicker {
         // i.e. everywhere except where you actually want to grab.
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!panEnabled || !isEnabled()) return;
+            if (isInsidePromotedChild(event.getTarget())) return;
             if (!isPanTrigger(event)) return;
             event.stopPropagation();
             beginPan(event.getPosition().x(), event.getPosition().y(), event.getButtonId());
@@ -157,6 +158,11 @@ public class CanvasView extends UIElement implements UIFrameTicker {
         // under a list the user was scrolling is the worse failure of the two.
         this.events.getGroup(MouseEvent.Scroll.class).attachListener((el, event) -> {
             if (!zoomEnabled || !isEnabled()) return;
+            // A wheel over a popup we own is the popup's, even when the popup declined it. A ScrollerView
+            // only claims the wheel while it actually scrolls -- deliberately, so a list at its end chains
+            // outward -- so a menu whose list is short or already at the bottom hands the wheel straight
+            // to this handler, and the graph zooms under an open menu. That is never what was meant.
+            if (isInsidePromotedChild(event.getTarget())) return;
             float notches = event.getScroll();
             if (notches == 0f) return;
             // NEGATED, and the sign is not guessable: in this engine a POSITIVE notch means the wheel
@@ -476,6 +482,22 @@ public class CanvasView extends UIElement implements UIFrameTicker {
     public CanvasView setZoomStep(float step) {
         this.zoomStep = Math.max(1.0001f, step);
         return this;
+    }
+
+    /**
+     * Whether a press or wheel landed inside a subtree that is only our <em>DOM</em> child — a popup we
+     * own but that is drawn in the top layer.
+     *
+     * <p>A promoted subtree is visually not inside its parent, so a parent that acts on background
+     * gestures must not count one. Everything a canvas does on the background — pan, zoom, marquee — has
+     * to ask this first, and each of them was found the same way: by a popup that looked dead because the
+     * canvas underneath had taken its input.</p>
+     */
+    protected boolean isInsidePromotedChild(@Nullable UIElement target) {
+        for (UIElement element = target; element != null && element != this; element = element.getParent()) {
+            if (element.isInTopLayer()) return true;
+        }
+        return false;
     }
 
     /**

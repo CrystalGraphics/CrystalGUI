@@ -72,8 +72,16 @@ graphnode .__title__ { font-size: 9; }
 graphnode .__collapse__ { color: #9A9A9A; }
 graphnode .__collapse__:hover { color: #E0E0E0; }
 
-/* Everything below the ports paints itself. The port band is the deliberate omission — see the note on
- * `graphnode` above. */
+/* The port band is TRANSLUCENT, not absent — which was the correction. Painting nothing let the canvas
+ * through as a hole: no separation from the node body, and the band read as a gap rather than a panel.
+ * Unity's is a distinct darker panel you can still see a wire behind.
+ *
+ * ~72% alpha (CSS order, #RRGGBBAA) keeps a wire visible as it passes underneath while the band stays
+ * legibly a surface. Fully opaque would hide the wire, which was the original complaint; fully
+ * transparent hides the panel, which was the over-correction. */
+graphnode .__ports__ { background-color: #262626B8; }
+
+/* Everything below the ports paints itself. */
 graphnode .__controls__ { background: #2B2B2B; }
 graphnode .__control-row__ { color: #B4B4B4; }
 
@@ -95,7 +103,22 @@ graphview .__marquee__ {
     border-color: #44C0FF;
 }
 
-/* ── Ports ─────────────────────────────────────────────────────────────────────────────────────── */
+/* -- Ports -────────────────────────────────────────────────────────────────────────────────────── */
+
+/* The create-node menu, in the same palette as the nodes it makes. Its cyan border is the selection
+ * colour on purpose: the menu is the thing you are acting through, and reusing the accent ties it to the
+ * ring on a selected node rather than introducing a third colour nobody chose. */
+nodecreationmenu {
+    background: #2B2B2B;
+    border-width: 1px;
+    border-color: #44C0FF;
+    border-radius: 4px;
+    color: #C4C4C4;
+    font-size: 8;
+}
+nodecreationmenu .__search__ { background: #1E1E1E; border-radius: 2px; color: #D4D4D4; }
+nodecreationmenu .__entry__:hover { background: #3C4A55; }
+nodecreationmenu .__empty__ { color: #7A7A7A; }
 
 nodeport { color: #C4C4C4; }
 nodeport:hover .__label__ { color: #FFFFFF; }

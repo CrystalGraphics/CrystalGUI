@@ -227,6 +227,55 @@ public class GraphEditingTest extends UiTestBase {
         assertTrue(graph.getSelection().contains(b));
     }
 
+    /**
+     * <b>A node you touch comes to the front and stays there.</b>
+     *
+     * <p>The first version keyed stacking off {@code :checked}, which raised a node while it was selected
+     * and dropped it back the instant something else was — so a node deliberately brought forward sank
+     * behind its neighbour again as soon as you clicked away. Stacking is interaction history, not
+     * selection state, which is why the second half of this test matters more than the first.</p>
+     *
+     * <p>Asserted through the hit-tester, because "what is on top is what you can click" is the property
+     * that sharing one sort order between paint and hit-testing actually buys.</p>
+     */
+    @Test
+    public void aTouchedNodeRisesAndStaysRisen() {
+        GraphNode under = node("Under", 40f, 40f);
+        GraphNode over = node("Over", 60f, 60f);   // added later, so it starts on top
+        GraphNode elsewhere = node("Elsewhere", 260f, 40f);
+        frame();
+
+        // Well inside both boxes: Under spans roughly (40..208, 40..80) and Over (60..228, 60..100),
+        // so a point on the edge of either proves nothing about which is in front.
+        Vector2f overlap = physicalOfWorld(100f, 70f);
+        assertTrue("the later node starts on top",
+                isInside(window.getHoveredElement(overlap.x(), overlap.y()), over));
+
+        press(physicalCenterOf(under.titleBar()));
+        frame();
+        release(physicalCenterOf(under.titleBar()));
+        frame();
+        assertTrue("pressing the buried node brings it forward",
+                isInside(window.getHoveredElement(overlap.x(), overlap.y()), under));
+
+        // Now click something else entirely: the raised node must NOT sink back.
+        press(physicalCenterOf(elsewhere.titleBar()));
+        frame();
+        release(physicalCenterOf(elsewhere.titleBar()));
+        frame();
+
+        assertFalse("it is no longer selected", under.isSelected());
+        assertTrue("but it must still be in front — raising is history, not a highlight",
+                isInside(window.getHoveredElement(overlap.x(), overlap.y()), under));
+    }
+
+    private static boolean isInside(UIElement hit, GraphNode node) {
+        for (UIElement e = hit; e != null; e = e.getParent()) {
+            if (e == node) return true;
+        }
+        return false;
+    }
+
     // ── Move-many ───────────────────────────────────────────────────────────
 
     /**

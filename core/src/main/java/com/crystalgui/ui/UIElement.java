@@ -836,7 +836,7 @@ public class UIElement {
      * {@link #applyResizeOrigin} to route the move through its own clamped position, which is why a modal
      * stays inside its containing block while being resized from the top-left.</p>
      */
-    boolean canMoveResizeOrigin() {
+    protected boolean canMoveResizeOrigin() {
         return style.taffyBridge.style.position == TaffyPosition.ABSOLUTE;
     }
 
