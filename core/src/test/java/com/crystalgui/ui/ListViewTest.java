@@ -673,7 +673,7 @@ public class ListViewTest extends UiTestBase {
     public void everyScrollingSubclassIsNamedInTheUserAgentSheet() {
         String sheet = com.crystalgraphics.util.io.CgIO.loadSource("crystalgui:ui/styles/default.css");
         assertNotNull("default.css must be readable", sheet);
-        for (String tag : new String[] { "listview", "treeview", "tableview" }) {
+        for (String tag : new String[] { "listview", "treeview", "tableview", "texteditor" }) {
             assertTrue(tag + " has no scrollbar rule, so its bars will be invisible",
                     sheet.contains(tag + " .__v-scroller__"));
         }

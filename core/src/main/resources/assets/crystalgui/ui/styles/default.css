@@ -388,9 +388,37 @@ tab:disabled {
 scrollerview,
 listview,
 treeview,
-tableview {
+tableview,
+texteditor {
     scroll-behavior: smooth;
     scroll-duration: 0.18;
+}
+
+/* The multi-line editor (6.1.6). Geometry only, plus the two colours without which the widget cannot be
+ * used at all: a caret and a selection band that are invisible are not "unthemed", they are broken. A
+ * theme overrides both, the same way it overrides the scroller track above.
+ *
+ * The caret and the bands are ordinary absolutely-positioned children in document coordinates, so they
+ * scroll with the text for free -- see TextEditor#layOutCaretAndSelection. */
+texteditor {
+    overflow: auto;
+    line-height: 1.4;
+}
+
+/* A line must not wrap: the editor's whole windowing model is that row N sits at N * lineHeight, and a
+ * wrapped line silently breaks that arithmetic rather than looking wrong. Soft wrap needs the
+ * variable-height virtualisation deferred in 6.1.3. */
+texteditor .__line__ {
+    white-space: nowrap;
+}
+
+texteditor .__caret__ {
+    width: 1px;
+    background-color: #E6E6E6;
+}
+
+texteditor .__selection__ {
+    background-color: #2C5A8C;
 }
 
 /* Functional geometry for the table's own structure. Nothing here is decoration — a theme owns all of
@@ -477,6 +505,7 @@ scroller .__tail__:hover {
 scrollerview .__corner__,
 listview .__corner__,
 treeview .__corner__,
+texteditor .__corner__,
 tableview .__corner__ {
     background: #2A2A2A;
 }
@@ -484,6 +513,7 @@ tableview .__corner__ {
 scrollerview .__v-scroller__,
 listview .__v-scroller__,
 treeview .__v-scroller__,
+texteditor .__v-scroller__,
 tableview .__v-scroller__ {
     width: 8px;
     top: 0;
@@ -493,6 +523,7 @@ tableview .__v-scroller__ {
 scrollerview .__h-scroller__,
 listview .__h-scroller__,
 treeview .__h-scroller__,
+texteditor .__h-scroller__,
 tableview .__h-scroller__ {
     height: 8px;
     left: 0;
@@ -909,6 +940,13 @@ splitview.__dragging__ { cursor: ew-resize; }
 splitview.__vertical__ .__divider__ { cursor: ns-resize; }
 splitview.__vertical__.__dragging__ { cursor: ns-resize; }
 splitview .__vertical__ .__divider__ { cursor: ns-resize; }
+
+/* A canvas advertises the grab only while it is actually being panned. Deliberately NOT `cursor: grab`
+ * on the canvas at rest: a bare left-drag does not pan (that gesture is reserved for the marquee), so a
+ * permanent open-hand would promise a drag that does nothing. The class goes on while the pan drag is
+ * live, and the pointer is captured for its duration, so the cursor holds even when the drag leaves the
+ * canvas — the same reason splitview repeats its cursor on `.__dragging__` above. */
+canvasview.__panning__ { cursor: grabbing; }
 
 /* `pointer` marks anything clickable, as it does on the web for links and buttons. */
 button, checkbox, switch, tab, dropdown, menuitem { cursor: pointer; }
