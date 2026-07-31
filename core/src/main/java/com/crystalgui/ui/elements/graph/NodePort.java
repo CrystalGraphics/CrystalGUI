@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.graph;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgui.graph.PortDirection;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.UIText;
