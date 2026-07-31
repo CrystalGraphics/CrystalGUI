@@ -1194,10 +1194,42 @@ backend responsible for things a grammar does not describe.
 "3 of 47" cannot be computed from what is on screen. **Regex and whole-word are still not implemented** —
 `find` is plain substring, and search-within-selection has no UI.
 
-#### G. View · `DEFERRED`
+#### G. View · **soft wrap `DONE`** (2026-07-31); the rest deferred
 
-**Soft wrap** (unblocked by `VariableHeightStrategy`, still not delivered — deliberately stopped short of
-it), indent guides, visible whitespace, a column ruler, and scroll-past-end. None of these are started.
+**Soft wrap is delivered.** `com.crystalgui.text.wrap` — a port of VS Code's view model, kept headless:
+
+| Class | Ported from |
+|---|---|
+| `LineProjection` | `modelLineProjectionData.ts` — the affinity binary search, operator-for-operator |
+| `MonospaceLineBreaks` | `monospaceLineBreaksComputer.ts` — `canBreak`, the scan loop |
+| `WrapIndent` | `computeWrappedTextIndentLength` |
+| `ProjectedLines` | `ViewModelLinesFromProjectedModel` over `PrefixSumComputer` |
+| `LineBreaksComputer` | `ILineBreaksComputer` |
+
+> **The projection is unconditional — wrap off is the identity projection, not a second code path.**
+> A wrapped/unwrapped branch through painting, hit testing, caret, gutter and scrolling is six places for
+> the two to drift, and the unwrapped half is the one exercised constantly, so it would stay right while
+> the other rotted. This was not theoretical: an `if (!softWrap) return` shortcut in the per-edit
+> reprojection left the index stale with wrap **off**, and the window stopped growing when a line was
+> added. An existing test caught it. The shortcut looks free precisely because the unwrapped case appears
+> to need nothing.
+
+> **`PositionAffinity` is the load-bearing import.** An offset exactly at a wrap is genuinely two places —
+> the end of one visual line and the start of the next — and which is meant depends on how the caret got
+> there. Without it the caret at a wrap point flickers between them, which is the most visible way a soft
+> wrap implementation is wrong. The caret resolves `LEFT`; Home resolves `RIGHT`.
+
+> **Tab stops after a wrap were solved by rebasing, not by more state.** A tab's stop depends on its
+> position in the *row*, so measuring a continuation line's own text puts every tab after a wrap at the
+> wrong stop. VS Code carries a parallel `breakOffsetsVisibleColumn` array for this; here the view line
+> takes a slice of the row's already-expanded display string and its x positions come from the row's
+> prefix widths minus the view line's origin. Correct by construction, and no second array to go stale.
+
+**Not ported: VS Code's injected-text layer**, which threads inlay hints through every conversion and is
+most of `modelLineProjectionData.ts`. There are no inlay hints here, and it would leave four coordinate
+spaces where two suffice.
+
+**Still deferred:** indent guides, visible whitespace, a column ruler, scroll-past-end. None started.
 
 #### H. All of it through the keymap · `TODO`
 

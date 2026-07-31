@@ -776,6 +776,23 @@ public class TextEditorTest extends UiTestBase {
         assertEquals("a new row exists", before + 1, linesOf().size());
     }
 
+    private static int rowsOf(String text) {
+        return text.split(NL, -1).length;
+    }
+
+    /**
+     * One row far wider than the test viewport.
+     *
+     * <p>Sized against the measurement rather than guessed: the editor is 300px and a space at font-size
+     * 8 advances about 1.9px, so the wrap column is around 150. A first attempt at these tests used an
+     * 86-character line, which correctly did <b>not</b> wrap — and read as soft wrap being broken.</p>
+     */
+    private static String longLine() {
+        StringBuilder out = new StringBuilder();
+        while (out.length() < 400) out.append("alpha beta gamma delta epsilon zeta eta theta ");
+        return out.toString().trim();
+    }
+
     private java.util.List<UIElement> linesOf() {
         java.util.List<UIElement> out = new java.util.ArrayList<>();
         for (UIElement child : editor.getChildren()) {
@@ -1931,6 +1948,192 @@ public class TextEditorTest extends UiTestBase {
         settle();
 
         assertEquals(501 * editor.lineHeight(), editor.getScrollHeight(), 0.5f);
+    }
+
+    // ── 6.1.7b: soft wrap ────────────────────────────────────────
+    //
+    // The coordinate mapping is pinned headlessly in SoftWrapTest. These are the questions that need a
+    // real widget: that the projection actually reaches the painted lines, the gutter, hit testing and
+    // the scroll extent -- i.e. that the model layer is WIRED, not merely correct.
+
+    /** A line far wider than the viewport occupies several visual rows. */
+    @Test
+    public void aLongLineWrapsIntoSeveralViewLines() {
+        build(longLine());
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertEquals("still one document row", 1, rowsOf(editor.getText()));
+        assertTrue("but several visual rows: " + editor.viewLineCount(), editor.viewLineCount() > 1);
+    }
+
+    /** <b>Wrapping is not an edit.</b> The document is byte-identical either way. */
+    @Test
+    public void wrappingDoesNotTouchTheDocument() {
+        String text = longLine();
+        build(text);
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertEquals("no newline was inserted", text, editor.getText());
+        assertEquals(1, rowsOf(editor.getText()));
+    }
+
+    @Test
+    public void turningWrapOffRestoresOneViewLinePerRow() {
+        build(longLine());
+        editor.setSoftWrap(true);
+        settle();
+        assertTrue(editor.viewLineCount() > 1);
+
+        editor.setSoftWrap(false);
+        settle();
+        assertEquals(1, editor.viewLineCount());
+    }
+
+    /** The scroll extent must count visual rows, or the last wrapped line cannot be reached. */
+    @Test
+    public void theScrollExtentCountsViewLinesNotRows() {
+        build(longLine());
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertTrue("a wrapped document is taller than one line",
+                editor.getScrollHeight() > editor.lineHeight() * 1.5f);
+    }
+
+    /** One element per <b>visual</b> row, or the continuations are never painted. */
+    @Test
+    public void everyViewLineIsRealisedAsItsOwnElement() {
+        build(longLine());
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertEquals("one line element per view line", editor.viewLineCount(), linesOf().size());
+    }
+
+    /**
+     * <b>Concatenating the painted lines returns the row.</b> The strongest single assertion available
+     * here: it fails if a character is dropped at a break, duplicated across one, or if the carried
+     * indent leaks into the text as spaces — which is the failure that makes a paste out of a wrapped
+     * editor carry indentation the file never had.
+     */
+    @Test
+    public void thePaintedLinesConcatenateBackToTheRow() {
+        String text = longLine();
+        build(text);
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        StringBuilder painted = new StringBuilder();
+        for (UIElement line : linesOf()) {
+            painted.append(((UIText) line.getChildren().get(0)).getText());
+        }
+        assertEquals(text, painted.toString());
+    }
+
+    /**
+     * <b>One gutter number per document row, not per visual row.</b> Numbering continuations would report
+     * line counts the file does not have.
+     */
+    @Test
+    public void theGutterNumbersRowsNotViewLines() {
+        build(longLine());
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        // The numbers hang off the GUTTER, not off the editor. The gutter pools one element per number
+        // it has ever needed, so the element count IS the count of numbers asked for -- observable,
+        // unlike "is this one currently hidden", which hide() expresses as a zero-sized box.
+        int numbers = 0;
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
+            for (UIElement number : child.getChildren()) {
+                if (number.hasClass(TextEditor.LINE_NUMBER_CLASS)) numbers++;
+            }
+        }
+        assertTrue("there are several view lines to number", editor.viewLineCount() > 1);
+        assertEquals("but only one row, so only one number", 1, numbers);
+    }
+
+    /**
+     * <b>Down moves one VISUAL row.</b> Skipping to the next document row makes a wrapped paragraph one
+     * keypress tall, which is the behaviour every editor is judged on.
+     */
+    @Test
+    public void downMovesByOneVisualRowWhenWrapped() {
+        build(longLine());
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+        editor.setCaret(0);
+        settle();
+
+        key(CgKeyCodes.KEY_DOWN);
+
+        int caret = editor.getCaret();
+        assertTrue("the caret moved into the row, not past it", caret > 0);
+        assertTrue("and stayed inside the single document row", caret < editor.getText().length());
+    }
+
+    /** With wrap off the same key must still cross document rows. */
+    @Test
+    public void downStillMovesByRowWhenNotWrapped() {
+        build("one" + NL + "two" + NL + "three");
+        editor.setCaret(0);
+        settle();
+
+        key(CgKeyCodes.KEY_DOWN);
+
+        assertEquals("row 1, column 0", 4, editor.getCaret());
+    }
+
+    /** End goes to the end of the visual row, not the end of the document row. */
+    @Test
+    public void endStopsAtTheVisualRowEndWhenWrapped() {
+        String text = longLine();
+        build(text);
+        editor.setSoftWrap(true);
+        settle();
+        editor.updateWindow();
+        settle();
+        editor.setCaret(0);
+        settle();
+
+        key(CgKeyCodes.KEY_END);
+
+        assertTrue("it moved", editor.getCaret() > 0);
+        assertTrue("but stopped short of the row's end", editor.getCaret() < text.length());
+    }
+
+    /** Editing a wrapped row reprojects it — the view line count must follow the text. */
+    @Test
+    public void typingIntoAWrappedRowReprojectsIt() {
+        build("alpha beta gamma");
+        editor.setSoftWrap(true);
+        settle();
+        int before = editor.viewLineCount();
+
+        editor.setCaret(editor.getText().length());
+        // Long enough to cross the wrap column, which is ~150 here -- see longLine().
+        type(" " + longLine());
+        settle();
+
+        assertTrue("adding a screenful of text must add view lines: " + before + " -> "
+                + editor.viewLineCount(), editor.viewLineCount() > before);
     }
 
     /** The editor is a composite: its lines and caret are its own, and callers do not add children. */
