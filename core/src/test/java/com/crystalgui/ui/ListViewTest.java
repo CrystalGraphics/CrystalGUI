@@ -660,6 +660,25 @@ public class ListViewTest extends UiTestBase {
         assertEquals(java.util.List.of(5), activated);
     }
 
+    /**
+     * <b>Every scrolling subclass must be named in {@code default.css}.</b>
+     *
+     * <p>A widget's cascade identity is its TAG, never its Java supertype — so {@code ListView},
+     * {@code TreeView} and {@code TableView} are three different tags, and each matches none of the
+     * {@code scrollerview} rules its superclass depends on. Naming {@code listview} alone was not enough:
+     * the tree and the table both shipped with scrollbars that existed as elements, got no width from
+     * anywhere, and simply did not draw.</p>
+     */
+    @Test
+    public void everyScrollingSubclassIsNamedInTheUserAgentSheet() {
+        String sheet = com.crystalgraphics.util.io.CgIO.loadSource("crystalgui:ui/styles/default.css");
+        assertNotNull("default.css must be readable", sheet);
+        for (String tag : new String[] { "listview", "treeview", "tableview" }) {
+            assertTrue(tag + " has no scrollbar rule, so its bars will be invisible",
+                    sheet.contains(tag + " .__v-scroller__"));
+        }
+    }
+
     // ── The size strategy ───────────────────────────────────────────────────
 
     @Test

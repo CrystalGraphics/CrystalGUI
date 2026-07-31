@@ -13,15 +13,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
 import lombok.Getter;
 
 import javax.annotation.Nullable;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.TreeSet;
-import java.util.Collections;
+import java.util.*;
 
 /**
  * A windowed view over an {@link ObservableList} — only the visible rows exist as elements, and they are
@@ -236,7 +228,7 @@ public class ListView<T> extends ScrollerView {
      * showing the old ones. The elements are recycled rather than destroyed, so the cost is a re-bind of a
      * dozen rows, which is what a model change means anyway.</p>
      */
-    private void invalidateWindow() {
+    protected void invalidateWindow() {
         recycleAll();
         markTreeDirty();
     }
@@ -339,6 +331,18 @@ public class ListView<T> extends ScrollerView {
         focusRestoreWanted = focusedIndex >= 0;
     }
 
+    /**
+     * How far down the scrollport the first row starts. Zero for a plain list.
+     *
+     * <p>{@code TableView} returns its header height: the header lives inside the scrollport (so it can
+     * be scroll-exempt and stay pinned) rather than above it, which means the rows have to begin below it
+     * or the first one is painted underneath. Reducing {@link #getClientHeight()} alone is not enough —
+     * that fixes how many rows fit, not where they sit.</p>
+     */
+    protected float rowOffset() {
+        return 0f;
+    }
+
     private UIElement realise(int index) {
         UIElement row = pool.pollFirst();
         if (row == null) {
@@ -366,7 +370,7 @@ public class ListView<T> extends ScrollerView {
                     l -> l.positionType(TaffyPosition.ABSOLUTE));
             addInternalChild(row);
         }
-        final float top = sizeStrategy.offsetOf(index);
+        final float top = rowOffset() + sizeStrategy.offsetOf(index);
         final float height = sizeStrategy.sizeOf(index);
         StyleGroup.defaultPipeline(row.getStyle().getLayoutGroup(),
                 l -> l.top(top).left(0).widthPercent(100f).height(height).display(dev.vfyjxf.taffy.style.TaffyDisplay.FLEX));
@@ -447,6 +451,27 @@ public class ListView<T> extends ScrollerView {
         selected.clear();
         selectionChanged();
         return this;
+    }
+
+    /**
+     * Replaces the selection wholesale with a set of indices.
+     *
+     * <p>For a subclass that keys selection on something more stable than an index and has to re-derive
+     * it — {@code TableView} does, because sorting moves every row and index-based selection would leave
+     * a user who selected three files owning three different ones after one header click.</p>
+     *
+     * <p>Emits once, not once per index, so a listener sees the new selection rather than each step of
+     * assembling it.</p>
+     */
+    protected void setSelectedIndices(Collection<Integer> indices) {
+        TreeSet<Integer> next = new TreeSet<>();
+        for (int index : indices) {
+            if (isValid(index)) next.add(index);
+        }
+        if (next.equals(selected)) return;
+        selected.clear();
+        selected.addAll(next);
+        selectionChanged();
     }
 
     private boolean isValid(int index) {
