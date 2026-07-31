@@ -2651,6 +2651,37 @@ public class TextEditorTest extends UiTestBase {
         assertTrue("several numbers must be on screen, not " + seen, seen > 3);
     }
 
+    /**
+     * <b>Scrolling past the end must not leave a tail of retired line numbers behind.</b>
+     *
+     * <p>Retiring a pooled element collapses it to zero size, which hides a fill and nothing else — the
+     * {@code UIText} inside keeps painting. The gutter's {@code overflow: hidden} looked like it covered
+     * this, but a retired number is still <em>inside</em> the gutter's bounds so the clip never applied to
+     * it. Invisible until scroll-past-end made it possible to leave a long tail behind, which then drew on
+     * top of itself below the last line.</p>
+     */
+    @Test
+    public void scrollingPastTheEndLeavesNoStaleLineNumbers() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 1; i <= 32; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        editor.setScrollBeyondLastLine(true);
+        showEditor();
+
+        editor.setScrollImmediate(0f, editor.getScrollHeight());
+        showEditor();
+
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
+            for (UIElement number : child.getChildren()) {
+                if (!number.hasClass(TextEditor.LINE_NUMBER_CLASS)) continue;
+                if (number.getTaffyLayout().contentBoxHeight() > 0f) continue;
+                assertEquals("a retired number must carry no glyph",
+                        "", ((UIText) number.getChildren().get(0)).getText());
+            }
+        }
+    }
+
     /** The gap scales with the font, so the gutter stays proportionate when the editor is zoomed. */
     @Test
     public void theGutterGapGrowsWithTheFont() {

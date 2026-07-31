@@ -1053,7 +1053,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // Zero without a gutter: the margin exists to separate the code FROM the gutter, so with no
         // gutter there is nothing to separate from and the text belongs on the content-box origin.
         if (!gutterVisible) return 0f;
-        return Math.max(3f, getStyle().getGeneralGroup().fontSize() * 0.45f);
+        // Wide enough for a guide to sit INSIDE it and still read as separate from the text. At 0.45em
+        // the gap was under two pixels, so the level-0 guide and the first glyph were visually the same
+        // column and the letter appeared to cut the guide in half.
+        return Math.max(6f, getStyle().getGeneralGroup().fontSize() * 0.9f);
     }
 
     /** Whether the line-number gutter is shown. */
@@ -2623,8 +2626,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return lineNumbers.get(index);
     }
 
+    /**
+     * Retires one pooled element.
+     *
+     * <p><b>Clears its text as well as collapsing its box</b>, for the reason {@code hideFrom} gives: zero
+     * size hides a fill and nothing else, and a {@code UIText} inside keeps painting. The line numbers
+     * looked immune because the gutter clips to its own bounds — but a retired number is still <em>inside</em>
+     * those bounds, so the clip never applied to it. Invisible until scroll-past-end made it possible to
+     * leave a long tail of retired numbers behind, which then drew on top of one another.</p>
+     */
     private void hide(UIElement element) {
         StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(), l -> l.width(0f).height(0f));
+        for (UIElement child : element.getChildren()) {
+            if (child instanceof UIText label) label.setText("");
+        }
     }
 
     // ── §G view decorations: layout ─────────────────────────────────────────────────────────────
@@ -2652,15 +2667,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * around them sets {@code overflow: hidden}; a whitespace marker has nothing around it, so turning
      * the feature off left every dot on screen.</p>
      */
-    private static void hideFrom(List<UIElement> pool, int used) {
-        for (int i = used; i < pool.size(); i++) {
-            UIElement element = pool.get(i);
-            StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(),
-                    l -> l.width(0f).height(0f));
-            for (UIElement child : element.getChildren()) {
-                if (child instanceof UIText label) label.setText("");
-            }
-        }
+    private void hideFrom(List<UIElement> pool, int used) {
+        for (int i = used; i < pool.size(); i++) hide(pool.get(i));
     }
 
     /**
