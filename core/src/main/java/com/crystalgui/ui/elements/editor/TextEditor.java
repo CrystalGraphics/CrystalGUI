@@ -143,6 +143,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** The digits' width, measured whenever {@code gutterWidth} is — the two must never disagree. */
     private float gutterNumbersWidth;
 
+    /** The sheet's three gutter metrics, re-read once a frame — see {@code refreshGutterMetrics}. */
+    private float cachedPadLeft;
+    private float cachedFoldWidth;
+    private float cachedCodeLeftPad;
+
+    /** The font the whitespace markers were last styled for. */
+    private String markerFontKey;
+
+    /** The shaped width of one digit, and the font it was measured in. */
+    private float digitWidth = -1f;
+    private String digitWidthFontKey;
+
     // ── §G view decorations ─────────────────────────────────────────────────────────────────────
 
     private boolean indentGuidesVisible;
@@ -1066,9 +1078,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // gutter there is nothing to separate from and the text belongs on the content-box origin.
         if (!gutterVisible) return 0f;
         // The gutter's margin-right. Margin is the honest property for it -- it is space OUTSIDE the
-        // gutter's painted box, which is precisely why the level-0 indent guide can live in it without
-        // being covered by the gutter's own background.
-        return gutterMetric(LayoutProperties.MARGIN_RIGHT);
+        // gutter's painted box, which is precisely why the gutter's edge can live in it without being
+        // covered by the gutter's own background.
+        return cachedCodeLeftPad;
     }
 
     /** Whether the line-number gutter is shown. */
@@ -1790,7 +1802,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * three numbers sit next to each other in the sheet where they can be compared.</p>
      */
     private float gutterPadLeft() {
-        return gutterMetric(LayoutProperties.PADDING_LEFT);
+        return cachedPadLeft;
+    }
+
+    /**
+     * Re-reads the three metrics from the cascade. <b>Once per frame, never per use.</b>
+     *
+     * <p>{@link #textOriginX} calls {@link #codeLeftPad}, and {@code textOriginX} is called for every
+     * line, every indent guide, every whitespace marker, every caret and every selection band. Reading
+     * the cascade inside it turned a two-field addition into <b>78 style lookups per frame</b> on a
+     * 32-line document with every decoration switched off, scaling with the visible line count and with
+     * each feature turned on. Measured, after the harness went unresponsive.</p>
+     *
+     * <p>The values are pure CSS — no font, no layout — so one read per frame is always current.</p>
+     */
+    private void refreshGutterMetrics() {
+        cachedPadLeft = gutterMetric(LayoutProperties.PADDING_LEFT);
+        cachedFoldWidth = gutterMetric(LayoutProperties.PADDING_RIGHT);
+        cachedCodeLeftPad = gutterMetric(LayoutProperties.MARGIN_RIGHT);
     }
 
     /**
@@ -1812,10 +1841,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return Math.max(0f, value.getValue());
     }
 
-    /** The digits themselves, sized to the widest number the document can reach. */
+    /**
+     * The digits themselves, sized to the widest number the document can reach.
+     *
+     * <p><b>The shaped width of a "0" is cached.</b> {@code measureGutter} runs every frame, so this was
+     * a text-shaping call per frame for a value that only moves when the font does. Keyed on the same
+     * font key {@code rowMetrics} uses, so the two invalidate together.</p>
+     */
     private float gutterDigitsWidth() {
         int digits = Math.max(2, String.valueOf(Math.max(1, buffer.lineCount())).length());
-        return digits * CgTextLayout.of("0", resolveFamily()).build().totalWidth();
+        var general = getStyle().getGeneralGroup();
+        String fontKey = general.fontFamily() + "/" + general.fontSize();
+        if (digitWidth < 0f || !fontKey.equals(digitWidthFontKey)) {
+            digitWidth = CgTextLayout.of("0", resolveFamily()).build().totalWidth();
+            digitWidthFontKey = fontKey;
+        }
+        return digits * digitWidth;
     }
 
     /** The numbers' own column: margin, digits, margin. */
@@ -1832,8 +1873,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * numbers jammed against the code. It is also where a fold arrow goes, when there is one.</p>
      */
     private float gutterFoldWidth() {
-        if (!gutterVisible) return 0f;
-        return gutterMetric(LayoutProperties.PADDING_RIGHT);
+        return gutterVisible ? cachedFoldWidth : 0f;
     }
 
     /** The vertical equivalent, for the same reason. */
@@ -2304,6 +2344,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
 
         float height = lineHeight();
+        // Before ANY geometry is read: every position below goes through textOriginX, which needs these.
+        refreshGutterMetrics();
         // Before anything is placed: the gutter's width moves textOriginX, so a change here has to be
         // known before rows, carets and bands are positioned or they land a gutter-width out for a frame.
         float wantedGutter = measureGutter();
@@ -2732,11 +2774,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
         float step = advance * Math.max(1, indentWidth);
         int used = 0;
 
-        for (int viewLine = Math.max(0, firstViewLine);
-             viewLine <= Math.min(lastViewLine, viewLineCount() - 1); viewLine++) {
+        int firstLine = Math.max(0, firstViewLine);
+        int lastLine = Math.min(lastViewLine, viewLineCount() - 1);
+        if (lastLine < firstLine) {
+            hideFrom(indentGuides, 0);
+            return;
+        }
+        // ONE call for the whole visible RANGE. Asking row by row -- guidesFor(doc, row, row, ...) --
+        // threw away the carry-forward the algorithm is built around: every blank row restarted the
+        // search for the nearest content line above and below and rescanned the document, once per row
+        // and once per frame. The range form is what the port was written for.
+        int firstRow = modelAt(firstLine).row();
+        int lastRow = modelAt(lastLine).row();
+        int[] levelsByRow = IndentLevels.guidesFor(buffer.document(), firstRow, lastRow,
+                indentWidth, tabSize, offSideLanguage);
+
+        for (int viewLine = firstLine; viewLine <= lastLine; viewLine++) {
             int row = modelAt(viewLine).row();
-            int levels = IndentLevels.guidesFor(buffer.document(), row, row,
-                    indentWidth, tabSize, offSideLanguage)[0];
+            int levels = levelsByRow[Math.max(0, Math.min(row - firstRow, levelsByRow.length - 1))];
             final float top = textOriginY() + viewLine * height;
 
             // Half the CODE MARGIN left of the indent stop -- never half a space. A space is wider than
@@ -2805,15 +2860,21 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 UIElement mark = decorationAt(whitespaceMarks, used++, WHITESPACE_CLASS, true);
                 UIText label = (UIText) mark.getChildren().get(0);
                 label.setText(String.valueOf(marker));
-                StyleGroup.importantPipeline(label.getStyle().getGeneralGroup(),
-                        g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
-                                .fontFamily(getStyle().getGeneralGroup().fontFamily()));
+                // The font is pushed only while it is actually settling, not per marker per frame. There
+                // can be hundreds of markers and the pipeline is not free; a line number pays this
+                // because there are ~25 of them, a marker cannot.
+                if (markerFontKey == null || !markerFontKey.equals(measuredFontKey)) {
+                    StyleGroup.importantPipeline(label.getStyle().getGeneralGroup(),
+                            g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
+                                    .fontFamily(getStyle().getGeneralGroup().fontFamily()));
+                }
                 StyleGroup.defaultPipeline(mark.getStyle().getLayoutGroup(),
                         l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
                                 .left(left).top(top).height(ink));
             }
         }
         hideFrom(whitespaceMarks, used);
+        markerFontKey = measuredFontKey;
     }
 
     /**
