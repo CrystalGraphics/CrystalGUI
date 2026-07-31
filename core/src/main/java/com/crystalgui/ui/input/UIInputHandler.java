@@ -648,6 +648,19 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
     private void emitMouseScroll(UIElement target) {
         MouseEvent.Scroll event = new MouseEvent.Scroll(target, hoverFrameData.eventPosition(), scrollDelta);
         sendInputEvent(target, event);
+        // THE WHEEL RESOLVES THROUGH THE KEYMAP TOO, and after dispatch for exactly the reason a keystroke
+        // does: a widget under the pointer gets first refusal on its own wheel, and only what nothing
+        // wanted becomes a shortcut. That is what lets ScrollerView keep plain and Shift+wheel while
+        // Mod+wheel falls through to `editor.zoomIn` -- with no widget hard-coding either, and both
+        // remappable.
+        //
+        // Scoped from the element under the POINTER rather than from focus. A wheel is a pointing gesture:
+        // zooming the editor you are hovering, not the one that happens to hold the caret, is what every
+        // editor does and what the hover target already means.
+        if (event.isDefaultPrevented() || scrollDelta == 0f) return;
+        UIElement start = target != null ? target : window.ui.rootElement;
+        keymapResolver.resolve(start, KeyStroke.ofWheel(scrollDelta, CgPlatform.input().getCurrentModifiers()),
+                KeyEventType.PRESS, System.currentTimeMillis(), false);
     }
 
     private void emitMouseMove(UIElement target) {
