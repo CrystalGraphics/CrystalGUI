@@ -1257,9 +1257,16 @@ Harness-testable in isolation, independent of everything in 6.1, and roughly a d
 
 ### 6.2.2 Pan/zoom canvas · `DONE` (2026-07-31)
 
-> **Shipped as `CanvasView` + `WorldRect` in `ui/elements/canvas/`**, with 17 tests, a `canvasview`
-> rule in `default.css`, and a `cgui-canvas` harness scene that draws node wires through
+> **Shipped as `CanvasView` + `WorldRect` in `ui/elements/canvas/`**, with 18 tests, a `canvasview`
+> rule in `default.css`, and a **canvas page in `cgui-gallery`** that draws node wires through
 > `ctx.curve()` — the first thing in the engine that looks like a node graph.
+>
+> It began as a standalone `cgui-canvas` scene and was folded into the gallery instead. Worth
+> recording as the standing preference: the gallery is the front door, a scene that only one person
+> ever remembers to run is a scene nobody runs, and a page costs one line in `createDemo` against a
+> whole scene class with its own lifecycle, input plumbing and registry entry. A separate scene earns
+> its keep only when it needs something the gallery cannot give it — a scripted capture burst, a
+> different `uiScale`, or thousands of elements.
 >
 > **The sketch below was right about the hard part being done already**, and that held: zoom is a
 > CSS `transform` on one internal `__content__` child, so the plane scales without reflowing anything
@@ -1274,6 +1281,15 @@ Harness-testable in isolation, independent of everything in 6.1, and roughly a d
 >   live drag consuming every mouse move with nothing held, i.e. the canvas sliding around on its own.
 >   `startDrag` now takes the button, defaulting to left, and the handler compares against it. Found by
 >   the one test that released the middle button rather than assuming symmetry.
+> - **The wheel's sign is not guessable, and it shipped inverted.** A positive `MouseEvent.Scroll`
+>   notch means the wheel rolled *down* — the only statement of that anywhere is `ScrollerView`'s
+>   `setScrollTop(before + delta)`. Taken at face value, the canvas zoomed *in* when you scrolled down.
+>   No test failed, because a test written from the implementation agrees with the implementation; it
+>   took one person and one second at the harness. Now pinned by a test that asserts *both* consumers
+>   in one method, so if the platform's sign ever flips they fail together instead of drifting apart.
+>   The general lesson is the one this file keeps relearning: a convention that lives in exactly one
+>   call site is a trap for the second call site, and the fix is to write it down where the next
+>   author will be standing.
 > - **The drag source must be the viewport, never the plane.** Every coordinate a `DragListener`
 >   receives is converted through the source's own transform — so dragging *from* the thing being
 >   panned moves the frame the delta is measured in, and the view accelerates away from the cursor
@@ -1385,8 +1401,9 @@ item that can run in parallel with 6.1's remaining work.
 ## Changelog
 
 - **2026-07-31** — **6.2.2 pan/zoom canvas done, built in parallel with 6.1.6.** `CanvasView` +
-  `WorldRect`, 17 tests, a `cgui-canvas` harness scene whose wires are drawn with 6.2.1's `ctx.curve()`
-  from inside the transformed plane.
+  `WorldRect`, 18 tests, and a **canvas page in `cgui-gallery`** whose wires are drawn with 6.2.1's
+  `ctx.curve()` from inside the transformed plane. New widgets land as gallery pages, not as their own
+  scenes — a scene nobody remembers to run is coverage nobody has.
   - **The design's premise held**: zoom is one CSS `transform` on one internal child, and because
     `UITransform.applyTo` is shared by the render pose and the hit-test chain, clicks follow the picture
     with no widget code. The load-bearing test is the one that takes a world coordinate through the

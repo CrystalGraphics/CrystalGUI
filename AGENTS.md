@@ -838,6 +838,7 @@ int value types.
 | `Menu` | `menu` | `cgui-gallery` (menus page) |
 | `MenuItem` | `menuitem` | `cgui-gallery` (menus page) |
 | `Dropdown` | `dropdown` | `cgui-gallery` (menus page) |
+| `CanvasView` | `canvasview` | `cgui-gallery` (canvas page) |
 | `Scroller` | `scroller` | `cgui-scroller` |
 | `ScrollerView` | `scrollerview` | `cgui-scroller` |
 | `SplitView` | `splitview` | `cgui-splitview` |
@@ -968,6 +969,11 @@ The things that are invisible from any single class and expensive to rediscover.
 | Only `AnchoredPlacement` writes `left`/`top` on an anchored popup | Any other writer fights placement every frame |
 | Transitioning *into* view needs a resting value in the sheet, never a one-frame write from Java | The write is itself transitionable, so the engine eases toward it and the cleanup retargets it back — nothing animates, and no test sees it |
 | `TransitionEngine` advances on `System.nanoTime()`, ignoring the delta it is passed | A test loop cannot step transition time; assert the inputs (resting value, state class, ANIMATION-origin candidate) rather than intermediate values |
+| A drag ends when **the button that started it** is released — `startDrag` takes one, defaulting to left | The handler used to assume button 0 unconditionally: invisible for every left-button drag in the engine, and fatal for any other. A middle-button pan is never told its button came up, while the implicit capture release still fires — so a drag with no button held keeps eating every mouse move, and the canvas slides around on its own |
+| A **positive** `MouseEvent.Scroll` notch means the wheel rolled **down** — `ScrollerView` is the only statement of it, via `setScrollTop(before + delta)` | Any new wheel consumer that takes the sign at face value is inverted. `CanvasView` shipped zooming *in* on scroll-down: nothing failed, because a test written from the implementation agrees with it, and the first person to touch a wheel found it in a second |
+| A pan drag's source is the **viewport**, never the transformed plane | Every `DragListener` coordinate is converted through the source's own transform, so panning the plane you are dragging from moves the frame the delta is measured in — the view accelerates away from the cursor instead of following it |
+| The canvas culls with `opacity: 0`, **not** `display: none` | A culled node's layout rect is the input its own cull decision is computed from. Collapse it and the node can never be un-culled without a cache of where it used to be — which then goes stale whenever anything moves it. Keeping layout live is what makes the decision self-correcting |
+| The plane's `transform-origin` is pinned to `0 0` at IMPORTANT | It defaults to 50%, so every world↔screen conversion in `CanvasView` would be off by half a viewport times the zoom — and it would look plausible, since the picture is still internally consistent |
 | A drag ghost is registered **per drag** — `UIDragController` drops it when the drag ends | Register once and you get a ghost for the first drag only; retaining it was a real bug, where a ghost outlived its drag and reappeared on unrelated screens |
 | Leading (top/left) resize handles exist only for out-of-flow elements | `left`/`top` on an in-flow box is a *relative offset* — it slides over the sibling above and reflows nothing, so the panel eats its neighbour |
 | A leading resize derives its origin from the size **achieved**, never from the pointer delta | The box shrinks to `min-height` and then keeps travelling — while the trailing edge, which moves nothing, correctly just stops |
@@ -1134,6 +1140,7 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
   .elements                    Button, Checkbox, CheckboxGroup, Dialog, DialogManager, Dropdown, Menu,
                                MenuItem, Popover, Scroller, ScrollerView, Slider,
                                SplitView, Switch, Tab, TabView, TextField, Tooltip, UIText
+    .canvas                    CanvasView (pan/zoom viewport), WorldRect — the node graph's substrate
 
 com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, JsonOps, PlainOps,
                                StateMap, UIDescriptionCodec, ContentHash
