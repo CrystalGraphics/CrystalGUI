@@ -2896,9 +2896,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         UIElement edge = decorationAt(gutterEdge, 0, GUTTER_EDGE_CLASS, false);
         edge.setScrollExempt(true);
-        // Centred in the code margin, which is the gap that exists between the gutter's painted box and
-        // the first glyph -- so it touches neither.
-        final float left = textOriginX() - codeLeftPad() * 0.5f;
+        // ON the gutter's right edge, which is what a border is. Floating it in the middle of the code
+        // margin read as a third thing -- a stray rule with a gap either side -- rather than as the
+        // gutter ending. The whole margin then sits between it and the first glyph, which is the gap the
+        // margin is for.
+        final float left = textOriginX() - codeLeftPad();
         final float height = viewportHeight();
         StyleGroup.defaultPipeline(edge.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
