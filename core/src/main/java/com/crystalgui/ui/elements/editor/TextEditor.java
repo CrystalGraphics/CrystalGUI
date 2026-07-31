@@ -2275,11 +2275,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 + textWidthOf(zoomResetButton.getText(), chrome) + chrome * 4f;
         final float height = chrome * 2f;
         final float left = Math.max(textOriginX(), (getClientWidth() - width) / 2f);
-        final float top = Math.max(0f, viewportHeight() - height - chrome * 0.6f);
+        // A BOTTOM inset, not a computed top. Every position here is derived from the PREVIOUS frame's
+        // layout, which is fine for anything anchored to the top -- a height change does not move it. This
+        // is anchored to the bottom, so a resize moved it by the full delta for one frame and then
+        // corrected: the visible flick downwards and back. Taffy resolves a bottom inset against the
+        // container's height at layout time, so there is no stale value to be wrong with.
+        final float bottom = horizontalBarThickness() + chrome * 0.6f;
 
         StyleGroup.defaultPipeline(zoomIndicator.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(left).top(top).width(width).height(height));
+                        .left(left).bottom(bottom).width(width).height(height));
     }
 
     /** The shaped width of a string at a given size, in the editor's family. */
