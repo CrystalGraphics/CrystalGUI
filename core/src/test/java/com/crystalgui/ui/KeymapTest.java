@@ -8,6 +8,7 @@ import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.input.keymap.KeymapSheet;
 import com.crystalgui.ui.input.keymap.KeyEventType;
 import com.crystalgui.ui.input.keymap.KeyStroke;
 import com.crystalgui.ui.input.keymap.KeymapResolver;
@@ -434,6 +435,108 @@ public class KeymapTest extends UiTestBase {
         assertEquals("the inner rebinding shadows the outer one, as pressing it would",
                 KeyChord.parse("Mod+Shift+S"), all.get("edit.save"));
         assertEquals(KeyChord.parse("Mod+P"), all.get("palette.open"));
+    }
+
+    // ── Sheets: bindings as data ────────────────────────────────────────────
+
+    /**
+     * <b>The half that makes the command-id indirection worth anything.</b>
+     *
+     * <p>Bindings name a string rather than holding a lambda precisely so a sheet can be shipped as a
+     * preset or written by a user. Until this existed the indirection was cost with no benefit — every
+     * binding still had to be reachable from Java.</p>
+     */
+    @Test
+    public void aSheetBindsFromJson() {
+        UIElement el = build();
+        window.getCommands().register(recording("edit.save")).register(recording("edit.saveAll"));
+        el.keymap().load(KeymapSheet.parse("["
+                + "{\"key\": \"Mod+S\", \"command\": \"edit.save\"},"
+                + "{\"key\": \"Mod+K Mod+S\", \"command\": \"edit.saveAll\"}]"));
+
+        assertTrue(press(el, "Mod+S"));
+        assertEquals(List.of("edit.save"), fired);
+
+        press(el, "Mod+K Mod+S");
+        assertEquals(List.of("edit.save", "edit.saveAll"), fired);
+    }
+
+    /**
+     * <b>{@code "-command"} removes, and removes only that pairing.</b>
+     *
+     * <p>A user sheet is appended to the defaults rather than replacing them, so without a way to say
+     * "not that one" the only way to drop a default would be to redefine the whole default sheet — which
+     * then silently stops tracking any later change to it. And the removal is targeted: taking some other
+     * extension's binding off the same key would be a surprise nobody could diagnose.</p>
+     */
+    @Test
+    public void aLeadingMinusRemovesOnlyThatBinding() {
+        UIElement el = build();
+        window.getCommands().register(recording("a.command")).register(recording("b.command"));
+        el.keymap().bind("Mod+P", "a.command");
+        el.keymap().bind("Mod+P", "b.command");
+
+        el.keymap().load(KeymapSheet.parse("[{\"key\": \"Mod+P\", \"command\": \"-a.command\"}]"));
+
+        assertTrue(press(el, "Mod+P"));
+        assertEquals("b's binding on the same chord must survive", List.of("b.command"), fired);
+    }
+
+    @Test
+    public void aSheetCarriesReleaseAndTypingFlags() {
+        UIElement el = build();
+        window.getCommands().register(recording("pan.end")).register(recording("tool.brush"));
+        el.keymap().load(KeymapSheet.parse("["
+                + "{\"key\": \"Space\", \"command\": \"pan.end\", \"on\": \"release\"},"
+                + "{\"key\": \"B\", \"command\": \"tool.brush\", \"whileTyping\": true}]"));
+
+        var bindings = el.keymap().bindings();
+        assertEquals(KeyEventType.RELEASE, bindings.get(0).getEventType());
+        assertTrue(bindings.get(1).isAllowedWhileTyping());
+    }
+
+    /**
+     * <b>One malformed entry must not cost every other binding in the file.</b>
+     *
+     * <p>The same call the stylesheet parser makes for a malformed declaration, and for the same reason:
+     * this is a file a <em>user</em> edits, and losing an entire remapping to one typo is a far worse
+     * outcome than losing the line that had the typo.</p>
+     */
+    @Test
+    public void malformedEntriesAreSkippedNotFatal() {
+        UIElement el = build();
+        window.getCommands().register(recording("good.command"));
+        el.keymap().load(KeymapSheet.parse("["
+                + "{\"key\": \"Mod+Nonsense\", \"command\": \"bad.key\"},"
+                + "{\"key\": \"\", \"command\": \"no.key\"},"
+                + "{\"command\": \"missing.key\"},"
+                + "{\"key\": \"Mod+G\"},"
+                + "\"not an object\","
+                + "{\"key\": \"Mod+G\", \"command\": \"good.command\"}]"));
+
+        assertEquals("only the one valid entry survived", 1, el.keymap().bindings().size());
+        assertTrue(press(el, "Mod+G"));
+        assertEquals(List.of("good.command"), fired);
+    }
+
+    @Test
+    public void invalidJsonYieldsAnEmptySheetRatherThanThrowing() {
+        assertTrue(KeymapSheet.parse("{ not json at all").isEmpty());
+        assertTrue("a bare object is not a keymap either", KeymapSheet.parse("{}").isEmpty());
+        assertTrue(KeymapSheet.parse("").isEmpty());
+    }
+
+    /** Sheet order is significant and preserved: layering a user sheet over defaults depends on a later
+     * entry being able to remove an earlier one. */
+    @Test
+    public void sheetOrderIsPreserved() {
+        UIElement el = build();
+        window.getCommands().register(recording("first"));
+        el.keymap().load(KeymapSheet.parse("["
+                + "{\"key\": \"Mod+D\", \"command\": \"first\"},"
+                + "{\"key\": \"Mod+D\", \"command\": \"-first\"}]"));
+
+        assertTrue("bound then removed, in that order", el.keymap().bindings().isEmpty());
     }
 
     // ── Diagnostics ──────────────────────────────────────────────────────────

@@ -228,7 +228,7 @@ is the same work 6.1.6 needs for a caret.
   gets attention.
 
 
-### 6.1.2 Keymap and accelerators · `MOSTLY DONE` (2026-07-31)
+### 6.1.2 Keymap and accelerators · `DONE` (2026-07-31)
 
 Chords, sequences, scoping, remapping and a conflict report. Cheapest item on the list and
 disproportionately what makes an application *feel* like an editor — and placed second because
@@ -359,10 +359,25 @@ page.
 `acceleratorsFrom` (what a palette lists), both walking the resolver's own path so a label cannot
 disagree with what fires.
 
-**Not yet built — the one remaining deliverable:** the **keymap sheet parser**. Bindings being data is a
-premise of the whole design ("what makes them remappable"), and until a sheet can be parsed that claim is
-theoretical: today bindings are only reachable from Java. It is additive — `{key, command}` entries plus
-`-command` removal, over the existing `JsonOps` — and nothing else waits on it.
+**Sheet parser done 2026-07-31** — `KeymapSheet`, VS Code's `keybindings.json` shape:
+`{key, command}` with optional `on: "release"` and `whileTyping`, plus `-command` to remove. Loaded
+through `CgIO`, so a filesystem override and a resource pack both work exactly as they do for
+stylesheets. 6 tests.
+
+Two decisions in it worth keeping:
+
+- **A leading minus removes, and removes only that chord/command pairing.** A user sheet is *appended* to
+  the defaults rather than replacing them, so without a way to say "not that one" the only route to
+  dropping a default would be to redefine the entire default sheet — which then silently stops tracking
+  any later change to it. And the removal has to be targeted: taking some other extension's binding off
+  the same key would be a surprise nobody could diagnose.
+- **A malformed entry is skipped with a warning, never fatal.** The same call the stylesheet parser makes
+  for a bad declaration, and for a stronger reason: this is a file a *user* edits, and losing an entire
+  remapping to one typo is far worse than losing the line with the typo. An empty `command` is refused
+  loudly rather than accepted and ignored — VS Code reads it as "disable this key", which would need a
+  chord-suppression concept nothing has asked for.
+
+**6.1.2 is now complete.**
 
 Two design points were confirmed by building rather than by argument:
 
@@ -429,6 +444,72 @@ somewhere.
 - **No global OS hotkeys.** Out of scope for an in-game UI and a platform concern regardless.
 - **No key-repeat semantics** beyond what the platform already delivers.
 - **No chord *display* localisation.** Labels render the same tokens they parse.
+
+#### Built
+
+`ui/elements/list/`: `ListView<T>`, `ListRenderer<T>`, `ItemSizeStrategy`, `FixedHeightStrategy`.
+13 tests in `ListViewTest`, a `list` gallery page over 100,000 rows with live counters.
+
+**Selection and keyboard navigation landed 2026-07-31**, after the question "are we completely done?"
+made the gap obvious: what existed was a *viewport*, not a list *control*. `SelectionMode`
+(NONE/SINGLE/MULTIPLE), an anchor-based Shift-range, Ctrl-toggle, `selectAll`, an `onSelectionChanged`
+signal, and the full ARIA listbox key set — arrows, Home/End, PageUp/PageDown, Space, Ctrl+A.
+
+- **Selection follows focus in SINGLE mode**, because arrowing through a list you then have to press
+  Space in is a keyboard experience nobody wants. Ctrl+arrow is the APG's escape hatch for reaching a row
+  without selecting it.
+- **Space and Enter are a pair, not duplicates.** After Ctrl+arrow a row is focused and unselected, so
+  Space **adds** it to the selection and Enter **replaces** the selection with just it — and Enter also
+  emits `onRowActivated`, because activation ("open this") is a different question from selection
+  ("where am I"). Enter did nothing at all at first: `UIInputHandler` turns Space/Enter into a
+  synthesized click on the focused element, and since selection here is driven by the *focus* event,
+  clicking a row that already has focus changes nothing.
+- **Keys are handled on the widget, not through the keymap.** A keymap binding names a *command id*, and
+  ids are global to the window — two lists on one screen would need two sets of identical bindings.
+  Widget-local keys belong on the widget, which is `TabView`'s existing idiom.
+- **Selected rows carry `__selected__`**, not `:checked`. That pseudo-class reads `isChecked()`, which
+  would need a row *subclass*, and wrapping every renderer template in one is the "eight wrappers deep"
+  structure `TabView`'s javadoc exists to mock.
+- **A guard stops the view's own focus moves re-entering the click path.** Without it Ctrl+arrow selected
+  anyway, Shift+arrow collapsed a range to one row, and — the latent one, found by the same fix —
+  restoring focus to a recycled row silently discarded whatever multi-selection had been built since.
+
+**The model-listener leak is closed too**: an `ObservableList` outlives the views onto it, so a discarded
+view kept itself, its pool and every item they referenced alive. It now detaches when it leaves the tree.
+Two dead ends worth knowing: `Connection.isConnected()` defaults to `true` unless the concrete signal
+overrides it, so it cannot observe a disconnect; and the `DOMEvent.ElementRemoved` route did not fire, so
+the detach hangs off the ticker's own detach branch.
+
+**Still deferred, deliberately:** variable row heights (6.1.7 needs them; `ItemSizeStrategy` makes it
+additive), and serialization — `ListView` is not in `ElementRegistry` and cannot round-trip, because a
+virtualised view should serialize its *model* rather than its window and that is undesigned.
+
+**The three open questions above were all answered by building:**
+
+- **`ListView` owns its scrolling.** Scrolling is an ambient element capability here, so *not* owning it
+  — living inside a `ScrollerView` and reading an ancestor's offset every frame — would have been the
+  divergence. One `getScrollHeight()` override, from the model rather than the children, is the entire
+  seam; max scroll, clamping, smooth scroll and the scrollbar thumb all read through it and needed no
+  changes at all.
+- **Recycle by pool, and rows are hidden rather than removed.** Removing would destroy the Taffy node and
+  every style candidate on it, so the next scroll step would pay to rebuild exactly what it just threw
+  away.
+- **Fixed overscan of 2.** Predictable and testable; velocity-based is an optimisation wanting a
+  measurement first.
+
+**One non-obvious thing the build forced**, and the reason it is worth reading `tickFrame`'s comment:
+**the window is re-derived every frame, not on layout.** A scroll offset is state on the element applied
+as a pose translate at paint time — nothing in the layout tree changes when it moves — so an
+`onLayoutChanged` hook realises the window once and never again. It looks perfect until somebody scrolls.
+
+**And one genuine bug, found by a test rather than by eye:** restoring focus to a recycled row scrolled
+the list to where that row's *previous* occupant had been, because `requestFocus` scrolls its target into
+view and layout had not yet run. That moved the window, which realised a different set, which restored
+focus again — a loop that settled 7,940px from where the caller asked to be. The restore is now deferred
+one frame, by which point the row is where it belongs and `scrollIntoView` is correctly a no-op.
+
+Both mutation-checked: realising every row, or taking `getScrollHeight` from the children, each turns six
+of the thirteen tests red.
 
 #### Open questions
 
