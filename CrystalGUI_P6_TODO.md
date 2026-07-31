@@ -977,13 +977,91 @@ construction; sharing it would mean generalising every method on it while it sta
 
 </details>
 
-### 6.1.7 Code editor · `TODO`
+### 6.1.7 Code editor · `PLANNED` (2026-07-31)
 
 6.1.6 plus a gutter, line numbers, current-line highlight, syntax highlighting (6.1.1), bracket matching,
-indent handling, and find/replace.
+indent handling, and find/replace. The widget must not know what any particular language is.
 
-Highlighting wants a tokenizer seam that a caller supplies — GLSL first, since that is the shader graph's
-need, but the widget must not know what GLSL is.
+#### The two gates, decided
+
+**Variable-height rows — do this first.** 6.1.3 shipped fixed-height virtualisation, 6.1.6 dropped soft
+wrap because of it, and 6.1.7 cannot avoid it: a wrapped line occupies several visual rows, and the gutter
+has to draw one number spanning all of them. It is a change to `ItemSizeStrategy` plus the editor's window
+arithmetic, and everything else here sits on top of it. **This is the last time it can be deferred.**
+
+**Multi-cursor — design it in now.** `TextEditor` holds `caret`/`anchor` as two `int` fields and every
+movement method reads and writes them directly; converting that to a list of ranges later means touching
+all of them. The layer underneath is already ready — several non-overlapping changes in one `ChangeSet` is
+exactly what a multi-cursor edit is, and `ChangeSet.of` already refuses overlaps, which is the invariant
+multi-cursor has to maintain anyway.
+
+#### Syntax highlighting: tree-sitter, behind an SPI
+
+**Decision: use tree-sitter, but the editor must never reference it.**
+
+The blocker was Java. The official `jtreesitter` needs **JDK 23+** and the Foreign Function & Memory API,
+which is impossible here. That is resolved: there is a **local fork of `tree-sitter-ng` v0.26.6 at
+`X:/projects/tree-sitter`**, JNI-based, `sourceCompatibility`/`targetCompatibility` **1.8**, with 25
+grammars, `TSQuery` for `highlights.scm`, and prebuilt natives committed for x86_64 Windows/Linux/macOS
+and aarch64 Linux/macOS.
+
+Why it earns a native dependency, rather than a hand-written lexer:
+
+- **Incremental reparse.** `TSInputEdit` reuses unchanged subtrees, and a `ChangeSet` is already exactly
+  the edit description it wants. A lexer would re-scan from the last known-good line, which is fine for
+  highlighting and useless for everything below.
+- **Error recovery.** Half-typed code still yields a usable tree. A lexer degrades here in the case that
+  matters most — while typing.
+- **It is not only highlighting.** Bracket matching, folding, indent rules and structural selection all
+  want a tree. And the grand goal is a shader graph that *generates* GLSL: a real CST is worth having for
+  validating node code and extracting uniforms, well outside the editor.
+- **`highlights.scm` capture names map straight onto 6.1.1.** A capture of `@keyword` becomes
+  `::highlight(keyword)` and the theme styles it in CSS. The Custom Highlight API was built for ranges
+  supplied from outside; this is the consumer it was waiting for.
+
+**Java grammar first, GLSL second.** The fork bundles `tree-sitter-java` with its natives and
+`queries/highlights.scm` already built — so the pipeline can be proven end to end with no new native work.
+`tree-sitter-glsl` exists upstream (`tree-sitter-grammars/tree-sitter-glsl`, an extension of the C
+grammar) but is **not** in the fork, so it needs adding and cross-compiling; that is a second step, not a
+prerequisite.
+
+#### The SPI, and why it is not optional
+
+`core/` must stay loadable on a dedicated server with no GL and no natives. So:
+
+| Layer | Lives in | Knows about |
+|---|---|---|
+| `SyntaxTokenizer` — text in, captured ranges out | `core/` | nothing but text and range names |
+| Built-in lexer | `core/` | one language's keywords, no dependency |
+| tree-sitter backend | its own module | `org.treesitter`, natives, `highlights.scm` |
+
+**The built-in lexer is not throwaway work, it is the degradation path.** A native load *will* fail
+somewhere — the fork has no aarch64-Windows build, and a Minecraft client is the least predictable
+deployment target there is. An editor that falls back to lexer highlighting is far better than one that
+throws, and the fallback also gives the tree-sitter backend a differential oracle: for valid code the two
+must agree on token boundaries.
+
+**Byte offsets again.** tree-sitter speaks UTF-8 byte offsets; this engine speaks UTF-16 code units. The
+conversion already exists in `TextEditor.utf16IndexByUtf8Byte` for caret positioning, and wants extracting
+rather than writing a second time in the other direction. Getting it wrong is invisible in ASCII.
+
+#### Order of work
+
+1. Variable-height rows in `ItemSizeStrategy` + the editor window, unblocking soft wrap in 6.1.6 too.
+2. Multi-cursor selection model in `TextEditor`.
+3. Gutter, line numbers, current-line highlight — all of which need (1).
+4. `SyntaxTokenizer` SPI + the built-in lexer, wired to `HighlightRegistry`.
+5. tree-sitter module, Java grammar, `highlights.scm` → `::highlight()` captures.
+6. Bracket matching and indent handling from the tree.
+7. Find/replace.
+8. GLSL grammar added to the fork.
+
+#### Risk
+
+The native shipping story is the real one. Loader jars already bundle JNI for
+`freetype-msdfgen-harfbuzz`, so there is precedent and infrastructure — but that is per-loader build
+configuration across four targets, and the mc modules are not in this build today. Keeping tree-sitter in
+its own module means `core/` and the harness stay unaffected either way.
 
 ### 6.1.8 Configurator · `TODO`
 
@@ -997,7 +1075,44 @@ after the Tree and Table rather than before them.
 
 This is what a node's property panel is made of.
 
-### 6.1.9 Command and undo system · `TODO`
+### 6.1.9 Command and undo system · `DONE` (2026-07-31)
+
+> **Both halves have now landed, from opposite ends.** The *command* half shipped with 6.1.2 —
+> `core/command/` holds `Command` (a named, id-addressable action), `CommandContext` and
+> `CommandRegistry`, which is what a key binding, a menu item and the palette all point at. The *undo*
+> half is `core/undo/`: `Edit`, `CompositeEdit`, `UndoStack`, with **20 tests in `headlessTest`**,
+> because a dedicated server authors documents and the history mechanism has to run with no GL context.
+>
+> Built out of the 6.2 track rather than the 6.1 one, since 6.2.4 is blocked on it and 6.1.6/6.1.7 are
+> heavy. The design below is what was implemented; four things it did not say:
+>
+> - **An `Edit` is not a `Command`, and the names are close enough to need saying.** A command is what
+>   the user asked for; an edit is what that did to the document. One command may produce no edits (a
+>   scroll), one (a keystroke), or several (paste over a selection).
+> - **The stack owns the clock, the edit owns the intent.** `UndoStack` measures the pause and offers
+>   the previous edit a merge; the edit decides whether the two are the same kind of thing. Neither half
+>   can implement coalescing alone, and splitting it this way means no edit type ever carries a
+>   timestamp. The window matches `TextBuffer`'s own 500ms, so a user cannot tell which mechanism
+>   handled their Ctrl+Z.
+> - **Two entry points, deliberately.** `execute()` applies and records; `push()` records something the
+>   caller already applied — which is the shape `TextBuffer` has, since it applies a `ChangeSet` and
+>   emits it afterwards. What would not be legitimate is a stack that guessed which had happened.
+> - **Re-entrancy throws.** A listener that reacts to a document change by editing it again would push
+>   onto a stack that is mid-unwind, leaving a history that no longer describes the document. The
+>   exception lands at the call site instead of the corruption being found three actions later.
+>
+> **One bug worth recording, caught by a test that existed to catch it.** The "no merge run open"
+> sentinel was `lastPushNanos = Long.MIN_VALUE`, and `System.nanoTime() - Long.MIN_VALUE` **overflows**
+> — so "never merge again" evaluated as "merge immediately" and every edit coalesced into one step.
+> `nanoTime()` has an arbitrary origin and may be negative; it is not a value you can pick a sentinel
+> against. It is now an explicit boolean, and the trap is in `AGENTS.md`.
+>
+> **Not done, and not mine to do:** `TextBuffer` keeps its own internal undo stack. It predates this and
+> works; adopting `UndoStack` is a small refactor for whoever owns 6.1.6, not something to do underneath
+> them mid-rewrite. Nothing is blocked by the duplication — the two never see the same document.
+
+<details>
+<summary>The design, as settled — implemented as written</summary>
 
 > **Design settled 2026-07-31**, because 6.1.6 could not start without it.
 
@@ -1023,6 +1138,8 @@ have made this hard; this shape makes it not a question.
 
 Labels for a history panel come free, since a command is already a record rather than a pair of function
 pointers.
+
+</details>
 
 ### 6.1.10 File system SPI and browser · `TODO`
 
@@ -1549,8 +1666,10 @@ stack — this is where undo stops being optional.
 - **Every mutation is a command** — `AddNode`, `DeleteSelection`, `MoveNodes`, `Connect`, `Disconnect`.
   A drag of forty nodes is *one* `MoveNodes` command coalesced at drag end, not forty, or undo becomes
   useless in exactly the situation it matters.
-- **Blocked on 6.1.9's implementation**, which lands with 6.1.6. This is the one 6.2 item that genuinely
-  waits for the 6.1 track.
+- ~~**Blocked on 6.1.9's implementation**~~ — **unblocked 2026-07-31**: `core/undo/` now exists
+  (`Edit`, `CompositeEdit`, `UndoStack`), built out of this track because 6.1.6/6.1.7 are heavy. A
+  forty-node drag is one `beginTransaction`/`endTransaction` pair, and a rewire is the disconnect and
+  the connect inside one.
 
 ### 6.2.5 Graph document model and serialization · `TODO`
 
@@ -1603,7 +1722,7 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
                     │
                     └── 6.1.6 text buffer ───────────────┘
                               ▲
-6.1.9 command/undo (design) ──┘──────────────────────► 6.2.4
+6.1.9 command/undo (DONE) ────┘──────────────────────► 6.2.4  (now unblocked)
 
 6.1.10 file SPI ──► 6.1.11 docking ──► 6.1.12 chrome
 
@@ -1630,11 +1749,12 @@ item that can run in parallel with 6.1's remaining work.
 
 | Question | Blocks | Notes |
 |---|---|---|
+| Do the MC loader jars ship tree-sitter's natives, and for which platforms? | 6.1.7 step 5 | The fork has no aarch64-Windows build. The built-in lexer fallback makes this a degradation rather than a failure, but the answer decides how much of 6.1.7 is usable in-game. |
 | ~~Are `CgShapedParagraph`'s style spans drivable without backend work?~~ | ~~6.1.1~~ | **Answered: yes, entirely.** The backend was already complete; 6.1.1 was a translation layer. |
 | What *is* the filesystem in a Minecraft context — resource packs, world data, server storage? | 6.1.10 | Shape the SPI around what the client can be handed, not around POSIX. |
 | ~~Do widgets mutate models directly, or emit commands?~~ | ~~6.1.9~~ | **Answered: both, split on document vs view state.** See 6.1.9. Settled while three widgets had chosen rather than a dozen, which is the whole reason it was the gate. |
 | Fixed-height rows only for the first virtualised pass? | 6.1.3, **and now 6.1.7** | Still deferred. 6.1.6 shipped without soft wrap for exactly this reason, so the wrapped code lines in 6.1.7 are what will force it — it is no longer a question that can be deferred again. |
-| Does the code editor need multi-cursor? | 6.1.7 | Cheap to design for, expensive to retrofit. Worth an early yes/no. |
+| ~~Does the code editor need multi-cursor?~~ | ~~6.1.7~~ | **Answered: yes, designed in from the start.** `TextEditor` holds caret/anchor as two ints and every movement method touches them, so retrofitting means rewriting all of them; `ChangeSet` already models a multi-cursor edit exactly. |
 | ~~What should a node look like?~~ | ~~6.2.3~~ | **Answered: Unity Shader Graph's, literally.** Anatomy, the type→colour palette, and four behaviours the screenshots could not show are all recorded in 6.2.3. |
 | How does a wire stay visible when zoomed out? | 6.2.3 | A pose-scaled stroke is sub-pixel at low zoom. Clamp in Java against the canvas's zoom, not in the shader. |
 | Who owns selection — the node, or a selection model? | 6.2.3 / 6.2.4 | 6.2.4 decides, but 6.2.3 must not settle it by accident with a boolean field on `GraphNode`. |
@@ -1642,6 +1762,23 @@ item that can run in parallel with 6.1's remaining work.
 ---
 
 ## Changelog
+
+- **2026-07-31** — **6.1.9 done: the undo half, built from the 6.2 track.** `core/undo/` — `Edit`,
+  `CompositeEdit`, `UndoStack` — with 20 tests in `headlessTest`, so the mechanism is provably free of
+  GL and safe for a server that authors documents. Taken up here because 6.2.4 is blocked on it and the
+  6.1 agent is deep in 6.1.6/6.1.7.
+  - **The command half already existed** (6.1.2's `core/command/`), so the item was half done and looked
+    untouched. An `Edit` is not a `Command`: a command is what the user asked for, an edit is what it did
+    to the document, and one command may produce none, one, or several.
+  - **Coalescing splits cleanly**: the stack owns the clock, the edit owns the intent. No edit type
+    carries a timestamp, and the window matches `TextBuffer`'s 500ms so a user cannot tell which
+    mechanism served their Ctrl+Z.
+  - **`Long.MIN_VALUE` is not a valid "long ago" sentinel against `System.nanoTime()`.** The subtraction
+    overflows, so "never merge again" evaluated as "merge immediately" and the whole session collapsed
+    into one undo step. Caught by a test written to pin that a pause breaks a typing run — the failure
+    would otherwise have been undo occasionally swallowing two actions, on some machines only.
+  - **`TextBuffer` keeps its own stack for now**, deliberately: adopting this one is a small refactor
+    for whoever owns 6.1.6, not something to do underneath them mid-rewrite.
 
 - **2026-07-31** — **6.2.3 done: nodes, ports and wires, to Unity Shader Graph's spec.** 18 tests, a
   `crystalgui:graph` theme, and the gallery's canvas page rebuilt as the reference graph.
