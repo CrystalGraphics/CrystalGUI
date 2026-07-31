@@ -529,6 +529,19 @@ texteditor .__indent-guide__ {
     z-index: -1;
 }
 
+/* THE ACTIVE GUIDE — the block the caret is actually inside, which IntelliJ draws brighter than the rest.
+ *
+ * Brighter, not thicker or a different hue: the guides are a background layer the eye is meant to be able
+ * to ignore, and one that changes weight as the caret moves would pull attention on every keystroke. The
+ * whole point of highlighting one is that the others stay quiet.
+ *
+ * Which guide this is comes from IndentLevels.activeGuideFor — a port of Monaco's getActiveIndentGuide —
+ * and notably it is NOT simply "the deepest guide on the caret's row": standing on a line that opens or
+ * closes a block activates the CHILD block, not the one that line is written at. */
+texteditor .__indent-guide__.__active__ {
+    background-color: #6E7A8A;
+}
+
 /* THE GUTTER'S RIGHT EDGE. One element, full viewport height, sitting in the gutter's margin-right.
  *
  * This is what the level-zero indent guide was pretending to be, and the distinction is the whole reason
