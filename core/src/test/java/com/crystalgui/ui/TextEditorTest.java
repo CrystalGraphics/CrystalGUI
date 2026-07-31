@@ -383,8 +383,13 @@ public class TextEditorTest extends UiTestBase {
                 contentLeft, line.getRuntimeCache().getX(), 0.5f);
         editor.setCaret(0);
         settle();
-        assertEquals("and the caret at column 0 must sit exactly there too",
-                contentLeft, caret.getRuntimeCache().getX(), 0.5f);
+        // The caret's RIGHT edge sits on the boundary, so at column 0 it occupies the gap immediately
+        // before the first glyph -- one caret-width into the padding. That is deliberate: a caret drawn
+        // rightwards from the boundary covers the first ink column of the glyph after it, because a
+        // bitmap font has no left side bearing. Having padding is what gives it somewhere to sit.
+        float caretWidth = editor.getStyle().getGeneralGroup().caretWidth();
+        assertEquals("the caret at column 0 sits one caret-width before the text",
+                contentLeft - caretWidth, caret.getRuntimeCache().getX(), 0.5f);
     }
 
     /**

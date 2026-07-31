@@ -429,8 +429,14 @@ texteditor .__line__ {
  * caret is created in the constructor while lines are realised later -- so without this the caret paints
  * UNDER every line and reads as a caret that lags a character behind whatever was just typed. Stacking it
  * explicitly is also what lets the bands sit behind the glyphs they highlight rather than over them. */
+/* The caret's WIDTH comes from the inheritable `caret-width` property on the editor, not from a width
+ * here -- TextEditor sizes and positions the element from it so it can straddle the character boundary
+ * rather than start at it. Colour and stacking remain a theme's business. */
+texteditor {
+    caret-width: 1px;
+}
+
 texteditor .__caret__ {
-    width: 1px;
     background-color: #E6E6E6;
     z-index: 2;
 }
@@ -965,7 +971,90 @@ splitview .__vertical__ .__divider__ { cursor: ns-resize; }
  * permanent open-hand would promise a drag that does nothing. The class goes on while the pan drag is
  * live, and the pointer is captured for its duration, so the cursor holds even when the drag leaves the
  * canvas — the same reason splitview repeats its cursor on `.__dragging__` above. */
-canvasview.__panning__ { cursor: grabbing; }
+/* `graphview` is named alongside `canvasview` for the reason this file keeps repeating: a widget's
+ * cascade identity is its TAG, never its Java supertype. GraphView extends CanvasView and matches none
+ * of its rules. */
+canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
+
+/* ── Graph nodes and ports (P6.2.3) ─────────────────────────────────────────────────────────────
+ * Functional geometry only. Every colour — including the per-type port palette, which is the whole
+ * readability of a graph — belongs to a theme; see `graph.css`.
+ *
+ * Without these rules a node is a column of full-width rows with no port dots to grab: the dot has no
+ * intrinsic size, and Taffy's default direction is COLUMN, so the two port columns would stack. */
+
+graphnode {
+    width: 168px;
+    flex-direction: column;
+}
+graphnode .__title-bar__ {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 6px;
+    padding-right: 4px;
+    height: 18px;
+}
+/* The title takes the slack so the chevron is pinned right. `width: 0` as the basis because
+ * flex-shrink is 0 in this engine — a long title would otherwise push the chevron out of the node. */
+graphnode .__title__ { flex-grow: 1; width: 0; }
+graphnode .__collapse__ {
+    width: 10px;
+    height: 10px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+graphnode .__ports__ { flex-direction: row; padding-top: 2px; padding-bottom: 2px; }
+/* Two columns, each taking half. Zero basis for the same flex-shrink reason as above. */
+graphnode .__inputs__, graphnode .__outputs__ { flex-direction: column; flex-grow: 1; width: 0; }
+/* An output reads right-to-left: label, then the dot on the edge. */
+graphnode .__outputs__ { align-items: flex-end; }
+
+graphnode .__controls__ { flex-direction: column; }
+graphnode .__control-row__ {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap-all: 4px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+/* The preview slot has a height even while empty, because 6.2.7 fills it with a render and a node
+ * that changed size the moment previews arrived would move every wire in the graph. */
+graphnode .__preview__ { height: 78px; }
+
+/* Unity's rule, and the reason collapse is worth having: a collapsed node is its title bar plus the
+ * wires that actually attach to it. `nodeport:blank` is "unconnected" — see NodePort.isBlank(). */
+graphnode.__collapsed__ .__controls__,
+graphnode.__collapsed__ .__preview__,
+graphnode.__collapsed__ nodeport:blank { display: none; }
+
+nodeport {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 4px;
+    /* The padding IS the hit target. The dot is 8px and a pointer is not — a connection you have to
+     * aim for is a connection you get wrong. */
+    padding-all: 3px;
+    height: 16px;
+}
+nodeport.__output__ { justify-content: flex-end; }
+nodeport .__dot__ {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    /* The ring IS the port when unconnected, so the border is structural rather than decoration —
+     * without a width here a hollow port is invisible. Its colour is the type's, from the theme. */
+    border-width: 2px;
+}
+/* The inline editor an unconnected input offers (Unity's `X 0.9` field). Shown only while blank:
+ * an input under a wire has a value already, and offering to type another is a lie about which one
+ * wins. */
+nodeport .__editor__ { display: none; }
+nodeport:blank .__editor__ { display: flex; }
 
 /* `pointer` marks anything clickable, as it does on the web for links and buttons. */
 button, checkbox, switch, tab, dropdown, menuitem { cursor: pointer; }
