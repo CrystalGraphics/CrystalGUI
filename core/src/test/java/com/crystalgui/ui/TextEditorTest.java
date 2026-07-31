@@ -2893,6 +2893,36 @@ public class TextEditorTest extends UiTestBase {
         assertTrue("and after one, got " + after, after > 0);
     }
 
+    /**
+     * <b>Indent guides track the scroll.</b>
+     *
+     * <p>They did not, and the miss was mechanical: converting the widget to the clipped viewport meant
+     * every document-coordinate {@code top} had to start subtracting the scroll offset by hand, and this
+     * one edit silently did not apply. The guides then sat exactly {@code scrollTop} away from their rows
+     * — stale-looking lines stranded below the text, and none beside the code.</p>
+     *
+     * <p>Asserted against the gutter number rather than against a delta, because both pools are keyed by
+     * view line and re-used: the same element describes a different row after a scroll, so only
+     * "is it on the right row" survives the comparison.</p>
+     */
+    @Test
+    public void indentGuidesTrackTheScroll() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 200; i++) document.append("            deep").append(i).append(NL);
+        build(document.toString());
+        editor.setIndentGuidesVisible(true);
+        showEditor();
+
+        assertEquals("before scrolling", childWithClass(TextEditor.LINE_NUMBER_CLASS).getRuntimeCache().getY(),
+                childWithClass(TextEditor.INDENT_GUIDE_CLASS).getRuntimeCache().getY(), editor.lineHeight());
+
+        editor.setScrollImmediate(0f, 12f * editor.lineHeight());
+        showEditor();
+
+        assertEquals("after scrolling", childWithClass(TextEditor.LINE_NUMBER_CLASS).getRuntimeCache().getY(),
+                childWithClass(TextEditor.INDENT_GUIDE_CLASS).getRuntimeCache().getY(), editor.lineHeight());
+    }
+
     /** The gap scales with the font, so the gutter stays proportionate when the editor is zoomed. */
     @Test
     public void theGutterGapGrowsWithTheFont() {
