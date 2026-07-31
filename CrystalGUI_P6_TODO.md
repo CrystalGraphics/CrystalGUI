@@ -1714,12 +1714,63 @@ styled by a stylesheet the way everything else in this engine can.
 
 </details>
 
-### 6.2.4 Selection, marquee, and graph editing · `TODO` · **next**
+### 6.2.4 Selection, marquee, and graph editing · `DONE` (2026-07-31)
 
-Box-select, multi-select, move-many and delete, all recording into 6.1.9's stack. **Researched
-2026-07-31** against Unity Shader Graph's shortcut reference, Blender's node editor, Unreal's Blueprint
-editor and Figma, because every one of these behaviours is a convention rather than a derivable answer,
-and getting a convention wrong is the kind of thing a user feels immediately and cannot name.
+> **Shipped**: `GraphSelection` (the model that replaces 6.2.3's per-node boolean), the marquee,
+> move-many, delete with undo, wire picking and deletion, and `GraphCommands` — `graph.delete`,
+> `selectAll`, `clearSelection`, `frameSelection`, `frameAll`. 20 tests in `GraphEditingTest`.
+>
+> **The research was the work**, and it held: touched-not-enclosed, Shift adds / Alt subtracts,
+> selection stays out of the undo history, duplicate deferred because a `GraphNode` is a widget the
+> caller assembled and cannot be cloned. Every one of those is in the plan above with its reasoning.
+>
+> **What the harness found that seventeen passing tests did not.** Five bugs, and the pattern is worth
+> more than any of them: *every single one was a seam between the widget and the engine* — focus,
+> hover, key names, layout timing — and not one was in the graph logic the tests covered.
+>
+> - **The graph could not hold focus at all.** `FocusPolicy` defaults to `NONE`, so `requestFocus`
+>   silently refused it, and every command — which resolves the nearest `GraphView` *from the focused
+>   element* — disabled itself. Delete, Ctrl+A and Escape all did nothing while the widget looked
+>   entirely alive. `F` worked, because pressing a node happens to focus the node, which made it present
+>   as "some keys work and some do not" rather than as one broken thing.
+> - **Then focusing it drew a ring around the whole viewport**, because `requestFocus` is
+>   `PROGRAMMATIC` — the one focus source `:focus-visible` exists to ring. The engine already had
+>   `requestPointerFocus` for this, with a javadoc that says exactly why. Pointer-driven focus must use
+>   it; the ring is for keyboard focus, which is the whole point of the pseudo-class.
+> - **Deleting the node under the pointer crashed the next frame.** `UIInputHandler` kept
+>   `lastFrameHover` pointing into the detached subtree, so the hover diff asked for a common ancestor
+>   between two elements in *different trees* — the walk never converges and runs off the end of both.
+>   Fixed at both ends: the handler now forgets a removed element (hover, press target, pointer capture,
+>   any drag anchored on it — focus already did this), and `commonAncestor` returns null rather than
+>   walking off a tree. **An engine bug, exposed by being the first widget that deletes what you are
+>   pointing at.**
+> - **`bind("Backspace")` threw at construction and took the whole scene down.** Key names are reflected
+>   from `CgKeyCodes`, where the constant is `KEY_BACK` — an LWJGL2 spelling leaking into a user-facing
+>   string. There was already an alias table (`ENTER`, `ESC`, `DEL`); `BACKSPACE` joins it. **No test
+>   caught it because every test drove the API directly and never installed the commands.**
+> - **A move recorded a delta of zero.** Drag end re-read `worldBoundsOf()`, but the final `moveNode` of
+>   a drag writes insets Taffy has not resolved yet — so the position was one frame stale and a short
+>   drag recorded nothing at all. The drag's own reported delta is the only non-stale source.
+>
+> **And one design fix from watching it**: framing computed the literal fit, which for one small node in
+> a large viewport is an eight-times blow-up filling the screen with a single box. Framing now never
+> magnifies past 1:1 — it zooms out to fit and stops at natural size.
+>
+> #### Known gap: Escape
+>
+> `Escape` is bound to `graph.clearSelection` and works in isolation, but did nothing in the gallery.
+> The cause is almost certainly correct behaviour rather than a bug: the engine gives Escape to a live
+> drag, then to the **topmost close watcher**, and only then to the keymap — and the gallery's Dialog
+> page leaves dialogs open, each holding a watcher. Not chased further because the consumer does not
+> want the feature; recorded so the next person does not mistake it for an untested path. The same
+> ordering is why Escape does not cancel a live marquee there.
+>
+> #### Deliberately not done
+>
+> Duplicate, copy and paste — they need 6.2.5's document model or 6.2.6's node factory, per the plan.
+
+<details>
+<summary>The plan, as researched — implemented as written except where noted above</summary>
 
 #### What the research settled
 
@@ -1792,6 +1843,8 @@ Delete is unaffected: removing a node needs no factory, only its wires unwound i
    on the next move.
 4. **Escape is already spoken for** by a live drag and the close-watcher stack. Clearing the selection
    is the lowest-priority claim on it and must not pre-empt either.
+
+</details>
 
 ### 6.2.5 Graph document model and serialization · `TODO`
 

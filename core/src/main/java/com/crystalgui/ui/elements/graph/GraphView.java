@@ -1,11 +1,23 @@
 package com.crystalgui.ui.elements.graph;
 
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.input.UIDragController;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
+import dev.vfyjxf.taffy.style.TaffyPosition;
+import org.joml.Vector2f;
 import com.crystalgui.ui.elements.canvas.CanvasView;
+import com.crystalgui.ui.elements.canvas.WorldRect;
 import lombok.Getter;
 
 import javax.annotation.Nullable;
@@ -85,6 +97,15 @@ public class GraphView extends CanvasView implements UndoScope {
     /** Fires after any change to the edge set — connect, disconnect, or a node leaving with wires on it. */
     public final Signal.Action onConnectionsChanged = new Signal.Action();
 
+    /** The rubber band. A child of the VIEWPORT, not the plane — see {@link #marqueeElement()}. */
+    private final UIElement marquee = new UIElement();
+
+    private boolean marqueeActive;
+    private float marqueeStartX, marqueeStartY;
+    /** The selection to fall back on while a Shift/Alt marquee is in flight, so dragging the band
+     * bigger and smaller adds and removes rather than accumulating. */
+    private List<GraphNode> marqueeBaseline = List.of();
+
     public GraphView() {
         wireLayer = new NodeWireLayer(this, connections);
         // First, so it paints under every node: equal z-index siblings paint in insertion order.
@@ -93,6 +114,49 @@ public class GraphView extends CanvasView implements UndoScope {
         // about where its wires are — left cullable, it would vanish the moment the view left world
         // origin, taking every wire with it. It culls per wire instead, where the endpoints are known.
         setCullExempt(wireLayer, true);
+
+        // The graph must be able to HOLD focus, or none of its keys work.
+        //
+        // requestFocus refuses anything whose policy is NONE, which is the default — so the canvas took
+        // no focus, every graph command resolved no GraphView from the focused element, and Delete,
+        // Ctrl+A and Escape disabled themselves while the widget looked entirely alive. Pressing a node
+        // happened to work because a node is CLICK-focusable, which made the failure look like "some
+        // keys work and some do not".
+        //
+        // CLICK rather than FOCUSABLE: a canvas is not a tab stop. You reach it by pressing it, the way
+        // you reach one in every editor.
+        setFocusPolicy(FocusPolicy.CLICK);
+
+        marquee.addClass(MARQUEE_CLASS);
+        // In the VIEWPORT, not the plane: a band drawn inside the transform would scale with the zoom,
+        // so its 1px border would be four physical pixels at 4x and invisible at 0.25x. Every editor
+        // draws the rubber band in screen space over a world-space test, and so does this.
+        marquee.setHitTest(false);
+        StyleGroup.defaultPipeline(marquee.getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE).display(TaffyDisplay.NONE));
+        addInternalChild(marquee);
+
+        this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
+            if (!isEnabled() || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
+            // A press that reached the graph itself landed on empty canvas: a node claims its own press
+            // in the capture phase, and a port claims one before that. So this is the marquee's press —
+            // unless a wire is under it, which is the only thing here that is drawn but not an element.
+            if (beginMarqueeOrPickWire(event.getPosition().x(), event.getPosition().y())) {
+                event.stopPropagation();
+            }
+        }, false, true);
+    }
+
+    /** On the rubber band, so a theme owns its look. */
+    public static final String MARQUEE_CLASS = "__marquee__";
+
+    /** The rubber-band element, for a theme or a test. */
+    public UIElement marqueeElement() {
+        return marquee;
+    }
+
+    public boolean isMarqueeActive() {
+        return marqueeActive;
     }
 
     /** The layer that draws the wires. Exposed for a theme or a test to reach; it owns no state a
@@ -103,12 +167,64 @@ public class GraphView extends CanvasView implements UndoScope {
 
     // ── Nodes ───────────────────────────────────────────────────────────────
 
-    /** Removes a node <b>and every wire attached to it</b>. Removing it as a plain element would leave
-     * edges pointing at ports that are no longer in the tree, which paints wires to nowhere. */
+    /**
+     * Removes a node <b>and every wire attached to it</b>, as one undoable step.
+     *
+     * <p>Removing it as a plain element would leave edges pointing at ports that are no longer in the
+     * tree, which paints wires to nowhere. Wrapping the wires and the node in one transaction is what
+     * makes the undo whole: unwound in reverse, the node comes back first and its wires reconnect to
+     * ports that exist again.</p>
+     */
     public GraphView removeNode(GraphNode node) {
-        for (NodePort port : node.getPorts()) disconnectAll(port);
-        content().removeChild(node);
+        WorldRect at = worldBoundsOf(node);
+        undoStack.beginTransaction("delete node");
+        try {
+            for (NodePort port : node.getPorts()) disconnectAll(port);
+            undoStack.execute(new AddNodeEdit(this, node, at.x(), at.y(), false));
+        } finally {
+            undoStack.endTransaction();
+        }
+        selection.prune(this);
         return this;
+    }
+
+    /**
+     * Deletes everything selected, as <b>one</b> undo step.
+     *
+     * <p>One transaction rather than one per node for the reason the whole transaction mechanism
+     * exists: a user who selected six nodes and pressed Delete did one thing, and six presses of Ctrl+Z
+     * to get back is not undo, it is arithmetic.</p>
+     *
+     * @return how many nodes and wires went
+     */
+    public int deleteSelection() {
+        List<GraphNode> doomedNodes = selection.nodes();
+        GraphConnection doomedWire = selection.wire();
+        if (doomedNodes.isEmpty() && doomedWire == null) return 0;
+
+        undoStack.beginTransaction("delete");
+        try {
+            if (doomedWire != null) disconnect(doomedWire);
+            for (GraphNode node : doomedNodes) removeNode(node);
+        } finally {
+            undoStack.endTransaction();
+        }
+        selection.clear();
+        return doomedNodes.size() + (doomedWire == null ? 0 : 1);
+    }
+
+    /** Adding or removing a node, as data: the widget and where it sat. */
+    private record AddNodeEdit(GraphView view, GraphNode node, float worldX, float worldY,
+                               boolean adding) implements Edit {
+        @Override public void apply() {
+            if (adding) view.addNode(node, worldX, worldY);
+            else view.content().removeChild(node);
+        }
+        @Override public void undo() {
+            if (adding) view.content().removeChild(node);
+            else view.addNode(node, worldX, worldY);
+        }
+        @Override public String label() { return adding ? "add node" : "delete node"; }
     }
 
     /** Every node currently on the plane, in insertion order. */
@@ -123,49 +239,55 @@ public class GraphView extends CanvasView implements UndoScope {
     // ── Selection ───────────────────────────────────────────────────────────
 
     /**
-     * Selects {@code node}, replacing the current selection unless {@code additive}.
+     * What is selected. A model rather than a flag per node, so a marquee, a delete command and an
+     * inspector all read one answer — see {@link GraphSelection}, including why selection is not
+     * undoable.
+     */
+    @Getter
+    private final GraphSelection selection = new GraphSelection();
+
+    /**
+     * The press rule every graph editor uses, and the one a naive implementation gets wrong.
      *
-     * <p><b>This is the smallest thing that works, and it is on purpose.</b> 6.2.4 owns the selection
-     * <em>model</em> — a set plus a signal that an inspector, a marquee and a delete command all read
-     * without any of them owning it. What is here is the click behaviour a user expects immediately
-     * (press a node and it is the selected one; Shift adds), implemented over the nodes themselves so
-     * that when the model lands it replaces this list rather than fighting a second source of truth.</p>
+     * <p>Clicking one of five selected nodes in order to drag all five is the most common gesture there
+     * is. "A press selects only that node" breaks it — the other four deselect and the drag moves one.
+     * So on <b>press</b> a node that is already selected leaves the selection alone; only an unselected
+     * one replaces it. Shift always toggles.</p>
      */
     public GraphView selectNode(GraphNode node, boolean additive) {
-        if (!additive) {
-            for (GraphNode other : nodes()) {
-                if (other != node) other.setSelected(false);
-            }
-            node.setSelected(true);
-        } else {
-            node.setSelected(!node.isSelected());
-        }
-        onSelectionChanged.emit();
+        if (additive) selection.toggle(node);
+        else if (!selection.contains(node)) selection.selectOnly(node);
         return this;
     }
 
     public GraphView clearSelection() {
-        boolean any = false;
-        for (GraphNode node : nodes()) {
-            if (node.isSelected()) {
-                node.setSelected(false);
-                any = true;
-            }
-        }
-        if (any) onSelectionChanged.emit();
+        selection.clear();
         return this;
     }
 
     public List<GraphNode> selectedNodes() {
+        return selection.nodes();
+    }
+
+    /** Every node on the plane, selected. */
+    public GraphView selectAll() {
+        selection.replaceWith(nodes());
+        return this;
+    }
+
+    /** The nodes whose world rect touches {@code region} — the marquee's question.
+     *
+     * <p><b>Touched, not enclosed.</b> No vendor documents which they use, so it is a decision: at any
+     * zoom where a node is larger than the viewport, an enclose-only rule makes it unselectable by
+     * marquee at all. CAD's direction-dependent convention (drag right for enclose, left for cross) is
+     * powerful, unguessable, and belongs to a domain where precision beats discoverability.</p> */
+    public List<GraphNode> nodesTouching(WorldRect region) {
         List<GraphNode> found = new ArrayList<>();
         for (GraphNode node : nodes()) {
-            if (node.isSelected()) found.add(node);
+            if (region.intersects(worldBoundsOf(node))) found.add(node);
         }
         return found;
     }
-
-    /** Fires after any change to which nodes are selected. */
-    public final Signal.Action onSelectionChanged = new Signal.Action();
 
     // ── Connections ─────────────────────────────────────────────────────────
 
@@ -345,12 +467,195 @@ public class GraphView extends CanvasView implements UndoScope {
         undoStack.push(new MoveNodeEdit(this, node, fromX, fromY, toX, toY));
     }
 
+    /**
+     * Records a completed multi-node move as one undo step.
+     *
+     * <p>One transaction rather than one edit per node, because the user performed one drag. The
+     * per-node edits inside it are still individually correct, which is what lets a future
+     * align-or-distribute command reuse them.</p>
+     */
+    public void recordMoves(List<GraphNode> moved, List<float[]> origins, float dx, float dy) {
+        if (moved.isEmpty() || (dx == 0f && dy == 0f)) return;
+        if (moved.size() == 1) {
+            float[] origin = origins.get(0);
+            recordMove(moved.get(0), origin[0], origin[1], origin[0] + dx, origin[1] + dy);
+            return;
+        }
+        undoStack.beginTransaction("move " + moved.size() + " nodes");
+        try {
+            for (int i = 0; i < moved.size(); i++) {
+                float[] origin = origins.get(i);
+                undoStack.push(new MoveNodeEdit(this, moved.get(i),
+                        origin[0], origin[1], origin[0] + dx, origin[1] + dy));
+            }
+        } finally {
+            undoStack.endTransaction();
+        }
+    }
+
     /** Data, not a closure: two positions and the node. Invertible by swapping them. */
     private record MoveNodeEdit(GraphView view, GraphNode node,
                                 float fromX, float fromY, float toX, float toY) implements Edit {
         @Override public void apply() { view.moveNode(node, toX, toY); }
         @Override public void undo() { view.moveNode(node, fromX, fromY); }
         @Override public String label() { return "move"; }
+    }
+
+    // ── Marquee ─────────────────────────────────────────────────────────────
+
+    /**
+     * Starts a rubber-band selection, or selects a wire if one is under the press.
+     *
+     * <p>The wire check comes first and is the reason the layer can stay {@code hitTest(false)}: a wire
+     * is painted, not laid out, so nothing in the hit-test tree knows where it is. Asking the layer
+     * directly keeps that true rather than inventing an element per edge — which is the trade 6.2.3
+     * recorded.</p>
+     *
+     * @return whether the press was claimed
+     */
+    private boolean beginMarqueeOrPickWire(float rawX, float rawY) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return false;
+
+        // Pressing the canvas focuses it, exactly as pressing a node does.
+        //
+        // Every graph command resolves the nearest GraphView from the FOCUSED element, so without this
+        // a click on empty canvas or on a wire leaves focus wherever it was — and Delete, Ctrl+A and
+        // Escape are all silently disabled while the graph looks and feels active. Selecting a wire and
+        // pressing Delete did nothing at all, which reads as a broken command rather than as a focus
+        // problem.
+        //
+        // requestPOINTERFocus, not requestFocus: the latter is PROGRAMMATIC, which is a focus source
+        // `:focus-visible` deliberately rings — so every click on the canvas drew a focus ring around the
+        // entire viewport. You already know where your pointer is; that is the whole carve-out
+        // `:focus-visible` exists for, and the click path takes it too.
+        window.getInputHandler().requestPointerFocus(this);
+
+        Vector2f world = screenToWorld(rawX, rawY);
+        GraphConnection hit = wireLayer.pickWire(world.x(), world.y());
+        if (hit != null) {
+            selection.selectOnly(hit);
+            return true;
+        }
+
+        boolean additive = isShiftHeld();
+        boolean subtractive = isAltHeld();
+        if (!additive && !subtractive) selection.clear();
+        marqueeBaseline = selection.nodes();
+
+        Vector2f local = screenToLocal(rawX, rawY);
+        marqueeStartX = local.x();
+        marqueeStartY = local.y();
+        marqueeActive = true;
+
+        window.getInputHandler().getDragController().startDrag(this, rawX, rawY,
+                new UIDragController.DragListener() {
+                    @Override
+                    public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
+                        updateMarquee(mx, my, additive, subtractive);
+                    }
+
+                    @Override
+                    public void onDragEnd(float mx, float my) {
+                        endMarquee();
+                    }
+
+                    @Override
+                    public void onDragCancel() {
+                        // Escape mid-band puts back what was selected before it started, rather than
+                        // leaving whatever the half-drawn rectangle happened to be over.
+                        selection.replaceWith(marqueeBaseline);
+                        endMarquee();
+                    }
+                });
+        return true;
+    }
+
+    private void updateMarquee(float localX, float localY, boolean additive, boolean subtractive) {
+        float x = Math.min(marqueeStartX, localX), y = Math.min(marqueeStartY, localY);
+        float w = Math.abs(localX - marqueeStartX), h = Math.abs(localY - marqueeStartY);
+
+        var cache = getRuntimeCache();
+        // left/top are relative to this element's own box, since the band is absolutely positioned
+        // inside it — while the drag reports coordinates in the space getX() lives in.
+        final float left = x - cache.getX(), top = y - cache.getY();
+        StyleGroup.importantPipeline(marquee.getStyle().getLayoutGroup(),
+                l -> l.display(TaffyDisplay.FLEX).left(left).top(top).width(w).height(h));
+
+        Vector2f from = viewportToWorld(x, y);
+        Vector2f to = viewportToWorld(x + w, y + h);
+        List<GraphNode> inside = nodesTouching(WorldRect.of(from.x(), from.y(), to.x(), to.y()));
+
+        // Recomputed from the baseline every frame rather than accumulated, so shrinking the band takes
+        // nodes back out. An accumulating marquee only ever grows, which feels broken the first time you
+        // overshoot.
+        if (subtractive) {
+            List<GraphNode> kept = new ArrayList<>(marqueeBaseline);
+            kept.removeAll(inside);
+            selection.replaceWith(kept);
+        } else if (additive) {
+            List<GraphNode> combined = new ArrayList<>(marqueeBaseline);
+            for (GraphNode node : inside) if (!combined.contains(node)) combined.add(node);
+            selection.replaceWith(combined);
+        } else {
+            selection.replaceWith(inside);
+        }
+    }
+
+    private void endMarquee() {
+        marqueeActive = false;
+        StyleGroup.importantPipeline(marquee.getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
+    }
+
+    /** World point -> the wire under it, or null. Delegates to the layer, which is the only thing that
+     * knows where a wire was drawn. */
+    @Nullable
+    public GraphConnection pickWire(float worldX, float worldY) {
+        return wireLayer.pickWire(worldX, worldY);
+    }
+
+    private static boolean isShiftHeld() {
+        var input = CgPlatform.input();
+        return input != null && CgModifiers.hasShift(input.getCurrentModifiers());
+    }
+
+    private static boolean isAltHeld() {
+        var input = CgPlatform.input();
+        return input != null && CgModifiers.hasAlt(input.getCurrentModifiers());
+    }
+
+    // ── Framing ─────────────────────────────────────────────────────────────
+
+    /** Frames the selection, or everything when nothing is selected — Unity binds these to F and A. */
+    public GraphView frameSelection(float padding) {
+        List<GraphNode> selected = selection.nodes();
+        if (selected.isEmpty()) {
+            fitToContent(padding);
+            return this;
+        }
+        WorldRect union = null;
+        for (GraphNode node : selected) {
+            WorldRect rect = worldBoundsOf(node);
+            union = union == null ? rect : union.union(rect);
+        }
+        return frameRect(union, padding);
+    }
+
+    /** Fits the view to an arbitrary world rect. {@code fitToContent} is this over everything. */
+    public GraphView frameRect(WorldRect rect, float padding) {
+        if (rect == null) return this;
+        var cache = getRuntimeCache();
+        float viewW = cache.getWidth(), viewH = cache.getHeight();
+        if (viewW <= 0f || viewH <= 0f) return this;
+        WorldRect padded = rect.expand(padding);
+        // Never magnifies past 1:1. Framing means "make this fit", and for one small node in a large
+        // viewport the literal fit is an eight-times blow-up that fills the screen with a single box —
+        // which is what it did, and is useless: the point of framing a selection is to see it in
+        // context, not to inspect its pixels.
+        float fit = Math.min(viewW / Math.max(1e-4f, padded.width()), viewH / Math.max(1e-4f, padded.height()));
+        setZoom(Math.min(1f, fit));
+        centerOnWorld(padded.centerX(), padded.centerY());
+        return this;
     }
 
     // ── The wire being dragged ──────────────────────────────────────────────

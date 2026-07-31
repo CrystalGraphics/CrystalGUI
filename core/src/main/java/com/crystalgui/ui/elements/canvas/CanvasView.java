@@ -325,6 +325,21 @@ public class CanvasView extends UIElement implements UIFrameTicker {
                 contentOriginY() + panY + zoom * worldY);
     }
 
+    /**
+     * The exact inverse of {@link #worldToViewport}: a point in the engine's logical space — what
+     * {@link UIElement#screenToLocal} returns and what a {@code DragListener} on this canvas reports —
+     * back into world coordinates.
+     *
+     * <p>Distinct from {@link #screenToWorld}, which starts from <em>physical</em> pointer pixels. Both
+     * exist because both starting points are real: a raw event carries physical, and anything already
+     * converted (a drag delta, a layout position) carries logical. Collapsing them would mean one caller
+     * silently applying {@code uiScale} twice, which looks correct at a scale of 1.</p>
+     */
+    public Vector2f viewportToWorld(float localX, float localY) {
+        return new Vector2f((localX - contentOriginX() - panX) / zoom,
+                (localY - contentOriginY() - panY) / zoom);
+    }
+
     // ── Culling ─────────────────────────────────────────────────────────────
 
     /**

@@ -561,10 +561,12 @@ public class UIElement {
 
     private void onRemoved() {
         this.runtimeCache.depth.invalidate();
-        // Drop focus before detaching — otherwise UIInputHandler keeps a reference into a subtree
-        // that's no longer in the tree, and tab traversal from it silently restarts from the top.
-        if (this.isFocused && attachedWindow != null) {
-            attachedWindow.getInputHandler().blurIfFocused(this);
+        // Drop every input reference before detaching — focus, hover, the press target, pointer capture
+        // and a drag anchored here. Otherwise UIInputHandler keeps a reference into a subtree that is no
+        // longer in the tree: tab traversal from it silently restarts from the top, and the hover diff
+        // tries to find a common ancestor across two different trees.
+        if (attachedWindow != null) {
+            attachedWindow.getInputHandler().forgetElement(this);
         }
         children.forEach(UIElement::onRemoved);
         events.emitToGroup(new DOMEvent.ElementRemoved(this));

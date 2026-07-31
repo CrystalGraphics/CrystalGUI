@@ -95,6 +95,33 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         firstFrameOver = true;
     }
 
+    /**
+     * Drops every reference to {@code element}, which is leaving the tree.
+     *
+     * <p>Focus already had this treatment ({@link #blurIfFocused}); the others did not, and hover was
+     * the one that bit: deleting the node under the pointer left {@code lastFrameHover} pointing into a
+     * detached subtree, and the next frame's hover diff tried to find a common ancestor between two
+     * elements in different trees. It threw an NPE from inside the hover diff — a place with no
+     * relationship to the delete that caused it.</p>
+     *
+     * <p>The same reasoning as {@code UIWindow.unregisterElement} popping a detached modal off the modal
+     * stack: anything holding an element has to be told when that element goes, or the reference outlives
+     * the tree it made sense in.</p>
+     */
+    public void forgetElement(UIElement element) {
+        if (element == null) return;
+        if (lastFrameHover == element) lastFrameHover = null;
+        if (lastPressedElement == element) lastPressedElement = null;
+        if (keyboardPressTarget == element) keyboardPressTarget = null;
+        if (pointerCaptureTarget == element) releasePointerCapture();
+        // A drag whose source just left the tree cannot continue: every coordinate it reports is
+        // converted through that element's transform, which no longer means anything.
+        if (dragController.isDragging() && dragController.getSource() == element) {
+            dragController.cancelDrag();
+        }
+        blurIfFocused(element);
+    }
+
     public void sendInputEvent(UIElement element, UIEvent event) {
         if (element == null) return;
         UIElement[] path = UITreeTraversal.pathToRoot(element); // root-first, path[path.length - 1] == element

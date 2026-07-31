@@ -52,6 +52,20 @@ public final class UITreeTraversal {
 
     // ── Ancestry ─────────────────────────────────────────────────────────
 
+    /**
+     * The deepest element that is an ancestor of both, or {@code null} when there is none.
+     *
+     * <p><b>Null when they are in different trees</b>, which is not a hypothetical: the hover diff
+     * compares last frame's element against this frame's, and an element deleted while the pointer was
+     * over it is detached but still referenced for one more frame. Two chains that never converge used
+     * to walk each other straight off the end of their trees and throw an NPE inside the hover diff —
+     * from a delete, which is nowhere near where it lands.</p>
+     *
+     * <p>The depth cache cannot be trusted to prevent it either. A detached element's cached depth is
+     * whatever it was when it was attached, so the equalising walk can overshoot before the convergence
+     * loop even starts. Both loops are therefore null-guarded rather than relying on the invariant that
+     * the inputs share a root.</p>
+     */
     public static UIElement commonAncestor(UIElement a, UIElement b) {
         if (a == null || b == null) return null;
 
@@ -61,14 +75,14 @@ public final class UITreeTraversal {
         var nodeA = a;
         var nodeB = b;
 
-        while (depthA > depthB) { nodeA = nodeA.getParent(); depthA--; }
-        while (depthB > depthA) { nodeB = nodeB.getParent(); depthB--; }
+        while (depthA > depthB && nodeA != null) { nodeA = nodeA.getParent(); depthA--; }
+        while (depthB > depthA && nodeB != null) { nodeB = nodeB.getParent(); depthB--; }
 
-        while (nodeA != nodeB) {
+        while (nodeA != nodeB && nodeA != null && nodeB != null) {
             nodeA = nodeA.getParent();
             nodeB = nodeB.getParent();
         }
-        return nodeA;
+        return nodeA == nodeB ? nodeA : null;
     }
 
     /** Root-to-element chain, root first. Empty-safe: single-element list if element has no parent. */

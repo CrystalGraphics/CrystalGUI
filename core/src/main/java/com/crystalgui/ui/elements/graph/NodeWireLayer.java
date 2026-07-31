@@ -80,6 +80,64 @@ public class NodeWireLayer extends UIElement {
         this.pendingLive = false;
     }
 
+    // ── Picking ─────────────────────────────────────────────────────────────
+
+    /** How close a click must land, in world units. Generous, because a 2px wire is a 2px target and a
+     * pointer is not that accurate — the same reasoning that makes a port's padding its hit area. */
+    private static final float PICK_TOLERANCE = 5f;
+
+    /** Samples per wire when picking. */
+    private static final int PICK_SAMPLES = 24;
+
+    /**
+     * The wire nearest {@code (worldX, worldY)} within {@link #PICK_TOLERANCE}, or {@code null}.
+     *
+     * <p><b>Sampled, not solved.</b> The exact answer is the cubic's closest-point parameter, which is a
+     * quintic — the same reason {@code CgCurveRenderer}'s primitive is a quadratic rather than a cubic.
+     * Twenty-four samples along a wire is well under a pixel apart at any zoom a user clicks at, costs
+     * nothing at this scale, and cannot be subtly wrong the way a hand-rolled solver can. If a graph
+     * ever has enough wires for this to matter, the fix is a broad-phase rejection by bounding box, not
+     * a cleverer solve.</p>
+     */
+    @Nullable
+    public GraphConnection pickWire(float worldX, float worldY) {
+        float originX = 0f, originY = 0f;
+        var cache = getRuntimeCache();
+        originX = cache.getX();
+        originY = cache.getY();
+
+        GraphConnection best = null;
+        float bestDistance = PICK_TOLERANCE;
+        for (GraphConnection connection : connections) {
+            Vector2f a = connection.from().dotCenter();
+            Vector2f b = connection.to().dotCenter();
+            float distance = distanceToWire(worldX + originX, worldY + originY, a, b);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = connection;
+            }
+        }
+        return best;
+    }
+
+    /** Closest approach of the drawn cubic to a point, by sampling. Plane-space coordinates. */
+    private static float distanceToWire(float px, float py, Vector2f a, Vector2f b) {
+        float pull = Math.max(MIN_TANGENT, Math.abs(b.x() - a.x()) * 0.5f);
+        float c1x = a.x() + pull, c1y = a.y();
+        float c2x = b.x() - pull, c2y = b.y();
+
+        float best = Float.MAX_VALUE;
+        for (int i = 0; i <= PICK_SAMPLES; i++) {
+            float t = i / (float) PICK_SAMPLES;
+            float u = 1f - t;
+            float x = u * u * u * a.x() + 3f * u * u * t * c1x + 3f * u * t * t * c2x + t * t * t * b.x();
+            float y = u * u * u * a.y() + 3f * u * u * t * c1y + 3f * u * t * t * c2y + t * t * t * b.y();
+            float dx = x - px, dy = y - py;
+            best = Math.min(best, dx * dx + dy * dy);
+        }
+        return (float) Math.sqrt(best);
+    }
+
     // ── Paint ───────────────────────────────────────────────────────────────
 
     @Override
@@ -96,8 +154,12 @@ public class NodeWireLayer extends UIElement {
             Vector2f a = connection.from().dotCenter();
             Vector2f b = connection.to().dotCenter();
             if (!isVisible(a, b, ox, oy, visible)) continue;
-            wire(ctx, a.x(), a.y(), b.x(), b.y(),
-                    connection.from().typeColor(), connection.to().typeColor());
+            boolean selected = connection.equals(view.getSelection().wire());
+            // Selected wires draw white and thicker, which is the only affordance a wire has: it cannot
+            // carry a border or a :checked rule, being painted rather than laid out.
+            int colorA = selected ? SELECTED_WIRE_COLOR : connection.from().typeColor();
+            int colorB = selected ? SELECTED_WIRE_COLOR : connection.to().typeColor();
+            wire(ctx, a.x(), a.y(), b.x(), b.y(), colorA, colorB, selected);
         }
 
         if (pendingLive && pendingFrom != null) {
@@ -105,7 +167,7 @@ public class NodeWireLayer extends UIElement {
             int color = pendingFrom.typeColor();
             // Drawn from the port toward the pointer regardless of which direction the port is, so a
             // drag started from an input still reads as a wire being pulled out of it.
-            wire(ctx, a.x(), a.y(), pendingX, pendingY, color, color);
+            wire(ctx, a.x(), a.y(), pendingX, pendingY, color, color, false);
         }
 
         ctx.flush();
@@ -127,12 +189,16 @@ public class NodeWireLayer extends UIElement {
      * to the right and enter an input from the left, so that a backwards connection loops visibly
      * instead of drawing a straight diagonal that looks like a mistake.</p>
      */
-    private void wire(CgUiPaintContext ctx, float x0, float y0, float x1, float y1, int color0, int color1) {
+    private void wire(CgUiPaintContext ctx, float x0, float y0, float x1, float y1,
+                      int color0, int color1, boolean emphasised) {
         float pull = Math.max(MIN_TANGENT, Math.abs(x1 - x0) * 0.5f);
         ctx.curve()
                 .cubic(x0, y0, x0 + pull, y0, x1 - pull, y1, x1, y1)
-                .width(view.getWireWidth())
+                .width(view.getWireWidth() * (emphasised ? 1.8f : 1f))
                 .colors(color0, color1)
                 .submit();
     }
+
+    /** Near-white: a selected wire must read as selected against every type colour in the palette. */
+    private static final int SELECTED_WIRE_COLOR = 0xFFF4F8FF;
 }
