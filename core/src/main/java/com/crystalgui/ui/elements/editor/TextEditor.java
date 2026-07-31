@@ -134,6 +134,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Whether the live projection was built with real measurement, or is the no-font fallback. */
     private boolean projectedWithMeasurement = true;
 
+    /** The numbers' column, measured whenever {@code gutterWidth} is — the two must never disagree. */
+    private float gutterNumbersLeft;
+    private float gutterNumbersWidth;
+
     // ── §G view decorations ─────────────────────────────────────────────────────────────────────
 
     private boolean indentGuidesVisible;
@@ -1033,7 +1037,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * front and the caret trailed the glyph it had just moved past.</p>
      */
     private float textOriginX() {
-        return getTaffyLayout().padding().left + gutterWidth;
+        return getTaffyLayout().padding().left + gutterWidth + codeLeftPad();
+    }
+
+    /**
+     * The margin between the gutter's edge and the first character.
+     *
+     * <p>Two jobs, and the second is not obvious. It stops the first glyph of an unindented line sitting
+     * on the gutter's border — and it gives the <b>level-0 indent guide somewhere to be</b>. A guide drawn
+     * at the text origin is exactly where an unindented glyph starts, so the vertical run breaks around
+     * that letter; drawn any further left it lands under the gutter, which has a higher z-index and paints
+     * straight over it. The gap is the only place it can live.</p>
+     */
+    private float codeLeftPad() {
+        // Zero without a gutter: the margin exists to separate the code FROM the gutter, so with no
+        // gutter there is nothing to separate from and the text belongs on the content-box origin.
+        if (!gutterVisible) return 0f;
+        return Math.max(3f, getStyle().getGeneralGroup().fontSize() * 0.45f);
     }
 
     /** Whether the line-number gutter is shown. */
@@ -1745,13 +1765,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return gutterNumberWidth() + gutterFoldWidth();
     }
 
-    /** The numbers' own column: a little breathing room, then the digits. */
+    /**
+     * The margin before the digits.
+     *
+     * <p>A widest-number field is right-aligned, so without this the longest number in the file — the one
+     * that fills the field exactly — sits flush against the gutter's left edge. Three digits touching the
+     * border is what a two-digit file never shows and a hundred-line file always does.</p>
+     */
+    private float gutterPadLeft() {
+        return Math.max(3f, getStyle().getGeneralGroup().fontSize() * 0.55f);
+    }
+
+    /** The digits themselves, sized to the widest number the document can reach. */
+    private float gutterDigitsWidth() {
+        int digits = Math.max(2, String.valueOf(Math.max(1, buffer.lineCount())).length());
+        return digits * CgTextLayout.of("0", resolveFamily()).build().totalWidth();
+    }
+
+    /** The numbers' own column: margin, digits, margin. */
     private float gutterNumberWidth() {
         if (!gutterVisible) return 0f;
-        int digits = Math.max(2, String.valueOf(Math.max(1, buffer.lineCount())).length());
-        float digitWidth = CgTextLayout.of("0", resolveFamily()).build().totalWidth();
-        float fontSize = getStyle().getGeneralGroup().fontSize();
-        return Math.max(2f, fontSize * 0.4f) + digits * digitWidth;
+        return gutterPadLeft() + gutterDigitsWidth() + gutterPadLeft();
     }
 
     /**
@@ -1763,7 +1797,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private float gutterFoldWidth() {
         if (!gutterVisible) return 0f;
-        return Math.max(8f, getStyle().getGeneralGroup().fontSize() * 1.6f);
+        return Math.max(10f, getStyle().getGeneralGroup().fontSize() * 2.2f);
     }
 
     /** The vertical equivalent, for the same reason. */
@@ -2239,6 +2273,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
         float wantedGutter = measureGutter();
         if (Math.abs(wantedGutter - gutterWidth) > 0.5f) {
             gutterWidth = wantedGutter;
+            gutterNumbersLeft = gutterPadLeft();
+            gutterNumbersWidth = gutterDigitsWidth();
             firstRealised = -1;
             lastRealised = -1;
         }
@@ -2517,10 +2553,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // The NUMBERS' column, not the whole gutter. Spanning the full width right-aligns the digits
             // against the code instead of against the fold column, which is what put them a few pixels
             // from the first glyph.
-            final float numberWidth = gutterNumberWidth();
+            // From the CACHED measurement, never recomputed here. gutterWidth is a field updated only
+            // when it moves, so measuring the digits afresh at layout time meant the two could disagree
+            // on any frame where the font had not resolved -- the numbers got a zero-width box and every
+            // one of them piled up in the same place.
+            final float numberLeft = gutterNumbersLeft;
+            final float numberWidth = gutterNumbersWidth;
             StyleGroup.defaultPipeline(number.getStyle().getLayoutGroup(),
                     l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                            .left(0f).top(top).width(numberWidth).height(height));
+                            .left(numberLeft).top(top).width(numberWidth).height(height));
         }
         for (int i = used; i < lineNumbers.size(); i++) hide(lineNumbers.get(i));
         insetHorizontalBarPastGutter();
@@ -2602,10 +2643,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return pool.get(index);
     }
 
+    /**
+     * Retires the unused tail of a decoration pool.
+     *
+     * <p><b>Clears the text as well as collapsing the box.</b> Zero size hides a <em>fill</em>, and that
+     * is all it does — a {@code UIText} inside has no clipping of its own and keeps painting its glyph
+     * wherever the box used to be. The line numbers get away with the same trick only because the gutter
+     * around them sets {@code overflow: hidden}; a whitespace marker has nothing around it, so turning
+     * the feature off left every dot on screen.</p>
+     */
     private static void hideFrom(List<UIElement> pool, int used) {
         for (int i = used; i < pool.size(); i++) {
-            StyleGroup.defaultPipeline(pool.get(i).getStyle().getLayoutGroup(),
+            UIElement element = pool.get(i);
+            StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(),
                     l -> l.width(0f).height(0f));
+            for (UIElement child : element.getChildren()) {
+                if (child instanceof UIText label) label.setText("");
+            }
         }
     }
 
@@ -2639,8 +2693,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     indentWidth, tabSize, offSideLanguage)[0];
             final float top = textOriginY() + viewLine * height;
 
+            // Half the CODE MARGIN left of the indent stop -- never half a space. A space is wider than
+            // the margin, so nudging by one put the level-0 guide underneath the gutter, which has a
+            // higher z-index and painted straight over it: the guides simply vanished from every
+            // unindented row. Half the margin keeps the guide in the gap that exists for it.
+            final float nudge = codeLeftPad() * 0.5f;
             for (int level = 0; level < levels && used < MAX_INDENT_GUIDES; level++) {
-                final float left = textOriginX() + level * step;
+                final float left = textOriginX() + level * step - nudge;
                 // Past the right edge there is nothing to guide, and the elements are better spent on
                 // rows that are visible.
                 if (left > getClientWidth()) break;
