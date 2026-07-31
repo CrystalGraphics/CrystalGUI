@@ -4,11 +4,13 @@ import com.crystalgraphics.shadergraph.CgMasterNode;
 import com.crystalgraphics.shadergraph.CgShaderEmitter;
 import com.crystalgraphics.shadergraph.CgShaderGraph;
 import com.crystalgraphics.shadergraph.CgShaderNode;
+import com.crystalgraphics.shadergraph.CgShaderNodeProperty;
 import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgraphics.shadergraph.CgShaderPort;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.NodeData;
+import com.crystalgui.graph.NodeField;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.PortSpec;
@@ -72,14 +74,84 @@ public final class ShaderGraphBridge {
         return library;
     }
 
-    /** One shader node as an editor node type. Category comes from the id's own namespace. */
+    /**
+     * One shader node as an editor node type. Category comes from the id's own namespace.
+     *
+     * <h4>Properties and port literals both become {@link com.crystalgui.graph.NodeField}s</h4>
+     * <p>Which is the whole point of that type existing: a {@code Space} dropdown and a typed-in
+     * {@code Color.Value} are the same thing placed differently, so neither needs shader-specific control
+     * code. An unconnected input with a default expression gets an inline editor automatically, and the
+     * value it writes IS the literal the compiler reads for that port.</p>
+     */
     public static NodeType asNodeType(CgShaderNode node) {
         NodeType.Builder builder = NodeType.of(node.id()).label(node.label()).category(categoryOf(node.id()));
         for (CgShaderPort port : node.ports()) {
-            if (port.isInput()) builder.in(port.id(), typeIdOf(port));
-            else builder.out(port.id(), typeIdOf(port));
+            if (!port.isInput()) {
+                builder.out(port.id(), typeIdOf(port));
+                continue;
+            }
+            NodeField editor = portFieldFor(port);
+            if (editor == null) builder.in(port.id(), typeIdOf(port));
+            else builder.in(port.id(), typeIdOf(port), editor);
+        }
+        for (CgShaderNodeProperty property : node.properties()) {
+            if (property.isEnumerated()) {
+                builder.field(NodeField.enumOf(property.id(), property.label(),
+                        property.options().toArray(new String[0])));
+            } else {
+                // A value property: the widget is chosen from the GLSL TYPE, by the same mapping ports
+                // use. CrystalGraphics never says "swatch" — it says vec4, and this side decides what a
+                // vec4 deserves to be edited with.
+                builder.field(new NodeField(property.id(), property.label(),
+                        widgetKindFor(property.type()), java.util.List.of(),
+                        property.defaultValue(), null));
+            }
         }
         return builder.build();
+    }
+
+    /**
+     * The inline editor for an unconnected input, or null when it has no default to edit.
+     *
+     * <p>Kind is chosen from the GLSL type so a better widget can be registered later — a colour picker
+     * for {@code vec4}, a drag-number for {@code float} — without any node changing.</p>
+     */
+    @Nullable
+    private static NodeField portFieldFor(CgShaderPort port) {
+        String defaultExpression = port.defaultExpression();
+        if (defaultExpression == null || defaultExpression.isEmpty()) return null;
+        // An engine expression is not a value anyone picks — see CgShaderPort.engineDefault.
+        if (!port.defaultIsLiteral()) return null;
+        NodeField.Kind kind = widgetKindFor(port.type());
+        // Dynamic, matrices and samplers: no meaningful literal to type, so no editor rather than a text
+        // box that accepts something the compiler will reject.
+        if (kind == null) return null;
+        return new NodeField(port.id(), port.id(), kind, java.util.List.of(), defaultExpression, null);
+    }
+
+    /**
+     * The widget a GLSL type deserves — the <b>one</b> place that decision is made.
+     *
+     * <p>Shared by ports and value properties so a {@code vec4} is edited the same way wherever it
+     * appears, and so registering a colour picker for {@link NodeField.Kind#COLOR} later upgrades both at
+     * once. This mapping is CrystalGUI's alone: CrystalGraphics only ever says what the type is.</p>
+     */
+    @Nullable
+    private static NodeField.Kind widgetKindFor(com.crystalgraphics.shadergraph.CgShaderType type) {
+        switch (type) {
+            case VEC4:
+            case VEC3:
+                return NodeField.Kind.COLOR;
+            case VEC2:
+                return NodeField.Kind.VECTOR;
+            case BOOL:
+                return NodeField.Kind.BOOLEAN;
+            case FLOAT:
+            case INT:
+                return NodeField.Kind.NUMBER;
+            default:
+                return null;
+        }
     }
 
     /**
@@ -145,14 +217,29 @@ public final class ShaderGraphBridge {
                 ? DYNAMIC_TYPE : port.type().glsl();
     }
 
-    /** {@code cg:math/add} → {@code Math}; {@code cg:master} → {@code Output}. */
+    /**
+     * Every path segment but the last, title-cased and rejoined.
+     *
+     * <p>{@code cg:math/add} → {@code Math}; {@code cg:input/basic/vector4} → {@code Input/Basic};
+     * {@code cg:master} → {@code Output}.</p>
+     *
+     * <p>Nested rather than just the first segment, because the menu is a tree and Unity's is two deep —
+     * {@code Input ▸ Basic ▸ Vector 4}. Taking only the head would pile every input node into one flat
+     * list, which is exactly the thing a tree was built to avoid.</p>
+     */
     private static String categoryOf(String id) {
         int colon = id.indexOf(':');
         String path = colon < 0 ? id : id.substring(colon + 1);
-        int slash = path.indexOf('/');
-        if (slash < 0) return "Output";
-        String head = path.substring(0, slash);
-        return Character.toUpperCase(head.charAt(0)) + head.substring(1);
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash < 0) return "Output";
+
+        StringBuilder category = new StringBuilder();
+        for (String segment : path.substring(0, lastSlash).split("/")) {
+            if (segment.isEmpty()) continue;
+            if (category.length() > 0) category.append('/');
+            category.append(Character.toUpperCase(segment.charAt(0))).append(segment.substring(1));
+        }
+        return category.toString();
     }
 
     /**
@@ -196,7 +283,8 @@ public final class ShaderGraphBridge {
                 continue;
             }
             if (type == master) masterId = data.id();
-            graph.add(new CgShaderGraph.Instance(data.id(), type, inputValuesOf(data)));
+            graph.add(new CgShaderGraph.Instance(data.id(), type, inputValuesOf(data),
+                    propertyValuesOf(data, type)));
             present.put(data.id(), true);
         }
         if (masterId == null) return null;
@@ -223,6 +311,24 @@ public final class ShaderGraphBridge {
             if (!port.direction().isInput()) continue;
             String value = data.properties().get(port.portId());
             if (value != null && !value.isEmpty()) values.put(port.portId(), value);
+        }
+        return values;
+    }
+
+    /**
+     * The node's chosen values for the compile-time properties its type declares.
+     *
+     * <p>Read from the same {@code NodeData.properties} map as port literals, which is safe because the
+     * two are looked up by different keys: {@link #inputValuesOf} only reads keys matching an
+     * <em>input port</em> id, and this only reads keys matching a <em>declared property</em> id. A node
+     * declaring a port and a property with the same name would collide — so don't.</p>
+     */
+    private static Map<String, String> propertyValuesOf(NodeData data,
+                                                        com.crystalgraphics.shadergraph.CgShaderNode type) {
+        Map<String, String> values = new LinkedHashMap<>();
+        for (var property : type.properties()) {
+            String chosen = data.properties().get(property.id());
+            if (chosen != null && !chosen.isEmpty()) values.put(property.id(), chosen);
         }
         return values;
     }

@@ -60,7 +60,28 @@ public class NodePort extends UIElement {
 
     @Nullable
     @Getter
-    private final UIElement inlineEditor;
+    private UIElement inlineEditor;
+
+    /**
+     * Replaces this port's inline editor — the control shown while nothing is connected.
+     *
+     * <p>The slot itself is not new: a {@link PortType} may supply a default editor at construction, and
+     * {@code nodeport:blank .__editor__} already decides when it is visible. This is how a
+     * <b>document-declared</b> {@link com.crystalgui.graph.NodeField} takes that slot instead, so the
+     * value the user types is the one stored on the node rather than something the port type invented.</p>
+     *
+     * <p>Outputs are refused: a value flows <em>out</em> of one, so there is nothing to type.</p>
+     */
+    public NodePort setInlineEditor(@Nullable UIElement editor) {
+        if (!direction.isInput()) return this;
+        if (inlineEditor != null) removeInternalChild(inlineEditor);
+        inlineEditor = editor;
+        if (editor != null) {
+            editor.addClass(EDITOR_CLASS);
+            addInternalChild(editor);
+        }
+        return this;
+    }
 
     /**
      * How many wires end here. An int rather than a boolean because an output may feed many, and
@@ -118,6 +139,21 @@ public class NodePort extends UIElement {
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled() || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
+            // A press inside the inline editor belongs to the EDITOR, not to a wire. This listener runs
+            // on the bubble, so without the check a click on the value box started a connection drag from
+            // this port; releasing on the spot read as "dropped on empty canvas" and opened the create
+            // menu, which then ate every keystroke meant for the field.
+            //
+            // The usual dodge — setHitTest(false) on a composite's parts — is unavailable here precisely
+            // because this part IS interactive. That is the case the invariant about click-focus already
+            // calls out.
+            if (isInsideInlineEditor(event.getTarget())) {
+                // Stopped, not merely ignored: the node above starts a MOVE drag on press, so dragging to
+                // select text inside the field would drag the whole node instead. The editor has already
+                // had the event at the target phase, so nothing it needs is lost.
+                event.stopPropagation();
+                return;
+            }
             if (beginConnectionDrag(event.getPosition().x(), event.getPosition().y())) {
                 // The press belongs to the wire now. Without this the node underneath starts its own
                 // move-drag and the pointer drags the node it was trying to wire up.
@@ -139,6 +175,17 @@ public class NodePort extends UIElement {
     }
 
     /** Unity's {@code Out(3)}: the name, then the arity, unless the type has none worth printing. */
+    /** Whether {@code target} is the inline editor or anything inside it. */
+    private boolean isInsideInlineEditor(@Nullable UIElement target) {
+        if (inlineEditor == null || target == null) return false;
+        for (UIElement e = target; e != null; e = e.getParent()) {
+            if (e == inlineEditor) return true;
+            // Stop at the port: anything above it is not ours to reason about.
+            if (e == this) return false;
+        }
+        return false;
+    }
+
     private static String displayLabel(String name, PortType type) {
         return type.arity() > 0 ? name + "(" + type.arity() + ")" : name;
     }

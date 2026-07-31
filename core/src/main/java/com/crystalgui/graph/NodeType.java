@@ -22,7 +22,7 @@ import java.util.Map;
  * knowledge lives with the node rather than in a lookup table somebody has to remember to update.</p>
  */
 public record NodeType(String id, String label, String category, List<String> synonyms,
-                       List<PortSpec> ports, Map<String, String> defaults) {
+                       List<PortSpec> ports, Map<String, String> defaults, List<NodeField> fields) {
 
     public NodeType {
         if (id == null || id.isEmpty()) throw new IllegalArgumentException("A node type needs an id");
@@ -30,17 +30,59 @@ public record NodeType(String id, String label, String category, List<String> sy
         category = category == null ? "" : category;
         synonyms = List.copyOf(synonyms == null ? List.of() : synonyms);
         ports = List.copyOf(ports == null ? List.of() : ports);
+        fields = List.copyOf(fields == null ? List.of() : fields);
         defaults = defaults == null ? Map.of()
                 : java.util.Collections.unmodifiableMap(new LinkedHashMap<>(defaults));
+    }
+
+    /** The six-component shape, for a type declaring no editable fields. */
+    public NodeType(String id, String label, String category, List<String> synonyms,
+                    List<PortSpec> ports, Map<String, String> defaults) {
+        this(id, label, category, synonyms, ports, defaults, List.of());
+    }
+
+    /** The field with this id, or null. */
+    @javax.annotation.Nullable
+    public NodeField field(String fieldId) {
+        for (NodeField field : fields) {
+            if (field.id().equals(fieldId)) return field;
+        }
+        return null;
+    }
+
+    /** Fields drawn in the node's body, in declaration order. */
+    public List<NodeField> bodyFields() {
+        return fields.stream().filter(f -> !f.isPortField()).toList();
+    }
+
+    /** The field editing {@code portId} inline, or null if that port has none. */
+    @javax.annotation.Nullable
+    public NodeField fieldForPort(String portId) {
+        for (NodeField field : fields) {
+            if (field.isPortField() && portId.equals(field.portId())) return field;
+        }
+        return null;
     }
 
     public static Builder of(String id) {
         return new Builder(id);
     }
 
-    /** A fresh node of this type at a world position, with a generated id. */
+    /**
+     * A fresh node of this type at a world position, with a generated id.
+     *
+     * <p>Field defaults are seeded into the node's properties, so a node is <b>born valid</b>: an editor
+     * reading a field, and a compiler reading a port's literal, both find a value without either having
+     * to know the type's declaration. An explicit {@code defaultProperty} still wins, since it is the more
+     * specific statement.</p>
+     */
     public NodeData create(float x, float y) {
-        return new NodeData(GraphIds.generate(), id, x, y, ports, defaults);
+        Map<String, String> initial = new LinkedHashMap<>();
+        for (NodeField field : fields) {
+            if (!field.defaultValue().isEmpty()) initial.put(field.id(), field.defaultValue());
+        }
+        initial.putAll(defaults);
+        return new NodeData(GraphIds.generate(), id, x, y, ports, initial);
     }
 
     /** Every port of this type that could accept {@code sourceTypeId} arriving from an output — what the
@@ -92,6 +134,7 @@ public record NodeType(String id, String label, String category, List<String> sy
         private final List<String> synonyms = new ArrayList<>();
         private final List<PortSpec> ports = new ArrayList<>();
         private final Map<String, String> defaults = new LinkedHashMap<>();
+        private final List<NodeField> fields = new ArrayList<>();
 
         private Builder(String id) {
             this.id = id;
@@ -124,13 +167,48 @@ public record NodeType(String id, String label, String category, List<String> sy
             return this;
         }
 
+        /**
+         * An input port that can also be typed into while nothing is connected to it.
+         *
+         * <p>The single most common shape in any node editor — Unity draws one on every unconnected
+         * input — so it is one call rather than a port plus a separately-placed field.</p>
+         */
+        public Builder in(String portId, String typeId, NodeField field) {
+            ports.add(PortSpec.input(portId, typeId));
+            fields.add(field.onPort(portId));
+            return this;
+        }
+
+        /**
+         * A setting drawn in the node's body — a dropdown, a checkbox, a number.
+         *
+         * @see NodeField
+         */
+        public Builder field(NodeField field) {
+            fields.add(field);
+            return this;
+        }
+
         public Builder defaultProperty(String key, String value) {
             defaults.put(key, value);
             return this;
         }
 
         public NodeType build() {
-            return new NodeType(id, label, category, synonyms, ports, defaults);
+            // A standalone field sharing a port's id would write to the same properties entry as that
+            // port's literal, so one would silently overwrite the other. A PORT field is exempt: sharing
+            // the entry is precisely what it is for.
+            for (NodeField field : fields) {
+                if (field.isPortField()) continue;
+                for (PortSpec port : ports) {
+                    if (port.portId().equals(field.id())) {
+                        throw new IllegalArgumentException("Node type " + id + ": field '" + field.id()
+                                + "' has the same id as a port, so the two would share one stored value."
+                                + " Rename the field, or declare it with in(portId, typeId, field).");
+                    }
+                }
+            }
+            return new NodeType(id, label, category, synonyms, ports, defaults, fields);
         }
     }
 }

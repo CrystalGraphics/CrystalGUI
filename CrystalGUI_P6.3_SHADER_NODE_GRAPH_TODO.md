@@ -386,7 +386,25 @@ natural home for them and needs no new document concept.
 
 ---
 
-### 6.3.6 The built-in node library · `IN PROGRESS` — 5 of the set (2026-07-31)
+### 6.3.6 The built-in node library · `IN PROGRESS` — 8 of the set (2026-07-31)
+
+> **Update 2026-07-31, later**: three more — **UV, Position, Normal Vector**. These are the nodes a
+> preview system exists to show, and adding them forced two mechanisms into being rather than merely
+> using the existing one:
+>
+> - **`previewBody(...)`** — Godot's `p_for_preview` made real. All three read vertex attributes, so they
+>   are `VERTEX` domain and cannot run in the fragment stage where a preview evaluates. They declare a
+>   second body reading the preview's varying instead, and `hasPreviewForm()` lifts the preview emitter's
+>   refusal for exactly those nodes.
+> - **Node properties** — the `Space` dropdown (Object/World/View). See 6.3.8.
+>
+> **A real bug this turned up**: `Normal Vector` emitted `CG_NORMAL_MATRIX * cg_Normal` unconditionally —
+> a *world* normal, with nothing saying so. Object is now the default, matching Unity, with World and
+> View as variants.
+>
+> **Tangent space is deliberately absent.** Unlike the other three it needs a per-vertex tangent basis,
+> which this engine's vertex formats do not carry, so it cannot be derived from what a node is handed. An
+> option that silently emitted the wrong frame would be worse than one that is missing.
 
 > **Shipped**: `CgBuiltinShaderNodes` — Color, Float, Time, Add, Multiply — plus `CgShaderNodeRegistry`.
 > Five rather than fifty, deliberately: enough to prove the stack end to end, chosen so the demo is also
@@ -420,7 +438,59 @@ having been done first.
 
 ---
 
-### 6.3.7 Node previews · `TODO` · **the only genuinely new GL capability**
+### 6.3.7 Node previews · `DONE` (2026-07-31) · **the genuinely new GL capability**
+
+> **Shipped, and live in the gallery's shadergraph page.**
+>
+> | Piece | What it is |
+> |---|---|
+> | `CgPreviewEmitter` | A subgraph → a complete, parseable `.shader`. Not a second compiler: `compileFrom(graph, rootId, forPreview)` from 6.3.4, rooted elsewhere |
+> | `CgPreviewGeometry` | Quad vs sphere, **propagated downstream** — Unity's rule |
+> | `CgPreviewSlots` | Keep/reuse/evict policy, split out so it is testable with no GL |
+> | `CgPreviewTargetPool` / `CgPreviewTarget` | Bounded pool of MSAA target + resolve target pairs |
+> | `CgPreviewRenderer` | One mesh, one material, one draw, on a per-frame budget |
+> | `ShaderNodePreview` / `ShaderGraphPreviews` | The editor side: paints the texture, drives the visible set |
+>
+> **`CgRenderPipeline.prepareFrame()` was the whole seam.** It already existed for "manual-bind scenes
+> that call `CgMaterial.bind()` directly" — no second pipeline was needed. The shared `CgFrameData` is
+> borrowed and restored in a `finally`, or the world pass would later render through a 128×128 preview
+> camera with no exception and no obvious cause. `timeSecs` is deliberately *not* overridden, which is
+> what makes a Time node's thumbnail animate for free.
+>
+> **MSAA was added to CrystalGraphics for this** — committed separately as `999f218`: sample count on
+> `CgFrameBufferFormat`, `glRenderbufferStorageMultisample` / `glTexImage2DMultisample` through the SPI to
+> all four backends, multisampled attachments, and EXT degrading to single-sampled rather than failing.
+> That commit also fixed a **pre-existing bug**: nothing ever *bound* a renderbuffer before allocating its
+> storage, so allocation landed on whatever was bound already. Single-sampled depth survived it by luck.
+>
+> **Four bugs found by looking at it, every one silent:**
+>
+> 1. **Nothing ever rendered.** `invalidateAll()` marks what has already been drawn, which on a cold start
+>    is nothing — so the dirty set stayed empty forever. `setVisible` now queues never-rendered nodes.
+> 2. **UV drew fully transparent.** `UV` is `vec4(uv, 0, 0)`, so its alpha is 0. Alpha is now supplied
+>    structurally as the geometry's coverage and the value contributes colour only.
+> 3. **Everything was too dark, and the sphere's quadrants looked uneven.** Linear values were being
+>    written into an RGBA8 the compositor treats as sRGB. `linear_to_srgb` on output fixed both — the
+>    geometry was centred the whole time; the sRGB curve compresses exactly the values either side of the
+>    x=0 boundary hardest.
+> 4. **A failing preview retried forever.** `renderedSource` was only recorded after a successful draw, so
+>    any node that could not be drawn — the Output node permanently, by design — came back dirty every
+>    frame. There is now a `failed` set, cleared by `invalidate`.
+>
+> **Also**: previews declare `CastShadows Off`. Without it the compiler auto-generates a ShadowCaster pass
+> referencing `cg_ShadowViewProjMatrix`, which nothing in a preview context declares.
+>
+> **Known limitation, recorded rather than hidden**: the preview camera is the identity, so `View` space
+> is a no-op there. The thumbnail expresses the object-vs-view Z convention directly instead; the *real*
+> shader still emits the true transform, and both are pinned by tests. If previews ever get a real camera,
+> delete that substitution.
+>
+> **Blocked externally**: the shadergraph page pins its `TextEditor` to `height: 300px`, because a
+> `TextEditor` with a parent-derived height hangs — `viewportHeight`/`horizontalBarThickness` and
+> `textViewportWidth`/`verticalBarThickness` are mutually recursive and do not converge. That is a 6.1
+> defect, handed over with a stack dump. Revert to `flex-grow: 1` once it converges.
+
+<details><summary>The original plan, for the record</summary>
 
 A live render of the graph up to each node — the thumbnail in every reference screenshot, and the thing
 that makes a node graph feel like a node graph.
@@ -449,6 +519,8 @@ that makes a node graph feel like a node graph.
 **Blocked on 6.3.1** — a preview is a compile of a subgraph, and there is nowhere to put that source
 until generated materials exist.
 
+</details>
+
 ---
 
 ### 6.3.8 Editor integration and error reporting · `IN PROGRESS` (2026-07-31)
@@ -463,13 +535,34 @@ until generated materials exist.
 > failure available — a connection simply refused, with no wire, no error and nothing to read anywhere.
 > A test now asserts the two return the *same answer* rather than each being separately correct.
 >
+> **Update 2026-07-31, later — node properties and their dropdowns shipped.**
+>
+> `CgShaderNodeProperty` is an enumerated **compile-time choice** that selects which GLSL a node emits,
+> and it is deliberately not an input port with a default: `Position` in object space and in world space
+> are different expressions, not one expression with a different input. Modelling it as a port would imply
+> it could be driven by another node — i.e. branching in the shader for something known before compiling.
+> Unity and Godot keep the two apart for the same reason.
+>
+> - `CgTemplateShaderNode.bodyFor(property, option, glsl)` / `previewBodyFor(...)` — declarative variants
+> - `ShaderNodeControls` — draws a `Dropdown` per property and writes the choice **to the document**, not
+>   to the widget: selecting an option changes the generated shader and must survive a reload
+> - `ShaderGraphPreviews.onPropertyChanged` — a property changes the emitted GLSL but *not* the graph's
+>   shape, so `onConnectionsChanged` never fires for it and the source pane would silently show the
+>   previous variant
+> - A stored option this build no longer has resolves to the default, rather than leaving the dropdown
+>   blank while the compiler quietly used something else
+>
+> `CgMasterNode.properties()` became `shaderProperties()` in the same change — those are the material's
+> `Properties {}` uniform block, a genuinely different thing from a node's dropdowns, and the two collided.
+>
 > **Still to do:**
 > - **Mapping a driver error back to a node.** `Result.ownerOfLine` exists and is populated; nothing
 >   consumes it yet. This is the item that decides whether the editor is usable on a real failure.
-> - **Debounced recompile.** Currently on connection change only, which is discrete. A per-keystroke
->   trigger needs real debouncing.
+> - **Debounced recompile.** Currently on connection change and property change, both discrete. A
+>   per-keystroke trigger needs real debouncing.
 > - **Inline value editors.** `Color`'s `Value` and `Float`'s `Value` have no field to type into, so a
->   graph is connectable but not yet editable.
+>   graph is connectable but not yet editable. Same mechanism as the property dropdowns — a control bound
+>   to `NodeData.properties` — but a text/colour field rather than an enumerated choice.
 > - **Dynamic ports have no colour** — `graph.css` has no `dynamic` entry, so those dots are grey. Unity
 >   colours a dynamic port by its *resolved* type, which the compiler already computes.
 
@@ -487,6 +580,10 @@ until generated materials exist.
 ---
 
 ## Ordering, and what blocks what
+
+**Status as of 2026-07-31:** 6.3.1–6.3.5 `DONE` · 6.3.7 `DONE` · 6.3.6 `IN PROGRESS` (8 nodes) ·
+6.3.8 `IN PROGRESS` (dropdowns done; error mapping, debounce, inline value editors, dynamic port colour
+remain). The whole stack runs end to end in the gallery's **shadergraph** page.
 
 ```
 6.3.1  materials from source ──┬── 6.3.3 compiler ── 6.3.4 domains ── 6.3.5 master node

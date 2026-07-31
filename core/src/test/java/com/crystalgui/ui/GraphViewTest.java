@@ -535,7 +535,11 @@ public class GraphViewTest extends UiTestBase {
         float narrow = shortNames.getRuntimeCache().getWidth();
         float wide = longNames.getRuntimeCache().getWidth();
 
-        assertTrue("short names sit at the floor: " + narrow, narrow >= 133f && narrow <= 135f);
+        // Once the inline port editors arrived the floors came down (graphnode 96px, nodeport 43px), and
+        // a two-port node is now sized by its COLUMNS rather than pinned to the floor — so this asserts a
+        // band, not an exact value. The floor is the lower bound it may not go under; the upper bound is
+        // what keeps "short" meaningfully narrower than the long-name case below.
+        assertTrue("short names stay narrow: " + narrow, narrow >= 96f && narrow <= 115f);
         assertTrue("a long port name must widen the node, not wrap inside it: " + wide, wide > narrow);
         assertTrue("but never past the ceiling: " + wide, wide <= 320f);
 
