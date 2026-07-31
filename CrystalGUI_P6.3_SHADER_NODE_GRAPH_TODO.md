@@ -386,7 +386,19 @@ natural home for them and needs no new document concept.
 
 ---
 
-### 6.3.6 The built-in node library · `TODO` · **the volume**
+### 6.3.6 The built-in node library · `IN PROGRESS` — 5 of the set (2026-07-31)
+
+> **Shipped**: `CgBuiltinShaderNodes` — Color, Float, Time, Add, Multiply — plus `CgShaderNodeRegistry`.
+> Five rather than fifty, deliberately: enough to prove the stack end to end, chosen so the demo is also
+> a test. Constants exercise the unconnected-input-becomes-a-literal path, Add/Multiply are **dynamic**
+> so widening and compiler-emitted casts are live in any graph using them, and Time is an engine builtin
+> from `cg_env.glsl`.
+>
+> **All five are `CgTemplateShaderNode`** — the declarative path covered every one, which is the
+> evidence that 6.3.2's interface/data split was drawn in the right place.
+>
+> **Still to do**: the volume. The categories below are unchanged, and the observation that most of them
+> are one call into an existing stdlib function still holds.
 
 Unity-scale, and entirely resource files once 6.3.2 exists. Categories worth having from the start,
 ordered by how often a real shader needs them:
@@ -439,7 +451,27 @@ until generated materials exist.
 
 ---
 
-### 6.3.8 Editor integration and error reporting · `TODO`
+### 6.3.8 Editor integration and error reporting · `IN PROGRESS` (2026-07-31)
+
+> **Shipped**: `ShaderGraphBridge` (`GraphDocument` ↔ `CgShaderGraph`, the node library, GLSL promotion
+> and the port types), and the gallery's **shadergraph** page — a live graph beside the `.shader` it
+> compiles to, recompiling on every connection change. 7 tests.
+>
+> **The lesson, and it cost two rounds:** there are **two compatibility checks and they are not the same
+> one**. The document's `TypeCompatibility` governs `GraphDocument.connect`; a widget drag goes through
+> `GraphView.canConnect`, which asks the `PortType`. Registering the rule in only one gives the worst
+> failure available — a connection simply refused, with no wire, no error and nothing to read anywhere.
+> A test now asserts the two return the *same answer* rather than each being separately correct.
+>
+> **Still to do:**
+> - **Mapping a driver error back to a node.** `Result.ownerOfLine` exists and is populated; nothing
+>   consumes it yet. This is the item that decides whether the editor is usable on a real failure.
+> - **Debounced recompile.** Currently on connection change only, which is discrete. A per-keystroke
+>   trigger needs real debouncing.
+> - **Inline value editors.** `Color`'s `Value` and `Float`'s `Value` have no field to type into, so a
+>   graph is connectable but not yet editable.
+> - **Dynamic ports have no colour** — `graph.css` has no `dynamic` entry, so those dots are grey. Unity
+>   colours a dynamic port by its *resolved* type, which the compiler already computes.
 
 - `NodeType` ↔ `CgShaderNode` mapping, so the create menu offers shader nodes and
   `NodeWidgetFactory` builds their widgets. Both registries already exist; this is a bridge, not a
