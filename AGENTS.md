@@ -972,6 +972,10 @@ The things that are invisible from any single class and expensive to rediscover.
 | Only `AnchoredPlacement` writes `left`/`top` on an anchored popup | Any other writer fights placement every frame |
 | Transitioning *into* view needs a resting value in the sheet, never a one-frame write from Java | The write is itself transitionable, so the engine eases toward it and the cleanup retargets it back — nothing animates, and no test sees it |
 | `TransitionEngine` advances on `System.nanoTime()`, ignoring the delta it is passed | A test loop cannot step transition time; assert the inputs (resting value, state class, ANIMATION-origin candidate) rather than intermediate values |
+| **Document state goes through `Edit`s; view state is mutated directly** | The boundary the whole undo mechanism rests on. Anything a reload should give back is an edit (text, nodes, connections); anything that is only how you are *looking* at the document is not (scroll, selection, column widths, pan/zoom). VS Code, Photoshop and Godot all draw it here, and it is why re-sorting a table is undoable in none of them. Get it wrong and Ctrl+Z scrolls instead of undoing |
+| An `UndoStack` belongs to a **document**, not a `UIWindow` | Two editor tabs in one window must not braid histories. Impossible to retrofit once a shared stack exists, which is why there is deliberately no `UIWindow.getUndoStack()` |
+| A `CompositeEdit` undoes in **reverse** | Each edit assumed the state the previous one left. The disconnect-then-connect pair is the smallest example: unwinding forwards restores an edge into an input that is still occupied |
+| `System.nanoTime()` has an **arbitrary origin and may be negative** — never use `Long.MIN_VALUE` as a "long ago" sentinel against it | `nanoTime() - Long.MIN_VALUE` overflows to a *small* elapsed time, so "never merge again" evaluates as "merge immediately". Caught here by a test; in the wild it is undo swallowing two actions on some machines and not others. Use an explicit flag |
 | A wire's colour is **read back out of the cascade** — `NodePort.typeColor()` returns the dot's computed `border-color` | `CgCurveRenderer` needs an ARGB int, so something must hand it a number; reading it from the dot keeps Unity's per-type palette in `graph.css` instead of putting GLSL's type system and its colours in Java. Hard-code it and adding a type means editing two languages |
 | An input port takes **one** edge, an output **many** — so connecting to an occupied input *replaces* | Refusing it looks like correct validation and makes rewiring take two gestures. The displaced edge must leave through the same `disconnect` as a manual one, or 6.2.4's undo will not know it happened |
 | `nodeport:blank` means *unconnected*, and a connect must `invalidateStyleMatch()` | It drives both the hollow-vs-filled dot and whether the inline editor shows. Without the invalidation a pseudo-class is never re-evaluated: the dot stays hollow under a live wire and the editor stays visible beneath it, which reads as a paint bug |
@@ -1091,6 +1095,10 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                ReadOnlyVec2f (immutable view over a mutable JOML Vector2f), Transform2D
   .property                    Property<T> (binding, equality-suppressing set), ObservableList<T>
   .signal                      Signal.Action/Value/Pair, SignalBase, Connection, ConnectionGroup
+  .command                     Command (a named invocable action), CommandContext, CommandRegistry —
+                               what a key binding, a menu item and the palette all point at
+  .undo                        Edit (one undoable change), CompositeEdit, UndoStack — one history per
+                               DOCUMENT, never per window
 
 com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platform SPI, which CrystalGUI
                                consumes. Listed here because the engine's input, sound, clipboard and
