@@ -1945,9 +1945,48 @@ public class TextEditorTest extends UiTestBase {
         StringBuilder document = new StringBuilder();
         for (int i = 0; i < 500; i++) document.append("line ").append(i).append('\n');
         build(document.toString());
+        // Scroll-past-end is on by default (VS Code's default too), and adds a viewport of empty space
+        // below the last line -- so the content height is asserted with it turned off.
+        editor.setScrollBeyondLastLine(false);
         settle();
 
         assertEquals(501 * editor.lineHeight(), editor.getScrollHeight(), 0.5f);
+    }
+
+    /**
+     * <b>Scroll past the end</b> — VS Code's {@code scrollBeyondLastLine}, on by default. It exists so the
+     * last line of a file can be read and edited somewhere other than jammed against the bottom edge.
+     */
+    @Test
+    public void scrollingPastTheEndAddsAViewportOfRoom() {
+        build("one" + NL + "two" + NL + "three");
+        editor.setScrollBeyondLastLine(false);
+        settle();
+        float without = editor.getScrollHeight();
+
+        editor.setScrollBeyondLastLine(true);
+        settle();
+        float with = editor.getScrollHeight();
+
+        assertTrue("it must add room: " + without + " -> " + with, with > without);
+        assertEquals("a viewport, less one line so the last line stays on screen",
+                3 * editor.lineHeight() + editor.getClientHeight() - editor.lineHeight(), with, 2f);
+    }
+
+    /**
+     * <b>The horizontal bar's allowance is the ELSE branch</b>, which is easy to miss. Scrolling past the
+     * end already leaves empty space below the last line, so also adding the bar's thickness would be a
+     * second allowance for the same problem.
+     */
+    @Test
+    public void theBarAllowanceIsNotAddedOnTopOfScrollPastEnd() {
+        build("one" + NL + "two");
+        editor.setScrollBeyondLastLine(true);
+        settle();
+
+        assertEquals("content plus exactly one viewport, less a line",
+                2 * editor.lineHeight() + editor.getClientHeight() - editor.lineHeight(),
+                editor.getScrollHeight(), 2f);
     }
 
     // ── 6.1.7b: soft wrap ────────────────────────────────────────
@@ -2389,6 +2428,112 @@ public class TextEditorTest extends UiTestBase {
 
         assertTrue("the caret must be inside the document, not past where the text used to end",
                 editor.getCaret() <= editor.getText().length());
+    }
+
+    // ── 6.1.7b §G: indent guides, visible whitespace, rulers ─────
+
+    private int countOf(String className) {
+        int n = 0;
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(className)) continue;
+            // hide() collapses an unused pooled element to zero height, so a laid-out height is what
+            // separates "drawn this frame" from "pooled and idle".
+            if (child.getTaffyLayout().contentBoxHeight() > 0f) n++;
+        }
+        return n;
+    }
+
+    private void showEditor() {
+        settle();
+        editor.updateWindow();
+        settle();
+    }
+
+    @Test
+    public void indentGuidesAreOffUntilAskedFor() {
+        build("a" + NL + "    b" + NL + "        c");
+        showEditor();
+        assertEquals(0, countOf(TextEditor.INDENT_GUIDE_CLASS));
+    }
+
+    /** One guide per level, so a three-level file draws 0 + 1 + 2. */
+    @Test
+    public void indentGuidesDrawOnePerLevel() {
+        build("a" + NL + "    b" + NL + "        c");
+        editor.setIndentGuidesVisible(true);
+        showEditor();
+
+        assertEquals("0 + 1 + 2", 3, countOf(TextEditor.INDENT_GUIDE_CLASS));
+    }
+
+    /**
+     * <b>A blank line inside a block still guides.</b> This is the whole reason the model layer exists —
+     * a guide derived from the row's own characters has nothing to derive from here, and the guides would
+     * visibly break at every blank line in a function.
+     */
+    @Test
+    public void aBlankLineInsideABlockStillDrawsItsGuides() {
+        build("    a" + NL + NL + "    c");
+        editor.setIndentGuidesVisible(true);
+        showEditor();
+
+        assertEquals("one per row, the blank one included", 3, countOf(TextEditor.INDENT_GUIDE_CLASS));
+    }
+
+    @Test
+    public void whitespaceIsInvisibleUntilAskedFor() {
+        build("  a  b  ");
+        showEditor();
+        assertEquals(0, countOf(TextEditor.WHITESPACE_CLASS));
+    }
+
+    /** Boundary mode: leading, trailing and runs — never a lone space between two words. */
+    @Test
+    public void boundaryWhitespaceSkipsLoneSpaces() {
+        build("a b c");
+        editor.setRenderWhitespace(
+                com.crystalgui.text.view.RenderWhitespace.BOUNDARY);
+        showEditor();
+        assertEquals("two lone spaces, neither marked", 0, countOf(TextEditor.WHITESPACE_CLASS));
+
+        editor.setRenderWhitespace(com.crystalgui.text.view.RenderWhitespace.ALL);
+        showEditor();
+        assertEquals("all marks both", 2, countOf(TextEditor.WHITESPACE_CLASS));
+    }
+
+    @Test
+    public void whitespaceMarkersUseTheConventionalGlyphs() {
+        build("  a");
+        editor.setRenderWhitespace(com.crystalgui.text.view.RenderWhitespace.ALL);
+        showEditor();
+
+        int dots = 0;
+        for (UIElement child : editor.getChildren()) {
+            if (!child.hasClass(TextEditor.WHITESPACE_CLASS)) continue;
+            if (child.getTaffyLayout().contentBoxHeight() <= 0f) continue;
+            if ("·".equals(((UIText) child.getChildren().get(0)).getText())) dots++;
+        }
+        assertEquals("two leading spaces, two middots", 2, dots);
+    }
+
+    @Test
+    public void rulersAreDrawnAtTheColumnsAskedFor() {
+        build("x");
+        showEditor();
+        assertEquals(0, countOf(TextEditor.RULER_CLASS));
+
+        editor.setRulers(20, 40);
+        showEditor();
+        assertEquals(2, countOf(TextEditor.RULER_CLASS));
+    }
+
+    /** A ruler past the right-hand edge is not drawn — there is nothing there to mark. */
+    @Test
+    public void aRulerBeyondTheViewportIsSkipped() {
+        build("x");
+        editor.setRulers(20, 100000);
+        showEditor();
+        assertEquals(1, countOf(TextEditor.RULER_CLASS));
     }
 
     /** The editor is a composite: its lines and caret are its own, and callers do not add children. */

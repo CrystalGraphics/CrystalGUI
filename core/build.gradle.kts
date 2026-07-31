@@ -140,6 +140,18 @@ tasks.named("check") { dependsOn(headlessTestTask) }
 //   will be replaced by a CrystalGraphics-backed implementation in Phase 2.
 //val platformImportExemptions = setOf("ScissorStack.java")
 
+// Source files are UTF-8, and javac must be told so rather than left to the platform default.
+//
+// Not cosmetic. Sources here carry non-ASCII character literals that ARE the behaviour -- the whitespace
+// markers U+00B7 and U+2192, and the CJK ranges the line breaker classifies. Under a platform default of
+// windows-1252 those decode to the wrong characters, which draws the wrong glyph or classifies the wrong
+// codepoint: a failure no test asserting on offsets or counts would notice, on developer machines only.
+// JDK 18+ happens to default to UTF-8 already, which makes the bug invisible here and waiting for
+// whoever builds on an older toolchain.
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+}
+
 tasks.named<JavaCompile>("compileJava") {
     val srcRoot: String = layout.projectDirectory.dir("src/main/java").asFile.absolutePath
     doLast {
