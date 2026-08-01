@@ -82,13 +82,11 @@ final class FoldingDecorationsPart extends EditorViewPart {
             int slot = used++;
             UIElement arrow = arrowAt(slot);
             arrowRows.set(slot, model.row());
+            // The triangle's direction is driven entirely by this class — default.css's
+            // texteditor .__fold__(.__collapsed__) rules swap the shape, the same way TreeView's
+            // own twisty state classes do. No Java decision about the glyph any more.
             if (region.isCollapsed()) arrow.addClass(TextEditor.FOLD_COLLAPSED_CLASS);
             else arrow.removeClass(TextEditor.FOLD_COLLAPSED_CLASS);
-
-            UIText glyph = (UIText) arrow.getChildren().get(0);
-            glyph.setText(region.isCollapsed()
-                    ? TextEditor.FOLD_GLYPH_COLLAPSED : TextEditor.FOLD_GLYPH_EXPANDED);
-            pushEditorFont(glyph);
 
             // Relative to the COLUMN, so left is 0 rather than the gutter offset.
             final float top = editor.textOriginY() + viewLine * height - editor.getScrollTop();
@@ -108,13 +106,9 @@ final class FoldingDecorationsPart extends EditorViewPart {
             UIElement arrow = new UIElement();
             arrow.addClass(TextEditor.FOLD_CLASS);
             arrow.markAsInternal();
-            // HIT-TESTABLE, unlike every other part of the gutter -- it is the one piece a user clicks.
-            // The glyph inside it is not, so the press lands on the arrow rather than on the character:
-            // the same trick every composite here uses, since click targeting takes the exact element hit
-            // and never walks up to a handler-bearing ancestor.
-            UIText glyph = new UIText(TextEditor.FOLD_GLYPH_EXPANDED);
-            glyph.setHitTest(false);
-            arrow.addChild(glyph);
+            // A real vector triangle drawn directly by `overlay:` (see default.css's
+            // texteditor .__fold__ rules) — no child glyph needed, since a shape needs nowhere to
+            // hide from hit-testing the way a click-through UIText child used to require.
             arrow.onMouseDown.attachListener((el, event) -> {
                 int row = slot < arrowRows.size() ? arrowRows.get(slot) : -1;
                 if (row >= 0) editor.toggleFoldAt(row);
@@ -133,9 +127,10 @@ final class FoldingDecorationsPart extends EditorViewPart {
      * Draws the {@code {...}} chip after the header of each collapsed region on screen.
      *
      * <p>The only thing distinguishing a collapsed block from a block with nothing in it. The glyphs are
-     * ASCII dots, not U+22EF or U+2026, for the reason {@link TextEditor#FOLD_GLYPH_EXPANDED} gives:
-     * neither is in the bundled fonts, and a missing glyph draws a blank advance rather than falling
-     * back.</p>
+     * ASCII dots, not U+22EF or U+2026 — neither is in the bundled fonts, and a missing glyph draws a
+     * blank advance rather than falling back. This is text, unlike the fold arrow itself, because a
+     * chip's content varies (it repeats the region's own closing bracket) rather than being one of a
+     * fixed set of marks a shape can express.</p>
      */
     private void renderChips(int firstViewLine, int lastViewLine) {
         if (!editor.isFoldingEnabled() || !editor.foldingModel().hasCollapsedRegions()) {

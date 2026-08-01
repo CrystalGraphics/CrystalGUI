@@ -13,6 +13,7 @@ import com.crystalgui.ui.elements.graph.NodePort;
 import com.crystalgui.ui.elements.graph.NodeWidgetFactory;
 import com.crystalgui.ui.elements.graph.PortType;
 import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.elements.tree.TreeView;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import org.junit.Before;
 import org.junit.Test;
@@ -496,10 +497,16 @@ public class NodeCreationMenuTest extends UiTestBase {
         assertTrue("depth 2 must sit right of depth 1: " + depth1 + " vs " + depth2, depth2 > depth1 + 4f);
     }
 
-    /** The twisty has to be a glyph the bundled font can actually draw — U+25B6/U+25BC are not, and a
-     * missing glyph is a blank advance, so the marker silently disappears. */
+    /**
+     * The twisty's look (chevron-right/-down, or nothing for a leaf) is a {@code shape(...)} drawn
+     * directly by {@code overlay:}, not a font glyph — the bundled Minecraft font has neither
+     * U+25B6 nor U+25BC, and a missing glyph draws a blank advance rather than failing, which is
+     * exactly what silently swallowed the twisty before this existed. Java no longer decides the
+     * appearance at all; it only has to get the state CLASSES right, which is what this checks —
+     * {@code default.css}'s {@code nodecreationmenu .__twisty__} rules own the rest.
+     */
     @Test
-    public void expandableRowsDrawATwisty() {
+    public void expandableRowsCarryTheRightTwistyStateClasses() {
         library.clear();
         library.register(NodeType.of("shader.Position").label("Position").category("Input").out("Out", "vec3"));
         graph.openCreationMenu(0f, 0f);
@@ -507,16 +514,17 @@ public class NodeCreationMenuTest extends UiTestBase {
         frame();
 
         NodeCreationMenu menu = graph.creationMenu();
-        UIText folderTwisty = (UIText) menu.entries().get(0).getChildren().get(0);
-        UIText leafTwisty = (UIText) menu.entries().get(1).getChildren().get(0);
+        UIElement folderRow = menu.entries().get(0);
+        UIElement leafRow = menu.entries().get(1);
 
-        assertEquals("an open folder points down", "v", folderTwisty.getText());
-        assertTrue("and a leaf draws no marker", leafTwisty.getText().trim().isEmpty());
+        assertTrue("an open folder is __expanded__", folderRow.hasClass(TreeView.EXPANDED_CLASS));
+        assertTrue("a leaf is __leaf__", leafRow.hasClass(TreeView.LEAF_CLASS));
+        assertFalse("a leaf is not __expanded__", leafRow.hasClass(TreeView.EXPANDED_CLASS));
 
         menu.treeView().collapseAll();
         frame();
-        assertEquals("a closed folder points right", ">",
-                ((UIText) menu.entries().get(0).getChildren().get(0)).getText());
+        assertTrue("a closed folder is __collapsed__", folderRow.hasClass(TreeView.COLLAPSED_CLASS));
+        assertFalse("and no longer __expanded__", folderRow.hasClass(TreeView.EXPANDED_CLASS));
     }
 
     /**

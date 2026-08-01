@@ -123,24 +123,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** The marker drawn after a collapsed region's header, standing in for the rows it hides. */
     public static final String FOLD_PLACEHOLDER_CLASS = "__fold-placeholder__";
 
-    /**
-     * The fold arrows, and why they are {@code -}/{@code +} rather than IntelliJ's {@code▾}/{@code▸}.
-     *
-     * <p><b>The bundled fonts cannot draw a triangle.</b> Measured, not assumed: {@code MinecraftRegular.otf}
-     * covers none of U+25BE, U+25B8, U+22EF or even U+2026, and a missing glyph here does not fall back to
-     * anything — it draws a blank advance. So a triangle arrow renders as an <em>invisible</em> control that
-     * is still laid out and still clickable, which is the worst possible failure: the feature is entirely
-     * present and looks entirely absent. {@code UIText} already carries the same scar for the ellipsis, and
-     * this is that note's second instance.</p>
-     *
-     * <p>{@code +}/{@code -} are ASCII, are guaranteed present, and are the fold affordance Eclipse and
-     * Visual Studio have always used, so they read correctly rather than merely rendering. Getting
-     * IntelliJ's exact chevron needs a triangle <em>drawable</em> — the engine has no glyph-free way to
-     * draw one today, and every other widget's mark ({@code Checkbox.__mark__} and friends) is a CSS-styled
-     * box for exactly this reason.</p>
-     */
-    static final String FOLD_GLYPH_EXPANDED = "-";
-    static final String FOLD_GLYPH_COLLAPSED = "+";
+    // The fold arrows used to be "-"/"+" here — the bundled fonts have no triangle glyph at all
+    // (MinecraftRegular.otf covers none of U+25BE, U+25B8, U+22EF or even U+2026, and a missing
+    // glyph draws a blank advance rather than falling back, so a triangle rendered as an invisible
+    // but still-clickable control). Real IntelliJ-style triangles now come from
+    // `overlay: shape("chevron-down"/"chevron-right")` in default.css's texteditor .__fold__ rules,
+    // toggled by FOLD_COLLAPSED_CLASS exactly as before — no glyph constants needed any more.
 
     /** {@code "..."} for the same reason — U+22EF and U+2026 are both absent from the bundled fonts. */
     static final String FOLD_PLACEHOLDER_TEXT = "...";

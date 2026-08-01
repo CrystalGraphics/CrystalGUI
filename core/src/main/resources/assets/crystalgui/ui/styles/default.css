@@ -106,7 +106,7 @@ button, dropdown {
     border-radius: 2px;
 }
 button:hover, dropdown:hover {
-    background: #B4B4B4;
+    background: #FF0000;
 }
 button:active, dropdown:active {
     background: #7A7A7A;
@@ -139,6 +139,10 @@ checkbox:hover .__mark__ {
 }
 checkbox:checked .__mark__ {
     background: #3C8527;
+    /* A real vector checkmark, not a texture asset — default.css has no image assets to lean on and
+       previously drew nothing here at all beyond the colour change. shape("checkmark") needs no font
+       glyph and no sprite pack, so it works with literally nothing else loaded. */
+    overlay: shape("checkmark");
 }
 checkbox:disabled .__mark__ {
     background: #6E6E6E;
@@ -408,7 +412,7 @@ texteditor {
      * painted over by the border and the line reads as ".ine 0" instead of "line 0". This is geometry,
      * not taste, which is why it is in the user-agent sheet; TextEditor derives its text origin, its
      * caret and its hit testing from exactly this padding. */
-    padding-left: 3px;
+    padding-left: 1px;
     padding-right: 3px;
 }
 
@@ -440,11 +444,11 @@ texteditor .__line__ {
  * here -- TextEditor sizes and positions the element from it so it can straddle the character boundary
  * rather than start at it. Colour and stacking remain a theme's business. */
 texteditor {
-    caret-width: 1px;
+    caret-width: 15px;
 }
 
 texteditor .__caret__ {
-    background-color: #E6E6E6;
+    background-color: #FF0000;
     z-index: 1;
 }
 
@@ -1005,7 +1009,12 @@ menuitem.__has-submenu__ {
 /* Dimmer than the label — it is an affordance, not content. Colour is inheritable, so this only needs to
  * override, not restate. */
 menuitem .__submenu-arrow__ {
+    width: 8px;
+    height: 8px;
+    flex-grow: 0;
+    flex-shrink: 0;
     color: #A8B0B8;
+    overlay: shape("chevron-right");
 }
 menuitem:focus-visible {
     outline: 0;
@@ -1275,6 +1284,52 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
     --graph-pad-x: 6px;        /* a control row's horizontal inset */
     --graph-gap: 4px;          /* label to widget */
     --graph-hairline: 1px;     /* every separator and every ring in the editor */
+
+    /* ── The configurator (P6.1.8) ──────────────────────────────────────────────────────────────
+     * A SEPARATE scale from the graph's, not a shared one. An inspector panel is a few hundred
+     * pixels wide and a node is 134, so the two will not stay equal however tempting it is to start
+     * them there — and one set of tokens serving both means the first time they disagree, one of
+     * them silently loses.
+     *
+     * Measured off `docs/research/unity-inspector/01-inspector-property.png`, which is a 1:1 shot of
+     * four rows carrying four different control kinds on one rhythm. */
+    /* MEASURED off `docs/research/unity-inspector/01-inspector-property.png`, pixel by pixel, rather
+     * than eyeballed — the first pass was eyeballed and every one of these was wrong:
+     *
+     *     row pitch 20px · control 18px · glyph block ~10px · label column 114px · label #D2D2D2
+     *
+     * The ratio is the part that matters. Ours was an 8px type in an 18px row (0.44); Unity's is ~10
+     * in 20 (0.50), and that single number is most of why ours read airy and theirs reads dense. */
+    --cfg-row-h: 20px;         /* the row; a floor, never a cap */
+    --cfg-ctrl-h: 18px;        /* the control inside it — the number that makes the kit a SET */
+    /* FIXED, not a percentage, and the correction is worth recording: at 300px our old 38% resolved to
+     * 114px, which is exactly Unity's — so it looked right and would have drifted at every other panel
+     * width. Unity's column does not scale; it is ~114px in a 275px panel and ~114px in an 800px one,
+     * which is why it reads as 41% in one screenshot and 26% in another. */
+    --cfg-label-w: 114px;
+    --cfg-label-min: 48px;     /* ...but never so narrow that a label is one character wide */
+    --cfg-gap: 4px;            /* label to control */
+    --cfg-pad-x: 6px;
+    /* 1px, so adjacent control boxes are 2px apart. At 2px they were 4px apart and the gaps between
+     * fields were doing much of the "spread out" impression on their own. */
+    --cfg-pad-y: 1px;
+    --cfg-indent: 8px;         /* one foldout level. Unity steps ~8px; ours stepped 12 and read as a staircase */
+    --cfg-font: 10;
+
+    /* The palette, sampled from the same reference. A theme may override every one of these; they are
+     * here because the engine ships no inspector theme and a kit with no colours at all is unreviewable.
+     * Same precedent as `textfield`'s own #2A2A2A further up this file. */
+    --cfg-panel: #2E2E2E;
+    --cfg-band: #383838;       /* a group header's strip — what marks it off from the rows above */
+    --cfg-field: #2A2A2A;      /* a recessed, typeable surface */
+    --cfg-popup: #515151;      /* a dropdown's raised face — deliberately NOT the field colour */
+    --cfg-label-text: #D2D2D2;
+    --cfg-value-text: #E4E4E4;
+    --cfg-list-head: #353535;
+    --cfg-list-body: #414141;
+    /* A checkbox is NOT the kit height. Unity keeps it ~13px inside a 20px row — stretching it to the
+     * row makes it the loudest thing on the panel, and a checkbox is the quietest control there is. */
+    --cfg-check: 13px;
 }
 
 /* Sized to its CONTENT between a floor and a ceiling: the node grows to fit its port names rather than
@@ -1311,6 +1366,12 @@ graphnode .__collapse__ {
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    overlay: shape("chevron-down");
+}
+/* Same rotate-not-swap idiom as ConfiguratorGroup's identical arrow — one drawable, two states,
+   and the -90deg matches that rule exactly so both read as the same affordance. */
+graphnode.__collapsed__ .__collapse__ {
+    transform: rotate(-90deg);
 }
 
 /* Three 1px separators from one rule: padding gives the horizontal pair (under the title bar, above the
@@ -1567,11 +1628,26 @@ nodecreationmenu .__entry__ {
 }
 /* The twisty is a real element, because this engine has no ::before to put it in. Fixed width so every
    label at a given depth starts at the same x whether or not its row can be opened -- a leaf simply
-   draws an empty one rather than shifting left, which is what makes a column of siblings line up. */
+   draws an empty one rather than shifting left, which is what makes a column of siblings line up.
+   overlay: shape("chevron-right"), not text -- the bundled Minecraft font has no U+25B6/U+25BC, and a
+   missing glyph draws a blank advance rather than failing, which used to read as "the twisty was never
+   added" rather than as a font problem. TreeView already applies __expanded__/__collapsed__/__leaf__ to
+   the row (see TreeView.EXPANDED_CLASS et al.), so the state is driven entirely from CSS below -- no
+   Java decides what a row's twisty looks like. */
 nodecreationmenu .__twisty__ {
     width: 9px;
+    height: 9px;
     flex-shrink: 0;
-    text-align: center;
+    overlay: shape("chevron-right");
+}
+/* Rotating the same shape (ConfiguratorGroup's arrow does the identical thing) rather than swapping to
+   a different one keeps open/closed a single drawable state and lets it transition. */
+nodecreationmenu .__expanded__ > .__twisty__ {
+    transform: rotate(90deg);
+}
+/* A leaf keeps its box (so the label column still lines up) but draws nothing. */
+nodecreationmenu .__leaf__ > .__twisty__ {
+    overlay: none;
 }
 /* Clips at the row rather than escaping it, and `text-overflow` has to sit on the TEXT, not on the row:
    it does not inherit, so on the wrapper it would silently never arrive. */
@@ -1608,12 +1684,17 @@ texteditor .__fold-column__ {
     z-index: 7;
 }
 
+/* IntelliJ-style triangles, not "+"/"-" — the bundled Minecraft font has no fold glyph at all, and
+   the ASCII fallback was never anything but a stand-in. Down-pointing means "expanded, click to
+   fold"; .__collapsed__ swaps to right-pointing, matching TreeView's own twisty semantics exactly
+   (expanded points down, collapsed points at the content it is hiding). */
 texteditor .__fold__ {
     justify-content: center;
     align-items: center;
     color: #4A515C;
     cursor: pointer;
     z-index: 5;
+    overlay: shape("chevron-down");
 }
 
 texteditor .__fold__:hover {
@@ -1624,6 +1705,7 @@ texteditor .__fold__:hover {
  * offering an action, and a hidden block whose only marker faded out is a block you cannot find. */
 texteditor .__fold__.__collapsed__ {
     color: #A9B2BF;
+    overlay: shape("chevron-right");
 }
 
 /* THE PLACEHOLDER. Drawn after a collapsed region's header, standing in for the rows it hides — the only
@@ -1978,4 +2060,267 @@ colorselector .__side__ dropdown .__menu__ menuitem {
  * every element a specified size, so setting it on an ancestor changes nothing. */
 colorselector .__side__ dropdown .__menu__ menuitem text {
     font-size: 6;
+}
+
+/* ── The configurator (P6.1.8) ──────────────────────────────────────────────────────────────────
+ * Functional geometry for the inspector kit. Appearance belongs to a theme, as everywhere else.
+ *
+ * Reference: `docs/research/unity-inspector/01-inspector-property.png` (the row rhythm and the label
+ * column) and `07-full-window.png` marker F (groups, lists, and a panel that scrolls).
+ *
+ * THE RULE FOR MAINTAINING THIS SECTION: a new control kind is added to the kit selector below and
+ * needs no rule of its own. A control left out of that list is the one that will be visibly a pixel or
+ * three off, in every panel, in a way that takes a session to chase. */
+
+.__configurator-panel__ {
+    flex-direction: column;
+    background: var(--cfg-panel);
+    padding-left: var(--cfg-pad-x);
+    padding-right: var(--cfg-pad-x);
+    padding-top: var(--cfg-pad-y);
+    padding-bottom: var(--cfg-pad-y);
+    overflow: scroll;
+}
+
+/* The row. `align-items: center` is what puts a 14px control in the middle of an 18px row rather than
+ * at its top — the two heights differ on purpose, and the gap is the rhythm. */
+.__configurator__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: var(--cfg-gap);
+    min-height: var(--cfg-row-h);
+    padding-top: var(--cfg-pad-y);
+    padding-bottom: var(--cfg-pad-y);
+}
+/* LEFT-aligned and fixed-width, which is what makes a stack of unlike controls read as a form: every
+ * control starts on a common left edge however long its label is. Right-aligning the labels — which
+ * several toolkits do — ragged-edges the controls instead, and a column that does not line up reads as
+ * a pile. `flex-shrink: 1` so a long label ellipsizes rather than pushing the control off the row. */
+.__configurator__ > .__label__ {
+    color: var(--cfg-label-text);
+    width: var(--cfg-label-w);
+    min-width: var(--cfg-label-min);
+    flex-grow: 0;
+    flex-shrink: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* The control column takes the rest. `width: 0` is the basis it grows FROM — this engine's flex-shrink
+ * defaults to 0, so a content-sized column would keep whatever its widest control happened to need. */
+.__configurator__ > .__inline__ {
+    width: 0;
+    flex-grow: 1;
+    flex-direction: row;
+    align-items: center;
+}
+.__configurator__ > .__inline__ > .__config-control__ { width: 0; flex-grow: 1; }
+
+/* ── THE KIT ────────────────────────────────────────────────────────────────────────────────────
+ * One height for every control kind, so a panel of unlike controls sits on one rhythm. Their base
+ * rules disagree by design — a text field is 16px, a dropdown 14, a checkbox 12, each right on its own
+ * — and a form is where that stops being right. */
+.__config-control__ textfield,
+.__config-control__ dropdown,
+.__config-control__ button,
+.__config-control__ slider {
+    height: var(--cfg-ctrl-h);
+    min-height: var(--cfg-ctrl-h);
+}
+.__config-control__,
+.__config-control__ text,
+.__config-control__ textfield,
+.__config-control__ dropdown,
+.__config-control__ button {
+    font-size: var(--cfg-font);
+}
+/* A typeable surface is RECESSED and a popup's face is RAISED, and they are different colours on
+ * purpose: it is the only thing telling a dropdown from a text field until the chevron exists. */
+.__config-control__ textfield {
+    background: var(--cfg-field);
+    color: var(--cfg-value-text);
+}
+.__config-control__ dropdown {
+    background: var(--cfg-popup);
+    color: var(--cfg-value-text);
+    justify-content: flex-start;
+}
+/* Unity does not colour-code a slider's fill; a saturated green track reads as a progress bar or as a
+ * validation state rather than as a value being chosen. */
+.__config-control__.__slider__ slider .__fill__ { background: #6A6A6A; }
+.__config-control__.__slider__ slider .__track__ { background: var(--cfg-field); }
+/* The exception, and a real one: a checkbox is SQUARE — its width is a function of its height, not of
+ * the space available. So it does not fill, and sits at the left of its column with the rest empty.
+ * Stretching it is the single most obvious way to make a form look wrong. */
+.__config-control__.__boolean__ { flex-grow: 0; flex-direction: row; }
+.__config-control__.__boolean__ checkbox,
+.__config-control__.__boolean__ checkbox .__mark__ {
+    width: var(--cfg-check);
+    height: var(--cfg-check);
+    min-height: var(--cfg-check);
+}
+/* NOT the base sheet's #3C8527. Green is a semantic colour — it reads as "valid" or "success", and on
+ * a panel where a colour swatch is itself a control, a green square reads as a VALUE rather than as a
+ * state. Unity draws a checkmark on a dark box; until CgShapeRenderer can draw one, a light fill is the
+ * honest stand-in: unmistakably on, and unmistakably not a colour anyone chose. */
+.__config-control__.__boolean__ checkbox .__mark__ { background: var(--cfg-field); }
+.__config-control__.__boolean__ checkbox:checked .__mark__ { background: var(--cfg-value-text); }
+.__config-control__.__boolean__ checkbox:hover .__mark__ { background: #3A3A3A; }
+.__config-control__.__boolean__ checkbox:checked:hover .__mark__ { background: #FFFFFF; }
+
+/* Leaves fill their inline box; the composites lay their own parts out. */
+.__config-control__.__number__,
+.__config-control__.__text__,
+.__config-control__.__select__ { flex-direction: row; }
+.__config-control__.__number__ textfield,
+.__config-control__.__text__ textfield,
+.__config-control__.__select__ dropdown { width: 0; flex-grow: 1; }
+
+/* A vector's components share the column evenly, and its axis letters live INSIDE it — that is what
+ * makes a Vector3 one row rather than three. */
+.__config-control__.__vector__ { flex-direction: row; gap-all: var(--cfg-gap); }
+.__config-control__.__vector__ .__vector-cell__ {
+    width: 0;
+    flex-grow: 1;
+    flex-direction: row;
+    align-items: center;
+    gap-all: 2px;
+}
+.__config-control__.__vector__ .__axis__ { flex-grow: 0; flex-shrink: 0; }
+.__config-control__.__vector__ .__number__ { width: 0; flex-grow: 1; }
+
+/* Track and value field on one row, the field sized to its digits rather than sharing the slack —
+ * a slider whose track is half its width is not a slider. */
+.__config-control__.__slider__ { flex-direction: row; align-items: center; gap-all: var(--cfg-gap); }
+/* `flex-shrink: 1` on the TRACK, and it is load-bearing rather than tidy: this engine's flex-shrink
+ * defaults to 0, so a theme that gives the number field any padding of its own makes the pair wider
+ * than the column and the value is what gets pushed out — clipped at the panel edge under ore.css while
+ * looking correct under default.css. The track is the part with slack to give. */
+.__config-control__.__slider__ slider { width: 0; flex-grow: 1; flex-shrink: 1; }
+.__config-control__.__slider__ .__number__ { width: 34px; flex-grow: 0; flex-shrink: 0; }
+
+/* ── Groups ─────────────────────────────────────────────────────────────────────────────────────
+ * Indented, NOT bordered. A border per group turns a panel three levels deep into a stack of nested
+ * boxes where the frames compete with the content; indentation reads as depth without adding a mark
+ * per level. Unity indents; LDLib2 draws a box; this takes Unity's. */
+.__configurator-group__ { flex-direction: column; }
+/* THE BAND. A group header is a SEPARATOR, not another row — it has to say "everything below me
+ * belongs to me" before you read a word of it, and on a flat panel the only thing that says that is a
+ * change of surface. Unity's foldout header is #383838 on a #2E2E2E panel: a hair lighter, enough to
+ * read as a strip and not enough to compete with the controls.
+ *
+ * Full-bleed to the panel edges — `margin` outward by the panel's own padding — because a band that
+ * stops short of the edge reads as a button, which is exactly what it is not. */
+.__configurator-group__ > .__head__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: var(--cfg-gap);
+    min-height: var(--cfg-row-h);
+    cursor: pointer;
+    background: var(--cfg-band);
+    color: var(--cfg-label-text);
+    margin-left: -6px;
+    margin-right: -6px;
+    padding-left: var(--cfg-pad-x);
+    padding-right: var(--cfg-pad-x);
+    margin-top: 2px;
+    margin-bottom: 1px;
+}
+.__configurator-group__ > .__head__ > .__arrow__ {
+    width: 8px;
+    height: 8px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    overlay: shape("chevron-down");
+}
+/* One glyph, two states. Open points down; collapsed points right. Rotating rather than swapping the
+ * character is what keeps the closed state out of Java — and it transitions, which a text swap cannot. */
+.__configurator-group__.__collapsed__ > .__head__ > .__arrow__ {
+    transform: rotate(-90deg);
+}
+.__configurator-group__ > .__content__ { flex-direction: column; }
+/* ── INDENT THE LABEL, NOT THE ROW ──────────────────────────────────────────────────────────────
+ * Nesting must not move the control column. Unity's inspector is the reference: in
+ * `docs/research/unity-inspector/07-full-window.png`, `Material` sits inside the `Universal` foldout
+ * and its dropdown starts on exactly the same x as top-level `Precision`'s. Only the LABELS step
+ * right; the controls stay in one column all the way down.
+ *
+ * Indenting the content container instead — the obvious way, and what this shipped as first — narrows
+ * every nested row, so the label column (a percentage) shrinks with it and the control starts further
+ * right at each level. The panel then reads as ragged, which is the one thing a form must not do.
+ *
+ * This works because `box-sizing: border-box` is the engine default: the padding is taken OUT of the
+ * label's declared width rather than added to it, so the label column stays exactly `--cfg-label-w`
+ * wide at every depth and the control column cannot move.
+ *
+ * One rule per level, because this engine has no `calc()` and no way to count ancestors in a selector.
+ * Three is enough for any panel anyone should be building; a fourth level is a sign the panel wants
+ * splitting, not a fourth rule. */
+.__configurator-group__ > .__content__ > .__configurator__ > .__label__,
+.__configurator-group__ > .__content__ > .__configurator-group__ > .__head__ {
+    padding-left: var(--cfg-indent);
+}
+.__configurator-group__ .__configurator-group__ > .__content__ > .__configurator__ > .__label__,
+.__configurator-group__ .__configurator-group__ > .__content__ > .__configurator-group__ > .__head__ {
+    padding-left: 16px;
+}
+.__configurator-group__ .__configurator-group__ .__configurator-group__ > .__content__ > .__configurator__ > .__label__ {
+    padding-left: 24px;
+}
+/* Collapsed keeps no box at all — so every box inside one measures 0, the same trap a closed Dialog
+ * sets. Worth knowing before asserting on anything inside a collapsed group. */
+.__configurator-group__.__collapsed__ > .__content__ { display: none; }
+
+/* ── Arrays ─────────────────────────────────────────────────────────────────────────────────────
+ * Header, body, and the +/- pair at the BOTTOM RIGHT — Unity's arrangement in every list it draws. */
+.__config-control__.__array__ { flex-direction: column; }
+/* A header BAR, not a bare label. Unity draws one on every list it has, and it is what makes the rows
+ * under it read as belonging to something rather than as more rows of the panel. */
+.__config-control__.__array__ > .__head__ {
+    flex-direction: row;
+    align-items: center;
+    min-height: var(--cfg-row-h);
+    padding-left: var(--cfg-pad-x);
+    background: var(--cfg-list-head);
+    color: var(--cfg-label-text);
+}
+.__config-control__.__array__ > .__body__ {
+    background: var(--cfg-list-body);
+    padding-top: 1px;
+    padding-bottom: 1px;
+}
+.__config-control__.__array__ > .__body__ { flex-direction: column; }
+.__config-control__.__array__ .__entry__ {
+    flex-direction: row;
+    align-items: center;
+    min-height: var(--cfg-row-h);
+    padding-left: var(--cfg-pad-x);
+    padding-right: var(--cfg-pad-x);
+}
+.__config-control__.__array__ .__entry__ > .__config-control__ { width: 0; flex-grow: 1; }
+/* The placeholder is a ROW, not an absence: a list that collapsed when emptied would leave the + button
+ * floating with nothing to say what it adds to, and would make "no entries" and "no list" identical. */
+.__config-control__.__array__ .__empty__ {
+    min-height: var(--cfg-row-h);
+    padding-left: var(--cfg-pad-x);
+}
+/* The +/- pair sits on a TAB hung under the list's right edge, not loose on the panel. Unity's does
+ * the same, and the difference is what makes the list read as one object with a footer rather than as
+ * a box with two buttons lying under it. `align-self: flex-end` sizes the strip to its buttons. */
+.__config-control__.__array__ > .__foot__ {
+    flex-direction: row;
+    justify-content: flex-end;
+    align-self: flex-end;
+    gap-all: 1px;
+    min-height: 14px;
+    padding-left: 3px;
+    padding-right: 3px;
+    background: var(--cfg-list-body);
+}
+.__config-control__.__array__ > .__foot__ button {
+    width: 14px;
+    height: 12px;
+    min-height: 12px;
+    flex-grow: 0;
 }
