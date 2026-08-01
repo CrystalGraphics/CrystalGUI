@@ -67,6 +67,8 @@ public class GraphNode extends UIElement {
     public static final String OUTPUTS_CLASS = "__outputs__";
     public static final String CONTROLS_CLASS = "__controls__";
     public static final String CONTROL_ROW_CLASS = "__control-row__";
+    /** A control that carries this takes the whole row and {@link #addControl} writes it no label. */
+    public static final String FULL_WIDTH_CLASS = "__full-width__";
     public static final String PREVIEW_CLASS = "__preview__";
     /** On the node while collapsed. */
     public static final String COLLAPSED_CLASS = "__collapsed__";
@@ -400,10 +402,16 @@ public class GraphNode extends UIElement {
     public GraphNode addControl(String labelText, UIElement widget) {
         UIElement row = new UIElement();
         row.addClass(CONTROL_ROW_CLASS);
-        UIText rowLabel = new UIText(labelText);
-        rowLabel.addClass(NodePort.LABEL_CLASS);
-        rowLabel.setHitTest(false);
-        row.addChild(rowLabel);
+        // A widget may decline the label, and the decision belongs to the WIDGET rather than to this
+        // method or its caller: only the control knows whether it describes itself. A colour swatch
+        // does — it is the value, drawn — so a word beside it buys nothing and costs the row's width,
+        // which for a swatch is the whole of what makes it readable.
+        if (!widget.hasClass(FULL_WIDTH_CLASS)) {
+            UIText rowLabel = new UIText(labelText);
+            rowLabel.addClass(NodePort.LABEL_CLASS);
+            rowLabel.setHitTest(false);
+            row.addChild(rowLabel);
+        }
         row.addChild(widget);
         controls.addInternalChild(row);
         return this;
