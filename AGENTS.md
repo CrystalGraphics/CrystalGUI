@@ -1023,6 +1023,10 @@ The things that are invisible from any single class and expensive to rediscover.
 | Folding a block the caret is in must **move the caret to the block's header** | A caret on a hidden row has no view line, so it cannot be painted, scrolled to, or typed at — the editor looks focused and silently does nothing |
 | A pooled gutter arrow's row is read **per frame**, never captured in its listener | Arrows recycle as the view scrolls, and a listener may only be attached once. Capture the row and the arrow keeps toggling whatever row its slot was first used for — which keeps working for exactly as long as nobody scrolls |
 | A failed material compile latches (`hasCompileFailed`) and is cleared only by `markDirty()` | Without the latch every draw retries the compile — 3044 log lines a second; without the clear, hot-reload can never fix a broken shader |
+| `Rope.fromChildren` must never return a lone child bare | It drops the rebuilt subtree by a level, and `concat`'s two unequal-height branches both read a height mismatch as "the join grew a level" and cast to `Internal` — so a join that *shrank* one throws `Leaf cannot be cast to Internal`. `build` groups leaves eight at a time, so every level whose count is ≡ 1 (mod 8) hits it: **`new TextEditor(text)` threw outright at ~8.2 KB, ~16.4 KB and up**, because the constructor reads every row. Found by a throwaway perf probe, not by the suite — the sizes in between are fine |
+| `TextEditor.getScrollWidth` is a pure accessor; the scan is `measureWidestRealisedLine`, once a frame | `getMaxScrollLeft` reads it, `horizontalBarThickness` reads that, `viewportHeight` reads that, and `getScrollHeight` reads `viewportHeight` — so a dozen field-looking reads fan back into one loop over every realised line. **Measured at 54 entries per settled frame**; splitting measurement from query took a settled frame from 1277 µs to ~240 µs. Same trap `refreshGutterMetrics` already documents |
+| A view part is a piece of the editor, not a client of it — the parts sit BESIDE `TextEditor` in its package and reach it through package-private accessors | Monaco needs a `ViewContext` because a part may not touch the view; with one view implementation in one package that indirection is a layer to keep in step rather than a seam. What is worth porting is the decomposition and the render protocol. `TextEditor` went 4159 → 3278 lines across ten parts; **the extraction is a pure code move**, so the 226 widget tests are a real net under it |
+| `measuredRows` may be invalidated one row at a time **only** when the edit left the line count alone | The map is keyed by row index, so adding or removing a line renumbers every row below and their cached widths now describe someone else's text — which both places the caret and, via `viewLineDisplayText`, decides what the row *paints*. Removing that guard broke no existing test; `aLineCountChangeDropsEveryCachedRowMeasurement` was written from the surviving mutant |
 
 ---
 
@@ -1053,8 +1057,22 @@ wrong, and each was learned by shipping to millions of users. Four from `text/cu
 
 ### Port the module boundaries too
 
-`com.crystalgui.text.cursor` mirrors VS Code's `vs/editor/common/cursor/` file-for-file —
-`CursorColumns`, `MoveOperations`, `TypeOperations`, `LineOperations`, `MouseSelection`.
+`com.crystalgui.text.cursor` takes its boundaries from VS Code, though **not file-for-file** — the
+mapping is worth stating because two of the five come from elsewhere in that tree:
+
+| Ours | VS Code |
+|---|---|
+| `CursorColumns` | `common/core/cursorColumns.ts` |
+| `MoveOperations` | `common/cursor/cursorMoveOperations.ts` |
+| `TypeOperations` | `common/cursor/cursorTypeOperations.ts` |
+| `LineOperations` | `contrib/linesOperations/browser/linesOperations.ts` — **not** `common/cursor/` |
+| `MouseSelection` | `browser/controller/mouseHandler.ts` — **not** `common/cursor/` |
+
+Monaco's `common/cursor/` holds twelve files; the seven we have no counterpart for are its orchestration
+layer (`cursor.ts`, `cursorCollection.ts`, `oneCursor.ts`, `cursorContext.ts`, `cursorMoveCommands.ts`)
+plus two genuine feature gaps — `cursorAtomicMoveOperations.ts` (`editor.useTabStops`: arrows and
+backspace stepping a whole indent unit through leading whitespace) and `cursorColumnSelection.ts`
+(box selection). Neither is implemented here.
 
 > This is not tidiness. The same logic first went in as private methods on `TextEditor`, which reached
 > **2556 lines, larger than the entire `com.crystalgui.text` package combined**, and could only be
@@ -1204,6 +1222,12 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
   .elements                    Button, Checkbox, CheckboxGroup, Dialog, DialogManager, Dropdown, Menu,
                                MenuItem, Popover, Scroller, ScrollerView, Slider,
                                SplitView, Switch, Tab, TabView, TextField, Tooltip, UIText
+    .editor                    TextEditor (the widget), EditorCommands (its named actions), plus VS
+                               Code's VIEW-PART decomposition: EditorViewPart (the base + Monaco's
+                               shouldRender protocol), DecorationPool (the pool/hide idiom), and one
+                               part each — LineNumbersPart, ViewCursorsPart, SelectionsPart,
+                               CurrentLinePart, IndentGuidesPart, WhitespacePart, RulersPart,
+                               GutterEdgePart, FoldingDecorationsPart, ZoomIndicatorPart
     .canvas                    CanvasView (pan/zoom viewport), WorldRect — the node graph's substrate
     .graph                     GraphView, GraphNode, NodePort, NodeWireLayer, GraphConnection,
                                GraphSelection, GraphCommands, PortType (SPI) + BasicPortType +
@@ -1213,7 +1237,10 @@ com.crystalgui.text            Rope, TextBuffer, TextSummary, Change/ChangeSet, 
                                SelectionModel, TextPoint, TextRange, WordClassifier, WordOperations,
                                LineEnding — the document model, all headless
   .cursor                      CursorColumns, MoveOperations, TypeOperations, LineOperations,
-                               MouseSelection — mirrors VS Code vs/editor/common/cursor/ file-for-file
+                               MouseSelection — VS Code's boundaries, but NOT file-for-file: the last
+                               two come from contrib/linesOperations/ and browser/controller/. See
+                               "Port the module boundaries too" for the full mapping and the two
+                               unimplemented gaps (atomic tab moves, column selection)
   .syntax                      Language, SyntaxToken, SyntaxTokenizer (SPI), KeywordTokenizer
   .wrap                        LineProjection, ProjectedLines, LineBreaksComputer (SPI),
                                MonospaceLineBreaks, ShapedLineBreaks, BreakOpportunities, WrapIndent —

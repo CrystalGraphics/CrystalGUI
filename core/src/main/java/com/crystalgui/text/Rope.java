@@ -331,9 +331,25 @@ public final class Rope implements CharSequence {
         return fromChildren(kept);
     }
 
-    /** One node from a child list, splitting into a new level when it overflows. */
+    /**
+     * One node from a child list, splitting into a new level when it overflows.
+     *
+     * <p><b>A single child is still wrapped, never returned bare.</b> Returning it would drop the rebuilt
+     * subtree by exactly one level, and {@link #concat}'s two unequal-height branches both read
+     * {@code merged.height != edge.height} as "the join grew a level" and cast {@code merged} to
+     * {@code Internal}. A join that <em>shrank</em> a level fails that cast instead — a {@code Leaf}
+     * cast to an {@code Internal}, thrown out of {@code slice} and so out of {@code Rope.line}.</p>
+     *
+     * <p>It was reachable from {@code new TextEditor(text)} for ordinary files. {@link #build} groups
+     * leaves eight at a time, so any level whose node count is {@code ≡ 1 (mod MAX_CHILDREN)} ends in a
+     * one-child {@code Internal} — which is every document of about 8.2 KB, 16.4 KB, and so on.
+     * {@code RopeSingleChildLevelTest} pins the sizes that used to throw.</p>
+     *
+     * <p>The wrap keeps {@code concat}'s postcondition — the result is never shorter than either input —
+     * which is what makes those casts safe by construction rather than by luck. It costs one node on a
+     * level that had exactly one child, and adds no depth.</p>
+     */
     private static Node fromChildren(List<Node> children) {
-        if (children.size() == 1) return children.get(0);
         if (children.size() <= MAX_CHILDREN) return new Internal(children);
         int half = children.size() / 2;
         return new Internal(List.of(
