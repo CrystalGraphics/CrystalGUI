@@ -58,11 +58,14 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+        // curve_instance_coverage, not stroke_coverage directly -- it is the one place stroke vs.
+        // filled-triangle is decided (lib/stroke.glsl), so ctx.triangle()'s instances render
+        // correctly through this material too, not just through the engine's own curve.shader.
         float t;
-        float alpha = stroke_coverage(i.posXy,
-                                      CG_CURVE_P0.xy, CG_CURVE_P1.xy, CG_CURVE_P2.xy,
-                                      CG_CURVE_WIDTHS, CG_CURVE_FEATHER,
-                                      int(CG_CURVE_FLAGS + 0.5), t);
+        float alpha = curve_instance_coverage(i.posXy,
+                                              CG_CURVE_P0.xy, CG_CURVE_P1.xy, CG_CURVE_P2.xy,
+                                              CG_CURVE_WIDTHS, CG_CURVE_FEATHER,
+                                              int(CG_CURVE_FLAGS + 0.5), t);
 
         vec4 color = mix(CG_CURVE_COLOR0, CG_CURVE_COLOR1, t);
         // The ONE line that differs from the engine's curve.shader, and the reason this material
