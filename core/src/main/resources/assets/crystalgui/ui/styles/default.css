@@ -1520,20 +1520,32 @@ texteditor .__fold__.__collapsed__ {
  *
  * A background as well as a colour, because it has to read as a CONTROL rather than as punctuation
  * someone typed. VS Code boxes it for the same reason. */
-/* THE FOLD MARKER LAYER. Mirrors the text viewport's box and clipping, but answers the mouse -- the
- * viewport is setHitTest(false) and that covers its subtree, so a clickable chip cannot live in it.
- *
- * z-index 1: above the text, below the gutter (6) and the bars (7), so a chip clips against them. */
-texteditor .__fold-marker-layer__ {
-    overflow: hidden;
-    z-index: 1;
-}
-
 texteditor .__fold-placeholder__ {
     color: #8A94A3;
     background-color: #2A303A;
-    padding-left: 4px;
-    padding-right: 4px;
+    /* Padding and corner radius are written by the widget, not declared here: they must scale with the
+     * editor's font size, and this stylesheet has no font-relative unit to say that in. A fixed pixel is
+     * half a line's height at 8px and invisible at 31px. See TextEditor.chipPadding.
+     *
+     * The widget also shifts the box LEFT by that padding, so the bracket still lands on the pixel the
+     * row would have drawn it at -- the box grows outwards, the glyphs do not move. */
+    /* flex-direction defaults to COLUMN in this engine, NOT row -- so justify-content is the VERTICAL
+     * axis here and align-items is the horizontal one. Getting these the wrong way round is the single
+     * easiest mistake to make in this stylesheet, and it silently centres on one axis only. */
+    justify-content: center;
+    align-items: center;
     white-space: nowrap;
     z-index: 1;
+    /* Declared HERE rather than inherited. cursor inherits, and the editor sets a text cursor over its
+     * whole surface -- so a chip that did not name its own would present an I-beam over a button. */
+    cursor: pointer;
 }
+
+/* Hover is what makes it read as a control rather than as punctuation. IntelliJ lightens the chip on
+ * hover and so does this; the pointer cursor alone is not enough, because it only appears once you are
+ * already on it and says nothing on the way there. */
+texteditor .__fold-placeholder__:hover {
+    color: #DCE1E8;
+    background-color: #3C4553;
+}
+

@@ -1017,6 +1017,11 @@ The things that are invisible from any single class and expensive to rediscover.
 | Exactly one tab in a `TabView` strip is tabbable, falling back to the first when nothing is selected | Zero tab stops — the whole tablist disappears from the keyboard |
 | `Property.set()` silently drops re-entrant sets from inside its own emit | A listener cannot fight the value it's being notified about |
 | A `.shader`'s `#include` reaches the **vertex** stage too — fragment-only lib code must self-guard with `#ifndef CG_VERTEX_STAGE` | NVIDIA compiles it and AMD refuses, so the UI is fine here and completely unlaunchable there |
+| **Folding is view state** — it never touches `UndoStack` | Ctrl+Z would unfold instead of undoing, which is the same boundary the document/view rule already draws for scroll and selection. VS Code and IntelliJ both put it here |
+| A collapsed region's **first row stays visible** — `hiddenRows()` starts at `startRow + 1` | That row carries the fold arrow and is the only handle left on the block. Hide it and a collapsed region is unreachable: the rows are gone and so is the way back |
+| Once folding exists, `ProjectedLines.modelAt` **cannot use `Arrays.binarySearch`** | A hidden row projects onto ZERO view lines, so adjacent prefix-sum entries are equal — and the JDK's search over duplicates may return either, landing on a row that is not on screen. VS Code's `PrefixSumComputer.getIndexOf` tests the half-open span `[start, stop)` instead, so a zero-width row fails both bounds and is stepped over |
+| Folding a block the caret is in must **move the caret to the block's header** | A caret on a hidden row has no view line, so it cannot be painted, scrolled to, or typed at — the editor looks focused and silently does nothing |
+| A pooled gutter arrow's row is read **per frame**, never captured in its listener | Arrows recycle as the view scrolls, and a listener may only be attached once. Capture the row and the arrow keeps toggling whatever row its slot was first used for — which keeps working for exactly as long as nobody scrolls |
 | A failed material compile latches (`hasCompileFailed`) and is cleared only by `markDirty()` | Without the latch every draw retries the compile — 3044 log lines a second; without the clear, hot-reload can never fix a broken shader |
 
 ---
@@ -1203,6 +1208,20 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
     .graph                     GraphView, GraphNode, NodePort, NodeWireLayer, GraphConnection,
                                GraphSelection, GraphCommands, PortType (SPI) + BasicPortType +
                                PortTypeRegistry, PortDirection
+
+com.crystalgui.text            Rope, TextBuffer, TextSummary, Change/ChangeSet, Selection,
+                               SelectionModel, TextPoint, TextRange, WordClassifier, WordOperations,
+                               LineEnding — the document model, all headless
+  .cursor                      CursorColumns, MoveOperations, TypeOperations, LineOperations,
+                               MouseSelection — mirrors VS Code vs/editor/common/cursor/ file-for-file
+  .syntax                      Language, SyntaxToken, SyntaxTokenizer (SPI), KeywordTokenizer
+  .wrap                        LineProjection, ProjectedLines, LineBreaksComputer (SPI),
+                               MonospaceLineBreaks, ShapedLineBreaks, BreakOpportunities, WrapIndent —
+                               soft wrap, and the model/view coordinate seam the whole editor rests on
+  .view                        IndentLevels, WhitespaceMarkers, RenderWhitespace
+  .fold                        FoldingRegions (+Region), FoldingModel, FoldingRangeProvider (SPI),
+                               IndentRangeProvider — folding. INDENT-based by default, which is Monaco's
+                               default too and deliberately not brackets; see the class javadoc for why
 
 com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, JsonOps, PlainOps,
                                StateMap, UIDescriptionCodec, ContentHash

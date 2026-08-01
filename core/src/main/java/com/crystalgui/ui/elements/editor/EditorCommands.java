@@ -177,6 +177,24 @@ public final class EditorCommands {
                 // Not undoable, and it must not be: wrapping is a view setting and the document is
                 // byte-identical either way. See the boundary note on UndoStack.
                 .run(on(editor -> editor.setSoftWrap(!editor.isSoftWrap()))));
+
+        // FOLDING. Not undoable either, and for the same reason: which blocks are closed is how you are
+        // looking at the file, not what the file says.
+        registry.register(Command.of(PREFIX + "fold", "Fold")
+                .run(on(TextEditor::fold)));
+        registry.register(Command.of(PREFIX + "unfold", "Unfold")
+                .run(on(TextEditor::unfold)));
+        registry.register(Command.of(PREFIX + "foldRecursively", "Fold Recursively")
+                .run(on(TextEditor::foldRecursively)));
+        registry.register(Command.of(PREFIX + "foldAll", "Fold All")
+                .run(on(TextEditor::foldAll)));
+        registry.register(Command.of(PREFIX + "unfoldAll", "Unfold All")
+                .run(on(TextEditor::unfoldAll)));
+        for (int level = 1; level <= 7; level++) {
+            final int foldLevel = level;
+            registry.register(Command.of(PREFIX + "foldLevel" + level, "Fold Level " + level)
+                    .run(on(editor -> editor.foldLevel(foldLevel))));
+        }
     }
 
     /**
@@ -217,6 +235,23 @@ public final class EditorCommands {
         keymap.bind("Mod+F3", PREFIX + "findWordUnderCaret");
 
         keymap.bind("Alt+Z", PREFIX + "toggleSoftWrap");
+
+        // VS Code's folding chords verbatim. Mod+Shift+bracket for the region at the caret, Mod+K as a
+        // prefix for the rest -- except that this keymap has no chord sequences, so the Mod+K family is
+        // spelled as the single stroke it resolves to. Mod+Shift+Digit is IntelliJ's fold-to-level, which
+        // VS Code spells Mod+K Mod+<digit>; the single-stroke form is the one that can be bound here.
+        keymap.bind("Mod+Shift+LBracket", PREFIX + "fold");
+        keymap.bind("Mod+Shift+RBracket", PREFIX + "unfold");
+        keymap.bind("Mod+Shift+Multiply", PREFIX + "foldRecursively");
+        // Both spellings of each, exactly as the zoom chords do it, and for the same reason: the numeric
+        // keypad is a different key code and IntelliJ's own collapse-all/expand-all ARE the numpad pair.
+        // One call rather than two, so the pair cannot drift apart when somebody edits the line they were
+        // looking at.
+        keymap.bindAll("Mod+Shift+Minus, Mod+Shift+Subtract", PREFIX + "foldAll");
+        keymap.bindAll("Mod+Shift+Equals, Mod+Shift+Add", PREFIX + "unfoldAll");
+        for (int level = 1; level <= 7; level++) {
+            keymap.bind("Mod+Shift+" + level, PREFIX + "foldLevel" + level);
+        }
 
         // VS Code's chords. Both spellings of each, because the numeric keypad is a different key code
         // and a laptop without one is the common case -- and one call rather than two, so the pair cannot

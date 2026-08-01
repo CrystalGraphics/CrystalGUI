@@ -37,6 +37,10 @@ import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.text.view.IndentLevels;
 import com.crystalgui.text.view.RenderWhitespace;
 import com.crystalgui.text.view.WhitespaceMarkers;
+import com.crystalgui.text.fold.FoldingModel;
+import com.crystalgui.text.fold.FoldingRangeProvider;
+import com.crystalgui.text.fold.FoldingRegions;
+import com.crystalgui.text.fold.IndentRangeProvider;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.text.wrap.ShapedLineBreaks;
 import com.crystalgui.text.wrap.WrapIndent;
@@ -106,6 +110,36 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String SHOWN_CLASS = "__shown__";
     public static final String LINE_NUMBER_CLASS = "__line-number__";
     public static final String CURRENT_LINE_CLASS = "__current-line__";
+    /** The clickable fold arrow in the gutter, on the first row of a foldable region. */
+    public static final String FOLD_CLASS = "__fold__";
+    /** The strip the arrows live in — the one part of the gutter region that answers the mouse. */
+    public static final String FOLD_COLUMN_CLASS = "__fold-column__";
+    /** Added to a fold arrow whose region is closed, so the sheet can point it sideways. */
+    public static final String FOLD_COLLAPSED_CLASS = "__collapsed__";
+    /** The marker drawn after a collapsed region's header, standing in for the rows it hides. */
+    public static final String FOLD_PLACEHOLDER_CLASS = "__fold-placeholder__";
+
+    /**
+     * The fold arrows, and why they are {@code -}/{@code +} rather than IntelliJ's {@code▾}/{@code▸}.
+     *
+     * <p><b>The bundled fonts cannot draw a triangle.</b> Measured, not assumed: {@code MinecraftRegular.otf}
+     * covers none of U+25BE, U+25B8, U+22EF or even U+2026, and a missing glyph here does not fall back to
+     * anything — it draws a blank advance. So a triangle arrow renders as an <em>invisible</em> control that
+     * is still laid out and still clickable, which is the worst possible failure: the feature is entirely
+     * present and looks entirely absent. {@code UIText} already carries the same scar for the ellipsis, and
+     * this is that note's second instance.</p>
+     *
+     * <p>{@code +}/{@code -} are ASCII, are guaranteed present, and are the fold affordance Eclipse and
+     * Visual Studio have always used, so they read correctly rather than merely rendering. Getting
+     * IntelliJ's exact chevron needs a triangle <em>drawable</em> — the engine has no glyph-free way to
+     * draw one today, and every other widget's mark ({@code Checkbox.__mark__} and friends) is a CSS-styled
+     * box for exactly this reason.</p>
+     */
+    private static final String FOLD_GLYPH_EXPANDED = "-";
+    private static final String FOLD_GLYPH_COLLAPSED = "+";
+
+    /** {@code "..."} for the same reason — U+22EF and U+2026 are both absent from the bundled fonts. */
+    private static final String FOLD_PLACEHOLDER_TEXT = "...";
 
     /** Rows kept realised beyond the viewport, so a scroll does not expose an unpainted band. */
     private static final int OVERSCAN = 3;
@@ -345,6 +379,63 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Spaces per tab stop. Separate from {@link #indentWidth}, exactly as VS Code separates the two. */
     private int tabSize = 4;
 
+    /**
+     * Which blocks are foldable and which are closed.
+     *
+     * <p><b>View state, not document state</b>, by the same boundary the engine draws for undo: it is how
+     * you are looking at the file, not what the file says. So it never reaches {@code UndoStack} and Ctrl+Z
+     * will not unfold — which is what VS Code and IntelliJ both do, and the same rule that keeps scroll
+     * position and selection out of the history.</p>
+     */
+    private final FoldingModel folding = new FoldingModel();
+
+    /**
+     * Where foldable regions come from. Indentation by default — see {@link IndentRangeProvider} for why
+     * that is Monaco's default too, and why brackets are not.
+     */
+    private FoldingRangeProvider foldingProvider = IndentRangeProvider.plain();
+
+    private boolean foldingEnabled = true;
+
+    /** Set by anything that could change the region set; drained once per frame by {@code refreshFolding}. */
+    private boolean foldingDirty = true;
+
+    /**
+     * The arrows' own container, sitting over the gutter's fold column.
+     *
+     * <p><b>Not a child of the gutter, and it cannot be one.</b> {@code gutter.setHitTest(false)} applies
+     * to the whole SUBTREE — the engine's spelling of {@code pointer-events: none} — so an arrow parented
+     * there is laid out, painted and permanently unclickable. That is exactly how the arrows shipped: the
+     * handles appeared and did nothing, and no test saw it because a test that dispatches to the element
+     * directly never asks whether a real pointer could have reached it.</p>
+     *
+     * <p>So the arrows get a container the gutter does not own: scroll-exempt like the gutter, drawn over
+     * the same strip, and hit-testable. It also means the fold column swallows clicks that would otherwise
+     * place a caret in the margin, which is what IntelliJ does with that strip anyway.</p>
+     */
+    private final UIElement foldColumn = new UIElement();
+
+    /** Pooled gutter arrows, one per foldable row on screen. */
+    private final List<UIElement> foldArrows = new ArrayList<>();
+
+    /**
+     * Which row each pooled arrow currently stands for.
+     *
+     * <p>The arrows are recycled, so the row an arrow means changes every time the view scrolls — but a
+     * listener may only be attached <b>once</b>, at creation, or every frame would add another one to the
+     * same element. So the listener captures its immutable <em>pool index</em> and reads the row from here,
+     * which the layout pass rewrites each frame. Capturing the row itself would freeze the arrow on
+     * whatever row it was first used for, and it would keep working for exactly as long as nobody
+     * scrolled.</p>
+     */
+    private final List<Integer> foldArrowRows = new ArrayList<>();
+
+    /** Pooled markers, one per collapsed region whose header is on screen. */
+    private final List<UIElement> foldPlaceholders = new ArrayList<>();
+
+    /** The row each pooled placeholder stands for — same recycling rule as {@code foldArrowRows}. */
+    private final List<Integer> foldPlaceholderRows = new ArrayList<>();
+
     /** One row's expanded display text and column maps, plus the measured x of each display index. */
     private record RowMetrics(CursorColumns.Line line, float[] widths) {
     }
@@ -375,6 +466,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         gutter.setHitTest(false);
         gutter.markAsInternal();
         gutter.setScrollExempt(true);
+        foldColumn.addClass(FOLD_COLUMN_CLASS);
+        foldColumn.setScrollExempt(true);
+        foldColumn.markAsInternal();
+        addInternalChild(foldColumn);
         addInternalChild(gutter);
 
         buffer.onChanged.connect(change -> {
@@ -404,6 +499,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // frame's style pass.
             forgetWidestLine();
             reprojectAfterEdit(change);
+            foldingDirty = true;
             rebindRealisedLines();
             // A document that shrank can leave a selection pointing past its end, and the caret then
             // indexes a row that is not there. Clamped HERE rather than at the keystroke that caused it,
@@ -1252,6 +1348,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     byName.computeIfAbsent(general, key -> new ArrayList<>()).add(range);
                 }
             }
+
+            // CLAMPED to what is actually painted. A collapsed header stops drawing its trailing bracket,
+            // so a token covering it would publish a range past the end of the string. Correct to do
+            // unconditionally -- a range beyond the text is never meaningful, folding or not.
+            int painted = textOf(entry.getValue()).getText().length();
+            for (List<TextRange> ranges : byName.values()) {
+                for (int i = ranges.size() - 1; i >= 0; i--) {
+                    TextRange range = ranges.get(i);
+                    int start = Math.min(range.start(), painted);
+                    int end = Math.min(range.end(), painted);
+                    // DROPPED, not clamped to empty. TextRange refuses a zero-width range outright, so
+                    // building one to filter it afterwards throws instead of filtering -- and the range
+                    // that collapses is the bracket-match on the very brace the chip took over, i.e. the
+                    // single most likely one to exist here.
+                    if (end <= start) ranges.remove(i);
+                    else if (start != range.start() || end != range.end()) ranges.set(i, TextRange.of(start, end));
+                }
+            }
+            byName.values().removeIf(List::isEmpty);
 
             HighlightRegistry highlights = textOf(entry.getValue()).highlights();
             for (String name : new ArrayList<>(highlights.names())) {
@@ -2749,6 +2864,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
             highlightsDirty = true;
         }
 
+        // AFTER reprojection, BEFORE the view line count is read. Folding changes how many view lines
+        // exist, so asking first would realise rows against a count that is about to move -- and a
+        // reprojection resets visibility whenever the row count changed, so the hidden rows have to be
+        // reapplied on the far side of it rather than the near side.
+        if (refreshFolding()) {
+            firstRealised = -1;
+            lastRealised = -1;
+            rebindRealisedLines();
+            highlightsDirty = true;
+            forgetWidestLine();
+        }
+
         int count = viewLineCount();
         int first = Math.max(0, (int) (getScrollTop() / height) - OVERSCAN);
         float viewport = viewportHeight();
@@ -2793,6 +2920,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         layOutIndentGuides(first, last);
         layOutWhitespace(first, last);
         layOutRulers();
+        layOutFoldPlaceholders(first, last);
         layOutZoomIndicator();
         layOutCurrentLine();
         layOutCaretAndSelection(first, last);
@@ -2991,6 +3119,454 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** Places the gutter box and one number per visible row. */
+    // ===================================================================================================
+    // Folding
+    // ===================================================================================================
+
+    /**
+     * Recomputes regions when something invalidated them, then pushes the hidden rows into the projection.
+     *
+     * <p>Runs every frame and is cheap when nothing moved: the recompute is gated on {@code foldingDirty},
+     * and {@link ProjectedLines#setHiddenAreas} reports whether it actually changed a row's visibility.</p>
+     *
+     * @return whether the set of visible rows changed, so the caller can drop what it has realised
+     */
+    private boolean refreshFolding() {
+        if (!foldingEnabled) return false;
+        if (foldingDirty) {
+            foldingDirty = false;
+            folding.update(buffer.document(), foldingProvider, tabSize);
+        }
+        return applyHiddenRows();
+    }
+
+    private boolean applyHiddenRows() {
+        List<FoldingModel.RowRange> hidden = folding.hiddenRows();
+        int[][] ranges = new int[hidden.size()][];
+        for (int i = 0; i < hidden.size(); i++) {
+            ranges[i] = new int[] { hidden.get(i).startRow(), hidden.get(i).endRow() };
+        }
+        return projections.setHiddenAreas(ranges);
+    }
+
+    /** The folding model, for tests and for anything wanting to drive folds directly. */
+    public FoldingModel foldingModel() {
+        return folding;
+    }
+
+    /** Swaps the region source — a syntax-aware provider layers over the indent one this way. */
+    public TextEditor setFoldingProvider(FoldingRangeProvider provider) {
+        this.foldingProvider = provider == null ? FoldingRangeProvider.none() : provider;
+        this.foldingDirty = true;
+        return this;
+    }
+
+    public TextEditor setFoldingEnabled(boolean enabled) {
+        if (this.foldingEnabled == enabled) return this;
+        this.foldingEnabled = enabled;
+        if (!enabled) {
+            folding.setCollapseStateForAll(false);
+            applyHiddenRows();
+        }
+        this.foldingDirty = true;
+        return this;
+    }
+
+    public boolean isFoldingEnabled() {
+        return foldingEnabled;
+    }
+
+    /**
+     * Ensures the regions are current before a command reads them.
+     *
+     * <p>A command can fire between an edit and the next frame, and the region set is only recomputed in
+     * {@code refreshFolding}. Without this a fold command right after typing would act on the regions of
+     * the document as it was, which is off by however many rows the edit added.</p>
+     */
+    private void ensureFoldingCurrent() {
+        if (foldingDirty) {
+            foldingDirty = false;
+            folding.update(buffer.document(), foldingProvider, tabSize);
+        }
+    }
+
+    /**
+     * Moves every caret out of a row that is about to be hidden, onto its region's header.
+     *
+     * <p>Not cosmetic: a caret on a hidden row has no view line, so it cannot be drawn, scrolled to, or
+     * typed at — the editor looks focused and does nothing. VS Code does the same, which is why folding a
+     * block you are inside leaves the caret on the block's first line.</p>
+     */
+    private void liftCaretsOutOfHiddenRows() {
+        for (FoldingModel.RowRange range : folding.hiddenRows()) {
+            int caretRow = buffer.document().offsetToPoint(selections.primary().head()).row();
+            if (!range.contains(caretRow)) continue;
+            setCaret(buffer.document().lineStartOffset(range.startRow() - 1));
+            return;
+        }
+    }
+
+    /**
+     * Finishes a fold change, keeping the viewport where it was.
+     *
+     * <p><b>The anchor is captured before the change, by the caller.</b> Folding removes rows above the
+     * viewport as readily as below it, and {@code scrollTop} is a pixel count — so collapsing everything
+     * while scrolled into a file silently pulls the whole document up past the top of the view, and
+     * fold-all near the end leaves the editor apparently empty. IntelliJ keeps the line you are on exactly
+     * where it is, which is the same guarantee zooming already makes here and the same
+     * {@code StableViewport} that makes it.</p>
+     */
+    private void afterFoldChange(StableViewport anchor) {
+        liftCaretsOutOfHiddenRows();
+        if (applyHiddenRows()) {
+            firstRealised = -1;
+            lastRealised = -1;
+            forgetWidestLine();
+        }
+        // AFTER the hidden rows are applied, or the anchor is resolved against the projection the fold
+        // just invalidated.
+        restoreStableViewport(anchor);
+        invalidateStyleMatch();
+    }
+
+    /** Folds or unfolds the innermost region at the caret, stepping outwards when already in that state. */
+    public void fold() {
+        StableViewport anchor = captureStableViewport();
+        ensureFoldingCurrent();
+        folding.setCollapseStateUp(true, caretRow());
+        afterFoldChange(anchor);
+    }
+
+    public void unfold() {
+        StableViewport anchor = captureStableViewport();
+        ensureFoldingCurrent();
+        folding.setCollapseStateUp(false, caretRow());
+        afterFoldChange(anchor);
+    }
+
+    /** Folds or unfolds the region at the caret and everything inside it. */
+    public void foldRecursively() {
+        StableViewport anchor = captureStableViewport();
+        ensureFoldingCurrent();
+        FoldingRegions.Region region = folding.getRegionAtLine(caretRow());
+        if (region != null && !region.isCollapsed()) folding.toggleCollapseState(Integer.MAX_VALUE, caretRow());
+        afterFoldChange(anchor);
+    }
+
+    public void foldAll() {
+        StableViewport anchor = captureStableViewport();
+        ensureFoldingCurrent();
+        folding.collapseAllKeepingDocumentVisible(buffer.lineCount());
+        afterFoldChange(anchor);
+    }
+
+    public void unfoldAll() {
+        StableViewport anchor = captureStableViewport();
+        ensureFoldingCurrent();
+        folding.setCollapseStateForAll(false);
+        afterFoldChange(anchor);
+    }
+
+    /** Folds every region at exactly {@code level}, leaving the block the caret is in open. */
+    public void foldLevel(int level) {
+        StableViewport anchor = captureStableViewport();
+        ensureFoldingCurrent();
+        folding.setCollapseStateAtLevel(level, true, caretRow());
+        afterFoldChange(anchor);
+    }
+
+    /** Toggles the region whose first row is {@code row} — what clicking a gutter arrow does. */
+    public void toggleFoldAt(int row) {
+        ensureFoldingCurrent();
+        FoldingRegions.Region region = folding.getRegionStartingAt(row);
+        if (region == null) return;
+        StableViewport anchor = captureStableViewport();
+        region.setCollapsed(!region.isCollapsed());
+        afterFoldChange(anchor);
+    }
+
+    private int caretRow() {
+        return buffer.document().offsetToPoint(selections.primary().head()).row();
+    }
+
+    private UIElement foldArrowAt(int index) {
+        while (foldArrows.size() <= index) {
+            final int slot = foldArrows.size();
+            UIElement arrow = new UIElement();
+            arrow.addClass(FOLD_CLASS);
+            arrow.markAsInternal();
+            // HIT-TESTABLE, unlike every other part of the gutter -- it is the one piece a user clicks.
+            // The glyph inside it is not, so the press lands on the arrow rather than on the character:
+            // the same trick every composite here uses, since click targeting takes the exact element hit
+            // and never walks up to a handler-bearing ancestor.
+            UIText glyph = new UIText(FOLD_GLYPH_EXPANDED);
+            glyph.setHitTest(false);
+            arrow.addChild(glyph);
+            arrow.onMouseDown.attachListener((el, event) -> {
+                int row = slot < foldArrowRows.size() ? foldArrowRows.get(slot) : -1;
+                if (row >= 0) toggleFoldAt(row);
+                event.stopPropagation();
+            }, false, false);
+            foldColumn.addInternalChild(arrow);
+            foldArrows.add(arrow);
+            foldArrowRows.add(-1);
+        }
+        return foldArrows.get(index);
+    }
+
+    private UIElement foldPlaceholderAt(int index) {
+        while (foldPlaceholders.size() <= index) {
+            final int slot = foldPlaceholders.size();
+            UIElement marker = new UIElement();
+            marker.addClass(FOLD_PLACEHOLDER_CLASS);
+            marker.markAsInternal();
+            // The chip itself takes the click; its text does not, so the press lands on the box rather
+            // than on a character inside it.
+            UIText glyph = new UIText(FOLD_PLACEHOLDER_TEXT);
+            glyph.setHitTest(false);
+            marker.addChild(glyph);
+            marker.onMouseDown.attachListener((el, event) -> {
+                int row = slot < foldPlaceholderRows.size() ? foldPlaceholderRows.get(slot) : -1;
+                if (row >= 0) toggleFoldAt(row);
+                event.stopPropagation();
+            }, false, false);
+            // A DIRECT child of the editor, deliberately not of a container spanning the text.
+            //
+            // A full-size hit-testable layer was the first design and it broke clicking entirely: it
+            // covered the whole text area, so every press that was not on a chip landed on the layer and
+            // the editor never saw it -- no caret, no selection, no focus, for as long as anything was
+            // folded. It could not be made transparent either, because setHitTest(false) takes the whole
+            // subtree with it and the chips inside would have gone dead again.
+            //
+            // Nothing was lost by dropping it. The layer existed to CLIP chips against the gutter and the
+            // scrollbars, and z-order already does that: the gutter and the bars both sit above the chips,
+            // and the editor clips its own subtree to its padding box.
+            marker.setScrollExempt(true);
+            addInternalChild(marker);
+            foldPlaceholders.add(marker);
+            foldPlaceholderRows.add(-1);
+        }
+        return foldPlaceholders.get(index);
+    }
+
+    /**
+     * Places a fold arrow on every visible row that starts a region.
+     *
+     * <p>The arrow lives in the gutter's <b>right</b> column — the clear strip between the numbers and the
+     * code, which {@code gutterFoldWidth} already reserves and which is where every editor puts it.</p>
+     */
+    private void layOutFoldArrows(int firstRow, int lastRow) {
+        if (!gutterVisible || !foldingEnabled) {
+            hide(foldColumn);
+            for (UIElement arrow : foldArrows) hide(arrow);
+            return;
+        }
+        final float columnLeft = getTaffyLayout().padding().left + gutterNumberWidth();
+        final float columnWidth = gutterFoldWidth();
+        final float columnHeight = getClientHeight();
+        StyleGroup.defaultPipeline(foldColumn.getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE)
+                        .left(columnLeft).top(0f).width(columnWidth).height(columnHeight));
+        float height = lineHeight();
+        int used = 0;
+        for (int viewLine = Math.max(0, firstRow); viewLine <= Math.min(lastRow, viewLineCount() - 1); viewLine++) {
+            ProjectedLines.ModelPosition model = modelAt(viewLine);
+            // The arrow belongs to the ROW, so a wrapped row carries it on its first view line only --
+            // the same rule the line number follows, and for the same reason.
+            if (model.viewLineInRow() != 0) continue;
+            FoldingRegions.Region region = folding.getRegionStartingAt(model.row());
+            if (region == null) continue;
+
+            int slot = used++;
+            UIElement arrow = foldArrowAt(slot);
+            foldArrowRows.set(slot, model.row());
+            if (region.isCollapsed()) arrow.addClass(FOLD_COLLAPSED_CLASS);
+            else arrow.removeClass(FOLD_COLLAPSED_CLASS);
+
+            UIText glyph = (UIText) arrow.getChildren().get(0);
+            glyph.setText(region.isCollapsed() ? FOLD_GLYPH_COLLAPSED : FOLD_GLYPH_EXPANDED);
+            StyleGroup.importantPipeline(glyph.getStyle().getGeneralGroup(),
+                    g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
+                            .fontFamily(getStyle().getGeneralGroup().fontFamily()));
+
+            // Relative to the COLUMN now, so left is 0 rather than the gutter offset.
+            final float top = textOriginY() + viewLine * height - getScrollTop();
+            StyleGroup.defaultPipeline(arrow.getStyle().getLayoutGroup(),
+                    l -> l.positionType(TaffyPosition.ABSOLUTE)
+                            .left(0f).top(top).width(columnWidth).height(height));
+        }
+        // A recycled arrow must also stop ANSWERING. hide() only zeroes the box, and a zero-sized element
+        // is still hit-testable at its origin -- so an arrow left pointing at a row it no longer shows
+        // would toggle that row on a stray click in the gutter's corner.
+        for (int i = used; i < foldArrows.size(); i++) {
+            hide(foldArrows.get(i));
+            foldArrowRows.set(i, -1);
+        }
+    }
+
+    /**
+     * Draws the "\u22ef" after the header of each collapsed region on screen.
+     *
+     * <p>The only thing distinguishing a collapsed block from a block with nothing in it. Placed after the
+     * row's text rather than replacing it, which is what makes {@code void f() { \u22ef }} readable at a
+     * glance and is how VS Code renders it.</p>
+     */
+    private void layOutFoldPlaceholders(int firstRow, int lastRow) {
+        if (!foldingEnabled || !folding.hasCollapsedRegions()) {
+            for (int i = 0; i < foldPlaceholders.size(); i++) {
+                hide(foldPlaceholders.get(i));
+                foldPlaceholderRows.set(i, -1);
+            }
+            return;
+        }
+        float height = lineHeight();
+        int used = 0;
+        for (int viewLine = Math.max(0, firstRow); viewLine <= Math.min(lastRow, viewLineCount() - 1); viewLine++) {
+            ProjectedLines.ModelPosition model = modelAt(viewLine);
+            FoldingRegions.Region region = folding.getRegionStartingAt(model.row());
+            if (region == null || !region.isCollapsed()) continue;
+            // The header's LAST view line, so a wrapped header puts the marker after its final fragment.
+            if (model.viewLineInRow() != projections.projectionOf(model.row()).viewLineCount() - 1) continue;
+
+            int slot = used++;
+            UIElement marker = foldPlaceholderAt(slot);
+            foldPlaceholderRows.set(slot, model.row());
+            UIText glyph = (UIText) marker.getChildren().get(0);
+
+            // The chip SWALLOWS the row's trailing opener, so it reads "{...}" rather than "...}" beside a
+            // brace the line still owns. That is IntelliJ's collapsed form: one control covering the whole
+            // construct, not a chip bolted onto the end of a line.
+            //
+            // The line's text is NOT altered to do it. Truncating what the row paints would desync it from
+            // what the row MEASURES -- every caret x, selection band and click on that row is resolved from
+            // the document's own text -- so the chip is placed over the opener instead and hides it behind
+            // its own background. Nothing downstream has to know.
+            String rowText = buffer.document().line(model.row());
+            int opener = trailingOpenerIndex(rowText);
+            String tail = placeholderTextFor(region);
+            glyph.setText(opener >= 0 ? rowText.charAt(opener) + tail : tail);
+            StyleGroup.importantPipeline(glyph.getStyle().getGeneralGroup(),
+                    g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
+                            .fontFamily(getStyle().getGeneralGroup().fontFamily()));
+
+            int endColumn = projections.projectionOf(model.row()).maxColumn(model.viewLineInRow());
+            // Back up over the opener and anything after it. Index-to-column is a constant shift on one
+            // view line (the carried wrap indent), so subtracting the character count is correct whether
+            // or not the row wrapped.
+            // From the DISPLAY index, not the raw one: a tab occupies one character and several columns,
+            // so subtracting a raw character count would place the chip short on any tab-indented row.
+            if (opener >= 0) {
+                int cut = rowMetrics(model.row()).line().displayIndexOf(opener);
+                int displayLength = rowMetrics(model.row()).line().display().length();
+                endColumn -= displayLength - cut;
+            }
+            final float pad = chipPadding();
+            final float box = chipHeight();
+
+            // Centred WITHIN the row rather than filling it. A chip as tall as the line makes its text
+            // look shrunken inside a slab, and the line's leading sits below the glyphs, so a full-height
+            // box is not centred on the text beside it either. Hugging the text is what IntelliJ draws.
+            final float top = textOriginY() + viewLine * height - getScrollTop()
+                    + Math.max(0f, (height - box) / 2f);
+
+            // NO left shift, and this reverses an earlier choice. The box begins exactly where the row
+            // stopped painting -- at the bracket -- so the space that preceded the bracket survives as a
+            // clear gap from the code. Shifting the box left by its own padding to keep the bracket on the
+            // pixel the row would have drawn it at ate that gap, and the chip ended up touching the ')'
+            // before it. IntelliJ insets the bracket inside the chip rather than aligning it to the
+            // character it replaced: the chip is one object, not a box drawn around a bracket.
+            final float left = textViewportLeft() + codeLeftPad() + xOfView(viewLine, endColumn)
+                    - getScrollLeft();
+            // widthAuto() is NOT redundant. hide() parks a recycled element at width 0, and a chip that
+            // only ever writes left/top/height keeps that zero when it comes back -- so a pooled slot that
+            // was once hidden renders its text overflowing a collapsed box, while a slot that never was
+            // looks perfect. Two identical folds, one right and one wrong, depending only on which slot
+            // each happened to land in.
+            StyleGroup.defaultPipeline(marker.getStyle().getLayoutGroup(),
+                    l -> l.positionType(TaffyPosition.ABSOLUTE)
+                            .left(left).top(top).height(box).widthAuto()
+                            .paddingHorizontal(pad));
+            StyleGroup.defaultPipeline(marker.getStyle().getGeneralGroup(),
+                    g -> g.borderRadius(pad * 0.6f));
+        }
+        for (int i = used; i < foldPlaceholders.size(); i++) {
+            hide(foldPlaceholders.get(i));
+            foldPlaceholderRows.set(i, -1);
+        }
+    }
+
+    /**
+     * What a collapsed region's chip reads.
+     *
+     * <p>{@code "...}"} rather than plain {@code "..."} whenever the region's last row is the one that
+     * closes it — so the header {@code void f() {} plus the chip renders as {@code void f() {...}}, which
+     * is IntelliJ's collapsed form and the whole point of swallowing the closing row. The closer is taken
+     * from the DOCUMENT rather than assumed, so {@code });} comes back intact instead of being guessed at
+     * as a bare brace.</p>
+     */
+    /**
+     * Index of the bracket a row ends on, ignoring trailing whitespace, or {@code -1}.
+     *
+     * <p>Only a bracket counts. A row ending in a word — {@code do}, {@code then}, a Python colon — has no
+     * character the chip can absorb without the collapsed line reading as if it were missing something.</p>
+     */
+    private static int trailingOpenerIndex(String rowText) {
+        int i = rowText.length() - 1;
+        while (i >= 0 && Character.isWhitespace(rowText.charAt(i))) i--;
+        if (i < 0) return -1;
+        char c = rowText.charAt(i);
+        return (c == '{' || c == '(' || c == '[') ? i : -1;
+    }
+
+    /**
+     * The chip's horizontal breathing room, <b>as a fraction of the font size</b>.
+     *
+     * <p>Computed rather than declared, and a deliberate exception to the rule that geometry lives in
+     * {@code default.css}. The value has to track the editor's own zoom: a fixed {@code 5px} is half a
+     * line's height at 8px and a rounding error at 31px, so the chip reads as fat at one zoom and cramped
+     * at the other <em>while the glyphs inside it are provably the same size</em> — measured, not assumed.
+     * This stylesheet has no font-relative unit to express a fraction of a character with, and a pixel in
+     * the sheet encodes an answer that is only correct at one font size.</p>
+     *
+     * <p>What is authored here is the RATIO, which is the real design decision. The sheet keeps the
+     * colours; the corner radius follows the same scale so the chip's whole shape is proportional.</p>
+     */
+    private float chipPadding() {
+        return Math.max(1f, getFontSize() * 0.28f);
+    }
+
+    /**
+     * The chip's box height — the text plus a little, never the whole line.
+     *
+     * <p>Proportional for the same reason {@link #chipPadding} is, and clamped to the line so a theme with
+     * unusually tight leading cannot make the chip overflow the row it belongs to.</p>
+     */
+    private float chipHeight() {
+        // Two bounds, and both are load-bearing. The font term hugs the TEXT when the theme's leading is
+        // generous; the line term keeps the chip strictly INSIDE its row when the leading is tight, where
+        // a font-only rule clamps to exactly the line height and the box stops looking like a chip at all.
+        return Math.min(lineHeight() * 0.88f, Math.max(1f, getFontSize() * 1.35f));
+    }
+
+    /** A length the chip's own stylesheet rule declares — the same read {@code gutterMetric} does. */
+    private float chipMetric(UIElement marker, StyleProperty<LengthPercentageAuto> property) {
+        LengthPercentageAuto value = marker.getStyle().getLayoutGroup().getValueSave(property);
+        if (value == null || value.getType() != LengthPercentageAuto.Type.LENGTH) return 0f;
+        return Math.max(0f, value.getValue());
+    }
+
+    private String placeholderTextFor(FoldingRegions.Region region) {
+        int endRow = region.endLineNumber();
+        if (endRow <= region.startLineNumber() || endRow >= buffer.lineCount()) {
+            return FOLD_PLACEHOLDER_TEXT;
+        }
+        String closing = buffer.document().line(endRow).trim();
+        if (closing.isEmpty()) return FOLD_PLACEHOLDER_TEXT;
+        char first = closing.charAt(0);
+        if (first != '}' && first != ')' && first != ']') return FOLD_PLACEHOLDER_TEXT;
+        return FOLD_PLACEHOLDER_TEXT + closing;
+    }
+
     private void layOutGutter(int firstRow, int lastRow) {
         if (!gutterVisible) {
             hide(gutter);
@@ -3052,6 +3628,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
                             .left(numberLeft).top(top).width(numberWidth).height(height));
         }
         for (int i = used; i < lineNumbers.size(); i++) hide(lineNumbers.get(i));
+        layOutFoldArrows(firstRow, lastRow);
         insetHorizontalBarPastGutter();
     }
 
@@ -3474,10 +4051,36 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * <p>Slicing the expanded string rather than expanding the slice is what keeps tab stops right after a
      * wrap, for the same reason {@link #xOfView} rebases rather than remeasures.</p>
      */
+    /**
+     * The display column a collapsed header stops painting at, or {@code -1}.
+     *
+     * <p>A row that starts a collapsed region and ends in a bracket hands that bracket to the chip, which
+     * renders {@code {...}} as one control. <b>The row must then stop drawing it.</b> Leaving it and covering
+     * it with the chip's background was the first attempt and it showed: rounded corners let the brace's
+     * corners through, and the chip's own left padding put its brace a few pixels right of the real one, so
+     * the two disagreed more the further you zoomed in.</p>
+     *
+     * <p>Cutting a SUFFIX is what makes this safe. Every x in the row is measured from a prefix, so removing
+     * trailing characters moves nothing that is still drawn — carets, selection bands and click targeting on
+     * that row are all unaffected. A caret at the row's end lands where the brace was, which is exactly where
+     * the chip now begins.</p>
+     */
+    private int collapsedHeaderCut(int row) {
+        if (!foldingEnabled) return -1;
+        FoldingRegions.Region region = folding.getRegionStartingAt(row);
+        if (region == null || !region.isCollapsed()) return -1;
+        int opener = trailingOpenerIndex(buffer.document().line(row));
+        return opener < 0 ? -1 : rowMetrics(row).line().displayIndexOf(opener);
+    }
+
     private String viewLineDisplayText(int viewLine) {
         ProjectedLines.ModelPosition model = modelAt(viewLine);
         LineProjection projection = projectionAt(viewLine);
-        if (projection.isUnwrapped()) return rowMetrics(model.row()).line().display();
+        if (projection.isUnwrapped()) {
+            String display = rowMetrics(model.row()).line().display();
+            int cut = collapsedHeaderCut(model.row());
+            return cut >= 0 && cut <= display.length() ? display.substring(0, cut) : display;
+        }
 
         CursorColumns.Line line = rowMetrics(model.row()).line();
         String display = line.display();
@@ -3485,6 +4088,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int to = line.displayIndexOf(projection.viewLineEnd(model.viewLineInRow()));
         from = Math.max(0, Math.min(from, display.length()));
         to = Math.max(from, Math.min(to, display.length()));
+        // The cut lands on the row's LAST view line, which is the only one that can carry the opener.
+        int cut = collapsedHeaderCut(model.row());
+        if (cut >= from && cut < to) to = cut;
         return display.substring(from, to);
     }
 
