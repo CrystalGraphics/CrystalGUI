@@ -280,6 +280,38 @@ The assembly line's guard rails. `NodeControlKitTest` already exists and general
 
 ---
 
+## Blocked on `CgShapeRenderer` — a CrystalGraphics gap
+
+**Status 2026-08-01: the user is building this.** Note it here so nothing below is mistaken for an
+oversight.
+
+Three controls cannot be finished until CrystalGraphics can draw a filled primitive:
+
+| Needs | For | Today |
+|---|---|---|
+| Triangle / chevron `▼ ▶` | the foldout arrow; a dropdown's popup indicator | the letter `v`, CSS-rotated |
+| Checkmark `✓` | a checked `BooleanControl` | a solid filled square |
+| Arrow head `→` | wires, port direction, future breadcrumbs | absent |
+
+**Why a glyph is not a substitute, having tried it.** The bundled `Minecraft.otf` / `MinecraftRegular.otf`
+have no geometric shapes at all — no `▼`, no `✓`, not even `…` (which is why `UIText` carries an explicit
+`...` fallback). So the only characters available are letters, and a letter used as an arrow reads as a
+letter: at 10px, a rotated `v` is legible as a `v`. Nor can a `CgUiQuad` be coaxed into a triangle — a
+drawable paints one rect, and the SDF path (`CgUiRoundedRect`) only rounds corners.
+
+**The dropdown chevron is the sharpest case.** Without it, a dropdown and a text field differ only by
+their face colour, so `Space [World]` reads as an oddly-tinted text input. It is currently the single
+largest legibility gap against the reference.
+
+Scope, as requested: a general `CgShapeRenderer` for UI primitives — triangles, arrow heads, chevrons,
+checkmarks — in **CrystalGraphics**, since CrystalGUI may not write raw GL and this is a backend
+capability. `Cg` prefix per the project's naming rule.
+
+**When it lands:** replace the `v` in `ConfiguratorGroup` and `GraphNode`'s collapse toggle, add a
+chevron to `Dropdown`, and swap `BooleanControl`'s filled square for a real check.
+
+---
+
 ## Work order
 
 Sequenced so each step is testable and nothing is built twice.

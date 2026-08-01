@@ -1502,13 +1502,13 @@ Toolbar, status bar, breadcrumbs, command palette. All composition over finished
 The grand goal's actual substrate. Blocked on 6.1 for its container, and on 6.2.1 for its ability to draw
 anything at all.
 
-### 6.2.1 `CgCurveRenderer` · `DONE` (2026-07-31) · **the one true engine gap**
+### 6.2.1 `CgVectorRenderer` · `DONE` (2026-07-31) · **the one true engine gap**
 
-> **Shipped, and wired through to CrystalGUI.** `CgCurveRenderer` + `CgCurveSplitter` in `gl/render/`,
+> **Shipped, and wired through to CrystalGUI.** `CgVectorRenderer` + `CgCurveSplitter` in `gl/render/`,
 > `CgBindingPoints.CURVE_RENDERER`, the `curve` `#pragma cg_use` token, `CG_CURVE_*` in `cg_env.glsl`,
 > `sdf_bezier`/`sdf_segment` in `sdf.glsl`, the shared `lib/stroke.glsl`, shipped
 > `crystalgraphics:shaders/curve.shader` **and** `crystalgui:shaders/gui_curve.shader`,
-> `CgUiRenderer.curve()` + `CgUiPaintContext.curve()`, 11 GL-free tests in `CgCurveRendererSplitTest`,
+> `CgUiRenderer.curve()` + `CgUiPaintContext.curve()`, 11 GL-free tests in `CgVectorRendererSplitTest`,
 > a `curve-renderer-test` harness scene and a 15-row scrolling `curve` gallery page. Both suites green.
 >
 > Three things landed on the CrystalGUI side that the backend plan did not anticipate:
@@ -1599,7 +1599,7 @@ anything at all.
 >   - **Three cap bugs in a row, each surviving the previous fix, all found by eye and none by a
 >     test.** Worth remembering when 6.2.3 draws its first port connector: an SDF that is subtly wrong
 >     renders something confident and plausible, and the harness is the only thing that disagrees.
-> - **Pure maths on the renderer class is unreachable without a GL context.** `CgCurveRenderer` holds
+> - **Pure maths on the renderer class is unreachable without a GL context.** `CgVectorRenderer` holds
 >   a `static final CgShaderBuffer`, so *calling a static method on it at all* triggers class-init and
 >   throws before `CgRenderPipeline.init()`. The cubic splitting therefore lives in its own
 >   `CgCurveSplitter` — the same hazard `CgEngineBufferRegistry`'s method-reference seeding exists to
@@ -1642,7 +1642,7 @@ orchestration. Designed to mirror `CgQuadRenderer`'s API exactly, and instanced.
 - A **cubic** splits into 2–4 quadratics on the CPU, exactly as font rasterizers do.
 - **Arcs, polylines, rounded elbows** — sequences of quadratics.
 
-One primitive genuinely covers everything, which is why the name is `CgCurveRenderer` and not
+One primitive genuinely covers everything, which is why the name is `CgVectorRenderer` and not
 `CgLineRenderer`: `curve.line(...)` is a natural convenience, whereas `line.curve(...)` reads as a
 contradiction.
 
@@ -1674,7 +1674,7 @@ arbitrary `pose` — same unit-quad mesh, same `origin`/`right`/`up` trick, deri
 #### API
 
 ```java
-CgCurveRenderer r = CgCurveRenderer.create();
+CgVectorRenderer r = CgVectorRenderer.create();
 r.useMaterial(material);            // same contract: rebind every frame, auto-flush on switch
 r.begin();
 r.curve().line(x0, y0, x1, y1).width(2f).color(argb).submit();
@@ -1824,7 +1824,7 @@ the picture. What is missing is the widget, the input gestures, and the culling.
 >   at exactly the two corners a user looks at first.
 >
 > **The palette seam works exactly as designed**, which is the part worth reusing: `NodePort.typeColor()`
-> reads the dot's computed `border-color` back out of the cascade, so `CgCurveRenderer` gets its ARGB int
+> reads the dot's computed `border-color` back out of the cascade, so `CgVectorRenderer` gets its ARGB int
 > and the colours still live in a stylesheet. Adding a type is a `PortType` and a CSS rule, with no Java
 > colour anywhere — and a `float → vec3` promotion draws as a light-blue-to-yellow gradient for free,
 > because the instance record already carried two colours.
@@ -2541,7 +2541,7 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
 
 6.1.10 file SPI ──► 6.1.11 docking ──► 6.1.12 chrome
 
-6.2.1 CgCurveRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──┬─► 6.2.4 editing ──► 6.2.5 model
+6.2.1 CgVectorRenderer ──► 6.2.2 canvas ──► 6.2.3 nodes/ports ──┬─► 6.2.4 editing ──► 6.2.5 model
       (done)              (done)             (done)         (done)      ▲
                                                                ├─► 6.2.6 node library (done)
                                                                └─► 6.2.7 previews (slot only;
@@ -2711,7 +2711,7 @@ item that can run in parallel with 6.1's remaining work.
   - **The bare left-drag was left alone on purpose**, reserved for 6.2.4's marquee rather than spent on
     a second way to pan.
 
-- **2026-07-31** — **6.2.1 `CgCurveRenderer` done, pulled forward and built in parallel with 6.1.2.**
+- **2026-07-31** — **6.2.1 `CgVectorRenderer` done, pulled forward and built in parallel with 6.1.2.**
   Entirely inside CrystalGraphics, so it shared no file with the 6.1 work except this one.
   - **The design survived contact intact** — quadratic-as-primitive, the instance schema, and all four
     supporting pieces landed as sketched. What the sketch missed were consequences, not choices.
@@ -2725,7 +2725,7 @@ item that can run in parallel with 6.1's remaining work.
     emits into both stages. Verified by reading the emitter rather than by running a driver.
   - **Pure maths on a class holding a static GPU buffer is unreachable headlessly.** Ten unit tests
     failed identically with `ExceptionInInitializerError` because calling *any* static method on
-    `CgCurveRenderer` initializes its `CgShaderBuffer`. Split into `CgCurveSplitter`. This is the same
+    `CgVectorRenderer` initializes its `CgShaderBuffer`. Split into `CgCurveSplitter`. This is the same
     hazard `CgEngineBufferRegistry`'s method-reference seeding exists to avoid, arrived at from the
     opposite direction — worth expecting the next time a renderer grows a helper.
   - **Dash was cut rather than reserved.** It needs arc length, nothing consumes it, and a field that
@@ -2778,7 +2778,7 @@ item that can run in parallel with 6.1's remaining work.
   - **The one good surprise**: CrystalGraphics already shapes style-split runs and already carries
     glyph→character cluster mapping, documented as being for cursor/selection. If that is drivable from
     CrystalGUI, the two hardest parts of a syntax-highlighted editor with a caret are already built.
-  - **`CgCurveRenderer` designed in full.** The load-bearing choice is making the primitive a *quadratic*
+  - **`CgVectorRenderer` designed in full.** The load-bearing choice is making the primitive a *quadratic*
     Bézier: it has an exact analytic SDF, whereas a cubic's distance is a quintic with no closed form. Since
     a line is a quadratic with a midpoint control and a cubic splits into 2–4 quadratics on the CPU, one
     primitive covers lines, curves, arcs and polylines exactly — which is what makes the API elegant rather

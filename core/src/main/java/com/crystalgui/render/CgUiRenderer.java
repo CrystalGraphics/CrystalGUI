@@ -1,7 +1,7 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.api.material.CgMaterial;
-import com.crystalgraphics.gl.render.CgCurveRenderer;
+import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
 
 /**
@@ -31,23 +31,23 @@ import com.crystalgraphics.gl.render.CgQuadRenderer;
 public final class CgUiRenderer {
 
     private final CgQuadRenderer renderer;
-    private final CgCurveRenderer curveRenderer;
+    private final CgVectorRenderer vectorRenderer;
     private final CgUiPaintContext ctx;
 
     CgUiRenderer(CgUiPaintContext ctx) {
         this.renderer = CgQuadRenderer.create();
-        this.curveRenderer = CgCurveRenderer.create();
+        this.vectorRenderer = CgVectorRenderer.create();
         this.ctx = ctx;
     }
 
     void begin() {
         renderer.begin();
-        curveRenderer.begin();
+        vectorRenderer.begin();
     }
 
     void end() {
         renderer.end();
-        curveRenderer.end();
+        vectorRenderer.end();
     }
 
     /**
@@ -60,7 +60,7 @@ public final class CgUiRenderer {
      */
     public void flush() {
         renderer.flush();
-        curveRenderer.flush();
+        vectorRenderer.flush();
     }
 
     /**
@@ -73,7 +73,7 @@ public final class CgUiRenderer {
 
     /** Flushes only the curve path, for the same reason in the other direction. */
     void flushCurves() {
-        curveRenderer.flush();
+        vectorRenderer.flush();
     }
 
     /**
@@ -91,13 +91,13 @@ public final class CgUiRenderer {
     /**
      * The curve-path equivalent of {@link #useMaterial(CgMaterial)}.
      *
-     * <p>Separate because {@link CgCurveRenderer} has its own instance buffer and its own
+     * <p>Separate because {@link CgVectorRenderer} has its own instance buffer and its own
      * bind/unbind bookkeeping — a curve material and a quad material are never interchangeable, and
      * a single {@code useMaterial} taking both would silently let a caller submit quads against
      * {@code gui_curve.shader}, which declares no {@code QUAD_DATA} and would draw nothing.</p>
      */
     public void useCurveMaterial(CgMaterial material) {
-        curveRenderer.useMaterial(material);
+        vectorRenderer.useMaterial(material);
     }
 
     /**
@@ -140,11 +140,11 @@ public final class CgUiRenderer {
      * Starts a Bézier stroke, <b>with this context's pose already applied</b> — the curve-path twin
      * of {@link #quad()}, and the single place the {@code PoseStack} is bound to a curve.
      *
-     * <p>Same reasoning throughout: {@code CgCurveRenderer.curve()} resets its scratch instance
+     * <p>Same reasoning throughout: {@code CgVectorRenderer.curve()} resets its scratch instance
      * (clearing {@code pose} back to {@code null}), so the pose is re-applied on every call rather
      * than being sticky, and callers keep passing plain logical-space coordinates.</p>
      *
-     * <p><b>Stroke widths follow the pose's scale.</b> {@code CgCurveRenderer.Curve#submit} bakes the
+     * <p><b>Stroke widths follow the pose's scale.</b> {@code CgVectorRenderer.Curve#submit} bakes the
      * pose into the control points and scales {@code width}/{@code feather} by its uniform scale, so
      * a width passed here is in the same logical units as the coordinates — a 2px stroke stays 2
      * logical px at any {@code uiScale}, exactly as a 2px border does. That is the behaviour a caller
@@ -156,15 +156,15 @@ public final class CgUiRenderer {
      *
      * <p>CPU-side only — {@code submit()} queues, {@link #flush()} draws.</p>
      */
-    public CgCurveRenderer.Curve curve() {
+    public CgVectorRenderer.Curve curve() {
         if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit curves outside beginFrame()/endFrame()");
 
-        return curveRenderer.curve().pose(ctx.getPoseStack().last().pose());
+        return vectorRenderer.curve().pose(ctx.getPoseStack().last().pose());
     }
 
     /**
      * Starts a filled triangle, <b>with this context's pose already applied</b> — the fill-mode
-     * twin of {@link #curve()}. Shares the same {@code CgCurveRenderer} and the same curve material,
+     * twin of {@link #curve()}. Shares the same {@code CgVectorRenderer} and the same curve material,
      * so submitting a triangle does <em>not</em> switch material paths any differently than
      * submitting a curve does — see {@code CgUiPaintContext.beginCurvePath()}.
      *
@@ -172,10 +172,10 @@ public final class CgUiRenderer {
      * feather scale with the pose exactly as a stroke width would, since both are distances in the
      * same space as the points.</p>
      */
-    public CgCurveRenderer.Triangle triangle() {
+    public CgVectorRenderer.Triangle triangle() {
         if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit triangles outside beginFrame()/endFrame()");
 
-        return curveRenderer.triangle().pose(ctx.getPoseStack().last().pose());
+        return vectorRenderer.triangle().pose(ctx.getPoseStack().last().pose());
     }
 
     /**
@@ -187,6 +187,6 @@ public final class CgUiRenderer {
      */
     void delete() {
         renderer.delete();
-        curveRenderer.delete();
+        vectorRenderer.delete();
     }
 }

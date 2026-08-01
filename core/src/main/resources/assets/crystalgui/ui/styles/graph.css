@@ -12,7 +12,7 @@
  * float feeding a vec3 slot without reading a single label. The box is just a box; the colour coding is
  * the feature.
  *
- * HOW A WIRE GETS ITS COLOUR FROM HERE. `CgCurveRenderer` needs an ARGB int, so something has to hand
+ * HOW A WIRE GETS ITS COLOUR FROM HERE. `CgVectorRenderer` needs an ARGB int, so something has to hand
  * it a number. `NodePort.typeColor()` reads back the computed `border-color` of `.__dot__` — so the
  * number's source is still this stylesheet, and adding a type is a rule here plus a `PortType`
  * registration, with no Java colour anywhere. `border-color` rather than `background-color` because an
