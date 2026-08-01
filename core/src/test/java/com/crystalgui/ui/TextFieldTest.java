@@ -818,6 +818,55 @@ public class TextFieldTest {
         assertEquals(-1.25d, field.getNumber(0), 0.0001);
     }
 
+    // ── maxLength ───────────────────────────────────────────────────────────
+
+    @Test
+    public void typingStopsAtMaxLength() {
+        field.setMaxLength(3);
+        type("12345");
+        assertEquals("123", field.getText());
+    }
+
+    /** A paste is truncated to what fits, never refused whole — the behaviour every browser has. */
+    @Test
+    public void insertTruncatesRatherThanRejecting() {
+        field.setMaxLength(4);
+        field.insert("ab");
+        field.insert("cdef");
+        assertEquals("abcd", field.getText());
+    }
+
+    /**
+     * Room is what SURVIVES the edit, not the current length. Measuring against the latter wedges a
+     * full field forever: select-all-and-retype would see zero room and refuse its own replacement.
+     */
+    @Test
+    public void replacingASelectionMayInsertAsMuchAsItRemoves() {
+        field.setMaxLength(3);
+        type("123");
+        field.selectAll();
+        field.insert("789");
+        assertEquals("789", field.getText());
+    }
+
+    /**
+     * {@code setText} is exempt, as the web's {@code maxlength} is for assignment to {@code .value}.
+     * A widget formatting its own field has to be able to put back what it computed.
+     */
+    @Test
+    public void setTextIgnoresMaxLength() {
+        field.setMaxLength(3);
+        field.setText("0.690");
+        assertEquals("0.690", field.getText());
+    }
+
+    @Test
+    public void negativeMaxLengthIsUnlimited() {
+        field.setMaxLength(-1);
+        type("0.6905");
+        assertEquals("0.6905", field.getText());
+    }
+
     // ── Configuration must stay side-effect free ────────────────────────────
 
     /** Reconfiguring a field is not an edit. This is what pulled the commit out of revalidate(). */
