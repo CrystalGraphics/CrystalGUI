@@ -4156,38 +4156,155 @@ public class TextEditorTest extends UiTestBase {
         assertEquals(open, linesOf().size());
     }
 
-    /**
-     * <b>Fold-all keeps the line you are on where it is.</b>
-     *
-     * <p>Folding removes rows above the viewport as readily as below it, and {@code scrollTop} is a pixel
-     * count — so collapsing everything while scrolled into a file pulls the whole document up past the top
-     * of the view. Fold-all near the end left the editor apparently EMPTY, which reads as the feature
-     * having deleted the file rather than as a scroll position needing correction.</p>
-     *
-     * <p>Same guarantee zooming already makes, and the same {@code StableViewport} that makes it.</p>
-     */
-    @Test
-    public void foldAllKeepsTheViewportWhereItWas() {
+    /** A document of {@code n} four-row blocks, each foldable. */
+    private void buildBlocks(int n) {
         StringBuilder document = new StringBuilder();
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < n; i++) {
             document.append("void f").append(i).append("() {").append(NL)
                     .append("    a();").append(NL).append("    b();").append(NL).append("}").append(NL);
         }
         build(document.toString());
         showEditor();
+    }
 
-        // Scroll well into the file, then note which row sits at the top of the view.
-        editor.setScrollImmediate(0f, 120f * editor.lineHeight());
+    /** Screen y of the caret, which is what a fold must not move. */
+    private float caretScreenY() {
+        UIElement caret = childWithClass(TextEditor.CARET_CLASS);
+        assertNotNull("the caret is on screen", caret);
+        return caret.getRuntimeCache().getY();
+    }
+
+    /**
+     * <b>Folding keeps the line you are on exactly where it is.</b>
+     *
+     * <p><b>The caret, not the top of the viewport</b>, and the distinction is the whole bug. The two only
+     * differ when rows change ABOVE the caret — which is precisely what folding does. Anchoring the top row
+     * holds the first visible line still and lets everything below slide up to meet it, so collapsing the
+     * blocks above your cursor walks your line up the screen while the test that watched the top row stayed
+     * green. IntelliJ keeps the line under the cursor pinned and lets the top of the viewport move
+     * instead.</p>
+     *
+     * <p>These tests replace an earlier set that asserted the top row was unchanged. They were not wrong
+     * about the code — they were wrong about the requirement, and they are rewritten rather than deleted so
+     * the reversal is on the record.</p>
+     */
+    @Test
+    public void foldingAboveTheCaretKeepsTheCaretLineStill() {
+        buildBlocks(60);
+        editor.setCaret(editor.getText().indexOf("void f30()"));
+        editor.setScrollImmediate(0f, 100f * editor.lineHeight());
         showEditor();
-        int topRowBefore = editor.rowAtTopOfViewport();
-        assertTrue("we are genuinely scrolled in", topRowBefore > 20);
+        float before = caretScreenY();
+
+        editor.toggleFoldAt(0);
+        showEditor();
+        showEditor();
+
+        assertEquals("the caret's line did not move", before, caretScreenY(), 1f);
+    }
+
+    /** And unfolding above it, the mirror case. */
+    @Test
+    public void unfoldingAboveTheCaretKeepsTheCaretLineStill() {
+        buildBlocks(60);
+        editor.toggleFoldAt(0);
+        showEditor();
+        editor.setCaret(editor.getText().indexOf("void f30()"));
+        editor.setScrollImmediate(0f, 100f * editor.lineHeight());
+        showEditor();
+        float before = caretScreenY();
+
+        editor.toggleFoldAt(0);
+        showEditor();
+        showEditor();
+
+        assertEquals("the caret's line did not move", before, caretScreenY(), 1f);
+    }
+
+    /** Checked a few frames on, so a deferred scroll would still be caught. */
+    @Test
+    public void theCaretLineStaysStillOnLaterFramesToo() {
+        buildBlocks(60);
+        editor.setCaret(editor.getText().indexOf("void f30()"));
+        editor.setScrollImmediate(0f, 100f * editor.lineHeight());
+        showEditor();
+        float before = caretScreenY();
+
+        editor.toggleFoldAt(0);
+        showEditor();
+        showEditor();
+        showEditor();
+
+        assertEquals("still unchanged three frames on", before, caretScreenY(), 1f);
+    }
+
+    /**
+     * <b>Fold-all keeps the line you are on where it is.</b>
+     *
+     * <p>The reported case, and the one the top-row anchor could never satisfy: collapsing every block
+     * above the caret removes most of the rows between it and the top of the file, so holding the top row
+     * still necessarily drags the caret up. Reproduced with the caret two thirds of the way down.</p>
+     */
+    @Test
+    public void foldAllKeepsTheCaretLineStill() {
+        buildBlocks(60);
+        editor.setCaret(editor.getText().indexOf("void f40()"));
+        editor.setScrollImmediate(0f, 140f * editor.lineHeight());
+        showEditor();
+        float before = caretScreenY();
 
         editor.foldAll();
         showEditor();
+        showEditor();
 
         assertTrue("the editor must not go blank", linesOf().size() > 0);
-        assertEquals("the row at the top of the view is unchanged",
-                topRowBefore, editor.rowAtTopOfViewport());
+        assertEquals("the caret's line did not move", before, caretScreenY(), 1f);
+    }
+
+    /** With soft wrap on, where a row occupies several view lines. */
+    @Test
+    public void theCaretLineStaysStillWithSoftWrap() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 40; i++) {
+            document.append("void f").append(i).append("() {").append(NL)
+                    .append("    ").append("x".repeat(200)).append(";").append(NL)
+                    .append("    b();").append(NL).append("}").append(NL);
+        }
+        build(document.toString());
+        editor.setSoftWrap(true);
+        showEditor();
+        showEditor();
+
+        editor.setCaret(editor.getText().indexOf("void f20()"));
+        editor.setScrollImmediate(0f, 60f * editor.lineHeight());
+        showEditor();
+        float before = caretScreenY();
+
+        editor.toggleFoldAt(0);
+        showEditor();
+        showEditor();
+
+        assertEquals("the caret's line did not move", before, caretScreenY(), 1f);
+    }
+
+    /** At a large font size, which is how it was reported. */
+    @Test
+    public void theCaretLineStaysStillZoomedIn() {
+        buildBlocks(60);
+        editor.setFontSize(27f);
+        showEditor();
+        showEditor();
+
+        editor.setCaret(editor.getText().indexOf("void f30()"));
+        editor.setScrollImmediate(0f, 100f * editor.lineHeight());
+        showEditor();
+        float before = caretScreenY();
+
+        editor.toggleFoldAt(0);
+        showEditor();
+        showEditor();
+
+        assertEquals("the caret's line did not move", before, caretScreenY(), 1f);
     }
 
     /**
