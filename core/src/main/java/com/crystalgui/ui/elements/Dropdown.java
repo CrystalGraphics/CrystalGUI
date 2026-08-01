@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.UIElement;
 import lombok.Getter;
 
 import java.util.ArrayList;
@@ -34,6 +35,7 @@ import java.util.List;
 public class Dropdown extends Button {
 
     public static final String MENU_CLASS = "__menu__";
+    public static final String CHEVRON_CLASS = "__chevron__";
 
     /** Fires with the newly selected index. Never fires for a re-selection of the same index. */
     public final Signal.Value<Integer> onSelectionChanged = new Signal.Value<>();
@@ -54,6 +56,14 @@ public class Dropdown extends Button {
 
         menu.addClass(MENU_CLASS);
         addInternalChild(menu);
+
+        // The closed-state marker, via Button's post-icon slot: `dropdown { justify-content:
+        // space-between }` in default.css has had nothing to space against until now, so a dropdown
+        // and a text field differed only by face colour. `overlay: shape("chevron-down")` in CSS draws
+        // it — this constructor only claims the slot.
+        UIElement chevron = new UIElement();
+        chevron.addClass(CHEVRON_CLASS);
+        setPostIcon(chevron);
 
         // Toggle rather than open: pressing the button of an open dropdown should shut it. Light dismiss
         // deliberately spares the invoker (see UIWindow.lightDismiss), so without this the press would be
