@@ -11,7 +11,7 @@ import static org.junit.Assert.*;
  *
  * <p>Only construction is exercised here, never {@link CgUiShape#draw}: building a {@code CgUiShape}
  * touches nothing in CrystalGraphics (it is a bare {@code Kind} holder), but {@code draw()} reaches
- * {@code CgCurveRenderer}, whose static instance buffer allocates against a live GL context — see
+ * {@code CgVectorRenderer}, whose static instance buffer allocates against a live GL context — see
  * {@code CgCurveSplitter}'s own doc for the exact {@code ExceptionInInitializerError} this avoids.</p>
  */
 public class TextureShapeValueTest {

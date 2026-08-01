@@ -28,7 +28,7 @@ import java.util.List;
  *
  * <h3>Wire colour comes from the cascade</h3>
  * <p>{@link NodePort#typeColor()} reads the port dot's computed {@code border-color}, so Unity's
- * per-type palette stays in a stylesheet even though {@code CgCurveRenderer} needs an ARGB int. A wire
+ * per-type palette stays in a stylesheet even though {@code CgVectorRenderer} needs an ARGB int. A wire
  * between two different types is drawn as a gradient between them, which costs nothing (the instance
  * record already carries two colours) and makes a promotion visible as exactly what it is.</p>
  */
@@ -93,7 +93,7 @@ public class NodeWireLayer extends UIElement {
      * The wire nearest {@code (worldX, worldY)} within {@link #PICK_TOLERANCE}, or {@code null}.
      *
      * <p><b>Sampled, not solved.</b> The exact answer is the cubic's closest-point parameter, which is a
-     * quintic — the same reason {@code CgCurveRenderer}'s primitive is a quadratic rather than a cubic.
+     * quintic — the same reason {@code CgVectorRenderer}'s primitive is a quadratic rather than a cubic.
      * Twenty-four samples along a wire is well under a pixel apart at any zoom a user clicks at, costs
      * nothing at this scale, and cannot be subtly wrong the way a hand-rolled solver can. If a graph
      * ever has enough wires for this to matter, the fix is a broad-phase rejection by bounding box, not
@@ -220,7 +220,7 @@ public class NodeWireLayer extends UIElement {
     }
 
     /**
-     * One wire: a cubic with horizontal tangents, split into quadratics by {@code CgCurveRenderer}.
+     * One wire: a cubic with horizontal tangents, split into quadratics by {@code CgVectorRenderer}.
      *
      * <p>Horizontal tangents are the whole visual idiom of a node editor — a wire must leave an output
      * to the right and enter an input from the left, so that a backwards connection loops visibly

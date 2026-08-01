@@ -246,7 +246,7 @@ public class NodePort extends UIElement {
     /** The colour of this port's type, taken from the dot's computed {@code border-color}.
      *
      * <p>This is the seam that keeps Unity's per-type palette in CSS. A wire is drawn by
-     * {@code CgCurveRenderer}, which needs an ARGB int, so <em>something</em> has to hand it a number —
+     * {@code CgVectorRenderer}, which needs an ARGB int, so <em>something</em> has to hand it a number —
      * reading it back out of the cascade means the number's source is still a stylesheet.
      * {@code border-color} rather than {@code background-color} because the dot is hollow while
      * unconnected, so its fill is transparent exactly when a theme author would be surprised to find

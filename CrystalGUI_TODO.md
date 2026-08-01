@@ -946,7 +946,7 @@ plus gallery `modal` and `menus` pages.
 > It was two bullets — "editor windows" and "general graph view" — carrying about a dozen real features
 > between them, with an explicit instruction not to start from them. That re-plan happened on 2026-07-30 and
 > produced seventeen ordered items, an audit of what already exists, and a full design for the one genuine
-> engine gap (`CgCurveRenderer`). It is large enough that keeping it here would have swamped P0–P5.
+> engine gap (`CgVectorRenderer`). It is large enough that keeping it here would have swamped P0–P5.
 >
 > **Scope, settled there:** a general-purpose editor framework with the shader graph as its first client,
 > and 6.1 before 6.2 because the graph view is a document type hosted inside editor windows.

@@ -710,7 +710,7 @@ Java at DEFAULT origin precisely so the subclass gets it for real.
 - **`type.cssClass()` is `type-<id>`**, carried by the port. The palette — dot and wire alike — is
   therefore a stylesheet's business. `NodePort.typeColor()` reads the dot's computed `border-color`
   back out of the cascade, which is what keeps the number's source in CSS even though
-  `CgCurveRenderer` needs an int.
+  `CgVectorRenderer` needs an int.
 - **One edge per input, many per output.** Dropping onto an occupied input *replaces*; the displaced
   edge leaves through the same `disconnect()` as a manual one, so 6.2.4 can make the pair one undoable
   command.

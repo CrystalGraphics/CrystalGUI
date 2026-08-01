@@ -13,7 +13,7 @@ import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
-import com.crystalgraphics.gl.render.CgCurveRenderer;
+import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
@@ -463,7 +463,7 @@ public final class CgUiPaintContext {
      * applied it, and overwriting it silently drops {@code uiScale} and the element transform. Same
      * rule, same reason, as {@link #quad()}.</p>
      *
-     * <p>The returned object is {@code CgCurveRenderer}'s shared per-renderer scratch instance, so
+     * <p>The returned object is {@code CgVectorRenderer}'s shared per-renderer scratch instance, so
      * build it and {@code submit()} in one expression rather than holding it — the next
      * {@code curve()} call resets and reuses it. Use {@code retainedCurve()} on the renderer for
      * something held across frames.</p>
@@ -473,7 +473,7 @@ public final class CgUiPaintContext {
      * the two per element therefore costs a draw call each way — batch strokes together where it is
      * convenient, but correctness never depends on doing so.</p>
      */
-    public CgCurveRenderer.Curve curve() {
+    public CgVectorRenderer.Curve curve() {
         beginCurvePath();
         return renderer.curve();
     }
@@ -481,7 +481,7 @@ public final class CgUiPaintContext {
     /**
      * Starts a filled triangle, with this context's pose already applied — the fill-mode twin of
      * {@link #curve()}. Goes through the exact same material path as {@link #curve()} (it shares
-     * one {@code CgCurveRenderer} and one {@code gui_curve.shader} binding, not a third one), so
+     * one {@code CgVectorRenderer} and one {@code gui_curve.shader} binding, not a third one), so
      * switching between {@code quad()}/{@code curve()}/{@code triangle()} costs a flush only when
      * moving to or from the quad path — alternating {@code curve()} and {@code triangle()} is free.
      *
@@ -493,7 +493,7 @@ public final class CgUiPaintContext {
      * <p><b>Never call {@code .pose(...)} on the result</b> — same rule as {@link #quad()}/{@link
      * #curve()}, for the same reason.</p>
      */
-    public CgCurveRenderer.Triangle triangle() {
+    public CgVectorRenderer.Triangle triangle() {
         beginCurvePath();
         return renderer.triangle();
     }

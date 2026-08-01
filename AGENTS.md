@@ -735,7 +735,7 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIWindow`. Eve
 | Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
 
 > **`curve()` is `quad()`'s twin, and switching between them flushes.** Bézier strokes go through
-> `CgCurveRenderer` with their own instance buffer and their own material (`gui_curve.shader`), and GL
+> `CgVectorRenderer` with their own instance buffer and their own material (`gui_curve.shader`), and GL
 > binds one program at a time — so the two cannot both be live. Every switch flushes the outgoing path,
 > which is a **painter's-order requirement, not tidiness**: letting queued quads survive a switch would
 > draw them after the curves regardless of submission order, so a stroke under a panel would jump on top
@@ -774,7 +774,7 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIWindow`. Eve
 
 ## Supporting classes
 
-- **`CgUiRenderer`** — thin wrapper over CrystalGraphics' `CgQuadRenderer` **and `CgCurveRenderer`**:
+- **`CgUiRenderer`** — thin wrapper over CrystalGraphics' `CgQuadRenderer` **and `CgVectorRenderer`**:
   instanced unit quads whose per-instance record (`origin` + `right`/`up` edge vectors, UVs, colour)
   lives in a class-wide SSBO/TBO. The `PoseStack` matrix is baked in at `submit()` time by
   `Quad.pose(...)` — three transforms per quad rather than four corners, and affine-correct under
@@ -983,7 +983,7 @@ The things that are invisible from any single class and expensive to rediscover.
 | A marquee selects what it **touches**, not what it encloses | No vendor documents which they use, so it is a decision: at any zoom where a node is larger than the viewport, enclose-only makes it unselectable by marquee at all |
 | Selection is **not** undoable | The majority choice and a live disagreement — Blender records it and is criticised for being "counter to basically all other applications"; Figma has a standing request for it as a preference. Ours is VS Code's: selection is view state, and an *edit*'s undo restores the selection that edit applied to |
 | A drag's own delta is the truth at drag end, **never a re-read of the layout** | `worldBoundsOf()` reports the last *computed* layout, and the final `moveNode` of a drag writes insets Taffy has not resolved yet — so asking at drag end returns the position before the last move, and a short drag records a delta of zero and no undo step at all |
-| A wire's colour is **read back out of the cascade** — `NodePort.typeColor()` returns the dot's computed `border-color` | `CgCurveRenderer` needs an ARGB int, so something must hand it a number; reading it from the dot keeps Unity's per-type palette in `graph.css` instead of putting GLSL's type system and its colours in Java. Hard-code it and adding a type means editing two languages |
+| A wire's colour is **read back out of the cascade** — `NodePort.typeColor()` returns the dot's computed `border-color` | `CgVectorRenderer` needs an ARGB int, so something must hand it a number; reading it from the dot keeps Unity's per-type palette in `graph.css` instead of putting GLSL's type system and its colours in Java. Hard-code it and adding a type means editing two languages |
 | An input port takes **one** edge, an output **many** — so connecting to an occupied input *replaces* | Refusing it looks like correct validation and makes rewiring take two gestures. The displaced edge must leave through the same `disconnect` as a manual one, or 6.2.4's undo will not know it happened |
 | `nodeport:blank` means *unconnected*, and a connect must `invalidateStyleMatch()` | It drives both the hollow-vs-filled dot and whether the inline editor shows. Without the invalidation a pseudo-class is never re-evaluated: the dot stays hollow under a live wire and the editor stays visible beneath it, which reads as a paint bug |
 | Click-focus targets **the exact element hit**, never the nearest focusable ancestor | The DOM focuses the ancestor, which is why clicking a `<button>`'s inner text focuses the button. Every composite here dodges it by making its parts `setHitTest(false)` — unavailable when a part is itself interactive (a node's title bar carries the collapse chevron), so `GraphNode` calls `requestFocus` itself. Fixing `emitMouseDown` to walk up would cover every composite at once |

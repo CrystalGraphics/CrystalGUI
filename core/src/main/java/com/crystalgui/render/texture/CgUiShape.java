@@ -1,6 +1,6 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.gl.render.CgCurveRenderer;
+import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -35,7 +35,7 @@ import com.crystalgui.render.CgUiPaintContext;
  *
  * <h3>Stroke kinds vs. fill kinds</h3>
  * <p>Chevrons, checkmark, cross, plus/minus and arrows are 1–2 {@link CgUiPaintContext#curve()}
- * calls — {@link CgCurveRenderer} already draws arbitrary straight strokes with caps, so nothing new
+ * calls — {@link CgVectorRenderer} already draws arbitrary straight strokes with caps, so nothing new
  * was needed in the engine for these. Triangles are the one kind that needs {@link
  * CgUiPaintContext#triangle()} — a filled region, not a stroked path. Callers of this class never
  * see the difference; {@link #draw} dispatches internally.</p>
@@ -161,7 +161,7 @@ public final class CgUiShape implements CgUiDrawable {
      *
      * <p><b>Round at every end, including the shared apex — deliberately.</b> This used to butt-cap
      * the joint to dodge the double-round-cap disc-blend artefact documented on {@code
-     * CgCurveRenderer.packCaps}. That traded one problem for a worse one: two independently-stroked
+     * CgVectorRenderer.packCaps}. That traded one problem for a worse one: two independently-stroked
      * segments meeting at an angle with butt ends leave the OUTER wedge of the bend uncovered by
      * either segment's own rectangle — a plain "no join" gap, the same reason every vector graphics
      * system defaults line joins to round or miter rather than none. The chevron's apex rendered
@@ -175,8 +175,8 @@ public final class CgUiShape implements CgUiDrawable {
         float lx = x + w * 0.24f, ly = y + h * leftY;
         float mx = x + w * 0.50f, my = y + h * midY;
         float rx = x + w * 0.76f, ry = y + h * rightY;
-        ctx.curve().line(lx, ly, mx, my).width(hw).color(argb).cap(CgCurveRenderer.CAP_ROUND).submit();
-        ctx.curve().line(mx, my, rx, ry).width(hw).color(argb).cap(CgCurveRenderer.CAP_ROUND).submit();
+        ctx.curve().line(lx, ly, mx, my).width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
+        ctx.curve().line(mx, my, rx, ry).width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
     }
 
     /** Vertical-opening chevron (left/right pointing) — same shape, transposed. Round at every end,
@@ -186,8 +186,8 @@ public final class CgUiShape implements CgUiDrawable {
         float tx = x + w * topX, ty = y + h * 0.24f;
         float mx = x + w * midX, my = y + h * 0.50f;
         float bx = x + w * bottomX, by = y + h * 0.76f;
-        ctx.curve().line(tx, ty, mx, my).width(hw).color(argb).cap(CgCurveRenderer.CAP_ROUND).submit();
-        ctx.curve().line(mx, my, bx, by).width(hw).color(argb).cap(CgCurveRenderer.CAP_ROUND).submit();
+        ctx.curve().line(tx, ty, mx, my).width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
+        ctx.curve().line(mx, my, bx, by).width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
     }
 
     private static void triangle(CgUiPaintContext ctx, float x, float y, float w, float h, int argb,
@@ -204,25 +204,25 @@ public final class CgUiShape implements CgUiDrawable {
         float x1 = x + w * 0.22f, y1 = y + h * 0.52f;
         float x2 = x + w * 0.42f, y2 = y + h * 0.72f;
         float x3 = x + w * 0.80f, y3 = y + h * 0.26f;
-        ctx.curve().line(x1, y1, x2, y2).width(hw).color(argb).cap(CgCurveRenderer.CAP_ROUND).submit();
-        ctx.curve().line(x2, y2, x3, y3).width(hw).color(argb).cap(CgCurveRenderer.CAP_ROUND).submit();
+        ctx.curve().line(x1, y1, x2, y2).width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
+        ctx.curve().line(x2, y2, x3, y3).width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
     }
 
     /** Two independent diagonals — no shared endpoint, so both can round-cap freely. */
     private static void cross(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb) {
         ctx.curve().line(x + w * 0.26f, y + h * 0.26f, x + w * 0.74f, y + h * 0.74f)
-                .width(hw).color(argb).cap(CgCurveRenderer.CAP_ROUND).submit();
+                .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
         ctx.curve().line(x + w * 0.74f, y + h * 0.26f, x + w * 0.26f, y + h * 0.74f)
-                .width(hw).color(argb).cap(CgCurveRenderer.CAP_ROUND).submit();
+                .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
     }
 
     /** Horizontal bar, plus an optional vertical one — neither shares an endpoint with the other. */
     private static void plus(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb, boolean withVertical) {
         ctx.curve().line(x + w * 0.22f, y + h * 0.5f, x + w * 0.78f, y + h * 0.5f)
-                .width(hw).color(argb).cap(CgCurveRenderer.CAP_ROUND).submit();
+                .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
         if (withVertical) {
             ctx.curve().line(x + w * 0.5f, y + h * 0.22f, x + w * 0.5f, y + h * 0.78f)
-                    .width(hw).color(argb).cap(CgCurveRenderer.CAP_ROUND).submit();
+                    .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
         }
     }
 
@@ -231,7 +231,7 @@ public final class CgUiShape implements CgUiDrawable {
                               float fx0, float fy0, float fx1, float fy1) {
         ctx.curve().line(x + w * fx0, y + h * fy0, x + w * fx1, y + h * fy1)
                 .width(hw).color(argb)
-                .cap(CgCurveRenderer.CAP_ROUND, CgCurveRenderer.CAP_ARROW)
+                .cap(CgVectorRenderer.CAP_ROUND, CgVectorRenderer.CAP_ARROW)
                 .submit();
     }
 }

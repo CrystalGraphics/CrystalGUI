@@ -78,7 +78,7 @@ public class GraphView extends CanvasView implements UndoScope {
      * The floor a wire's on-screen thickness will not go below, in <b>physical-ish logical px after
      * zoom</b>.
      *
-     * <p>This is the answer to the open question the plan left: {@code CgCurveRenderer} scales stroke
+     * <p>This is the answer to the open question the plan left: {@code CgVectorRenderer} scales stroke
      * widths by the pose, which is correct — a wire should get thicker as you zoom in, exactly like a
      * border. Zoomed <em>out</em> the same rule takes a 2px wire to a fifth of a pixel and the graph
      * looks empty, so the width is clamped here, against the canvas's own zoom, rather than in the
