@@ -2283,6 +2283,32 @@ public class TextEditor extends ScrollerView implements UndoScope {
         static final StableViewport NONE = new StableViewport(-1, 0f);
     }
 
+    /**
+     * What a FOLD is anchored on — the caret's line, not the top of the viewport.
+     *
+     * <p>The two differ exactly when rows change <em>above</em> the caret, which is what folding does. An
+     * anchor on the top row holds the top row still and lets everything below slide up as blocks collapse:
+     * fold-all with the caret halfway down a file leaves the first line where it was and drags the line you
+     * were reading up to meet it. IntelliJ instead keeps <b>the line you are on</b> on the same screen row
+     * and lets the top of the viewport move — its collapse-all changes which rows are above you while
+     * the one under your cursor does not budge.</p>
+     *
+     * <p>Zooming keeps the top-row anchor, and that is not an inconsistency. A zoom changes how tall every
+     * row is and removes none of them, so there is nothing above the caret to move and the top row is the
+     * steadier reference. Folding changes how many rows exist above you, so the caret is.</p>
+     *
+     * <p>No {@code scrollTop <= 0} shortcut here either. {@link #captureStableViewport} skips that case
+     * because a zoom at the top has nothing to preserve — but folding at the top genuinely can need to
+     * scroll to keep the caret still once the rows above it are gone.</p>
+     */
+    private StableViewport captureFoldAnchor() {
+        float height = lineHeight();
+        if (!(height > 0f)) return StableViewport.NONE;
+        int caret = selections.primary().head();
+        int viewLine = viewLineOf(caret, LineProjection.Affinity.RIGHT);
+        return new StableViewport(caret, getScrollTop() - viewLine * height);
+    }
+
     private StableViewport captureStableViewport() {
         float height = lineHeight();
         // Nothing to preserve at the very top, and VS Code skips it there too -- restoring a zero is at
@@ -3231,14 +3257,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Folds or unfolds the innermost region at the caret, stepping outwards when already in that state. */
     public void fold() {
-        StableViewport anchor = captureStableViewport();
+        StableViewport anchor = captureFoldAnchor();
         ensureFoldingCurrent();
         folding.setCollapseStateUp(true, caretRow());
         afterFoldChange(anchor);
     }
 
     public void unfold() {
-        StableViewport anchor = captureStableViewport();
+        StableViewport anchor = captureFoldAnchor();
         ensureFoldingCurrent();
         folding.setCollapseStateUp(false, caretRow());
         afterFoldChange(anchor);
@@ -3246,7 +3272,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Folds or unfolds the region at the caret and everything inside it. */
     public void foldRecursively() {
-        StableViewport anchor = captureStableViewport();
+        StableViewport anchor = captureFoldAnchor();
         ensureFoldingCurrent();
         FoldingRegions.Region region = folding.getRegionAtLine(caretRow());
         if (region != null && !region.isCollapsed()) folding.toggleCollapseState(Integer.MAX_VALUE, caretRow());
@@ -3254,14 +3280,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     public void foldAll() {
-        StableViewport anchor = captureStableViewport();
+        StableViewport anchor = captureFoldAnchor();
         ensureFoldingCurrent();
         folding.collapseAllKeepingDocumentVisible(buffer.lineCount());
         afterFoldChange(anchor);
     }
 
     public void unfoldAll() {
-        StableViewport anchor = captureStableViewport();
+        StableViewport anchor = captureFoldAnchor();
         ensureFoldingCurrent();
         folding.setCollapseStateForAll(false);
         afterFoldChange(anchor);
@@ -3269,7 +3295,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Folds every region at exactly {@code level}, leaving the block the caret is in open. */
     public void foldLevel(int level) {
-        StableViewport anchor = captureStableViewport();
+        StableViewport anchor = captureFoldAnchor();
         ensureFoldingCurrent();
         folding.setCollapseStateAtLevel(level, true, caretRow());
         afterFoldChange(anchor);
@@ -3280,7 +3306,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         ensureFoldingCurrent();
         FoldingRegions.Region region = folding.getRegionStartingAt(row);
         if (region == null) return;
-        StableViewport anchor = captureStableViewport();
+        StableViewport anchor = captureFoldAnchor();
         region.setCollapsed(!region.isCollapsed());
         afterFoldChange(anchor);
     }
