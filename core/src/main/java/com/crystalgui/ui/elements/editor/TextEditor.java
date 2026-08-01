@@ -182,6 +182,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private float cachedFoldWidth;
     private float cachedCodeLeftPad;
 
+    /**
+     * The {@code font-size} in effect the first time {@link #refreshGutterMetrics} ever ran for
+     * this editor — {@code -1} until then. See {@link #gutterMetric} for why this exists.
+     */
+    private float gutterMetricBaselineFontSize = -1f;
+
     /** Clips everything drawn in document coordinates — see {@link #textViewport()}. */
     private UIElement textViewport;
 
@@ -1943,7 +1949,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /**
-     * One of the gutter's metrics, as the cascade computed it.
+     * One of the gutter's metrics, as the cascade computed it, <b>scaled to the editor's current
+     * font size.</b>
      *
      * <p>Read from the <b>computed style</b> rather than from the laid-out box, because
      * {@code getTaffyLayout()} is protected and the gutter is a plain {@code UIElement} — Java's protected
@@ -1954,11 +1961,37 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * <p>Only absolute lengths are honoured. A percentage here would resolve against the gutter's own
      * width, which is computed <em>from</em> these three values — so it would be circular, and silently
      * returning something plausible is worse than ignoring it.</p>
+     *
+     * <h3>The scaling — a regression this restores, not a new feature</h3>
+     * <p>{@link #measureGutter}'s own doc already claims "derived from the font size rather than fixed,
+     * so the gutter stays proportionate when the editor is zoomed" — that used to be true when these
+     * three metrics were {@code max(6f, fontSize * 0.9f)}-shaped Java constants. Moving them into
+     * {@code default.css} (see {@link #gutterPadLeft}'s doc) fixed the real problem — a pixel value
+     * baked into a widget — but dropped the multiply that made the claim true: a bare CSS length has no
+     * way to say "relative to font size" at all (this engine has no {@code em} unit), so the number the
+     * sheet gives back is the same at every zoom level while {@link #lineHeight} and the digits'
+     * shaped width both grow. The numbers column kept pace with zoom because it is measured text; the
+     * padding around it did not, because it was never anything but a constant — so the gutter's
+     * proportions visibly drifted apart from the code the more the editor was zoomed.</p>
+     *
+     * <p>Re-deriving a fixed reference size would need a caller to say what font-size these constants
+     * were authored against, and nothing records that. Instead the font-size the FIRST call ever saw is
+     * cached as the baseline ({@link #gutterMetricBaselineFontSize}) and every value scales relative to
+     * it — so whatever the gutter looks like at whatever size an editor actually starts at is preserved
+     * exactly (ratio 1.0 there), and it stays proportionate as the size changes from that point, in
+     * either direction. A theme is still free to change the absolute numbers in the sheet; only the
+     * zoom-relative behaviour is decided here.</p>
      */
     private float gutterMetric(StyleProperty<LengthPercentageAuto> property) {
         LengthPercentageAuto value = gutter.getStyle().getLayoutGroup().getValueSave(property);
         if (value == null || value.getType() != LengthPercentageAuto.Type.LENGTH) return 0f;
-        return Math.max(0f, value.getValue());
+        float raw = Math.max(0f, value.getValue());
+
+        float fontSize = getStyle().getGeneralGroup().fontSize();
+        if (fontSize <= 0f) return raw;
+        if (gutterMetricBaselineFontSize <= 0f) gutterMetricBaselineFontSize = fontSize;
+
+        return raw * (fontSize / gutterMetricBaselineFontSize);
     }
 
     /**
