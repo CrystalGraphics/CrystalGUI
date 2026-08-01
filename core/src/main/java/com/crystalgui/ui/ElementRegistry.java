@@ -2,6 +2,7 @@ package com.crystalgui.ui;
 
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Checkbox;
+import com.crystalgui.ui.elements.ColorSelector;
 import com.crystalgui.ui.elements.Dialog;
 import com.crystalgui.ui.elements.Dropdown;
 import com.crystalgui.ui.elements.Menu;
@@ -91,6 +92,7 @@ public final class ElementRegistry {
         register("menu", Menu.class, Menu::new);
         register("menuitem", MenuItem.class, () -> new MenuItem(""));
         register("dropdown", Dropdown.class, () -> new Dropdown(""));
+        register("colorselector", ColorSelector.class, ColorSelector::new);
     }
 
     /**

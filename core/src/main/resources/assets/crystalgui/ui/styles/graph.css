@@ -246,3 +246,66 @@ nodeport .__editor__ {
     color: #D4D4D4;
     font-size: 7;
 }
+
+/* ── ColorSelector ──────────────────────────────────────────────────────────────────────────────
+ * The node's own construction, deliberately: same border, same radius, same greys — a picker opened
+ * from a Color node should read as part of the node rather than as a dialog that arrived from
+ * somewhere else. OPAQUE though, unlike a node: a picker sits over the graph, and a wire crossing
+ * behind the surface you are judging a colour against would change the colour you judge. */
+colorselector {
+    background: #2B2B2B;
+    border-width: 1px;
+    border-color: #1A1A1A;
+    color: #C4C4C4;
+    font-size: 6;
+}
+
+colorselector .__channel-row__ text { color: #9A9A9A; }
+colorselector .__hex-row__ text     { color: #9A9A9A; }
+
+/* Both handles carry a dark outer ring as well as the white one, so they stay visible against a
+ * white square corner and against a yellow band alike. Without it the handle vanishes exactly where
+ * the colour is brightest, which is where it is most often dragged. */
+colorselector .__ring-handle__,
+colorselector .__square-handle__ {
+    outline: 1px #00000080;
+    outline-offset: 0px;
+}
+
+colorselector .__channel-row__ textfield,
+colorselector .__hex-row__ textfield {
+    background: #1E1E1E;
+    color: #D4D4D4;
+    border-radius: 2px;
+    font-size: 6;
+}
+
+/* Unity outlines every channel track and its thumb. It is not decoration: a track is a gradient that
+ * runs to near-white at one end, and without an edge it bleeds into the panel so the bar's true extent
+ * — which is what the thumb's position is read against — becomes a guess. The thumb takes a light
+ * border for the mirror-image reason: it is white, and against the pale end of a track it disappears. */
+/* An OUTLINE rather than `border-width`: the track's fill is a CgUiColorField covering the whole box and
+ * it paints over the border layer, so a border here draws nothing. Note an outline is measured in
+ * LOGICAL pixels and then multiplied by uiScale like everything else — at uiScale 2 this is two physical
+ * pixels, which is correct and is not the stylesheet disagreeing with itself. */
+/* #282828, not black. A line's apparent weight is contrast as much as thickness, and near-black against
+ * a #2B2B2B panel read as a heavy rule no matter what width it was given. This sits a hair darker than
+ * the panel: it separates the track from the background without drawing attention to itself. */
+colorselector .__channel-row__ slider {
+    outline: 1px #282828;
+    outline-offset: 0px;
+}
+/* The pair is ringed as ONE object, not as two — the outline goes on the container, so no line falls
+ * between the halves. That seam is the whole point: the eye compares two adjacent colours far better
+ * than two separated ones, and a divider would turn the comparison into two separate readings. */
+colorselector .__swatches__ {
+    outline: 1px #282828;
+    outline-offset: 0px;
+}
+/* NO outline on the thumb. An outline is stroked on BOTH sides, so a 1px edge on a 1px thumb is 3px of
+ * apparent width — the outline was the whole of what remained after the thumb itself was already a
+ * single pixel. A hairline cannot afford one, and it does not need it here: the track carries its own
+ * dark edge, so a white mark on it stays legible. */
+colorselector .__channel-row__ slider .__thumb__ {
+    outline: none;
+}

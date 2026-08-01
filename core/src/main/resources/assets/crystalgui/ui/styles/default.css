@@ -122,7 +122,7 @@ button:disabled, dropdown:disabled {
 
 checkbox {
     align-self: flex-start;
-    height: 14px;
+    height: 12px;
     padding-all: 1px;
     gap-all: 2px;
     align-items: center;
@@ -151,7 +151,7 @@ checkbox:disabled .__mark__ {
 
 switch {
     width: 25px;
-    height: 14px;
+    height: 12px;
     padding-all: 0;
     align-items: center;
     background: #6E6E6E;
@@ -318,7 +318,7 @@ tabview .__pane__ {
 /* A tab is a Button, so it inherits nothing from `button` (type selectors don't cascade by
  * inheritance) — it needs its own box. */
 tab {
-    height: 14px;
+    height: 12px;
     padding-left: 6px;
     padding-right: 6px;
     padding-top: 1px;
@@ -1418,7 +1418,7 @@ nodecreationmenu {
    does not activate anything, and the two cursors are the web's own distinction. */
 nodecreationmenu .__title-bar__ {
     width: 100%;
-    height: 14px;
+    height: 12px;
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
@@ -1549,3 +1549,296 @@ texteditor .__fold-placeholder__:hover {
     background-color: #3C4553;
 }
 
+/* ── ColorSelector ──────────────────────────────────────────────────────────────────────────────
+ * A picker is a hue ring around a saturation/value square, four channel rows, and a hex field.
+ * Everything here is what it needs to FUNCTION — sizes, stacking, hit areas. The look is a theme's.
+ *
+ * The two surfaces that vary continuously (ring, square) are painted by CgUiColorField through
+ * `background:` in Java rather than declared here: their colours are a function of position and of
+ * the current hue, which no stylesheet can express. What CSS owns is where they sit and how big. */
+/* WIDER THAN TALL: the wheel on the left, everything you drag on the right. Stacked vertically the
+ * wheel is the widest thing in the widget and the channel tracks inherit its narrow column — the one
+ * arrangement that starves the controls while the largest element sits idle. */
+/* `stretch`, not `flex-start`. The left column has to be as tall as the channel column for the wheel
+ * to be centred against it — with flex-start it is only as tall as its own contents, so "centre the
+ * wheel" has nothing to centre it in and it stays pinned to the top. */
+colorselector {
+    width: 188px;
+    flex-direction: row;
+    align-items: stretch;
+    gap-all: 6px;
+    /* Matches the channel rows' own gap, so the space left of a value box and the space right of it
+     * (out to this padding) are the same — the bars then run as wide as that symmetry allows. */
+    padding-all: 3px;
+    border-radius: 5px;
+}
+
+/* Swatch pair on top, wheel filling what is left. */
+colorselector .__left__ {
+    width: 73px;
+    flex-direction: column;
+    align-items: center;
+    gap-all: 3px;
+}
+/* `height: 0` is the BASIS it grows from, and `min-height` is what stops the ring being crushed:
+ * flex-shrink is 0 here, so without the minimum a short channel column would leave the 73px ring
+ * overflowing its own parent rather than the parent staying open for it. Growing is what centres the
+ * wheel — the box takes the slack and its own centring puts the ring in the middle of it. */
+colorselector .__wheel__ {
+    width: 73px;
+    height: 0;
+    min-height: 73px;
+    flex-grow: 1;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Takes the slack: `width: 0` is the basis it grows FROM, since flex-shrink defaults to 0 here and a
+ * content-sized column would keep whatever its widest row happened to need. */
+/* Centred against the LEFT column, which is the taller of the two: the swatch pair adds its height to
+ * that side, so a channel stack starting at the top sits a few pixels above the ring's middle and reads
+ * as misaligned with the thing it is describing. Centring is what ties the two columns together. */
+colorselector .__side__ {
+    width: 0;
+    flex-grow: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap-all: 3px;
+}
+/* Square, because a ring drawn into a non-square box is an ellipse — the shader normalises its own
+ * radius, so an oval box would show as a stretched band with a round handle path on top of it. */
+colorselector .__ring__ {
+    width: 73px;
+    height: 73px;
+}
+/* Inside the ring's inner edge, with clearance. The exactly-inscribed square is 51% — the shader's
+ * inner radius is 0.72 of the outer and an inscribed square's side is that over root two — but
+ * "exactly inscribed" means its four corners TOUCH the band, which reads as the square having been
+ * pushed in too far rather than as a tight fit. 44% leaves the gap Unity's has.
+ *
+ * Tied to the shader's inner radius: change one and this has to move, or the square either overlaps
+ * the band or floats loose in the middle of it. */
+colorselector .__square__ {
+    position: absolute;
+    left: 28%;
+    top: 28%;
+    width: 44%;
+    height: 44%;
+    border-radius: 2px;
+}
+
+/* Both handles are rings, not dots: a filled handle hides the one colour the user is trying to
+ * judge. Negative margins centre them on their point, since the insets place their top-left. */
+/* Both handles are rings, not dots: a filled handle hides the one colour the user is trying to judge.
+ * Negative margins are half the size, centring them on their point since the insets place their
+ * top-left corner.
+ *
+ * SIZED TO SPAN THE BAND. The band is (1 - 0.72) of the ring's half-width — 14px on a 104px ring — so
+ * the handle is 14px and reads as a collar around it rather than a dot floating on it. Derived from the
+ * shader's inner radius, so the two move together. */
+colorselector .__ring-handle__ {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    margin-top: -5px;
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: #FFFFFF;
+}
+/* Much smaller: the square is a continuous field, so the handle marks a POINT rather than spanning
+ * anything, and every pixel it covers is a colour you were trying to look at. */
+colorselector .__square-handle__ {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    margin-left: -2px;
+    margin-top: -2px;
+    border-radius: 2px;
+    border-width: 1px;
+    border-color: #FFFFFF;
+}
+
+/* Right-aligned above the channels, which is where the reference puts it — it labels the four rows
+ * below rather than the widget as a whole, and sizing it to its own text keeps it from reading as a
+ * title bar spanning the column. */
+/* Sized to the hex field below it — same width, same height as every value box in the column. It is one
+ * more control in that stack, so matching them is what stops it reading as a header. `min-height` has to
+ * be restated: the base `button, dropdown` rule sets a 14px floor that would otherwise win. */
+colorselector .__side__ dropdown {
+    align-self: flex-end;
+    width: 35px;
+    height: 9px;
+    min-height: 9px;
+    padding-left: 3px;
+    padding-right: 3px;
+}
+/* On the LABEL, not on the dropdown. `* { font-size: 10 }` at the top of this file gives every element
+ * a SPECIFIED font-size, and a specified value beats an inherited one — so setting the size on the
+ * parent changes nothing at all and the text goes on clipping ("RGB 0-2"). Smaller because the longest
+ * label is nine characters in a box sized for six digits, and the box matches the hex field by design,
+ * so the text is what gives. */
+colorselector .__side__ dropdown text {
+    font-size: 6;
+    text-align: center;
+}
+
+/* The before/after pair. Full width and equal halves with no gap, so the two colours MEET — a seam
+ * between them would make each one read against the panel rather than against the other, which is the
+ * entire comparison the control exists to offer. */
+/* Narrower than the ring it sits over. At the column's full width the pair was the widest solid block
+ * in the widget and read as a banner across the top; the ring is what the eye should land on. Two
+ * halves of 22px is enough to judge a colour against another — the comparison needs area, not span. */
+colorselector .__swatches__ {
+    width: 44px;
+    flex-direction: row;
+    height: 8px;
+}
+colorselector .__swatches__ .__swatch-original__,
+colorselector .__swatches__ .__swatch-new__ {
+    width: 0;
+    flex-grow: 1;
+    height: 8px;
+}
+/* Rounded on the OUTER corners only, so the pair reads as one pill with a straight seam down the
+ * middle. Stated per corner rather than left to a shorthand: the two inner corners must be square, and
+ * a rounded corner at the seam would put a notch of panel between the colours — which is exactly the
+ * gap the container is arranged to avoid. Each half owns the two corners on its own side. */
+colorselector .__swatches__ .__swatch-original__ {
+    border-top-left-radius-x: 2px;
+    border-top-left-radius-y: 2px;
+    border-bottom-left-radius-x: 2px;
+    border-bottom-left-radius-y: 2px;
+    border-top-right-radius-x: 0px;
+    border-top-right-radius-y: 0px;
+    border-bottom-right-radius-x: 0px;
+    border-bottom-right-radius-y: 0px;
+}
+colorselector .__swatches__ .__swatch-new__ {
+    border-top-right-radius-x: 2px;
+    border-top-right-radius-y: 2px;
+    border-bottom-right-radius-x: 2px;
+    border-bottom-right-radius-y: 2px;
+    border-top-left-radius-x: 0px;
+    border-top-left-radius-y: 0px;
+    border-bottom-left-radius-x: 0px;
+    border-bottom-left-radius-y: 0px;
+}
+
+colorselector .__channels__ {
+    width: 100%;
+    flex-direction: column;
+    gap-all: 3px;
+}
+/* 2px, not the picker's 4px padding, and the difference is the slider's OWN horizontal padding: the
+ * track's visible edge stops 2px inside the slider's box (that padding is the thumb's travel room), so
+ * a 4px gap reads as 6px against a 4px margin at the panel edge. 2 + 2 = 4 evens them, and hands the
+ * difference to the bar — which is the only thing in the row that grows. */
+colorselector .__channel-row__ {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap-all: 2px;
+    height: 11px;
+}
+/* Fixed, so all four labels align and the tracks start on one column — a row-sized label would
+ * indent R against A and read as a mistake. */
+colorselector .__channel-row__ text {
+    width: 7px;
+}
+/* The track IS the slider's background (a live gradient), so its own fill and spacer must not paint
+ * over it. The thumb stays: it is the only thing marking the value. */
+/* The horizontal padding is the thumb's TRAVEL ROOM, not decoration: the thumb is laid out between
+ * the fill and the spacer, so with no padding it runs past both ends of the track at 0 and at max —
+ * which is what it did. Half the thumb's width on each side keeps it inside its own box. */
+/* The padding is the thumb's travel inset, and it must be HALF THE THUMB — the thumb's centre rides the
+ * content box, so at value 0 half of it overhangs to the left. Anything larger strands the thumb short
+ * of the track's end (the base rule's 5px left a visible strip of track unreachable at both extremes);
+ * anything smaller lets it hang past the border. */
+colorselector .__channel-row__ slider {
+    width: 0;
+    flex-grow: 1;
+    height: 9px;
+    padding-left: 1.5px;
+    padding-right: 1.5px;
+    border-radius: 0px;
+}
+colorselector .__channel-row__ slider .__fill__,
+colorselector .__channel-row__ slider .__spacer__ {
+    background: #00000000;
+    height: 9px;
+}
+/* THREE properties of the base `slider .__thumb__` rule have to be re-stated together, and each one was
+ * found the hard way by overriding only the others:
+ *
+ *   width         — 3px is 1px of white core plus the 1px border on each side, because `box-sizing` is
+ *                   border-box here (see TaffyBridge's default table). Writing 1px with a 1px border
+ *                   leaves the border consuming the whole box and no core at all.
+ *   border-width  — the base rule sets 2px WHITE to make a 10px knob read as a ring. A border paints on
+ *                   every side, so inheriting it gave a 1px core wearing 2px of white per edge: a 5px
+ *                   mark from a rule that plainly says 1px.
+ *   margin-*      — HALF THE TOTAL WIDTH, so the thumb's centre sits on the value. The base pulls -5px
+ *                   for its 10px knob; inheriting that under a narrow thumb hangs it outside the track
+ *                   at both ends. -1.5px pairs with the slider's 1.5px padding to land it flush.
+ *
+ * All three are invisible in the stylesheet when wrong — the rule reads as complete on its own. */
+colorselector .__channel-row__ slider .__thumb__ {
+    width: 3px;
+    height: 9px;
+    margin-left: -1.5px;
+    margin-right: -1.5px;
+    border-width: 1px;
+    border-color: #C1C2C2;
+    border-radius: 1.5px;
+    background: #FFFFFF;
+}
+/* Sized to what a channel actually prints — "255", or "0.250" at its longest, which is the case that
+ * sets this number. Anything narrower clips the 0-1.0 mode; anything wider steals from the bar beside
+ * it for digits nothing can produce.
+ *
+ * The three decimals are not negotiable downward, which is what makes the box the thing that gives:
+ * the colour is stored as 8 bits, 1/255 is about 0.0039, so two decimals cannot round-trip a byte.
+ * At 17px the leading "0." was the part that went, and a field reading ",690" looks like a stray comma
+ * rather than like clipping — so it fails silently, which is the worst way for a number to be wrong. */
+colorselector .__channel-row__ textfield {
+    width: 20px;
+    height: 9px;
+    padding-all: 2px;
+}
+
+colorselector .__hex-row__ {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap-all: 5px;
+}
+/* Wider than a channel field, because it holds the whole colour — but eight digits plus a possible
+ * leading '#' is its entire vocabulary, so it stops there rather than taking whatever is left. */
+colorselector .__hex-row__ textfield {
+    width: 35px;
+    height: 9px;
+    padding-all: 2px;
+}
+
+/* The dropdown's popup, matched to the button that opens it. The menu is an internal child promoted to
+ * the top layer when open — promotion moves its TAFFY parent, not its DOM parent, so it still matches
+ * as a descendant here and these rules reach it.
+ *
+ * Without them the popup inherits the global menu geometry and opens two or three times the size of the
+ * control it belongs to, which reads as a different widget appearing rather than that button unfolding. */
+colorselector .__side__ dropdown .__menu__ {
+    min-width: 33px;
+    padding-all: 1px;
+}
+colorselector .__side__ dropdown .__menu__ menuitem {
+    min-height: 9px;
+    height: 9px;
+    padding-left: 3px;
+    padding-right: 3px;
+}
+/* On the item's own text, for the same reason the button's label needs it: `* { font-size: 10 }` gives
+ * every element a specified size, so setting it on an ancestor changes nothing. */
+colorselector .__side__ dropdown .__menu__ menuitem text {
+    font-size: 6;
+}
