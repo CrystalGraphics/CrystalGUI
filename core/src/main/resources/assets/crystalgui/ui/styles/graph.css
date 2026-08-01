@@ -302,6 +302,35 @@ colorselector .__swatches__ {
     outline: 1px #282828;
     outline-offset: 0px;
 }
+
+/* ── The Color node's field ─────────────────────────────────────────────────────────────────────
+ * A colour bar with its alpha as a strip beneath it, and the picker opens over it on a press. */
+graphnode .__color-swatch__ {
+    width: 100%;
+    height: 14px;
+    flex-direction: column;
+    border-radius: 2px;
+    outline: 1px #282828;
+    outline-offset: 0px;
+    cursor: pointer;
+}
+graphnode .__color-swatch__ .__color-bar__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+/* The unfilled remainder is DARK, not the panel colour: the strip has to read as a gauge that is part
+ * full, and against the node's own background an alpha of 0.4 is indistinguishable from a 40%-wide bar
+ * floating on nothing. */
+graphnode .__color-swatch__ .__alpha-bar__ {
+    width: 100%;
+    height: 3px;
+    background: #14140F;
+}
+graphnode .__color-swatch__ .__alpha-bar__ .__alpha-fill__ {
+    height: 3px;
+    background: #FFFFFF;
+}
 /* NO outline on the thumb. An outline is stroked on BOTH sides, so a 1px edge on a 1px thumb is 3px of
  * apparent width — the outline was the whole of what remained after the thumb itself was already a
  * single pixel. A hairline cannot afford one, and it does not need it here: the track carries its own

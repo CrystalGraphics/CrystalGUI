@@ -431,9 +431,28 @@ public class ColorSelector extends UIElement {
         value = hsv[2];
     }
 
-    /** Rebuilds the colour from the retained hue/saturation/value, preserving alpha. */
+    /**
+     * Rebuilds the colour from the retained hue/saturation/value, preserving alpha.
+     *
+     * <p><b>HSV is the model here; the ARGB is a projection of it, and the projection is lossy.</b> At
+     * {@code saturation == 0} every hue composes to the same grey, and at {@code value == 0} to the same
+     * black — so a real move on the ring can leave the colour byte-identical. {@code Property.set}
+     * suppresses an equal value, quite correctly, which means {@code color.changed} does not fire and
+     * the {@link #refresh()} that normally rides on it never runs.</p>
+     *
+     * <p>The result is a widget that looks broken rather than one that looks unchanged: the ring handle
+     * does not move and the SV square goes on drawing the <em>previous</em> hue, so the ring reads as
+     * dead until something makes the colour differ. It shipped that way because the gallery opens on a
+     * saturated purple; a node's colour defaults to {@code vec4(1.0, 1.0, 1.0, 1.0)}, which is white,
+     * which is exactly the case that has no hue to show.</p>
+     */
     private void applyHsv() {
-        color.set(ArgbMath.fromHsv(hue, saturation, value, (color.get() >>> 24) & 0xFF));
+        int before = color.get();
+        int next = ArgbMath.fromHsv(hue, saturation, value, (before >>> 24) & 0xFF);
+        color.set(next);
+        // The colour did not move, but the MODEL did — so drive the refresh by hand. Not an else-branch
+        // on a listener: this is the one caller that knows a suppressed set still changed something.
+        if (next == before) refresh();
     }
 
     /** Pushes the model into every control. Guarded, so the echoes it provokes are ignored. */

@@ -1178,6 +1178,26 @@ dialog .__close__:hover {
 .__resizer-top-right__,
 .__resizer-bottom-left__  { cursor: nesw-resize; }
 
+/* A dialog is a WINDOW, so it starts the cursor afresh rather than inheriting one.
+ *
+ * This is the exception the note above implies but does not spell out. `cursor` inherits, and a dialog
+ * keeps its DOM parent when it is promoted to the top layer — promotion moves the Taffy parent, the
+ * transform and the paint entry, never the cascade. So a dialog opened from anything carrying an
+ * affordance inherits it across the whole picker, list or form inside: the Color node's swatch says
+ * `cursor: pointer`, quite correctly, and every control in the colour picker it summons then claimed to
+ * be a button — ring, square, sliders and text fields alike.
+ *
+ * On the dialog rather than at each summoning site, because the summoning site is not wrong: the rule
+ * is that a window does not inherit its opener's cursor, and stating it once is the difference between
+ * a property of dialogs and a fix every future caller has to remember. Controls inside still declare
+ * their own — this is the floor, not a lid.
+ *
+ * `auto`, NOT `default`, and the difference is load-bearing: `auto` is the property's initial value, so
+ * this restores what an un-inherited element would have had. `default` is the arrow specifically, and
+ * would defeat the rule below that `textfield` deliberately declares nothing because "`auto` already
+ * resolves to `text` over an editable element" — every field in a dialog would lose its caret cursor,
+ * trading one wrong cursor for another. */
+dialog { cursor: auto; }
 /* A title bar is the drag handle for the whole dialog, so it advertises a move rather than a grab. */
 dialog .__title-bar__ { cursor: move; }
 /* SplitView's divider resizes its two panes along one axis.
@@ -1573,6 +1593,19 @@ colorselector {
     border-radius: 5px;
 }
 
+/* The picker's TYPE, and it has to be stated even with no theme loaded — this sheet's own
+ * `* { font-size: 10 }` at the top gives EVERY element a specified size, and a specified value beats an
+ * inherited one, so putting the size on `colorselector` alone changes nothing inside it. Specificity 2
+ * against the universal rule's 0 is all it takes.
+ *
+ * Without it the channel labels stand taller than the 9px tracks they name, and "Hexadecimal" wraps to
+ * a second line and pushes the panel open. graph.css and ore.css each restate this for their own
+ * reasons; this is the case where no theme is loaded at all. */
+colorselector text,
+colorselector textfield {
+    font-size: 6;
+}
+
 /* Swatch pair on top, wheel filling what is left. */
 colorselector .__left__ {
     width: 73px;
@@ -1665,8 +1698,19 @@ colorselector .__square-handle__ {
 /* Sized to the hex field below it — same width, same height as every value box in the column. It is one
  * more control in that stack, so matching them is what stops it reading as a header. `min-height` has to
  * be restated: the base `button, dropdown` rule sets a 14px floor that would otherwise win. */
+/* `flex-grow: 0` here and on both textfield rules is not tidiness — it is a DEFENCE. The picker can be
+ * opened from a node's control row (the Color node does exactly that), and `graphnode .__control-row__
+ * textfield, ... dropdown { width: 0; flex-grow: 1 }` above matches everything inside it: promotion moves
+ * an element's Taffy parent and its transform, but NOT its DOM parent, so the cascade reaches in exactly
+ * as if the picker were still sitting in the node.
+ *
+ * That rule weighs the same as these, so the widths here win on source order and look correct in the
+ * stylesheet — while the grow factor, which nothing here mentioned, went uncontested. The fields then
+ * absorbed the row's slack and the colour tracks got what was left: fields far too wide, tracks far too
+ * narrow, and every number in this file still reading exactly as intended. */
 colorselector .__side__ dropdown {
     align-self: flex-end;
+    flex-grow: 0;
     width: 35px;
     height: 9px;
     min-height: 9px;
@@ -1804,6 +1848,7 @@ colorselector .__channel-row__ textfield {
     width: 20px;
     height: 9px;
     padding-all: 2px;
+    flex-grow: 0;
 }
 
 colorselector .__hex-row__ {
@@ -1819,6 +1864,7 @@ colorselector .__hex-row__ textfield {
     width: 35px;
     height: 9px;
     padding-all: 2px;
+    flex-grow: 0;
 }
 
 /* The dropdown's popup, matched to the button that opens it. The menu is an internal child promoted to
