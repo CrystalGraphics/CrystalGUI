@@ -651,31 +651,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         applyEdit(changes);
     }
 
-    /**
-     * Deletes at every caret. {@code from}/{@code to} are used only for a <em>single</em> empty caret —
-     * the backspace-and-delete case, where the range depends on which key was pressed.
-     */
-    private void deleteSelectionOr(int from, int to) {
-        List<Change> changes = new ArrayList<>(selections.count());
-        boolean anySelection = selections.hasSelection();
-        for (Selection selection : selections.all()) {
-            if (anySelection) {
-                if (!selection.isEmpty()) changes.add(Change.delete(selection.start(), selection.end()));
-            } else {
-                // Every empty caret deletes the same way the pressed key says, relative to itself.
-                int offset = selection.head();
-                int delta = to - from;
-                int start = from <= selections.primary().head() && to <= selections.primary().head()
-                        ? offset - delta : offset;
-                int end = start + delta;
-                if (start >= 0 && end <= buffer.length() && end > start) {
-                    changes.add(Change.delete(start, end));
-                }
-            }
-        }
-        applyEdit(changes);
-    }
-
     /** Applies a set of per-caret changes as one edit, then carries the carets through it. */
     private void applyEdit(List<Change> changes) {
         if (readOnly) return;
@@ -3010,17 +2985,35 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /**
      * Moves every caret out of a row that is about to be hidden, onto its region's header.
      *
-     * <p>Not cosmetic: a caret on a hidden row has no view line, so it cannot be drawn, scrolled to, or
-     * typed at — the editor looks focused and does nothing. VS Code does the same, which is why folding a
-     * block you are inside leaves the caret on the block's first line.</p>
+     * <p>Not cosmetic: a caret on a hidden row has no view line, so it cannot be drawn where it actually
+     * is. {@code ProjectedLines.toViewPosition} walks it to the nearest visible row instead, and the caret
+     * is then painted on a line it is not on — typing inserts somewhere other than where it appears. VS
+     * Code does the same lift, which is why folding a block you are inside leaves the caret on the block's
+     * first line.</p>
+     *
+     * <p><b>EVERY caret, which this did not used to do.</b> It read {@code selections.primary()} inside the
+     * loop and returned after the first fix, so a secondary caret inside a folded block stayed there. With
+     * one caret that is indistinguishable from correct, and every folding test had one — the plural in the
+     * name and in this javadoc was the only evidence of the intent.</p>
      */
     private void liftCaretsOutOfHiddenRows() {
-        for (FoldingModel.RowRange range : folding.hiddenRows()) {
-            int caretRow = buffer.document().offsetToPoint(selections.primary().head()).row();
-            if (!range.contains(caretRow)) continue;
-            setCaret(buffer.document().lineStartOffset(range.startRow() - 1));
-            return;
-        }
+        List<FoldingModel.RowRange> hidden = folding.hiddenRows();
+        if (hidden.isEmpty()) return;
+        boolean[] moved = { false };
+        selections.transform(selection -> {
+            int row = buffer.document().offsetToPoint(selection.head()).row();
+            for (FoldingModel.RowRange range : hidden) {
+                if (!range.contains(row)) continue;
+                moved[0] = true;
+                // The region's HEADER. hiddenRows() starts at startLineNumber + 1 -- the first row stays
+                // visible because it carries the fold arrow -- so startRow - 1 is that header, and is
+                // never negative.
+                return Selection.caret(buffer.document().lineStartOffset(range.startRow() - 1));
+            }
+            return selection;
+        });
+        // Several carets in one folded block all land on its header; setAll normalises them into one.
+        if (moved[0]) afterSelectionChange();
     }
 
     /**

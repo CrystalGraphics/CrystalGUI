@@ -2554,6 +2554,48 @@ public class TextEditorTest extends UiTestBase {
     }
 
 
+    /**
+     * <b>Folding must lift EVERY caret off a hidden row, not only the primary one.</b>
+     *
+     * <p>A caret on a hidden row has no view line at all. It cannot be drawn where it actually is, so
+     * {@code ProjectedLines.toViewPosition} walks it to the nearest visible row and the caret is painted on
+     * a line it is not on — typing then inserts somewhere other than where the caret appears.</p>
+     *
+     * <p>{@code liftCaretsOutOfHiddenRows} is named in the plural and its javadoc says "every caret", but it
+     * read {@code selections.primary()} inside the loop and returned after the first fix. With one caret
+     * that is indistinguishable from correct, which is why it survived: every folding test so far has used
+     * a single caret.</p>
+     */
+    @Test
+    public void foldingLiftsEveryCaretOffAHiddenRow() {
+        build("void a() {" + NL + "    one();" + NL + "    two();" + NL + "}" + NL
+                + "void b() {" + NL + "    three();" + NL + "    four();" + NL + "}");
+        showEditor();
+
+        // Primary OUTSIDE any region that will close; secondary INSIDE the one being folded.
+        // The one INSIDE the fold is added FIRST, so the later one is primary and the inside caret is a
+        // secondary. The other way round the "secondary" is actually primary and the bug hides.
+        editor.setCaret(editor.getText().indexOf("three();"));
+        editor.addCaret(editor.getText().indexOf("void a()"));
+        showEditor();
+        assertEquals("two carets to begin with", 2, editor.caretCount());
+
+        editor.toggleFoldAt(4);
+        showEditor();
+
+        java.util.List<com.crystalgui.text.fold.FoldingModel.RowRange> hidden =
+                editor.foldingModel().hiddenRows();
+        assertFalse("the fold must actually have hidden something", hidden.isEmpty());
+        for (com.crystalgui.text.Selection selection : editor.selections().all()) {
+            int row = editor.buffer().offsetToPoint(selection.head()).row();
+            for (com.crystalgui.text.fold.FoldingModel.RowRange range : hidden) {
+                assertFalse("caret left on hidden row " + row + " (hidden " + range.startRow()
+                        + ".." + range.endRow() + ")", range.contains(row));
+            }
+        }
+    }
+
+
     private void showEditor() {
         settle();
         editor.updateWindow();
