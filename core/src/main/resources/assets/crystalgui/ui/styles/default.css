@@ -1337,6 +1337,12 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
     --cfg-panel: #2E2E2E;
     --cfg-band: #383838;       /* a group header's strip — what marks it off from the rows above */
     --cfg-field: #2A2A2A;      /* a recessed, typeable surface */
+    /* The inset bevel Unity draws on every text field — a near-black top edge, a lighter bottom one —
+     * which is the actual reason theirs reads as a cut-in surface and a flat fill (however well the
+     * fill colour itself matches) does not. See `border-top-color`/`border-bottom-color` on
+     * `.__config-control__ textfield` below. */
+    --cfg-field-border-top: #1A1A1A;
+    --cfg-field-border-bottom: #474747;
     --cfg-popup: #515151;      /* a dropdown's raised face — deliberately NOT the field colour */
     --cfg-label-text: #D2D2D2;
     --cfg-value-text: #E4E4E4;
@@ -1447,6 +1453,21 @@ graphnode .__control-row__ {
  * text field with nothing typed in it collapses to a sliver. */
 graphnode .__control-row__ textfield,
 graphnode .__control-row__ dropdown { width: 0; flex-grow: 1; }
+/* Since P6.1.8 step 7: NUMBER/TEXT/ENUM/BOOLEAN resolve to a bare `textfield`/`dropdown`/`checkbox`
+ * tag same as always (a `ConfigControl` composed of exactly one, styled the same way), but VECTOR
+ * (`VectorControl`) is a real composite — its own tag is `vectorcontrol`, not `textfield` — so the
+ * rule above never reaches it and it sat at its natural content width until this was added. A future
+ * kind wired into `NodeFieldWidgets` that is ALSO a composite needs a matching line here — this is
+ * not automatic, unlike the inspector's `.__configurator__ > .__inline__ > .__config-control__` rule,
+ * because a blanket `.__config-control__` selector here would outrank `.__boolean__`'s `flex-grow: 0`
+ * override on specificity and stretch every checkbox in every node. */
+graphnode .__control-row__ .__config-control__.__vector__ { width: 0; flex-grow: 1; }
+/* `GraphNode.FULL_WIDTH_CLASS` has only ever meant "addControl, skip the label" — it carries no sizing
+ * of its own, which the old hand-rolled colour swatch never needed to know because it set its own
+ * `width: 100%` directly. `ColorControl`'s swatch does the same, but relative to `ColorControl` ITSELF
+ * — so without this, `ColorControl` sits at its natural (near-zero) width and the swatch's 100% has
+ * nothing real to fill. */
+graphnode .__control-row__ .__full-width__ { width: 100%; }
 
 /* ── THE CONTROL KIT ────────────────────────────────────────────────────────────────────────────
  * One height and one type size for every control kind a node can carry, so a node holding a text
@@ -1476,6 +1497,29 @@ graphnode .__control-row__ switch {
 graphnode .__control-row__ checkbox,
 graphnode .__control-row__ checkbox .__mark__ {
     width: var(--graph-ctrl-h);
+    height: var(--graph-ctrl-h);
+    min-height: var(--graph-ctrl-h);
+}
+/* Since P6.1.8 step 7: BOOLEAN's checkbox lives inside `BooleanControl` now, not bare — and the
+ * config kit gives IT a 13px `--cfg-check` size (`.__config-control__.__boolean__ checkbox`), scoped
+ * without a `.__configurator__` ancestor requirement, so it reaches into a node exactly as it reaches
+ * everywhere else. That rule and the plain one above TIE on specificity (21 each), and the config
+ * kit's is declared LATER in this file, so it silently won the node's checkbox down to 13px instead
+ * of the graph's own 14px — caught by `everyKind()`, not by eye. One more class component
+ * (`.__config-control__.__boolean__`) is what breaks the tie in the node's favour. */
+graphnode .__control-row__ .__config-control__.__boolean__ checkbox,
+graphnode .__control-row__ .__config-control__.__boolean__ checkbox .__mark__ {
+    width: var(--graph-ctrl-h);
+    height: var(--graph-ctrl-h);
+    min-height: var(--graph-ctrl-h);
+}
+/* `ColorControl`'s swatch is not a `textfield`/`dropdown`/`button`/`slider`/`switch` tag, so the kit
+ * rule above never reaches it either — same gap as VECTOR's, different fix, because a swatch has no
+ * natural single tag to hang a selector on. `graphnode` prefixed onto the SAME class chain the
+ * inspector's own rule uses (`.__config-control__.__color__ .__swatch__`, `--cfg-ctrl-h`) is what
+ * lets this win: one more type-selector component is enough specificity to beat it without touching
+ * the inspector's own rule at all. */
+graphnode .__config-control__.__color__ .__swatch__ {
     height: var(--graph-ctrl-h);
     min-height: var(--graph-ctrl-h);
 }
@@ -2149,15 +2193,45 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     font-size: var(--cfg-font);
 }
 /* A typeable surface is RECESSED and a popup's face is RAISED, and they are different colours on
- * purpose: it is the only thing telling a dropdown from a text field until the chevron exists. */
+ * purpose: it is the only thing telling a dropdown from a text field until the chevron exists.
+ *
+ * The recessed READ, though, is mostly the bevel below, not the fill colour — Unity's field and popup
+ * fills are close enough in value that colour alone barely separates them; the inset border is what
+ * actually sells "this is a hole, not a raised button". `border-color` (used on left/right, since there
+ * is no `border-left/right-color`) matches the field so those edges stay invisible, same as Unity. */
 .__config-control__ textfield {
     background: var(--cfg-field);
     color: var(--cfg-value-text);
+    border-width: 1px;
+    border-color: var(--cfg-field);
+    border-top-color: var(--cfg-field-border-top);
+    border-bottom-color: var(--cfg-field-border-bottom);
 }
 .__config-control__ dropdown {
     background: var(--cfg-popup);
     color: var(--cfg-value-text);
-    justify-content: flex-start;
+    /* NOT flex-start. This rule pre-dates Dropdown's chevron (its post-icon slot was empty, so
+     * flex-start vs. the base sheet's space-between looked identical with one child in the row) — once
+     * the chevron existed as a real second child, flex-start packed it right next to the label instead
+     * of at the box's far edge. space-between is what pins it there, matching Unity and the base
+     * `dropdown` rule this was silently overriding. */
+    justify-content: space-between;
+}
+/* The base sheet's `button:hover, dropdown:hover { background: #FF0000 }` is a DELIBERATE eyesore —
+ * an unmissable "this widget has no real hover from a theme" flag, not a bug (see the comment on that
+ * rule). The whole config kit inherited it silently for as long as nothing was ever hovered in a
+ * screenshot; MaskControl's toggle (`Layers [Default, Water, UI]` turning solid red) is what actually
+ * caught it. Every `button`/`dropdown` in the kit needs its own hover, not just the ones a screenshot
+ * happened to catch, so this covers the kit in one rule rather than one widget at a time: the toggle,
+ * the array's `+`/`−`, and the asset control's `...` all resolve to `button`, and a raised dropdown
+ * face lightens the same way a button does. */
+.__config-control__ button:hover,
+.__config-control__ dropdown:hover {
+    background: #5C5C5C;
+}
+.__config-control__ button:active,
+.__config-control__ dropdown:active {
+    background: #454545;
 }
 /* Unity does not colour-code a slider's fill; a saturated green track reads as a progress bar or as a
  * validation state rather than as a value being chosen. */
@@ -2174,13 +2248,85 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     min-height: var(--cfg-check);
 }
 /* NOT the base sheet's #3C8527. Green is a semantic colour — it reads as "valid" or "success", and on
- * a panel where a colour swatch is itself a control, a green square reads as a VALUE rather than as a
- * state. Unity draws a checkmark on a dark box; until CgShapeRenderer can draw one, a light fill is the
- * honest stand-in: unmistakably on, and unmistakably not a colour anyone chose. */
+ * a panel where a colour swatch is itself a control, a green fill reads as a VALUE rather than as a
+ * state. Unity draws a checkmark on a dark box, and now that CgUiShape exists we draw the real thing:
+ * the box stays the SAME dark field colour checked or not, and `overlay: shape("checkmark")` is what
+ * carries the on/off distinction — not a colour swap. */
 .__config-control__.__boolean__ checkbox .__mark__ { background: var(--cfg-field); }
-.__config-control__.__boolean__ checkbox:checked .__mark__ { background: var(--cfg-value-text); }
+.__config-control__.__boolean__ checkbox:checked .__mark__ { overlay: shape("checkmark"); }
 .__config-control__.__boolean__ checkbox:hover .__mark__ { background: #3A3A3A; }
-.__config-control__.__boolean__ checkbox:checked:hover .__mark__ { background: #FFFFFF; }
+.__config-control__.__boolean__ checkbox:checked:hover .__mark__ { background: #3A3A3A; }
+
+/* ── Colour ─────────────────────────────────────────────────────────────────────────────────────
+ * Ported from graphnode's `.__color-swatch__` (graph.css) — a colour bar with its alpha as a strip
+ * beneath — scaled to the kit's row height instead of the node's. The swatch itself, not
+ * `.__config-control__`, carries the height: ColorControl wraps nothing else, so the control's own
+ * box auto-sizes to it, the same way every other composite here sizes to its parts rather than being
+ * told a number directly. */
+.__config-control__.__color__ .__swatch__ {
+    width: 100%;
+    height: var(--cfg-ctrl-h);
+    flex-direction: column;
+    border-radius: 2px;
+    outline: 1px #1A1A1A;
+    outline-offset: 0px;
+    cursor: pointer;
+}
+.__config-control__.__color__ .__color-bar__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+/* The unfilled remainder is DARK, not the panel colour — the strip has to read as a gauge that is
+ * part full, and against the panel's own background an alpha of 0.4 is indistinguishable from a
+ * 40%-wide bar floating on nothing. */
+.__config-control__.__color__ .__alpha-bar__ {
+    width: 100%;
+    height: 3px;
+    background: #14140F;
+}
+.__config-control__.__color__ .__alpha-fill__ {
+    height: 3px;
+    background: #FFFFFF;
+}
+
+/* ── Mask ───────────────────────────────────────────────────────────────────────────────────────
+ * The closed-state button is a real `button`, so it already lands on the kit height via the tag
+ * list above — nothing to add here for that. The panel is a plain `popover`, styled by the base
+ * sheet's popover chrome; only the per-row layout is the kit's business. */
+.__config-control__.__mask__ .__toggle__ {
+    width: 100%;
+    justify-content: space-between;
+}
+.__config-control__.__mask__ .__mask-panel__ .__mask-row__ {
+    width: 100%;
+    padding-all: 2px;
+}
+/* Same fix as `.__config-control__.__boolean__` above, and the same reason: the base sheet's
+ * `checkbox:checked .__mark__` is semantic green, and a mask panel is exactly the place that reads
+ * worst — a column of green squares looks like a column of validation states, not a column of
+ * selections. Kept in step with BooleanControl's rule deliberately rather than sharing a single
+ * selector, since `.__mask-row__` sits on the checkbox ITSELF (MaskControl adds the class directly),
+ * not on a `.__config-control__.__boolean__` wrapper the way a lone boolean row does. */
+.__config-control__.__mask__ .__mask-row__ .__mark__ { background: var(--cfg-field); }
+.__config-control__.__mask__ .__mask-row__:checked .__mark__ { overlay: shape("checkmark"); }
+.__config-control__.__mask__ .__mask-row__:hover .__mark__ { background: #3A3A3A; }
+.__config-control__.__mask__ .__mask-row__:checked:hover .__mark__ { background: #3A3A3A; }
+
+/* ── Matrix ─────────────────────────────────────────────────────────────────────────────────────
+ * A grid: one row per `.__matrix-row__`, cells stretching evenly across it. Unlabelled by design —
+ * see MatrixControl's javadoc on why it self-labels. */
+.__config-control__.__matrix__ { flex-direction: column; gap-all: 1px; }
+.__config-control__.__matrix__ .__matrix-row__ { flex-direction: row; gap-all: 1px; }
+.__config-control__.__matrix__ .__matrix-cell__ { width: 0; flex-grow: 1; }
+
+/* ── Asset ──────────────────────────────────────────────────────────────────────────────────────
+ * A field and a small square button, Unity's "path + picker" shape. The button does not stretch —
+ * `...` never needs more than its own square, and stretching it would waste the width a long path
+ * needs most. */
+.__config-control__.__asset__ { flex-direction: row; gap-all: var(--cfg-gap); }
+.__config-control__.__asset__ .__field__ { width: 0; flex-grow: 1; }
+.__config-control__.__asset__ .__browse__ { flex-grow: 0; width: var(--cfg-ctrl-h); }
 
 /* Leaves fill their inline box; the composites lay their own parts out. */
 .__config-control__.__number__,
@@ -2286,6 +2432,27 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
 /* Collapsed keeps no box at all — so every box inside one measures 0, the same trap a closed Dialog
  * sets. Worth knowing before asserting on anything inside a collapsed group. */
 .__configurator-group__.__collapsed__ > .__content__ { display: none; }
+
+/* ── Headers ────────────────────────────────────────────────────────────────────────────────────
+ * The SAME band a group's head uses, and for the same reason — a change of surface is the only thing
+ * that reads as "a section starts here" on a flat panel — but no arrow and nothing to click: a header
+ * does not own content, so there is nothing to collapse. `-6px` bleeds it to the panel edge exactly like
+ * the group head does, and for the same reason: a strip that stops short of the edge reads as a button. */
+.__configurator__ > .__inline__ > .__config-control__.__header__ {
+    flex-direction: row;
+    align-items: center;
+    height: var(--cfg-ctrl-h);
+    min-height: var(--cfg-ctrl-h);
+    background: var(--cfg-band);
+    color: var(--cfg-label-text);
+    margin-left: -6px;
+    margin-right: -6px;
+    padding-left: var(--cfg-pad-x);
+    padding-right: var(--cfg-pad-x);
+}
+.__config-control__.__header__ .__title__ {
+    font-size: var(--cfg-font);
+}
 
 /* ── Arrays ─────────────────────────────────────────────────────────────────────────────────────
  * Header, body, and the +/- pair at the BOTTOM RIGHT — Unity's arrangement in every list it draws. */

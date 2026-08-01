@@ -262,19 +262,66 @@ nodeport.type-sampler .__dot__ { border-color: #C1C1C1; background-color: #C1C1C
 nodeport:blank .__dot__ { background-color: #00000000; }
 
 /* The inline editor on an unconnected input. Narrow, because it shares the row with a label and a dot
- * inside a 168px node. */
+ * inside a 168px node.
+ *
+ * Since P6.1.8 step 8: this is a real `ConfigControl` (`NumberControl`, `VectorControl`, ...), not a
+ * bare `TextField` — so `.__editor__` itself can no longer BE the flat field. It is a plain row now;
+ * the box, background and padding these fields always had move to whatever leaf tag is actually
+ * visible inside. Getting this wrong looks like nothing at all: the class still exists, `:blank`
+ * still toggles it, and the ONLY symptom is the field painting in whatever colour its ambient rule
+ * happens to give it — port fields were the base sheet's plain textfield grey until this was caught. */
+nodeport .__editor__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 2px;
+    height: 11px;
+}
 /* Narrow on purpose. These hold a component of a vector — "0", "0.5", "-1.2" — not prose, and the field
  * sharing its row with a label and a dot is what sets the node's width. Unity's are about this size for
- * the same reason: four or five characters is the whole vocabulary. */
-nodeport .__editor__ {
-    width: 24px;
+ * the same reason: four or five characters is the whole vocabulary. A floor, not a cap — VECTOR's two
+ * cells each claim their own, so a vec2 port editor is legitimately wider than a scalar one. */
+nodeport .__editor__ textfield,
+nodeport .__editor__ dropdown {
+    min-width: 24px;
     height: 11px;
+    min-height: 11px;
     padding-all: 2px;
     background: var(--node-field);
     border-radius: 2px;
     color: var(--node-text-bright);
     font-size: 7;
 }
+/* BOOLEAN: same "square, and smaller than the row" exception the inspector and the control row both
+ * make — `--cfg-check` (13px, from the config kit's OWN unscoped rule) would otherwise win here too,
+ * same specificity trap `everyKind()` already caught for the control row. */
+nodeport .__editor__ checkbox,
+nodeport .__editor__ checkbox .__mark__ {
+    width: 11px;
+    height: 11px;
+    min-height: 11px;
+}
+/* COLOR: a vec3/vec4 input CAN carry an inline literal (widgetKindFor maps both to COLOR), so this is
+ * reachable even though Unity itself rarely puts a colour picker inline on a port — a swatch this
+ * small is still legible as "a colour, not a number", which is the one thing it has to say. Not the
+ * inspector's `.__swatch__` sizing (`--cfg-ctrl-h`) or the control row's (`--graph-ctrl-h`) — a THIRD
+ * scale, because a port row is tighter than either. */
+nodeport .__editor__.__color__ .__swatch__ {
+    width: 40px;
+    height: 11px;
+    min-height: 11px;
+    outline: 1px var(--node-hairline);
+    outline-offset: 0px;
+}
+/* `ColorControl` itself needs somewhere to be that size — same "FULL_WIDTH_CLASS has no sizing of its
+ * own" gap the control row hit, except a port editor never adds FULL_WIDTH_CLASS at all (there is no
+ * label to skip inside a port's own editor slot), so this reaches the control directly instead.
+ *
+ * NOT a descendant selector — `NodePort.setInlineEditor` adds `.__editor__` straight onto the control
+ * itself (`ColorControl`), the same element that already carries `.__color__`, not a wrapper around
+ * it. `.__editor__ .__color__` (with the space) matches nothing at all here, which is exactly the
+ * "resolves to zero, not to an error" failure this whole session keeps running into — caught this
+ * time by `NodePortInlineEditorTest` asserting real width, not by a screenshot. */
+nodeport .__editor__.__color__ { width: 40px; }
 
 /* ── ColorSelector ──────────────────────────────────────────────────────────────────────────────
  * The node's own construction, deliberately: same border, same radius, same greys — a picker opened
@@ -331,32 +378,14 @@ colorselector .__swatches__ {
 }
 
 /* ── The Color node's field ─────────────────────────────────────────────────────────────────────
- * A colour bar with its alpha as a strip beneath it, and the picker opens over it on a press. */
-graphnode .__color-swatch__ {
-    width: 100%;
-    height: 14px;
-    flex-direction: column;
-    border-radius: 2px;
+ * Since P6.1.8 step 7: the swatch is `ColorControl`'s (`__swatch__`, `__color-bar__`, `__alpha-bar__`,
+ * `__alpha-fill__`), not a hand-rolled widget of this node's own — default.css already gives it the
+ * right HEIGHT, geometry and alpha-gauge backdrop for a node
+ * (`graphnode .__config-control__.__color__ .__swatch__`). The one thing worth restating here is this
+ * THEME's own hairline colour, `--node-hairline`, in place of the inspector's `#1A1A1A`. */
+graphnode .__config-control__.__color__ .__swatch__ {
     outline: 1px var(--node-hairline);
     outline-offset: 0px;
-    cursor: pointer;
-}
-graphnode .__color-swatch__ .__color-bar__ {
-    width: 100%;
-    height: 0;
-    flex-grow: 1;
-}
-/* The unfilled remainder is DARK, not the panel colour: the strip has to read as a gauge that is part
- * full, and against the node's own background an alpha of 0.4 is indistinguishable from a 40%-wide bar
- * floating on nothing. */
-graphnode .__color-swatch__ .__alpha-bar__ {
-    width: 100%;
-    height: 3px;
-    background: #14140F;
-}
-graphnode .__color-swatch__ .__alpha-bar__ .__alpha-fill__ {
-    height: 3px;
-    background: #FFFFFF;
 }
 /* NO outline on the thumb. An outline is stroked on BOTH sides, so a 1px edge on a 1px thumb is 3px of
  * apparent width — the outline was the whole of what remained after the thumb itself was already a

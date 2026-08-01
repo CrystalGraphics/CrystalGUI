@@ -69,9 +69,12 @@ public final class ShaderGraphBridge {
     public static NodeTypeRegistry asNodeLibrary(CgShaderNodeRegistry shaderNodes) {
         registerPortTypes();
         // Here rather than at a call site, for the same reason the port types are: building a shader
-        // node library is the moment the shader domain's vocabulary has to exist, and a colour field
-        // silently falling back to a GLSL text box is the kind of miss nobody reports as a bug.
+        // node library is the moment the shader domain's vocabulary has to exist, and a colour or
+        // vector field silently falling back to a GLSL text box is the kind of miss nobody reports as
+        // a bug. NodeFieldWidgets no longer has a generic default for either — see its class javadoc —
+        // so skipping this line is now a visible regression (a text field) rather than a silent one.
         ShaderColorFieldWidget.install();
+        ShaderVectorFieldWidget.install();
         NodeTypeRegistry library = new NodeTypeRegistry();
         for (CgShaderNode node : shaderNodes.all()) library.register(asNodeType(node));
         library.register(asNodeType(new CgMasterNode()));

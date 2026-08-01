@@ -120,7 +120,10 @@ single place they get argued about.
 
 ### Groups, headers and lists
 
-- **Section header** (`Target Settings`): bold, full width, no control, no arrow.
+- **Section header** (`Target Settings`): full width, no control, no arrow. Built as
+  `ConfigDescriptor.Kind.HEADER` / `HeaderControl` — a self-labelling structural kind, the same band a
+  group's head uses. No `font-weight` exists in this engine's CSS, so the band carries the separation
+  rather than a bold glyph.
 - **Foldout** (`▼ Universal`): a disclosure arrow, and children indented under it. LDLib2 draws a border
   around the child container; Unity indents only. **Take Unity's** — a border per group turns a deep
   panel into a stack of boxes.
@@ -200,11 +203,11 @@ Thirteen, each with the Unity reference to build against.
 | 3 | `BooleanControl` | `05-toggle.png` | `Checkbox` | The one control that is square and does not fill |
 | 4 | `TextControl` | `08-validated-text.png` | `TextField` | Optional validator + `setMaxLength` |
 | 5 | `SelectControl` | `06-dropdown-*.png` | `Dropdown` | Must scroll — Blend has 22 options |
-| 6 | `ColorControl` | `01-color-field.png` | **`ColorSelector`** ✅ | Already built. Add the HDR mode |
+| 6 | ✅ `ColorControl` | `01-color-field.png` | `ColorSelector`, ported from `ShaderColorFieldWidget` minus the GLSL | Swatch + promoted `Dialog`. HDR mode still open |
 | 7 | `SliderControl` | `02-slider-with-range.png` | `Slider` + `NumberControl` | Range is **per instance**, not per type |
-| 8 | `MaskControl` | `07-mask-dropdown.png` | `Dropdown` + `Checkbox` | Multi-select; reads `Everything` when full |
-| 9 | `MatrixControl` | `11-matrix-grid.png` | N×N `NumberControl` | Self-labelling; no row label |
-| 10 | `AssetControl` | `04-inspector-custom-function.png` | `TextField` + `Button` | Path + picker. Browser is 6.1.10 |
+| 8 | ✅ `MaskControl` | `07-mask-dropdown.png` | `Popover` + `Checkbox` (**not** `Dropdown` — see the class javadoc) | Reads `Everything`/`Nothing`/a comma list, read back out of the boxes each time |
+| 9 | ✅ `MatrixControl` | `11-matrix-grid.png` | N×N `NumberControl`, flat row-major `double[]` | Self-labelling; no row label |
+| 10 | ✅ `AssetControl` | `04-inspector-custom-function.png` | `TextField` + `Button` | Path + `onBrowse` signal. The picker itself is still 6.1.10 |
 | 11 | `GradientControl` | `10-gradient-field.png` | new | **The expensive one.** Stops, alpha stops, interpolation |
 | 12 | `ConfiguratorGroup` | `07-full-window.png` **F** | `UIElement` | Foldout. Structure, not a value |
 | 13 | `ArrayControl` | `03-inspector-keyword-enum.png` | **`ListView`** ✅ | Reorder + `+`/`−` + empty state |
@@ -280,35 +283,31 @@ The assembly line's guard rails. `NodeControlKitTest` already exists and general
 
 ---
 
-## Blocked on `CgShapeRenderer` — a CrystalGraphics gap
+## `CgUiShape` — resolved 2026-08-01
 
-**Status 2026-08-01: the user is building this.** Note it here so nothing below is mistaken for an
-oversight.
+The blocker below is historical; `CgUiShape` shipped (curve-based, in CrystalGUI's own `render/texture/`
+— not a `CgShapeRenderer` in CrystalGraphics as first scoped, since chevrons/checkmarks turned out to
+be composable from `CgVectorRenderer.curve()`, already exposed to CrystalGUI, rather than needing a new
+CrystalGraphics-side primitive). All three items below are wired:
 
-Three controls cannot be finished until CrystalGraphics can draw a filled primitive:
-
-| Needs | For | Today |
+| Needs | For | Now |
 |---|---|---|
-| Triangle / chevron `▼ ▶` | the foldout arrow; a dropdown's popup indicator | the letter `v`, CSS-rotated |
-| Checkmark `✓` | a checked `BooleanControl` | a solid filled square |
-| Arrow head `→` | wires, port direction, future breadcrumbs | absent |
+| Chevron `▼` | `ConfiguratorGroup`'s foldout arrow | `overlay: shape("chevron-down")`, rotates `-90deg` collapsed |
+| Chevron `▼` | a dropdown's popup indicator | `Dropdown` claims `Button`'s post-icon slot; `dropdown .__chevron__` |
+| Checkmark `✓` | a checked `BooleanControl` | `overlay: shape("checkmark")` on `.__mark__`, same dark field colour checked or not |
 
-**Why a glyph is not a substitute, having tried it.** The bundled `Minecraft.otf` / `MinecraftRegular.otf`
-have no geometric shapes at all — no `▼`, no `✓`, not even `…` (which is why `UIText` carries an explicit
-`...` fallback). So the only characters available are letters, and a letter used as an arrow reads as a
-letter: at 10px, a rotated `v` is legible as a `v`. Nor can a `CgUiQuad` be coaxed into a triangle — a
-drawable paints one rect, and the SDF path (`CgUiRoundedRect`) only rounds corners.
+<details>
+<summary>Original blocker note, for history</summary>
 
-**The dropdown chevron is the sharpest case.** Without it, a dropdown and a text field differ only by
-their face colour, so `Space [World]` reads as an oddly-tinted text input. It is currently the single
-largest legibility gap against the reference.
+Three controls could not be finished until something could draw a filled primitive. The bundled
+`Minecraft.otf` / `MinecraftRegular.otf` have no geometric shapes at all — no `▼`, no `✓`, not even `…`
+(which is why `UIText` carries an explicit `...` fallback) — so a letter glyph was always a stand-in, not
+a solution: at 10px a rotated `v` is legible as a `v`. Nor can `CgUiQuad` be coaxed into a triangle — a
+drawable paints one rect, and the SDF path (`CgUiRoundedRect`) only rounds corners. The dropdown chevron
+was the sharpest case: without it, a dropdown and a text field differed only by face colour, so
+`Space [World]` read as an oddly-tinted text input.
 
-Scope, as requested: a general `CgShapeRenderer` for UI primitives — triangles, arrow heads, chevrons,
-checkmarks — in **CrystalGraphics**, since CrystalGUI may not write raw GL and this is a backend
-capability. `Cg` prefix per the project's naming rule.
-
-**When it lands:** replace the `v` in `ConfiguratorGroup` and `GraphNode`'s collapse toggle, add a
-chevron to `Dropdown`, and swap `BooleanControl`'s filled square for a real check.
+</details>
 
 ---
 
@@ -323,13 +322,100 @@ Sequenced so each step is testable and nothing is built twice.
 | 3 | The six assembly controls — Number, Vector, Boolean, Text, Select, Slider | All over existing widgets; this is where the kit becomes a kit |
 | 4 | `ConfiguratorGroup` + `ArrayControl` | Structure. `ArrayControl` is over `ListView`, already built |
 | 5 | **Gallery page + the review sitting** | Before anything depends on the look. This is the one human gate |
-| 6 | `ColorControl` (adopt `ColorSelector`), `MaskControl`, `MatrixControl`, `AssetControl` | The four remaining leaves |
-| 7 | `NodeFieldWidgets` becomes a codec layer over `ConfigControls` | The graph adopts the kit; nothing visual changes |
-| 8 | **Port-attached host** on `NodePort` | The mechanism 6.3.6 is actually blocked on |
+| 6 | ✅ `ColorControl`, `MaskControl`, `MatrixControl`, `AssetControl` | The four remaining leaves — done 2026-08-01. `everyKindIsAccountedFor`'s missing set is down to `[GRADIENT]` |
+| 7 | ✅ `NodeFieldWidgets` becomes a codec layer over `ConfigControls` | Done 2026-08-01. Two small, deliberate visual changes — see below, not "nothing" as first scoped |
+| 8 | ✅ **Port-attached host** on `NodePort` adopts the kit | Done 2026-08-02. The SLOT (`setInlineEditor`, `:blank`, click-vs-drag routing) already existed before P6.1.8 — see the correction below |
 | 9 | `GradientControl` | Deferred to last: expensive, and no node in the near set needs it |
 
 Step 5 is the gate. Everything before it is structure; everything after it inherits a look that has
 already been signed off.
+
+---
+
+## Step 7, what actually landed
+
+`NodeFieldWidgets` (`ui/elements/graph/`) kept its `NodeField.Kind -> Factory` registry exactly as it
+was, but four of its six built-ins — `ENUM`, `TEXT`, `NUMBER`, `BOOLEAN` — now build through
+`ConfigControls`/`ConfigDescriptor` instead of a bespoke `Dropdown`/`TextField`/`Checkbox`. A
+`ConfigControl`'s typed `changed` (`Object`) is bridged back to this package's `String` contract by one
+small `wrap()` helper, which also carries `ConfigControl#selfLabelling()` across to
+`GraphNode#FULL_WIDTH_CLASS` — two hosts, one decision, spelled the way each asks for it.
+
+`COLOR` and `VECTOR` are deliberately **not** built in — see `NodeFieldWidgets`'s class javadoc. Their
+stored value is a domain-specific literal (`NodeField`'s own doc calls it "the consumer's own literal
+form"), so a generic default would be guessing at a grammar this package has no business assuming.
+`ShaderColorFieldWidget` and the new `ShaderVectorFieldWidget` (`graph/shader/`) register the real GLSL
+codec for the shader domain, each now building through `ColorControl`/`VectorControl` instead of a
+hand-rolled widget — `ShaderColorFieldWidget` in particular shed its entire hand-built swatch/Dialog/
+placement code, since `ColorControl` already is that.
+
+**Two deliberate visual changes**, not the "nothing visual changes" first scoped:
+- **`VECTOR` in a node body** used to be a bare text field a `vec2(...)` literal was typed into raw. It
+  is now `VectorControl` — real X/Y boxes. A genuine upgrade, not a regression, and the reason it
+  wasn't possible to keep pixel-identical: there was no config-kit control standing in for "a vector as
+  a string" to fall back to, and inventing one would have been the second bespoke widget this step
+  exists to stop writing.
+- **`COLOR` in the inspector** now shows a label beside the swatch, matching Unity's own inspector
+  reference — `ColorControl.selfLabelling()` is `false` because a swatch cannot say *which* colour it
+  is by being a colour. The node body keeps its label-less, full-width swatch exactly as before:
+  `ShaderColorFieldWidget.build` claims `GraphNode.FULL_WIDTH_CLASS` explicitly rather than deferring to
+  the control's default, because a ~130px node has no room for both a label and a usable swatch — the
+  same trade-off this class reasoned through before `ConfigControl` existed. One control, two hosts,
+  two different (and still correct) answers to "do I get a label".
+
+**Two real bugs, caught by tests, not by eye:**
+- `graphnode .__control-row__ .__config-control__.__boolean__ checkbox` — `BooleanControl`'s 13px
+  `--cfg-check` rule and the node's own 14px `graphnode .__control-row__ checkbox` rule tied on CSS
+  specificity, and the config-kit one (declared later in the file) silently won, shrinking every
+  checkbox in every node by a pixel. `NodeControlKitTest.everyKind()` caught it as `BOOLEAN is 13.0px`.
+- `GraphNode.FULL_WIDTH_CLASS` never had any CSS effect beyond "skip the label" — the old hand-rolled
+  swatch never needed one, since it set its own `width: 100%` directly. `ColorControl`'s swatch does
+  the same, but relative to `ColorControl` itself, so without
+  `graphnode .__control-row__ .__full-width__ { width: 100% }` the control sat at near-zero width with
+  nothing for its swatch's 100% to fill.
+
+New tests: `ShaderFieldCodecTest` (`graph/shader/`) — the GLSL codec round-trips, a malformed literal
+degrades rather than throws, and an edit through `ColorControl`/`VectorControl` writes back the exact
+string `NodeFieldBinder` would store. `NodeControlKitTest` now installs both shader widgets in its own
+setup, since `COLOR`/`VECTOR` have no default to fall back to any more.
+
+---
+
+## Step 8, and a correction to how it was scoped
+
+**Correction first.** Step 8 was written up as "the mechanism 6.3.6 is actually blocked on" — that
+overstated it. `docs/research/UNITY_SHADER_GRAPH_NODES.md`'s own "What this implies for 6.3.6" section,
+written before P6.1.8 started, already lists "inline value editors" as done. The slot this step
+touches — `NodePort.setInlineEditor`, `nodeport:blank` visibility, the click-vs-drag routing in
+`beginConnectionDrag` — predates P6.1.8 entirely and was untouched by it. **The real blocker that
+research doc names is multiple outputs** (Split, Combine, every texture sampler, Voronoi), which is an
+emitter/compiler mechanism, not a UI kit control, and stays fully out of P6.1.8's scope.
+
+What step 8 actually did: made the EXISTING slot correctly host what step 7 changed
+`NodeFieldWidgets`/`NodeFieldBinder` into producing — real `ConfigControl`s instead of bare widgets —
+and, in the process, found the first real test coverage this path never had. `NodeFieldTest` stops at
+the document layer (no widget, no GL, by design); nothing before this exercised
+`NodeFieldBinder.attach` against a real `NodePort` at all.
+
+**Two real, pre-existing-shape bugs, found only because a test finally looked:**
+- `nodeport .__editor__`'s CSS was written for the shape the widget had before step 7 — a bare
+  `TextField`, styled directly. Once `NodeFieldWidgets` started returning a `ConfigControl` wrapper
+  (`NumberControl`, etc.), `.__editor__` landed on the WRAPPER while the visible field was its
+  internal `textfield` — so the port's own background/padding/colour/font-size rule silently stopped
+  reaching anything, and a port field quietly fell back to the base sheet's plain grey. Fixed by
+  retargeting the box styling onto `nodeport .__editor__ textfield`/`dropdown`/`checkbox` (the leaf
+  tags), leaving `.__editor__` itself a plain row.
+- My own first attempt at sizing `ColorControl`'s port swatch wrote `nodeport .__editor__ .__color__`
+  — a descendant selector, when `.__editor__` and `.__color__` are the SAME element
+  (`NodePort.setInlineEditor` adds `.__editor__` straight onto the control, not a wrapper around it).
+  That selector matched nothing; `NodePortInlineEditorTest`'s width assertion caught it as `0.0px`
+  before this was ever run in the harness.
+
+New test: `NodePortInlineEditorTest` (`ui/elements/graph/`) — a port field lands on its port and never
+leaks into the node's body controls (and vice versa); the editor's visibility actually follows
+`:blank`, not just the class; an edit writes through `NodeFieldBinder` to the document; and a VECTOR/
+COLOR port editor (reachable per `ShaderGraphBridge.widgetKindFor` — a vec2/vec3/vec4 default) has
+real, non-zero size in the port row's much tighter scale.
 
 ---
 
