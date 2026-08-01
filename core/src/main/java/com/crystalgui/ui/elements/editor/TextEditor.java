@@ -83,12 +83,16 @@ import java.util.Map;
  * "window over N fixed-height rows", and it becomes worth extracting when 6.1.7's gutter needs a third
  * copy of it.</p>
  *
- * <h3>Soft wrap is deliberately absent, not stubbed</h3>
- * <p>Wrapping makes a line occupy a variable number of visual rows, so the window can no longer be
- * derived by dividing a scroll offset by a row height — it needs the variable-height virtualisation that
- * 6.1.3 explicitly deferred. There is therefore <b>no {@code setSoftWrap}</b>: a toggle that silently did
- * nothing would be worse than an absent one, and this engine has already paid for that lesson once with
- * highlight properties that resolved and never painted.</p>
+ * <h3>Soft wrap</h3>
+ * <p>{@link #setSoftWrap} is real, and the window is no longer derived by dividing a scroll offset by a
+ * row height: {@link ProjectedLines} maps model rows onto view lines and is consulted unconditionally, so
+ * there is one code path whether wrapping is on or off. See that field's note for why there is no
+ * unwrapped fast path.</p>
+ *
+ * <p>This heading used to say soft wrap was "deliberately absent, not stubbed", on the reasoning that a
+ * toggle which silently did nothing is worse than an absent one. That reasoning still holds; the feature
+ * simply landed, and the paragraph outlived it — which is the same failure it was warning about, one
+ * level up.</p>
  */
 public class TextEditor extends ScrollerView implements UndoScope {
 
@@ -135,11 +139,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * draw one today, and every other widget's mark ({@code Checkbox.__mark__} and friends) is a CSS-styled
      * box for exactly this reason.</p>
      */
-    private static final String FOLD_GLYPH_EXPANDED = "-";
-    private static final String FOLD_GLYPH_COLLAPSED = "+";
+    static final String FOLD_GLYPH_EXPANDED = "-";
+    static final String FOLD_GLYPH_COLLAPSED = "+";
 
     /** {@code "..."} for the same reason — U+22EF and U+2026 are both absent from the bundled fonts. */
-    private static final String FOLD_PLACEHOLDER_TEXT = "...";
+    static final String FOLD_PLACEHOLDER_TEXT = "...";
 
     /** Rows kept realised beyond the viewport, so a scroll does not expose an unpainted band. */
     private static final int OVERSCAN = 3;
@@ -196,21 +200,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Widest line realised since the last edit, font change or reprojection. */
     private float widestSeen;
 
-    /** The font the whitespace markers were last styled for. */
-    private String markerFontKey;
-
     /** The shaped width of one digit, and the font it was measured in. */
     private float digitWidth = -1f;
     private String digitWidthFontKey;
 
     /** The size the sheet gave this editor, captured on the first zoom so reset has a target. */
     private float baseFontSize = -1f;
-
-    /** Seconds the zoom indicator has left on screen; zero means hidden. */
-    private float zoomIndicatorSeconds;
-    private UIElement zoomIndicator;
-    private UIText zoomLabel;
-    private com.crystalgui.ui.elements.Button zoomResetButton;
 
     // ── §G view decorations ─────────────────────────────────────────────────────────────────────
 
@@ -220,18 +215,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private boolean scrollBeyondLastLine = true;
     private boolean offSideLanguage;
 
-    private final List<UIElement> indentGuides = new ArrayList<>();
-    private final List<UIElement> whitespaceMarks = new ArrayList<>();
-    private final List<UIElement> rulerLines = new ArrayList<>();
-    private final List<UIElement> gutterEdge = new ArrayList<>();
-
     private final Map<Integer, UIElement> realisedLines = new HashMap<>();
     private final Deque<UIElement> linePool = new ArrayDeque<>();
-    private final List<UIElement> selectionBands = new ArrayList<>();
-
-    /** One element per caret, pooled — a multi-caret edit that shrinks back to one must not churn them. */
-    private final List<UIElement> caretElements = new ArrayList<>();
-
     /**
      * The gutter, and the line numbers inside it.
      *
@@ -242,7 +227,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * numbers sideways the moment a line is wider than the viewport.</p>
      */
     private final UIElement gutter = new UIElement();
-    private final List<UIElement> lineNumbers = new ArrayList<>();
     @Getter
     private boolean gutterVisible = true;
     /**
@@ -357,15 +341,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Last pointer position in this element's space, for autoscroll while dragging. */
     private float pointerX, pointerY;
-    private boolean pointerInside;
-
-    /**
-     * Blink period in seconds — one full off-and-on cycle. Chromium's is 1.06s; the exact number is less
-     * important than being slow enough not to distract and fast enough to read as a caret.
-     */
-    private float blinkPeriodSeconds = 1.06f;
-    private float blinkClock;
-    private boolean caretShown = true;
 
     /**
      * Per-row measurement, keyed by row and dropped wholesale on any edit.
@@ -387,6 +362,29 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * will not unfold — which is what VS Code and IntelliJ both do, and the same rule that keeps scroll
      * position and selection out of the history.</p>
      */
+    // ── View parts ──────────────────────────────────────────────────────────────────────────────
+    //
+    // VS Code's decomposition, ported: each piece of the view owns its own elements and places them in
+    // its own pass. See EditorViewPart. They are rendered unconditionally for now, exactly as the
+    // layOut* methods they replaced were -- the shouldRender protocol is defined but not yet wired.
+
+    private final RulersPart rulersPart = new RulersPart(this);
+    private final WhitespacePart whitespacePart = new WhitespacePart(this);
+    private final IndentGuidesPart indentGuidesPart = new IndentGuidesPart(this);
+    private final GutterEdgePart gutterEdgePart = new GutterEdgePart(this);
+    private final FoldingDecorationsPart foldingDecorationsPart = new FoldingDecorationsPart(this);
+    private final ZoomIndicatorPart zoomIndicatorPart = new ZoomIndicatorPart(this);
+    private final ViewCursorsPart viewCursorsPart = new ViewCursorsPart(this);
+    private final SelectionsPart selectionsPart = new SelectionsPart(this);
+    private final CurrentLinePart currentLinePart = new CurrentLinePart(this, currentLine, currentLineGutter);
+
+    private final LineNumbersPart lineNumbersPart = new LineNumbersPart(this, gutter);
+    /** Every part, in paint order, so the frame drives one list rather than a dozen named calls. */
+    private final java.util.List<EditorViewPart> viewParts = java.util.List.of(
+            gutterEdgePart, indentGuidesPart, whitespacePart, rulersPart, foldingDecorationsPart,
+            zoomIndicatorPart, lineNumbersPart, currentLinePart, selectionsPart, viewCursorsPart);
+
+
     private final FoldingModel folding = new FoldingModel();
 
     /**
@@ -415,29 +413,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private final UIElement foldColumn = new UIElement();
 
-    /** Pooled gutter arrows, one per foldable row on screen. */
-    private final List<UIElement> foldArrows = new ArrayList<>();
-
-    /**
-     * Which row each pooled arrow currently stands for.
-     *
-     * <p>The arrows are recycled, so the row an arrow means changes every time the view scrolls — but a
-     * listener may only be attached <b>once</b>, at creation, or every frame would add another one to the
-     * same element. So the listener captures its immutable <em>pool index</em> and reads the row from here,
-     * which the layout pass rewrites each frame. Capturing the row itself would freeze the arrow on
-     * whatever row it was first used for, and it would keep working for exactly as long as nobody
-     * scrolled.</p>
-     */
-    private final List<Integer> foldArrowRows = new ArrayList<>();
-
-    /** Pooled markers, one per collapsed region whose header is on screen. */
-    private final List<UIElement> foldPlaceholders = new ArrayList<>();
-
-    /** The row each pooled placeholder stands for — same recycling rule as {@code foldArrowRows}. */
-    private final List<Integer> foldPlaceholderRows = new ArrayList<>();
+    /** The arrows' strip. Owned here so its attachment order among siblings is unchanged. */
+    UIElement foldColumn() {
+        return foldColumn;
+    }
 
     /** One row's expanded display text and column maps, plus the measured x of each display index. */
-    private record RowMetrics(CursorColumns.Line line, float[] widths) {
+    record RowMetrics(CursorColumns.Line line, float[] widths) {
     }
 
     public TextEditor() {
@@ -478,7 +460,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // the implementation's business. See SyntaxTokenizer#edited.
             tokenizer.edited(buffer.document(), change);
             highlightsDirty = true;
-            measuredRows.clear();
+            // BEFORE reprojectAfterEdit, which is what advances previousLineCount -- this needs the count
+            // as it was in order to tell a same-row edit from one that shifted every row below it.
+            invalidateMeasuredRows(change);
             // NOT invalidateWindow() unless the line COUNT changed.
             //
             // Recycling every line on every keystroke clears each one's highlights -- recycleLine has to,
@@ -638,8 +622,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
         buffer.breakUndoCoalescing();
         updateBracketMatch();
         highlightsDirty = true;
-        restartCaretBlink();
-        layOutCaretAndSelection(firstRealised, lastRealised);
+        viewCursorsPart.restartBlink();
+        // These two EAGERLY, ahead of the frame's own pass. A caret that only moved on the next
+        // updateWindow would lag every keystroke by a frame, which is the one place in this widget where
+        // that is visible. The rest of the parts have nothing to say about a selection change and wait.
+        selectionsPart.render(firstRealised, lastRealised);
+        viewCursorsPart.render(firstRealised, lastRealised);
         markTreeDirty();
         onSelectionChanged.emit();
     }
@@ -697,7 +685,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         buffer.edit(edit);
         selections.mapThrough(edit).collapseEachToHead();
         clearGoalColumns();
-        restartCaretBlink();
+        viewCursorsPart.restartBlink();
         ensureCaretVisible();
         onSelectionChanged.emit();
     }
@@ -762,6 +750,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
 
             selecting = true;
+            // THE PRESS SEEDS THE AUTOSCROLL POSITION. A drag can begin and the button come up with no
+            // Move in between, and the autoscroll reads pointerY every tick -- so without this it would
+            // steer by wherever the pointer was left after some earlier gesture, which may be off-screen
+            // and therefore instantly "outside". This replaced a `pointerInside` flag that was set true
+            // on the first Move and never set false again: it read as a guard and, after one mouse
+            // movement anywhere over the editor, was permanently true.
+            rememberPointer(event.getPosition().x(), event.getPosition().y());
             var window = getAttachedWindow();
             if (window != null) window.getInputHandler().setPointerCapture(this);
             requestFocusHere();
@@ -769,10 +764,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }, false, false);
 
         events.getGroup(MouseEvent.Move.class).attachListener((el, event) -> {
-            var local = screenToLocal(event.getPosition().x(), event.getPosition().y());
-            pointerX = local.x() - getRuntimeCache().getX();
-            pointerY = local.y() - getRuntimeCache().getY();
-            pointerInside = true;
+            rememberPointer(event.getPosition().x(), event.getPosition().y());
             if (!selecting) return;
             extendDragTo(offsetAt(event.getPosition().x(), event.getPosition().y()));
         }, false, false);
@@ -782,6 +774,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
             dragGranularity = 1;
             dragAnchor = null;
         }, false, false);
+    }
+
+    /** Records the pointer in this element's own space, for the autoscroll to steer by. */
+    private void rememberPointer(float screenX, float screenY) {
+        var local = screenToLocal(screenX, screenY);
+        pointerX = local.x() - getRuntimeCache().getX();
+        pointerY = local.y() - getRuntimeCache().getY();
     }
 
     private void requestFocusHere() {
@@ -895,12 +894,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
     }
 
-    private void clampSelectionToDocument() {
-        selections.clampTo(buffer.length());
-        ensureCaretVisible();
-        onSelectionChanged.emit();
-    }
-
     // ── Movement ────────────────────────────────────────────────────────────────────────────────
 
     /** Absolute move — collapses to one caret, which is what Ctrl+Home/End mean. */
@@ -962,7 +955,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /**
      * Moves the caret by whole rows, remembering the column it started from.
      *
-     * <p>{@link #preferredColumn} is what makes down-then-up return to where it began rather than being
+     * <p>{@link #goalColumns} is what makes down-then-up return to where it began rather than being
      * dragged inward by the shortest line passed through.</p>
      */
     private void moveVertically(int rows, boolean extend) {
@@ -999,18 +992,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * obviously a row. For an editor it is not — the last line ends up sliced in half by the bar, and it
      * is the line you are usually typing on, since that is where the caret was scrolled to.</p>
      */
-    private float viewportHeight() {
+    float viewportHeight() {
         return Math.max(0f, getClientHeight() - horizontalBarThickness());
     }
 
     /** The horizontal bar's thickness when it is showing, otherwise zero. */
-    private float horizontalBarThickness() {
+    float horizontalBarThickness() {
         if (getMaxScrollLeft() <= 0f) return 0f;
         return Math.max(0f, horizontalScroller().getRuntimeCache().getHeight());
     }
 
     /** The vertical bar's thickness when it is showing, otherwise zero. */
-    private float verticalBarThickness() {
+    float verticalBarThickness() {
         if (getMaxScrollTop() <= 0f) return 0f;
         return Math.max(0f, verticalScroller().getRuntimeCache().getWidth());
     }
@@ -1031,14 +1024,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return WordOperations.previousWordStart(buffer.document(), from, wordClassifier);
     }
 
-    /**
-     * Home goes to the first non-blank character, and to column 0 only if already there.
-     *
-     * <p>"Smart home", and every code editor has it: in indented code the useful position is the start of
-     * the text, not the start of the indentation. Pressing it twice still gets you to column 0, so
-     * nothing is taken away.</p>
-     */
-
     /** Double-click selection, using the ported {@link WordOperations#wordAt}. */
     private void selectWordAt(int offset) {
         int[] word = WordOperations.wordAt(buffer.document(), offset, wordClassifier);
@@ -1051,6 +1036,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     // ── Geometry ────────────────────────────────────────────────────────────────────────────────
 
+    /** Seconds per full blink cycle; {@code 0} keeps the caret solid. */
+    public TextEditor setCaretBlinkSeconds(float seconds) {
+        viewCursorsPart.setBlinkSeconds(seconds);
+        viewCursorsPart.restartBlink();
+        return this;
+    }
+
     /**
      * The height of one row, in pixels.
      *
@@ -1059,50 +1051,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * text drawn over the top of itself; the property's own accessor documents the multiplier and it is
      * still the obvious thing to get wrong, so the conversion lives here in one place.</p>
      */
-    /**
-     * Advances the blink and shows or hides the caret.
-     *
-     * <p>Hidden outright when the editor is not focused: a caret in an unfocused editor claims a text
-     * cursor that no keystroke would reach. And the phase is <b>reset by any edit or caret move</b>
-     * ({@link #restartCaretBlink()}), so the caret is always solid at the instant you type — a caret that
-     * happened to be in its off phase would otherwise vanish exactly when it is being looked for.</p>
-     */
-    private void advanceCaretBlink(float deltaSeconds) {
-        boolean focused = isFocused();
-        boolean shown;
-        if (!focused) {
-            shown = false;
-        } else if (blinkPeriodSeconds <= 0f) {
-            shown = true;
-        } else {
-            blinkClock = (blinkClock + deltaSeconds) % blinkPeriodSeconds;
-            shown = blinkClock < blinkPeriodSeconds / 2f;
-        }
-        if (shown == caretShown) return;
-        caretShown = shown;
-        final float opacity = shown ? 1f : 0f;
-        for (UIElement caret : caretElements) {
-            StyleGroup.importantPipeline(caret.getStyle().getGeneralGroup(), g -> g.opacity(opacity));
-        }
-    }
-
-    /** Makes the caret solid again and restarts the cycle. Called from every edit and every caret move. */
-    private void restartCaretBlink() {
-        blinkClock = 0f;
-        if (caretShown) return;
-        caretShown = true;
-        for (UIElement caret : caretElements) {
-            StyleGroup.importantPipeline(caret.getStyle().getGeneralGroup(), g -> g.opacity(1f));
-        }
-    }
-
-    /** Seconds per full blink cycle; {@code 0} keeps the caret solid. */
-    public TextEditor setCaretBlinkSeconds(float seconds) {
-        this.blinkPeriodSeconds = Math.max(0f, seconds);
-        restartCaretBlink();
-        return this;
-    }
-
     public float lineHeight() {
         var general = getStyle().getGeneralGroup();
         float multiplier = general.lineHeight();
@@ -1110,15 +1058,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return Math.max(1f, general.fontSize() * multiplier);
     }
 
-    /**
-     * The document's height, <b>plus the strip the horizontal scrollbar covers</b>.
-     *
-     * <p>Without the extra, the last line can never be scrolled clear of the bar: {@code getMaxScrollTop}
-     * is {@code scrollHeight - getClientHeight()}, and {@code getClientHeight()} is the whole box, so the
-     * scroll clamps exactly one bar-thickness short of where the caret needs it. Adding the strip to the
-     * scrollable extent is the same thing every editor does by leaving trailing space below the last
-     * line.</p>
-     */
     /**
      * The width of the widest realised line, in editor coordinates.
      *
@@ -1137,18 +1076,41 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * <p>The memory is reset whenever it could be wrong — an edit, a font change, a reprojection — rather
      * than being allowed to ratchet up forever. Deleting the one long line in a file must give the width
      * back, and a high-water mark that never falls would not.</p>
+     *
+     * <p><b>A pure accessor. The measuring is {@link #measureWidestRealisedLine()}'s, once a frame.</b>
+     * This used to do the scan itself, and it is asked far more often than it looks: {@code getMaxScrollLeft}
+     * reads it, {@code horizontalBarThickness} reads that, {@code viewportHeight} reads that, and
+     * {@code getScrollHeight} reads {@code viewportHeight} — so a dozen callers that each look like a field
+     * access fan back into the same loop. <b>Measured at 54 entries per settled frame</b> on a 500-line
+     * document, each walking every realised line and doing two or three row-metric lookups: about 6,500
+     * map probes a frame with nothing on screen changing. It is the same trap
+     * {@link #refreshGutterMetrics} already documents — a cheap-looking read behind an accessor that the
+     * layout code calls per line — and it is fixed the same way, by separating the once-a-frame
+     * measurement from the O(1) query.</p>
      */
     @Override
     public float getScrollWidth() {
-        if (textViewport == null) return 0f;
+        return textViewport == null ? 0f : widestSeen;
+    }
+
+    /**
+     * Grows the high-water mark to cover every realised line. Called once per {@code updateWindow}.
+     *
+     * <p>Stale by at most a frame, which the high-water mark already was — it only ever grows between
+     * resets, so a query taken before this frame's scan sees the previous frame's answer for a line that
+     * has not moved.</p>
+     */
+    private void measureWidestRealisedLine() {
+        if (textViewport == null) return;
+        int count = viewLineCount();
+        float origin = textOriginX();
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
-            if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            if (viewLine < 0 || viewLine >= count) continue;
             ProjectedLines.ModelPosition model = modelAt(viewLine);
             float end = xOfView(viewLine, projectionAt(viewLine).maxColumn(model.viewLineInRow()));
-            widestSeen = Math.max(widestSeen, textOriginX() + end + 1f);
+            widestSeen = Math.max(widestSeen, origin + end + 1f);
         }
-        return widestSeen;
     }
 
     /** Forgets the widest line, so a shorter document reports a smaller scroll width. */
@@ -1157,6 +1119,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     @Override
+    /**
+     * The document's height, <b>plus the strip the horizontal scrollbar covers</b>.
+     *
+     * <p>Without the extra, the last line can never be scrolled clear of the bar: {@code getMaxScrollTop}
+     * is {@code scrollHeight - getClientHeight()}, and {@code getClientHeight()} is the whole box, so the
+     * scroll clamps exactly one bar-thickness short of where the caret needs it. Adding the strip to the
+     * scrollable extent is the same thing every editor does by leaving trailing space below the last
+     * line.</p>
+     */
     public float getScrollHeight() {
         float content = viewLineCount() * lineHeight();
         // VS Code's ViewLayout._getTotalHeight, including the part that is easy to miss: the horizontal
@@ -1233,7 +1204,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * at 2 and the caret at 14, while the visible text began at 12. The lines lost a character off the
      * front and the caret trailed the glyph it had just moved past.</p>
      */
-    private float textOriginX() {
+    float textOriginX() {
         return getTaffyLayout().padding().left + gutterWidth + codeLeftPad();
     }
 
@@ -1246,7 +1217,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * that letter; drawn any further left it lands under the gutter, which has a higher z-index and paints
      * straight over it. The gap is the only place it can live.</p>
      */
-    private float codeLeftPad() {
+    float codeLeftPad() {
         // Zero without a gutter: the margin exists to separate the code FROM the gutter, so with no
         // gutter there is nothing to separate from and the text belongs on the content-box origin.
         if (!gutterVisible) return 0f;
@@ -1497,7 +1468,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         ChangeSet edit = ChangeSet.of(buffer.length(), changes);
         buffer.edit(edit);
         selections.mapThrough(edit);
-        restartCaretBlink();
+        viewCursorsPart.restartBlink();
         ensureCaretVisible();
         onSelectionChanged.emit();
     }
@@ -1526,7 +1497,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * unresponsive near the edge and uncontrollable far from it.</p>
      */
     private void autoScrollDuringDrag(float deltaSeconds) {
-        if (!selecting || !pointerInside) return;
+        if (!selecting) return;
         float viewport = viewportHeight();
         float outside = 0f;
         if (pointerY < 0f) outside = pointerY;
@@ -1873,7 +1844,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 next = i;
                 break;
             }
-            next = (i == searchMatches.size() - 1) ? 0 : next;
+            // No else. `next` starts at 0 and stays there, which IS the wrap: running off the end of a
+            // document whose last match is behind the caret returns to the first one.
         }
         return selectMatch(next);
     }
@@ -1953,13 +1925,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /**
-     * How wide the gutter needs to be for the largest line number it will show.
-     *
-     * <p>Sized from the <b>digit count of the last line</b> rather than from the widest number currently
-     * on screen, so the text does not shift sideways as you scroll past line 99 into line 100 — which is
-     * the kind of thing that reads as the editor being unstable rather than as a gutter resizing.</p>
-     */
-    /**
      * The gutter's total width — <b>three</b> parts, following IntelliJ's.
      *
      * <pre>
@@ -1993,7 +1958,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * {@code default.css}. A theme can now change the gutter's proportions without touching Java, and the
      * three numbers sit next to each other in the sheet where they can be compared.</p>
      */
-    private float gutterPadLeft() {
+    float gutterPadLeft() {
         return cachedPadLeft;
     }
 
@@ -2052,7 +2017,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** The numbers' own column: margin, digits, margin. */
-    private float gutterNumberWidth() {
+    float gutterNumberWidth() {
         if (!gutterVisible) return 0f;
         return gutterPadLeft() + gutterDigitsWidth() + gutterPadLeft();
     }
@@ -2064,12 +2029,54 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * the text, which is the whole reason IntelliJ's gutter reads as a margin rather than as a column of
      * numbers jammed against the code. It is also where a fold arrow goes, when there is one.</p>
      */
-    private float gutterFoldWidth() {
+    float gutterFoldWidth() {
         return gutterVisible ? cachedFoldWidth : 0f;
     }
 
     /** The vertical equivalent, for the same reason. */
-    private float textOriginY() {
+    // ── Seams for the view parts ────────────────────────────────────────────────────────────────
+    //
+    // Package-private, and deliberately not public API. A view part is a piece of THIS widget rather
+    // than a client of it, so these widen access without widening the contract -- see EditorViewPart
+    // for why the parts sit beside the editor instead of behind a Monaco-style ViewContext.
+
+    /** The model-row to view-line projection every part resolves geometry through. */
+    ProjectedLines projections() {
+        return projections;
+    }
+
+    /** The digits' measured width, cached alongside {@code gutterWidth} so the two never disagree. */
+    float gutterNumbersWidth() {
+        return gutterNumbersWidth;
+    }
+
+    /** The horizontal bar. {@code horizontalScroller()} is protected, so a sibling part cannot reach it. */
+    UIElement horizontalScrollerElement() {
+        return horizontalScroller();
+    }
+
+    /** The editor's own padding-left, which every absolutely-placed child is measured from. */
+    float paddingLeft() {
+        return getTaffyLayout().padding().left;
+    }
+
+    /** Whether blocks end by dedenting alone — Python, YAML. Drives the indent guides only. */
+    boolean isOffSideLanguage() {
+        return offSideLanguage;
+    }
+
+    /** The ruler columns, uncopied. {@link #getRulers()} clones, which a per-frame pass must not. */
+    int[] rulerColumns() {
+        return rulers;
+    }
+
+
+    /** The font key row measurements are currently keyed on — see {@code WhitespacePart}. */
+    String measuredFontKey() {
+        return measuredFontKey;
+    }
+
+    float textOriginY() {
         return getTaffyLayout().padding().top;
     }
 
@@ -2081,7 +2088,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * rather than where it would sit in the fully-shaped line. Cached per row and dropped wholesale on
      * any edit, since a row's index is not stable across one.</p>
      */
-    private RowMetrics rowMetrics(int row) {
+    RowMetrics rowMetrics(int row) {
         var general = getStyle().getGeneralGroup();
         String fontKey = general.fontFamily() + "/" + general.fontSize();
         if (!fontKey.equals(measuredFontKey)) {
@@ -2092,8 +2099,30 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return measuredRows.computeIfAbsent(row, r -> measureRow(buffer.line(r)));
     }
 
-    private float[] prefixWidths(int row) {
-        return rowMetrics(row).widths();
+    /**
+     * Drops the row measurements an edit invalidated — <b>one row where that is provably enough</b>.
+     *
+     * <p>{@link #measuredRows} is keyed by row index, so an edit that adds or removes a line renumbers
+     * every row below it and the whole map has to go. An edit that leaves the count alone renumbers
+     * nothing: only the row it landed on can have changed, and every other measurement is still exactly
+     * right. That is the overwhelmingly common case — it is what ordinary typing is.</p>
+     *
+     * <p>It matters because a measurement is a <b>text shaping call</b>, not a lookup, and
+     * {@code rebindRealisedLines} re-lays out every line on screen after each edit. Clearing the map
+     * unconditionally therefore re-shaped the entire viewport on every keystroke: <b>measured at 4.0 ms
+     * per keystroke</b> on a 500-line document, most of it re-deriving lines the edit never touched.</p>
+     *
+     * <p>Multi-caret edits take the wholesale path. They touch several disjoint rows and the bookkeeping
+     * is not worth it, which is the same call {@link #reprojectAfterEdit} makes about the same edits.</p>
+     */
+    private void invalidateMeasuredRows(ChangeSet change) {
+        List<Change> changes = change.changes();
+        if (changes.size() != 1 || buffer.lineCount() != previousLineCount) {
+            measuredRows.clear();
+            return;
+        }
+        int at = Math.max(0, Math.min(change.mapPos(changes.get(0).from(), -1), buffer.length()));
+        measuredRows.remove(buffer.document().offsetToPoint(at).row());
     }
 
     /** Expands tabs through {@link CursorColumns} and measures the result. */
@@ -2226,15 +2255,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final float MAX_FONT_SIZE = 96f;
 
     /**
-     * How long the size indicator stays up after the last zoom, before it starts fading.
-     *
-     * <p>Roughly IntelliJ's. The <b>fade itself is not here</b> — the widget only holds a class on the
-     * indicator and drops it when the hold expires; {@code default.css} owns how long the fade takes and
-     * what it eases on. A timing in Java would be the same mistake the gutter's metrics were.</p>
-     */
-    private float zoomIndicatorHoldSeconds = 4f;
-
-    /**
      * Sets the editor's font size.
      *
      * <p>Written at {@code IMPORTANT} origin, and it has to be: {@code default.css} sets
@@ -2259,7 +2279,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         measuredFontKey = null;
         textHeight = -1f;
         digitWidth = -1f;
-        markerFontKey = null;
+        whitespacePart.forgetFont();
         reproject();
         restoreStableViewport(anchor);
         invalidateWindow();
@@ -2351,131 +2371,21 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     public TextEditor zoomBy(int steps) {
         setFontSize(Math.round(getFontSize()) + steps);
-        showZoomIndicator();
+        zoomIndicatorPart.show(baseFontSize);
         return this;
     }
 
     /** Back to the size the sheet gave it — {@code Mod+0}. */
     public TextEditor resetZoom() {
         if (baseFontSize > 0f) setFontSize(baseFontSize);
-        showZoomIndicator();
+        zoomIndicatorPart.show(baseFontSize);
         return this;
     }
 
     /** How long the size indicator holds before fading. The fade's own duration is CSS. */
     public TextEditor setZoomIndicatorSeconds(float seconds) {
-        this.zoomIndicatorHoldSeconds = Math.max(0f, seconds);
+        zoomIndicatorPart.setHoldSeconds(seconds);
         return this;
-    }
-
-    /** Shows the current size and restarts the hold — pressing zoom again keeps it up. */
-    private void showZoomIndicator() {
-        zoomIndicatorSeconds = zoomIndicatorHoldSeconds;
-        zoomIndicator();
-        zoomLabel.setText("Font size: " + Math.round(getFontSize()) + "px");
-        // The reset button names the size it will go back to, as IntelliJ's does. That is the whole
-        // reason it is worth showing: "reset" alone does not say what you are getting, and after three
-        // presses nobody remembers what the sheet said.
-        zoomResetButton.setText("Reset to " + Math.round(baseFontSize > 0f ? baseFontSize : getFontSize())
-                + "px");
-        // A faded indicator must not be clickable. Opacity is paint, not hit testing -- without this the
-        // reset button stays live over the text for as long as the element exists.
-        zoomIndicator.setHitTest(true);
-        // addClass invalidates the style match itself, so the transition sees the change.
-        zoomIndicator.addClass(SHOWN_CLASS);
-        markTreeDirty();
-    }
-
-    /**
-     * Counts the hold down and hands the fade to the cascade.
-     *
-     * <p>Dropping the class rather than writing an opacity is what keeps the timing in the sheet: the
-     * transition on {@code opacity} runs because the computed value changed, and the widget never learns
-     * how long it takes.</p>
-     */
-    private void advanceZoomIndicator(float deltaSeconds) {
-        if (zoomIndicatorSeconds <= 0f) return;
-        zoomIndicatorSeconds -= deltaSeconds;
-        if (zoomIndicatorSeconds > 0f) return;
-        zoomIndicatorSeconds = 0f;
-        if (zoomIndicator != null) {
-            zoomIndicator.removeClass(SHOWN_CLASS);
-            zoomIndicator.setHitTest(false);
-        }
-    }
-
-    private UIElement zoomIndicator() {
-        if (zoomIndicator == null) {
-            zoomIndicator = new UIElement();
-            zoomIndicator.addClass(ZOOM_INDICATOR_CLASS);
-            zoomIndicator.markAsInternal();
-            zoomIndicator.setScrollExempt(true);
-
-            zoomLabel = new UIText("");
-            zoomLabel.addClass(ZOOM_LABEL_CLASS);
-            zoomLabel.setHitTest(false);
-            zoomIndicator.addChild(zoomLabel);
-
-            zoomResetButton = new com.crystalgui.ui.elements.Button("");
-            zoomResetButton.addClass(ZOOM_RESET_CLASS);
-            // NEVER takes focus. A Button focuses on click by default, so pressing reset would move focus
-            // out of the editor and the next keystroke would go nowhere -- from a control whose whole
-            // purpose is to get you back to reading the text.
-            zoomResetButton.setFocusPolicy(com.crystalgui.ui.input.FocusPolicy.NONE);
-            zoomResetButton.attachListener(this::resetZoom);
-            zoomIndicator.addChild(zoomResetButton);
-
-            addInternalChild(zoomIndicator);
-        }
-        return zoomIndicator;
-    }
-
-    /**
-     * Parks the indicator at the bottom of the viewport, centred.
-     *
-     * <p>Where IntelliJ puts it, and it is the right place for the same reason: the caret is almost never
-     * there, so the thing telling you about the text does not sit on top of the text you are reading.</p>
-     */
-    private void layOutZoomIndicator() {
-        if (zoomIndicator == null) return;
-        // THE INDICATOR'S OWN SIZE, from the sheet -- never the editor's. It is chrome describing the
-        // text, not part of it, so scaling it with the zoom made it unreadable at 4px and oversized at
-        // 40. IntelliJ's stays put for the same reason. The widget pushes no font here at all; it reads
-        // what the cascade gave the label and measures against that.
-        final float chrome = zoomLabel.getStyle().getGeneralGroup().fontSize();
-        // Measured from both children, because the reset button's label changes with the default size and
-        // a box narrower than its content clips it -- the same definite-width rule the lines follow.
-        final float width = textWidthOf(zoomLabel.getText(), chrome)
-                + textWidthOf(zoomResetButton.getText(), chrome) + chrome * 4f;
-        final float height = chrome * 2f;
-        // Centred on the CLIENT box, not on the code area. textOriginX moves with the gutter, which grows
-        // with the font -- so anchoring to it made the indicator slide sideways on the very gesture it is
-        // reporting.
-        final float left = Math.max(0f, (getClientWidth() - width) / 2f);
-        // A BOTTOM inset, not a computed top. Every position here is derived from the PREVIOUS frame's
-        // layout, which is fine for anything anchored to the top -- a height change does not move it. This
-        // is anchored to the bottom, so a resize moved it by the full delta for one frame and then
-        // corrected: the visible flick downwards and back. Taffy resolves a bottom inset against the
-        // container's height at layout time, so there is no stale value to be wrong with.
-        //
-        // And a CONSTANT one. It used to add horizontalBarThickness(), which is zero or eight depending on
-        // whether the content currently overflows -- a term that TOGGLES on the very gesture this reports,
-        // since zooming changes how wide the text is. That is what made it flick on every zoom rather than
-        // only on a resize. Sized to clear the bar outright instead, so the answer never depends on
-        // whether the bar is there.
-        final float bottom = chrome * 1.6f;
-
-        StyleGroup.defaultPipeline(zoomIndicator.getStyle().getLayoutGroup(),
-                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(left).bottom(bottom).width(width).height(height));
-    }
-
-    /** The shaped width of a string at a given size, in the editor's family. */
-    private float textWidthOf(String text, float size) {
-        if (text == null || text.isEmpty()) return 0f;
-        CgFontFamily family = FontFamilyCache.resolve(
-                getStyle().getGeneralGroup().fontFamily(), Math.round(Math.max(1f, size)));
-        return CgTextLayout.of(text, family).build().totalWidth();
     }
 
     /**
@@ -2493,7 +2403,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * the scroll translate for free and subtract the offsets by hand, exactly as the gutter's numbers
      * already did.</p>
      */
-    private UIElement textViewport() {
+    UIElement textViewport() {
         if (textViewport == null) {
             textViewport = new UIElement();
             textViewport.addClass(TEXT_VIEWPORT_CLASS);
@@ -2508,7 +2418,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** Width of the code area — the client box, less the gutter and whatever the vertical bar covers. */
-    private float textViewportWidth() {
+    float textViewportWidth() {
         return Math.max(0f, getClientWidth() - textViewportLeft() - verticalBarThickness());
     }
 
@@ -2524,7 +2434,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * from its left edge, which is where the unscrolled first glyph sits. Same screen position as before,
      * a margin's more room to scroll into.</p>
      */
-    private float textViewportLeft() {
+    float textViewportLeft() {
         return textOriginX() - codeLeftPad();
     }
 
@@ -2564,7 +2474,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** The advance of one space in the editor's measured font. */
-    private float spaceAdvance() {
+    float spaceAdvance() {
         CgFontFamily family = resolveFamily();
         if (family == null) return 0f;
         float[] widths = caretOffsets(" ", family);
@@ -2758,7 +2668,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * it looks. Taken from the font's own ascender and descender so it tracks the font rather than a
      * guessed fraction of the row.</p>
      */
-    private float textHeight() {
+    float textHeight() {
         if (textHeight < 0f) {
             var metrics = CgTextLayout.of("Xg", resolveFamily()).build().metrics();
             textHeight = Math.abs(metrics.getAscender()) + Math.abs(metrics.getDescender());
@@ -2789,9 +2699,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     // ── Virtualised rendering ───────────────────────────────────────────────────────────────────
 
-    /** Row count when the window was last built — see the note in the edit listener. */
-    private int lineCountAtLastWindow = -1;
-
     /** Re-reads the text of every realised line without recycling it, so highlights survive the edit. */
     private void rebindRealisedLines() {
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
@@ -2803,11 +2710,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
             layOutLine(viewLine, entry.getValue());
         }
         markTreeDirty();
-    }
-
-    private void rebuildWindowForLineCountChange() {
-        lineCountAtLastWindow = viewLineCount();
-        invalidateWindow();
     }
 
     protected void invalidateWindow() {
@@ -2841,8 +2743,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public boolean tickFrame(float deltaSeconds) {
         super.tickFrame(deltaSeconds);
         updateWindow();
-        advanceCaretBlink(deltaSeconds);
-        advanceZoomIndicator(deltaSeconds);
+        viewCursorsPart.advanceBlink(deltaSeconds);
+        zoomIndicatorPart.tick(deltaSeconds);
         autoScrollDuringDrag(deltaSeconds);
         return true;
     }
@@ -2924,7 +2826,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
             firstRealised = first;
             lastRealised = last;
-            lineCountAtLastWindow = count;
             highlightsDirty = true;
             onWindowChanged.emit();
         }
@@ -2938,18 +2839,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // nothing. It is also the rebinding path, not the recycling one -- recycling every frame is what
         // cleared highlights and made the colours flicker.
         rebindRealisedLines();
+        // BEFORE anything reads the scroll extent, and exactly once. getScrollWidth is a pure accessor
+        // over the mark this grows; see its note for why it must not do the scan itself.
+        measureWidestRealisedLine();
         syncLineFonts();
         refreshHighlights(first, last);
-        layOutGutter(first, last);
         layOutTextViewport();
-        layOutGutterEdge();
-        layOutIndentGuides(first, last);
-        layOutWhitespace(first, last);
-        layOutRulers();
-        layOutFoldPlaceholders(first, last);
-        layOutZoomIndicator();
-        layOutCurrentLine();
-        layOutCaretAndSelection(first, last);
+        // Every extracted part, in one pass. Monaco skips the ones whose shouldRender() is false;
+        // this renders all of them, which is what the methods it replaced did.
+        for (EditorViewPart part : viewParts) {
+            part.render(first, last);
+            part.onDidRender();
+        }
     }
 
     /**
@@ -3035,116 +2936,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         linePool.addLast(line);
     }
 
-    /**
-     * Positions the caret and the selection bands.
-     *
-     * <p>Both are ordinary internal children in document coordinates rather than something painted in
-     * {@code paintSelf}. That is what makes them scroll for free — a scroll is a pose translate applied to
-     * children at paint time, so anything painted by the view itself would have to subtract the scroll
-     * offset by hand — and it is what lets a theme colour them, since the engine's rule is that no widget
-     * writes a colour in Java.</p>
-     */
-    private void layOutCaretAndSelection(int firstRow, int lastRow) {
-        if (lastRow < firstRow) return; // nothing realised yet; updateWindow will call again
-
-        int caretsUsed = 0;
-        int bandsUsed = 0;
-        for (Selection selection : selections.all()) {
-            caretsUsed = placeCaret(selection, caretsUsed);
-            bandsUsed = placeBands(selection, firstRow, lastRow, bandsUsed);
-        }
-        // Anything left over from a larger set of carets is collapsed rather than removed: these are
-        // pooled, and a multi-caret edit that shrinks back to one would otherwise churn elements every
-        // keystroke.
-        for (int i = caretsUsed; i < caretElements.size(); i++) hide(caretElements.get(i));
-        for (int i = bandsUsed; i < selectionBands.size(); i++) hide(selectionBands.get(i));
-    }
-
-    /**
-     * Places one caret.
-     *
-     * <p><b>The caret's right edge sits on the character boundary</b> — it does not start there, and it
-     * does not straddle it. A boundary in a bitmap font is where the <em>next</em> glyph's ink begins: the
-     * advance is ink plus trailing space and there is no left side bearing, so the whole of the clear gap
-     * lies to the left of it. Drawing rightwards covers the next glyph's first ink column, and centring is
-     * worse still — at uiScale 2 a 1px caret is two physical pixels and a Minecraft {@code i} is barely
-     * wider than that, so a centred caret buries the letter.</p>
-     */
-    private int placeCaret(Selection selection, int index) {
-        float height = lineHeight();
-        final float ink = textHeight();
-        final float caretWidth = Math.max(1f, getStyle().getGeneralGroup().caretWidth());
-        // LEFT affinity: a caret that arrived at a wrap point by moving forwards or by pressing End
-        // belongs at the end of the line it came from, not blinking at the start of the next one. This is
-        // the single most visible way a soft-wrap caret goes wrong, and the reason Affinity exists.
-        ProjectedLines.ViewPosition view = projections.toViewPosition(
-                buffer.document(), selection.head(), LineProjection.Affinity.LEFT);
-        final float left = codeLeftPad() + xOfView(view.viewLine(), view.column()) - caretWidth
-                - getScrollLeft();
-        final float top = textOriginY() + view.viewLine() * height + (height - ink) / 2f
-                - getScrollTop();
-
-        UIElement caret = caretAt(index);
-        StyleGroup.importantPipeline(caret.getStyle().getLayoutGroup(),
-                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(left).top(top).width(caretWidth).height(ink));
-        return index + 1;
-    }
-
-    /**
-     * Places the highlight bands for one selection, one per visible <b>view line</b> it covers.
-     *
-     * <p>A wrapped row needs a band per visual row, not one band per document row — a single band spanning
-     * a wrap would be a rectangle covering text that is not selected. Working in view space makes the
-     * wrapped and unwrapped cases the same code; the only thing that changes is how many bands a row
-     * produces.</p>
-     */
-    private int placeBands(Selection selection, int firstViewLine, int lastViewLine, int index) {
-        if (selection.isEmpty()) return index;
-        float height = lineHeight();
-        // The selection's own ends resolve with the affinity that keeps a zero-width band off the line
-        // below: a selection ending exactly at a wrap belongs to the line it visually ends on.
-        int startView = viewLineOf(selection.start(), LineProjection.Affinity.RIGHT);
-        int endView = viewLineOf(selection.end(), LineProjection.Affinity.LEFT);
-
-        for (int viewLine = Math.max(firstViewLine, startView);
-             viewLine <= Math.min(lastViewLine, endView); viewLine++) {
-            if (viewLine < 0 || viewLine >= viewLineCount()) continue;
-            int lineStart = viewLineStartOffset(viewLine);
-            int lineEnd = viewLineEndOffset(viewLine);
-            int from = Math.max(lineStart, selection.start());
-            int to = Math.min(lineEnd, selection.end());
-            if (to < from) continue;
-
-            LineProjection.ViewPosition fromView = projectionAt(viewLine)
-                    .toViewPosition(from - buffer.document().lineStartOffset(modelAt(viewLine).row()),
-                            LineProjection.Affinity.RIGHT);
-            LineProjection.ViewPosition toView = projectionAt(viewLine)
-                    .toViewPosition(to - buffer.document().lineStartOffset(modelAt(viewLine).row()),
-                            LineProjection.Affinity.LEFT);
-
-            float left = codeLeftPad() + xOfView(viewLine, fromView.column()) - getScrollLeft();
-            // A selected line break shows as a sliver past the end of the text, which is how every editor
-            // signals "the newline is in the selection too". A soft wrap is NOT a line break, so the
-            // sliver is only drawn where the selection genuinely continues onto another document row.
-            boolean continuesPastRow = selection.end() > lineEnd
-                    && modelAt(viewLine).viewLineInRow() == projectionAt(viewLine).viewLineCount() - 1;
-            float right = codeLeftPad() + xOfView(viewLine, toView.column()) - getScrollLeft()
-                    + (continuesPastRow ? height * 0.4f : 0f);
-
-            final float bandInk = textHeight();
-            final float top = textOriginY() + viewLine * height + (height - bandInk) / 2f
-                    - getScrollTop();
-            final float bandLeft = left;
-            final float width = Math.max(1f, right - left);
-            StyleGroup.defaultPipeline(bandAt(index++).getStyle().getLayoutGroup(),
-                    l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                            .left(bandLeft).top(top).width(width).height(bandInk));
-        }
-        return index;
-    }
-
-    /** Places the gutter box and one number per visible row. */
     // ===================================================================================================
     // Folding
     // ===================================================================================================
@@ -3311,214 +3102,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
         afterFoldChange(anchor);
     }
 
-    private int caretRow() {
+    int caretRow() {
         return buffer.document().offsetToPoint(selections.primary().head()).row();
-    }
-
-    private UIElement foldArrowAt(int index) {
-        while (foldArrows.size() <= index) {
-            final int slot = foldArrows.size();
-            UIElement arrow = new UIElement();
-            arrow.addClass(FOLD_CLASS);
-            arrow.markAsInternal();
-            // HIT-TESTABLE, unlike every other part of the gutter -- it is the one piece a user clicks.
-            // The glyph inside it is not, so the press lands on the arrow rather than on the character:
-            // the same trick every composite here uses, since click targeting takes the exact element hit
-            // and never walks up to a handler-bearing ancestor.
-            UIText glyph = new UIText(FOLD_GLYPH_EXPANDED);
-            glyph.setHitTest(false);
-            arrow.addChild(glyph);
-            arrow.onMouseDown.attachListener((el, event) -> {
-                int row = slot < foldArrowRows.size() ? foldArrowRows.get(slot) : -1;
-                if (row >= 0) toggleFoldAt(row);
-                event.stopPropagation();
-            }, false, false);
-            foldColumn.addInternalChild(arrow);
-            foldArrows.add(arrow);
-            foldArrowRows.add(-1);
-        }
-        return foldArrows.get(index);
-    }
-
-    private UIElement foldPlaceholderAt(int index) {
-        while (foldPlaceholders.size() <= index) {
-            final int slot = foldPlaceholders.size();
-            UIElement marker = new UIElement();
-            marker.addClass(FOLD_PLACEHOLDER_CLASS);
-            marker.markAsInternal();
-            // The chip itself takes the click; its text does not, so the press lands on the box rather
-            // than on a character inside it.
-            UIText glyph = new UIText(FOLD_PLACEHOLDER_TEXT);
-            glyph.setHitTest(false);
-            marker.addChild(glyph);
-            marker.onMouseDown.attachListener((el, event) -> {
-                int row = slot < foldPlaceholderRows.size() ? foldPlaceholderRows.get(slot) : -1;
-                if (row >= 0) toggleFoldAt(row);
-                event.stopPropagation();
-            }, false, false);
-            // A DIRECT child of the editor, deliberately not of a container spanning the text.
-            //
-            // A full-size hit-testable layer was the first design and it broke clicking entirely: it
-            // covered the whole text area, so every press that was not on a chip landed on the layer and
-            // the editor never saw it -- no caret, no selection, no focus, for as long as anything was
-            // folded. It could not be made transparent either, because setHitTest(false) takes the whole
-            // subtree with it and the chips inside would have gone dead again.
-            //
-            // Nothing was lost by dropping it. The layer existed to CLIP chips against the gutter and the
-            // scrollbars, and z-order already does that: the gutter and the bars both sit above the chips,
-            // and the editor clips its own subtree to its padding box.
-            marker.setScrollExempt(true);
-            addInternalChild(marker);
-            foldPlaceholders.add(marker);
-            foldPlaceholderRows.add(-1);
-        }
-        return foldPlaceholders.get(index);
-    }
-
-    /**
-     * Places a fold arrow on every visible row that starts a region.
-     *
-     * <p>The arrow lives in the gutter's <b>right</b> column — the clear strip between the numbers and the
-     * code, which {@code gutterFoldWidth} already reserves and which is where every editor puts it.</p>
-     */
-    private void layOutFoldArrows(int firstRow, int lastRow) {
-        if (!gutterVisible || !foldingEnabled) {
-            hide(foldColumn);
-            for (UIElement arrow : foldArrows) hide(arrow);
-            return;
-        }
-        final float columnLeft = getTaffyLayout().padding().left + gutterNumberWidth();
-        final float columnWidth = gutterFoldWidth();
-        final float columnHeight = getClientHeight();
-        StyleGroup.defaultPipeline(foldColumn.getStyle().getLayoutGroup(),
-                l -> l.positionType(TaffyPosition.ABSOLUTE)
-                        .left(columnLeft).top(0f).width(columnWidth).height(columnHeight));
-        float height = lineHeight();
-        int used = 0;
-        for (int viewLine = Math.max(0, firstRow); viewLine <= Math.min(lastRow, viewLineCount() - 1); viewLine++) {
-            ProjectedLines.ModelPosition model = modelAt(viewLine);
-            // The arrow belongs to the ROW, so a wrapped row carries it on its first view line only --
-            // the same rule the line number follows, and for the same reason.
-            if (model.viewLineInRow() != 0) continue;
-            FoldingRegions.Region region = folding.getRegionStartingAt(model.row());
-            if (region == null) continue;
-
-            int slot = used++;
-            UIElement arrow = foldArrowAt(slot);
-            foldArrowRows.set(slot, model.row());
-            if (region.isCollapsed()) arrow.addClass(FOLD_COLLAPSED_CLASS);
-            else arrow.removeClass(FOLD_COLLAPSED_CLASS);
-
-            UIText glyph = (UIText) arrow.getChildren().get(0);
-            glyph.setText(region.isCollapsed() ? FOLD_GLYPH_COLLAPSED : FOLD_GLYPH_EXPANDED);
-            StyleGroup.importantPipeline(glyph.getStyle().getGeneralGroup(),
-                    g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
-                            .fontFamily(getStyle().getGeneralGroup().fontFamily()));
-
-            // Relative to the COLUMN now, so left is 0 rather than the gutter offset.
-            final float top = textOriginY() + viewLine * height - getScrollTop();
-            StyleGroup.defaultPipeline(arrow.getStyle().getLayoutGroup(),
-                    l -> l.positionType(TaffyPosition.ABSOLUTE)
-                            .left(0f).top(top).width(columnWidth).height(height));
-        }
-        // A recycled arrow must also stop ANSWERING. hide() only zeroes the box, and a zero-sized element
-        // is still hit-testable at its origin -- so an arrow left pointing at a row it no longer shows
-        // would toggle that row on a stray click in the gutter's corner.
-        for (int i = used; i < foldArrows.size(); i++) {
-            hide(foldArrows.get(i));
-            foldArrowRows.set(i, -1);
-        }
-    }
-
-    /**
-     * Draws the "\u22ef" after the header of each collapsed region on screen.
-     *
-     * <p>The only thing distinguishing a collapsed block from a block with nothing in it. Placed after the
-     * row's text rather than replacing it, which is what makes {@code void f() { \u22ef }} readable at a
-     * glance and is how VS Code renders it.</p>
-     */
-    private void layOutFoldPlaceholders(int firstRow, int lastRow) {
-        if (!foldingEnabled || !folding.hasCollapsedRegions()) {
-            for (int i = 0; i < foldPlaceholders.size(); i++) {
-                hide(foldPlaceholders.get(i));
-                foldPlaceholderRows.set(i, -1);
-            }
-            return;
-        }
-        float height = lineHeight();
-        int used = 0;
-        for (int viewLine = Math.max(0, firstRow); viewLine <= Math.min(lastRow, viewLineCount() - 1); viewLine++) {
-            ProjectedLines.ModelPosition model = modelAt(viewLine);
-            FoldingRegions.Region region = folding.getRegionStartingAt(model.row());
-            if (region == null || !region.isCollapsed()) continue;
-            // The header's LAST view line, so a wrapped header puts the marker after its final fragment.
-            if (model.viewLineInRow() != projections.projectionOf(model.row()).viewLineCount() - 1) continue;
-
-            int slot = used++;
-            UIElement marker = foldPlaceholderAt(slot);
-            foldPlaceholderRows.set(slot, model.row());
-            UIText glyph = (UIText) marker.getChildren().get(0);
-
-            // The chip SWALLOWS the row's trailing opener, so it reads "{...}" rather than "...}" beside a
-            // brace the line still owns. That is IntelliJ's collapsed form: one control covering the whole
-            // construct, not a chip bolted onto the end of a line.
-            //
-            // The line's text is NOT altered to do it. Truncating what the row paints would desync it from
-            // what the row MEASURES -- every caret x, selection band and click on that row is resolved from
-            // the document's own text -- so the chip is placed over the opener instead and hides it behind
-            // its own background. Nothing downstream has to know.
-            String rowText = buffer.document().line(model.row());
-            int opener = trailingOpenerIndex(rowText);
-            String tail = placeholderTextFor(region);
-            glyph.setText(opener >= 0 ? rowText.charAt(opener) + tail : tail);
-            StyleGroup.importantPipeline(glyph.getStyle().getGeneralGroup(),
-                    g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
-                            .fontFamily(getStyle().getGeneralGroup().fontFamily()));
-
-            int endColumn = projections.projectionOf(model.row()).maxColumn(model.viewLineInRow());
-            // Back up over the opener and anything after it. Index-to-column is a constant shift on one
-            // view line (the carried wrap indent), so subtracting the character count is correct whether
-            // or not the row wrapped.
-            // From the DISPLAY index, not the raw one: a tab occupies one character and several columns,
-            // so subtracting a raw character count would place the chip short on any tab-indented row.
-            if (opener >= 0) {
-                int cut = rowMetrics(model.row()).line().displayIndexOf(opener);
-                int displayLength = rowMetrics(model.row()).line().display().length();
-                endColumn -= displayLength - cut;
-            }
-            final float pad = chipPadding();
-            final float box = chipHeight();
-
-            // Centred WITHIN the row rather than filling it. A chip as tall as the line makes its text
-            // look shrunken inside a slab, and the line's leading sits below the glyphs, so a full-height
-            // box is not centred on the text beside it either. Hugging the text is what IntelliJ draws.
-            final float top = textOriginY() + viewLine * height - getScrollTop()
-                    + Math.max(0f, (height - box) / 2f);
-
-            // NO left shift, and this reverses an earlier choice. The box begins exactly where the row
-            // stopped painting -- at the bracket -- so the space that preceded the bracket survives as a
-            // clear gap from the code. Shifting the box left by its own padding to keep the bracket on the
-            // pixel the row would have drawn it at ate that gap, and the chip ended up touching the ')'
-            // before it. IntelliJ insets the bracket inside the chip rather than aligning it to the
-            // character it replaced: the chip is one object, not a box drawn around a bracket.
-            final float left = textViewportLeft() + codeLeftPad() + xOfView(viewLine, endColumn)
-                    - getScrollLeft();
-            // widthAuto() is NOT redundant. hide() parks a recycled element at width 0, and a chip that
-            // only ever writes left/top/height keeps that zero when it comes back -- so a pooled slot that
-            // was once hidden renders its text overflowing a collapsed box, while a slot that never was
-            // looks perfect. Two identical folds, one right and one wrong, depending only on which slot
-            // each happened to land in.
-            StyleGroup.defaultPipeline(marker.getStyle().getLayoutGroup(),
-                    l -> l.positionType(TaffyPosition.ABSOLUTE)
-                            .left(left).top(top).height(box).widthAuto()
-                            .paddingHorizontal(pad));
-            StyleGroup.defaultPipeline(marker.getStyle().getGeneralGroup(),
-                    g -> g.borderRadius(pad * 0.6f));
-        }
-        for (int i = used; i < foldPlaceholders.size(); i++) {
-            hide(foldPlaceholders.get(i));
-            foldPlaceholderRows.set(i, -1);
-        }
     }
 
     /**
@@ -3530,58 +3115,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * from the DOCUMENT rather than assumed, so {@code });} comes back intact instead of being guessed at
      * as a bare brace.</p>
      */
-    /**
-     * Index of the bracket a row ends on, ignoring trailing whitespace, or {@code -1}.
-     *
-     * <p>Only a bracket counts. A row ending in a word — {@code do}, {@code then}, a Python colon — has no
-     * character the chip can absorb without the collapsed line reading as if it were missing something.</p>
-     */
-    private static int trailingOpenerIndex(String rowText) {
-        int i = rowText.length() - 1;
-        while (i >= 0 && Character.isWhitespace(rowText.charAt(i))) i--;
-        if (i < 0) return -1;
-        char c = rowText.charAt(i);
-        return (c == '{' || c == '(' || c == '[') ? i : -1;
-    }
-
-    /**
-     * The chip's horizontal breathing room, <b>as a fraction of the font size</b>.
-     *
-     * <p>Computed rather than declared, and a deliberate exception to the rule that geometry lives in
-     * {@code default.css}. The value has to track the editor's own zoom: a fixed {@code 5px} is half a
-     * line's height at 8px and a rounding error at 31px, so the chip reads as fat at one zoom and cramped
-     * at the other <em>while the glyphs inside it are provably the same size</em> — measured, not assumed.
-     * This stylesheet has no font-relative unit to express a fraction of a character with, and a pixel in
-     * the sheet encodes an answer that is only correct at one font size.</p>
-     *
-     * <p>What is authored here is the RATIO, which is the real design decision. The sheet keeps the
-     * colours; the corner radius follows the same scale so the chip's whole shape is proportional.</p>
-     */
-    private float chipPadding() {
-        return Math.max(1f, getFontSize() * 0.28f);
-    }
-
-    /**
-     * The chip's box height — the text plus a little, never the whole line.
-     *
-     * <p>Proportional for the same reason {@link #chipPadding} is, and clamped to the line so a theme with
-     * unusually tight leading cannot make the chip overflow the row it belongs to.</p>
-     */
-    private float chipHeight() {
-        // Two bounds, and both are load-bearing. The font term hugs the TEXT when the theme's leading is
-        // generous; the line term keeps the chip strictly INSIDE its row when the leading is tight, where
-        // a font-only rule clamps to exactly the line height and the box stops looking like a chip at all.
-        return Math.min(lineHeight() * 0.88f, Math.max(1f, getFontSize() * 1.35f));
-    }
-
-    /** A length the chip's own stylesheet rule declares — the same read {@code gutterMetric} does. */
-    private float chipMetric(UIElement marker, StyleProperty<LengthPercentageAuto> property) {
-        LengthPercentageAuto value = marker.getStyle().getLayoutGroup().getValueSave(property);
-        if (value == null || value.getType() != LengthPercentageAuto.Type.LENGTH) return 0f;
-        return Math.max(0f, value.getValue());
-    }
-
-    private String placeholderTextFor(FoldingRegions.Region region) {
+    String placeholderTextFor(FoldingRegions.Region region) {
         int endRow = region.endLineNumber();
         if (endRow <= region.startLineNumber() || endRow >= buffer.lineCount()) {
             return FOLD_PLACEHOLDER_TEXT;
@@ -3591,138 +3125,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         char first = closing.charAt(0);
         if (first != '}' && first != ')' && first != ']') return FOLD_PLACEHOLDER_TEXT;
         return FOLD_PLACEHOLDER_TEXT + closing;
-    }
-
-    private void layOutGutter(int firstRow, int lastRow) {
-        if (!gutterVisible) {
-            hide(gutter);
-            for (UIElement number : lineNumbers) hide(number);
-            return;
-        }
-        // FROM THE EDITOR'S EDGE, not from past its padding. The editor's own padding-left is a strip the
-        // gutter did not cover and scrolled text painted into, visible as fragments to the LEFT of the
-        // gutter when zoomed in. The gutter's width absorbs it; the numbers carry it themselves below so
-        // they stay where they were.
-        //
-        // FULL CLIENT HEIGHT. It used to stop at the viewport so it would not paint over the horizontal
-        // bar's left end -- and that left the corner between the two uncovered, which scrolled text showed
-        // through. The bars now sit ABOVE the gutter in z, so there is nothing left to paint over: the
-        // gutter can run the whole height and the bar draws on top of its bottom edge.
-        final float width = getTaffyLayout().padding().left + gutterWidth;
-        final float left = 0f;
-        // Stops ABOVE the horizontal bar. The gutter sits at a higher z than the scrollbars so that a
-        // long line scrolled sideways passes behind the numbers -- which also means a full-height gutter
-        // paints over the bar's left end, showing as a dead square in the corner.
-        final float gutterHeight = getClientHeight();
-        StyleGroup.defaultPipeline(gutter.getStyle().getLayoutGroup(),
-                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(left).top(0f).width(width).height(gutterHeight));
-
-        float height = lineHeight();
-        int used = 0;
-        for (int viewLine = Math.max(0, firstRow); viewLine <= Math.min(lastRow, viewLineCount() - 1); viewLine++) {
-            // ONE NUMBER PER DOCUMENT ROW, on the row's first view line. Numbering every view line would
-            // report line counts the file does not have, and repeating the row's number down its
-            // continuations reads as the editor being stuck. Both are what a blank continuation avoids.
-            ProjectedLines.ModelPosition model = modelAt(viewLine);
-            if (model.viewLineInRow() != 0) continue;
-            int row = model.row();
-            UIElement number = numberAt(used++);
-            ((UIText) number.getChildren().get(0)).setText(String.valueOf(row + 1));
-            StyleGroup.importantPipeline(number.getChildren().get(0).getStyle().getGeneralGroup(),
-                    g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
-                            .fontFamily(getStyle().getGeneralGroup().fontFamily()));
-            // Scroll-exempt, so the offset has to be subtracted by hand -- see the field's note.
-            final float top = textOriginY() + viewLine * height - getScrollTop();
-            // The NUMBERS' column, not the whole gutter. Spanning the full width right-aligns the digits
-            // against the code instead of against the fold column, which is what put them a few pixels
-            // from the first glyph.
-            // The inset is applied BY HAND. An absolute inset here turns out to be border-box relative,
-            // not padding-box -- left(0) put the digits exactly on the gutter's border, which is the
-            // "numbers kissing the edge" report. The value still comes from the sheet; only the placing
-            // is the widget's.
-            //
-            // The width comes from the CACHED measurement and is never recomputed here. gutterWidth is a
-            // field updated only when it moves, so measuring the digits afresh at layout time meant the
-            // two could disagree on any frame where the font had not resolved: the numbers got a
-            // zero-width box and every one of them piled up in the same place.
-            // Carries the editor's padding itself, now that the gutter's box starts at its edge.
-            final float numberLeft = getTaffyLayout().padding().left + gutterPadLeft();
-            final float numberWidth = gutterNumbersWidth;
-            StyleGroup.defaultPipeline(number.getStyle().getLayoutGroup(),
-                    l -> l.positionType(TaffyPosition.ABSOLUTE)
-                            .left(numberLeft).top(top).width(numberWidth).height(height));
-        }
-        for (int i = used; i < lineNumbers.size(); i++) hide(lineNumbers.get(i));
-        layOutFoldArrows(firstRow, lastRow);
-        insetHorizontalBarPastGutter();
-    }
-
-    /**
-     * Starts the horizontal scrollbar after the gutter rather than under it.
-     *
-     * <p>The gutter is pinned and does not scroll horizontally, so a bar running beneath it offers to
-     * scroll something that will not move.</p>
-     *
-     * <p>Written at {@code IMPORTANT} origin because {@code ScrollerView} rewrites the bar's geometry
-     * every frame from {@code refreshScrollers}; a lower-origin write would simply lose to it.</p>
-     */
-    private void insetHorizontalBarPastGutter() {
-        UIElement bar = horizontalScroller();
-        if (bar == null) return;
-        final float left = getTaffyLayout().padding().left + gutterWidth;
-        final float width = Math.max(0f, getClientWidth() - left - verticalBarThickness());
-        StyleGroup.importantPipeline(bar.getStyle().getLayoutGroup(),
-                l -> l.left(left).width(width));
-    }
-
-    /**
-     * Places the current-line band behind the primary caret's row.
-     *
-     * <p>Hidden while there is a selection, which is what every editor does: two overlapping highlights
-     * on the same row read as a rendering fault rather than as two pieces of information.</p>
-     */
-    private void layOutCurrentLine() {
-        if (selections.hasSelection() || !isFocused()) {
-            hide(currentLine);
-            hide(currentLineGutter);
-            return;
-        }
-        float height = lineHeight();
-        int row = buffer.offsetToPoint(getCaret()).row();
-        // THE WHOLE WRAPPED ROW, not the one view line the caret is on. The band answers "which line am I
-        // editing", and a line that wraps is still one line -- highlighting a third of it would make the
-        // band look like it had come unstuck from the caret whenever the caret moved along a long row.
-        final float top = textOriginY() + projections.firstViewLineOfRow(row) * height - getScrollTop();
-        final float bandHeight = height * projections.projectionOf(row).viewLineCount();
-        // Spans the viewport and does NOT move with horizontal scroll: it marks which row is being
-        // edited, which is true of the whole visible width however far sideways the text has gone.
-        final float left = 0f;
-        final float width = Math.max(1f, textViewportWidth());
-        StyleGroup.defaultPipeline(currentLine.getStyle().getLayoutGroup(),
-                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(left).top(top).width(width).height(bandHeight));
-
-        // The gutter half. Its parent is scroll-exempt, so it subtracts the offset by hand exactly as the
-        // numbers beside it do -- and it spans the gutter's whole box, including the fold column, so the
-        // band reads as one strip across the editor rather than two with a seam.
-        final float gutterBandWidth = getTaffyLayout().padding().left + gutterWidth;
-        StyleGroup.defaultPipeline(currentLineGutter.getStyle().getLayoutGroup(),
-                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(0f).top(top).width(gutterBandWidth).height(bandHeight));
-    }
-
-    private UIElement numberAt(int index) {
-        while (lineNumbers.size() <= index) {
-            UIElement number = new UIElement();
-            number.addClass(LINE_NUMBER_CLASS);
-            number.setHitTest(false);
-            number.markAsInternal();
-            number.addChild(new UIText(""));
-            gutter.addInternalChild(number);
-            lineNumbers.add(number);
-        }
-        return lineNumbers.get(index);
     }
 
     /**
@@ -3743,259 +3145,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     // ── §G view decorations: layout ─────────────────────────────────────────────────────────────
 
-    /** A pooled decoration element of the given class, appended as an internal child. */
-    private UIElement decorationAt(List<UIElement> pool, int index, String className, boolean withText) {
-        return decorationAt(pool, index, className, withText, false);
-    }
-
-    /**
-     * @param inText whether this decoration is drawn in document coordinates and so belongs inside
-     *               {@link #textViewport()}. Chrome that sits beside the text — the gutter's edge, the
-     *               zoom indicator — stays on the editor, or the viewport would clip it away.
-     */
-    private UIElement decorationAt(List<UIElement> pool, int index, String className, boolean withText,
-                                   boolean inText) {
-        while (pool.size() <= index) {
-            UIElement element = new UIElement();
-            element.addClass(className);
-            element.setHitTest(false);
-            element.markAsInternal();
-            if (withText) element.addChild(new UIText(""));
-            if (inText) textViewport().addInternalChild(element);
-            else addInternalChild(element);
-            pool.add(element);
-        }
-        return pool.get(index);
-    }
-
-    /**
-     * Retires the unused tail of a decoration pool.
-     *
-     * <p><b>Clears the text as well as collapsing the box.</b> Zero size hides a <em>fill</em>, and that
-     * is all it does — a {@code UIText} inside has no clipping of its own and keeps painting its glyph
-     * wherever the box used to be. The line numbers get away with the same trick only because the gutter
-     * around them sets {@code overflow: hidden}; a whitespace marker has nothing around it, so turning
-     * the feature off left every dot on screen.</p>
-     */
-    private void hideFrom(List<UIElement> pool, int used) {
-        for (int i = used; i < pool.size(); i++) hide(pool.get(i));
-    }
-
-    /**
-     * One vertical line per indent level, on every visual row.
-     *
-     * <p>Placed at whole multiples of the indent width rather than at measured text, because a guide
-     * marks a <b>level</b> and must be at the same x on a blank line as on the code around it — which is
-     * exactly the case {@link IndentLevels} exists to answer, and where a guide derived from a row's own
-     * characters would have nothing to derive from.</p>
-     */
-    private void layOutIndentGuides(int firstViewLine, int lastViewLine) {
-        if (!indentGuidesVisible || lastViewLine < firstViewLine) {
-            hideFrom(indentGuides, 0);
-            return;
-        }
-        float advance = spaceAdvance();
-        if (!(advance > 0f)) {
-            hideFrom(indentGuides, 0);
-            return;
-        }
-
-        float height = lineHeight();
-        float step = advance * Math.max(1, indentWidth);
-        int used = 0;
-
-        int firstLine = Math.max(0, firstViewLine);
-        int lastLine = Math.min(lastViewLine, viewLineCount() - 1);
-        if (lastLine < firstLine) {
-            hideFrom(indentGuides, 0);
-            return;
-        }
-        // ONE call for the whole visible RANGE. Asking row by row -- guidesFor(doc, row, row, ...) --
-        // threw away the carry-forward the algorithm is built around: every blank row restarted the
-        // search for the nearest content line above and below and rescanned the document, once per row
-        // and once per frame. The range form is what the port was written for.
-        int firstRow = modelAt(firstLine).row();
-        int lastRow = modelAt(lastLine).row();
-        int[] levelsByRow = IndentLevels.guidesFor(buffer.document(), firstRow, lastRow,
-                indentWidth, tabSize, offSideLanguage);
-
-        // WHICH BLOCK THE CARET IS IN, once for the whole pass. Bounded by the visible rows, so a long
-        // file costs the viewport rather than the document -- the same reason guidesFor takes a range.
-        //
-        // Scoped from the CARET and not from the pointer: it answers "where am I editing", which is the
-        // question the current-line band answers too, and hovering must not move it.
-        IndentLevels.ActiveGuide active = IndentLevels.activeGuideFor(buffer.document(),
-                buffer.offsetToPoint(getCaret()).row(), firstRow, lastRow,
-                indentWidth, tabSize, offSideLanguage);
-
-        for (int viewLine = firstLine; viewLine <= lastLine; viewLine++) {
-            int row = modelAt(viewLine).row();
-            int levels = levelsByRow[Math.max(0, Math.min(row - firstRow, levelsByRow.length - 1))];
-            final float top = textOriginY() + viewLine * height - getScrollTop();
-
-            // Half the CODE MARGIN left of the indent stop -- never half a space. A space is wider than
-            // the margin, so nudging by one put the level-0 guide underneath the gutter, which has a
-            // higher z-index and painted straight over it: the guides simply vanished from every
-            // unindented row. Half the margin keeps the guide in the gap that exists for it.
-            final float nudge = codeLeftPad() * 0.5f;
-            // FROM LEVEL 1. Level 0 is not an indent guide at all -- it is the gutter's right edge, drawn
-            // once for the whole viewport by layOutGutterEdge. Drawing it per row was what made it break
-            // at every unindented line: such a line has zero guides, so the run stopped wherever the code
-            // reached column 0, and the letter there looked like it had cut the line. As an edge it is one
-            // element, full height, and cannot be interrupted by anything.
-            for (int level = 1; level < levels && used < MAX_INDENT_GUIDES; level++) {
-                final float left = codeLeftPad() + level * step - nudge - getScrollLeft();
-                // Past the right edge there is nothing to guide, and the elements are better spent on
-                // rows that are visible.
-                if (left > textViewportWidth()) break;
-                UIElement guide = decorationAt(indentGuides, used++, INDENT_GUIDE_CLASS, false, true);
-                // Pooled, so the class has to be re-decided every frame rather than set once: this
-                // element described a different row and level a moment ago. addClass/removeClass no-op on
-                // an unchanged set, so a frame where nothing moved writes nothing.
-                if (active.covers(row, level)) guide.addClass(ACTIVE_GUIDE_CLASS);
-                else guide.removeClass(ACTIVE_GUIDE_CLASS);
-                StyleGroup.defaultPipeline(guide.getStyle().getLayoutGroup(),
-                        l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                                .left(left).top(top).width(1f).height(height));
-            }
-        }
-        hideFrom(indentGuides, used);
-    }
-
-    /**
-     * A marker glyph over every whitespace character the mode asks for.
-     *
-     * <p>Drawn as separate elements at <b>measured</b> x rather than substituted into the line's text.
-     * Substitution is what VS Code does and it is right there because the editor is monospaced: here a
-     * middot and a space have different advances, so replacing one with the other would shift every glyph
-     * after it and the caret would stop landing where the text is.</p>
-     */
-    private void layOutWhitespace(int firstViewLine, int lastViewLine) {
-        if (renderWhitespace == RenderWhitespace.NONE || lastViewLine < firstViewLine) {
-            hideFrom(whitespaceMarks, 0);
-            return;
-        }
-        float height = lineHeight();
-        float ink = textHeight();
-        int used = 0;
-
-        for (int viewLine = Math.max(0, firstViewLine);
-             viewLine <= Math.min(lastViewLine, viewLineCount() - 1) && used < MAX_WHITESPACE_MARKS;
-             viewLine++) {
-            ProjectedLines.ModelPosition model = modelAt(viewLine);
-            LineProjection projection = projectionAt(viewLine);
-            String row = buffer.line(model.row());
-            int from = projection.viewLineStart(model.viewLineInRow());
-            int to = Math.min(row.length(), projection.viewLineEnd(model.viewLineInRow()));
-            // TRAILING asks whether this segment is the row's last, which is what stops a soft wrap from
-            // reporting its own break as trailing whitespace.
-            boolean continues = model.viewLineInRow() < projection.viewLineCount() - 1;
-            boolean[] marked = WhitespaceMarkers.shouldMark(row, renderWhitespace, tabSize, continues);
-
-            final float top = textOriginY() + viewLine * height + (height - ink) / 2f - getScrollTop();
-            for (int column = from; column < to && used < MAX_WHITESPACE_MARKS; column++) {
-                if (!marked[column]) continue;
-                char marker = WhitespaceMarkers.markerFor(row.charAt(column));
-                if (marker == '\0') continue;
-
-                LineProjection.ViewPosition at =
-                        projection.toViewPosition(column, LineProjection.Affinity.RIGHT);
-                final float left = codeLeftPad() + xOfView(viewLine, at.column()) - getScrollLeft();
-                UIElement mark = decorationAt(whitespaceMarks, used++, WHITESPACE_CLASS, true, true);
-                UIText label = (UIText) mark.getChildren().get(0);
-                label.setText(String.valueOf(marker));
-                // The font is pushed only while it is actually settling, not per marker per frame. There
-                // can be hundreds of markers and the pipeline is not free; a line number pays this
-                // because there are ~25 of them, a marker cannot.
-                if (markerFontKey == null || !markerFontKey.equals(measuredFontKey)) {
-                    StyleGroup.importantPipeline(label.getStyle().getGeneralGroup(),
-                            g -> g.fontSize(getStyle().getGeneralGroup().fontSize())
-                                    .fontFamily(getStyle().getGeneralGroup().fontFamily()));
-                }
-                StyleGroup.defaultPipeline(mark.getStyle().getLayoutGroup(),
-                        l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                                .left(left).top(top).height(ink));
-            }
-        }
-        hideFrom(whitespaceMarks, used);
-        markerFontKey = measuredFontKey;
-    }
-
-    /**
-     * The gutter's right edge — one line, full height, never interrupted.
-     *
-     * <p>What the indent-guide column at level 0 was pretending to be. In IntelliJ this line runs the
-     * whole document unbroken, including past lines at indent 0 that have no indentation to guide; an
-     * indent guide cannot do that, because it is drawn per row from that row's own indent. Making it the
-     * gutter's edge makes it structural: it is one element, it spans the viewport, and no line of code can
-     * break it.</p>
-     *
-     * <p>Scroll-exempt for the same reason the gutter is — it marks a horizontal boundary, which does not
-     * move when the document scrolls vertically.</p>
-     */
-    private void layOutGutterEdge() {
-        if (!gutterVisible) {
-            hideFrom(gutterEdge, 0);
-            return;
-        }
-        UIElement edge = decorationAt(gutterEdge, 0, GUTTER_EDGE_CLASS, false);
-        edge.setScrollExempt(true);
-        // ON the gutter's right edge, which is what a border is. Floating it in the middle of the code
-        // margin read as a third thing -- a stray rule with a gap either side -- rather than as the
-        // gutter ending. The whole margin then sits between it and the first glyph, which is the gap the
-        // margin is for.
-        final float left = textOriginX() - codeLeftPad();
-        final float height = viewportHeight();
-        StyleGroup.defaultPipeline(edge.getStyle().getLayoutGroup(),
-                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                        .left(left).top(0f).width(1f).height(height));
-        hideFrom(gutterEdge, 1);
-    }
-
-    /**
-     * A vertical rule at each configured column.
-     *
-     * <p>Full viewport height and scroll-exempt: a ruler marks a <em>column</em>, which does not move when
-     * the document scrolls vertically. It does move when the document scrolls sideways, which is why the
-     * horizontal offset is subtracted and the vertical one is not.</p>
-     */
-    private void layOutRulers() {
-        if (rulers.length == 0) {
-            hideFrom(rulerLines, 0);
-            return;
-        }
-        float advance = spaceAdvance();
-        if (!(advance > 0f)) {
-            hideFrom(rulerLines, 0);
-            return;
-        }
-        final float height = viewportHeight();
-        int used = 0;
-        for (int column : rulers) {
-            if (column <= 0) continue;
-            final float left = codeLeftPad() + column * advance - getScrollLeft();
-            if (left < codeLeftPad() || left > textViewportWidth()) continue;
-            UIElement rule = decorationAt(rulerLines, used++, RULER_CLASS, false, true);
-            StyleGroup.defaultPipeline(rule.getStyle().getLayoutGroup(),
-                    l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
-                            .left(left).top(0f).width(1f).height(height));
-        }
-        hideFrom(rulerLines, used);
-    }
-
-    /**
-     * Caps on decoration elements.
-     *
-     * <p>Each is a Taffy node, and {@code renderWhitespace: all} on a wide file is thousands of them —
-     * VS Code has {@code stopRenderingLineAfter} for the same reason. The cap degrades the decoration
-     * rather than the editor, which is the right way round: markers missing off the far edge of a very
-     * long line are barely noticeable, and a layout pass that takes a second is not.</p>
-     */
-    private static final int MAX_INDENT_GUIDES = 512;
-    private static final int MAX_WHITESPACE_MARKS = 2048;
-
     /** X of a document column, via its display index — see {@link RowMetrics}. */
-    private float widthOf(int row, int column) {
+    float widthOf(int row, int column) {
         RowMetrics metrics = rowMetrics(row);
         int index = metrics.line().displayIndexOf(column);
         float[] widths = metrics.widths();
@@ -4008,30 +3159,30 @@ public class TextEditor extends ScrollerView implements UndoScope {
     // x). With soft wrap off every one of these is an identity and costs a lookup; there is deliberately
     // no fast path around them, because a second path is what lets the two disagree.
 
-    private ProjectedLines.ModelPosition modelAt(int viewLine) {
+    ProjectedLines.ModelPosition modelAt(int viewLine) {
         return projections.modelAt(viewLine);
     }
 
-    private LineProjection projectionAt(int viewLine) {
+    LineProjection projectionAt(int viewLine) {
         return projections.projectionOf(modelAt(viewLine).row());
     }
 
     /** The document offset at which a view line's text begins. */
-    private int viewLineStartOffset(int viewLine) {
+    int viewLineStartOffset(int viewLine) {
         ProjectedLines.ModelPosition model = modelAt(viewLine);
         return buffer.document().lineStartOffset(model.row())
                 + projectionAt(viewLine).viewLineStart(model.viewLineInRow());
     }
 
     /** The document offset at which a view line's text ends, excluding any newline. */
-    private int viewLineEndOffset(int viewLine) {
+    int viewLineEndOffset(int viewLine) {
         ProjectedLines.ModelPosition model = modelAt(viewLine);
         return buffer.document().lineStartOffset(model.row())
                 + projectionAt(viewLine).viewLineEnd(model.viewLineInRow());
     }
 
     /** Which view line a document offset paints on. */
-    private int viewLineOf(int offset, LineProjection.Affinity affinity) {
+    int viewLineOf(int offset, LineProjection.Affinity affinity) {
         return projections.toViewPosition(buffer.document(), offset, affinity).viewLine();
     }
 
@@ -4063,7 +3214,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * {@code breakOffsetsVisibleColumn} array to solve this; rebasing the row's prefix widths needs no
      * extra state, and state that exists only to mirror another array is state that goes stale.</p>
      */
-    private float xOfView(int viewLine, int column) {
+    float xOfView(int viewLine, int column) {
         ProjectedLines.ModelPosition model = modelAt(viewLine);
         LineProjection projection = projectionAt(viewLine);
         int inRow = projection.toModelOffset(model.viewLineInRow(), column);
@@ -4071,12 +3222,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return widthOf(model.row(), inRow) - origin + carriedIndentPx(viewLine);
     }
 
-    /**
-     * The text painted on a view line — a slice of the row's <b>already tab-expanded</b> display string.
-     *
-     * <p>Slicing the expanded string rather than expanding the slice is what keeps tab stops right after a
-     * wrap, for the same reason {@link #xOfView} rebases rather than remeasures.</p>
-     */
     /**
      * The display column a collapsed header stops painting at, or {@code -1}.
      *
@@ -4095,10 +3240,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
         if (!foldingEnabled) return -1;
         FoldingRegions.Region region = folding.getRegionStartingAt(row);
         if (region == null || !region.isCollapsed()) return -1;
-        int opener = trailingOpenerIndex(buffer.document().line(row));
+        int opener = FoldingDecorationsPart.trailingOpenerIndex(buffer.document().line(row));
         return opener < 0 ? -1 : rowMetrics(row).line().displayIndexOf(opener);
     }
 
+    /**
+     * The text painted on a view line — a slice of the row's <b>already tab-expanded</b> display string.
+     *
+     * <p>Slicing the expanded string rather than expanding the slice is what keeps tab stops right after a
+     * wrap, for the same reason {@link #xOfView} rebases rather than remeasures.</p>
+     */
     private String viewLineDisplayText(int viewLine) {
         ProjectedLines.ModelPosition model = modelAt(viewLine);
         LineProjection projection = projectionAt(viewLine);
@@ -4118,38 +3269,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int cut = collapsedHeaderCut(model.row());
         if (cut >= from && cut < to) to = cut;
         return display.substring(from, to);
-    }
-
-    private UIElement caretAt(int index) {
-        while (caretElements.size() <= index) {
-            UIElement caret = new UIElement();
-            caret.addClass(CARET_CLASS);
-            caret.setHitTest(false);
-            caret.markAsInternal();
-            textViewport().addInternalChild(caret);
-            caretElements.add(caret);
-        }
-        return caretElements.get(index);
-    }
-
-    private UIElement bandAt(int index) {
-        while (selectionBands.size() <= index) {
-            UIElement band = new UIElement();
-            band.addClass(SELECTION_CLASS);
-            band.setHitTest(false);
-            band.markAsInternal();
-            // IN THE VIEWPORT, like everything else in document coordinates. Left on the editor it was
-            // scrolled by the pose translate AND had the offset subtracted by hand in placeBands, so the
-            // bands sat a screenful away from the text they marked -- selecting a word painted a band
-            // several lines above it.
-            //
-            // Appended rather than inserted first: the sheet already orders these by z-index
-            // (__selection__ at -1, __caret__ at 1), so the caret cannot end up under its own band, and
-            // insertInternalChildAt is not reachable on another element anyway.
-            textViewport().addInternalChild(band);
-            selectionBands.add(band);
-        }
-        return selectionBands.get(index);
     }
 
     @Override

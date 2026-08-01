@@ -2496,6 +2496,64 @@ public class TextEditorTest extends UiTestBase {
         return n;
     }
 
+    /**
+     * <b>An edit that changes the LINE COUNT must drop every cached row measurement.</b>
+     *
+     * <p>{@code measuredRows} is keyed by row index, and measuring a row is a text-shaping call, so the
+     * editor invalidates one row rather than the map when an edit provably renumbers nothing — which is
+     * what ordinary typing is, and what took a keystroke from 4.0 ms to 3.4 ms on a 500-line document.</p>
+     *
+     * <p>The guard on that shortcut is the line count. Add or remove a line and every row below is
+     * renumbered, so row <i>n</i>'s cached widths now describe some other row's text — and the widths are
+     * what place the caret. Dropping only the edited row then puts the caret at a position measured from a
+     * line that has moved.</p>
+     *
+     * <p>Written because removing the guard <b>broke no existing test</b>: the optimisation shipped
+     * unpinned, and the failure it allows is a caret that is silently a few pixels wrong on a row nobody
+     * edited. Asserted differentially — the same final text reached by editing must place the caret
+     * exactly where reaching it directly does.</p>
+     */
+    @Test
+    public void aLineCountChangeDropsEveryCachedRowMeasurement() {
+        String longRow = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        build("SHORT" + NL + longRow);
+        showEditor();
+        // Touch BOTH rows so both are measured and cached under indices 0 and 1.
+        editor.setCaret(editor.getText().length());
+        showEditor();
+
+        // One newline at the very top renumbers every row below it: row 1 was the long line and is now
+        // "SHORT". Its cache entry is the one that goes stale, so that is the row to look at -- the row
+        // the edit LANDED on is dropped even by the broken shortcut, and the row past the end was never
+        // cached, so neither of those can see the bug.
+        editor.setCaret(0);
+        editor.insertAtCaret(NL);
+        showEditor();
+
+        java.util.List<UIElement> rendered = linesOf();
+        assertTrue("expected at least three rows on screen", rendered.size() >= 3);
+        assertEquals("row 1 must PAINT its new text, not the measurement cached for the old row 1",
+                "SHORT", ((UIText) rendered.get(1).getChildren().get(0)).getText());
+
+        // And the widths behind it must be the new row's, since they are what place the caret.
+        editor.setCaret(editor.getText().indexOf("SHORT") + "SHORT".length());
+        showEditor();
+        float edited = childWithClass(TextEditor.CARET_CLASS).getRuntimeCache().getX();
+        String editedText = editor.getText();
+
+        // The same final text, reached directly, with no cache that could be stale.
+        build(NL + "SHORT" + NL + longRow);
+        showEditor();
+        editor.setCaret(editor.getText().indexOf("SHORT") + "SHORT".length());
+        showEditor();
+        float fresh = childWithClass(TextEditor.CARET_CLASS).getRuntimeCache().getX();
+
+        assertEquals("the two editors must hold the same text", editedText, editor.getText());
+        assertEquals("caret x after a line-count change must not come from a stale row measurement",
+                fresh, edited, 0.5f);
+    }
+
+
     private void showEditor() {
         settle();
         editor.updateWindow();
