@@ -194,10 +194,12 @@ public class Menu extends Popover {
         item.addClass(MenuItem.HAS_SUBMENU_CLASS);
         submenu.setPreferredSide(AnchoredPlacement.Side.RIGHT);
 
-        // The affordance every native menu has: a row that leads somewhere says so. Plain text rather than a
-        // sprite so it works with no theme loaded, in the `__post-icon__` slot Button already provides — a
-        // theme that wants a real glyph replaces it with setPostIcon and styles __submenu-arrow__.
-        UIText arrow = new UIText(">");
+        // The affordance every native menu has: a row that leads somewhere says so. A vector chevron
+        // (overlay: shape("chevron-right") in default.css) rather than a sprite so it works with no
+        // theme loaded — same reasoning the plain-text glyph this replaced was after, without a font
+        // standing in for a triangle it does not actually contain. A theme that wants something else
+        // still overrides via setPostIcon and __submenu-arrow__.
+        UIElement arrow = new UIElement();
         arrow.addClass(MenuItem.SUBMENU_ARROW_CLASS);
         arrow.setHitTest(false);
         item.setPostIcon(arrow);

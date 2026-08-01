@@ -144,7 +144,10 @@ public class GraphNode extends UIElement {
         title.addClass(TITLE_CLASS);
         title.setHitTest(false);
         collapseToggle.addClass(COLLAPSE_CLASS);
-        collapseToggle.addChild(new UIText("v").setHitTest(false));
+        // A real vector chevron (overlay: shape("chevron-down") in default.css) rather than a text
+        // glyph — same reasoning as ConfiguratorGroup's identical arrow, which this used to imitate
+        // in letter form only. Rotated by .__collapsed__ on the node itself, not swapped, so the two
+        // states are one drawable that can transition rather than a jump cut.
         titleBar.addInternalChild(title);
         titleBar.addInternalChild(collapseToggle);
 

@@ -399,11 +399,10 @@ public class NodeCreationMenu extends Popover {
             EntryRow entry = (EntryRow) template;
             template.removeClass(CATEGORY_CLASS);
             if (item.isCategory()) template.addClass(CATEGORY_CLASS);
-            // ASCII, not U+25B6/U+25BC. The bundled Minecraft font has neither, and a missing glyph draws
-            // a blank advance rather than failing -- the same trap this engine already documents for the
-            // U+2026 ellipsis. The triangles rendered as nothing at all, which reads as "the twisty was
-            // never added" rather than as a font problem. The gallery's tree page uses these.
-            entry.twisty.setText(!row.expandable() ? " " : row.expanded() ? "v" : ">");
+            // No Java decision needed here any more: the twisty's appearance (chevron-right, rotated
+            // to chevron-down when expanded, or blank for a leaf) is driven entirely by the
+            // __expanded__/__collapsed__/__leaf__ classes TreeView already applies to `template` — see
+            // default.css's nodecreationmenu .__twisty__ rules.
             entry.label.setText(item.label());
         }
     }
@@ -413,7 +412,7 @@ public class NodeCreationMenu extends Popover {
      * inserted anything. */
     private static final class EntryRow extends UIElement {
 
-        private final UIText twisty = new UIText("");
+        private final UIElement twisty = new UIElement();
         private final UIText label = new UIText("");
 
         EntryRow() {
