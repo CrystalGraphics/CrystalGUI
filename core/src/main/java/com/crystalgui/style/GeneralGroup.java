@@ -442,6 +442,26 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
+    /** 0 when unset — the sentinel {@link UIElement} reads as "fall back to {@link #borderColor()}". */
+    public int borderTopColor() {
+        return getValueSave(StylePropertyRegistry.BORDER_TOP_COLOR);
+    }
+
+    public GeneralGroup borderTopColor(int colorArgb) {
+        set(StylePropertyRegistry.BORDER_TOP_COLOR, colorArgb);
+        return this;
+    }
+
+    /** 0 when unset — the sentinel {@link UIElement} reads as "fall back to {@link #borderColor()}". */
+    public int borderBottomColor() {
+        return getValueSave(StylePropertyRegistry.BORDER_BOTTOM_COLOR);
+    }
+
+    public GeneralGroup borderBottomColor(int colorArgb) {
+        set(StylePropertyRegistry.BORDER_BOTTOM_COLOR, colorArgb);
+        return this;
+    }
+
     public List<TransitionSpec> transition() {
         return getValueSave(StylePropertyRegistry.TRANSITION);
     }

@@ -34,7 +34,15 @@ public final class CgUiRoundedRect implements CgUiDrawable {
 
     private float rxTL = 0f, ryTL = 0f, rxTR = 0f, ryTR = 0f, rxBR = 0f, ryBR = 0f, rxBL = 0f, ryBL = 0f;
     private float borderWidth = 0f;
+    /** The LEFT and RIGHT edges always take this — there is no border-left/right-color to split them
+     * with — and it is what {@link #setBorder(float, int, int, int)}'s top/bottom pair falls back to
+     * being equal to when a caller doesn't want a split at all. */
     private int borderColorArgb = 0xFF000000;
+    /** Equal to {@link #borderColorArgb} unless {@link #setBorder(float, int, int, int)} was used — the
+     * pair that lets the shader stroke the TOP and BOTTOM edges differently (Unity's inset text-field
+     * bevel). See {@code gui_rounded_rect.shader}'s {@code SPLIT_BORDER} feature. */
+    private int borderTopColorArgb = 0xFF000000;
+    private int borderBottomColorArgb = 0xFF000000;
     private int fillColorArgb = 0xFFFFFFFF;
     private CgTexture2D fillTexture;
     /** Non-null when the fill is a 9-slice sprite — mutually exclusive with {@link #fillTexture}
@@ -58,8 +66,25 @@ public final class CgUiRoundedRect implements CgUiDrawable {
     }
 
     public CgUiRoundedRect setBorder(float width, int colorArgb) {
+        return setBorder(width, colorArgb, colorArgb, colorArgb);
+    }
+
+    /**
+     * As {@link #setBorder(float, int)}, but the TOP and BOTTOM edges may stroke a different colour
+     * from {@code uniformColorArgb} — Unity's inset text-field bevel: dark top, light bottom, same
+     * colour as the fill on the left and right (there is no {@code border-left/right-color} to split
+     * those with, and the shader has no notion of "left" or "right" edge to begin with).
+     *
+     * <p>{@code uniformColorArgb} is also the anti-fringe fallback fill in
+     * {@code UIElement.paintRoundedBackground} and the shader's {@code _BorderColor} — a caller that
+     * passes it for all three arguments is byte-for-byte the old uniform path, since the shader only
+     * engages {@code SPLIT_BORDER} when top or bottom actually differs from it.</p>
+     */
+    public CgUiRoundedRect setBorder(float width, int uniformColorArgb, int topColorArgb, int bottomColorArgb) {
         this.borderWidth = width;
-        this.borderColorArgb = colorArgb;
+        this.borderColorArgb = uniformColorArgb;
+        this.borderTopColorArgb = topColorArgb;
+        this.borderBottomColorArgb = bottomColorArgb;
         return this;
     }
 
@@ -88,6 +113,12 @@ public final class CgUiRoundedRect implements CgUiDrawable {
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         MATERIAL.toggleKeyword("WITH_BORDER", borderWidth > 0f);
+        // Only ever true when the 4-arg setBorder was called with a top or bottom that actually
+        // differs from the uniform colour — the 2-arg overload delegates here with all three equal,
+        // which keeps every existing caller (the outline ring, the mask border, every uniform-border
+        // widget) on the exact same shader path as before this feature existed.
+        MATERIAL.toggleKeyword("SPLIT_BORDER",
+                borderTopColorArgb != borderColorArgb || borderBottomColorArgb != borderColorArgb);
         boolean with9SliceFill = fillSprite != null;
         boolean withTextureFill = !with9SliceFill && fillTexture != null;
         MATERIAL.toggleKeyword("WITH_TEXTURE_FILL", withTextureFill);
@@ -99,6 +130,8 @@ public final class CgUiRoundedRect implements CgUiDrawable {
                 b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
                 b.set1f("_BorderWidth", borderWidth);
                 b.colorARGB("_BorderColor", borderColorArgb);
+                b.colorARGB("_BorderColorTop", borderTopColorArgb);
+                b.colorARGB("_BorderColorBottom", borderBottomColorArgb);
                 b.colorARGB("_FillColor", fillColorArgb);
                 b.vec2("_BoxSize", width, height);
                 if (with9SliceFill) {

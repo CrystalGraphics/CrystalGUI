@@ -1863,6 +1863,8 @@ public class UIElement {
         // what an absent background looks like.
         if (background == CgUiDrawable.EMPTY) {
             int borderColorArgb = style.getGeneralGroup().borderColor();
+            int borderTopArgb = resolveBorderEdgeColor(style.getGeneralGroup().borderTopColor(), borderColorArgb);
+            int borderBottomArgb = resolveBorderEdgeColor(style.getGeneralGroup().borderBottomColor(), borderColorArgb);
             RectFill fill;
             if (hasExplicitBackgroundColor) {
                 // background-color with no drawable paints as a flat fill (see paintSelf's comment on
@@ -1872,8 +1874,10 @@ public class UIElement {
             } else if (borderWidthPx > 0f) {
                 // Border only — a transparent interior with a visible stroke. The fill carries the
                 // BORDER's rgb at zero alpha rather than plain 0x00000000, because the shader blends
-                // `mix(_BorderColor, fillColor, innerCoverage)` across the inner edge and a mismatched
+                // `mix(edgeColor, fillColor, innerCoverage)` across the inner edge and a mismatched
                 // rgb bleeds a fringe there. paintOutline does the same thing for the same reason.
+                // The TOP colour is the representative — an edge case with no visible fringe either way,
+                // since a split border only exists for widgets that also carry a real background.
                 fill = new ColorFill(borderColorArgb & 0x00FFFFFF);
             } else {
                 // Nothing to draw at all. Fall through so the plain path (which also draws nothing)
@@ -1881,7 +1885,8 @@ public class UIElement {
                 return false;
             }
             ctx.setColor(0xFFFFFFFF);
-            buildRoundedRect(radii, borderWidthPx, borderColorArgb, fill).draw(ctx, x, y, width, height);
+            buildRoundedRect(radii, borderWidthPx, borderColorArgb, borderTopArgb, borderBottomArgb, fill)
+                    .draw(ctx, x, y, width, height);
             return true;
         }
 
@@ -1895,8 +1900,18 @@ public class UIElement {
 
         ctx.setColor(backgroundColor);
         int borderColor = style.getGeneralGroup().borderColor();
-        paintRoundedLayer(ctx, background, x, y, width, height, radii, borderWidthPx, borderColor);
+        int borderTopArgb = resolveBorderEdgeColor(style.getGeneralGroup().borderTopColor(), borderColor);
+        int borderBottomArgb = resolveBorderEdgeColor(style.getGeneralGroup().borderBottomColor(), borderColor);
+        paintRoundedLayer(ctx, background, x, y, width, height, radii, borderWidthPx, borderColor, borderTopArgb, borderBottomArgb);
         return true;
+    }
+
+    /** {@code border-top-color}/{@code border-bottom-color} are transparent when unset — this engine's
+     * way of saying "no override" without a nullable color type. A fully-transparent edge falls back to
+     * {@code border-color}'s own resolved value, so a widget that never touches the new pair paints
+     * exactly as it always has. */
+    private static int resolveBorderEdgeColor(int edgeColorArgb, int fallbackArgb) {
+        return (edgeColorArgb >>> 24) == 0 ? fallbackArgb : edgeColorArgb;
     }
 
     /** Pure, side-effect-free: true iff every leaf in this (possibly {@link CgUiCrossFade}-nested) drawable resolves to a fill. */
@@ -1907,15 +1922,17 @@ public class UIElement {
 
     /** Only called after {@link #canPaintRounded} confirmed every leaf resolves. */
     private static void paintRoundedLayer(CgUiPaintContext ctx, CgUiDrawable d, float x, float y, float width, float height,
-                                           CornerRadii radii, float borderWidthPx, int borderColor) {
+                                           CornerRadii radii, float borderWidthPx,
+                                           int borderColor, int borderTopColor, int borderBottomColor) {
         if (d instanceof CgUiCrossFade cf) {
-            ctx.withLayerOpacity(1f - cf.getT(), () ->
-                    paintRoundedLayer(ctx, cf.getFrom(), x, y, width, height, radii, borderWidthPx, borderColor));
-            ctx.withLayerOpacity(cf.getT(), () ->
-                    paintRoundedLayer(ctx, cf.getTo(), x, y, width, height, radii, borderWidthPx, borderColor));
+            ctx.withLayerOpacity(1f - cf.getT(), () -> paintRoundedLayer(ctx, cf.getFrom(), x, y, width, height,
+                    radii, borderWidthPx, borderColor, borderTopColor, borderBottomColor));
+            ctx.withLayerOpacity(cf.getT(), () -> paintRoundedLayer(ctx, cf.getTo(), x, y, width, height,
+                    radii, borderWidthPx, borderColor, borderTopColor, borderBottomColor));
             return;
         }
-        buildRoundedRect(radii, borderWidthPx, borderColor, resolveRoundedFill(d)).draw(ctx, x, y, width, height);
+        buildRoundedRect(radii, borderWidthPx, borderColor, borderTopColor, borderBottomColor, resolveRoundedFill(d))
+                .draw(ctx, x, y, width, height);
     }
 
     /** A resolved fill for the rounded-wrap layer — a flat color, a single stretched texture, or a
@@ -1969,10 +1986,12 @@ public class UIElement {
         return rect;
     }
 
-    private static CgUiRoundedRect buildRoundedRect(CornerRadii radii, float borderWidthPx, int borderColor, RectFill fill) {
+    private static CgUiRoundedRect buildRoundedRect(CornerRadii radii, float borderWidthPx,
+                                                      int borderColor, int borderTopColor, int borderBottomColor,
+                                                      RectFill fill) {
         CgUiRoundedRect rect = buildFillOnlyRoundedRect(radii, fill);
         if (borderWidthPx > 0f) {
-            rect.setBorder(borderWidthPx, borderColor);
+            rect.setBorder(borderWidthPx, borderColor, borderTopColor, borderBottomColor);
         }
         return rect;
     }
