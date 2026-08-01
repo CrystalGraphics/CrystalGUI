@@ -66,9 +66,13 @@ public final class StyleSheet {
     }
 
     private StyleSheet(List<StyleRule> rules, StyleOrigin origin) {
-        this.rules = rules;
+        // A MUTABLE COPY the sheet owns. Callers hand in whatever they have -- parse() a fresh ArrayList,
+        // loadUserAgentSheet() the immutable result of getRules() -- and replaceRules has to be able to
+        // empty it. Storing the caller's list meant DEFAULT held a List.copyOf and every hot reload threw
+        // UnsupportedOperationException on the one sheet the feature exists for.
+        this.rules = new ArrayList<>(rules);
         this.origin = origin;
-        for (var rule : rules) index(rule);
+        for (var rule : this.rules) index(rule);
     }
 
     public static StyleSheet parse(String source) {
@@ -147,7 +151,7 @@ public final class StyleSheet {
      * forever, a packaging slip would otherwise surface only as every widget silently laying out at
      * 0x0 — which is precisely the failure this file exists to prevent. */
     private static StyleSheet loadUserAgentSheet() {
-        StyleSheet sheet = StyleSheetRegistry.of("crystalgui:default");
+        StyleSheet sheet = StyleSheetRegistry.of(StyleSheetRegistry.DEFAULT_SHEET);
         if (sheet.getRules().isEmpty()) {
             CrystalGuiCore.LOGGER.error(
                     "StyleSheet.DEFAULT is EMPTY — 'assets/crystalgui/ui/styles/default.css' is missing or "
@@ -158,5 +162,32 @@ public final class StyleSheet {
 
     public List<StyleRule> getRules() {
         return List.copyOf(rules);
+    }
+
+    /**
+     * Swaps this sheet's rules for a freshly parsed set, <b>keeping the instance</b>.
+     *
+     * <p>Identity is the whole point. {@link StyleEngine} holds sheets in a list, {@link #DEFAULT} is a
+     * {@code static final}, and every window that has ever called {@code addStylesheet} holds the same
+     * reference — so a reload that produced a <em>new</em> sheet would update nothing that is already on
+     * screen, and {@code DEFAULT} could not be replaced at all. Refilling in place means every existing
+     * holder sees the new rules with no re-registration.</p>
+     *
+     * <p>The indices are rebuilt too, not merely appended to: {@link #candidatesFor} answers out of them,
+     * so a rule deleted from the file has to leave the buckets or it keeps matching. Dropping a stale
+     * <em>candidate</em> is then {@code StyleEngine.rematch}'s job, which it already does correctly — it
+     * remembers what it last applied per element and swaps the whole set atomically.</p>
+     *
+     * <p>Package-private, and reached through {@link StyleSheetRegistry#reloadAll()} rather than called
+     * directly: a sheet does not know which file it came from, and the registry is what does.</p>
+     */
+    void replaceRules(List<StyleRule> replacement) {
+        rules.clear();
+        rules.addAll(replacement);
+        byId.clear();
+        byClass.clear();
+        byType.clear();
+        universal.clear();
+        for (var rule : rules) index(rule);
     }
 }

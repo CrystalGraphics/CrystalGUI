@@ -5,6 +5,7 @@ import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.style.transition.TransitionEngine;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -12,11 +13,13 @@ import lombok.Getter;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * One instance per {@link UIWindow}. Owns the registered stylesheets, the dirty-rematch queue
@@ -49,8 +52,41 @@ public final class StyleEngine {
      */
     private final Map<UIElement, Map<String, HighlightStyle>> highlightsByElement = new HashMap<>();
 
+    /**
+     * Every live engine, weakly held — what {@link #reloadStylesheets()} restyles.
+     *
+     * <p>Weak because a window that goes out of scope must not be kept alive by a debug facility, and
+     * there is no {@code UIWindow.close()} to unregister from. A discarded window simply falls out of the
+     * set when it is collected; until then it is restyled harmlessly.</p>
+     */
+    private static final Set<StyleEngine> LIVE =
+            Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+
     public StyleEngine(UIWindow window) {
         this.window = window;
+        LIVE.add(this);
+    }
+
+    /**
+     * Re-reads every stylesheet from disk and restyles every live window — <b>CSS hot reload</b>.
+     *
+     * <p>The one call a host needs. {@code StyleSheetRegistry.reloadAll()} refills the sheets in place so
+     * existing registrations stay valid, and every engine then re-matches; see
+     * {@link #invalidateAllMatches()} for why re-matching alone is sufficient to drop deleted rules.</p>
+     *
+     * <p><b>Global rather than per-window on purpose.</b> Stylesheets are a global cache, so a per-window
+     * call would re-read every file once per window and still leave the other windows stale unless the
+     * caller remembered all of them. The harness binds this to a key; {@code CgAssetReloader}'s F3+T path
+     * is the same shape.</p>
+     *
+     * @return how many stylesheets were re-read successfully
+     */
+    public static int reloadStylesheets() {
+        int reloaded = StyleSheetRegistry.reloadAll();
+        synchronized (LIVE) {
+            for (StyleEngine engine : LIVE) engine.invalidateAllMatches();
+        }
+        return reloaded;
     }
 
     public void addStylesheet(StyleSheet sheet) {
@@ -62,6 +98,22 @@ public final class StyleEngine {
         if (sheets.remove(sheet)) {
             dirtyMatch.addAll(window.getElements());
         }
+    }
+
+    /**
+     * Marks every element in this window for re-matching — what a stylesheet <b>hot-reload</b> needs.
+     *
+     * <p>The same thing {@link #addStylesheet} does inline, named so a caller that changed a sheet's
+     * contents rather than the sheet list can ask for it. {@code StyleSheetRegistry.reloadAll()} refills
+     * sheets in place precisely so existing registrations stay valid, which means nothing about the sheet
+     * <em>list</em> changes and no existing hook fires.</p>
+     *
+     * <p>Re-matching is enough on its own: {@code rematch} remembers the slots it last applied per element
+     * and replaces that whole set atomically, so a declaration deleted from the file is dropped rather
+     * than left behind as a winning candidate nothing overwrites.</p>
+     */
+    public void invalidateAllMatches() {
+        dirtyMatch.addAll(window.getElements());
     }
 
     /** Called from {@link UIElement#invalidateStyleMatch()} — marks an element for re-matching. */
