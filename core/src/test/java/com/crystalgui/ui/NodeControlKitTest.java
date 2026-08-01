@@ -1,6 +1,8 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.graph.NodeField;
+import com.crystalgui.graph.shader.ShaderColorFieldWidget;
+import com.crystalgui.graph.shader.ShaderVectorFieldWidget;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiTestBase;
@@ -55,6 +57,14 @@ public class NodeControlKitTest extends UiTestBase {
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
         window.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:graph"));
         window.init(800, 600);
+        // Since P6.1.8 step 7: COLOR and VECTOR have no domain-agnostic default in NodeFieldWidgets —
+        // the GLSL literal parsing is genuinely the shader domain's, so it registers its own codec
+        // (see NodeFieldWidgets' class javadoc). This test's own `fieldFor` already assumes GLSL
+        // literals (`vec2(...)`, `vec4(...)`), so installing here is what makes it test the real,
+        // end-to-end shader-graph experience rather than a widget that no longer exists by default.
+        // Idempotent, so re-installing on every call is harmless.
+        ShaderColorFieldWidget.install();
+        ShaderVectorFieldWidget.install();
     }
 
     /** Every kind, with a value each one will actually accept. */
