@@ -163,6 +163,22 @@ public final class CgUiRenderer {
     }
 
     /**
+     * Starts a filled triangle, <b>with this context's pose already applied</b> — the fill-mode
+     * twin of {@link #curve()}. Shares the same {@code CgCurveRenderer} and the same curve material,
+     * so submitting a triangle does <em>not</em> switch material paths any differently than
+     * submitting a curve does — see {@code CgUiPaintContext.beginCurvePath()}.
+     *
+     * <p>Same pose/scale/unrounded-coordinates conventions as {@link #curve()}: corner radius and
+     * feather scale with the pose exactly as a stroke width would, since both are distances in the
+     * same space as the points.</p>
+     */
+    public CgCurveRenderer.Triangle triangle() {
+        if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit triangles outside beginFrame()/endFrame()");
+
+        return curveRenderer.triangle().pose(ctx.getPoseStack().last().pose());
+    }
+
+    /**
      * Releases what this renderer owns.
      *
      * <p>Called by {@link CgUiPaintContext#destroy()}. {@link CgQuadRenderer#delete()} only unbinds

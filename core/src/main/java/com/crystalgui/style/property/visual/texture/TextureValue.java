@@ -3,6 +3,7 @@ package com.crystalgui.style.property.visual.texture;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiRepeat;
+import com.crystalgui.render.texture.CgUiShape;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
 import com.crystalgui.style.CssParsingUtil;
@@ -30,6 +31,9 @@ import java.util.Locale;
  *       CSS, no asset file needed. An optional 4th {@code "refW refH"} arg overrides the texture-size
  *       reference the same way as {@code image(...)}.</li>
  *   <li>{@code asset("namespace:path", "element")} — named 9-slice lookup via {@link CgUiSpriteRegistry}.</li>
+ *   <li>{@code shape("name")} — a vector mark drawn directly ({@link CgUiShape}), no texture: e.g.
+ *       {@code "chevron-down"}, {@code "checkmark"}, {@code "triangle-right"}. See {@link
+ *       CgUiShape#parseKind} for the full catalog.</li>
  * </ul>
  *
  * <p>Rounding/border is a separate, universal wrapping layer ({@code border-radius}/
@@ -75,7 +79,18 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         if (lower.startsWith("asset(") && value.endsWith(")")) {
             return parseAsset(value.substring("asset(".length(), value.length() - 1));
         }
+        if (lower.startsWith("shape(") && value.endsWith(")")) {
+            return parseShape(value.substring("shape(".length(), value.length() - 1));
+        }
         return null;
+    }
+
+    private static @Nullable CgUiDrawable parseShape(String args) {
+        List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
+        if (parts.size() != 1) return null;
+        String name = unquote(parts.get(0).trim());
+        CgUiShape.Kind kind = CgUiShape.parseKind(name);
+        return kind == null ? null : new CgUiShape(kind);
     }
 
     private static @Nullable CgUiDrawable parseImage(String args) {

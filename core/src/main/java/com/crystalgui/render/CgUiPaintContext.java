@@ -479,6 +479,26 @@ public final class CgUiPaintContext {
     }
 
     /**
+     * Starts a filled triangle, with this context's pose already applied — the fill-mode twin of
+     * {@link #curve()}. Goes through the exact same material path as {@link #curve()} (it shares
+     * one {@code CgCurveRenderer} and one {@code gui_curve.shader} binding, not a third one), so
+     * switching between {@code quad()}/{@code curve()}/{@code triangle()} costs a flush only when
+     * moving to or from the quad path — alternating {@code curve()} and {@code triangle()} is free.
+     *
+     * <pre>{@code
+     * ctx.triangle().points(x0, y0, x1, y1, x2, y2).color(argb).submit();
+     * ctx.flush();
+     * }</pre>
+     *
+     * <p><b>Never call {@code .pose(...)} on the result</b> — same rule as {@link #quad()}/{@link
+     * #curve()}, for the same reason.</p>
+     */
+    public CgCurveRenderer.Triangle triangle() {
+        beginCurvePath();
+        return renderer.triangle();
+    }
+
+    /**
      * Makes the quad path current, flushing and unbinding the curve path if it was.
      *
      * <p>Rebinds {@link #currentMaterial} rather than {@link #boxModelMaterial}: a {@link
