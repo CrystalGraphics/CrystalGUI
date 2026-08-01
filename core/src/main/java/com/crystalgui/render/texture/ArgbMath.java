@@ -32,4 +32,69 @@ public final class ArgbMath {
     private static int lerpChannel(int from, int to, float t) {
         return Math.round(from + (to - from) * t);
     }
+
+    // ── HSV ─────────────────────────────────────────────────────────────────
+    //
+    // The same conversion `color.glsl` does on the GPU, needed here because a colour picker's
+    // WIDGET has to reason in HSV: the ring's angle is a hue and the square's axes are saturation
+    // and value, so a drag has to travel back to RGB before anything can store it. Duplicating the
+    // formula is unavoidable — the shader cannot answer a question about a pointer position — but
+    // the two must agree, or the handle sits somewhere other than the colour under it.
+
+    /**
+     * ARGB to {@code [hue, saturation, value]}, each 0..1.
+     *
+     * <p>Hue is <b>undefined for a grey</b> (saturation 0) and returns 0 there. A picker must not
+     * write that back blindly: dragging value down to black would otherwise reset the ring to red,
+     * losing the hue the user chose. Keep the hue in widget state, not derived from the colour.</p>
+     */
+    public static float[] toHsv(int argb) {
+        float r = ((argb >> 16) & 0xFF) / 255f;
+        float g = ((argb >> 8) & 0xFF) / 255f;
+        float b = (argb & 0xFF) / 255f;
+
+        float max = Math.max(r, Math.max(g, b));
+        float min = Math.min(r, Math.min(g, b));
+        float delta = max - min;
+
+        float hue = 0f;
+        if (delta > 0f) {
+            if (max == r) hue = ((g - b) / delta) / 6f;
+            else if (max == g) hue = (2f + (b - r) / delta) / 6f;
+            else hue = (4f + (r - g) / delta) / 6f;
+            if (hue < 0f) hue += 1f;
+        }
+        return new float[] { hue, max <= 0f ? 0f : delta / max, max };
+    }
+
+    /** {@code [hue, saturation, value]} (each 0..1) plus an alpha 0..255, back to ARGB. */
+    public static int fromHsv(float hue, float saturation, float value, int alpha) {
+        float h = (hue - (float) Math.floor(hue)) * 6f;
+        float s = clamp01(saturation);
+        float v = clamp01(value);
+
+        int sector = (int) h;
+        float f = h - sector;
+        float p = v * (1f - s);
+        float q = v * (1f - s * f);
+        float t = v * (1f - s * (1f - f));
+
+        float r, g, b;
+        switch (sector % 6) {
+            case 0:  r = v; g = t; b = p; break;
+            case 1:  r = q; g = v; b = p; break;
+            case 2:  r = p; g = v; b = t; break;
+            case 3:  r = p; g = q; b = v; break;
+            case 4:  r = t; g = p; b = v; break;
+            default: r = v; g = p; b = q; break;
+        }
+        return ((alpha & 0xFF) << 24)
+                | (Math.round(r * 255f) << 16)
+                | (Math.round(g * 255f) << 8)
+                | Math.round(b * 255f);
+    }
+
+    private static float clamp01(float v) {
+        return v < 0f ? 0f : (v > 1f ? 1f : v);
+    }
 }

@@ -645,3 +645,115 @@ texteditor .__zoom-reset__:active {
     color: #2F7FD8;
     text-decoration-line: underline;
 }
+
+/* ── ColorSelector ──────────────────────────────────────────────────────────────────────────────
+ * An OPT-OUT, not a skin. Every other widget in this sheet gets Ore's atlas art; the picker gets its
+ * geometry handed back.
+ *
+ * WHY IT HAS TO BE HERE AT ALL. default.css sizes the picker's parts correctly, and none of it
+ * survives: default.css is USER_AGENT and this sheet is STYLESHEET, so a theme rule beats it at ANY
+ * specificity — that is the whole point of the origin order, and it means a bare `slider` here
+ * outranks `colorselector .__channel-row__ slider` there. The picker's channel rows came out with
+ * 20px sprite thumbs on 6px green bevelled bars inside a 9px row.
+ *
+ * These selectors are all deeper than the generic ones above, so within this one sheet specificity
+ * settles it and the values below win.
+ *
+ * WHY OPT OUT RATHER THAN THEME. A channel track IS a live gradient of the colour being edited, and
+ * the thumb is a hairline marking a position on it. There is no Ore sprite that can be either: the
+ * bar's art would cover the gradient it exists to show. The same holds for the SV square and the hue
+ * ring, which is why neither has a rule here — nothing in the atlas can stand in for a per-pixel
+ * function of position. graph.css supplies the picker's colours; this sheet only has to stop
+ * fighting them. */
+
+colorselector .__channel-row__ slider {
+    width: 0;
+    flex-grow: 1;
+    height: 9px;
+    padding-left: 1.5px;
+    padding-right: 1.5px;
+}
+/* Transparent, and at the row's full height: the slider's BACKGROUND is the gradient, so a fill and a
+ * spacer that paint anything at all paint over the only thing the control is for. */
+colorselector .__channel-row__ slider .__fill__,
+colorselector .__channel-row__ slider .__spacer__ {
+    background: #00000000;
+    height: 9px;
+}
+/* Kept in step with the same rule in default.css — see the note there on why width, border-width and
+ * the margins have to be restated as a set. */
+colorselector .__channel-row__ slider .__thumb__ {
+    width: 3px;
+    height: 9px;
+    margin-left: -1.5px;
+    margin-right: -1.5px;
+    border-width: 1px;
+    border-color: #C1C2C2;
+    border-radius: 1.5px;
+    background: #FFFFFF;
+}
+/* The state sprites, cancelled. Ore swaps the thumb's texture on hover, press and disable; each swap
+ * would put a 20px bevelled button back on top of a 3px mark, so the hairline has to restate its own
+ * background for every state the theme reacts to. */
+colorselector .__channel-row__ slider:hover .__thumb__,
+colorselector .__channel-row__ slider:active .__thumb__,
+colorselector .__channel-row__ slider:disabled .__thumb__ {
+    background: #FFFFFF;
+    background-color: #FFFFFF;
+}
+/* Ore rings the THUMB rather than the root, which is right for a 20px knob and wrong for a hairline —
+ * the ring is wider than the thing it rings. The row's track carries a dark edge of its own, so the
+ * focused slider is still legible with nothing here. */
+colorselector .__channel-row__ slider:focus-visible .__thumb__ {
+    outline: none;
+}
+
+/* Ore's textfield is 14px tall with 3px of padding, sized for a form. Four of these sit in 11px rows
+ * beside a colour bar, so they take the picker's own metrics back. The dark fill comes from graph.css,
+ * which is deeper than Ore's bare `textfield` and wins on specificity. */
+colorselector .__channel-row__ textfield,
+colorselector .__hex-row__ textfield {
+    height: 9px;
+    padding-all: 2px;
+}
+
+/* `button, dropdown` gives every dropdown a 14px min-height — a floor, so the mode button cannot be
+ * shortened by height alone and stands half again as tall as the fields it is aligned with. */
+colorselector .__side__ dropdown {
+    height: 9px;
+    min-height: 9px;
+    padding-left: 3px;
+    padding-right: 3px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+}
+
+/* The picker's TYPE, and this is the one Ore declaration that cannot be beaten by specificity from the
+ * other side. Line 40 of this sheet is `* { font-family: Minecraft; font-size: 10; text-offset-y: 1px }` —
+ * a UNIVERSAL selector at STYLESHEET origin, so it outranks every user-agent rule no matter how deep,
+ * and it hands EVERY element its own specified font-size. graph.css setting `colorselector { font-size: 6 }`
+ * cannot help: font-size inherits, and a specified value beats an inherited one, so the picker's root
+ * was 6 and every single thing inside it was 10 — in a 9px row.
+ *
+ * `colorselector text` is specificity 2 against the universal rule's 0, which is all it takes. One
+ * selector covers the channel labels, the hex label, the mode button's label AND the menu items,
+ * because a promoted menu keeps its DOM parent and still matches as a descendant.
+ *
+ * text-offset-y goes back to 0 with it: Ore's 1px nudge is measured against a 14px button, and at this
+ * size it drops the glyphs onto the box's lower edge. */
+colorselector text,
+colorselector textfield {
+    font-size: 6;
+    text-offset-y: 0px;
+}
+
+/* Ore's focus ring is nine-slice ART, and its border rows are ~3px of a sprite drawn AT the border box.
+ * On a 14px button that is a hairline against the bevel; on this 9px one it is a third of the control
+ * from each side, and the label is what it takes — the ring closes over the text it is pointing at.
+ *
+ * A flat SDF ring instead. It is the one place in this sheet a picker part takes a colour rather than a
+ * sprite, for the same reason the tracks do: at this size the art IS the whole box. */
+colorselector .__side__ dropdown:focus-visible {
+    outline: 1px #C1C2C2;
+    outline-offset: 0px;
+}
