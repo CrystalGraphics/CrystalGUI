@@ -3368,6 +3368,828 @@ public class TextEditorTest extends UiTestBase {
         assertTrue("and it is now past the clip's edge, i.e. under the border", gapAfter < 0f);
     }
 
+    // ===================================================================================================
+    // Folding
+    // ===================================================================================================
+
+    /** A short Java-shaped document with one class holding one method. */
+    private void buildFoldable() {
+        build("class A {" + NL
+                + "    void f() {" + NL
+                + "        a();" + NL
+                + "        b();" + NL
+                + "    }" + NL
+                + "}");
+        showEditor();
+    }
+
+    /** Arrows whose box is non-zero, i.e. the ones actually on screen. */
+    private java.util.List<UIElement> visibleFoldArrows() {
+        java.util.List<UIElement> shown = new java.util.ArrayList<>();
+        for (UIElement arrow : allWithClass(TextEditor.FOLD_CLASS)) {
+            if (arrow.getTaffyLayout().contentBoxHeight() > 0f) shown.add(arrow);
+        }
+        return shown;
+    }
+
+    /**
+     * <b>A fold arrow appears on every row that starts a region, and nowhere else.</b>
+     *
+     * <p>Two here — the class and the method — and specifically <em>not</em> on the body rows, which are
+     * inside a region but do not begin one. An arrow on every row inside a block is the obvious mistake and
+     * turns the gutter into a column of arrows that mostly toggle their parent.</p>
+     */
+    @Test
+    public void aFoldArrowSitsOnEachRegionHeader() {
+        buildFoldable();
+        assertEquals("one for the class, one for the method", 2, visibleFoldArrows().size());
+    }
+
+    /** A document with no indentation has nothing to fold and shows no arrows. */
+    @Test
+    public void aFlatDocumentShowsNoArrows() {
+        build("a();" + NL + "b();" + NL + "c();");
+        showEditor();
+        assertEquals(0, visibleFoldArrows().size());
+    }
+
+    /**
+     * <b>Collapsing a region removes its rows from the view.</b>
+     *
+     * <p>Asserted through the realised lines rather than through the model, because that is the thing the
+     * user sees: the model can be perfectly right while the widget still paints the rows.</p>
+     */
+    @Test
+    public void collapsingARegionRemovesItsLinesFromTheView() {
+        buildFoldable();
+        int before = linesOf().size();
+
+        editor.toggleFoldAt(1); // the method
+        showEditor();
+
+        // THREE, not two: the region swallows its closing row, so a collapsed block reads as
+        // one collapsed line ending in the closing brace, rather than leaving it behind.
+        assertEquals("body and closing row went away", before - 3, linesOf().size());
+    }
+
+    /** And unfolding brings them back — folding is a view state that is fully reversible. */
+    @Test
+    public void unfoldingRestoresTheLines() {
+        buildFoldable();
+        int before = linesOf().size();
+
+        editor.toggleFoldAt(1);
+        showEditor();
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        assertEquals(before, linesOf().size());
+    }
+
+    /**
+     * <b>The header of a collapsed region is still on screen.</b>
+     *
+     * <p>It carries the arrow that reopens the block. Hiding it makes a collapsed region unreachable: the
+     * rows are gone and so is the only handle on them.</p>
+     */
+    @Test
+    public void theHeaderOfACollapsedRegionStaysVisible() {
+        buildFoldable();
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        boolean found = false;
+        for (UIElement line : linesOf()) {
+            String text = ((UIText) line.getChildren().get(0)).getText();
+            if (text.contains("void f()")) found = true;
+        }
+        assertTrue("the method's signature is still painted", found);
+    }
+
+    /** A collapsed region gets a placeholder after its header, so it does not read as an empty body. */
+    @Test
+    public void aCollapsedRegionGetsAPlaceholder() {
+        buildFoldable();
+        assertEquals("nothing is folded yet", 0, countOf(TextEditor.FOLD_PLACEHOLDER_CLASS));
+
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        assertEquals(1, countOf(TextEditor.FOLD_PLACEHOLDER_CLASS));
+    }
+
+    /** The arrow flips its state class, which is what the sheet turns into a sideways arrow. */
+    @Test
+    public void aCollapsedArrowCarriesTheStateClass() {
+        buildFoldable();
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        int collapsed = 0;
+        for (UIElement arrow : visibleFoldArrows()) {
+            if (arrow.hasClass(TextEditor.FOLD_COLLAPSED_CLASS)) collapsed++;
+        }
+        assertEquals("exactly the folded one", 1, collapsed);
+    }
+
+    /**
+     * <b>Folding a block the caret is inside moves the caret to the block's header.</b>
+     *
+     * <p>Not cosmetic. A caret on a hidden row has no view line at all, so it cannot be painted, scrolled
+     * to, or typed at — the editor looks focused and silently does nothing.</p>
+     */
+    @Test
+    public void foldingLiftsTheCaretOutOfTheHiddenRows() {
+        buildFoldable();
+        editor.setCaret(editor.getText().indexOf("a();"));
+        showEditor();
+
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        int caretRow = editor.getText().substring(0, editor.getCaret()).split("\n", -1).length - 1;
+        assertEquals("the caret came up to the method's signature", 1, caretRow);
+    }
+
+    /**
+     * <b>A fold survives a resize.</b>
+     *
+     * <p>A width change reprojects every row, and a reprojection that reset visibility would silently open
+     * every collapsed block whenever the window moved.</p>
+     */
+    @Test
+    public void aFoldSurvivesAResize() {
+        buildFoldable();
+        editor.toggleFoldAt(1);
+        showEditor();
+        int folded = linesOf().size();
+
+        editor.layout(l -> l.width(520f));
+        showEditor();
+        showEditor();
+
+        assertEquals("still folded after the width changed", folded, linesOf().size());
+    }
+
+    /** Fold-all closes every region; unfold-all opens them. */
+    @Test
+    public void foldAllAndUnfoldAllWork() {
+        buildFoldable();
+        int open = linesOf().size();
+
+        editor.foldAll();
+        showEditor();
+        assertTrue("fewer rows on screen", linesOf().size() < open);
+
+        editor.unfoldAll();
+        showEditor();
+        assertEquals(open, linesOf().size());
+    }
+
+    /**
+     * <b>Clicking the arrow toggles the row it is currently showing, not the one it was created for.</b>
+     *
+     * <p>The arrows are pooled and recycled as the view scrolls, so a listener that captured its row at
+     * creation would keep toggling whatever row the slot was first used for — and would keep working for
+     * exactly as long as nobody scrolled, which is why it survives a naive test.</p>
+     */
+    @Test
+    public void aRecycledArrowTogglesTheRowItNowShows() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 60; i++) {
+            document.append("void f").append(i).append("() {").append(NL)
+                    .append("    a();").append(NL).append("    b();").append(NL).append("}").append(NL);
+        }
+        build(document.toString());
+        showEditor();
+
+        editor.setScrollImmediate(0f, 40f * editor.lineHeight());
+        showEditor();
+
+        // Every arrow on screen now belongs to a row far down the document. Note the assertion is NOT on
+        // the realised line count: the viewport shows the same number of rows whatever is folded, so a
+        // count that far from the document's end proves nothing.
+        java.util.List<UIElement> arrows = visibleFoldArrows();
+        assertFalse("some arrows are on screen", arrows.isEmpty());
+        assertEquals("nothing folded yet", 0, collapsedStartRows().size());
+
+        com.crystalgui.ui.event.MouseEvent.Down press = new com.crystalgui.ui.event.MouseEvent.Down(
+                arrows.get(0), new com.crystalgui.core.data.ReadOnlyVec2f(new org.joml.Vector2f(0f, 0f)), 0, 1);
+        // The phase defaults to CAPTURE, and emitTarget dispatches to whichever phase the event names --
+        // so an unset phase silently delivers to the capture listeners and this reads as the handler not
+        // being attached at all.
+        press.setPhase(com.crystalgui.ui.event.PropagationPhase.TARGET);
+        arrows.get(0).onMouseDown.emitTarget(press);
+        showEditor();
+
+        java.util.List<Integer> collapsed = collapsedStartRows();
+        assertEquals("exactly one block folded", 1, collapsed.size());
+        assertTrue("and it is one that is ON SCREEN, not the row the slot was created for ("
+                        + collapsed.get(0) + ")",
+                collapsed.get(0) > 20);
+    }
+
+    /** Start rows of every currently collapsed region. */
+    private java.util.List<Integer> collapsedStartRows() {
+        java.util.List<Integer> rows = new java.util.ArrayList<>();
+        com.crystalgui.text.fold.FoldingRegions regions = editor.foldingModel().regions();
+        for (int i = 0; i < regions.length(); i++) {
+            if (regions.isCollapsed(i)) rows.add(regions.getStartLineNumber(i));
+        }
+        return rows;
+    }
+
+    /**
+     * <b>Folding works through the command registry, not just through the public methods.</b>
+     *
+     * <p>The gap the widget tests left: they called {@code foldAll()} directly, which proves the model and
+     * the view agree but says nothing about whether the key that is supposed to reach it does. A command
+     * that is registered but never bound, or bound to a chord that does not resolve, fails exactly here and
+     * nowhere else.</p>
+     */
+    @Test
+    public void theFoldCommandsAreRegisteredAndReachTheEditor() {
+        buildFoldable();
+        int open = linesOf().size();
+
+        assertNotNull("editor.foldAll must be registered",
+                window.getCommands().get("editor.foldAll"));
+
+        // WITH A SOURCE. Every editor command resolves its target from context.source() -- running one
+        // with no source finds no editor, does nothing, and still returns true, so a context-free call
+        // asserts only that the id exists.
+        assertTrue("and running it must return true", window.getCommands().run("editor.foldAll",
+                com.crystalgui.core.command.CommandContext.of(editor)));
+        showEditor();
+
+        assertTrue("the command actually folded something", linesOf().size() < open);
+    }
+
+    /** Every fold command is registered under the id its key binding names. */
+    @Test
+    public void everyFoldCommandIdResolves() {
+        buildFoldable();
+        for (String id : new String[] { "editor.fold", "editor.unfold", "editor.foldRecursively",
+                "editor.foldAll", "editor.unfoldAll", "editor.foldLevel1", "editor.foldLevel7" }) {
+            assertNotNull(id + " is not registered", window.getCommands().get(id));
+        }
+    }
+
+    /** And every fold chord is bound on the editor's own keymap. */
+    @Test
+    public void everyFoldChordIsBound() {
+        buildFoldable();
+        java.util.Set<String> bound = new java.util.HashSet<>();
+        for (var binding : editor.keymap().bindings()) bound.add(binding.getCommandId());
+
+        for (String id : new String[] { "editor.fold", "editor.unfold", "editor.foldAll",
+                "editor.unfoldAll", "editor.foldLevel1" }) {
+            assertTrue(id + " has no key binding", bound.contains(id));
+        }
+    }
+
+    /**
+     * <b>Every character the editor draws as furniture must exist in the font.</b>
+     *
+     * <p>The fold arrows shipped as U+25BE/U+25B8 and were invisible: the bundled fonts cover neither, and
+     * a missing glyph here draws a blank advance rather than falling back to anything. The control was laid
+     * out, hit-testable and completely present — and looked completely absent, which no other test could
+     * see, because nothing about layout or behaviour changes when the paint is empty.</p>
+     *
+     * <p>So the assertion is on FONT COVERAGE, not on which characters were chosen: a future theme may swap
+     * them, and this stays the right question to ask of whatever it picks.</p>
+     */
+    @Test
+    public void everyFurnitureGlyphIsDrawableByTheFont() {
+        buildFoldable();
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        var family = com.crystalgui.render.text.FontFamilyCache.resolve(
+                java.util.List.of("crystalgui:ui/fonts/MinecraftRegular.otf"), 16);
+
+        java.util.List<UIElement> furniture = new java.util.ArrayList<>();
+        furniture.addAll(allWithClass(TextEditor.FOLD_CLASS));
+        furniture.addAll(allWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS));
+        assertFalse("there is furniture to check", furniture.isEmpty());
+
+        for (UIElement element : furniture) {
+            for (UIElement child : element.getChildren()) {
+                if (!(child instanceof UIText label)) continue;
+                String text = label.getText();
+                for (int i = 0; i < text.length(); i++) {
+                    int cp = text.codePointAt(i);
+                    var source = family.resolveSourceForCodePoint(cp);
+                    assertTrue(String.format("U+%04X is not in the font, so it paints nothing", cp),
+                            source != null && source.canDisplayCodePoint(cp));
+                }
+            }
+        }
+    }
+
+    /** Resolves a chord through the real KeymapResolver, exactly as the input handler does. */
+    private boolean pressChord(int keyCode, int modifiers) {
+        var resolver = new com.crystalgui.ui.input.keymap.KeymapResolver(window.getCommands());
+        return resolver.resolve(editor,
+                new com.crystalgui.ui.input.keymap.KeyStroke(keyCode, modifiers),
+                com.crystalgui.ui.input.keymap.KeyEventType.PRESS, System.currentTimeMillis());
+    }
+
+    /**
+     * <b>The fold chords resolve through the keymap resolver.</b>
+     *
+     * <p>The gap every earlier test left: they ran the command by id. That proves registration and it
+     * proves the action, and it says nothing about whether the CHORD reaches it — which is the half the
+     * user actually presses.</p>
+     */
+    @Test
+    public void theFoldChordsResolve() {
+        buildFoldable();
+        int open = linesOf().size();
+
+        int ctrlShift = com.crystalgraphics.platform.input.CgModifiers.CTRL
+                | com.crystalgraphics.platform.input.CgModifiers.SHIFT;
+        assertTrue("Ctrl+Shift+Minus must resolve",
+                pressChord(com.crystalgraphics.platform.input.CgKeyCodes.KEY_MINUS, ctrlShift));
+        showEditor();
+        assertTrue("and must actually fold", linesOf().size() < open);
+    }
+
+    /**
+     * The point a real pointer would have to be at to be over {@code element}.
+     *
+     * <p><b>Not {@code getRuntimeCache().getX()}.</b> That is a layout coordinate in the element's own
+     * parent space; the screen position comes from walking {@code localToWorld}, which is what the input
+     * handler's hit test does. The two differ by every transform between the element and the root — most
+     * of all {@code uiScale} — so a probe built from the cached box lands somewhere else entirely and
+     * reports a perfectly reachable control as unreachable.</p>
+     */
+    private float[] screenCentreOf(UIElement element) {
+        // SEARCHED, not computed. The layout box, the world matrix and the screen differ by uiScale and by
+        // every transform in between, and getting that arithmetic subtly wrong is exactly how a reachable
+        // control gets reported as unreachable -- which is the bug this helper exists to detect, so the
+        // helper must not depend on the same reasoning. containsScreenPoint IS the question being asked.
+        for (float y = 0; y < 2048; y += 2) {
+            for (float x = 0; x < 2048; x += 2) {
+                if (element.containsScreenPoint(x, y)) return new float[] { x, y };
+            }
+        }
+        throw new AssertionError("no screen point is over " + element.getClasses());
+    }
+
+    /**
+     * <b>A real pointer can reach a fold arrow.</b>
+     *
+     * <p>The test the first version needed and did not have. It dispatched to the arrow with
+     * {@code emitTarget}, which proves the handler works and asks nothing about whether a click could ever
+     * arrive — and the arrows shipped parented to the gutter, which is {@code setHitTest(false)}. That
+     * applies to the whole SUBTREE, so every handle was painted, correct, and permanently dead. The user
+     * saw handles that did nothing; every test was green.</p>
+     *
+     * <p>So this goes through {@code getHoveredElement}, the same hit test the input handler uses.</p>
+     */
+    @Test
+    public void aPointerCanActuallyHitAFoldArrow() {
+        buildFoldable();
+
+        java.util.List<UIElement> arrows = visibleFoldArrows();
+        assertFalse("there are arrows", arrows.isEmpty());
+        UIElement arrow = arrows.get(0);
+
+        float[] at = screenCentreOf(arrow);
+        UIElement hit = window.getHoveredElement(at[0], at[1]);
+
+        assertNotNull("the pointer hits something at the arrow", hit);
+        assertTrue("and it is the arrow, not the editor behind it -- got " + hit.getClasses(),
+                hit.hasClass(TextEditor.FOLD_CLASS));
+    }
+
+    /** And a press delivered through that hit test folds the block. */
+    @Test
+    public void clickingAFoldArrowFoldsTheBlock() {
+        buildFoldable();
+        int open = linesOf().size();
+
+        UIElement arrow = visibleFoldArrows().get(0);
+        float[] at = screenCentreOf(arrow);
+        UIElement hit = window.getHoveredElement(at[0], at[1]);
+        assertNotNull(hit);
+
+        var press = new com.crystalgui.ui.event.MouseEvent.Down(hit,
+                new com.crystalgui.core.data.ReadOnlyVec2f(new org.joml.Vector2f(at[0], at[1])), 0, 1);
+        press.setPhase(com.crystalgui.ui.event.PropagationPhase.TARGET);
+        hit.onMouseDown.emitTarget(press);
+        showEditor();
+
+        assertTrue("the block folded", linesOf().size() < open);
+    }
+
+    /**
+     * <b>The collapsed chip is a real control: hoverable, pointer-cursored, and it unfolds.</b>
+     *
+     * <p>All three go through hit testing, which is the part that was broken twice — first the arrows under
+     * the gutter, then the chip under the text viewport, both {@code setHitTest(false)} whose effect covers
+     * the entire subtree. A chip that paints correctly and cannot be hovered is indistinguishable from one
+     * that works, in every test that does not ask the hit test itself.</p>
+     */
+    @Test
+    public void theCollapsedChipBehavesLikeAButton() {
+        buildFoldable();
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        assertNotNull("there is a chip", chip);
+
+        float[] at = screenCentreOf(chip);
+        UIElement hit = window.getHoveredElement(at[0], at[1]);
+        assertNotNull(hit);
+        assertTrue("the pointer reaches the chip, not the text behind it -- got " + hit.getClasses(),
+                hit.hasClass(TextEditor.FOLD_PLACEHOLDER_CLASS));
+
+        assertEquals("and it declares a pointer cursor",
+                com.crystalgraphics.platform.input.CgCursor.POINTER,
+                hit.getStyle().getGeneralGroup().cursor());
+
+        var press = new com.crystalgui.ui.event.MouseEvent.Down(hit,
+                new com.crystalgui.core.data.ReadOnlyVec2f(new org.joml.Vector2f(at[0], at[1])), 0, 1);
+        press.setPhase(com.crystalgui.ui.event.PropagationPhase.TARGET);
+        hit.onMouseDown.emitTarget(press);
+        showEditor();
+
+        assertEquals("clicking it unfolds", 0, countOf(TextEditor.FOLD_PLACEHOLDER_CLASS));
+    }
+
+    /**
+     * <b>The chip reads as the whole construct, opener included.</b>
+     *
+     * <p>IntelliJ collapses to a single control spanning {@code {...}}; a chip holding only {@code ...} sits
+     * beside a brace the line still owns and reads as two things. The opener is absorbed by placing the chip
+     * OVER it rather than by editing the row, so the text the row measures is untouched — see the note at
+     * the call site.</p>
+     */
+    @Test
+    public void theChipCoversTheOpeningBraceToo() {
+        buildFoldable();
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        assertNotNull(chip);
+        String text = ((UIText) chip.getChildren().get(0)).getText();
+
+        assertEquals("the chip is the whole collapsed construct", "{...}", text);
+    }
+
+    /** A row with no trailing bracket keeps the chip to what it can honestly stand for. */
+    @Test
+    public void aRowWithNoTrailingBracketGetsAPlainChip() {
+        build("def f():" + NL + "    a()" + NL + "    b()" + NL + "done()");
+        showEditor();
+        editor.toggleFoldAt(0);
+        showEditor();
+
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        assertNotNull(chip);
+        assertEquals("nothing to absorb, and nothing invented",
+                "...", ((UIText) chip.getChildren().get(0)).getText());
+    }
+
+    /**
+     * <b>A collapsed header stops painting the bracket the chip took over.</b>
+     *
+     * <p>The first attempt left the row drawing it and covered it with the chip's background. It showed:
+     * the chip's rounded corners let the brace's corners through, and its left padding put the chip's own
+     * brace a few pixels right of the real one — a gap that grew with the font size, so it drifted visibly
+     * on zoom. Two braces at slightly different positions is not something a layout assertion notices;
+     * only asking what the row actually paints does.</p>
+     */
+    @Test
+    public void aCollapsedHeaderStopsPaintingItsOpeningBrace() {
+        buildFoldable();
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        String painted = null;
+        for (UIElement line : linesOf()) {
+            String text = ((UIText) line.getChildren().get(0)).getText();
+            if (text.contains("void f()")) painted = text;
+        }
+        assertNotNull("the header row is on screen", painted);
+        assertFalse("the row must not draw the brace the chip now owns: " + painted, painted.contains("{"));
+        assertTrue("but keeps everything before it", painted.contains("void f()"));
+    }
+
+    /** An expanded row is untouched — the truncation is a property of being collapsed, not of the text. */
+    @Test
+    public void anExpandedHeaderKeepsItsBrace() {
+        buildFoldable();
+
+        boolean found = false;
+        for (UIElement line : linesOf()) {
+            String text = ((UIText) line.getChildren().get(0)).getText();
+            if (text.contains("void f()")) {
+                assertTrue("an open block keeps its brace", text.contains("{"));
+                found = true;
+            }
+        }
+        assertTrue(found);
+    }
+
+    /**
+     * <b>The chip starts where the bracket was, so the space before it survives as a gap.</b>
+     *
+     * <p><b>This reverses an earlier decision.</b> The box used to be shifted left by its own padding so
+     * the bracket stayed on the exact pixel the row would have drawn it at — which preserved the line's
+     * rhythm and ate the gap, leaving the chip touching the {@code )} before it. IntelliJ insets the
+     * bracket inside the chip instead, and it reads better: the chip is one object, not a box drawn around
+     * a character. The old rule had its own test; this is that test, rewritten rather than deleted, so the
+     * reversal is on the record.</p>
+     */
+    @Test
+    public void theChipStartsWhereTheBracketWasSoTheGapSurvives() {
+        buildFoldable();
+        int brace = editor.getText().indexOf("{", editor.getText().indexOf("void f()"));
+        editor.setCaret(brace);
+        editor.toggleFoldAt(1);
+        editor.setCaret(brace);
+        showEditor();
+
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        UIElement caret = childWithClass(TextEditor.CARET_CLASS);
+        assertNotNull("the chip is on screen", chip);
+        assertNotNull("and so is the caret", caret);
+
+        float braceX = caret.getRuntimeCache().getX() + caret.getRuntimeCache().getWidth();
+        assertEquals("the box begins at the bracket, not before it",
+                braceX, chip.getRuntimeCache().getX(), 1.5f);
+        assertTrue("and the bracket itself is inset within the box",
+                chip.getTaffyLayout().padding().left > 0f);
+    }
+
+    /**
+     * <b>The chip hugs its text and sits centred in the row.</b>
+     *
+     * <p>A box as tall as the line makes the text look shrunken inside a slab, and it is not even centred
+     * on the code beside it — the line's leading sits below the glyphs, so a full-height box has more space
+     * under its text than over it. Hugging the text and centring the result is what IntelliJ draws.</p>
+     */
+    @Test
+    public void theChipHugsItsTextAndCentresInTheRow() {
+        buildFoldable();
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        assertNotNull(chip);
+        float box = chip.getRuntimeCache().getHeight();
+        float line = editor.lineHeight();
+
+        assertTrue("the box must be shorter than the row it sits in: " + box + " vs " + line, box < line);
+        assertTrue("but still tall enough to hold the text", box > line * 0.5f);
+
+        // Centred: the space above the chip within its row equals the space below. Against the chip's OWN
+        // row -- the collapsed header -- not just any line, or the comparison is off by a whole line.
+        UIElement ownRow = null;
+        for (UIElement candidate : linesOf()) {
+            if (((UIText) candidate.getChildren().get(0)).getText().contains("void f()")) ownRow = candidate;
+        }
+        assertNotNull("found the collapsed header row", ownRow);
+        float rowTop = ownRow.getRuntimeCache().getY();
+        float rowHeight = line;
+        float above = chip.getRuntimeCache().getY() - rowTop;
+        float below = (rowTop + rowHeight) - (chip.getRuntimeCache().getY() + box);
+        assertEquals("equal space above and below", above, below, 1f);
+    }
+
+    /** The chip's box at a given editor font size. */
+    private float[] chipBoxAt(float fontSize) {
+        editor.setFontSize(fontSize);
+        showEditor();
+        showEditor();
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        assertNotNull("a chip at " + fontSize + "px", chip);
+        return new float[] { chip.getRuntimeCache().getWidth(), chip.getRuntimeCache().getHeight() };
+    }
+
+    /**
+     * <b>The chip keeps its proportions across zoom.</b>
+     *
+     * <p>It kept not doing so, and the reason was never the font — the glyphs inside are provably the same
+     * size as the line's at every zoom. It was the <em>padding</em>: a fixed {@code 5px} is half a line's
+     * height at 8px and a rounding error at 31px, so the same chip reads as fat at one zoom and cramped at
+     * the other. Nothing about the text differs, which is exactly why looking at the text kept coming up
+     * empty.</p>
+     *
+     * <p>The assertion is on the RATIO of the box to the line height, not on pixels: the ratio is the thing
+     * that must hold, and pinning pixels would just re-encode one zoom level as the answer again.</p>
+     */
+    @Test
+    public void theChipKeepsItsProportionsAcrossZoom() {
+        buildFoldable();
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        float[] small = chipBoxAt(8f);
+        float smallLine = editor.lineHeight();
+        float[] large = chipBoxAt(31f);
+        float largeLine = editor.lineHeight();
+
+        assertTrue("the zoom actually changed the line height", largeLine > smallLine * 2f);
+
+        float smallRatio = small[0] / smallLine;
+        float largeRatio = large[0] / largeLine;
+        assertEquals("the chip must occupy the same share of a line at any zoom",
+                smallRatio, largeRatio, 0.15f);
+    }
+
+    /**
+     * And the glyphs themselves track the editor's font — the half that was never broken, pinned so a
+     * future change to the chip's styling cannot quietly detach it.
+     */
+    @Test
+    public void theChipTextIsTheEditorsOwnFont() {
+        buildFoldable();
+        editor.setFontSize(31f);
+        editor.toggleFoldAt(1);
+        showEditor();
+        showEditor();
+
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        UIText glyph = (UIText) chip.getChildren().get(0);
+        assertEquals("the chip is set in the editor's own size", 31f,
+                glyph.getStyle().getGeneralGroup().fontSize(), 0.01f);
+    }
+
+    /**
+     * <b>Folding must not make the rest of the editor unclickable.</b>
+     *
+     * <p>The chips first lived in a hit-testable container spanning the whole text area, so every press
+     * that was not on a chip landed on that container and the editor never saw it — no caret, no
+     * selection, no focus, for as long as anything was folded. Every folding test passed: the chips
+     * worked, the rows hid, the model was right. What broke was everything <em>else</em>, which is exactly
+     * what a feature's own tests do not look at.</p>
+     */
+    @Test
+    public void theEditorStillTakesClicksWhileSomethingIsFolded() {
+        buildFoldable();
+        UIElement beforeHit = window.getHoveredElement(screenCentreOf(editor)[0], screenCentreOf(editor)[1]);
+        assertNotNull(beforeHit);
+
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        // A point in the text area, well clear of the gutter and of the collapsed row's chip.
+        UIElement line = linesOf().get(0);
+        float[] at = screenCentreOf(line);
+        UIElement hit = window.getHoveredElement(at[0], at[1]);
+
+        assertNotNull("a press over the text must reach something", hit);
+        assertFalse("and it must not be swallowed by folding furniture: " + hit.getClasses(),
+                hit.hasClass(TextEditor.FOLD_PLACEHOLDER_CLASS) || hit.hasClass(TextEditor.FOLD_CLASS));
+        assertSame("the editor itself takes the press, as it does with nothing folded", editor, hit);
+    }
+
+    /** And the caret genuinely moves, which is the thing the user actually lost. */
+    @Test
+    public void clickingTheTextMovesTheCaretWhileFolded() {
+        buildFoldable();
+        // Parked at the far end, because screenCentreOf finds the first point INSIDE the box -- the
+        // line's top-left -- which maps to offset 0. Starting there would assert nothing.
+        editor.setCaret(editor.getText().length());
+        editor.toggleFoldAt(1);
+        showEditor();
+
+        UIElement line = linesOf().get(0);
+        float[] at = screenCentreOf(line);
+        UIElement hit = window.getHoveredElement(at[0], at[1]);
+        assertSame(editor, hit);
+
+        var press = new com.crystalgui.ui.event.MouseEvent.Down(hit,
+                new com.crystalgui.core.data.ReadOnlyVec2f(new org.joml.Vector2f(at[0], at[1])), 0, 1);
+        press.setPhase(com.crystalgui.ui.event.PropagationPhase.TARGET);
+        hit.onMouseDown.emitTarget(press);
+        showEditor();
+
+        assertTrue("the caret moved to where the press landed",
+                editor.getCaret() < editor.getText().length());
+    }
+
+    /**
+     * <b>The bracket fold chords resolve and act.</b>
+     *
+     * <p>Pinned separately from the others because they are the two that cannot easily be checked by hand:
+     * the debug harness binds bare {@code [} and {@code ]} to uiScale and consumes them before the editor
+     * keymap runs, so pressing {@code Ctrl+Shift+[} there proves nothing either way. This asserts the
+     * binding itself, through the real resolver.</p>
+     */
+    @Test
+    public void theBracketFoldChordsResolveAndAct() {
+        buildFoldable();
+        int open = linesOf().size();
+        int ctrlShift = com.crystalgraphics.platform.input.CgModifiers.CTRL
+                | com.crystalgraphics.platform.input.CgModifiers.SHIFT;
+
+        assertTrue("Ctrl+Shift+[ must resolve",
+                pressChord(com.crystalgraphics.platform.input.CgKeyCodes.KEY_LBRACKET, ctrlShift));
+        showEditor();
+        assertTrue("and must fold the block at the caret", linesOf().size() < open);
+
+        assertTrue("Ctrl+Shift+] must resolve",
+                pressChord(com.crystalgraphics.platform.input.CgKeyCodes.KEY_RBRACKET, ctrlShift));
+        showEditor();
+        assertEquals("and must put it back", open, linesOf().size());
+    }
+
+    /** Fold-to-level, the other family a bare-key harness binding could shadow. */
+    @Test
+    public void theLevelFoldChordsResolve() {
+        buildFoldable();
+        int ctrlShift = com.crystalgraphics.platform.input.CgModifiers.CTRL
+                | com.crystalgraphics.platform.input.CgModifiers.SHIFT;
+        assertTrue("Ctrl+Shift+2 must resolve",
+                pressChord(com.crystalgraphics.platform.input.CgKeyCodes.KEY_2, ctrlShift));
+        showEditor();
+        assertTrue("and must fold the inner block",
+                editor.foldingModel().getRegionStartingAt(1).isCollapsed());
+    }
+
+    /**
+     * <b>Fold-all and unfold-all answer to the numpad as well as the top row.</b>
+     *
+     * <p>The numeric keypad is a different key code, not a different character, so a binding on the top-row
+     * key does nothing there. IntelliJ's own collapse-all/expand-all are the numpad pair specifically,
+     * which makes it the spelling a user coming from that editor will reach for first.</p>
+     */
+    @Test
+    public void foldAllAndUnfoldAllAnswerToTheNumpadToo() {
+        buildFoldable();
+        int open = linesOf().size();
+        int ctrlShift = com.crystalgraphics.platform.input.CgModifiers.CTRL
+                | com.crystalgraphics.platform.input.CgModifiers.SHIFT;
+
+        assertTrue("Ctrl+Shift+NumPad- must resolve",
+                pressChord(com.crystalgraphics.platform.input.CgKeyCodes.KEY_SUBTRACT, ctrlShift));
+        showEditor();
+        assertTrue("and must fold everything", linesOf().size() < open);
+
+        assertTrue("Ctrl+Shift+NumPad+ must resolve",
+                pressChord(com.crystalgraphics.platform.input.CgKeyCodes.KEY_ADD, ctrlShift));
+        showEditor();
+        assertEquals("and must open it all back up", open, linesOf().size());
+    }
+
+    /** The top-row spellings keep working — bindAll adds, it does not replace. */
+    @Test
+    public void theTopRowFoldAllChordsStillWork() {
+        buildFoldable();
+        int open = linesOf().size();
+        int ctrlShift = com.crystalgraphics.platform.input.CgModifiers.CTRL
+                | com.crystalgraphics.platform.input.CgModifiers.SHIFT;
+
+        assertTrue(pressChord(com.crystalgraphics.platform.input.CgKeyCodes.KEY_MINUS, ctrlShift));
+        showEditor();
+        assertTrue(linesOf().size() < open);
+
+        assertTrue(pressChord(com.crystalgraphics.platform.input.CgKeyCodes.KEY_EQUALS, ctrlShift));
+        showEditor();
+        assertEquals(open, linesOf().size());
+    }
+
+    /**
+     * <b>Fold-all keeps the line you are on where it is.</b>
+     *
+     * <p>Folding removes rows above the viewport as readily as below it, and {@code scrollTop} is a pixel
+     * count — so collapsing everything while scrolled into a file pulls the whole document up past the top
+     * of the view. Fold-all near the end left the editor apparently EMPTY, which reads as the feature
+     * having deleted the file rather than as a scroll position needing correction.</p>
+     *
+     * <p>Same guarantee zooming already makes, and the same {@code StableViewport} that makes it.</p>
+     */
+    @Test
+    public void foldAllKeepsTheViewportWhereItWas() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 60; i++) {
+            document.append("void f").append(i).append("() {").append(NL)
+                    .append("    a();").append(NL).append("    b();").append(NL).append("}").append(NL);
+        }
+        build(document.toString());
+        showEditor();
+
+        // Scroll well into the file, then note which row sits at the top of the view.
+        editor.setScrollImmediate(0f, 120f * editor.lineHeight());
+        showEditor();
+        int topRowBefore = editor.rowAtTopOfViewport();
+        assertTrue("we are genuinely scrolled in", topRowBefore > 20);
+
+        editor.foldAll();
+        showEditor();
+
+        assertTrue("the editor must not go blank", linesOf().size() > 0);
+        assertEquals("the row at the top of the view is unchanged",
+                topRowBefore, editor.rowAtTopOfViewport());
+    }
+
     /**
      * <b>Zooming keeps the line you were on.</b>
      *
