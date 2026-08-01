@@ -31,8 +31,15 @@ public final class MouseSelection {
         int at = Math.max(0, Math.min(offset, document.length()));
         if (clicks >= LINE) {
             int row = document.offsetToPoint(at).row();
-            return new int[] { document.lineStartOffset(row),
-                    Math.min(document.length(), document.lineEndOffset(row) + 1) };
+            // THE LINE'S TEXT, WITHOUT ITS NEWLINE. VS Code selects lineEnd + 1 here, which ends the
+            // selection at the FIRST OFFSET OF THE NEXT ROW -- and two visible things follow from that.
+            // The band loop draws a sliver on the row below, and the caret, which sits at the selection's
+            // head, is painted a line under the one that was clicked.
+            //
+            // IntelliJ ends at the line's end and leaves the caret on the clicked line, which is the
+            // behaviour wanted here. It also makes "triple-click then type" replace the line you pointed
+            // at rather than swallowing the break after it and joining the next line on.
+            return new int[] { document.lineStartOffset(row), document.lineEndOffset(row) };
         }
         if (clicks == WORD) {
             int[] word = WordOperations.wordAt(document, at, classifier);

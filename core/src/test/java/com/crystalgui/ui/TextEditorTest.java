@@ -2596,6 +2596,83 @@ public class TextEditorTest extends UiTestBase {
     }
 
 
+    /** A triple-click on the row containing {@code needle}, through the real press path. */
+    private void tripleClickOn(String needle) {
+        int offset = editor.getText().indexOf(needle);
+        assertTrue("needle must exist", offset >= 0);
+        editor.setCaret(offset);
+        showEditor();
+        UIElement caret = childWithClass(TextEditor.CARET_CLASS);
+        // SCALED SCREEN COORDINATES. MouseEvent positions are what consumeMouseEvent produces, which is
+        // layout * uiScale -- see pressAt. Passing editor-relative layout coordinates lands the press on
+        // whatever row that happens to be, which is how this helper first "proved" the wrong thing.
+        float scale = window.getUiScale();
+        float x = (caret.getRuntimeCache().getX() + 2f) * scale;
+        float y = (caret.getRuntimeCache().getY() + 1f) * scale;
+        var press = new com.crystalgui.ui.event.MouseEvent.Down(editor,
+                new com.crystalgui.core.data.ReadOnlyVec2f(new org.joml.Vector2f(x, y)), 0, 3);
+        press.setPhase(com.crystalgui.ui.event.PropagationPhase.TARGET);
+        editor.onMouseDown.emitTarget(press);
+        // RELEASE IT. A press with no release leaves `selecting` true, and the next frame synthesises a
+        // mouse-move from the pointer's resting position -- so the drag extends from the clicked line to
+        // wherever that is. The first version of this helper selected two rows for exactly that reason.
+        var release = new com.crystalgui.ui.event.MouseEvent.Up(editor,
+                new com.crystalgui.core.data.ReadOnlyVec2f(new org.joml.Vector2f(x, y)), 0, 3, true);
+        release.setPhase(com.crystalgui.ui.event.PropagationPhase.TARGET);
+        editor.onMouseUp.emitTarget(release);
+        showEditor();
+    }
+
+    /**
+     * <b>A selection that starts at column 0 must reach the left edge of the text area.</b>
+     *
+     * <p>Triple-clicking a line left an unselected strip between the gutter and the first glyph — the
+     * {@code codeLeftPad} margin, which the band started <em>after</em> because it is placed from the x of
+     * its first selected character and column 0's x is the first glyph, not the edge of the box.</p>
+     *
+     * <p>IntelliJ has no such strip: its line highlight runs from the gutter's border, and the text does
+     * not touch that border because the gap lives inside the gutter instead. Ours keeps the margin (the
+     * level-0 indent guide needs somewhere to be) and extends the band across it, which looks the same and
+     * changes nothing about where text is drawn.</p>
+     */
+    @Test
+    public void aSelectionFromColumnZeroReachesTheLeftEdge() {
+        build("    private static final int MAX = 8;" + NL + "    private String name;" + NL);
+        showEditor();
+        tripleClickOn("MAX");
+
+        UIElement band = childWithClass(TextEditor.SELECTION_CLASS);
+        UIElement viewport = childWithClass(TextEditor.TEXT_VIEWPORT_CLASS);
+        assertEquals("the band must start at the text area's left edge, leaving no unselected strip",
+                viewport.getRuntimeCache().getX(), band.getRuntimeCache().getX(), 0.5f);
+    }
+
+    /**
+     * <b>Triple-click must not select onto the line below, nor move the caret there.</b>
+     *
+     * <p>{@code MouseSelection.unitAt} returned {@code [lineStart, lineEnd + 1]} — VS Code's span, which
+     * includes the newline and therefore <em>ends at the first offset of the next row</em>. Two things fall
+     * out of that: the band loop draws a sliver on the next row, and the caret, which sits at the
+     * selection's head, is painted a line below the one that was clicked.</p>
+     *
+     * <p>IntelliJ ends the selection at the end of the clicked line and leaves the caret on it. That is the
+     * behaviour asked for here, and it is also the one that makes "triple-click then type" replace the line
+     * you pointed at rather than the line break after it.</p>
+     */
+    @Test
+    public void tripleClickStaysOnTheLineItClicked() {
+        build("one();" + NL + "two();" + NL + "three();" + NL);
+        showEditor();
+        tripleClickOn("two");
+
+        assertEquals("exactly one row is banded", 1,
+                allWithClass(TextEditor.SELECTION_CLASS).stream()
+                        .filter(b -> b.getRuntimeCache().getWidth() > 0f).count());
+        assertEquals("the caret stays on the clicked row", 1,
+                editor.buffer().offsetToPoint(editor.getCaret()).row());
+    }
+
+
     private void showEditor() {
         settle();
         editor.updateWindow();

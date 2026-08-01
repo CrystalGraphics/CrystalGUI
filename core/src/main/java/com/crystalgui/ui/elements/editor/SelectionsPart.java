@@ -59,7 +59,22 @@ final class SelectionsPart extends EditorViewPart {
             LineProjection.ViewPosition toView = editor.projectionAt(viewLine)
                     .toViewPosition(to - rowStart, LineProjection.Affinity.LEFT);
 
-            float left = pad + editor.xOfView(viewLine, fromView.column()) - editor.getScrollLeft();
+            // A BAND THAT STARTS AT THE ROW'S START REACHES THE LEFT EDGE OF THE TEXT AREA.
+            //
+            // Every x here is measured from the first glyph, so a selection beginning at column 0 began
+            // after codeLeftPad -- leaving an unselected strip between the gutter and the text on every
+            // triple-clicked line. IntelliJ has no such strip: its line highlight runs from the gutter's
+            // border, and the text avoids touching that border because the gap lives inside the gutter
+            // rather than in front of the code.
+            //
+            // Extending the band is the cheaper half of that. The margin stays where it is -- the level-0
+            // indent guide has nowhere else to live, see codeLeftPad -- and nothing about where text is
+            // drawn, measured or hit-tested moves. Only the highlight gets wider, on its left, and only
+            // when the row's own start is inside the selection. A wrapped continuation fails that test
+            // (its `from` is past the row start), so it still begins at its carried indent.
+            boolean fromRowStart = from == rowStart;
+            float left = (fromRowStart ? 0f : pad + editor.xOfView(viewLine, fromView.column()))
+                    - editor.getScrollLeft();
             // A selected line break shows as a sliver past the end of the text, which is how every editor
             // signals "the newline is in the selection too". A soft wrap is NOT a line break, so the
             // sliver is only drawn where the selection genuinely continues onto another document row.

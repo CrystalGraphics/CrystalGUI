@@ -241,14 +241,27 @@ public class CursorOperationsTest {
 
     // ── MouseSelection ──────────────────────────────────────────────────────────────────────────
 
+    /**
+     * <b>A triple-click takes the line's TEXT, not the line plus its newline.</b>
+     *
+     * <p>This asserted {@code {0, 11}} — VS Code's {@code lineEnd + 1}, which ends the selection at the
+     * first offset of the NEXT row. Two visible things follow from that end offset, both reported against
+     * the widget: a selection sliver is drawn on the row below, and the caret, which sits at the
+     * selection's head, is painted a line under the one that was clicked.</p>
+     *
+     * <p>Changed to IntelliJ's span, which stops at the line's end and leaves the caret on the clicked
+     * line. The old expectation was not wrong about the code — it was a faithful record of the port — so it
+     * is rewritten rather than deleted, and this note is why.</p>
+     */
     @Test
     public void clickCountPicksTheGranularity() {
         Rope document = Rope.of("alpha beta\nsecond");
         assertArrayEquals(new int[] { 3, 3 }, MouseSelection.unitAt(document, 3, 1, WORDS));
         assertArrayEquals("a double-click takes the word", new int[] { 0, 5 },
                 MouseSelection.unitAt(document, 3, 2, WORDS));
-        assertArrayEquals("a triple-click takes the line", new int[] { 0, 11 },
+        assertArrayEquals("a triple-click takes the line WITHOUT its newline", new int[] { 0, 10 },
                 MouseSelection.unitAt(document, 3, 3, WORDS));
+        assertEquals("and the newline is genuinely the next character", '\n', document.charAt(10));
     }
 
     /**
