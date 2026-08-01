@@ -19,6 +19,7 @@
 #pragma cg_feature WITH_BORDER
 #pragma cg_feature WITH_TEXTURE_FILL
 #pragma cg_feature WITH_9SLICE_FILL
+#pragma cg_feature SPLIT_BORDER
 
 #include "crystalgraphics:shaders/lib/sdf.glsl"
 
@@ -29,6 +30,10 @@ Properties {
     _MainTex      ("Main Texture", sampler2D) = "white"
     _FillColor    ("Fill Color",   color)     = (1.0, 1.0, 1.0, 1.0)
     _BorderColor  ("Border Color", color)     = (0.0, 0.0, 0.0, 1.0)
+    // SPLIT_BORDER only. Unity's inset text-field bevel: a darker top edge, a lighter bottom edge —
+    // see CgUiRoundedRect.setBorder(width, top, bottom).
+    _BorderColorTop    ("Border Color Top",    color) = (0.0, 0.0, 0.0, 1.0)
+    _BorderColorBottom ("Border Color Bottom", color) = (0.0, 0.0, 0.0, 1.0)
     _CornerRadiusX ("Corner Radii X (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
     _CornerRadiusY ("Corner Radii Y (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
     _BorderWidth  ("Border Width", float)     = 0.0
@@ -161,7 +166,26 @@ Pass {
 
 #ifdef WITH_BORDER
         float innerCoverage = sdf_coverage(dist + _BorderWidth);
-        vec4 color = mix(_BorderColor, fillColor, innerCoverage);
+#ifdef SPLIT_BORDER
+        // Which of the FOUR edges this boundary pixel belongs to, not just which half of the box: a
+        // naive `localPos.y < 0` split colours the whole stroke by vertical half, which cuts the LEFT
+        // and RIGHT edges in two as well — visible as a diagonal seam at the corners and a hard split
+        // running down each side, instead of a plain, uniform side matching the fill. Comparing how far
+        // the pixel is from the box's horizontal extent (`dx`) against its vertical extent (`dy`) picks
+        // out the horizontal (top/bottom) edges specifically: a pixel near the LEFT/RIGHT boundary has
+        // a small `dx` and a comparatively large `dy`, so `dy < dx` is false there and it falls through
+        // to the uniform `_BorderColor` — the same colour the fill uses, so it disappears the way
+        // Unity's side edges do. Only pixels genuinely closer to the top/bottom boundary take the
+        // split colour, picked by `localPos.y`'s sign (this engine's UI projection is Y-down — see
+        // gui_color_field.shader's `1.0 - i.uv.y`, which exists BECAUSE this direction is the natural
+        // one here and had to be flipped for that shader's own bottom-up convention).
+        float dx = halfSize.x - abs(localPos.x);
+        float dy = halfSize.y - abs(localPos.y);
+        vec4 edgeColor = dy < dx ? (localPos.y < 0.0 ? _BorderColorTop : _BorderColorBottom) : _BorderColor;
+#else
+        vec4 edgeColor = _BorderColor;
+#endif
+        vec4 color = mix(edgeColor, fillColor, innerCoverage);
 #else
         vec4 color = fillColor;
 #endif

@@ -347,8 +347,9 @@ Properties also carry change listeners — this is how `LayoutProperties.init()`
 property straight through to `TaffyBridge`.
 
 **Registered CSS properties** (`StylePropertyRegistry`) — the full set, alphabetically, so a missing
-entry is visible rather than merely absent: `background`, `background-color`, `border-color`,
-`caret-width`, `color`, `cursor`, `font-family`, `font-size`, `line-height`, `mask`, `mask-fit`,
+entry is visible rather than merely absent: `background`, `background-color`, `border-bottom-color`,
+`border-color`, `border-top-color`, `caret-width`, `color`, `cursor`, `font-family`, `font-size`,
+`line-height`, `mask`, `mask-fit`,
 `mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`,
 `outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-fit`,
 `overlay-origin`, `overlay-position`, `resize`, `scroll-behavior`, `scroll-duration`,

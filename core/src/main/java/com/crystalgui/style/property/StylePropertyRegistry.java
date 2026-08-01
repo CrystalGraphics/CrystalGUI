@@ -236,6 +236,17 @@ public class StylePropertyRegistry {
     // BorderRadiusProperties (see BorderRadiusShorthand) — not a registered property here, matching
     // how margin/padding/border-width work (BoxEdgeShorthands).
     public static final StyleProperty<Integer> BORDER_COLOR = create(new ColorProperty("border-color", 0xFF000000));
+    // A per-edge OVERRIDE, not an independent colour — the initial value is fully transparent, which
+    // this pair reads as "unset" rather than as a real colour: CgUiRoundedRect falls back to
+    // border-color's own resolved value whenever an edge's alpha is 0, so a widget that only ever sets
+    // border-color keeps painting exactly as it always has. Unity's inset text-field bevel (a darker
+    // top edge, a lighter bottom edge, same colour left/right) is what this exists for — the SDF border
+    // shader has no notion of "which edge" a pixel belongs to beyond top/bottom, so that is the one
+    // split this pair offers; there is no border-left/right-color to match.
+    public static final StyleProperty<Integer> BORDER_TOP_COLOR =
+            create(new ColorProperty("border-top-color", 0x00000000));
+    public static final StyleProperty<Integer> BORDER_BOTTOM_COLOR =
+            create(new ColorProperty("border-bottom-color", 0x00000000));
     // A third drawable layer, drawn last (above `overlay`) and — unlike `border-width`, which feeds
     // Taffy — completely layout-free. That's exactly why CSS has `outline`: it's the standard way to
     // mark focus without resizing the element. Also frees `overlay` to stay a widget's own
