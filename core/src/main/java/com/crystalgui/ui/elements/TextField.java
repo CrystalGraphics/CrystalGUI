@@ -130,6 +130,8 @@ public class TextField extends UIElement implements UIFrameTicker {
     private Predicate<String> userTextValidator = null;
     private Pattern userCharPattern = null;
     private Pattern userPattern = null;
+    /** HTML's {@code maxlength}. Negative means unlimited, which is the default. */
+    private int maxLength = -1;
 
     // Derived from mode + range by applyModeConstraints(). Never written by a setter.
     private Predicate<Character> modeCharFilter = c -> true;
@@ -412,6 +414,27 @@ public class TextField extends UIElement implements UIFrameTicker {
     }
 
     /** Rejects individual keystrokes — a rejected character never enters the text at all. */
+    /**
+     * Caps how many characters may be <em>entered</em>, HTML's {@code maxlength}. Negative is unlimited.
+     *
+     * <p><b>Entered, not held.</b> {@link #setText} is deliberately exempt, exactly as the web's
+     * {@code maxlength} constrains typing and pasting but not assignment to {@code .value}. A widget
+     * that formats its own field — a colour channel writing {@code "0.690"}, a spinner writing a
+     * clamped bound — must be able to put back whatever it computed, and a limit that fought its owner
+     * would truncate the very value it was trying to display.</p>
+     *
+     * <p>Applied at {@link #insert}, which is the single point both typing and pasting funnel through,
+     * so a paste is truncated to fit rather than refused whole — the same as every browser.</p>
+     */
+    public TextField setMaxLength(int maxLength) {
+        this.maxLength = maxLength;
+        return this;
+    }
+
+    public int getMaxLength() {
+        return maxLength;
+    }
+
     public TextField setCharFilter(Predicate<Character> charFilter) {
         this.userCharFilter = charFilter;
         return this;
@@ -694,6 +717,14 @@ public class TextField extends UIElement implements UIFrameTicker {
     public void insert(String s) {
         if (!isEnabled() || s.isEmpty()) return;
         int start = getSelectionStart(), end = getSelectionEnd();
+        if (maxLength >= 0) {
+            // Room is measured against what SURVIVES this edit, so replacing a selection can insert as
+            // much as it removes — a full-field select-and-retype has to keep working at the cap, and
+            // measuring against the current length instead would wedge the field permanently once full.
+            int room = maxLength - (text.length() - (end - start));
+            if (room <= 0) return;
+            if (s.length() > room) s = s.substring(0, room);
+        }
         editText(text.substring(0, start) + s + text.substring(end), start + s.length());
     }
 
