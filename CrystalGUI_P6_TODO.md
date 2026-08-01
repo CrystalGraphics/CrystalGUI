@@ -1393,6 +1393,21 @@ after the Tree and Table rather than before them.
 
 This is what a node's property panel is made of.
 
+> **📄 Planned in full 2026-08-01: [`CrystalGUI_P6.1.8_CONFIGURATOR_PLAN.md`](CrystalGUI_P6.1.8_CONFIGURATOR_PLAN.md).**
+> Read that, not this. Three things it settles that the sketch above gets wrong or leaves open:
+>
+> - **A control and a row are different things.** LDLib2's `Configurator` *is* the row and every editor
+>   extends it — right for an inspector, wrong here, because there are **three** hosts and only one is a
+>   row. A node graph anchors an unconnected input's editor to its *port*, floating outside the node
+>   box, and would be able to reuse nothing. `ConfigControl` is the unit; the row wraps it.
+> - **The annotation driver is the half nothing needs yet.** The immediate consumer is the shader node
+>   library, and a `NodeField` already states kind, label, options and default — there is no object to
+>   reflect over. The widget kit ships; `@Configurable` and `ConfiguratorParser` wait for a caller.
+> - **It is 13 controls, not ~20**, and six are assembly over widgets already built. Unity's 169 shader
+>   nodes, Unity's own 44-control editor reference, and LDLib2's 27 widgets independently collapse onto
+>   the same set — including the same two options on the same two controls (`@ConfigNumber`'s range is
+>   Unity's Slider `Min`/`Max`; `@ConfigHDR` is the Color node's `Mode: HDR`).
+
 ### 6.1.9 Command and undo system · `DONE` (2026-07-31)
 
 > **Both halves have now landed, from opposite ends.** The *command* half shipped with 6.1.2 —

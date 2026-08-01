@@ -1229,6 +1229,54 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
  * Without these rules a node is a column of full-width rows with no port dots to grab: the dot has no
  * intrinsic size, and Taffy's default direction is COLUMN, so the two port columns would stack. */
 
+/* ── The graph editor's design tokens ───────────────────────────────────────────────────────────
+ *
+ * WHY THIS BLOCK EXISTS. A node library is ~170 controls drawn from a kit of about a dozen widget
+ * kinds. Every number one of those widgets needs — a row height, a gap, a font size — was previously
+ * chosen at the moment that widget was written, argued over on its own, and then never reused: the
+ * next widget started from nothing and the argument happened again. Naming them here converts "tune
+ * this widget" into "tune every node at once", which is the only version of that conversation worth
+ * having more than once.
+ *
+ * THREE THINGS ABOUT THIS ENGINE'S `var()` THAT DECIDE HOW THIS BLOCK IS WRITTEN:
+ *
+ *   1. Variables are collected PER SHEET, from every rule, before any rule is parsed
+ *      (`DeclarationParser.collectVariables`). They are NOT cascaded and NOT scoped by the selector
+ *      they are declared under — so `*` is the honest spelling, and a token declared here is
+ *      invisible to `graph.css` and `ore.css`. That is why the theme keeps its own block: geometry
+ *      is this sheet's business, appearance is the theme's, and neither can reach the other's
+ *      numbers even by accident.
+ *   2. Substitution is TEXTUAL and single-level — no `calc()`, no `var(--a, fallback)`, and no
+ *      variable referring to another. So a derived number is written out and its derivation recorded
+ *      in a comment; it cannot be expressed.
+ *   3. A `--name` declaration is skipped by normal parsing, so this rule contributes nothing to the
+ *      cascade despite matching everything.
+ *
+ * THE PROPORTIONS ARE MEASURED, NOT CHOSEN. Unity's reference node is 173px wide with a 31px header
+ * and ~24px port rows. Ours is 134px, so the same node reads correctly at 24 and 18 — those two
+ * numbers are that ratio, not preferences, and moving the node width without moving them is what
+ * makes a node look subtly wrong in a way nobody can name. */
+* {
+    /* The modulus every other measurement here is proportioned against. */
+    --graph-node-w: 134px;
+    --graph-head-h: 24px;      /* 31/173 of the node width */
+    --graph-port-h: 18px;      /* 24/173 of the node width */
+    --graph-dot: 6px;          /* 24% of the port band */
+    --graph-dot-ring: 2px;     /* the ring IS the port when unconnected — structural, never scaled down */
+
+    /* The control kit. `--graph-ctrl-h` is the one that makes a dozen widget kinds read as a SET:
+     * before it, a text field was 16px, a dropdown 14 and a checkbox 12, so three controls in three
+     * rows of one node sat at three different heights. Applied per widget rather than to the row,
+     * because the row is a floor that holds whatever it is given. */
+    --graph-ctrl-h: 14px;
+    --graph-row-h: 25px;       /* the control row's floor: ctrl-h + the vertical padding pair */
+    --graph-font: 6;
+    --graph-pad: 4px;          /* vertical rhythm — section padding, top and bottom */
+    --graph-pad-x: 6px;        /* a control row's horizontal inset */
+    --graph-gap: 4px;          /* label to widget */
+    --graph-hairline: 1px;     /* every separator and every ring in the editor */
+}
+
 /* Sized to its CONTENT between a floor and a ceiling: the node grows to fit its port names rather than
  * wrapping them. Works only because nothing inside declares a zero flex basis -- a zero-basis child
  * contributes nothing to a container's max-content, so the node could never grow. */
@@ -1249,7 +1297,7 @@ graphnode .__title-bar__ {
     /* Measured off the reference rather than chosen: Unity's header is 31px on a 173px-wide node, and
        ours is 134px wide, so the same proportion is ~24. At 18px it was visibly squatter than the
        reference beside an otherwise matching node — the one piece of the box still out of scale. */
-    height: 24px;
+    height: var(--graph-head-h);
 }
 /* The title takes the slack so the chevron is pinned right, and SHRINKS rather than sitting on a zero
  * basis. The zero basis was there to stop a long title pushing the chevron out of a fixed-width node;
@@ -1290,15 +1338,15 @@ graphnode .__inputs__ {
     flex-direction: column;
     flex-grow: 0;
     flex-shrink: 1;
-    padding-top: 4px;
-    padding-bottom: 4px;
+    padding-top: var(--graph-pad);
+    padding-bottom: var(--graph-pad);
 }
 graphnode .__outputs__ {
     flex-direction: column;
     flex-grow: 1;
     flex-shrink: 1;
-    padding-top: 4px;
-    padding-bottom: 4px;
+    padding-top: var(--graph-pad);
+    padding-bottom: var(--graph-pad);
 }
 /* An output reads right-to-left: label, then the dot on the edge. */
 graphnode .__outputs__ { align-items: flex-end; }
@@ -1308,21 +1356,64 @@ graphnode .__control-row__ {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    gap-all: 4px;
-    padding-left: 6px;
-    padding-right: 6px;
+    gap-all: var(--graph-gap);
+    padding-left: var(--graph-pad-x);
+    padding-right: var(--graph-pad-x);
     /* The padding, not min-height, is what holds the widget clear of the seams: extra height alone just
        centres it in more space, and a taller widget takes that slack straight back. */
-    padding-top: 4px;
-    padding-bottom: 4px;
+    padding-top: var(--graph-pad);
+    padding-bottom: var(--graph-pad);
     /* A floor, not a cap — the row holds whatever widget a node puts in it. */
-    min-height: 25px;
+    min-height: var(--graph-row-h);
 }
 /* A field widget takes the slack next to its label. `width: 0` is the basis it grows FROM — this
  * engine's flex-shrink defaults to 0, so a widget sized by its content would keep that width and a
  * text field with nothing typed in it collapses to a sliver. */
 graphnode .__control-row__ textfield,
 graphnode .__control-row__ dropdown { width: 0; flex-grow: 1; }
+
+/* ── THE CONTROL KIT ────────────────────────────────────────────────────────────────────────────
+ * One height and one type size for every control kind a node can carry, so a node holding a text
+ * field, a dropdown and a checkbox shows three widgets on one line rather than three heights. Their
+ * base rules disagree by design — a text field is 16px, a dropdown 14, a checkbox 12, and each is
+ * right in a form — but a node control row is not a form, it is a column of interchangeable slots.
+ *
+ * Scoped to `graphnode .__control-row__`, so this restates the kit for the graph and changes nothing
+ * anywhere else in the engine.
+ *
+ * ADD NEW CONTROL KINDS TO THIS SELECTOR LIST. That is the whole maintenance rule: a widget named
+ * here is the right size on the day it is written and never needs a rule of its own, and a widget
+ * left out is the one that will be visibly a pixel or three off in a way that takes a session to
+ * chase. `min-height` as well as `height` because several of these declare a floor that would
+ * otherwise win. */
+graphnode .__control-row__ textfield,
+graphnode .__control-row__ dropdown,
+graphnode .__control-row__ button,
+graphnode .__control-row__ slider,
+graphnode .__control-row__ switch {
+    height: var(--graph-ctrl-h);
+    min-height: var(--graph-ctrl-h);
+}
+/* The exception, and it is a real one: a checkbox is SQUARE. Forcing the kit height on it would make
+ * the box oblong, so it takes the height and the mark follows — the one control whose width is a
+ * function of its height rather than of the row. */
+graphnode .__control-row__ checkbox,
+graphnode .__control-row__ checkbox .__mark__ {
+    width: var(--graph-ctrl-h);
+    height: var(--graph-ctrl-h);
+    min-height: var(--graph-ctrl-h);
+}
+/* Type size for the row and everything in it. On the controls as well as the row because
+ * `* { font-size: 10 }` at the top of this file gives every element a SPECIFIED size, and a specified
+ * value beats an inherited one — the same trap `colorselector` documents at length. */
+graphnode .__control-row__,
+graphnode .__control-row__ text,
+graphnode .__control-row__ textfield,
+graphnode .__control-row__ dropdown,
+graphnode .__control-row__ button {
+    font-size: var(--graph-font);
+}
+
 /* The preview slot has a height even while empty, because 6.2.7 fills it with a render and a node
  * that changed size the moment previews arrived would move every wire in the graph. */
 /* Tall enough to be roughly square against the 134px min-width, because the render target IS square
@@ -1350,7 +1441,7 @@ nodeport {
     /* Measured off the reference like the header: Unity's port rows are ~24px on a 173px-wide node, so
        the same proportion on our 134px one is ~18. At 16 the band was visibly tighter than the reference
        while the header beside it already matched, which is what made the whole node read as compressed. */
-    height: 18px;
+    height: var(--graph-port-h);
 }
 /* Breathing room on the side AWAY from the dot, which is what makes a port panel read as a panel
    rather than as a box drawn tight around a word.
@@ -1391,12 +1482,12 @@ nodeport.__output__ .__label__ { text-align: right; }
 /* 6px = the reference's 24% of the port band's height. Safe to keep this small only because the hit
  * target is the ROW's padding, never the dot. */
 nodeport .__dot__ {
-    width: 6px;
-    height: 6px;
+    width: var(--graph-dot);
+    height: var(--graph-dot);
     border-radius: 3px;
     /* The ring IS the port when unconnected, so this is structural, not decoration — and it stays 2px
      * rather than scaling with the diameter, or a hollow port stops reading as one. */
-    border-width: 2px;
+    border-width: var(--graph-dot-ring);
 }
 /* The inline editor an unconnected input offers (Unity's `X 0.9` field). Shown only while blank:
  * an input under a wire has a value already, and offering to type another is a lie about which one
