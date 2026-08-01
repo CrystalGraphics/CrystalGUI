@@ -54,8 +54,37 @@
  * The two port columns paint over the ports band, not the canvas, so they composite twice and take the
  * second formula — the backdrop is whatever is directly behind, which here is another translucent
  * surface. Change the alpha and BOTH sets have to be re-solved. */
+/* ── The theme's tokens ─────────────────────────────────────────────────────────────────────────
+ *
+ * The palette named in prose at the top of this file, made usable. Appearance only — every SIZE the
+ * graph editor uses is a token in `default.css`, and the two blocks cannot see each other because
+ * this engine collects `var()` definitions PER SHEET (`DeclarationParser.collectVariables`). That
+ * separation is not a limitation to work around: it is the project's geometry/appearance split
+ * enforced by the parser, so a theme physically cannot move a box and this sheet physically cannot
+ * recolour one.
+ *
+ * Declared on `*` because these are sheet-global regardless of the selector they sit under — see the
+ * same block in `default.css` for the three rules of this engine's `var()` that decide the shape of
+ * both. */
+* {
+    --node-canvas: #202020;
+    --node-header: #393939;    /* header, input panel, controls row — the "raised" surfaces */
+    --node-panel: #2B2B2B;     /* output panel */
+    --node-seam: #232323;      /* every 1px separator between regions */
+    --node-edge: #1A1A1A;      /* the node's own outer border */
+
+    /* The hairline that rings a control. #282828, NOT black: a line's apparent weight is contrast as
+     * much as thickness, and near-black against the panel read as a heavy rule at any width. This
+     * sits a hair darker than the panel — it separates without drawing attention. */
+    --node-hairline: #282828;
+
+    --node-field: #1E1E1E;     /* the recessed surface a value is typed or dragged on */
+    --node-text: #C4C4C4;
+    --node-text-bright: #D4D4D4;
+}
+
 graphview {
-    background: #202020;
+    background: var(--node-canvas);
 }
 
 /* ── The node box ──────────────────────────────────────────────────────────────────────────────── */
@@ -73,8 +102,8 @@ graphnode {
     background: #00000000;
     border-radius: 5px;
     border-width: 1px;
-    border-color: #1A1A1A;
-    color: #C4C4C4;
+    border-color: var(--node-edge);
+    color: var(--node-text);
     font-size: 8;
 }
 
@@ -83,7 +112,7 @@ graphnode {
  *
  *     hover 1px #327090      selected 2px #44C0FF      both 3px #44C0FF
  *
- * An OUTLINE, not a recoloured `border-color`: that would replace the node's #1A1A1A edge, so a selected
+ * An OUTLINE, not a recoloured `border-color`: that would replace the node's own edge colour, so a selected
  * node lost its outline exactly when it gained emphasis.
  *
  * ORDER IS LOAD-BEARING. `:hover` and `:checked` both weigh 11, so source order decides between them and
@@ -106,7 +135,7 @@ graphnode:checked:hover {
  * two corners a user looks at first. 4px, not 5: it is inset by the 1px border. */
 graphnode .__title-bar__ {
     background: #56565676;
-    color: #D4D4D4;
+    color: var(--node-text-bright);
     border-top-left-radius-x: 4px;
     border-top-left-radius-y: 4px;
     border-top-right-radius-x: 4px;
@@ -136,7 +165,7 @@ graphnode .__preview__ {
     /* Its seam with the controls row. Both are siblings of a node that paints nothing, so a gap between
        them would show bare canvas — a top border belongs to THIS element, so it paints. */
     border-top-width: 1px;
-    border-color: #232323;
+    border-color: var(--node-seam);
     border-bottom-left-radius-x: 4px;
     border-bottom-left-radius-y: 4px;
     border-bottom-right-radius-x: 4px;
@@ -169,13 +198,13 @@ nodecreationmenu {
     border-width: 1px;
     border-color: #4A4A4A;
     border-radius: 4px;
-    color: #C4C4C4;
+    color: var(--node-text);
     font-size: 8;
 }
 /* The header reads as chrome, not as content: same treatment a node's own title bar gets, so the two
    surfaces in this editor that you drag by look alike. */
-nodecreationmenu .__title-bar__ { background: #383838; color: #C4C4C4; }
-nodecreationmenu .__search__ { background: #1E1E1E; border-radius: 2px; color: #D4D4D4; }
+nodecreationmenu .__title-bar__ { background: #383838; color: var(--node-text); }
+nodecreationmenu .__search__ { background: var(--node-field); border-radius: 2px; color: var(--node-text-bright); }
 nodecreationmenu .__entry__:hover { background: #3C4A55; }
 nodecreationmenu .__empty__ { color: #7A7A7A; }
 
@@ -187,14 +216,14 @@ nodecreationmenu .__entry__.__selected__ { background: #2C5D87; color: #FFFFFF; 
 /* The twisty. Dimmer than the label it sits beside: it is a control, and a column of bright arrows
    competes with the names, which are what you are actually reading. */
 nodecreationmenu .__twisty__ { color: #8A8A8A; }
-nodecreationmenu .__entry__:hover .__twisty__ { color: #D4D4D4; }
+nodecreationmenu .__entry__:hover .__twisty__ { color: var(--node-text-bright); }
 
 /* A category is a container, not a thing you can create, so it is deliberately QUIETER than its leaves
    rather than louder. Unity's folder rows read as structure you scan past; the node names are the
    payload. Making the folders bolder inverts that and turns the list into a wall of headings. */
 nodecreationmenu .__entry__.__category__ .__label__ { color: #9D9D9D; }
 
-nodeport { color: #C4C4C4; }
+nodeport { color: var(--node-text); }
 nodeport:hover .__label__ { color: #FFFFFF; }
 
 /* The type palette. `border-color` is the type's colour and the wire's; the fill follows it, and is
@@ -241,9 +270,9 @@ nodeport .__editor__ {
     width: 24px;
     height: 11px;
     padding-all: 2px;
-    background: #1E1E1E;
+    background: var(--node-field);
     border-radius: 2px;
-    color: #D4D4D4;
+    color: var(--node-text-bright);
     font-size: 7;
 }
 
@@ -255,8 +284,8 @@ nodeport .__editor__ {
 colorselector {
     background: #2B2B2B;
     border-width: 1px;
-    border-color: #1A1A1A;
-    color: #C4C4C4;
+    border-color: var(--node-edge);
+    color: var(--node-text);
     font-size: 6;
 }
 
@@ -274,8 +303,8 @@ colorselector .__square-handle__ {
 
 colorselector .__channel-row__ textfield,
 colorselector .__hex-row__ textfield {
-    background: #1E1E1E;
-    color: #D4D4D4;
+    background: var(--node-field);
+    color: var(--node-text-bright);
     border-radius: 2px;
     font-size: 6;
 }
@@ -288,18 +317,16 @@ colorselector .__hex-row__ textfield {
  * it paints over the border layer, so a border here draws nothing. Note an outline is measured in
  * LOGICAL pixels and then multiplied by uiScale like everything else — at uiScale 2 this is two physical
  * pixels, which is correct and is not the stylesheet disagreeing with itself. */
-/* #282828, not black. A line's apparent weight is contrast as much as thickness, and near-black against
- * a #2B2B2B panel read as a heavy rule no matter what width it was given. This sits a hair darker than
- * the panel: it separates the track from the background without drawing attention to itself. */
+/* The ring colour is `--node-hairline`; the reasoning for that value lives with the token. */
 colorselector .__channel-row__ slider {
-    outline: 1px #282828;
+    outline: 1px var(--node-hairline);
     outline-offset: 0px;
 }
 /* The pair is ringed as ONE object, not as two — the outline goes on the container, so no line falls
  * between the halves. That seam is the whole point: the eye compares two adjacent colours far better
  * than two separated ones, and a divider would turn the comparison into two separate readings. */
 colorselector .__swatches__ {
-    outline: 1px #282828;
+    outline: 1px var(--node-hairline);
     outline-offset: 0px;
 }
 
@@ -310,7 +337,7 @@ graphnode .__color-swatch__ {
     height: 14px;
     flex-direction: column;
     border-radius: 2px;
-    outline: 1px #282828;
+    outline: 1px var(--node-hairline);
     outline-offset: 0px;
     cursor: pointer;
 }
