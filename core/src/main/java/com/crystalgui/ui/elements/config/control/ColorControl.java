@@ -35,6 +35,8 @@ public class ColorControl extends ValueControl<Integer> {
     public static final String ALPHA_BAR_CLASS = "__alpha-bar__";
     public static final String ALPHA_FILL_CLASS = "__alpha-fill__";
 
+    private static final int DEFAULT_COLOR = 0xFF000000;
+
     private final UIElement swatch = new UIElement();
     private final UIElement colorBar = new UIElement();
     private final UIElement alphaFill = new UIElement();
@@ -42,7 +44,7 @@ public class ColorControl extends ValueControl<Integer> {
     private final ColorSelector picker = new ColorSelector();
 
     public ColorControl(ConfigDescriptor descriptor, @Nullable Integer defaultValue) {
-        super(descriptor, defaultValue == null ? 0xFFFFFFFF : defaultValue);
+        super(descriptor, defaultValue == null ? DEFAULT_COLOR : defaultValue);
         addClass("__color__");
         markAsInternal();
 
@@ -88,9 +90,11 @@ public class ColorControl extends ValueControl<Integer> {
     }
 
     /** The colour opaque, the alpha as a proportional width — reading a translucent colour against
-     * whatever sits behind the row is not something an eye can do reliably. */
+     * whatever sits behind the row is not something an eye can do reliably. Deliberately NOT
+     * {@code ColorSelector}'s checkerboard-composite swatch: this is a closed-state summary read at a
+     * glance in a dense panel, and a real alpha bar is a faster read there than a checkerboard is. */
     private void paint(@Nullable Integer value) {
-        int argb = value == null ? 0xFFFFFFFF : value;
+        int argb = value == null ? DEFAULT_COLOR : value;
         colorBar.generalStyle(g -> g.background(new CgUiQuad(argb | 0xFF000000)));
         float alpha = ((argb >>> 24) & 0xFF) / 255f;
         alphaFill.layout(l -> l.widthPercent(alpha * 100f));
@@ -99,7 +103,7 @@ public class ColorControl extends ValueControl<Integer> {
     @Override
     protected void writeToWidgets(@Nullable Integer value) {
         paint(value);
-        picker.setColor(value == null ? 0xFFFFFFFF : value);
+        picker.setColor(value == null ? DEFAULT_COLOR : value);
     }
 
     /** As {@code ShaderColorFieldWidget.placeAtPointer} — the pointer, not the swatch, and the world

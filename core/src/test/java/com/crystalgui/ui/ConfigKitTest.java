@@ -287,6 +287,51 @@ public class ConfigKitTest extends UiTestBase {
     }
 
     /**
+     * A full-width title must CLIP, never wrap. The default sheet's pixel font is narrow enough that
+     * "Node Settings"/"Advanced"/"Entries" always fit their band regardless of whether this was set —
+     * a screenshot under ore.css (a wider font, {@code MinecraftRegular.otf}) caught each one wrapping
+     * onto a second line in turn, ONE AT A TIME, because each is a separate rule with no shared
+     * ancestor to have fixed them all at once. The label column already solves this for an ordinary
+     * row ({@code .__configurator__ > .__label__}); a header, a group head and an array's head are all
+     * full-width with no such column to have inherited the fix from, so each needed its own — three
+     * separate CSS rules is exactly why this was found one screenshot at a time instead of all at once.
+     */
+    @Test
+    public void aFullWidthTitleClipsRatherThanWraps() {
+        ConfiguratorPanel panel = openPanel();
+        Configurator header = panel.add(ConfigDescriptor.header("Node Settings"), null);
+        ConfiguratorGroup group = new ConfiguratorGroup("Advanced");
+        panel.addChild(group);
+        Configurator array = panel.add(ConfigDescriptor.of("entries", "Entries", ConfigDescriptor.Kind.ARRAY)
+                .element(ConfigDescriptor.text("entries.e", "")), null);
+        window.updateWithoutPainting();
+
+        UIElement headerTitle = header.control().querySelectorAll(".__title__").get(0);
+        UIElement groupTitle = group.head().querySelectorAll(".__title__").get(0);
+        // Scoped to `.__head__ text`, not a bare "text" query — an empty array ALSO shows a
+        // `.__empty__` placeholder, itself a `text` tag, and the two must not be confused.
+        UIElement arrayTitle = array.control().querySelectorAll(".__head__ text").get(0);
+        for (UIElement title : List.of(headerTitle, groupTitle, arrayTitle)) {
+            assertEquals("must not wrap onto a second line",
+                    com.crystalgui.style.property.visual.text.WhiteSpace.NOWRAP,
+                    title.getStyle().getComputed(
+                            com.crystalgui.style.property.StylePropertyRegistry.WHITE_SPACE));
+            assertEquals("must clip with an ellipsis instead",
+                    com.crystalgui.style.property.visual.text.TextOverflow.ELLIPSIS,
+                    title.getStyle().getComputed(
+                            com.crystalgui.style.property.StylePropertyRegistry.TEXT_OVERFLOW));
+            // The bug the first pass at this fix actually shipped: `text-overflow` decides what the
+            // clipped glyphs look like, it does not itself clip anything. Without `overflow: hidden`
+            // establishing the clip box, the title's own box shrinks correctly but the glyphs still
+            // paint at full width, bleeding out past it — a near-invisible sliver with ghost text
+            // escaping past it, not a wrapped line.
+            assertTrue("must actually clip, not just resolve an ellipsis value nothing enforces",
+                    title.getStyle().getComputed(
+                            com.crystalgui.style.property.StylePropertyRegistry.OVERFLOW).clips());
+        }
+    }
+
+    /**
      * The gallery page's exact arrangement, laid out headlessly.
      *
      * <p>Mirrors {@code CgUiGalleryScene.configuratorPage} — every kind the page shows, two nesting

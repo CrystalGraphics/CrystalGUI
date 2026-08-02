@@ -14,6 +14,7 @@ import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.serialization.StateMap;
@@ -107,6 +108,51 @@ import java.util.Set;
  */
 public final class UIText extends UIElement {
 
+    static {
+        // `font-size`/`font-family` are GeneralGroup/visual properties, never routed through TaffyBridge
+        // the way LayoutProperties are — so nothing marks Taffy dirty when either changes, and
+        // `recompute()` (the only thing that re-measures this element) fires ONLY from a text-content
+        // change or from `onLayoutChanged()`, which itself only fires on a genuine Taffy GEOMETRY change.
+        // A font change alone is neither: it leaves the box's already-pushed !important width/height
+        // exactly as they were, so nothing ever asks this element to re-shape against the new font. The
+        // glyphs still paint with it (paintOverlay resolves the family fresh every frame), but the box
+        // they're wrapped/ellipsized against is stale.
+        //
+        // Both properties, not just size: a runtime theme switch (the harness's ore.css -> default.css
+        // toggle) turned out to change the FAMILY, not the size — ore.css's `* { font-family:
+        // MinecraftRegular.otf }` stops applying and default.css's own family (wider glyphs for the same
+        // string) takes over — so a font-size-only listener left "Time"'s pushed width sitting at
+        // whatever MinecraftRegular measured it at, now too narrow for the same text in the new family,
+        // truncating to "Ti…". A page revisit "fixed" it only because it rebuilds every element from
+        // scratch, giving each one a first, correctly-sized measurement under whichever font happens to
+        // be active at that moment.
+        //
+        // NOT a direct `recompute()` call here, unlike the `text`/`highlights` listeners above — proven
+        // by instrumentation, not assumed. `ElementStyle.resolveTouched` notifies this listener BEFORE
+        // the property's own cascade write has settled: `getComputed()`, called synchronously from
+        // inside this callback, was still returning the OLD family even though the notification's own
+        // `newVal` already reported the new (or removed) one — a real timing hole in the cascade's own
+        // read path, not something to paper over by reading `newVal` directly here (paint time calls
+        // `resolveFamily()` independently and needs the SAME eventually-consistent value). Clearing the
+        // shape cache and the pushed !important size, then `markTreeDirty()`, defers the actual re-shape
+        // to `onLayoutChanged()` on the NEXT layout pass — which runs after `calculateStyle()` has fully
+        // settled for the frame, by which point `getComputed()` is correct.
+        StylePropertyRegistry.FONT_SIZE.addListener((element, prop, oldVal, newVal) -> {
+            if (element instanceof UIText t) t.invalidateForFontChange();
+        });
+        StylePropertyRegistry.FONT_FAMILY.addListener((element, prop, oldVal, newVal) -> {
+            if (element instanceof UIText t) t.invalidateForFontChange();
+        });
+    }
+
+    private void invalidateForFontChange() {
+        shapedParagraph = null;
+        shadowParagraph = null;
+        getStyle().removeCandidates(LayoutProperties.WIDTH, slot -> slot.origin() == StyleOrigin.IMPORTANT);
+        getStyle().removeCandidates(LayoutProperties.HEIGHT, slot -> slot.origin() == StyleOrigin.IMPORTANT);
+        markTreeDirty();
+    }
+
     /** Text content — bindable via {@link #bindTextTo(Property)}, reusing the same data-binding
      * infrastructure the rest of CrystalGUI uses (see {@code Property.bindTo}). */
     public final Property<String> text = new Property<>("");
@@ -149,6 +195,28 @@ public final class UIText extends UIElement {
     /** null = not yet determined. Decided ONCE, on the first {@link #recompute()} call after this
      * element is genuinely attached to a window, then never re-derived — see {@link #recompute()}. */
     private Boolean selfSizesWidth;
+
+    /**
+     * Skips the auto-detect and locks {@link #selfSizesWidth} to {@code true} directly, for a caller
+     * that already knows — by construction — that this label must always drive its ancestor's growth
+     * rather than accept whatever width layout hands it.
+     *
+     * <p>The auto-detect ({@code contentBoxWidth() <= 0} on the first post-attachment
+     * {@link #recompute()}) is a heuristic, and a genuinely racy one: it is reading whatever the
+     * ancestor chain's FIRST, not-yet-converged layout pass happens to report at that exact moment. If
+     * an ancestor itself grows to fit ITS children (a {@code graphnode}'s title, sized to help drive the
+     * node wide enough for a short label like "Time"/"UV") that first reading can land on a small but
+     * nonzero placeholder rather than the true {@code <= 0}, latching {@code false} — and because the
+     * decision never re-derives, the label is then stuck taking whatever narrow width it's handed for
+     * its entire lifetime, silently truncating text that would fit once the ancestor actually settled.
+     * The only recovery was destroying and rebuilding the element (e.g. navigating away from a page and
+     * back), which is what made the bug look "conditional on first open" rather than a plain miscount.
+     * A caller that already knows the answer should not gamble on the race at all.</p>
+     */
+    public UIText forceSelfSizeWidth() {
+        selfSizesWidth = Boolean.TRUE;
+        return this;
+    }
 
     public UIText(String initialText) {
         text.set(initialText == null ? "" : initialText);

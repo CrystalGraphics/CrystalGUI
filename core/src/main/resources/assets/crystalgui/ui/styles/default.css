@@ -105,6 +105,33 @@ button, dropdown {
     text-shadow: false;
     border-radius: 2px;
 }
+/* THE ROOT CAUSE, once: this is the one label every `Button`/`Dropdown` in the engine has (Button
+ * gives it no class of its own, hence the tag selector), so a config-kit dropdown squeezed to
+ * `width:0;flex-grow:1` and a node's title-bar squeezing its title are the SAME underlying gap, not
+ * two separate ones. Neither had `flex-shrink`, `white-space` or `text-overflow` — this engine's
+ * `flex-shrink: 0` default means the label never shrank at all, so a too-narrow box simply wrapped it
+ * instead of clipping. The bundled pixel font is narrow enough that this almost never triggered;
+ * ore.css's wider `MinecraftRegular.otf` and any long selected value (`World`, `View`) reliably do.
+ * `min-width: 0` is explicit rather than load-bearing here — this engine's `min-size` already
+ * defaults to 0, unlike real CSS's `auto` (see AGENTS.md's Taffy-divergence table), so `flex-shrink: 1`
+ * alone would already let the label shrink; stating it anyway documents the assumption this rule
+ * depends on rather than leaving it implicit.
+ *
+ * `overflow: hidden` is NOT optional, and was the actual bug in the first pass at this fix:
+ * `text-overflow` decides what the clipped GLYPHS look like, it does not itself clip anything —
+ * without `overflow: hidden` establishing the clip box, the label's own box shrinks correctly (that
+ * part genuinely worked) but the glyphs still paint at their full natural width, bleeding out past
+ * the now-tiny box exactly like `dialog .__title-bar__ .__label__`'s own comment already warned:
+ * "clips the glyphs the ellipsis stands in for, on exactly the box it measured against." A dropdown
+ * whose value text is longer than its row showed a near-invisible sliver of background with ghost
+ * text escaping past the node's edge — the box was right, the paint wasn't clipped to it. */
+button text, dropdown text {
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 button:hover, dropdown:hover {
     background: #FF0000;
 }
@@ -1281,7 +1308,13 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
  * numbers are that ratio, not preferences, and moving the node width without moving them is what
  * makes a node look subtly wrong in a way nobody can name. */
 * {
-    /* The modulus every other measurement here is proportioned against. */
+    /* The modulus every other measurement here is proportioned against.
+     *
+     * A 2026-08-02 pass tried "fixing" this to Unity's own 173px reference on the theory that 134 was
+     * an unexplained scale-down — WRONG, caught by a side-by-side measurement: at 173 our Position node
+     * measured 342px against Unity's 264px in the same comparison screenshot, a ~1.3x overshoot. Unity's
+     * reference pixels and this engine's own are not the same absolute scale, so the number is not
+     * portable 1:1. 134 already WAS the right translation (173 × (264/342) ≈ 134) — restored. */
     --graph-node-w: 134px;
     --graph-head-h: 24px;      /* 31/173 of the node width */
     --graph-port-h: 18px;      /* 24/173 of the node width */
@@ -1291,10 +1324,16 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
     /* The control kit. `--graph-ctrl-h` is the one that makes a dozen widget kinds read as a SET:
      * before it, a text field was 16px, a dropdown 14 and a checkbox 12, so three controls in three
      * rows of one node sat at three different heights. Applied per widget rather than to the row,
-     * because the row is a floor that holds whatever it is given. */
-    --graph-ctrl-h: 14px;
+     * because the row is a floor that holds whatever it is given.
+     *
+     * 18px, not 14 — matches the inspector's own `--cfg-ctrl-h` now that `--graph-font` (below) matches
+     * `--cfg-font` too. 14px was sized for this kit's old 6px control-row text; once that became 9px to
+     * match the title, the same box read as text and chevron crammed on top of each other, not merely
+     * snug — a control kind's own height has to scale with the text it holds or it stops being a floor
+     * and becomes a clip. */
+    --graph-ctrl-h: 18px;
     --graph-row-h: 25px;       /* the control row's floor: ctrl-h + the vertical padding pair */
-    --graph-font: 6;
+    --graph-font: 9;   /* matches the title's own size — Unity does not shrink port/control text below it */
     --graph-pad: 4px;          /* vertical rhythm — section padding, top and bottom */
     --graph-pad-x: 6px;        /* a control row's horizontal inset */
     --graph-gap: 4px;          /* label to widget */
@@ -1355,10 +1394,21 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
 
 /* Sized to its CONTENT between a floor and a ceiling: the node grows to fit its port names rather than
  * wrapping them. Works only because nothing inside declares a zero flex basis -- a zero-basis child
- * contributes nothing to a container's max-content, so the node could never grow. */
+ * contributes nothing to a container's max-content, so the node could never grow.
+ *
+ * Unity's own rule, confirmed side by side: a node with no preview (or preview toggled off) shrinks to
+ * the smallest box its rows actually need — NO node-wide floor holding it open beyond that. A 96px floor
+ * here was tried and measured wrong: `Time`/`Split`'s real content (title + one short row, no preview)
+ * comes in under 96px, so the floor — not the content — was setting the width, and `flex-grow: 1` on
+ * whichever column still had a visible row then stretched to fill THAT, shoving its dot away from its
+ * label with dead space neither Unity nor this node's own content asked for. 40px is a genuine safety
+ * minimum for the pathological case (no title, no ports, no preview) rather than a design width — title
+ * bar padding plus the collapse chevron alone already exceeds it. What keeps a preview-bearing node wide
+ * enough is `graphnode .__preview__`'s OWN min-width, and what keeps `Color` wide despite having no
+ * preview is `ColorControl`'s swatch declaring one too — see each. */
 graphnode {
     width: auto;
-    min-width: 96px;
+    min-width: 40px;
     max-width: 320px;
     flex-direction: column;
 }
@@ -1380,7 +1430,17 @@ graphnode .__title-bar__ {
  * now the node grows instead, and a zero basis would contribute nothing to that growth — the node would
  * stay at its floor while the title ellipsized inside it. flex-shrink: 1 still protects the chevron once
  * the node is clamped at max-width. */
-graphnode .__title__ { flex-grow: 0; flex-shrink: 1; }
+/* Same root cause as `button text, dropdown text` above — see that comment. This one was even
+ * documented as intending to ellipsize ("the node would stay at its floor while the title ellipsized
+ * inside it") without the property that actually does it ever being written. */
+graphnode .__title__ {
+    flex-grow: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 graphnode .__collapse__ {
     width: 10px;
     height: 10px;
@@ -1389,10 +1449,12 @@ graphnode .__collapse__ {
     cursor: pointer;
     overlay: shape("chevron-down");
 }
-/* Same rotate-not-swap idiom as ConfiguratorGroup's identical arrow — one drawable, two states,
-   and the -90deg matches that rule exactly so both read as the same affordance. */
+/* Same rotate-not-swap idiom as ConfiguratorGroup's identical arrow — one drawable, two states.
+   +90deg here rather than ConfiguratorGroup's -90: that arrow collapses toward its own row above it,
+   this one collapses the port column sitting BELOW/beside it, and pointing left ("<") is what reads as
+   "the ports that were here are gone" rather than ConfiguratorGroup's "-90 means both point the same way". */
 graphnode.__collapsed__ .__collapse__ {
-    transform: rotate(-90deg);
+    transform: rotate(90deg);
 }
 
 /* Three 1px separators from one rule: padding gives the horizontal pair (under the title bar, above the
@@ -1407,21 +1469,52 @@ graphnode .__ports__ {
     padding-bottom: 1px;
     gap-all: 1px;
 }
-/* The input column hugs its content; the OUTPUT column takes the slack. Not two halves (that gives an
- * inputless node an empty input panel and pins the output at 50%), and not two huggers (that leaves a
- * hole between them on any node narrower than min-width). Growing only the output side fixes all three.
+/* The input column has nothing visible in it (see `GraphNode.NO_INPUT_GAP_CLASS`) — `gap-all` runs
+ * between the two columns regardless of either one's width, so even a genuinely 0-width input column left
+ * 1px of `.__ports__`'s own darker tint standing in front of the output content, reading as a stray left
+ * edge on a node that has no input half to divide FROM. */
+graphnode .__ports__.__no-input-gap__ {
+    gap-all: 0;
+}
+/* Both columns collapsed-empty (see `GraphNode.PORTS_EMPTY_CLASS`) — nothing left for the padding pair
+ * to divide, so the 1px-top/1px-bottom band that used to read as two seams around real port rows now
+ * read as one flat 2px strip around nothing. Fixed to a single 1px line instead: `.__ports__` still owns
+ * the only divider between the title bar and whatever comes next (Unity draws exactly one hairline there
+ * whether or not the node has ports at all), it is just no longer sized by content it no longer has. */
+graphnode .__ports__.__ports-empty__ {
+    padding-top: 0;
+    padding-bottom: 0;
+    gap-all: 0;
+    height: 1px;
+    min-height: 1px;
+    flex-shrink: 0;
+}
+/* Two even halves — matching Unity's own node, where the input/output divider sits at the node's
+ * midline regardless of how few inputs a node has. An earlier version had the input column hug its own
+ * content and only the output column grow, on the reasoning that an inputless node would otherwise show
+ * an empty input half; Unity accepts exactly that trade (see e.g. its Time node, no inputs, still split
+ * down the middle) and asymmetric columns read as the divider sitting in the wrong place on every
+ * multi-input node, which is the far more common case.
  *
  * The vertical padding is on the COLUMNS so it paints in the panel's own colour — on the band it would
  * be a fourth seam. It costs an empty column nothing: padding adds no width, so an inputless node still
- * has a zero-width input column and paints no panel.
+ * has a zero-width input column and paints no panel — EXCEPT that with flex-grow:1 an inputless input
+ * column would otherwise take half the width anyway, empty. `GraphNode.addPort` catches that case and
+ * marks the column `NO_INPUTS_CLASS`, which the rule right below zeroes back to a real zero-width column.
  *
  * flex-shrink: 1 (this engine defaults to 0) lets them give way at max-width instead of overflowing. */
 graphnode .__inputs__ {
     flex-direction: column;
-    flex-grow: 0;
+    flex-grow: 1;
     flex-shrink: 1;
     padding-top: var(--graph-pad);
     padding-bottom: var(--graph-pad);
+}
+/* A node with genuinely no input ports (UV, Position, Normal Vector, Time) — the divider sits at the
+ * node's right edge instead of its midline, same as Unity draws it, rather than showing an empty panel
+ * that has nothing in it to justify half the node's width. */
+graphnode .__inputs__.__no-inputs__ {
+    flex-grow: 0;
 }
 graphnode .__outputs__ {
     flex-direction: column;
@@ -1432,8 +1525,29 @@ graphnode .__outputs__ {
 }
 /* An output reads right-to-left: label, then the dot on the edge. */
 graphnode .__outputs__ { align-items: flex-end; }
+/* A collapsed node whose column has nothing left visible in it (every port blank, so
+ * `nodeport:blank { display: none }` just erased every row) — see `GraphNode.EMPTY_WHEN_COLLAPSED_CLASS`.
+ * Zeroing BOTH the grow and the section padding is what actually closes the gap: grow alone still leaves
+ * the column's own 4px-top/4px-bottom breathing room standing over nothing, which is the empty strip
+ * this was written to fix. `Split` (has an input, just not wired up) needed this as much as a genuinely
+ * portless column does — `NO_INPUTS_CLASS` alone never applied to it. */
+graphnode .__inputs__.__empty-collapsed__,
+graphnode .__outputs__.__empty-collapsed__ {
+    flex-grow: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
 
-graphnode .__controls__ { flex-direction: column; }
+/* padding-bottom is what exposes graph.css's darker `.__controls__` tint as a framing seam below the
+ * rows, same mechanism `.__ports__` uses on itself — see the note there. NOT padding-top too: `.__ports__`
+ * always precedes `.__controls__` (every node renders a ports section, even an empty one) and already
+ * spends its OWN padding-bottom on that shared edge, so a matching padding-top here stacked into a
+ * visible 2px band instead of the 1px seam everywhere else uses. */
+graphnode .__controls__ {
+    flex-direction: column;
+    gap-all: 1px;
+    padding-bottom: 1px;
+}
 graphnode .__control-row__ {
     flex-direction: row;
     align-items: center;
@@ -1448,11 +1562,32 @@ graphnode .__control-row__ {
     /* A floor, not a cap — the row holds whatever widget a node puts in it. */
     min-height: var(--graph-row-h);
 }
+/* Same root cause as `button text, dropdown text` and `graphnode .__title__` above. `GraphNode.
+ * addControl` reuses `NodePort.LABEL_CLASS` for this row's label — same class name, same visual
+ * language — but the ONLY rule that class had (`nodeport .__label__`) requires a `nodeport` ancestor,
+ * and a control row is not one. Reusing the class bought nothing here without also reaching it. */
+graphnode .__control-row__ > .__label__ {
+    flex-grow: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 /* A field widget takes the slack next to its label. `width: 0` is the basis it grows FROM — this
  * engine's flex-shrink defaults to 0, so a widget sized by its content would keep that width and a
- * text field with nothing typed in it collapses to a sliver. */
+ * text field with nothing typed in it collapses to a sliver.
+ *
+ * `min-width` is what actually keeps it from collapsing, though, not the `flex-grow` — a zero flex
+ * BASIS contributes nothing to `graphnode`'s own max-content sizing (the exact trap this file's own
+ * comments document repeatedly), so a node with nothing else demanding width settled at its bare floor
+ * and handed the dropdown whatever sliver was left AFTER the label — 11px measured, for a "Space"
+ * control whose chevron alone is 8px. `min-width` is a real, stated floor and DOES count toward that
+ * sizing pass, which is the whole difference: enough for a short-to-medium option ("World", "Object")
+ * plus the chevron plus a little breathing room, without being so wide it makes trivial dropdowns
+ * (a boolean's two-word choice) look padded. */
 graphnode .__control-row__ textfield,
-graphnode .__control-row__ dropdown { width: 0; flex-grow: 1; }
+graphnode .__control-row__ dropdown { width: 0; min-width: 50px; flex-grow: 1; }
 /* Since P6.1.8 step 7: NUMBER/TEXT/ENUM/BOOLEAN resolve to a bare `textfield`/`dropdown`/`checkbox`
  * tag same as always (a `ConfigControl` composed of exactly one, styled the same way), but VECTOR
  * (`VectorControl`) is a real composite — its own tag is `vectorcontrol`, not `textfield` — so the
@@ -1523,9 +1658,20 @@ graphnode .__config-control__.__color__ .__swatch__ {
     height: var(--graph-ctrl-h);
     min-height: var(--graph-ctrl-h);
 }
-/* Type size for the row and everything in it. On the controls as well as the row because
- * `* { font-size: 10 }` at the top of this file gives every element a SPECIFIED size, and a specified
- * value beats an inherited one — the same trap `colorselector` documents at length. */
+/* Type size for every PORT row and every CONTROL row, and everything inside each. `* { font-size: 10 }`
+ * at the top of this file gives every element a SPECIFIED size, and a specified value beats an inherited
+ * one, so nothing here can just inherit it off `graphnode` — the same trap `colorselector` documents at
+ * length. This used to be restated for `.__control-row__` only, which is why a theme-less node's port
+ * labels ("Time(1)", "A", "B") rendered at the universal 10 instead of the intended 6, didn't fit their
+ * tight boxes, and were silently eaten by `text-overflow: ellipsis` — invisible whenever a theme sheet
+ * (`ore.css`) happened to be loaded too and contributed its own broader font-size rule, and completely
+ * broken without one. NOT `.__title__` here — graph.css already states that one at its own size (9,
+ * bigger than the body text), and restating a SECOND number for the same element at the same specificity
+ * just makes the two fight over source order instead of one obviously winning. */
+graphnode nodeport,
+graphnode nodeport text,
+graphnode nodeport textfield,
+graphnode nodeport dropdown,
 graphnode .__control-row__,
 graphnode .__control-row__ text,
 graphnode .__control-row__ textfield,
@@ -1533,22 +1679,34 @@ graphnode .__control-row__ dropdown,
 graphnode .__control-row__ button {
     font-size: var(--graph-font);
 }
+/* Stated here too, matching graph.css's OWN size (9) rather than a different number, so a theme-less
+ * node's title is never at the mercy of which of the two same-specificity rules happens to load last. */
+graphnode .__title__ {
+    font-size: 9;
+}
 
 /* The preview slot has a height even while empty, because 6.2.7 fills it with a render and a node
  * that changed size the moment previews arrived would move every wire in the graph. */
-/* Tall enough to be roughly square against the 134px min-width, because the render target IS square
- * and the thumbnail is drawn letterboxed inside this box. At 78px a sphere was a wide ellipse — the
- * picture was never wrong, the box it was stretched into was. */
-graphnode .__preview__ { height: 128px; }
+/* Tall enough to be roughly square, because the render target IS square and the thumbnail is drawn
+ * letterboxed inside this box. At 78px a sphere was a wide ellipse — the picture was never wrong, the
+ * box it was stretched into was.
+ *
+ * `min-width` matching that height is what keeps a preview-bearing node from letterboxing now that
+ * `graphnode`'s own floor is a bare 96px (shrink-to-content is the point, for the nodes that have
+ * nothing this wide in them) — a node with a preview genuinely NEEDS 133px, and this is what asks for
+ * it: a child's own min-width contributes to its column parent's max-content sizing, so the node grows
+ * to fit this slot exactly the way it grows to fit a long port label. */
+graphnode .__preview__ { height: 133px; min-width: 133px; }
 /* The rendered thumbnail fills its slot. Explicit because the slot is a flex COLUMN with the project's
  * flex-shrink: 0 default, so a child with no size of its own would lay out at zero and paint nothing —
  * which is indistinguishable from a preview that has not rendered yet. */
 graphnode .__preview__ .__preview-image__ { width: 100%; height: 100%; }
 
-/* Unity's rule, and the reason collapse is worth having: a collapsed node is its title bar plus the
- * wires that actually attach to it. `nodeport:blank` is "unconnected" — see NodePort.isBlank(). */
-graphnode.__collapsed__ .__controls__,
-graphnode.__collapsed__ .__preview__,
+/* Collapse folds the PORT COLUMN only — unconnected ports (`nodeport:blank`, see NodePort.isBlank())
+ * disappear so a collapsed node is its title bar plus the wires that actually attach to it. Controls and
+ * the preview are deliberately NOT in this list: they are the node's own configured state, not a wiring
+ * affordance, and hiding them made the chevron double as "hide my color picker" — a second, unrelated
+ * meaning nobody asked this control to carry. */
 graphnode.__collapsed__ nodeport:blank { display: none; }
 
 nodeport {
@@ -1837,6 +1995,20 @@ colorselector text,
 colorselector textfield {
     font-size: 6;
 }
+/* Restated at `.__channel-row__`/`.__hex-row__` specificity (12) for the same reason `.__side__
+ * dropdown`/`.__channel-row__ textfield`'s `flex-grow: 0` is restated below: `ColorControl` opens this
+ * picker from inside `.__config-control__.__color__`, and promotion moves the picker's TAFFY parent to
+ * the top layer but never its DOM parent — so the inspector kit's own `.__config-control__ text,
+ * .__config-control__ textfield { font-size: var(--cfg-font) }` (specificity 11) still reaches every
+ * label and value box in here. 11 beat the plain rule above (specificity 2) and doubled every channel
+ * row's font size, which is what actually blew the row heights, gaps and thumb-fit out of tune — not a
+ * missing size anywhere, a WON size fight. 12 > 11 settles it regardless of which ancestor opened this. */
+colorselector .__channel-row__ text,
+colorselector .__channel-row__ textfield,
+colorselector .__hex-row__ text,
+colorselector .__hex-row__ textfield {
+    font-size: 6;
+}
 
 /* Swatch pair on top, wheel filling what is left. */
 colorselector .__left__ {
@@ -1944,6 +2116,8 @@ colorselector .__side__ dropdown {
     align-self: flex-end;
     flex-grow: 0;
     width: 35px;
+    /* Same defence as `.__channel-row__`'s slider/textfield — see that comment. */
+    min-width: 0;
     height: 9px;
     min-height: 9px;
     padding-left: 3px;
@@ -2031,8 +2205,16 @@ colorselector .__channel-row__ text {
  * content box, so at value 0 half of it overhangs to the left. Anything larger strands the thumb short
  * of the track's end (the base rule's 5px left a visible strip of track unreachable at both extremes);
  * anything smaller lets it hang past the border. */
+/* `min-width: 0` is a DEFENCE, same idiom as `.__side__ dropdown`/`.__channel-row__ textfield`'s
+ * `flex-grow: 0` below: `graphnode .__control-row__ textfield, ... dropdown { min-width: 50px }`
+ * (added so a node's own control-row fields stop collapsing to a sliver) matches this element too when
+ * the picker opens from a node's control row — promotion moves the picker's Taffy parent, not its DOM
+ * parent, so the cascade reaches in exactly as if it were still sitting in the node. That rule ties this
+ * one on specificity and neither states `min-width` first, so without restating it here the 50px floor
+ * won by default and inflated every channel track. */
 colorselector .__channel-row__ slider {
     width: 0;
+    min-width: 0;
     flex-grow: 1;
     height: 9px;
     padding-left: 1.5px;
@@ -2076,8 +2258,10 @@ colorselector .__channel-row__ slider .__thumb__ {
  * the colour is stored as 8 bits, 1/255 is about 0.0039, so two decimals cannot round-trip a byte.
  * At 17px the leading "0." was the part that went, and a field reading ",690" looks like a stray comma
  * rather than like clipping — so it fails silently, which is the worst way for a number to be wrong. */
+/* `min-width: 0` is the same defence as `.__channel-row__ slider`'s above — see that comment. */
 colorselector .__channel-row__ textfield {
     width: 20px;
+    min-width: 0;
     height: 9px;
     padding-all: 2px;
     flex-grow: 0;
@@ -2092,8 +2276,10 @@ colorselector .__hex-row__ {
 }
 /* Wider than a channel field, because it holds the whole colour — but eight digits plus a possible
  * leading '#' is its entire vocabulary, so it stops there rather than taking whatever is left. */
+/* `min-width: 0` is the same defence as `.__channel-row__`'s slider/textfield above — see that comment. */
 colorselector .__hex-row__ textfield {
     width: 35px;
+    min-width: 0;
     height: 9px;
     padding-all: 2px;
     flex-grow: 0;
@@ -2258,11 +2444,12 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
 .__config-control__.__boolean__ checkbox:checked:hover .__mark__ { background: #3A3A3A; }
 
 /* ── Colour ─────────────────────────────────────────────────────────────────────────────────────
- * Ported from graphnode's `.__color-swatch__` (graph.css) — a colour bar with its alpha as a strip
- * beneath — scaled to the kit's row height instead of the node's. The swatch itself, not
- * `.__config-control__`, carries the height: ColorControl wraps nothing else, so the control's own
- * box auto-sizes to it, the same way every other composite here sizes to its parts rather than being
- * told a number directly. */
+ * A colour bar with its alpha as a strip beneath — deliberately its own summary rendering, not
+ * ColorSelector's checkerboard-composite swatch. A row you read at a glance wants a real proportional
+ * alpha bar; the picker it opens is a session you look closely at, and gets the checkerboard there
+ * instead. The swatch itself, not `.__config-control__`, carries the height: ColorControl wraps nothing
+ * else, so the control's own box auto-sizes to it, the same way every other composite here sizes to its
+ * parts rather than being told a number directly. */
 .__config-control__.__color__ .__swatch__ {
     width: 100%;
     height: var(--cfg-ctrl-h);
@@ -2386,6 +2573,21 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     margin-top: 2px;
     margin-bottom: 1px;
 }
+/* Ellipsis, not wrap. The default pixel font is narrow enough that "Advanced" always fit the band
+ * regardless — width:0/flex-grow is what actually reserves the shrink-to space text-overflow clips
+ * into, `flex-shrink:1` is what allows it to, and `white-space:nowrap` is what makes text-overflow
+ * mean anything at all (ellipsis only applies to text that cannot wrap — see UIText's own note). A
+ * wider theme font (ore.css's MinecraftRegular, vs. the default's pixel font) no longer fit, and
+ * without this the title wrapped onto a second line instead of clipping — caught on ore.css, not on
+ * default.css, because only ore.css's font is wide enough to overflow "Advanced" in a 130px panel. */
+.__configurator-group__ > .__head__ > .__title__ {
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .__configurator-group__ > .__head__ > .__arrow__ {
     width: 8px;
     height: 8px;
@@ -2450,8 +2652,16 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     padding-left: var(--cfg-pad-x);
     padding-right: var(--cfg-pad-x);
 }
+/* Same fix, same reason as the group head's title just above — a header IS full width, so there is no
+ * label column to have already solved this the way an ordinary row's `.__label__` does. */
 .__config-control__.__header__ .__title__ {
     font-size: var(--cfg-font);
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ── Arrays ─────────────────────────────────────────────────────────────────────────────────────
@@ -2466,6 +2676,17 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     padding-left: var(--cfg-pad-x);
     background: var(--cfg-list-head);
     color: var(--cfg-label-text);
+}
+/* Same fix, same reason as the header's and the group head's titles — a third full-width caption with
+ * no label column to have inherited it from. Missed the first pass because it has no `.__title__`
+ * class to search for; `ArrayControl` just drops a bare `text` in here. */
+.__config-control__.__array__ > .__head__ > text {
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .__config-control__.__array__ > .__body__ {
     background: var(--cfg-list-body);

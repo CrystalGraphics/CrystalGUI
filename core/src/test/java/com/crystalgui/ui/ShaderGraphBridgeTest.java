@@ -127,7 +127,7 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         NodeData master = document.addNode(library.get(ShaderGraphBridge.MASTER_TYPE).create(400f, 40f));
 
         document.link(colour, "Out", multiply, "A");
-        document.link(time, "Out", multiply, "B");
+        document.link(time, "Time", multiply, "B");
         document.link(multiply, "Out", master, CgMasterNode.BASE_COLOR);
 
         CgShaderEmitter.Result result = ShaderGraphBridge.compile(
@@ -140,7 +140,7 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         // the thing a user would otherwise have to know to do by hand.
         assertTrue(result.source(), result.source().contains("vec4 node_" + multiply.id() + "_Out;"));
         assertTrue("the scalar side was promoted",
-                result.source().contains("vec4(node_" + time.id() + "_Out)"));
+                result.source().contains("vec4(node_" + time.id() + "_Time)"));
         assertTrue("and it reaches the output",
                 result.source().contains("fragColor = node_" + multiply.id() + "_Out;"));
     }
@@ -179,6 +179,54 @@ public class ShaderGraphBridgeTest extends UiTestBase {
 
         assertFalse(result.ok());
         assertTrue(result.errors().get(0), result.errors().get(0).contains("Output"));
+    }
+
+    // ── Multiple outputs (6.3.6's real remaining blocker, now proven through the full bridge) ────
+
+    /**
+     * <b>{@code Split}'s four outputs show up as four editor ports, and two of them wire to two
+     * different downstream nodes independently.</b>
+     *
+     * <p>{@code CgGraphCompilerTest} already proves the raw compiler handles this; what had no
+     * coverage is the EDITOR half — {@code ShaderGraphBridge.asNodeType} turning
+     * {@link com.crystalgraphics.shadergraph.CgShaderNode#outputs()} into {@code NodeType} ports, and
+     * {@code GraphDocument.link} accepting two edges out of the same node on two different port ids.
+     * Nothing before {@code cg:channel/split} existed for either of those to have ever run against a
+     * real multi-output node.</p>
+     */
+    @Test
+    public void splitsFourOutputsBecomeFourPortsAndWireIndependently() {
+        NodeTypeRegistry library = library();
+        NodeType split = library.get("cg:channel/split");
+        assertNotNull(split);
+        assertEquals("one input, four outputs", 5, split.ports().size());
+        assertEquals(4, split.ports().stream()
+                .filter(p -> p.direction() == com.crystalgui.graph.PortDirection.OUTPUT).count());
+
+        GraphDocument document = new GraphDocument();
+        document.setTypeCompatibility(ShaderGraphBridge.GLSL_PROMOTION);
+        NodeData colour = document.addNode(library.get("cg:input/basic/color").create(0f, 0f));
+        NodeData splitNode = document.addNode(split.create(200f, 0f));
+        NodeData multiply = document.addNode(library.get("cg:math/multiply").create(400f, 0f));
+        NodeData master = document.addNode(library.get(ShaderGraphBridge.MASTER_TYPE).create(600f, 0f));
+
+        document.link(colour, "Out", splitNode, "In");
+        // R and G each feed a DIFFERENT input of the same downstream node — two edges out of the same
+        // source node, on two different output ports, which is exactly what a single-output node could
+        // never produce.
+        document.link(splitNode, "R", multiply, "A");
+        document.link(splitNode, "G", multiply, "B");
+        document.link(multiply, "Out", master, CgMasterNode.BASE_COLOR);
+
+        CgShaderEmitter.Result result = ShaderGraphBridge.compile(
+                document, CgShaderNodeRegistry.builtins(), new CgMasterNode());
+
+        assertTrue(String.join("\n", result.errors()), result.ok());
+        assertNotNull("the generated file must parse", CgShaderParser.parse(result.source()));
+        assertTrue("R reaches A", result.source().contains(
+                "node_" + multiply.id() + "_Out = node_" + splitNode.id() + "_R * "));
+        assertTrue("G reaches B, not R's line",
+                result.source().contains("* node_" + splitNode.id() + "_G;"));
     }
 
     /**

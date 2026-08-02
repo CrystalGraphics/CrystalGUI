@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.graph;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.PortDirection;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -93,6 +94,10 @@ public class NodePort extends UIElement {
      */
     private int connectionCount;
 
+    /** Fires whenever {@link #isBlank()} flips — {@link GraphNode} listens, to know when a collapsed
+     * column has nothing left in it to show. See {@link #setConnectionCount}. */
+    public final Signal.Action onBlankChanged = new Signal.Action();
+
     /**
      * The document's {@code PortSpec.portId} for this port — what an {@code EdgeData} points at.
      *
@@ -121,6 +126,10 @@ public class NodePort extends UIElement {
         this.label = new UIText(displayLabel(name, type));
         label.addClass(LABEL_CLASS);
         label.setHitTest(false);
+        // Same reasoning as `GraphNode.title`'s identical call: this label has to drive its column's
+        // (and therefore the node's own) growth, and the auto-detect heuristic races the ancestor
+        // chain's first, not-yet-converged layout pass — see `UIText.forceSelfSizeWidth()`.
+        label.forceSelfSizeWidth();
 
         this.inlineEditor = direction.isInput() ? type.createInlineEditor() : null;
         if (inlineEditor != null) inlineEditor.addClass(EDITOR_CLASS);
@@ -232,6 +241,7 @@ public class NodePort extends UIElement {
             onStyleChanged();
             invalidateStyleMatch();
             notifyStateChanged();
+            onBlankChanged.emit();
         }
     }
 

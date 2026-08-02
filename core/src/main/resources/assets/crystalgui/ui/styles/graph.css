@@ -142,7 +142,12 @@ graphnode .__title-bar__ {
     border-top-right-radius-y: 4px;
 }
 graphnode .__title__ { font-size: 9; }
-graphnode .__collapse__ { color: #9A9A9A; }
+/* Hidden until the node itself is hovered — NOT `:checked`/selected, which is a held state a node can
+ * sit in for the whole session, while the chevron is a hover affordance like a window's own close button.
+ * Tying it to selection would leave it permanently on for whatever you clicked last and permanently off
+ * for everything else, which is backwards from "reveal on demand". */
+graphnode .__collapse__ { color: #9A9A9A; opacity: 0; }
+graphnode:hover .__collapse__ { opacity: 1; }
 graphnode .__collapse__:hover { color: #E0E0E0; }
 
 /* The fill sits on the two COLUMNS, not on the band holding them, because the two sides get different
@@ -154,18 +159,31 @@ graphnode .__outputs__ { background-color: #35353576; }
  * section below, between the columns). Darker than either panel so the seams read as seams. */
 graphnode .__ports__ { background-color: #26262676; }
 
-graphnode .__controls__ { background: #56565676; }
-graphnode .__control-row__ { color: #B4B4B4; }
+/* Same trick as `.__ports__` above, not a border — this engine has no per-edge `border-*-width`
+ * property (only the 4-edge `border-width` shorthand and its own `border-width-{edge}` longhands), so a
+ * `border-top-width`/`border-bottom-width` declaration is silently unrecognized and paints nothing. The
+ * real mechanism is: the CONTAINER (`.__controls__`) is the darker tone, each ROW gets its own lighter
+ * fill, and `.__controls__`'s `padding-top`/`padding-bottom` (default.css) plus its 1px `gap-all`
+ * (already there, for the multi-row case) expose the darker tone as a frame around them — exactly how
+ * `.__ports__`'s own 1px-darker-than-its-columns band reads as a seam. Before this, `.__controls__` and
+ * `.__control-row__` were the SAME flat colour, so there was nothing for that padding to expose: touching
+ * a differently-coloured preview read as a bare colour jump ("kissing") rather than a framed line. */
+graphnode .__controls__ { background: #26262676; }
+graphnode .__control-row__ {
+    background: #56565676;
+    color: #B4B4B4;
+}
 
 graphnode .__preview__ {
     /* OPAQUE, unlike everything above it: a preview is a rendered image, and something showing through
        it is a second picture mixed into the one it exists to display. So the sampled colour goes in
        flat, with no solving. */
     background: #313131;
-    /* Its seam with the controls row. Both are siblings of a node that paints nothing, so a gap between
-       them would show bare canvas — a top border belongs to THIS element, so it paints. */
-    border-top-width: 1px;
-    border-color: var(--node-seam);
+    /* Its seam with `.__controls__` above is now that element's own darker padding-frame — see the note
+     * there. `border-top-width` was tried here first and does nothing: this engine has no per-edge
+     * `border-*-width` property, only the 4-edge `border-width` shorthand and `border-width-{edge}`
+     * longhands, so it silently parsed to a no-op. Left as history in the sibling comment, not repeated
+     * here. */
     border-bottom-left-radius-x: 4px;
     border-bottom-left-radius-y: 4px;
     border-bottom-right-radius-x: 4px;
@@ -386,6 +404,12 @@ colorselector .__swatches__ {
 graphnode .__config-control__.__color__ .__swatch__ {
     outline: 1px var(--node-hairline);
     outline-offset: 0px;
+    /* `Color` has no preview to lean on for width the way a previewed node does, but its swatch is
+     * real content the same way a long port label is — `width: 100%` alone contributes nothing to the
+     * node's own max-content sizing (it's a zero flex basis, same trap `graphnode`'s own comment
+     * documents), so without an explicit min-width here `Color` would shrink to the bare 40px floor
+     * along with every other preview-less node. It should not: it has a control, `Time`/`Split` do not. */
+    min-width: 133px;
 }
 /* NO outline on the thumb. An outline is stroked on BOTH sides, so a 1px edge on a 1px thumb is 3px of
  * apparent width — the outline was the whole of what remained after the thumb itself was already a

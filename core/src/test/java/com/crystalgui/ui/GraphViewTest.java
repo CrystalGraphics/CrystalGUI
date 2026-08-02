@@ -368,11 +368,13 @@ public class GraphViewTest extends UiTestBase {
     }
 
     /**
-     * <b>Collapsing hides unconnected ports, not just the body.</b>
+     * <b>Collapsing folds the PORT COLUMN only, not controls or the preview.</b>
      *
-     * <p>Unity's rule, and the one that makes the feature worth having: a collapsed node in a busy graph
-     * should be a title bar plus the wires that actually attach to it. Hiding only the body leaves a
-     * node nearly as tall as before, which is the version that feels broken.</p>
+     * <p>Unity's rule for ports, and the one that makes the feature worth having: a collapsed node in a
+     * busy graph should show the wires that actually attach to it and nothing else in that column. But
+     * controls and the preview are the node's own configured state, not a wiring affordance — collapsing
+     * used to hide them too, which made the chevron double as "hide my colour picker", a second, unrelated
+     * meaning nobody asked it to carry. See {@code GraphNode}'s collapse CSS for the same note.</p>
      */
     @Test
     public void collapsingHidesUnconnectedPortsButKeepsWiredOnes() {
@@ -391,7 +393,8 @@ public class GraphViewTest extends UiTestBase {
         assertEquals("an unconnected port goes", TaffyDisplay.NONE, displayOf(bare));
         assertNotEquals("a wired one stays, or its wire would end in mid-air",
                 TaffyDisplay.NONE, displayOf(wired));
-        assertEquals(TaffyDisplay.NONE, displayOf(preview));
+        assertNotEquals("the preview is not a wiring affordance — collapse must not fold it",
+                TaffyDisplay.NONE, displayOf(preview));
 
         b.setCollapsed(false);
         frame();
@@ -535,11 +538,14 @@ public class GraphViewTest extends UiTestBase {
         float narrow = shortNames.getRuntimeCache().getWidth();
         float wide = longNames.getRuntimeCache().getWidth();
 
-        // Once the inline port editors arrived the floors came down (graphnode 96px, nodeport 43px), and
+        // Once the inline port editors arrived the floors came down (graphnode 40px, nodeport 43px), and
         // a two-port node is now sized by its COLUMNS rather than pinned to the floor — so this asserts a
         // band, not an exact value. The floor is the lower bound it may not go under; the upper bound is
-        // what keeps "short" meaningfully narrower than the long-name case below.
-        assertTrue("short names stay narrow: " + narrow, narrow >= 96f && narrow <= 115f);
+        // what keeps "short" meaningfully narrower than the long-name case below. `graphnode`'s own floor
+        // dropped from 96 to 40 once a no-preview node was made to shrink to its real content (Unity's
+        // own rule — see the CSS comment on `graphnode`), so a short-port node like this one can now
+        // legitimately settle below the old 96px number without being under-sized.
+        assertTrue("short names stay narrow: " + narrow, narrow >= 40f && narrow <= 115f);
         assertTrue("a long port name must widen the node, not wrap inside it: " + wide, wide > narrow);
         assertTrue("but never past the ceiling: " + wide, wide <= 320f);
 
