@@ -45,7 +45,10 @@ public class NodeControlKitTest extends UiTestBase {
 
     /** From the `--graph-ctrl-h` token. Restated because a test that reads its own expectation out of
      * the sheet asserts only that the sheet is self-consistent, which it always is. */
-    private static final float CTRL_H = 14f;
+    // --graph-ctrl-h: 14px was sized for the control kit's old 6px text; it became 18px alongside
+    // --graph-font going from 6 to 9 (matching the title), so the same box wouldn't crowd the bigger
+    // text against its own chevron/mark.
+    private static final float CTRL_H = 18f;
     private static final float ROW_H = 25f;
 
     private UIWindow window;
@@ -118,6 +121,47 @@ public class NodeControlKitTest extends UiTestBase {
         }
         assertTrue("control kinds off the kit height — add the widget's tag to the kit selector in "
                 + "default.css:\n  " + String.join("\n  ", wrong), wrong.isEmpty());
+    }
+
+    /**
+     * <b>One root cause, three symptoms.</b> A node's title bar, a control row's label, and every
+     * {@code Button}/{@code Dropdown}'s own selected-value text all wrapped onto a second line under
+     * ore.css's wider {@code MinecraftRegular.otf} — "Position" as "Positio/n", "Space" as "Sp/ac/e",
+     * a dropdown's "World" or "View" cut mid-word. All three trace to the same gap: none of them ever
+     * had {@code flex-shrink}/{@code white-space}/{@code text-overflow} set, because the bundled pixel
+     * font is narrow enough that a too-narrow box never actually happened before. Fixed as one pattern
+     * in three places rather than three unrelated bugs — this test pins all three so a fourth spot
+     * doesn't need its own screenshot to find.
+     */
+    @Test
+    public void labelsClipInsteadOfWrappingEverywhereTheSameGapExisted() {
+        openWindow();
+        GraphNode node = new GraphNode("A Rather Long Node Title");
+        node.addControl("A Rather Long Control Label", new UIElement());
+        com.crystalgui.ui.elements.Dropdown dropdown = new com.crystalgui.ui.elements.Dropdown("");
+        dropdown.addOption("A Rather Long Selected Value").select(0);
+        root.addChild(node);
+        root.addChild(dropdown);
+        window.updateWithoutPainting();
+
+        UIElement title = node.querySelectorAll(".__title__").get(0);
+        UIElement controlLabel = node.querySelectorAll(".__control-row__ .__label__").get(0);
+        // Not a bare "text" query — the dropdown's own (closed) menu holds MenuItems, each a Button
+        // with its own internal text, so the first match is not reliably the dropdown's own label.
+        UIElement dropdownLabel = dropdown.querySelectorAll("text").stream()
+                .filter(e -> e.getParent() == dropdown)
+                .findFirst().orElseThrow();
+
+        for (UIElement label : List.of(title, controlLabel, dropdownLabel)) {
+            assertEquals("must not wrap onto a second line: " + label,
+                    com.crystalgui.style.property.visual.text.WhiteSpace.NOWRAP,
+                    label.getStyle().getComputed(
+                            com.crystalgui.style.property.StylePropertyRegistry.WHITE_SPACE));
+            assertEquals("must clip with an ellipsis instead: " + label,
+                    com.crystalgui.style.property.visual.text.TextOverflow.ELLIPSIS,
+                    label.getStyle().getComputed(
+                            com.crystalgui.style.property.StylePropertyRegistry.TEXT_OVERFLOW));
+        }
     }
 
     /** The row is a FLOOR that holds whatever it is given, never a cap that crops it. */

@@ -64,6 +64,23 @@ public class GraphNode extends UIElement {
     public static final String COLLAPSE_CLASS = "__collapse__";
     public static final String PORTS_CLASS = "__ports__";
     public static final String INPUTS_CLASS = "__inputs__";
+    /** On {@link #INPUTS_CLASS} when the node has zero input ports — see {@link #addPort}. */
+    public static final String NO_INPUTS_CLASS = "__no-inputs__";
+    /** On {@link #INPUTS_CLASS} or {@link #OUTPUTS_CLASS} whenever the node is collapsed AND every port
+     * in that column is blank — see {@link #recomputeEmptyOnCollapse}. Distinct from
+     * {@link #NO_INPUTS_CLASS}: that is structural (this node was never given an input at all) and
+     * permanent; this is connection state and only matters while collapsed — a node like {@code Split}
+     * genuinely has an input port, it is simply unconnected right now, and {@code nodeport:blank} already
+     * hides its row when folded. Without this the column that row sat in keeps its width/padding for a
+     * row that is no longer there. */
+    public static final String EMPTY_WHEN_COLLAPSED_CLASS = "__empty-collapsed__";
+    /** On {@link #PORTS_CLASS} when BOTH columns carry {@link #EMPTY_WHEN_COLLAPSED_CLASS} — see
+     * {@link #recomputeEmptyOnCollapse}. */
+    public static final String PORTS_EMPTY_CLASS = "__ports-empty__";
+    /** On {@link #PORTS_CLASS} whenever the input column has nothing visible in it (structurally
+     * portless, or collapsed with every input blank) — zeroes `.__ports__`'s own column gap, which
+     * otherwise stood as a stray 1px left edge in front of a column with nothing to its left. */
+    public static final String NO_INPUT_GAP_CLASS = "__no-input-gap__";
     public static final String OUTPUTS_CLASS = "__outputs__";
     public static final String CONTROLS_CLASS = "__controls__";
     public static final String CONTROL_ROW_CLASS = "__control-row__";
@@ -102,6 +119,9 @@ public class GraphNode extends UIElement {
 
     /** @see #preview() */
     private boolean hasPreview;
+
+    /** @see #addControl(UIElement) */
+    private boolean hasControls;
 
     private boolean selected;
 
@@ -143,6 +163,13 @@ public class GraphNode extends UIElement {
         title = new UIText(titleText);
         title.addClass(TITLE_CLASS);
         title.setHitTest(false);
+        // The title is what has to drive `graphnode`'s own growth for a short-port node ("Time", "UV")
+        // whose port rows alone would settle narrower than the title needs — see the note on
+        // `forceSelfSizeWidth()`. Left to auto-detect, this raced the node's own not-yet-converged first
+        // layout pass and intermittently latched the wrong (non-self-sizing) mode, which is why the
+        // truncation this fixes only ever showed up on a page's FIRST open and never again once its
+        // elements were torn down and rebuilt.
+        title.forceSelfSizeWidth();
         collapseToggle.addClass(COLLAPSE_CLASS);
         // A real vector chevron (overlay: shape("chevron-down") in default.css) rather than a text
         // glyph — same reasoning as ConfiguratorGroup's identical arrow, which this used to imitate
@@ -162,11 +189,13 @@ public class GraphNode extends UIElement {
 
         addInternalChild(titleBar);
         addInternalChild(ports);
-        addInternalChild(controls);
-        // NOT the preview: it is attached by the first preview() call. An always-present slot means a
-        // node with nothing to show still reserves 78px of empty box — which is what the first build
-        // looked like, four nodes each with a large dark hole where a render will one day be. A node
-        // that never asks for a preview should be the height of its ports.
+        // NOT controls, NOT preview: both are attached lazily, by the first addControl()/preview() call
+        // — see each. An always-present EMPTY slot still contributes a box: `.__controls__` carries its
+        // own darker seam-tint and a real `padding-bottom` (see default.css), so a node with zero controls
+        // used to render that padding as a phantom 1px band stacked on top of `.__ports__`'s own bottom
+        // seam — a stray 2px gap in front of `Multiply`'s preview, which has no controls at all. Preview
+        // learned this lesson first (a node with nothing to show used to still reserve 78px of empty box);
+        // controls just never got the same treatment until the phantom seam surfaced it.
 
         collapseToggle.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             setCollapsed(!collapsed);
@@ -352,6 +381,17 @@ public class GraphNode extends UIElement {
             outputPorts.add(port);
             outputs.addInternalChild(port);
         }
+        // An even 50/50 split matches Unity on every node that HAS inputs — but an inputless node
+        // (UV, Position, Normal Vector, Time) has nothing in the input column to justify it a half, and
+        // an even split there shows a bare empty panel beside Out. `NO_INPUTS_CLASS` is what lets
+        // the sheet zero the input column's grow ONLY in that one case, without the sheet needing to
+        // count children (which its selector subset cannot do).
+        if (inputPorts.isEmpty()) inputs.addClass(NO_INPUTS_CLASS);
+        else inputs.removeClass(NO_INPUTS_CLASS);
+        // Connection state can flip long after this port is added, and it has to be re-checked every time
+        // it does — see recomputeEmptyOnCollapse.
+        port.onBlankChanged.connect(this::recomputeEmptyOnCollapse);
+        recomputeEmptyOnCollapse();
         // The document has to learn about it, because ports may be added AFTER the node joins the view —
         // `addNode(node, x, y); node.addOutput(...)` is the order 6.2.3's own examples use. Deriving the
         // NodeData once at add time captured whatever ports existed at that instant, so a port declared
@@ -403,6 +443,7 @@ public class GraphNode extends UIElement {
      * {@code Space [ World v ]} row in the reference.
      */
     public GraphNode addControl(String labelText, UIElement widget) {
+        ensureControlsAttached();
         UIElement row = new UIElement();
         row.addClass(CONTROL_ROW_CLASS);
         // A widget may decline the label, and the decision belongs to the WIDGET rather than to this
@@ -413,6 +454,8 @@ public class GraphNode extends UIElement {
             UIText rowLabel = new UIText(labelText);
             rowLabel.addClass(NodePort.LABEL_CLASS);
             rowLabel.setHitTest(false);
+            // Same reasoning as `GraphNode.title`/`NodePort.label` — see `UIText.forceSelfSizeWidth()`.
+            rowLabel.forceSelfSizeWidth();
             row.addChild(rowLabel);
         }
         row.addChild(widget);
@@ -422,8 +465,18 @@ public class GraphNode extends UIElement {
 
     /** A widget occupying the whole control row, for something that needs no label. */
     public GraphNode addControl(UIElement widget) {
+        ensureControlsAttached();
         controls.addInternalChild(widget);
         return this;
+    }
+
+    /** See {@link #hasControls}. Inserted right after {@link #ports} — not appended — so a caller free to
+     * call {@link #preview()} before its first {@code addControl} still ends up with the fixed visual
+     * order (title, ports, controls, preview) rather than whichever was asked for first. */
+    private void ensureControlsAttached() {
+        if (hasControls) return;
+        hasControls = true;
+        insertInternalChildAt(controls, ports.getSiblingIndex() + 1);
     }
 
     /**
@@ -467,8 +520,48 @@ public class GraphNode extends UIElement {
         this.collapsed = value;
         if (value) addClass(COLLAPSED_CLASS);
         else removeClass(COLLAPSED_CLASS);
+        recomputeEmptyOnCollapse();
         onCollapsedChanged.emit(value);
         return this;
+    }
+
+    /** See {@link #EMPTY_WHEN_COLLAPSED_CLASS}. Run on every collapse toggle and every port blank-state
+     * change, since either can flip whether a column's visible rows just went to zero. An empty list is
+     * vacuously all-blank, so this also covers a genuinely portless column with no special case. */
+    private void recomputeEmptyOnCollapse() {
+        setEmptyOnCollapse(inputs, inputPorts);
+        setEmptyOnCollapse(outputs, outputPorts);
+        // Visibly empty EITHER because there is structurally nothing here (a portless column, permanent)
+        // OR because collapse just hid every row in it — `.__ports__`'s own `gap-all: 1px` runs between
+        // the two columns regardless of either one's width, so a genuinely 0-width input column still
+        // left 1px of `.__ports__`'s darker tint standing before the output content, reading as a stray
+        // left edge on an otherwise inputless row (`Position`'s `Out` row is the case that surfaced it).
+        boolean inputsVisiblyEmpty = visiblyEmpty(inputPorts);
+        boolean outputsVisiblyEmpty = visiblyEmpty(outputPorts);
+        if (inputsVisiblyEmpty) ports.addClass(NO_INPUT_GAP_CLASS);
+        else ports.removeClass(NO_INPUT_GAP_CLASS);
+        // Both columns empty leaves `.__ports__` itself with nothing in it but its own 1px-top/1px-bottom
+        // padding — the two seams default.css's own comment describes collapse into ONE two-tone band
+        // with nothing between them to divide, which is the extra "gap" a fully-collapsed, fully-blank
+        // node showed instead of Unity's single hairline. `__ports-empty__` lets the sheet collapse that
+        // padding to a single fixed-height line instead of losing the seam entirely — `.__ports__` still
+        // owns the only divider between the title bar and whatever comes next.
+        if (inputsVisiblyEmpty && outputsVisiblyEmpty) ports.addClass(PORTS_EMPTY_CLASS);
+        else ports.removeClass(PORTS_EMPTY_CLASS);
+    }
+
+    private boolean visiblyEmpty(List<NodePort> ports) {
+        return ports.isEmpty() || (collapsed && allBlank(ports));
+    }
+
+    private void setEmptyOnCollapse(UIElement column, List<NodePort> ports) {
+        boolean empty = collapsed && allBlank(ports);
+        if (empty) column.addClass(EMPTY_WHEN_COLLAPSED_CLASS);
+        else column.removeClass(EMPTY_WHEN_COLLAPSED_CLASS);
+    }
+
+    private static boolean allBlank(List<NodePort> ports) {
+        return ports.stream().allMatch(NodePort::isBlank);
     }
 
     /** @see #isChecked() */

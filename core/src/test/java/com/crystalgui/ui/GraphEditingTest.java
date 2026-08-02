@@ -245,9 +245,14 @@ public class GraphEditingTest extends UiTestBase {
         GraphNode elsewhere = node("Elsewhere", 260f, 40f);
         frame();
 
-        // Well inside both boxes: Under spans roughly (40..208, 40..80) and Over (60..228, 60..100),
-        // so a point on the edge of either proves nothing about which is in front.
-        Vector2f overlap = physicalOfWorld(100f, 70f);
+        // Derived from `over`'s own (later, on-top) bounds rather than a hardcoded point: `graphnode`'s
+        // width is content-fit (its floor dropped from a fixed 96px to 40px once no-preview nodes were
+        // made to shrink to their real size — see the CSS), so a literal pixel guess for "well inside
+        // both boxes" goes stale the moment either node's measured width changes. 5px in from `over`'s
+        // own top-left corner is guaranteed inside `over`, and — since `over` sits only 20px down-right
+        // of `under`'s own origin, well inside `under`'s floor in both axes — inside `under` too.
+        var overBounds = graph.worldBoundsOf(over);
+        Vector2f overlap = physicalOfWorld(overBounds.x() + 5f, overBounds.y() + 5f);
         assertTrue("the later node starts on top",
                 isInside(window.getHoveredElement(overlap.x(), overlap.y()), over));
 
