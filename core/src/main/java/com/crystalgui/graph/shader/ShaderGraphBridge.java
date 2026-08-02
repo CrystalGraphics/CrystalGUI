@@ -155,6 +155,10 @@ public final class ShaderGraphBridge {
                 return NodeField.Kind.BOOLEAN;
             case FLOAT:
             case INT:
+                // A dynamic port's literal default (Add/Multiply's "0.0"/"1.0") is always a plain scalar
+                // regardless of what the port eventually resolves to — Unity's own Add/Multiply show a
+                // plain float knob too, never something that changes shape before anything is wired.
+            case DYNAMIC:
                 return NodeField.Kind.NUMBER;
             default:
                 return null;

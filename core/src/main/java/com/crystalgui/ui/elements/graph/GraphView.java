@@ -17,6 +17,7 @@ import com.crystalgui.graph.TypeCompatibility;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -105,6 +106,15 @@ public class GraphView extends CanvasView implements UndoScope {
     private final Map<String, GraphNode> widgetsById = new LinkedHashMap<>();
 
     private final NodeWireLayer wireLayer;
+
+    /**
+     * One {@link PortDefaultEditor} per port that has ever had a {@link NodePort#getDefaultEditor()} —
+     * built once ({@link #discoverPortEditors}), kept for the port's whole lifetime, mounted and
+     * unmounted as it connects and disconnects. Doubles as the "have we seen this port's editor"
+     * discovery guard. See {@link PortDefaultEditor}'s own class javadoc for what it owns and why it is
+     * a class of its own rather than a handful of parallel maps here.
+     */
+    private final Map<NodePort, PortDefaultEditor> portEditors = new LinkedHashMap<>();
 
     /**
      * This document's history.
@@ -222,10 +232,16 @@ public class GraphView extends CanvasView implements UndoScope {
         }, false, true);
     }
 
-    /** Whether {@code target} is this graph's own node, or anything inside one. */
+    /** Whether {@code target} is this graph's own node, or anything inside one — or a floating
+     * default-value editor, which is neither: it is a plane child of its own, sitting beside its node
+     * rather than inside it (see {@link NodePort#getDefaultEditor()}). Without the second check, a press
+     * on one fell through as "empty canvas" and started a marquee under whatever the user was trying to
+     * type into — the exact conflict {@code NodePort} used to guard against back when this editor lived
+     * inside the port. */
     private boolean isInsideNode(@Nullable UIElement target) {
         for (UIElement element = target; element != null && element != this; element = element.getParent()) {
             if (element instanceof GraphNode) return true;
+            if (element.hasClass(NodePort.EDITOR_CLASS)) return true;
         }
         return false;
     }
@@ -253,6 +269,91 @@ public class GraphView extends CanvasView implements UndoScope {
      * caller should be setting. */
     public NodeWireLayer wireLayer() {
         return wireLayer;
+    }
+
+    // ── Port default editors ────────────────────────────────────────────────
+
+    /**
+     * Discovers newly bound port editors, mounts/repositions the ones currently on the plane, every
+     * frame.
+     *
+     * <p>Always ticking, regardless of {@link #setCullingEnabled}: a floating editor still has to track
+     * its port even in a huge graph where node culling is doing real work, so this cannot piggyback on
+     * {@link CanvasView#tickFrame}'s own early-out.</p>
+     */
+    @Override
+    public boolean tickFrame(float deltaSeconds) {
+        super.tickFrame(deltaSeconds);
+        discoverPortEditors();
+        for (PortDefaultEditor editor : portEditors.values()) {
+            if (editor.isMounted()) editor.reposition();
+        }
+        return true;
+    }
+
+    @Override
+    protected void onLayoutChanged() {
+        super.onLayoutChanged();
+        // super's own ensureTicking() only registers while culling is enabled — this view needs to tick
+        // unconditionally, for the reason tickFrame's javadoc gives. registerTicker is HashSet-backed, so
+        // calling it again every layout pass is idempotent rather than wasteful.
+        UIWindow window = getAttachedWindow();
+        if (window != null) window.registerTicker(this);
+    }
+
+    /**
+     * Finds ports whose {@link NodePort#getDefaultEditor()} has never been seen, builds a
+     * {@link PortDefaultEditor} for each, and wires it to follow its port's blank state from here on.
+     *
+     * <p>A per-tick scan over the (small) node set, the same shape as {@code ShaderGraphPreviews}'s own
+     * new-node discovery — there is no signal for "a port gained a default editor" any more than there
+     * was one for "a node was added", and for the same reason: a document-declared field can bind to its
+     * port at any point after the widget exists, not only at construction.</p>
+     */
+    private void discoverPortEditors() {
+        for (GraphNode node : nodes()) {
+            for (NodePort port : node.getInputPorts()) {
+                if (port.getDefaultEditor() == null || portEditors.containsKey(port)) continue;
+                PortDefaultEditor editor = new PortDefaultEditor(port, this);
+                portEditors.put(port, editor);
+                port.onBlankChanged.connect(() -> editor.setMounted(port.isBlank()));
+                editor.setMounted(port.isBlank());
+            }
+        }
+    }
+
+    /**
+     * Draws the stub joining {@code port}'s floating default editor to its own dot — called from
+     * {@link GraphNode#paintOverlay}, never invoked directly by anything on the plane. See
+     * {@link PortDefaultEditor#paintStub} for why the paint call has to originate from the TARGET node
+     * itself: {@code paintOverlay} is the only hook that runs after a node's own children and before its
+     * own outline, which is what makes "over the body, under the ring" possible at all — no sibling
+     * element, however it is z-ordered, can land between two steps of one other element's own atomic
+     * paint call.
+     *
+     * <p>A no-op when {@code port} has no mounted editor (connected, or no default at all) — the common
+     * case for most ports on most nodes, checked once via a map lookup rather than by every node walking
+     * its own ports' state.</p>
+     */
+    void paintPortEditorStub(CgUiPaintContext ctx, NodePort port) {
+        PortDefaultEditor editor = portEditors.get(port);
+        if (editor != null && editor.isMounted()) editor.paintStub(ctx);
+    }
+
+    /** Drops a port's default editor from the plane and forgets it entirely — called when the port's own
+     * node leaves the view, since {@link #detachNode} and {@link #load} otherwise have no way to reach a
+     * floating box or dot that was never their descendant. */
+    private void forgetPortEditor(NodePort port) {
+        PortDefaultEditor editor = portEditors.remove(port);
+        if (editor != null) editor.setMounted(false);
+    }
+
+    /** The {@link PortDefaultEditor} tracked for {@code port}, or {@code null} if it never had one
+     * (connected output, or a {@link PortType} with no default at all). Package-private: tests are the
+     * only consumer, reaching into the mechanism to assert on it directly rather than through pixels. */
+    @Nullable
+    PortDefaultEditor portEditorFor(NodePort port) {
+        return portEditors.get(port);
     }
 
     // ── The document seam ───────────────────────────────────────────────────
@@ -348,6 +449,10 @@ public class GraphView extends CanvasView implements UndoScope {
             document.removeNode(id);
             widgetsById.remove(id);
         }
+        // A port's default editor is a SEPARATE plane child, not a descendant of the node — removing the
+        // node does not take it with it. Forgotten explicitly, or a deleted node's floating field is
+        // orphaned on screen forever, pointing at a port that no longer exists anywhere.
+        for (NodePort port : widget.getPorts()) forgetPortEditor(port);
         content().removeChild(widget);
         markSynced();
     }
@@ -413,6 +518,10 @@ public class GraphView extends CanvasView implements UndoScope {
      */
     public GraphView load(GraphDocument source) {
         for (GraphNode widget : List.copyOf(widgetsById.values())) content().removeChild(widget);
+        // Same reason detachNode forgets them: a floating default editor is not a descendant of its
+        // node, so the loop above never touches it.
+        for (PortDefaultEditor editor : portEditors.values()) editor.setMounted(false);
+        portEditors.clear();
         widgetsById.clear();
         connections.clear();
         selection.clear();

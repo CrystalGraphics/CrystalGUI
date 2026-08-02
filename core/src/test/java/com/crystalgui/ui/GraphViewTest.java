@@ -332,15 +332,18 @@ public class GraphViewTest extends UiTestBase {
     }
 
     /**
-     * <b>The inline editor is visible exactly while the input is unconnected.</b>
+     * <b>The default-value editor is on the plane exactly while the input is unconnected.</b>
      *
-     * <p>Unity's `X 0.9` field, and the reason a graph is usable before it is finished. Driven by
-     * {@code nodeport:blank} rather than by Java, which is why this asserts a <em>computed</em>
-     * display value — the pseudo-class has to survive a real connection, and a stale style match is
-     * the likely failure.</p>
+     * <p>Unity's floating {@code X 0.9} field, and the reason a graph is usable before it is finished.
+     * Since P6.3.9 it is not a descendant of the port at all — {@code GraphView} wraps it in a label+dot
+     * row and mounts/unmounts THAT on {@link GraphView#content()} as {@link NodePort#onBlankChanged}
+     * fires, so the editor's own {@code getParent()} is the row and stays non-null even while
+     * unmounted (a detached subtree still has its own internal structure). Whether it is actually LIVE
+     * is {@code getAttachedWindow()} — cleared/restored recursively by {@code removeChild}/{@code
+     * addChild} — which is what this asserts instead.</p>
      */
     @Test
-    public void theInlineEditorHidesOnceTheInputIsConnected() {
+    public void theDefaultEditorMountsOnlyWhileTheInputIsUnconnected() {
         // Implementing PortType directly rather than extending BasicPortType, which is a record and
         // therefore final — and that is the intended shape: a type with an editor is not a plain id.
         PortType editable = new PortType() {
@@ -354,17 +357,19 @@ public class GraphViewTest extends UiTestBase {
         NodePort in = b.addInput(editable, "A");
         frame();
 
-        UIElement editor = in.getInlineEditor();
+        UIElement editor = in.getDefaultEditor();
         assertNotNull("an input port must offer its type's editor", editor);
-        assertNotEquals("visible while unconnected", TaffyDisplay.NONE, displayOf(editor));
+        // frame() ticks the graph, which is what discovers a newly-bound default editor and mounts it —
+        // the same one-tick lag ShaderGraphPreviews's own node discovery has.
+        assertNotNull("mounted on the plane while unconnected", editor.getAttachedWindow());
 
         graph.connect(out, in);
         frame();
-        assertEquals("hidden once a wire supplies the value", TaffyDisplay.NONE, displayOf(editor));
+        assertNull("taken off the plane once a wire supplies the value", editor.getAttachedWindow());
 
         graph.disconnect(graph.getConnections().get(0));
         frame();
-        assertNotEquals("and back when the wire goes", TaffyDisplay.NONE, displayOf(editor));
+        assertNotNull("and back when the wire goes", editor.getAttachedWindow());
     }
 
     /**

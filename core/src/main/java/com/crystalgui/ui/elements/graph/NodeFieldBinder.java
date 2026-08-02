@@ -22,9 +22,10 @@ import javax.annotation.Nullable;
  * <h3>Two placements, one mechanism</h3>
  * <ul>
  *   <li><b>Body fields</b> go in the node's {@code __controls__} row, labelled.</li>
- *   <li><b>Port fields</b> go in the port's own row and are hidden while something is connected — the
- *       behaviour {@code nodeport:blank} exists to express. This is why an unconnected {@code Value} can
- *       be typed into without any node needing a matching setting.</li>
+ *   <li><b>Port fields</b> become the port's {@link NodePort#getDefaultEditor()} — a floating widget
+ *       {@code GraphView} places beside the port and shows only while it is unconnected, the behaviour
+ *       {@code nodeport:blank} exists to express. This is why an unconnected {@code Value} can be typed
+ *       into without any node needing a matching setting.</li>
  * </ul>
  */
 public final class NodeFieldBinder {
@@ -58,7 +59,7 @@ public final class NodeFieldBinder {
                 // A field naming a port the widget does not have is a declaration bug, but a silently
                 // missing editor is worse than a missing one you can see — so it falls back to the body.
                 if (port != null) {
-                    port.setInlineEditor(control);
+                    port.setDefaultEditor(control);
                     continue;
                 }
             }
