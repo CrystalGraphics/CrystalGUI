@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import lombok.Getter;
 
@@ -17,6 +18,15 @@ import javax.annotation.Nullable;
  * menu takes focus outright and Tab has nothing to do inside it, so every item is permanently outside the
  * tab sequence rather than taking turns being in it. Items stay clickable and stay reachable by
  * {@code requestFocus}, which is what {@code CLICK_NOT_TABBABLE} means.</p>
+ *
+ * <h3>Selection mark</h3>
+ * <p>Every item carries a {@link #MARK_CLASS} pre-icon, unconditionally — the same "always in the tree,
+ * opacity does the toggling" shape {@link Checkbox}'s own mark uses, driven by the standard {@code
+ * :checked} pseudo-class ({@link #isChecked()} returns {@link #isSelected()}). It costs nothing when
+ * unused: the base sheet gives it zero width outside a selectable context, so an ordinary context-menu
+ * row is unaffected. {@link Dropdown} is what actually calls {@link #setSelected}, to mark which option
+ * is the current value — see {@code dropdown .__menu__ menuitem .__mark__} in default.css for the
+ * reserved gutter and checkmark shape.</p>
  */
 public class MenuItem extends Button {
 
@@ -24,6 +34,8 @@ public class MenuItem extends Button {
     public static final String HAS_SUBMENU_CLASS = "__has-submenu__";
     /** On the arrow itself. A theme can replace it wholesale via {@link Button#setPostIcon}. */
     public static final String SUBMENU_ARROW_CLASS = "__submenu-arrow__";
+    /** On the selection checkmark. See the class javadoc's "Selection mark" section. */
+    public static final String MARK_CLASS = "__mark__";
 
     /**
      * The menu this item opens, or {@code null} for an ordinary item — ARIA's {@code aria-haspopup}.
@@ -37,9 +49,16 @@ public class MenuItem extends Button {
     @Nullable
     private Menu submenu;
 
+    private boolean selected = false;
+
     public MenuItem(String label) {
         super(label);
         setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
+
+        UIElement mark = new UIElement();
+        mark.addClass(MARK_CLASS);
+        mark.setHitTest(false);
+        setPreIcon(mark);
     }
 
     void setSubmenu(@Nullable Menu submenu) {
@@ -49,5 +68,24 @@ public class MenuItem extends Button {
     /** Whether activating this opens a submenu rather than dismissing the menu. */
     public boolean hasSubmenu() {
         return submenu != null;
+    }
+
+    /** Whether this row represents the current value of whatever it belongs to — see "Selection mark"
+     * above. Ignored/unused outside {@link Dropdown}. */
+    public boolean isSelected() {
+        return selected;
+    }
+
+    public MenuItem setSelected(boolean value) {
+        if (this.selected == value) return this;
+        this.selected = value;
+        onStyleChanged();
+        invalidateStyleMatch();
+        return this;
+    }
+
+    @Override
+    public boolean isChecked() {
+        return selected;
     }
 }

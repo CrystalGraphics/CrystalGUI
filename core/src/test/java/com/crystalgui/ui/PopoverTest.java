@@ -465,17 +465,22 @@ public class PopoverTest extends UiTestBase {
     }
 
     @Test
-    public void openingAMenuFocusesItsFirstItem() {
+    public void openingAMenuPreSelectsNothing() {
         Menu menu = new Menu();
         root.addChild(menu);
         MenuItem first = menu.addItem("first");
-        menu.addItem("second");
+        MenuItem second = menu.addItem("second");
         settle();
 
         menu.showFor(invoker, invoker);
         settle();
 
-        assertSame("the ARIA pattern leaves the first choice ready", first, input.getFocusedElement());
+        // Deliberately NOT the ARIA-suggested "first choice ready" — see Menu.onOpened's doc. Opening a
+        // menu must not look like a choice was already made; focus lands on the menu itself so keyboard
+        // events still reach it, but no row lights up until the user actually moves.
+        assertNotSame(first, input.getFocusedElement());
+        assertNotSame(second, input.getFocusedElement());
+        assertSame(menu, input.getFocusedElement());
     }
 
     @Test
@@ -489,8 +494,10 @@ public class PopoverTest extends UiTestBase {
 
         menu.showFor(invoker, invoker);
         settle();
-        assertSame(a, input.getFocusedElement());
+        assertSame("nothing pre-selected on open", menu, input.getFocusedElement());
 
+        key(CgKeyCodes.KEY_DOWN);
+        assertSame("the first Down is what actually chooses the first row", a, input.getFocusedElement());
         key(CgKeyCodes.KEY_DOWN);
         assertSame(b, input.getFocusedElement());
         key(CgKeyCodes.KEY_END);
@@ -557,7 +564,7 @@ public class PopoverTest extends UiTestBase {
         menu.showFor(invoker, invoker);
         settle();
         settle();
-        assertSame("opens focused on the first row", first, input.getFocusedElement());
+        assertFalse("nothing pre-selected on open", first.isFocused());
 
         // Hover the second row through the real input path.
         float x = second.getRuntimeCache().getX() + 2f;
