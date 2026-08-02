@@ -471,7 +471,7 @@ public class ConfigKitTest extends UiTestBase {
         window.updateWithoutPainting();
 
         assertEquals("a dropdown must take the RAISED popup face, not the base sheet's button grey",
-                0xFF515151, backgroundOf(select.control().querySelectorAll("dropdown").get(0)));
+                0xFF4B4B4B, backgroundOf(select.control().querySelectorAll("dropdown").get(0)));
         assertEquals("a text field must take the RECESSED field face",
                 0xFF2A2A2A, backgroundOf(text.control().querySelectorAll("textfield").get(0)));
 

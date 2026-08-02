@@ -962,9 +962,13 @@ popover, menu, dropdown .__menu__ {
      * got both backwards: #2A2F36 with a #00000060 outline is within a few points of every dark surface in
      * this sheet, so a menu rendered perfectly and was simply invisible — reported from the harness as
      * "I right-clicked but no menu". A popup that cannot be told apart from what is behind it has failed at
-     * the one job it has, so being separable is a functional requirement here, not styling. */
-    background: #3F4A57;
-    outline: 1px #808E9E;
+     * the one job it has, so being separable is a functional requirement here, not styling.
+     *
+     * NEUTRAL grey, not the earlier #3F4A57 blue-grey — a dropdown's closed face (`--cfg-popup`, the
+     * config kit and every graph node share it) is the same grayscale family as this open menu, and a
+     * tinted menu on top of a grayscale face read as two different materials the instant it opened. */
+    background: #4B4B4B;
+    outline: 1px #8C8C8C;
     /* Light text, set on the POPOVER so it inherits to every item and to arbitrary popover content.
      * Needed because a Dropdown is a Button, so its menu — an internal child — inherits the button's dark
      * `color: #222222`, which on this surface renders as barely-legible grey. Colour is inheritable, so the
@@ -1023,9 +1027,14 @@ menuitem {
  *
  * The highlight is also the ONLY focus affordance here: no ring. A ring would trail the mouse across every
  * row it passed over, which is the noise :focus-visible exists to avoid, so it is suppressed explicitly
- * rather than left to depend on which focus path happened to fire. */
+ * rather than left to depend on which focus path happened to fire.
+ *
+ * NEUTRAL grey, not the earlier #4A6E9A blue — same reasoning as the menu's own background above: a
+ * saturated blue highlight on an otherwise grayscale popup was the one part of the whole widget that
+ * still looked like a leftover accent colour. Lighter than the #4B4B4B menu surface is what still reads
+ * as "raised" without reaching for hue. */
 menuitem:focus {
-    background: #4A6E9A;
+    background: #606060;
 }
 /* A row that leads somewhere: label left, arrow hard right, and a gap so the two never touch on a short
  * label. `space-between` overrides the `flex-start` above, which is why this rule follows it. */
@@ -1046,9 +1055,58 @@ menuitem .__submenu-arrow__ {
 menuitem:focus-visible {
     outline: 0;
 }
+/* `Menu.onOpened` parks focus on the menu itself so nothing looks pre-selected on open (see that
+ * method's doc) — but `requestFocus` RINGS by default, and a ring around the whole popup the instant
+ * it appears is exactly the affordance this was trying to avoid. Every real highlight in a menu is the
+ * row's own `menuitem:focus` background; the container never needs a ring of its own. */
+menu:focus-visible {
+    outline: 0;
+}
 menuitem:disabled {
     background: #00000000;
     color: #6E6E6E;
+}
+/* Zero footprint outside a selectable context — see MenuItem's "Selection mark" javadoc. A plain
+ * context-menu row ("Cut", "Copy") never calls `setSelected`, so this never draws for it, and giving
+ * it zero width here (rather than leaving the check up to `dropdown .__menu__` alone) means an ordinary
+ * menu's rows stay exactly as wide as their label, with no dead gutter reserved for a checkmark that
+ * item can never show. */
+menuitem .__mark__ {
+    width: 0;
+    margin-right: 0;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+/* `Dropdown`'s own menu, however, IS a selectable context — every row is a candidate value, so the
+ * gutter is reserved for ALL of them, checked or not. Without a shared gutter the checked row's label
+ * would sit one glyph to the right of every other row's, which reads as misaligned text rather than as
+ * "this one has a mark". `:checked` only ever changes the overlay, never the box. */
+dropdown .__menu__ menuitem .__mark__ {
+    width: 12px;
+    height: 12px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    /* menuitem's own cross-axis alignment is engine-default `stretch`, which — for a child with an
+     * explicit, non-auto cross size like this one — degenerates to top-aligned rather than centred, so
+     * without this the mark sat flush with the row's top edge instead of level with the label's text. */
+    align-self: center;
+    margin-right: 1px;
+    color: #DDDDDD;
+}
+dropdown .__menu__ menuitem:checked .__mark__ {
+    overlay: shape("checkmark");
+}
+/* The base `menuitem` rule's 6px left padding was sized for a bare label with no mark before it — once
+ * the 12px gutter above sits in front of it, the checkmark reads as floating well clear of the row's
+ * edge rather than beside it. Tightened for every row in a dropdown's menu (checked or not), so the
+ * whole column — mark and label alike — shifts left together instead of the mark alone moving and
+ * throwing off the shared gutter's alignment. */
+dropdown .__menu__ menuitem {
+    padding-left: 1px;
+    /* Same trim on the trailing edge — the base sheet's 6px was sized for a generic context-menu row
+     * with a submenu arrow to clear; a dropdown row has neither, so it just left dead air between the
+     * label and the menu's own edge. */
+    padding-right: 2px;
 }
 
 /* The closed-state marker on the button, so a theme can point an arrow at it. */
@@ -1382,7 +1440,13 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
      * `.__config-control__ textfield` below. */
     --cfg-field-border-top: #1A1A1A;
     --cfg-field-border-bottom: #474747;
-    --cfg-popup: #515151;      /* a dropdown's raised face — deliberately NOT the field colour */
+    /* The SAME grey the open menu itself uses (`popover, menu, dropdown .__menu__ { background: #4B4B4B }`
+     * above) — NOT the field colour, so it still reads as raised rather than recessed, but tied to the
+     * menu's own value rather than an independent number that could drift out of step with it. A dropdown
+     * that changes shade the instant it opens looks like two different materials; matching this exactly
+     * is what keeps the closed face and the open popup read as one surface. Also deliberately NOT the
+     * blue-tinted #46525F this briefly was — see the popover rule's own note on why that hue is gone. */
+    --cfg-popup: #4B4B4B;
     --cfg-label-text: #D2D2D2;
     --cfg-value-text: #E4E4E4;
     --cfg-list-head: #353535;
@@ -2413,11 +2477,11 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * face lightens the same way a button does. */
 .__config-control__ button:hover,
 .__config-control__ dropdown:hover {
-    background: #5C5C5C;
+    background: #5A5A5A;
 }
 .__config-control__ button:active,
 .__config-control__ dropdown:active {
-    background: #454545;
+    background: #3D3D3D;
 }
 /* Unity does not colour-code a slider's fill; a saturated green track reads as a progress bar or as a
  * validation state rather than as a value being chosen. */

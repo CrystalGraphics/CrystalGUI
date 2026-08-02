@@ -7,6 +7,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.event.KeyboardEvent;
+import com.crystalgui.ui.input.FocusPolicy;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -80,6 +81,11 @@ public class Menu extends Popover {
         this.items = new UIElement();
         this.items.addClass(ITEMS_CLASS);
         addInternalChild(this.items);
+
+        // CLICK_NOT_TABBABLE, not FOCUSABLE: this is a real focus target now (see onOpened below), but
+        // a menu is still "one tab stop" per MenuItem's own doc — Tab has nothing to do inside an open
+        // menu, so the container itself must stay out of the tab sequence exactly like its items do.
+        setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
 
         this.events.getGroup(KeyboardEvent.Down.class).attachListener((el, event) -> {
             if (!isOpen() || itemList.isEmpty()) return;
@@ -309,11 +315,30 @@ public class Menu extends Popover {
 
     // ── Keyboard ────────────────────────────────────────────────────────────
 
-    /** Focus lands on the first item, matching the ARIA pattern: opening a menu with the keyboard should
-     * leave the first choice ready rather than making the user press Down to start. */
+    /**
+     * Focus lands on the menu itself, not on any item — deliberately <b>not</b> the ARIA-suggested
+     * "first choice ready" behaviour.
+     *
+     * <p>Pre-highlighting item 0 the instant the menu opens reads as a selection the user never made:
+     * a dropdown opened to check its current value shows some unrelated row lit up before the mouse or
+     * keyboard has done anything. Landing focus on the menu itself keeps every row unlit — {@link
+     * #moveFocus} already treats "nothing focused inside" ({@link #focusedIndex()} returning {@code -1})
+     * as the starting point for the first Up/Down press, so arrow-key navigation is unaffected; only the
+     * free pre-selection on open is gone. A mouse hover still moves focus onto a row immediately, via
+     * {@link #addItemAt}'s {@code onMouseEnter} listener, and remains a purely pointer-driven focus (no
+     * ring) — so mouse-hover and keyboard-Down produce the same "I asked for this" affordance and only
+     * the passive act of opening does not.</p>
+     *
+     * <p>The menu must still take focus <em>somewhere</em>, though — keyboard events dispatch to whatever
+     * is currently focused and walk from there, so with nothing focused inside this subtree at all,
+     * arrow/Home/End would never reach {@link #events}'s {@code KeyboardEvent.Down} listener in the first
+     * place. {@code menu:focus-visible { outline: 0; }} in the base sheet is what keeps this invisible —
+     * see {@link com.crystalgui.ui.input.UIInputHandler#requestFocus} ringing by default.</p>
+     */
     @Override
     protected void onOpened() {
-        focusItem(0);
+        UIWindow window = getAttachedWindow();
+        if (window != null) window.getInputHandler().requestFocus(this);
     }
 
     private void moveFocus(int step) {

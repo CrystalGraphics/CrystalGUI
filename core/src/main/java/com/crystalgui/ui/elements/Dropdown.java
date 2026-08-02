@@ -109,7 +109,9 @@ public class Dropdown extends Button {
     /** Selects by index. Out-of-range and unchanged indices are ignored, so callers need not check. */
     public Dropdown select(int index) {
         if (index < 0 || index >= options.size() || index == selectedIndex) return this;
+        if (selectedIndex >= 0) menu.getItems().get(selectedIndex).setSelected(false);
         selectedIndex = index;
+        menu.getItems().get(selectedIndex).setSelected(true);
         applyLabel();
         onSelectionChanged.emit(index);
         return this;
