@@ -70,8 +70,7 @@ public final class CgUiColorField implements CgUiDrawable {
     private float innerRadius = 0.72f;
     private int fromArgb = 0xFF000000;
     private int toArgb = 0xFFFFFFFF;
-    private float radiusX;
-    private float radiusY;
+    private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
     public CgUiColorField setMode(Mode value) {
         this.mode = value == null ? Mode.GRADIENT : value;
@@ -99,8 +98,31 @@ public final class CgUiColorField implements CgUiDrawable {
 
     /** Uniform corner rounding, matching the rest of the UI's radii. */
     public CgUiColorField setCornerRadius(float rx, float ry) {
-        this.radiusX = rx;
-        this.radiusY = ry;
+        return setCornerRadius(rx, ry, rx, ry, rx, ry, rx, ry);
+    }
+
+    /**
+     * Independent elliptical radius per corner, CSS {@code border-radius} order (TL,TR,BR,BL), each an
+     * (rx,ry) pair — same signature and same order as {@link CgUiRoundedRect#setCornerRadius(float,
+     * float, float, float, float, float, float, float)}.
+     *
+     * <p>This is the ONLY way a {@code CgUiColorField}-backed element gets rounded. It does not go
+     * through CSS {@code border-radius}: {@code UIElement.resolveRoundedFill} only recognises
+     * {@code CgUiQuad} and {@code CgUiSprite} as fills the generic rounded-wrap layer can clip — a
+     * hue ring, an SV square or a gradient swatch paints ITSELF via this shader, so there is no flat
+     * fill for that layer to wrap. {@link com.crystalgui.ui.elements.ColorSelector}'s before/after swatch
+ * pair is the one place
+     * this is called with asymmetric corners (each swatch rounds only its own outer edge, matching the
+     * "one pill, straight seam" shape {@code CgUiRoundedRect}-backed pairs get from CSS elsewhere in
+     * this file) — every other mode here is round (the ring) or square (everything else) on purpose
+     * and never calls this at all.</p>
+     */
+    public CgUiColorField setCornerRadius(float rxTL, float ryTL, float rxTR, float ryTR,
+                                           float rxBR, float ryBR, float rxBL, float ryBL) {
+        this.rxTL = rxTL; this.ryTL = ryTL;
+        this.rxTR = rxTR; this.ryTR = ryTR;
+        this.rxBR = rxBR; this.ryBR = ryBR;
+        this.rxBL = rxBL; this.ryBL = ryBL;
         return this;
     }
 
@@ -115,8 +137,8 @@ public final class CgUiColorField implements CgUiDrawable {
                 b.set1f("_InnerRadius", innerRadius);
                 b.colorARGB("_ColorA", fromArgb);
                 b.colorARGB("_ColorB", toArgb);
-                b.vec4("_CornerRadiusX", radiusX, radiusX, radiusX, radiusX);
-                b.vec4("_CornerRadiusY", radiusY, radiusY, radiusY, radiusY);
+                b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
+                b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
                 b.vec2("_BoxSize", width, height);
             });
             ctx.quad().at(x, y).size(width, height).color(ctx.getColor()).submit();
