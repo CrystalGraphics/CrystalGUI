@@ -473,7 +473,7 @@ public class ConfigKitTest extends UiTestBase {
         assertEquals("a dropdown must take the RAISED popup face, not the base sheet's button grey",
                 0xFF4B4B4B, backgroundOf(select.control().querySelectorAll("dropdown").get(0)));
         assertEquals("a text field must take the RECESSED field face",
-                0xFF2A2A2A, backgroundOf(text.control().querySelectorAll("textfield").get(0)));
+                0xFF1E1E1E, backgroundOf(text.control().querySelectorAll("textfield").get(0)));
 
         // The inset bevel: this is the property most likely to resolve-but-not-paint, since
         // border-top-color/border-bottom-color only DO anything when border-width is also non-zero —
@@ -482,16 +482,16 @@ public class ConfigKitTest extends UiTestBase {
         assertEquals("the field must carry a non-zero border for the bevel colours to have anything "
                         + "to stroke", 1f, field.getTaffyLayout().border().left, 0.01f);
         assertEquals("top edge must be the DARK bevel colour",
-                0xFF1A1A1A, field.getStyle().getGeneralGroup().borderTopColor());
+                0xFF121212, field.getStyle().getGeneralGroup().borderTopColor());
         assertEquals("bottom edge must be the LIGHT bevel colour",
-                0xFF474747, field.getStyle().getGeneralGroup().borderBottomColor());
+                0xFF545454, field.getStyle().getGeneralGroup().borderBottomColor());
         assertNotEquals("top and bottom must actually differ, or the split-border shader path never "
                         + "engages and this is just a slower way to draw a uniform border",
                 field.getStyle().getGeneralGroup().borderTopColor(),
                 field.getStyle().getGeneralGroup().borderBottomColor());
         assertEquals("a checked box must not be the base sheet's semantic green — the kit draws a "
                         + "real checkmark on the SAME dark field colour instead of colour-swapping",
-                0xFF2A2A2A, backgroundOf(bool.control().querySelectorAll(".__mark__").get(0)));
+                0xFF1E1E1E, backgroundOf(bool.control().querySelectorAll(".__mark__").get(0)));
 
         UIElement mark = bool.control().querySelectorAll(".__mark__").get(0);
         var overlay = mark.getStyle().getGeneralGroup().overlay();
@@ -509,7 +509,7 @@ public class ConfigKitTest extends UiTestBase {
         UIElement maskMark = mask.control().querySelectorAll(".__mask-row__ .__mark__").get(0);
         assertEquals("a checked mask row must match BooleanControl's neutral field colour, not the "
                         + "base sheet's green",
-                0xFF2A2A2A, backgroundOf(maskMark));
+                0xFF1E1E1E, backgroundOf(maskMark));
         var maskOverlay = maskMark.getStyle().getGeneralGroup().overlay();
         assertTrue("a mask row's on/off distinction must also be the vector checkmark",
                 maskOverlay instanceof com.crystalgui.render.texture.CgUiShape

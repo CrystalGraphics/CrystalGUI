@@ -930,20 +930,43 @@ tooltip .__label__ {
 
 /* NEUTRAL grey throughout — not the earlier #2A2F36/#3A4450 blue-grey. Same reasoning as the popover
  * and config-kit repaint: a dialog is chrome the same way a menu or a dropdown's face is, and it was
- * the last widget left in its own tinted family after those moved to grayscale. */
+ * the last widget left in its own tinted family after those moved to grayscale.
+ *
+ * `color` is stated explicitly here rather than left to the property's own inherited default (white) —
+ * that default is what the title label was quietly relying on, and an inherited value a widget merely
+ * happens to agree with is not the same as one it actually states; see `dialog .__close__` below for
+ * exactly the case where relying on it silently goes wrong. */
 dialog {
     min-width: 80px;
     min-height: 40px;
     background: #2E2E2E;
     outline: 1px #1A1A1A;
+    color: #DDDDDD;
     z-index: 5;
 }
+/* `ColorControl`'s popup only. Translucent-over-OPAQUE composites right back to opaque (tinted, but
+ * alpha 1.0) — colorselector's own `#1E1E1E76` sitting directly on this element's normal `#2E2E2E`
+ * (full alpha) had nothing behind IT to show through either, so nothing ever read as see-through no
+ * matter what colorselector's own alpha was. This is the layer that has to give first: with the root
+ * itself translucent too, both layers now compound against whatever is actually behind the dialog —
+ * the same two-layer shape `graphnode`'s fully transparent root plus its translucent `.__inputs__`/
+ * `.__outputs__` bands already uses. Scoped to `.__picker__` so every other `Dialog` in the engine
+ * (draggable panels, etc.) stays fully opaque; `.__title-bar__` keeps its own separate `#393939`. */
+dialog.__picker__ {
+    background: #2E2E2E76;
+}
 
+/* 14px, not 16 — matches the base `button, dropdown` row height already used everywhere else in this
+ * sheet, rather than a number picked just for this one bar. Against a 10px title, 16 read as a band of
+ * dead air above and below the text; 14 is the smallest this convention already commits to. */
 dialog .__title-bar__ {
     height: 16px;
     width: 100%;
     padding-left: 4px;
-    padding-right: 2px;
+    /* 7px, not 2 — the close button sat flush enough against the bar's own edge that it read as
+     * overflowing past it rather than sitting inside it. 5px more breathing room pulls it in. */
+    padding-right: 4px;
+    padding-top: 1px;
     /* Explicit `row`: this engine's Taffy default is COLUMN, not CSS's `row` (see AGENTS.md), so
      * without this the close button stacks underneath the title instead of beside it. */
     flex-direction: row;
@@ -1197,19 +1220,44 @@ dialog .__content__ {
 /* The dialog's close affordance. Browsers ship no dialog chrome at all — a `<dialog>` is a bare box —
  * so this is ours. A floating panel with a draggable title bar and no way to dismiss it is simply
  * broken, and Escape is not the answer: only a MODAL dialog establishes a close watcher, so a
- * modeless one does not respond to Escape on the web either. */
-dialog .__close__ {
-    width: 12px;
-    min-height: 12px;
-    height: 12px;
+ * modeless one does not respond to Escape on the web either.
+ *
+ * Scoped through `.__title-bar__`, not just `dialog .__close__` — that shorter form ties on specificity
+ * (11) with the config kit's `.__config-control__ button { height: var(--cfg-ctrl-h) }` (also 11), and a
+ * `Dialog` opened from `ColorControl` (this one) is a genuine DOM descendant of `.__config-control__`:
+ * promotion to the top layer moves the dialog's Taffy parent, never its DOM parent, so the cascade
+ * still reaches straight through. On a tie the LATER rule in source order wins, and the kit section is
+ * declared after this one — so the close button silently inherited an 18px floor no edit here appeared
+ * to touch, the same "won a specificity fight nobody knew was happening" trap `colorselector`'s own
+ * comments document repeatedly. One more class component (specificity 21) settles it outright. */
+dialog .__title-bar__ .__close__ {
+    width: 10px;
+    min-height: 11px;
+    height: 11px;
     padding-all: 0;
     justify-content: center;
     align-items: center;
     /* Same neutral raised grey the menu/dropdown chrome uses (`popover, menu, dropdown .__menu__`,
      * `--cfg-popup`) — not the title bar's own #55606E blue-grey, which was the last of it here. */
     background: #4B4B4B;
+    /* The close button is still a `Button` underneath, and the base `button, dropdown { color: #222222 }`
+     * rule is a SPECIFIED value on that element, not an inherited one — so the dark colour every unthemed
+     * button gets by default wins over `dialog`'s inherited #DDDDDD regardless of how light the title bar
+     * around it is. The "x" was rendering almost invisibly dark-on-dark; this restates the same light grey
+     * the rest of the title bar already uses, matching the label instead of the base button rule. */
+    color: #DDDDDD;
+    text-align: center;
 }
-dialog .__close__:hover {
+/* Centring the BOX (`justify-content`/`align-items` above) is not the same as centring the INK — a
+ * pixel font's glyph carries its own asymmetric leading inside its line box (see ore.css's own
+ * `text-offset-y` note, which measures the same effect on a 14px button), so a perfectly centred text
+ * box still shows the "x" sitting visibly high. `text-offset-y` nudges the glyph itself at paint time
+ * without moving the box or the click target. Scoped to just this button — default.css otherwise stays
+ * font-agnostic and applies no such correction globally; retune this if the bundled font ever changes. */
+dialog .__title-bar__ .__close__ text {
+    text-offset-y: -1px;
+}
+dialog .__title-bar__ .__close__:hover {
     background: #C05050;
 }
 
@@ -1438,13 +1486,13 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
      * Same precedent as `textfield`'s own #2A2A2A further up this file. */
     --cfg-panel: #2E2E2E;
     --cfg-band: #383838;       /* a group header's strip — what marks it off from the rows above */
-    --cfg-field: #2A2A2A;      /* a recessed, typeable surface */
+    --cfg-field: #1E1E1E;      /* a recessed, typeable surface */
     /* The inset bevel Unity draws on every text field — a near-black top edge, a lighter bottom one —
      * which is the actual reason theirs reads as a cut-in surface and a flat fill (however well the
      * fill colour itself matches) does not. See `border-top-color`/`border-bottom-color` on
      * `.__config-control__ textfield` below. */
-    --cfg-field-border-top: #1A1A1A;
-    --cfg-field-border-bottom: #474747;
+    --cfg-field-border-top: #121212;
+    --cfg-field-border-bottom: #545454;
     /* The SAME grey the open menu itself uses (`popover, menu, dropdown .__menu__ { background: #4B4B4B }`
      * above) — NOT the field colour, so it still reads as raised rather than recessed, but tied to the
      * menu's own value rather than an independent number that could drift out of step with it. A dropdown
@@ -1481,7 +1529,19 @@ graphnode {
     max-width: 320px;
     flex-direction: column;
 }
-graphnode .__title-bar__ {
+/* `>`, not a bare descendant combinator — `Dialog` and `GraphNode` both name their header strip
+ * `TITLE_BAR_CLASS = "__title-bar__"`, and a `ColorControl` swatch's popup `Dialog` is a genuine DOM
+ * descendant of whatever `graphnode` it was opened from (promotion moves the Taffy parent, never the
+ * DOM one — the same fact every other "cascade reaches through promotion" note in this file relies on).
+ * A bare descendant selector therefore matched the POPUP'S title bar too, and at equal specificity (11)
+ * with `dialog .__title-bar__`'s own 14px, this rule's later position in the file won the tie — so
+ * opening the colour picker from a shader-graph node silently gave its dialog the NODE header's height
+ * (`--graph-head-h`, a much taller number meant for a 24px node strip) instead of the dialog's own 14px,
+ * while the exact same control opened from a plain inspector row was unaffected. `>` restricts this to
+ * `GraphNode`'s own title bar, which really is a direct internal child (`addInternalChild(titleBar)` in
+ * `GraphNode`'s constructor) — a popup nested many levels down through `.__control-row__` -> `swatch` ->
+ * `dialog` is not, and no longer matches. */
+graphnode > .__title-bar__ {
     flex-direction: row;
     align-items: center;
     /* Pins the chevron right WITHOUT the title having to grow into the gap — see the note on the title.
@@ -2050,6 +2110,21 @@ colorselector {
      * (out to this padding) are the same — the bars then run as wide as that symmetry allows. */
     padding-all: 3px;
     border-radius: 5px;
+    /* Semi-transparent, same 0x76 (~46%) alpha graph.css uses throughout a shader node's own panels
+     * (`.__inputs__`, `.__outputs__`, `.__ports__`) — this is the INNER surface the ring/square/channel
+     * fields actually sit on, one level in from the dialog's own opaque body. Putting the translucency
+     * on the dialog itself instead was tried first and was the wrong layer: that reads as the outer
+     * card, not the surface directly behind the controls.
+     *
+     * This is now the ONE rule for `colorselector`'s own background, everywhere the widget is used,
+     * graph included — graph.css used to restate `background`/`border-width`/`border-color`/`color`/
+     * `font-size` on the same bare selector for a real, documented reason (opacity, specifically, so a
+     * wire crossing behind the picker can't distort the colour being judged), but at equal specificity
+     * (1) to this rule and loaded after it, that override applied to EVERY colorselector in the whole
+     * window, not just ones opened from a node — which is why changing this value alone was completely
+     * invisible no matter what it was set to, on any page, including ones with nothing to do with the
+     * graph. Removed there; this value is the only one now. */
+    background: #1E1E1EDD;
 }
 
 /* The picker's TYPE, and it has to be stated even with no theme loaded — this sheet's own
@@ -2110,6 +2185,11 @@ colorselector .__side__ {
     flex-direction: column;
     justify-content: center;
     gap-all: 3px;
+    /* A few px nudge DOWN off dead centre — the mode dropdown's own chrome (chevron, padding) reads
+     * visually "heavier" at the top of the stack than the bevelled channel rows below it, so true
+     * centring against the ring still looked a couple px high. Padding, not a bigger `gap-all`: this
+     * needs to shift the WHOLE stack, not open space between its rows. */
+    padding-top: 8px;
 }
 /* Square, because a ring drawn into a non-square box is an ellipse — the shader normalises its own
  * radius, so an oval box would show as a stretched band with a round handle path on top of it. */
@@ -2144,10 +2224,10 @@ colorselector .__square__ {
  * shader's inner radius, so the two move together. */
 colorselector .__ring-handle__ {
     position: absolute;
-    width: 10px;
-    height: 10px;
-    margin-left: -5px;
-    margin-top: -5px;
+    width: 9px;
+    height: 9px;
+    margin-left: -4px;
+    margin-top: -4px;
     border-radius: 5px;
     border-width: 1px;
     border-color: #FFFFFF;
@@ -2156,11 +2236,11 @@ colorselector .__ring-handle__ {
  * anything, and every pixel it covers is a colour you were trying to look at. */
 colorselector .__square-handle__ {
     position: absolute;
-    width: 4px;
-    height: 4px;
+    width: 5px;
+    height: 5px;
     margin-left: -2px;
     margin-top: -2px;
-    border-radius: 2px;
+    border-radius: 3px;
     border-width: 1px;
     border-color: #FFFFFF;
 }
@@ -2184,7 +2264,10 @@ colorselector .__square-handle__ {
 colorselector .__side__ dropdown {
     align-self: flex-end;
     flex-grow: 0;
-    width: 35px;
+    /* 35px clipped the mode label ("RGB", "HSV") down to "RGB ..." against the chevron — the label and
+     * the chevron were fighting over the same few pixels. A few px wider gives the label room without
+     * the box reading as oversized next to the hex field it lines up with. */
+    width: 45px;
     /* Same defence as `.__channel-row__`'s slider/textfield — see that comment. */
     min-width: 0;
     height: 9px;
@@ -2208,41 +2291,35 @@ colorselector .__side__ dropdown text {
 /* Narrower than the ring it sits over. At the column's full width the pair was the widest solid block
  * in the widget and read as a banner across the top; the ring is what the eye should land on. Two
  * halves of 22px is enough to judge a colour against another — the comparison needs area, not span. */
+/* Sized against Unity's own reference swatch pair rather than the wheel/ring column: ~20% narrower and
+ * ~20% taller than this used to be (44x8 -> 35x10) is what actually reads as "two stout chips", not the
+ * wide flat strip the old proportions gave. */
 colorselector .__swatches__ {
-    width: 44px;
+    width: 35px;
     flex-direction: row;
-    height: 8px;
+    height: 10px;
 }
 colorselector .__swatches__ .__swatch-original__,
 colorselector .__swatches__ .__swatch-new__ {
     width: 0;
     flex-grow: 1;
-    height: 8px;
+    height: 10px;
 }
-/* Rounded on the OUTER corners only, so the pair reads as one pill with a straight seam down the
- * middle. Stated per corner rather than left to a shorthand: the two inner corners must be square, and
- * a rounded corner at the seam would put a notch of panel between the colours — which is exactly the
- * gap the container is arranged to avoid. Each half owns the two corners on its own side. */
-colorselector .__swatches__ .__swatch-original__ {
-    border-top-left-radius-x: 2px;
-    border-top-left-radius-y: 2px;
-    border-bottom-left-radius-x: 2px;
-    border-bottom-left-radius-y: 2px;
-    border-top-right-radius-x: 0px;
-    border-top-right-radius-y: 0px;
-    border-bottom-right-radius-x: 0px;
-    border-bottom-right-radius-y: 0px;
-}
+/* Pulls the seam closed by 1px. Sub-pixel rounding between two adjacent flex items with no gap of
+ * their own left a 1px sliver of the panel behind showing through at the middle join. */
 colorselector .__swatches__ .__swatch-new__ {
-    border-top-right-radius-x: 2px;
-    border-top-right-radius-y: 2px;
-    border-bottom-right-radius-x: 2px;
-    border-bottom-right-radius-y: 2px;
-    border-top-left-radius-x: 0px;
-    border-top-left-radius-y: 0px;
-    border-bottom-left-radius-x: 0px;
-    border-bottom-left-radius-y: 0px;
+    margin-left: -1px;
 }
+/* NO `border-radius` here, deliberately — it would do nothing. Both swatches paint themselves through
+ * `CgUiColorField` (a `GRADIENT`, so the alpha checkerboard shows through correctly), and
+ * `UIElement.resolveRoundedFill` only recognises `CgUiQuad`/`CgUiSprite` fills as something the generic
+ * rounded-wrap layer can clip — a `CgUiColorField` draws its own shape via its own shader, so there is
+ * no flat fill for that layer to wrap around. CSS `border-radius` on these two elements was written,
+ * looked correct, and silently painted nothing for exactly that reason.
+ *
+ * The rounding — outer corners only, so the pair still reads as one pill with a straight seam down the
+ * middle, 3px to match the box's own 20% bigger size — is set in Java instead, in
+ * `ColorSelector.paintSwatch`, via `CgUiColorField.setCornerRadius(...)`. See that method's doc. */
 
 colorselector .__channels__ {
     width: 100%;
@@ -2281,11 +2358,20 @@ colorselector .__channel-row__ text {
  * parent, so the cascade reaches in exactly as if it were still sitting in the node. That rule ties this
  * one on specificity and neither states `min-width` first, so without restating it here the 50px floor
  * won by default and inflated every channel track. */
+/* `min-height: 9px` is restated alongside `height`, and it is not redundant: the cascade is fought
+ * per PROPERTY, not per rule, and `.__config-control__ slider { height: var(--cfg-ctrl-h); min-height:
+ * var(--cfg-ctrl-h) }` (specificity 11, reaching this element the same way the comment above already
+ * explains for width/flex-grow) loses the `height` fight to this rule's specificity 12 — but with no
+ * competing `min-height` declaration here, ITS min-height (18px) stood completely uncontested and
+ * floored a 9px track to 18, which is what actually doubled every channel row's height inside a
+ * ColorControl's popup. `min-height` as well as `height`, same rule this file's own graph-node kit
+ * comment already states. */
 colorselector .__channel-row__ slider {
     width: 0;
     min-width: 0;
     flex-grow: 1;
     height: 9px;
+    min-height: 9px;
     padding-left: 1.5px;
     padding-right: 1.5px;
     border-radius: 0px;
@@ -2326,12 +2412,21 @@ colorselector .__channel-row__ slider .__thumb__ {
  * The three decimals are not negotiable downward, which is what makes the box the thing that gives:
  * the colour is stored as 8 bits, 1/255 is about 0.0039, so two decimals cannot round-trip a byte.
  * At 17px the leading "0." was the part that went, and a field reading ",690" looks like a stray comma
- * rather than like clipping — so it fails silently, which is the worst way for a number to be wrong. */
-/* `min-width: 0` is the same defence as `.__channel-row__ slider`'s above — see that comment. */
+ * rather than like clipping — so it fails silently, which is the worst way for a number to be wrong.
+ *
+ * 26px, not 20 — 20 was still too tight for the RGB 0-1 mode's own longest strings ("0.235", "1.000"):
+ * five characters plus 2px of padding on each side left less content width than the glyphs actually
+ * need at this font size, and the leading digit clipped exactly like the 17px case above already warns
+ * about. Widened rather than shrinking the padding, since the padding is what keeps the ink off the
+ * field's own border. */
+/* `min-width: 0` and `min-height: 9px` are the same defence as `.__channel-row__ slider`'s above — see
+ * that comment. Without the latter `.__config-control__ textfield`'s 18px floor won by default and this
+ * field grew to twice its intended height inside a ColorControl's popup. */
 colorselector .__channel-row__ textfield {
-    width: 20px;
+    width: 22px;
     min-width: 0;
     height: 9px;
+    min-height: 9px;
     padding-all: 2px;
     flex-grow: 0;
 }
@@ -2345,11 +2440,15 @@ colorselector .__hex-row__ {
 }
 /* Wider than a channel field, because it holds the whole colour — but eight digits plus a possible
  * leading '#' is its entire vocabulary, so it stops there rather than taking whatever is left. */
-/* `min-width: 0` is the same defence as `.__channel-row__`'s slider/textfield above — see that comment. */
+/* `min-width: 0` and `min-height: 9px` are the same defence as `.__channel-row__`'s slider/textfield
+ * above — see that comment. This was the tallest-looking offender of the three: the hex field sits
+ * alone on its own row, so an 18px floor against a 9px intended height read as a visibly oversized box
+ * rather than just a slightly taller row. */
 colorselector .__hex-row__ textfield {
     width: 35px;
     min-width: 0;
     height: 9px;
+    min-height: 9px;
     padding-all: 2px;
     flex-grow: 0;
 }
@@ -2450,18 +2549,35 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
 /* A typeable surface is RECESSED and a popup's face is RAISED, and they are different colours on
  * purpose: it is the only thing telling a dropdown from a text field until the chevron exists.
  *
- * The recessed READ, though, is mostly the bevel below, not the fill colour — Unity's field and popup
- * fills are close enough in value that colour alone barely separates them; the inset border is what
- * actually sells "this is a hole, not a raised button". `border-color` (used on left/right, since there
- * is no `border-left/right-color`) matches the field so those edges stay invisible, same as Unity. */
+ * Every visible edge is now a DIFFERENT, deliberate shade rather than left to match (and hide inside)
+ * the fill: top is the darkest (`--cfg-field-border-top`), bottom the lightest
+ * (`--cfg-field-border-bottom`) — the inset bevel Unity draws on every field — and left/right sit a
+ * step DARKER than the fill, not lighter, so the box reads as fully framed against the panel around
+ * it. #2A2A2A (a step lighter) sat too close to `--cfg-panel` (#2E2E2E) — a field embedded in a row
+ * (a `VectorControl` cell beside its axis label, say) had almost nothing marking where its own edge
+ * was against the panel behind it, which is the opposite of what a visible border is for. This is the
+ * border every config-control textfield gets, INCLUDING the port-default editor's own field
+ * (`graphview .__editor__ textfield` never restates `border-color`/`border-top-color`/
+ * `border-bottom-color`, so it inherits these exact values) — anything that needs to diverge from it
+ * (see `.__configurator-panel__ .__config-control__ textfield` below) must do so through a MORE
+ * SPECIFIC selector, not by editing this rule, or it changes both surfaces at once. */
 .__config-control__ textfield {
     background: var(--cfg-field);
     color: var(--cfg-value-text);
     border-width: 1px;
-    border-color: var(--cfg-field);
+    border-color: #343434;
     border-top-color: var(--cfg-field-border-top);
     border-bottom-color: var(--cfg-field-border-bottom);
+    border-radius: 4px;
 }
+/* A configurator textfield's border used to be bumped to 2px here (the base rule above stays 1px,
+ * shared with the port-default editor) on the theory that the bigger inspector field needed a
+ * proportionally thicker line to still read as framed. That asymmetry is what actually caused the
+ * digit-clipping saga on `colorselector .__channel-row__ textfield`'s RGBA boxes — `box-sizing:
+ * border-box` means a thicker border eats directly out of the content area on a box with zero size
+ * slack, and no amount of retuning padding or radius changes that a THICKER border on the SAME box is a
+ * SMALLER content area. Reverted: the configurator now shares the exact 1px border the shadergraph field
+ * has, so both are the literal same rule with nothing to fall out of step. */
 .__config-control__ dropdown {
     background: var(--cfg-popup);
     color: var(--cfg-value-text);
@@ -2622,8 +2738,9 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
 .__configurator-group__ { flex-direction: column; }
 /* THE BAND. A group header is a SEPARATOR, not another row — it has to say "everything below me
  * belongs to me" before you read a word of it, and on a flat panel the only thing that says that is a
- * change of surface. Unity's foldout header is #383838 on a #2E2E2E panel: a hair lighter, enough to
- * read as a strip and not enough to compete with the controls.
+ * change of surface. Originally Unity's own #383838-on-#2E2E2E (a hair lighter); the panel moved to
+ * #393939 since, so the band now reads a hair DARKER instead — still enough of a step to read as a
+ * strip and not enough to compete with the controls.
  *
  * Full-bleed to the panel edges — `margin` outward by the panel's own padding — because a band that
  * stops short of the edge reads as a button, which is exactly what it is not. */

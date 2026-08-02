@@ -462,14 +462,22 @@ public class ColorSelector extends UIElement {
         try {
             int argb = color.get();
             paintWheel();
-            paintSwatch(newSwatch, argb);
-            paintSwatch(originalSwatch, originalColor);
+            // originalSwatch is added first (see buildSwatches), so it sits on the LEFT — its own outer
+            // edge is the left one, and the new swatch's is the right.
+            paintSwatch(newSwatch, argb, false);
+            paintSwatch(originalSwatch, originalColor, true);
             for (ChannelRow row : rows) row.refresh(argb);
             hexField.setText(toHex(argb));
         } finally {
             updating = false;
         }
     }
+
+    /** Matches {@code colorselector .__swatches__ .__swatch-original__}/{@code -new__}'s CSS radius —
+     * kept here rather than read back out of the cascade because there is nothing to read: see
+     * {@link CgUiColorField#setCornerRadius(float, float, float, float, float, float, float, float)}'s
+     * own doc for why this specific shape can't go through {@code border-radius} at all. */
+    private static final float SWATCH_CORNER_RADIUS = 3f;
 
     /**
      * A flat fill that still shows its alpha, by being a gradient with both stops the same.
@@ -478,11 +486,23 @@ public class ColorSelector extends UIElement {
      * so a 50%-alpha colour would render as a darker opaque one and the two swatches would be
      * indistinguishable at every alpha. The checkerboard is the only thing that makes transparency
      * legible as transparency, and {@code GRADIENT} already composites over it.</p>
+     *
+     * <p>Rounded only on its OWN outer edge — left for the original swatch, right for the new one — so
+     * the pair still reads as one pill with a straight seam down the middle, the same shape the CSS
+     * {@code border-*-radius} pair on {@code CgUiRoundedRect}-backed swatches elsewhere in this sheet
+     * gets for free. This one can't get it for free: see {@code setCornerRadius}'s own doc.</p>
      */
-    private static void paintSwatch(UIElement swatch, int argb) {
-        swatch.generalStyle(g -> g.background(new CgUiColorField()
+    private static void paintSwatch(UIElement swatch, int argb, boolean roundLeft) {
+        CgUiColorField field = new CgUiColorField()
                 .setMode(CgUiColorField.Mode.GRADIENT)
-                .setGradient(argb, argb)));
+                .setGradient(argb, argb);
+        float r = SWATCH_CORNER_RADIUS;
+        if (roundLeft) {
+            field.setCornerRadius(r, r, 0f, 0f, 0f, 0f, r, r);
+        } else {
+            field.setCornerRadius(0f, 0f, r, r, r, r, 0f, 0f);
+        }
+        swatch.generalStyle(g -> g.background(field));
     }
 
     private void paintWheel() {

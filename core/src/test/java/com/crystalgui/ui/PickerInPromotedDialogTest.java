@@ -107,7 +107,7 @@ public class PickerInPromotedDialogTest extends UiTestBase {
         UIElement track = picker.querySelectorAll("." + ColorSelector.CHANNEL_ROW_CLASS + " slider").get(0);
 
         assertEquals("the node's control-row rule must not inflate the picker's value fields",
-                20f, boxOf(field).w(), 0.5f);
+                22f, boxOf(field).w(), 0.5f);
         assertTrue("the colour track must keep the row's slack, was " + boxOf(track),
                 boxOf(track).w() > boxOf(field).w() * 2f);
     }

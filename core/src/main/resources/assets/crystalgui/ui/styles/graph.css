@@ -132,8 +132,13 @@ graphnode:checked:hover {
 
 /* The title bar carries the node's top corners itself, because the root no longer paints a background
  * to round. Without this a square bar sits over a rounded border and the two disagree at exactly the
- * two corners a user looks at first. 4px, not 5: it is inset by the 1px border. */
-graphnode .__title-bar__ {
+ * two corners a user looks at first. 4px, not 5: it is inset by the 1px border.
+ *
+ * `>`, not a bare descendant combinator — see default.css's own `graphnode > .__title-bar__` note.
+ * `Dialog` reuses the exact same `__title-bar__` class, and a popup opened from this node (a
+ * `ColorControl` swatch, say) is a genuine DOM descendant of it even once promoted — a bare descendant
+ * selector painted the popup's title bar in this node-header colour/radius too. */
+graphnode > .__title-bar__ {
     background: #56565676;
     color: var(--node-text-bright);
     border-top-left-radius-x: 4px;
@@ -424,17 +429,14 @@ graphview .__editor__ .__color__ .__swatch__ {
 graphview .__editor__ .__color__ { width: 40px; }
 
 /* ── ColorSelector ──────────────────────────────────────────────────────────────────────────────
- * The node's own construction, deliberately: same border, same radius, same greys — a picker opened
- * from a Color node should read as part of the node rather than as a dialog that arrived from
- * somewhere else. OPAQUE though, unlike a node: a picker sits over the graph, and a wire crossing
- * behind the surface you are judging a colour against would change the colour you judge. */
-colorselector {
-    background: #2B2B2B;
-    border-width: 1px;
-    border-color: var(--node-edge);
-    color: var(--node-text);
-    font-size: 6;
-}
+ * No bare `colorselector { ... }` rule here any more. There used to be one — background, border,
+ * text colour, font-size, all restated for the node's own palette — but it tied on specificity (1)
+ * with default.css's own bare `colorselector` rule and, being loaded after it, silently won for
+ * EVERY colorselector in the whole window, not just ones opened from a node: any change to
+ * default.css's own colorselector background was completely invisible on any page, anywhere, for as
+ * long as this file was also loaded. default.css's own rule is what every picker uses now, node
+ * context included. What's left below are the genuinely graph-specific touches — the descendant
+ * selectors don't collide with anything in default.css and were never the problem. */
 
 colorselector .__channel-row__ text { color: #9A9A9A; }
 colorselector .__hex-row__ text     { color: #9A9A9A; }
@@ -471,10 +473,18 @@ colorselector .__channel-row__ slider {
 }
 /* The pair is ringed as ONE object, not as two — the outline goes on the container, so no line falls
  * between the halves. That seam is the whole point: the eye compares two adjacent colours far better
- * than two separated ones, and a divider would turn the comparison into two separate readings. */
+ * than two separated ones, and a divider would turn the comparison into two separate readings.
+ *
+ * `border-radius` matches the swatches' own — those round via `CgUiColorField.setCornerRadius` in
+ * Java, not CSS (see that method's doc for why), so nothing here derives it automatically the way a
+ * `CgUiRoundedRect`-backed pair would. Without it this outline was a sharp rectangle drawn around
+ * properly rounded content — invisible back when the container's own background was close enough in
+ * tone to hide the mismatch, and an obvious squared-off corner poking out past the pill the moment
+ * that background changed. */
 colorselector .__swatches__ {
     outline: 1px var(--node-hairline);
     outline-offset: 0px;
+    border-radius: 3px;
 }
 
 /* ── The Color node's field ─────────────────────────────────────────────────────────────────────

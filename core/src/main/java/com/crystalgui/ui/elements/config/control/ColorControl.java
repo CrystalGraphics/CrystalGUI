@@ -34,6 +34,16 @@ public class ColorControl extends ValueControl<Integer> {
     public static final String COLOR_BAR_CLASS = "__color-bar__";
     public static final String ALPHA_BAR_CLASS = "__alpha-bar__";
     public static final String ALPHA_FILL_CLASS = "__alpha-fill__";
+    /** On the popup {@link Dialog} itself, so a theme can style the colour picker's dialog distinctly
+     * from every other {@code Dialog} in the engine (see {@code dialog.__picker__} in default.css) —
+     * {@code Dialog} is shared, generic chrome and carries no such hook of its own.
+     *
+     * <p>Needed for translucency specifically: a translucent {@code colorselector} laid directly over
+     * an OPAQUE dialog composites right back to opaque (tinted, but alpha 1.0) — there is nothing
+     * behind it to actually show through. Both layers have to be translucent together, the same way
+     * {@code graphnode}'s own root is fully transparent (`#00000000`) underneath its translucent
+     * `.__inputs__`/`.__outputs__` bands, for either one to read as see-through at all.</p> */
+    public static final String PICKER_DIALOG_CLASS = "__picker__";
 
     private static final int DEFAULT_COLOR = 0xFF000000;
 
@@ -61,6 +71,7 @@ public class ColorControl extends ValueControl<Integer> {
         colorBar.setHitTest(false);
         alphaBar.setHitTest(false);
 
+        dialog.addClass(PICKER_DIALOG_CLASS);
         paint(getValue());
         picker.setInitialColor(getValue());
         picker.onColorChanged.connect(argb -> {
@@ -76,6 +87,7 @@ public class ColorControl extends ValueControl<Integer> {
                 dialog.close();
                 return;
             }
+            picker.setInitialColor(getValue() == null ? DEFAULT_COLOR : getValue());
             dialog.show();
             UIWindow window = swatch.getAttachedWindow();
             if (window == null) return;
