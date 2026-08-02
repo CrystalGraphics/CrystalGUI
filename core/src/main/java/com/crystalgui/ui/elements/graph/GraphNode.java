@@ -5,6 +5,7 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.PortDirection;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.UIText;
@@ -354,6 +355,29 @@ public class GraphNode extends UIElement {
             if (e instanceof GraphView view) return view;
         }
         return null;
+    }
+
+    /**
+     * Draws the stub for each of this node's own input ports that currently has a floating default
+     * editor mounted — the one paint slot that is genuinely "sandwiched" between a node's own body and
+     * its selection ring.
+     *
+     * <p>{@code drawSubtreeTransformed} calls {@code paintSelf}, then every child, then
+     * {@code paintOverlay} (here), then {@code paintOutline} — all as ONE atomic unit for this element,
+     * before any sibling with a different z gets a turn. That is exactly why a SIBLING element (a
+     * separate stub layer on the plane) could never land "above the body, below the ring" no matter what
+     * z-index it was given: the ring is the last step of the SAME atomic paint call as the body, so any
+     * z comparison against a sibling answers for both at once. Overlay is the only hook that runs
+     * strictly after this node's own children and strictly before its own outline — so drawing the stub
+     * from here, rather than from a plane sibling, is what actually produces "over the body, under the
+     * ring" instead of only ever being able to choose one side of that pair.</p>
+     */
+    @Override
+    protected void paintOverlay(CgUiPaintContext ctx) {
+        super.paintOverlay(ctx);
+        GraphView view = graphView();
+        if (view == null) return;
+        for (NodePort port : inputPorts) view.paintPortEditorStub(ctx, port);
     }
 
     /** Ports and chrome are structure. A caller's element goes in {@link #preview()} or through

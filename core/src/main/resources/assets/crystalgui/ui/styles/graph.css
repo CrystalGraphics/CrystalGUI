@@ -279,27 +279,113 @@ nodeport.type-sampler .__dot__ { border-color: #C1C1C1; background-color: #C1C1C
  * changes. */
 nodeport:blank .__dot__ { background-color: #00000000; }
 
-/* The inline editor on an unconnected input. Narrow, because it shares the row with a label and a dot
- * inside a 168px node.
+/* `PortDefaultEditor` — Unity's little floating `X 0 •` beside an unconnected input. Not a descendant of
+ * `nodeport` at all: it floats on the plane beside the port, rather than sharing the port's own row
+ * inside the node. Scoped under `graphview` instead — still true (it is a plane child of the view).
  *
- * Since P6.1.8 step 8: this is a real `ConfigControl` (`NumberControl`, `VectorControl`, ...), not a
- * bare `TextField` — so `.__editor__` itself can no longer BE the flat field. It is a plain row now;
- * the box, background and padding these fields always had move to whatever leaf tag is actually
- * visible inside. Getting this wrong looks like nothing at all: the class still exists, `:blank`
- * still toggles it, and the ONLY symptom is the field painting in whatever colour its ambient rule
- * happens to give it — port fields were the base sheet's plain textfield grey until this was caught. */
-nodeport .__editor__ {
+ * `.__editor__` IS `PortDefaultEditor`'s box — the rounded, panel-toned frame wrapping the axis label
+ * and the bare `ConfigControl` `NodePort.getDefaultEditor()` returns. Its dot (`.__editor-dot__`, below)
+ * is NOT a descendant of it, despite reading as attached to it visually: it is a wholly separate plane
+ * element `PortDefaultEditor.reposition()` places independently every tick, off the box's own live
+ * bounds. See that class's own javadoc for why a flex-child dot could not be made to do this instead — a
+ * flex margin does not move a flex child relative to its own container, it changes what the CONTAINER
+ * measures itself as, and `reposition()` anchors the box's world position off exactly that measurement —
+ * so the fix a web developer reaches for first quietly moved the whole box instead of the dot. Same
+ * greys the rest of a node uses (`--node-header`, `--node-edge`), because a value floating beside a node
+ * should read as part of the same object, not a dialog that arrived from somewhere else — the same
+ * reasoning `ColorSelector`'s own construction note gives. */
+graphview .__editor__ {
     flex-direction: row;
     align-items: center;
-    gap-all: 2px;
-    height: 11px;
+    gap-all: 4px;
+    /* NOT a fixed height — auto, sized to its own content (the field's 11px plus this padding). A fixed
+     * height here once clamped the box to exactly the field's own 11px with nothing left over for the
+     * padding below, so the rounded corners clipped to an 11px band while the field inside — still
+     * demanding its own 11px, from INSIDE that padding — visibly overflowed past the bottom edge. Auto
+     * is what every other sized-to-its-children container in this stylesheet already does. */
+    /* 2px, not 3 — small enough that two ports stacked in the same node (their editors necessarily
+     * stacked too, one per row) keep a sliver of visible gap between boxes rather than nearly touching. */
+    padding-top: 2px;
+    padding-bottom: 2px;
+    /* Symmetric, unlike the field's own narrow padding — 4px more than the vertical sides so the axis
+     * label and the field read as centred inside the box rather than hugging its left edge. Right is
+     * wider still: the box's own trailing edge, which is what the dot overlaps and the stub leaves
+     * from, needs room for both without either crowding the field. */
+    padding-left: 7px;
+    padding-right: 17px;
+    /* Translucent, matching the SAME composited "header" surface the node's own title bar and control
+     * row use on the canvas — `#393939` composited at this engine's one shared alpha (0x76) over
+     * `--node-canvas` solves to `#565656` — see this file's own alpha-solving note near the top. A flat
+     * opaque `var(--node-header)` looked like a different material entirely sitting on the same canvas
+     * every other translucent surface shares. */
+    background: #56565676;
+    border-width: 1px;
+    border-color: var(--node-edge);
+    border-radius: 4px;
 }
-/* Narrow on purpose. These hold a component of a vector — "0", "0.5", "-1.2" — not prose, and the field
- * sharing its row with a label and a dot is what sets the node's width. Unity's are about this size for
- * the same reason: four or five characters is the whole vocabulary. A floor, not a cap — VECTOR's two
- * cells each claim their own, so a vec2 port editor is legitimately wider than a scalar one. */
-nodeport .__editor__ textfield,
-nodeport .__editor__ dropdown {
+/* The axis prefix. Deliberately plain — no field chrome of its own — because it reads as part of the
+ * box the way Unity's does, and only the value field inside it is the thing you type into. Same dim
+ * shade as a port's own label (`nodeport { color: var(--node-text); }`), since it is naming the exact
+ * same thing from the outside. */
+graphview .__editor__ .__editor-label__ {
+    color: var(--node-text);
+    font-size: 7;
+}
+/* `PortDefaultEditor`'s dot, three concentric layers, dark to coloured — a TOP-LEVEL rule, not a
+ * descendant of `.__editor__`, because it genuinely is not one in the tree; see `.__editor__`'s own
+ * comment and `PortDefaultEditor`'s own javadoc for why. `reposition()` places its centre
+ * `PortDefaultEditor.DOT_OVERLAP` inside the box's own right edge every tick — this rule only supplies
+ * its fixed size and look, never its position.
+ *
+ * THIS outermost element is the static dark backdrop — `--node-edge`, a shade darker than the canvas
+ * rather than the canvas's own tone. It was `--node-canvas` first, which is exactly the colour of the
+ * plane behind it — visually indistinguishable from "no backdrop at all", so what was meant to be
+ * three concentric rings read as only two. `--node-edge` is the same dark the node's OWN border uses,
+ * so the ring stays legible against the canvas without introducing a fourth colour into the dot. */
+graphview .__editor-dot__ {
+    width: 8px;
+    height: 8px;
+    min-height: 8px;
+    border-radius: 4px;
+    background: var(--node-edge);
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+/* The middle, neutral ring — deliberately not black or the coloured core: a third tone between the two
+ * is what keeps the centre from reading as a coloured dot floating with a dark halo, rather than a
+ * deliberate three-layer target. */
+graphview .__editor-dot-ring__ {
+    width: 6px;
+    height: 6px;
+    min-height: 6px;
+    border-radius: 3px;
+    background: #2B2B2B;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+/* The coloured core, at the very centre. Java sets its `background-color` every tick, the same
+ * `NodePort.typeColor()` the stub and the port's own dot read, one number for all three rather than a
+ * fourth copy of the per-type palette living in this file. */
+graphview .__editor-dot-core__ {
+    width: 4px;
+    height: 4px;
+    min-height: 4px;
+    border-radius: 2px;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+/* Narrow on purpose. These hold a component of a vector — "0", "0.5", "-1.2" — not prose, and Unity's
+ * own floating field is about this size for the same reason: four or five characters is the whole
+ * vocabulary. A floor, not a cap — VECTOR's two cells each claim their own, so a vec2 port editor is
+ * legitimately wider than a scalar one. */
+graphview .__editor__ textfield,
+graphview .__editor__ dropdown {
     min-width: 24px;
     height: 11px;
     min-height: 11px;
@@ -312,8 +398,8 @@ nodeport .__editor__ dropdown {
 /* BOOLEAN: same "square, and smaller than the row" exception the inspector and the control row both
  * make — `--cfg-check` (13px, from the config kit's OWN unscoped rule) would otherwise win here too,
  * same specificity trap `everyKind()` already caught for the control row. */
-nodeport .__editor__ checkbox,
-nodeport .__editor__ checkbox .__mark__ {
+graphview .__editor__ checkbox,
+graphview .__editor__ checkbox .__mark__ {
     width: 11px;
     height: 11px;
     min-height: 11px;
@@ -322,8 +408,8 @@ nodeport .__editor__ checkbox .__mark__ {
  * reachable even though Unity itself rarely puts a colour picker inline on a port — a swatch this
  * small is still legible as "a colour, not a number", which is the one thing it has to say. Not the
  * inspector's `.__swatch__` sizing (`--cfg-ctrl-h`) or the control row's (`--graph-ctrl-h`) — a THIRD
- * scale, because a port row is tighter than either. */
-nodeport .__editor__.__color__ .__swatch__ {
+ * scale, because a port editor is tighter than either. */
+graphview .__editor__ .__color__ .__swatch__ {
     width: 40px;
     height: 11px;
     min-height: 11px;
@@ -332,14 +418,10 @@ nodeport .__editor__.__color__ .__swatch__ {
 }
 /* `ColorControl` itself needs somewhere to be that size — same "FULL_WIDTH_CLASS has no sizing of its
  * own" gap the control row hit, except a port editor never adds FULL_WIDTH_CLASS at all (there is no
- * label to skip inside a port's own editor slot), so this reaches the control directly instead.
- *
- * NOT a descendant selector — `NodePort.setInlineEditor` adds `.__editor__` straight onto the control
- * itself (`ColorControl`), the same element that already carries `.__color__`, not a wrapper around
- * it. `.__editor__ .__color__` (with the space) matches nothing at all here, which is exactly the
- * "resolves to zero, not to an error" failure this whole session keeps running into — caught this
- * time by `NodePortInlineEditorTest` asserting real width, not by a screenshot. */
-nodeport .__editor__.__color__ { width: 40px; }
+ * separate label to skip — the axis prefix above is not it), so this reaches the control directly
+ * instead. A real descendant selector now that the control sits one level inside the row — see this
+ * section's opening note. */
+graphview .__editor__ .__color__ { width: 40px; }
 
 /* ── ColorSelector ──────────────────────────────────────────────────────────────────────────────
  * The node's own construction, deliberately: same border, same radius, same greys — a picker opened

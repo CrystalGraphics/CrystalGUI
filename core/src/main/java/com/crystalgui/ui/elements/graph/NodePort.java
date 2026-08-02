@@ -15,12 +15,13 @@ import org.joml.Vector2f;
 import javax.annotation.Nullable;
 
 /**
- * One connection point on a {@link GraphNode} — the dot, its label, and (for an unconnected input) the
- * inline editor its {@link PortType} supplies.
+ * One connection point on a {@link GraphNode} — the dot and its label. For an unconnected input whose
+ * {@link PortType} supplies one, a default-value editor exists too, but it is not a child of this
+ * element — see {@link #getDefaultEditor()}.
  *
  * <pre>
- *   input:   [•] A(3)  [ 0.9 ]
- *   output:            Out(3) [•]
+ *   [ 0.9 ]╴╴ [•] A(3)
+ *                       Out(3) [•]
  * </pre>
  *
  * <h3>The dot is decorative; the port is the target</h3>
@@ -30,10 +31,11 @@ import javax.annotation.Nullable;
  *
  * <h3>{@code :blank} means unconnected</h3>
  * <p>{@link #isBlank()} is overridden, so a stylesheet gets {@code nodeport:blank} for free — no new
- * engine concept, and the two things that depend on connection state become CSS rather than Java:
- * the hollow-versus-filled dot, and whether the inline editor shows. It is a mild stretch of CSS's
- * own {@code :blank} (an empty user input), and the closest honest fit: an unconnected input <em>is</em>
- * a field waiting for a value.</p>
+ * engine concept. The hollow-versus-filled dot is CSS reading it directly; whether the default editor is
+ * showing is {@link GraphView} reading it to decide whether the floating widget belongs on the plane at
+ * all — see {@link #getDefaultEditor()} and {@link PortDefaultEditor}. It is a mild stretch of CSS's own
+ * {@code :blank} (an empty user input), and the closest honest fit: an unconnected input <em>is</em> a
+ * field waiting for a value.</p>
  *
  * <h3>Where the wire's endpoint comes from</h3>
  * <p>{@link #dotCenter()} reads the dot's <b>live</b> layout every time it is asked. Nothing caches an
@@ -45,7 +47,21 @@ public class NodePort extends UIElement {
 
     public static final String DOT_CLASS = "__dot__";
     public static final String LABEL_CLASS = "__label__";
+    /** {@link PortDefaultEditor}'s box — the rounded, panel-toned frame holding the axis label and the
+     * bare control — see {@link #getDefaultEditor()}. */
     public static final String EDITOR_CLASS = "__editor__";
+    /** {@link PortDefaultEditor}'s axis prefix — {@code "X"}, {@code "A"} — sitting plain (no field
+     * chrome of its own) to the left of the control, inside the box carrying {@link #EDITOR_CLASS}. */
+    public static final String EDITOR_LABEL_CLASS = "__editor-label__";
+    /** {@link PortDefaultEditor}'s dot — see that class's own javadoc for its full construction (three
+     * concentric layers) and for why it is never a descendant of the {@link #EDITOR_CLASS} box despite
+     * reading as attached to it. */
+    public static final String EDITOR_DOT_CLASS = "__editor-dot__";
+    /** The middle, neutral-grey ring inside {@link #EDITOR_DOT_CLASS} — see {@link PortDefaultEditor}. */
+    public static final String EDITOR_DOT_RING_CLASS = "__editor-dot-ring__";
+    /** The coloured core at the centre of {@link #EDITOR_DOT_RING_CLASS} — see {@link PortDefaultEditor}.
+     * Coloured by the port's own type in Java, same as {@link #DOT_CLASS} and the wire itself. */
+    public static final String EDITOR_DOT_CORE_CLASS = "__editor-dot-core__";
     /** On the port, so a theme can style the two sides differently without knowing about directions. */
     public static final String INPUT_CLASS = "__input__";
     public static final String OUTPUT_CLASS = "__output__";
@@ -59,28 +75,34 @@ public class NodePort extends UIElement {
     private final UIElement dot = new UIElement();
     private final UIText label;
 
+    /**
+     * The control shown while this input is unconnected — Unity's little floating {@code X 0} field.
+     *
+     * <p><b>Stored here, but never mounted here, and never the whole visible widget.</b> Unity does not
+     * draw this inside the node at all: it floats outside the node's left edge, labelled with the port's
+     * own name and joined to a small dot by a connecting stub — see {@link PortDefaultEditor}, which
+     * wraps whatever this getter returns in that presentation. A port only owns the bare editable control
+     * and the connection state that decides whether it should be showing; everything about how it is
+     * presented is {@link GraphView}'s job (via {@code PortDefaultEditor}), because only the view knows
+     * the plane's world space and only the view ticks every frame.</p>
+     */
     @Nullable
     @Getter
-    private UIElement inlineEditor;
+    private UIElement defaultEditor;
 
     /**
-     * Replaces this port's inline editor — the control shown while nothing is connected.
+     * Replaces this port's default-value editor.
      *
      * <p>The slot itself is not new: a {@link PortType} may supply a default editor at construction, and
-     * {@code nodeport:blank .__editor__} already decides when it is visible. This is how a
+     * {@link #isBlank()} already decides when it should be showing. This is how a
      * <b>document-declared</b> {@link com.crystalgui.graph.NodeField} takes that slot instead, so the
      * value the user types is the one stored on the node rather than something the port type invented.</p>
      *
      * <p>Outputs are refused: a value flows <em>out</em> of one, so there is nothing to type.</p>
      */
-    public NodePort setInlineEditor(@Nullable UIElement editor) {
+    public NodePort setDefaultEditor(@Nullable UIElement editor) {
         if (!direction.isInput()) return this;
-        if (inlineEditor != null) removeInternalChild(inlineEditor);
-        inlineEditor = editor;
-        if (editor != null) {
-            editor.addClass(EDITOR_CLASS);
-            addInternalChild(editor);
-        }
+        defaultEditor = editor;
         return this;
     }
 
@@ -131,8 +153,8 @@ public class NodePort extends UIElement {
         // chain's first, not-yet-converged layout pass — see `UIText.forceSelfSizeWidth()`.
         label.forceSelfSizeWidth();
 
-        this.inlineEditor = direction.isInput() ? type.createInlineEditor() : null;
-        if (inlineEditor != null) inlineEditor.addClass(EDITOR_CLASS);
+        // Not mounted here — see the field javadoc. GraphView discovers it and places it on the plane.
+        setDefaultEditor(direction.isInput() ? type.createInlineEditor() : null);
 
         // Structure, not style: an input reads dot-then-label and an output label-then-dot, which is
         // the difference between a wire arriving and a wire leaving. Reversing it in CSS would need a
@@ -140,7 +162,6 @@ public class NodePort extends UIElement {
         if (direction.isInput()) {
             addInternalChild(dot);
             addInternalChild(label);
-            if (inlineEditor != null) addInternalChild(inlineEditor);
         } else {
             addInternalChild(label);
             addInternalChild(dot);
@@ -148,21 +169,9 @@ public class NodePort extends UIElement {
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled() || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-            // A press inside the inline editor belongs to the EDITOR, not to a wire. This listener runs
-            // on the bubble, so without the check a click on the value box started a connection drag from
-            // this port; releasing on the spot read as "dropped on empty canvas" and opened the create
-            // menu, which then ate every keystroke meant for the field.
-            //
-            // The usual dodge — setHitTest(false) on a composite's parts — is unavailable here precisely
-            // because this part IS interactive. That is the case the invariant about click-focus already
-            // calls out.
-            if (isInsideInlineEditor(event.getTarget())) {
-                // Stopped, not merely ignored: the node above starts a MOVE drag on press, so dragging to
-                // select text inside the field would drag the whole node instead. The editor has already
-                // had the event at the target phase, so nothing it needs is lost.
-                event.stopPropagation();
-                return;
-            }
+            // The default editor is no longer a descendant of this port — it floats on the plane as its
+            // own element — so a press on it never reaches here at all, and the click-vs-drag conflict
+            // that used to require a target check does not exist any more.
             if (beginConnectionDrag(event.getPosition().x(), event.getPosition().y())) {
                 // The press belongs to the wire now. Without this the node underneath starts its own
                 // move-drag and the pointer drags the node it was trying to wire up.
@@ -184,17 +193,6 @@ public class NodePort extends UIElement {
     }
 
     /** Unity's {@code Out(3)}: the name, then the arity, unless the type has none worth printing. */
-    /** Whether {@code target} is the inline editor or anything inside it. */
-    private boolean isInsideInlineEditor(@Nullable UIElement target) {
-        if (inlineEditor == null || target == null) return false;
-        for (UIElement e = target; e != null; e = e.getParent()) {
-            if (e == inlineEditor) return true;
-            // Stop at the port: anything above it is not ours to reason about.
-            if (e == this) return false;
-        }
-        return false;
-    }
-
     private static String displayLabel(String name, PortType type) {
         return type.arity() > 0 ? name + "(" + type.arity() + ")" : name;
     }
