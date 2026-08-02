@@ -928,11 +928,14 @@ tooltip .__label__ {
  * The title bar is the drag handle, so it needs enough height to be grabbable — that is functional
  * geometry, which is why it lives here rather than in a theme. */
 
+/* NEUTRAL grey throughout — not the earlier #2A2F36/#3A4450 blue-grey. Same reasoning as the popover
+ * and config-kit repaint: a dialog is chrome the same way a menu or a dropdown's face is, and it was
+ * the last widget left in its own tinted family after those moved to grayscale. */
 dialog {
     min-width: 80px;
     min-height: 40px;
-    background: #2A2F36;
-    outline: 1px #00000060;
+    background: #2E2E2E;
+    outline: 1px #1A1A1A;
     z-index: 5;
 }
 
@@ -947,7 +950,7 @@ dialog .__title-bar__ {
     align-items: center;
     /* Title left, close button hard right, whatever the dialog's width. */
     justify-content: space-between;
-    background: #3A4450;
+    background: #393939;
 }
 
 /* ── Popovers, menus and dropdowns ──────────────────────────────────────────────────────────────
@@ -1202,7 +1205,9 @@ dialog .__close__ {
     padding-all: 0;
     justify-content: center;
     align-items: center;
-    background: #55606E;
+    /* Same neutral raised grey the menu/dropdown chrome uses (`popover, menu, dropdown .__menu__`,
+     * `--cfg-popup`) — not the title bar's own #55606E blue-grey, which was the last of it here. */
+    background: #4B4B4B;
 }
 dialog .__close__:hover {
     background: #C05050;
