@@ -129,7 +129,19 @@ public final class ShaderGraphPreviews implements UIFrameTicker {
         // Controls first, and tracked by id rather than by inspecting the widget: a dropdown is added to
         // an internal child, so there is no cheap "does it already have one" question to ask, and adding
         // a second set every frame would be invisible until the node grew a stack of identical rows.
+        //
+        // Doubling as "have we ever seen this node before" for the compiled preview graph too: `graph`
+        // (see #tickFrame) is only rebuilt when `invalidate()` runs, and that was wired ONLY to
+        // `view.onConnectionsChanged` — there is no signal anywhere for "a node was added" on its own.
+        // A freshly created, still-unwired node got a preview SLOT immediately (the loop below runs every
+        // tick regardless), but the compiled `graph` snapshot it would be drawn FROM stayed stale until
+        // some unrelated connection changed elsewhere and happened to invalidate everything — so
+        // `CgPreviewEmitter.emit` could never find the node's own instance, failed silently, and (since a
+        // failed node is deliberately never retried, or a broken material would recompile every frame)
+        // stayed blank forever. This `controlled.add` check already fires exactly once per node, on
+        // first sight, which is exactly the moment the compiled graph needs to catch up.
         if (controlled.add(nodeId)) {
+            invalidate();
             var library = view.getNodeLibrary();
             var nodeType = node.getTypeId() == null || library == null
                     ? null : library.get(node.getTypeId());
