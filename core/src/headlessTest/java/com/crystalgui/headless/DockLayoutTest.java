@@ -398,6 +398,29 @@ public class DockLayoutTest {
         layout.checkInvariants();
     }
 
+    /**
+     * <b>An outer-edge drop after the tree has collapsed to one pane.</b>
+     *
+     * <p>The normal case during a drag: detaching what is being moved collapses the branch it came from,
+     * so by the time the drop lands the root may hold a single node. Carrying that down a level leaves a
+     * one-child branch, which is exactly the state the collapse machinery exists to prevent — and it is
+     * only reachable through a real drag, which is why it survived the first pass of these tests.</p>
+     */
+    @Test
+    public void anOuterEdgeDropOntoASinglePaneLeavesNoOneChildBranch() {
+        DockLeaf a = leaf("A");
+        DockLayout layout = DockLayout.of(a);
+        DockLeaf b = leaf("B");
+        layout.drop(a, DockDropZone.SPLIT_RIGHT, b);
+
+        layout.remove(a);                                   // the tree is one leaf under the root again
+        layout.dropOnOuterEdge(DockDropZone.SPLIT_UP, a);   // and A comes back on the outer edge
+
+        assertEquals("A,B", ids(layout));
+        assertEquals(DockOrientation.VERTICAL, layout.rootOrientation());
+        layout.checkInvariants();
+    }
+
     // ── Paths ───────────────────────────────────────────────────────────────────────────────────
 
     /** A path identifies a node without holding it — what makes a drop describable before it happens. */

@@ -424,6 +424,32 @@ public class SplitView extends UIElement {
         setPercentageAt(index, percentageAt(index) + deltaWeight / pairSum * 100f);
     }
 
+    /**
+     * Every pane's weight, in order.
+     *
+     * <p>Read back rather than tracked by whoever set them, because a divider drag changes them and the
+     * owner of the layout needs the values the <em>user</em> left, not the ones it last wrote.</p>
+     */
+    public float[] getWeights() {
+        float[] weights = new float[panes.size()];
+        for (int i = 0; i < panes.size(); i++) weights[i] = panes.get(i).weight;
+        return weights;
+    }
+
+    /**
+     * Sets every pane's weight at once. Extra values are ignored, missing ones left alone.
+     *
+     * <p>Silent about a length mismatch on purpose: this is how a saved layout is restored, and a restore
+     * that threw because a pane count drifted would take the whole arrangement with it.</p>
+     */
+    public SplitView setWeights(float... weights) {
+        for (int i = 0; i < Math.min(weights.length, panes.size()); i++) {
+            panes.get(i).weight = Math.max(0f, weights[i]);
+        }
+        applySplit();
+        return this;
+    }
+
     public float getMinPercentage() {
         return minPercentage;
     }
