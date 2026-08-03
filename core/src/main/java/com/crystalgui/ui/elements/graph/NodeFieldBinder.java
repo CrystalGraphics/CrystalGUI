@@ -49,9 +49,7 @@ public final class NodeFieldBinder {
         if (nodeId == null) return;
 
         for (NodeField field : type.fields()) {
-            String current = currentValue(document, nodeId, field);
-            UIElement control = NodeFieldWidgets.create(field, current,
-                    value -> write(document, undo, nodeId, field, value, onChange));
+            UIElement control = buildControl(field, document, nodeId, undo, onChange);
             if (control == null) continue;
 
             if (field.isPortField()) {
@@ -65,6 +63,45 @@ public final class NodeFieldBinder {
             }
             widget.addControl(field.label(), control);
         }
+    }
+
+    /**
+     * Builds one field's control, reading its current value from the document and wiring it to write
+     * back through {@code undo} — the same thing {@link #attach} does per field, exposed so a caller can
+     * REBUILD one later without duplicating the write path.
+     *
+     * <p>Rebuilding is a real need rather than a hypothetical: a shader graph's {@code dynamic} port
+     * changes how many components it edits as the graph is rewired ({@code A} becomes three boxes when a
+     * vec3 arrives), and a control cannot restructure itself — the widget kind and its arity are decided
+     * at construction. Whoever knows the new shape passes a field describing it; everything about where
+     * the value comes from and where it goes stays here, so there is only ever one writer.</p>
+     *
+     * @return the control, or {@code null} when nothing is registered for the field's kind
+     */
+    @Nullable
+    public static UIElement buildControl(NodeField field, GraphDocument document, String nodeId,
+                                         @Nullable UndoStack undo, @Nullable Runnable onChange) {
+        return buildControl(field, document, nodeId, undo, onChange, null);
+    }
+
+    /**
+     * As {@link #buildControl(NodeField, GraphDocument, String, UndoStack, Runnable)}, but starting from
+     * {@code presetValue} instead of what the document currently holds.
+     *
+     * <p>For a rebuild that changes the control's SHAPE. A widget may infer its shape from the value it
+     * is handed — {@code ShaderVectorFieldWidget} counts the components in {@code vecN(...)} to decide how
+     * many boxes to draw — so re-shaping to three components while the document still holds the scalar
+     * {@code 1.0} would build the wrong widget from the right intent. The document is left alone: the
+     * stored literal is still valid for the port (a scalar promotes), and it is rewritten the moment the
+     * user actually edits one of the new boxes.</p>
+     */
+    @Nullable
+    public static UIElement buildControl(NodeField field, GraphDocument document, String nodeId,
+                                         @Nullable UndoStack undo, @Nullable Runnable onChange,
+                                         @Nullable String presetValue) {
+        String current = presetValue != null ? presetValue : currentValue(document, nodeId, field);
+        return NodeFieldWidgets.create(field, current,
+                value -> write(document, undo, nodeId, field, value, onChange));
     }
 
     private static String currentValue(GraphDocument document, String nodeId, NodeField field) {

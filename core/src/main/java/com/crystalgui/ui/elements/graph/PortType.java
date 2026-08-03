@@ -45,6 +45,21 @@ public interface PortType {
     }
 
     /**
+     * What {@link #arity()} is <em>printed</em> as, when the plain number is not what the domain calls it.
+     *
+     * <p>A matrix is the case this exists for: Unity labels one {@code (2x2)}, not {@code (2)}, while it
+     * still contributes the width 2 to a dynamic node it feeds ({@code A(2) B(2x2) Out(2)} — the matrix
+     * port keeps its own shape, the vector ports around it take its width). Keeping the printed form
+     * separate from the number means the resolution arithmetic never has to parse a label back.</p>
+     *
+     * @return the text inside the brackets, or {@code null} for no suffix at all
+     */
+    @javax.annotation.Nullable
+    default String arityLabel() {
+        return arity() > 0 ? String.valueOf(arity()) : null;
+    }
+
+    /**
      * Whether a wire may run from a port of this type into one of {@code other}.
      *
      * <p>Asked of the <b>source</b> type, and deliberately not symmetric: GLSL promotes a float to a

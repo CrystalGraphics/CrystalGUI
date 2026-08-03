@@ -205,6 +205,21 @@ public final class ShaderGraphBridge {
          * {@code type-dynamic} is left in {@code graph.css} for consumers whose port types genuinely
          * cannot resolve; a GLSL one always can.</p>
          */
+        /**
+         * A matrix prints {@code (2x2)} but still counts as the width 2 — Unity's {@code B(2x2)} beside
+         * an {@code A(2)} on the same node. The number is what dynamic resolution arithmetic uses; this
+         * is only how it reads.
+         */
+        @Override
+        public String arityLabel() {
+            return switch (id) {
+                case "mat2" -> "2x2";
+                case "mat3" -> "3x3";
+                case "mat4" -> "4x4";
+                default -> com.crystalgui.ui.elements.graph.PortType.super.arityLabel();
+            };
+        }
+
         @Override
         public String cssClass() {
             return DYNAMIC_TYPE.equals(id)
@@ -242,6 +257,13 @@ public final class ShaderGraphBridge {
         register(new GlslPortType("vec4", 4));
         register(new GlslPortType("bool", 1));
         register(new GlslPortType("int", 1));
+        // No node emits a matrix yet, but the rule is wired now rather than rediscovered later: a matN
+        // feeding a dynamic node contributes the width N (Unity's Matrix2x2 -> Multiply gives A(2)), and
+        // arityLabel() above prints it as NxN. Registering them here is also what stops a matrix port
+        // falling back to BasicPortType's arity-0 "no width worth printing".
+        register(new GlslPortType("mat2", 2));
+        register(new GlslPortType("mat3", 3));
+        register(new GlslPortType("mat4", 4));
     }
 
     private static void register(GlslPortType type) {
