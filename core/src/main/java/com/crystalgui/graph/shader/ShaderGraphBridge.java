@@ -231,8 +231,8 @@ public final class ShaderGraphBridge {
     /**
      * Every path segment but the last, title-cased and rejoined.
      *
-     * <p>{@code cg:math/add} → {@code Math}; {@code cg:input/basic/vector4} → {@code Input/Basic};
-     * {@code cg:master} → {@code Output}.</p>
+     * <p>{@code cg:math/basic/add} → {@code Math/Basic}; {@code cg:input/basic/vector4} →
+     * {@code Input/Basic}; {@code cg:master} → {@code Output}.</p>
      *
      * <p>Nested rather than just the first segment, because the menu is a tree and Unity's is two deep —
      * {@code Input ▸ Basic ▸ Vector 4}. Taking only the head would pile every input node into one flat

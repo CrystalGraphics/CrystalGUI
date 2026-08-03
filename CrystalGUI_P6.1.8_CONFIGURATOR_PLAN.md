@@ -440,11 +440,11 @@ real, non-zero size in the port row's much tighter scale.
 
 | Question | Notes |
 |---|---|
-| Does a control own its undo, or does the host? | LDLib2 puts `EditAction` on the row. Our `UndoStack` belongs to a *document*, and a control has none — so the host almost certainly owns it. Settle before step 1, because it decides whether `changed` carries enough to build an `Edit` from |
-| Label column: fixed px or a percentage? | Unity's is ~40%. A percentage keeps a narrow panel usable; a fixed column keeps two panels aligned. Probably percentage with a min |
-| Is `MaskControl`'s option list ever dynamic? | Unity's `Channel Mask` derives its options from the *resolved* input width. That needs the control and the type resolver to talk, which nothing else in the kit does |
-| Does the port-attached host reuse `Configurator` or bypass it? | It has a label (the port's) but not a row. Leaning bypass — `NodePort` hosts a bare `ConfigControl` |
-| One `ConfigControls` registry, or one per host? | One, with the host deciding chrome. A second registry is how the graph and the inspector drift apart |
+| ~~Does a control own its undo, or does the host?~~ | **Settled: the host.** `NodeFieldBinder.write` wraps every change in a `SetNodeFieldEdit` and runs it through the host's `UndoStack`; a control's `changed` only ever reports what happened |
+| ~~Label column: fixed px or a percentage?~~ | **Settled: fixed px (114px)**, not a percentage — see step 6's correction: a percentage looked right at one panel width and would have drifted at every other one |
+| Is `MaskControl`'s option list ever dynamic? | **Still open.** Unity's `Channel Mask` derives its options from the *resolved* input width. That needs the control and the type resolver to talk, which nothing else in the kit does |
+| ~~Does the port-attached host reuse `Configurator` or bypass it?~~ | **Settled: bypass.** Step 8 confirmed it — `NodePort.setInlineEditor` hosts the bare `ConfigControl` directly, no `Configurator` row wrapper |
+| ~~One `ConfigControls` registry, or one per host?~~ | **Settled: one.** Step 7 made `NodeFieldWidgets` a codec layer over the same `ConfigControls` registry the inspector uses |
 
 ---
 

@@ -49,18 +49,19 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         // turns every new built-in into a test failure that says nothing about the bridge.
         assertEquals("every shader node plus the master",
                 CgShaderNodeRegistry.builtins().all().size() + 1, library.size());
-        assertNotNull(library.get("cg:math/multiply"));
+        assertNotNull(library.get("cg:math/basic/multiply"));
         assertNotNull(library.get(ShaderGraphBridge.MASTER_TYPE));
-        assertEquals("Multiply", library.get("cg:math/multiply").label());
-        assertEquals("categories come from the id's own namespace",
-                "Math", library.get("cg:math/multiply").category());
+        assertEquals("Multiply", library.get("cg:math/basic/multiply").label());
+        assertEquals("categories come from the id's own namespace, nested to match Unity's own "
+                        + "Math ▸ Basic/Advanced/Range/Round grouping",
+                "Math/Basic", library.get("cg:math/basic/multiply").category());
     }
 
     /** A dynamic port has no GLSL name, so it is presented as float — the identity of the promotion
      * order — rather than as something the editor cannot colour or validate. */
     @Test
     public void dynamicPortsArePresentedConcretelyToTheEditor() {
-        NodeType multiply = library().get("cg:math/multiply");
+        NodeType multiply = library().get("cg:math/basic/multiply");
 
         assertTrue(multiply.ports().stream().allMatch(p -> !p.typeId().isEmpty()));
         assertEquals("dynamic ports are their own type, not float — float would refuse every vector",
@@ -123,7 +124,7 @@ public class ShaderGraphBridgeTest extends UiTestBase {
 
         NodeData colour = document.addNode(library.get("cg:input/basic/color").create(0f, 0f));
         NodeData time = document.addNode(library.get("cg:input/basic/time").create(0f, 120f));
-        NodeData multiply = document.addNode(library.get("cg:math/multiply").create(200f, 40f));
+        NodeData multiply = document.addNode(library.get("cg:math/basic/multiply").create(200f, 40f));
         NodeData master = document.addNode(library.get(ShaderGraphBridge.MASTER_TYPE).create(400f, 40f));
 
         document.link(colour, "Out", multiply, "A");
@@ -207,7 +208,7 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         document.setTypeCompatibility(ShaderGraphBridge.GLSL_PROMOTION);
         NodeData colour = document.addNode(library.get("cg:input/basic/color").create(0f, 0f));
         NodeData splitNode = document.addNode(split.create(200f, 0f));
-        NodeData multiply = document.addNode(library.get("cg:math/multiply").create(400f, 0f));
+        NodeData multiply = document.addNode(library.get("cg:math/basic/multiply").create(400f, 0f));
         NodeData master = document.addNode(library.get(ShaderGraphBridge.MASTER_TYPE).create(600f, 0f));
 
         document.link(colour, "Out", splitNode, "In");

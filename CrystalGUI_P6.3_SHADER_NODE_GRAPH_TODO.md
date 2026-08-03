@@ -386,7 +386,102 @@ natural home for them and needs no new document concept.
 
 ---
 
-### 6.3.6 The built-in node library · `IN PROGRESS` — 8 of the set (2026-07-31)
+### 6.3.6 The built-in node library · `IN PROGRESS` — 73 of the set, Math category 63/64 (2026-08-03)
+
+> **Update 2026-08-03 — the Math volume pass, three batches, `CgShaderNodeRegistry.register` grew
+> varargs to carry it.** `CgBuiltinShaderNodes` went from 12 nodes to 73 in one session, closing Math
+> from 2/64 (Add, Multiply) to 63/64. Every subcategory is now complete except Wave (1/2 — see below),
+> and every node is still `CgTemplateShaderNode`: nothing in this pass needed a Java implementation,
+> which is the same evidence 6.3.2's interface/data split was drawn correctly that the original twelve
+> already gave.
+>
+> **`CgShaderNodeRegistry.register(CgShaderNode...)`** — was single-arg; `registerAll` now reads as one
+> call per subcategory (`register(ADD, MULTIPLY, SUBTRACT, DIVIDE, POWER, SQUARE_ROOT) // math/basic`)
+> instead of one chained `.register(...)` per node. Ids grew a matching subcategory segment
+> (`cg:math/basic/add`, not `cg:math/add`) so `ShaderGraphBridge.categoryOf`'s existing nested-path
+> derivation puts each node in Unity's own `Math ▸ Basic/Advanced/Range/Round/...` menu structure
+> instead of dumping all 63 into one flat "Math" list — a real, user-visible reason for the rename, not
+> tidiness. `Add`/`Multiply` moved ids too, for the same reason: leaving them at the old flat id would
+> have split Basic across two menu locations. Every real reference to the old ids (the harness's
+> shadergraph demo, `ShaderGraphBridgeTest`) was updated with the rename; both are covered by the test
+> suite that already existed for them.
+>
+> **Batch 1 (15) — Basic/Advanced/Range/Round, no property, no domain.** Subtract, Divide, Power,
+> Square Root · Absolute, Negate · One Minus, Minimum, Maximum, Clamp, Saturate · Floor, Ceiling, Round,
+> Sign. `Clamp`'s `Min`/`Max` and an unconnected input of any of these stay bare float literals even
+> once a `DYNAMIC` port group widens to a vector — legal GLSL (`clamp`/`min`/`max` all have a
+> vector-plus-scalar overload), the same trick `Add`/`Multiply` already relied on implicitly.
+>
+> **Batch 2 (30) — completing Advanced, Interpolation, Range, Round, Trigonometry, and starting
+> Vector.** Exponential, Length, Log, Modulo, Normalize, Posterize, Reciprocal, Reciprocal Square Root ·
+> Inverse Lerp, Lerp, Smoothstep · Fraction, Remap, Random Range · Step, Truncate · all twelve
+> Trigonometry nodes · Dot Product, Cross Product.
+>
+> - **`Remap` is the one node in this whole pass that needed a real fix, not just a template.**
+>   `math.glsl`'s `remap` has no scalar-broadcast overload the way GLSL's own `clamp`/`mix` do — every
+>   one of its five parameters must be the *same* width. An unconnected bound left as a bare float while
+>   `In` widens to a vector, the pattern every Range/Round node above relies on, references an overload
+>   that does not exist and fails to compile. The fix is `{type:In}(...)` around each bound — a
+>   `{type:}` cast token 6.3.2 already had, just never previously needed for anything but width
+>   resolution bookkeeping.
+> - **`Random Range` is fixed-typed throughout** (`Seed: vec2`, `Min`/`Max`/`Out: float`), not
+>   `DYNAMIC` — a hash needs a concrete `vec2` to hash and its result is always one float, so unlike
+>   every other node in this batch there is no width to resolve from context at all. Uses
+>   `noise.glsl`'s `hash12`.
+> - **`Length`/`Dot Product` are the first `DYNAMIC`-in/fixed-`FLOAT`-out nodes** — proof that a node's
+>   dynamic ports do not all have to resolve to the same *role* (in vs. out), only the same *value*
+>   within whichever ports actually declare `DYNAMIC`. `resolveTypes` already supported this; nothing
+>   needed changing to use it.
+>
+> **Batch 3 (16) — Derivative, Matrix (simplified), the rest of Vector, Sawtooth Wave.** DDX, DDY, DDXY
+> · Matrix Split, Matrix Construction, Matrix Transpose, Matrix Determinant · Distance, Reflection,
+> Fresnel Effect, Projection, Rejection, Rotate About Axis, Sphere Mask, Transform · Sawtooth Wave.
+>
+> - **Derivative is this library's first `FRAGMENT`-domain node.** `dFdx`/`dFdy` are refused outright in
+>   a vertex shader — the exact `sdf.glsl`/`fwidth` failure 6.3.4's own doc already warns about, now
+>   guarded against by construction rather than by remembering not to wire one in wrong.
+>   `CgGraphCompiler.compile()` does not itself check domain (that is `CgShaderEmitter`'s job at real
+>   two-stage split time), so this is pinned by asserting `.domain() == FRAGMENT` directly rather than by
+>   provoking a compile failure.
+> - **Matrix is this library's first consumer of a matrix TYPE at all** — `CgShaderType.MAT2/3/4`
+>   existed with nothing wired through them since 6.3.2. Simplified to `mat4` only, dropping Unity's
+>   Dimension property (2x2/3x3/4x4) — the same "drop the dropdown, ship one concrete form" call
+>   `Exponential`/`Log` already made for their own Base property. One real, load-bearing consequence
+>   worth knowing: `ShaderGraphBridge.widgetKindFor` has no case for a matrix type, so an unconnected
+>   matrix input gets no inline editor — the same gap Texture/Sampler/Gradient already have, and every
+>   Matrix node's input must be wired rather than typed in as a result. `Matrix Split`'s outputs are
+>   named `Col0`..`Col3`, not Unity's `Row0`..`Row3` — GLSL's own `m[i]` indexing is column-major, and a
+>   `Row`-labelled port would be quietly wrong rather than merely differently-shaped.
+> - **`Transform` is simplified to Object→{Object,World,View} position only** — Unity's real node
+>   crosses `From` × `To` × `Type` (Position/Direction/Normal), a combinatorial control surface this
+>   pass does not reproduce. Reuses `POSITION`'s own `SPACE` property rather than inventing a second
+>   one, with `From` fixed at Object and `Type` fixed at Position.
+> - **`Noise Sine Wave` is deliberately not implemented.** It was not one of the fifteen nodes verified
+>   in detail against Unity's own docs, and this library's existing convention — see `Time`'s own doc,
+>   "Delta Time/Smooth Delta are deliberately absent rather than wired to something that looks
+>   plausible" — is to leave a node out rather than ship a guessed formula. `Sawtooth Wave`'s formula is
+>   unambiguous (`(fract(x) - 0.5) * 2`) and shipped; Wave is 1/2 until Noise Sine Wave's real formula is
+>   confirmed.
+>
+> **61 new GL-free tests** across three new files (`CgBuiltinMathNodesTest`,
+> `CgBuiltinMathNodesBatch2Test`, `CgBuiltinMathNodesBatch3Test`), each following
+> `CgGraphCompilerTest`'s own pattern — the emitted GLSL string is the assertion, compiled unconnected
+> (so the port defaults are checked verbatim) and again fed a `vec3` (so `DYNAMIC` resolution is
+> exercised, not just the float identity every default would otherwise hide) — plus one
+> registration-reachability test per batch, since a node nobody calls `.register()` on never reaches the
+> editor's create menu regardless of how correct its GLSL is.
+
+> **Update 2026-08-02: `Split` (`cg:channel/split`) — the multi-output blocker is resolved, not just
+> worked around.** `docs/research/UNITY_SHADER_GRAPH_NODES.md`'s "What this implies for 6.3.6" had
+> flagged multiple outputs as "the change that is hardest to retrofit" — checking the actual code
+> (`CgGraphCompiler`, `CgTemplateShaderNode`, `CgPreviewEmitter`, `EdgeData`, `GraphNode`'s port lists)
+> found every layer already generic over output count; nothing was ever hardcoded to one. `Split` is the
+> first node to actually use more than one output, proven end to end by `CgGraphCompilerTest` (four
+> outputs, four independent consumers, per-output type resolution) and
+> `ShaderGraphBridgeTest.splitsFourOutputsBecomeFourPortsAndWireIndependently` (the editor's `NodeType`,
+> `GraphDocument.link` fan-out from one node on two different output ports, the compiled result
+> parsing). Zero production code changed outside the node itself. `Combine`/`Matrix Split` are now the
+> same shape of work as any other template node — see the Channel row below.
 
 > **Update 2026-07-31, later**: three more — **UV, Position, Normal Vector**. These are the nodes a
 > preview system exists to show, and adding them forced two mechanisms into being rather than merely
@@ -406,17 +501,24 @@ natural home for them and needs no new document concept.
 > which this engine's vertex formats do not carry, so it cannot be derived from what a node is handed. An
 > option that silently emitted the wrong frame would be worse than one that is missing.
 
-> **Shipped**: `CgBuiltinShaderNodes` — Color, Float, Time, Add, Multiply — plus `CgShaderNodeRegistry`.
-> Five rather than fifty, deliberately: enough to prove the stack end to end, chosen so the demo is also
-> a test. Constants exercise the unconnected-input-becomes-a-literal path, Add/Multiply are **dynamic**
-> so widening and compiler-emitted casts are live in any graph using them, and Time is an engine builtin
-> from `cg_env.glsl`.
+> **Shipped**: `CgBuiltinShaderNodes` — 73 nodes plus `CgShaderNodeRegistry`. The original twelve
+> (Color, Float, Vector2/3/4, Time, Add, Multiply, UV, Position, Normal Vector, Split) proved the stack
+> end to end; the Math volume pass above closed out Basic/Advanced/Interpolation/Range/Round/
+> Trigonometry/Derivative/Vector fully and Matrix (simplified to `mat4`) and Wave (Sawtooth only —
+> Noise Sine Wave deferred, see above) partially. Constants exercise the unconnected-input-becomes-a-
+> literal path, the arithmetic/comparison nodes are **dynamic** so widening and compiler-emitted casts
+> are live in any graph using them, Time is an engine builtin from `cg_env.glsl`, UV/Position/Normal
+> exercise `previewBody`/`hasPreviewForm` and the `Space` property (now also reused by `Transform`),
+> Split/Matrix Split exercise fixed (non-`DYNAMIC`) multi-output nodes, and Derivative is the first
+> `FRAGMENT`-domain node.
 >
-> **All five are `CgTemplateShaderNode`** — the declarative path covered every one, which is the
-> evidence that 6.3.2's interface/data split was drawn in the right place.
+> **Every one is `CgTemplateShaderNode`** — the declarative path has covered every node so far, across
+> 73 of them now, which is the evidence that 6.3.2's interface/data split was drawn in the right place.
 >
-> **Still to do**: the volume. The categories below are unchanged, and the observation that most of them
-> are one call into an existing stdlib function still holds.
+> **Still to do**: Input (54, 8 shipped), Artistic (16), UV (10), Procedural (9), Utility (12), the rest
+> of Channel (Combine/Swizzle/Flip), Wave's Noise Sine Wave, and mapping a driver error back to a node
+> (6.3.8's own open item). The observation that most of the rest is one call into an existing stdlib
+> function still holds — Math was the proof of that at scale.
 
 Unity-scale, and entirely resource files once 6.3.2 exists. Categories worth having from the start,
 ordered by how often a real shader needs them:
@@ -424,11 +526,11 @@ ordered by how often a real shader needs them:
 | Category | Examples |
 |---|---|
 | **Input** | Position, Normal, UV, Vertex Colour, Time, Screen Position, Camera, Texture2D, Sampler, Constants (π, e), Float/Vector/Colour parameters |
-| **Math** | Add/Subtract/Multiply/Divide/Power/Sqrt; Abs, Sign, Floor, Ceil, Round, Frac, Modulo; Min/Max/Clamp/Saturate; Lerp, Smoothstep, Remap; Dot, Cross, Normalize, Length, Distance, Reflect, Refract; Sin/Cos/Tan and inverses; matrix construct/split/transpose |
+| **Math** | ~~Basic, Advanced, Interpolation, Range, Round, Trigonometry, Derivative, Vector~~ (done — 63/64); Matrix (done, simplified to `mat4`); Wave (Sawtooth done, Noise Sine Wave deferred) |
 | **UV** | Tiling and Offset, Rotate, Polar, Twirl, Flipbook, Parallax |
 | **Procedural** | Simple/Gradient/Voronoi noise, Checkerboard, Shapes (ellipse, rectangle, polygon), Gradients |
 | **Artistic** | Saturation, Contrast, Hue, Invert, Replace Colour, Blend modes, Channel Mask, Normal Blend/Strength/Unpack |
-| **Channel** | Split, Combine, Swizzle, Flip |
+| **Channel** | ~~Split~~ (done), Combine, Swizzle, Flip |
 | **Utility** | Preview, Comparison, Branch, And/Or/Not, Subgraph |
 
 **Most of this already exists as GLSL** in `shaders/lib/` — `math.glsl`, `vector.glsl`, `color.glsl`,
@@ -555,16 +657,52 @@ until generated materials exist.
 > `CgMasterNode.properties()` became `shaderProperties()` in the same change — those are the material's
 > `Properties {}` uniform block, a genuinely different thing from a node's dropdowns, and the two collided.
 >
+> **Update 2026-08-02 — inline value editors shipped, as part of P6.1.8's config-kit work.**
+> `NodeFieldWidgets` became a codec layer over `ConfigControls` (step 7) and `NodePort`'s existing
+> `setInlineEditor` slot was proven end to end against real controls for the first time (step 8) —
+> `Color`'s `Value` and `Float`'s `Value` (and any port carrying a literal default) now get a real
+> `NumberControl`/`ColorControl`/etc. inline on the port row, not a bare stand-in. See
+> `CrystalGUI_P6.1.8_CONFIGURATOR_PLAN.md`'s step 7/8 write-ups and `NodePortInlineEditorTest`.
+>
+> **Update 2026-08-02, later — moved OFF the port row entirely, to match Unity's actual layout.**
+> The step-8 shape above put the control inside the port's own row, inside the node's box. Unity's
+> reference screenshots show it floating OUTSIDE the node, beside the port, joined by a short stub —
+> and `Add`/`Multiply`'s `A`/`B` had no editor at all (`widgetKindFor` had no case for `DYNAMIC`, now
+> fixed). `NodePort.setInlineEditor` is `setDefaultEditor` now — a stored reference only, mounted
+> nowhere by the port itself. `GraphView` discovers, places and tears down the floating widget
+> (`discoverPortEditors`/`setPortEditorMounted`/`positionPortEditor`), tracking its own live
+> `NodePort.dotCenter()` every tick; `NodeWireLayer` draws the connecting stub in the port's own type
+> colour. Two real bugs surfaced building this, both now pinned by tests rather than left for the next
+> screenshot to catch: every `ConfigControl` self-marks internal in its own constructor, so mounting via
+> public `addChild` "worked" (the public API doesn't check the child's own flag) while unmounting via
+> public `removeChild` silently no-opped forever (`content().addInternalChild`/`removeInternalChild`
+> fixed it); and `NodePort.dotCenter()` is a raw accumulated layout position, not a world coordinate —
+> feeding it straight into `moveNode` double-counts the plane's own on-screen origin, invisible at world
+> (0, 0) and off by a whole panel width anywhere else (`positionPortEditor` now subtracts
+> `content().getRuntimeCache()`, the same conversion `CanvasView.worldBoundsOf` already does).
+>
+> **Update 2026-08-02, later still — Unity's axis prefix and trailing dot.** A closer reference
+> screenshot showed the floating field is not bare: it reads `X 0 •` — the port's own id as a plain
+> unstyled prefix, then the value box, then a small filled dot the stub actually runs into. `GraphView`
+> now builds that whole row (`discoverPortEditors`) around whatever `NodePort.getDefaultEditor()`
+> returns, rather than mounting the bare control — the getter's own contract is unchanged (still the raw
+> `NumberControl`/`ColorControl`/etc., per its javadoc), so nothing downstream that reads it needed to
+> change. `graph.css`'s `.__editor__` compound selectors (`.__editor__.__color__`) had to become real
+> descendant selectors (`.__editor__ .__color__`) now that the kind class sits on a nested control rather
+> than the row itself — the exact "resolves to zero, not to an error" trap this file's own CSS comments
+> already warned about, just relocated one level down. The dot's colour is read from
+> `NodePort.typeColor()` every tick alongside the reposition, not hard-coded per type in CSS — one number,
+> three consumers (the port's own dot, the wire, this dot) rather than a fourth copy of the palette.
+>
 > **Still to do:**
 > - **Mapping a driver error back to a node.** `Result.ownerOfLine` exists and is populated; nothing
 >   consumes it yet. This is the item that decides whether the editor is usable on a real failure.
 > - **Debounced recompile.** Currently on connection change and property change, both discrete. A
 >   per-keystroke trigger needs real debouncing.
-> - **Inline value editors.** `Color`'s `Value` and `Float`'s `Value` have no field to type into, so a
->   graph is connectable but not yet editable. Same mechanism as the property dropdowns — a control bound
->   to `NodeData.properties` — but a text/colour field rather than an enumerated choice.
-> - **Dynamic ports have no colour** — `graph.css` has no `dynamic` entry, so those dots are grey. Unity
->   colours a dynamic port by its *resolved* type, which the compiler already computes.
+> - **Dynamic ports resolve to a static grey, not their resolved colour** — `graph.css`'s
+>   `nodeport.type-dynamic` entry exists (it is not simply missing, as this bullet used to say), but it
+>   is one fixed grey rather than Unity's behaviour of colouring a dynamic port by whatever concrete type
+>   it resolved to, which the compiler already computes and records in `Result.typeOf`.
 
 - `NodeType` ↔ `CgShaderNode` mapping, so the create menu offers shader nodes and
   `NodeWidgetFactory` builds their widgets. Both registries already exist; this is a bridge, not a
@@ -581,9 +719,10 @@ until generated materials exist.
 
 ## Ordering, and what blocks what
 
-**Status as of 2026-07-31:** 6.3.1–6.3.5 `DONE` · 6.3.7 `DONE` · 6.3.6 `IN PROGRESS` (8 nodes) ·
-6.3.8 `IN PROGRESS` (dropdowns done; error mapping, debounce, inline value editors, dynamic port colour
-remain). The whole stack runs end to end in the gallery's **shadergraph** page.
+**Status as of 2026-08-03:** 6.3.1–6.3.5 `DONE` · 6.3.7 `DONE` · 6.3.6 `IN PROGRESS` (73 nodes; Math
+63/64, every other category still to start) · 6.3.8 `IN PROGRESS` (dropdowns and inline value editors
+done; error mapping, debounce, and dynamic-port-colour-by-resolved-type remain). The whole stack runs
+end to end in the gallery's **shadergraph** page.
 
 ```
 6.3.1  materials from source ──┬── 6.3.3 compiler ── 6.3.4 domains ── 6.3.5 master node
