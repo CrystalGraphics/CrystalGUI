@@ -1381,7 +1381,17 @@ Debugger, LSP, IntelliSense, minimap, git gutter. Folding is deferred with them:
 syntax tree, and indentation-based folding is the kind of approximation that is wrong exactly where code is
 interesting.
 
-### 6.1.8 Configurator · `TODO`
+### 6.1.8 Configurator · `DONE` (2026-08-02)
+
+> **Steps 1–8 of nine shipped.** The seam (`ConfigControl`, `ValueControl<T>`, `ConfigControls`,
+> `ConfigDescriptor`), the form row (`Configurator`, `ConfiguratorPanel`, `ConfiguratorGroup`), twelve
+> controls under `config/control/`, and all three hosts live — the inspector row, the gallery's
+> **configurator** page, and the port-attached editor on an unconnected input.
+>
+> Step 9, `GradientControl`, stays deferred exactly as the plan scheduled it: expensive, and nothing in
+> the near node set needs a gradient. It is not forgotten — `ConfigKitTest.everyKindIsAccountedFor`
+> asserts the missing set is precisely `[GRADIENT]`, so building it will fail that test until the list is
+> updated, and adding any *other* unbuilt kind fails it immediately.
 
 Point it at an object, get an editing UI. Annotation-driven, concept borrowed from LDLib2 — which has the
 full prior art checked in at `research_repos/LDLib2/src/main/java/com/lowdragmc/lowdraglib2/configurator/`:
@@ -1474,13 +1484,32 @@ pointers.
 
 </details>
 
-### 6.1.10 File system SPI and browser · `TODO`
+### 6.1.10 Remote project workspace · `TODO` — planned 2026-08-03
+
+> **This item is not what the sketch below describes.** It is a **server-hosted project workspace** —
+> the files live on the server's machine, the client is a thin IDE frontend over them, and singleplayer
+> is the same path because the integrated server *is* a server. VS Code Remote, not a desktop file
+> browser. The plan doc is authoritative; everything under this heading is the superseded sketch.
 
 An interface in `core/` with per-platform implementations, following `UIClipboard`/`UISoundSystem` exactly.
 
 > **Open design question.** In a Minecraft context "the filesystem" is most likely resource packs, world
 > data, or server-side storage rather than `java.io`. The SPI should be shaped around *what the client can
 > actually be handed*, not around POSIX. Settle this before writing the browser UI on top.
+
+> **📄 Being planned 2026-08-03: [`CrystalGUI_P6.1.10_FILESYSTEM_PLAN.md`](CrystalGUI_P6.1.10_FILESYSTEM_PLAN.md).**
+> Read that, not this. Three things above are already known to be wrong or out of date:
+>
+> - **`UIClipboard` and `UISoundSystem` no longer exist.** CrystalGUI has no platform registry at all;
+>   the pattern to copy is `CgInputService`/`CgSoundService`, and the SPI belongs in CrystalGraphics'
+>   `platform/service/` rather than in `core/`.
+> - **The read half already ships** — `CgResourceService.openStream(domain, path)`. What is missing is
+>   listing, writing and a path type.
+> - **The open question is answerable now.** `PackResources.listResources` and `getNamespaces` mean MC
+>   genuinely supports a listable, namespaced, read-only tree; `LevelStorageSource` and the loader config
+>   directory are the writable roots. The plan turns this into seven numbered decisions, of which the
+>   one the sketch never raises — whether a *server-authored* tree may touch the filesystem at all — is
+>   the one with security consequences.
 
 ### 6.1.11 Docking and workspace layout · `TODO`
 
@@ -2550,7 +2579,7 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
 ```
 
 **Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → ~~6.1.6~~ →
-~~6.1.7~~ → ~~6.1.7b~~ (complete) → **6.1.8 (next)**, then 6.1.10-12, then the 6.2
+~~6.1.7~~ → ~~6.1.7b~~ → ~~6.1.8~~ (complete) → **6.1.10 (next)**, then 6.1.11-12, then the 6.2
 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done, see 6.1.9; its implementation lands with
 6.1.6.
 

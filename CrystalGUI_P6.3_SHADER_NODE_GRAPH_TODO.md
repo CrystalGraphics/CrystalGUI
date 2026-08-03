@@ -386,7 +386,39 @@ natural home for them and needs no new document concept.
 
 ---
 
-### 6.3.6 The built-in node library · `IN PROGRESS` — 73 of the set, Math category 63/64 (2026-08-03)
+### 6.3.6 The built-in node library · `IN PROGRESS` — 93 of the set, Math done, Channel/UV/Utility/Procedural started (2026-08-03)
+
+> **Update 2026-08-03, later — batch 4 (20 nodes), the first cross-category pass.** Where the Math
+> batches stayed inside one category, this one is a slice across five: Channel's `Combine`/`Flip`
+> (`Swizzle` still deferred — its output width is set by a user-typed string, needing a real
+> `CgShaderNode`, not a template), three UV nodes with a direct 1:1 `uv.glsl` call (`Rotate`, `Tiling
+> and Offset`, `Polar Coordinates`), three more whose formulas were new to `uv.glsl` this batch
+> (`Twirl`, `Radial Shear`, `Spherize` — standard node-graph distortions, not independently verified
+> against Unity's own page, same honesty note `Rotate About Axis` already carries), Utility's Logic set
+> (`And`/`Or`/`Not`/`Nand`/`Comparison`/`Branch`), and six of Procedural's nine (`Voronoi` and the two
+> Polygon shapes need a genuinely new stdlib function each — cellular noise and an N-gon SDF — and are
+> deferred rather than approximated).
+>
+> - **Logic is fixed-`FLOAT`/`BOOL`, not `DYNAMIC`.** GLSL's `&&`/`||`/comparison operators are
+>   scalar-bool-only — there is no `bvecN` short-circuit form — so generalising `Comparison` to a
+>   vector would need `lessThan()`/`any()`/`all()` reducing a `bvec` back to one `bool`, a real
+>   mechanism this batch does not add. `Comparison`'s `Condition` dropdown (Equal/NotEqual/Less/
+>   LessOrEqual/Greater/GreaterOrEqual) is the same `bodyFor` property mechanism `Space`/`Transform`
+>   already use, just six options instead of three.
+> - **`Gradient Noise` is `fbm4`, not true gradient/Perlin noise** — this library has no real
+>   gradient-vector noise function yet, and `fbm4` (four-octave *value* noise) is the closest existing
+>   stand-in rather than a new one built to match. Visually similar, mathematically different;
+>   documented on the node itself rather than presented as the genuine article.
+> - **`Ellipse` uses a cheap approximation** (`length(p/radius) - 1`), not a true elliptical SDF —
+>   `sdf.glsl` has none, and adding one for a single caller was judged not worth it this pass. The
+>   antialiasing band is not perfectly uniform around the rim as a result (the expression's gradient
+>   isn't unit magnitude off-axis); `Rectangle`/`Rounded Rectangle` use the real `sdf_rounded_box` and
+>   have no such caveat.
+> - **All three shapes are `FRAGMENT`-domain**, same rule Derivative already established: `sdf_coverage`
+>   is `fwidth`-based and does not compile in a vertex shader.
+>
+> **23 new GL-free tests** in `CgBuiltinMathNodesBatch4Test`, same pattern as the Math batches —
+> including one that runs `Comparison` through all six `Condition` options, not just the default.
 
 > **Update 2026-08-03 — the Math volume pass, three batches, `CgShaderNodeRegistry.register` grew
 > varargs to carry it.** `CgBuiltinShaderNodes` went from 12 nodes to 73 in one session, closing Math
@@ -501,22 +533,26 @@ natural home for them and needs no new document concept.
 > which this engine's vertex formats do not carry, so it cannot be derived from what a node is handed. An
 > option that silently emitted the wrong frame would be worse than one that is missing.
 
-> **Shipped**: `CgBuiltinShaderNodes` — 73 nodes plus `CgShaderNodeRegistry`. The original twelve
+> **Shipped**: `CgBuiltinShaderNodes` — 93 nodes plus `CgShaderNodeRegistry`. The original twelve
 > (Color, Float, Vector2/3/4, Time, Add, Multiply, UV, Position, Normal Vector, Split) proved the stack
-> end to end; the Math volume pass above closed out Basic/Advanced/Interpolation/Range/Round/
-> Trigonometry/Derivative/Vector fully and Matrix (simplified to `mat4`) and Wave (Sawtooth only —
-> Noise Sine Wave deferred, see above) partially. Constants exercise the unconnected-input-becomes-a-
-> literal path, the arithmetic/comparison nodes are **dynamic** so widening and compiler-emitted casts
-> are live in any graph using them, Time is an engine builtin from `cg_env.glsl`, UV/Position/Normal
-> exercise `previewBody`/`hasPreviewForm` and the `Space` property (now also reused by `Transform`),
-> Split/Matrix Split exercise fixed (non-`DYNAMIC`) multi-output nodes, and Derivative is the first
-> `FRAGMENT`-domain node.
+> end to end; the Math volume pass closed out Basic/Advanced/Interpolation/Range/Round/Trigonometry/
+> Derivative/Vector fully and Matrix (simplified to `mat4`) and Wave (Sawtooth only — Noise Sine Wave
+> deferred) partially; batch 4 opened Channel (2/4 — Swizzle deferred), UV (6/10), Utility's Logic set
+> (6/12), and Procedural (6/9 — Voronoi and the two Polygon shapes deferred). Constants exercise the
+> unconnected-input-becomes-a-literal path, the arithmetic/comparison nodes are **dynamic** so widening
+> and compiler-emitted casts are live in any graph using them, Time is an engine builtin from
+> `cg_env.glsl`, UV/Position/Normal exercise `previewBody`/`hasPreviewForm` and the `Space` property
+> (now also reused by `Transform`), Split/Matrix Split exercise fixed (non-`DYNAMIC`) multi-output
+> nodes, and Derivative/the Procedural shapes are `FRAGMENT`-domain.
 >
 > **Every one is `CgTemplateShaderNode`** — the declarative path has covered every node so far, across
-> 73 of them now, which is the evidence that 6.3.2's interface/data split was drawn in the right place.
+> 93 of them now, which is the evidence that 6.3.2's interface/data split was drawn in the right place.
 >
-> **Still to do**: Input (54, 8 shipped), Artistic (16), UV (10), Procedural (9), Utility (12), the rest
-> of Channel (Combine/Swizzle/Flip), Wave's Noise Sine Wave, and mapping a driver error back to a node
+> **Still to do**: Input (54, 8 shipped), Artistic (16, untouched), the rest of UV (4: Flipbook,
+> Triplanar, Parallax Mapping, Parallax Occlusion Mapping — the genuinely hard ones, needing texture
+> sampling/tangent space), the rest of Procedural (3: Voronoi, Polygon, Rounded Polygon), the rest of
+> Utility (6: Preview, Subgraph, Is Infinite, Is NaN, Any, All), Channel's Swizzle, Wave's Noise Sine
+> Wave, and mapping a driver error back to a node
 > (6.3.8's own open item). The observation that most of the rest is one call into an existing stdlib
 > function still holds — Math was the proof of that at scale.
 
@@ -527,11 +563,11 @@ ordered by how often a real shader needs them:
 |---|---|
 | **Input** | Position, Normal, UV, Vertex Colour, Time, Screen Position, Camera, Texture2D, Sampler, Constants (π, e), Float/Vector/Colour parameters |
 | **Math** | ~~Basic, Advanced, Interpolation, Range, Round, Trigonometry, Derivative, Vector~~ (done — 63/64); Matrix (done, simplified to `mat4`); Wave (Sawtooth done, Noise Sine Wave deferred) |
-| **UV** | Tiling and Offset, Rotate, Polar, Twirl, Flipbook, Parallax |
-| **Procedural** | Simple/Gradient/Voronoi noise, Checkerboard, Shapes (ellipse, rectangle, polygon), Gradients |
+| **UV** | ~~Tiling and Offset, Rotate, Polar Coordinates, Twirl, Radial Shear, Spherize~~ (done — 6/10); Flipbook, Triplanar, Parallax Mapping, Parallax Occlusion Mapping remain (texture sampling/tangent space needed) |
+| **Procedural** | ~~Checkerboard, Simple Noise, Gradient Noise (approximated via `fbm4`), Ellipse, Rectangle, Rounded Rectangle~~ (done — 6/9); Voronoi, Polygon, Rounded Polygon remain (each needs a new stdlib function) |
 | **Artistic** | Saturation, Contrast, Hue, Invert, Replace Colour, Blend modes, Channel Mask, Normal Blend/Strength/Unpack |
-| **Channel** | ~~Split~~ (done), Combine, Swizzle, Flip |
-| **Utility** | Preview, Comparison, Branch, And/Or/Not, Subgraph |
+| **Channel** | ~~Split, Combine, Flip~~ (done — 3/4); Swizzle remains (output width set by a user-typed string, needs a real `CgShaderNode`) |
+| **Utility** | ~~And, Or, Not, Nand, Comparison, Branch~~ (Logic done — 6/12); Preview, Subgraph, Is Infinite, Is NaN, Any, All remain |
 
 **Most of this already exists as GLSL** in `shaders/lib/` — `math.glsl`, `vector.glsl`, `color.glsl`,
 `uv.glsl`, `noise.glsl`, `sdf.glsl`. A large fraction of the library is a JSON file whose body is one
@@ -717,12 +753,179 @@ until generated materials exist.
 
 ---
 
+### 6.3.9 Search — ranked, highlighted, and **reusable** · `DONE` (2026-08-03)
+
+> **Layer 1 shipped 2026-08-03 — `com.crystalgui.core.search`, 16 tests, headless.**
+> `SearchQuery` (normalised once, because a query is matched against every candidate),
+> `SearchMatch` (score + kind + **ranges**) and `SearchMatcher`. Field weights are 1000 apart so no kind
+> bonus can cross them, which is what makes *any* name hit outrank *any* category hit — the Enter bug,
+> pinned by `theWeakestNameMatchStillBeatsAnExactCategoryMatch`. Deliberately **not** a general fuzzy
+> matcher: `ACRONYM` covers word starts (`cp` → Cross Product) and an arbitrary subsequence is refused,
+> which `anArbitrarySubsequenceIsNotAMatch` holds to.
+>
+> **②③④ shipped 2026-08-03.** `NodeTypeRegistry` ranks (score desc, then alphabetical — without that
+> tiebreak a `LinkedHashMap` orders equal scores by registration, which the user cannot see or predict);
+> `NodeMenuTree.ranked` replaced `flat`, which had been **re-sorting alphabetically and throwing the
+> ranking away**; rows carry their category; `EntryRenderer` registers match ranges under
+> `::highlight(search-match)` on every bind; `SearchField` is a general widget (icon / field / clear),
+> and the menu now uses it.
+>
+> **Two things the screenshots caught that the plan did not.** The category separator was `▸` — which
+> `MinecraftRegular.otf` does not have, so it drew a **blank advance** and read as a spacing bug, the
+> same trap `UIText`'s ellipsis fallback already documents. It is now a drawn `CgUiShape`
+> `triangle-right`, and the category is a list of **segments** rather than one joined string — which also
+> makes the tint exact for free, since each segment is matched on its own and there is no offset
+> arithmetic to get wrong. The magnifier is deliberately **not** drawn: the shape catalog has no
+> magnifier, and both cheap fakes (a font glyph, a wrong shape) are worse than the element sitting
+> `display: none` as a hook until one exists.
+>
+> **Follow-up fixes 2026-08-03**, from using it: the menu is a `Popover` and therefore the SAME element
+> every open, so its scroll offset survived hiding and reopening showed the list already scrolled — reset
+> with `setScrollImmediate` before `rebuild()`. Category casing now comes from the id **verbatim**
+> (`categoryOf` and `categorySegments` both stopped upper-casing the first letter), because deriving it
+> is right for `math` and silently wrong for an acronym: `uv` rendered as the category "Uv". Port labels
+> are humanised at the draw site (`RadialScale` → `Radial Scale`, `UV` stays `UV`) while the id is left
+> alone — it is simultaneously a GLSL template key, the emitted variable name and `PortSpec.portId`, so it
+> must stay a single identifier. Derived rather than declared, deliberately: an explicit label would mean
+> 93 nodes each carrying a second string, and it can still be added per-port later if one needs it.
+>
+> ⚠ **Node ids were re-cased** (`cg:uv/…` → `cg:UV/…`, `cg:math/basic/…` → `cg:Math/Basic/…`; 115
+> replacements). An id is the **persisted `typeId`**, so a graph saved before this reads as unknown types
+> and renders through `NodeWidgetFactory.placeholder`. Harmless while nothing durable has been saved,
+> which is true today — but if that stops being true, this is the change that needs a migration, and it
+> is cheap to write as an id alias map. Only CATEGORY segments were re-cased; leaves are untouched
+> (`cg:UV/polar-coordinates`), since a leaf is never displayed.
+>
+> Tests: 16 headless (`SearchMatcherTest`) + 4 in `NodeCreationMenuTest` — name-beats-category ranking,
+> ranking-does-not-filter, category shown only while searching, and highlight ranges registered **and
+> cleared** (the row-recycling guard).
+
+> Motivation: the create menu side by side with Unity's, 2026-08-03. Four differences, each verified
+> against our code rather than inferred from the screenshot.
+
+#### The audit
+
+| # | Defect | Where it lives |
+|---|---|---|
+| 1 | **The match reason is invisible — and it is most of the list.** `NodeType.matches()` ORs over label, **category** and synonyms. For `vec`, ten of thirteen visible rows (Cross Product, Distance, Dot Product, Fresnel Effect, Projection, Reflection, Rejection, Rotate About Axis, Sphere Mask, Transform) matched *only* on their `Math/Vector` category — and `NodeMenuTree.flat()` then builds every leaf with `""` as its category, throwing the reason away. Unity lists the same nodes under a highlighted `Math ▸ Vector`, so they read as obvious rather than arbitrary. | `NodeType.matches`, `NodeMenuTree.flat` |
+| 2 | **No ranking, and it makes Enter create the wrong node.** `flat()` sorts alphabetically by label, full stop. But `rebuild()` pre-selects row 0 so Enter takes "the best match" — with `vec` that is **Cross Product**, which does not contain the string at all, while `Vector 2` sits 12th. The class doc already claims a result set is "ranked rather than filed"; the code only filters. | `NodeMenuTree.flat`, `NodeCreationMenu.rebuild` |
+| 3 | **No match highlighting.** Unity tints the matched substring in both leaves and category names. Ours is plain text — which is what makes #1 unreadable. | the row builder |
+| 4 | **Flat list vs. preserved tree.** A genuine design disagreement, not an oversight: our own note argues that burying matches under collapsed folders is what the user typed to avoid. But Unity **auto-expands** the matched branches, so nothing is buried — the rationale does not survive the comparison intact. | see the open decision below |
+
+> **Not a defect, and it validates a design we already have:** Unity shows `Float` under `Input ▸ Basic`
+> for `vec` because Shader Graph's Float was formerly *"Vector 1"* and still carries it as a synonym —
+> exactly the mechanism `NodeType.synonyms` exists for ("typing `plus` finds `Add`"). We need the data,
+> not a feature. (`URP Sample Buffer` also appears there and I cannot account for it; not worth guessing.)
+
+#### This is NOT a create-menu feature — three layers, and only the last is the menu's
+
+The create menu is the first consumer, not the owner. Splitting it now rather than after a second
+consumer forces the issue is the whole point.
+
+**1. `com.crystalgui.core.search` — the matcher. Headless: no widgets, no GL.**
+Sits beside `core.command` / `core.undo` / `core.property`, which is the family it belongs to — small,
+general, testable without a window. Shape:
+
+- `SearchQuery` — a parsed, normalised query
+- `SearchMatch` — `score`, **which field matched**, and the matched **character ranges**
+- `Searchable` — the SPI a candidate implements, or a `Function<T, List<Field>>` adapter so a caller does
+  not have to modify its own types
+
+The ranges are the load-bearing part and the reason this cannot return a boolean: **both** the
+highlighting (#3) and the "why did this match" annotation (#1) are downstream of knowing *where* the hit
+landed. A yes/no matcher forces every consumer to re-derive it, badly and differently.
+
+**2. Highlighting reuses the CSS Custom Highlight API already shipped.**
+`ui/text/HighlightRegistry` + `TextRange` + `::highlight(name)` exist and are precisely this: styling text
+ranges **without wrapping them in elements**. So match tinting is `::highlight(search-match) { color: … }`
+in a stylesheet — **no new render path, and the colour is a theme's business rather than a constant in
+Java**, the same rule the port palette already follows.
+
+Two constraints from that API, both already documented and both fine here: it accepts only non-layout
+properties (colour is; `font-size` would reflow the very text being searched), and highlighted text takes
+the shaped-span path, so a row with no match is unaffected.
+
+**3. `SearchField` — a real widget in `ui/elements/`. NOT a `ConfigControl`.**
+Worth stating plainly, because it is the one place this could go wrong: **a `ConfigControl` edits a value;
+a search field filters a view.** Different jobs — and the kit's row height, label column and
+`__config-control__` cascade are all built for the first. A `SearchField` *used inside* a configurator
+panel is completely fine: that is composition, not membership. Internal children `__icon__` / `__field__` /
+`__clear__`, so a theme can draw Unity's magnifier and a clear button.
+
+**Composition** (query → ranked model → selection) stays in `NodeCreationMenu` for now. Its arrow-key
+routing and its pre-selection asymmetry are already correct and hard-won — see its own note on why Enter
+pre-selects only *with* a query — and extracting behaviour that has exactly one consumer is how a
+premature abstraction gets locked in. Extract it when a second consumer disagrees, not before.
+
+#### Ranking — ported, not invented
+
+Scoring buckets are a convention, not a derivable answer, so they come from VS Code's
+`vs/base/common/filters.ts` / `fuzzyScorer.ts` (**MIT — port the code, attribute in the class javadoc**),
+the same rule `text/cursor/` already follows. Tiers, strongest first:
+
+1. exact label match
+2. label **prefix** — `vec` → `Vector 2`
+3. label word-boundary / acronym — `cp` → `Cross Product`
+4. label substring
+5. **synonym** match
+6. **category** match — deliberately last, and the direct fix for #2
+
+Ties break alphabetically, so ordering is stable rather than dependent on registry iteration order.
+
+#### Consumers this unlocks
+
+- **Create Node menu** (now), and the contextual wire-drop menu that shares its code
+- **Command palette** — `core.command.CommandRegistry` exists with no palette over it, and
+  `NodeCreationMenu` already cites "the command-palette rule" for its Enter behaviour
+- **Configurator panel** — searching settings is table stakes (VS Code, Unity and Blender all have it)
+- `TableView` / `ListView` filtering, and the `__asset__` control's browse
+
+#### Tests
+
+- `core.search` is **headless**, so it belongs in `headlessTest` (no `CgIO`, no fonts, no `StyleSheet`) —
+  which is also the standing proof that it carries no widget dependency
+- Ranking: `vec` puts `Vector 2` above `Distance`; `cp` finds `Cross Product`; a category-only match ranks
+  below every name match
+- **Regression for #2**: with a query, the pre-selected row is a *name* match — the "Enter creates Cross
+  Product" bug, pinned
+- Ranges: a match reports the exact offsets a highlight would tint
+- Highlighting asserted through `HighlightRegistry`, never pixels
+
+#### Layout — SETTLED 2026-08-03: flat, ranked, with a category suffix
+
+Chosen over Unity's auto-expanded tree. The argument for flattening was right the first time; its only
+real defect was hiding the category that *caused* the match, and that is a dim `Math ▸ Vector` suffix per
+row rather than a layout change. Unity only avoids burying results by auto-expanding every matched
+branch — at which point the folders are decorative, and it is paying extra rows and indentation for a
+grouping nobody navigates while searching.
+
+So: **a query yields a flat, ranked list; each row shows its category dimmed after the label; both the
+label and the category tint their matched ranges.** Browsing with an empty query still shows the real
+tree, unchanged — that is what the hierarchy is *for*, and 6.3.9 does not touch it.
+
+#### The one constraint that will bite if forgotten — rows are RECYCLED
+
+`TreeView` realises about a dozen rows and reuses them: its own note says a realised row "represents a
+*different* row every time it is recycled, so a listener cannot capture an index and must ask at click
+time." **Highlight ranges are per-row data and must therefore be applied in the renderer, on every bind
+— never registered once against a row element.** Getting this wrong produces the exact failure the
+editor's pooled gutter arrows already documented: correct until you scroll, then every row wears the
+ranges of whichever result last occupied its slot. The `EntryRenderer` is the only place that may call
+`highlights().set(...)`, and it must `set` on every bind (including clearing to empty) rather than only
+when there is a match.
+
+---
+
 ## Ordering, and what blocks what
 
-**Status as of 2026-08-03:** 6.3.1–6.3.5 `DONE` · 6.3.7 `DONE` · 6.3.6 `IN PROGRESS` (73 nodes; Math
-63/64, every other category still to start) · 6.3.8 `IN PROGRESS` (dropdowns and inline value editors
-done; error mapping, debounce, and dynamic-port-colour-by-resolved-type remain). The whole stack runs
-end to end in the gallery's **shadergraph** page.
+**Status as of 2026-08-03:** 6.3.1–6.3.5 `DONE` · 6.3.7 `DONE` · 6.3.6 `IN PROGRESS` (93 nodes; Math
+63/64 done, Channel 3/4, UV 6/10, Utility Logic 6/12, Procedural 6/9, Input 8/54, Artistic untouched)
+· 6.3.8 `IN PROGRESS` (dropdowns, inline value editors, implicit-UV port defaults and dynamic port
+arity/colour-by-resolved-type all done; error mapping and debounce remain) · 6.3.9 `DONE`.
+The whole stack runs end to end in the gallery's **shadergraph** page.
+
+**6.3.9 blocks nothing and is blocked by nothing** — it is a general search facility the create menu
+happens to be the first consumer of, so it can be picked up whenever, independently of the node library.
 
 ```
 6.3.1  materials from source ──┬── 6.3.3 compiler ── 6.3.4 domains ── 6.3.5 master node
