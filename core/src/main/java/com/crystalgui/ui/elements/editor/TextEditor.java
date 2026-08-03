@@ -2117,8 +2117,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
             measuredRows.clear();
             return;
         }
-        int at = Math.max(0, Math.min(change.mapPos(changes.get(0).from(), -1), buffer.length()));
-        measuredRows.remove(buffer.document().offsetToPoint(at).row());
+        // EVERY ROW THE CHANGE SPANS, not merely the one it starts on.
+        //
+        // A single change is not a single row. `setText` replaces the whole document as one change, and
+        // a replacement with the same number of lines therefore reached here and dropped only row 0 --
+        // leaving every row below holding a RowMetrics whose DISPLAY TEXT was the old document's. The
+        // editor painted a new first line above a stale remainder, and only a later edit that happened to
+        // alter the line count cleared it.
+        Change edit = changes.get(0);
+        int start = clampToDocument(change.mapPos(edit.from(), -1));
+        int end = clampToDocument(start + edit.insert().length());
+        int firstRow = buffer.document().offsetToPoint(start).row();
+        int lastRow = buffer.document().offsetToPoint(end).row();
+        for (int row = firstRow; row <= lastRow; row++) measuredRows.remove(row);
+    }
+
+    private int clampToDocument(int offset) {
+        return Math.max(0, Math.min(offset, buffer.length()));
     }
 
     /** Expands tabs through {@link CursorColumns} and measures the result. */

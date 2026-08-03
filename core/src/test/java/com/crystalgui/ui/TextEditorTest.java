@@ -2673,6 +2673,58 @@ public class TextEditorTest extends UiTestBase {
     }
 
 
+    /**
+     * <b>A single edit can span MANY rows, and every one of them must be re-measured.</b>
+     *
+     * <p>{@code invalidateMeasuredRows} drops one row when an edit provably renumbers nothing — and its
+     * guard was only "the line count did not change". That is not enough: {@code setText} replaces the
+     * whole document as ONE change, so a replacement with the same number of lines passed the guard and
+     * only row 0 was invalidated. Every row below kept its cached {@link RowMetrics}, which holds the
+     * DISPLAY TEXT, so the editor painted the old document with a new first line.</p>
+     *
+     * <p>Found in the workspace harness scene: reloading a file from disk changed nothing on screen until
+     * a keystroke happened to alter the line count and trigger the wholesale clear. The existing test
+     * covered a line-count CHANGE and so walked straight past this.</p>
+     */
+    @Test
+    public void anEditSpanningSeveralRowsReMeasuresAllOfThem() {
+        build("alpha" + NL + "bravo" + NL + "charlie");
+        showEditor();
+        assertEquals(java.util.List.of("alpha", "bravo", "charlie"), renderedLines());
+
+        // Same line count, every line different -- exactly what setText does on a reload.
+        editor.setText("delta" + NL + "echo" + NL + "foxtrot");
+        showEditor();
+
+        assertEquals("every row must paint its new text",
+                java.util.List.of("delta", "echo", "foxtrot"), renderedLines());
+    }
+
+    /** The same through a mid-document replacement rather than setText. */
+    @Test
+    public void aMultiRowReplacementReMeasuresEveryRowItTouched() {
+        build("one" + NL + "two" + NL + "three" + NL + "four");
+        showEditor();
+
+        int from = editor.getText().indexOf("two");
+        int to = editor.getText().indexOf("four");
+        editor.setSelection(from, to);
+        editor.insertAtCaret("TWO" + NL + "THREE" + NL);
+        showEditor();
+
+        assertEquals(java.util.List.of("one", "TWO", "THREE", "four"), renderedLines());
+    }
+
+    /** The rendered text of each realised line, in order. */
+    private java.util.List<String> renderedLines() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (UIElement line : linesOf()) {
+            out.add(((UIText) line.getChildren().get(0)).getText());
+        }
+        return out;
+    }
+
+
     private void showEditor() {
         settle();
         editor.updateWindow();
