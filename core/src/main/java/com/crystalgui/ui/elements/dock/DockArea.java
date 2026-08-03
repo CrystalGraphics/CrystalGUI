@@ -39,6 +39,21 @@ public class DockArea extends UIElement implements UIFrameTicker {
     /** On the area while a dock drag is in flight, so a theme can dim or outline the whole thing. */
     public static final String DRAGGING_CLASS = "__dock-dragging__";
 
+    /**
+     * The one child this area owns, holding whatever the layout currently builds to.
+     *
+     * <p><b>Marked internal exactly once, while empty, and never again.</b> {@code markAsInternal()}
+     * recurses into the whole subtree, so calling {@code addInternalChild} on a built tree stamps every
+     * descendant internal — including every {@code Tab}. {@code removeChild} refuses internal children
+     * outright, so from the next rebuild on {@code TabView.clearTabs()} emptied its list and left the tab
+     * ELEMENTS in the rail: strips that grew by one dead, unclickable tab per rebuild while every
+     * assertion against {@code getTabs()} stayed green.</p>
+     *
+     * <p>Going through a wrapper means the built tree is added with an ordinary public
+     * {@code addChild}, which marks nothing.</p>
+     */
+    private final UIElement content = new UIElement();
+
     private final DockPanelRegistry<UIElement> registry;
     private DockLayout layout;
 
@@ -67,6 +82,8 @@ public class DockArea extends UIElement implements UIFrameTicker {
         this.registry = registry;
         this.layout = layout;
         setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
+        StyleGroup.defaultPipeline(content.getStyle().getLayoutGroup(), l -> l.flexGrow(1f).flexBasis(0));
+        addInternalChild(content);
         registerDropHandling();
     }
 
@@ -90,6 +107,15 @@ public class DockArea extends UIElement implements UIFrameTicker {
         this.activeGroup = null;
         requestRebuild();
         return this;
+    }
+
+    /**
+     * What the layout currently builds to — a {@link SplitView} for a branch, a {@link DockGroup} for a
+     * single leaf, or {@code null} before the first rebuild.
+     */
+    @Nullable
+    public UIElement builtRoot() {
+        return content.getChildren().isEmpty() ? null : content.getChildren().get(0);
     }
 
     public DockGroup groupFor(DockLeaf leaf) {
@@ -156,7 +182,7 @@ public class DockArea extends UIElement implements UIFrameTicker {
         // split somewhere else in the tree silently undoes the drag you just did here.
         pullWeightsIntoLayout();
 
-        clearAllInternalChildren();
+        content.clearAllChildren();
         pruneStaleGroups();
         splitPool.clear();
 
@@ -167,7 +193,7 @@ public class DockArea extends UIElement implements UIFrameTicker {
             // A literal size here would have to be a real number, and there is no "auto" to write.
             StyleGroup.defaultPipeline(built.getStyle().getLayoutGroup(),
                     l -> l.flexGrow(1f).flexBasis(0));
-            addInternalChild(built);
+            content.addChild(built);
         }
         if (activeGroup == null || activeGroup.leaf().parent() == null) {
             List<DockLeaf> leaves = layout.leaves();
@@ -175,9 +201,6 @@ public class DockArea extends UIElement implements UIFrameTicker {
         }
     }
 
-    private void clearAllInternalChildren() {
-        for (UIElement child : new ArrayList<>(getChildren())) removeInternalChild(child);
-    }
 
     /** Groups whose leaf left the tree are dropped, or the map grows for the life of the window. */
     private void pruneStaleGroups() {
