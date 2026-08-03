@@ -2579,7 +2579,7 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
 ```
 
 **Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → ~~6.1.6~~ →
-~~6.1.7~~ → ~~6.1.7b~~ → ~~6.1.8~~ (complete) → **6.1.10 (next)**, then 6.1.11-12, then the 6.2
+~~6.1.7~~ → ~~6.1.7b~~ → ~~6.1.8~~ → ~~6.1.10~~ (MVP complete) → **6.1.11 (next)**, then 6.1.12, then the 6.2
 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done, see 6.1.9; its implementation lands with
 6.1.6.
 
@@ -2596,7 +2596,7 @@ item that can run in parallel with 6.1's remaining work.
 |---|---|---|
 | Do the MC loader jars ship tree-sitter's natives, and for which platforms? | 6.1.7 step 5 | The fork has no aarch64-Windows build. The built-in lexer fallback makes this a degradation rather than a failure, but the answer decides how much of 6.1.7 is usable in-game. |
 | ~~Are `CgShapedParagraph`'s style spans drivable without backend work?~~ | ~~6.1.1~~ | **Answered: yes, entirely.** The backend was already complete; 6.1.1 was a translation layer. |
-| What *is* the filesystem in a Minecraft context — resource packs, world data, server storage? | 6.1.10 | Shape the SPI around what the client can be handed, not around POSIX. |
+| ~~What *is* the filesystem in a Minecraft context — resource packs, world data, server storage?~~ | ~~6.1.10~~ | **Answered: none of those — it is a server-hosted project directory, and the client is a thin frontend over it.** Which makes the shape VS Code Remote's, not POSIX's and not a resource pack's. The implementing mod supplies the roots and the permission callback; singleplayer is the same path because the integrated server *is* a server. |
 | ~~Do widgets mutate models directly, or emit commands?~~ | ~~6.1.9~~ | **Answered: both, split on document vs view state.** See 6.1.9. Settled while three widgets had chosen rather than a dozen, which is the whole reason it was the gate. |
 | ~~Fixed-height rows only for the first virtualised pass?~~ | ~~6.1.3, 6.1.7~~ | **Answered: `VariableHeightStrategy` shipped with 6.1.7 step 1.** Soft wrap itself is still not implemented in the editor — unblocked rather than done. |
 | ~~Does the code editor need multi-cursor?~~ | ~~6.1.7~~ | **Answered: yes, designed in from the start.** `TextEditor` holds caret/anchor as two ints and every movement method touches them, so retrofitting means rewriting all of them; `ChangeSet` already models a multi-cursor edit exactly. |
