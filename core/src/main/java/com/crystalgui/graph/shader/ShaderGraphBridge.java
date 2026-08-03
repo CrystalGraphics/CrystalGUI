@@ -191,6 +191,27 @@ public final class ShaderGraphBridge {
     public record GlslPortType(String id, int arity) implements
             com.crystalgui.ui.elements.graph.PortType {
 
+        /**
+         * A {@code dynamic} port is presented as a <b>float</b> until something resolves it otherwise.
+         *
+         * <p>The same reasoning as its arity being 1 rather than 0: unwired, this port really will compile
+         * as a float, so showing it in the palette's "unknown" grey states something untrue and makes the
+         * one node type a user meets first — {@code Add}, {@code Multiply} — the only grey thing on the
+         * canvas. Unity colours it as the scalar and recolours on connection, which is exactly what
+         * {@link ShaderPortArity} then does from here.</p>
+         *
+         * <p>Done on the TYPE rather than left to that resolver because a freshly created node has no
+         * connections, so nothing would fire to correct it — it would sit grey until its first wire.
+         * {@code type-dynamic} is left in {@code graph.css} for consumers whose port types genuinely
+         * cannot resolve; a GLSL one always can.</p>
+         */
+        @Override
+        public String cssClass() {
+            return DYNAMIC_TYPE.equals(id)
+                    ? com.crystalgui.ui.elements.graph.PortType.CSS_CLASS_PREFIX + "float"
+                    : com.crystalgui.ui.elements.graph.PortType.super.cssClass();
+        }
+
         @Override
         public boolean isCompatibleWith(com.crystalgui.ui.elements.graph.PortType other) {
             if (other == null) return false;
@@ -208,7 +229,13 @@ public final class ShaderGraphBridge {
      * a library. Idempotent — {@code PortTypeRegistry.register} tolerates a repeat.</p>
      */
     public static void registerPortTypes() {
-        register(new GlslPortType(DYNAMIC_TYPE, 0));
+        // Arity 1, not 0 — a dynamic port reads "(1)" before anything is wired into it, exactly as
+        // Unity's unwired Multiply reads A(1) B(1) Out(1). 0 would mean "no width worth printing" (what
+        // a texture or sampler says) and suppressed the suffix entirely, so a Multiply showed a bare
+        // "A B Out" until it was connected. float is also the compiler's own fallback for an unresolved
+        // dynamic port, so the label and the emitted GLSL agree from the start rather than only once a
+        // wire lands. ShaderPortArity widens it from here as the graph is built.
+        register(new GlslPortType(DYNAMIC_TYPE, 1));
         register(new GlslPortType("float", 1));
         register(new GlslPortType("vec2", 2));
         register(new GlslPortType("vec3", 3));

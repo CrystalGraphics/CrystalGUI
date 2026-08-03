@@ -469,6 +469,40 @@ graphview .__editor__ dropdown {
     color: var(--node-text-bright);
     font-size: 7;
 }
+/* VECTOR's own components collapse to literal ZERO width here, not merely narrow — the bug the
+ * `min-width` above cannot reach on its own. `.__config-control__.__vector__ .__number__` (and
+ * `.__vector-cell__` around it) is `width: 0; flex-grow: 1`, which is the correct shape everywhere
+ * ELSE a vector control lives: the inspector column and a node's own control row are both a BOUNDED
+ * flex context, so `flex-grow` has real slack to distribute and the field ends up sized to its share
+ * of it. `.__editor__` is not — it is `position: absolute`, sized to its OWN content — so a
+ * `flex-grow: 1` item inside it has nothing to grow into. In real CSS a flex item's default
+ * `min-width` is `auto`, which floors it at its own content's minimum size regardless (the textfield's
+ * `min-width: 24px` above would still win). This engine's `min-size` default is `0`, not `auto` — a
+ * deliberate divergence recorded in AGENTS.md's own "Taffy defaults diverge from CSS" table — so
+ * nothing stops the collapse here the way it would in a browser. Scoped to `graphview .__editor__`
+ * rather than fixed on the base `.__vector__` rule itself: nowhere else a vector control is used is
+ * missing the bounded ancestor this depends on, so a global floor would be defending against a bug
+ * that cannot occur there. */
+graphview .__editor__ .__vector__ .__vector-cell__ { min-width: 30px; }
+graphview .__editor__ .__vector__ .__number__ { min-width: 24px; }
+/* Cells size to their OWN content instead of stretching to whatever height the box currently has, and
+ * this is a correctness fix rather than a cosmetic one.
+ *
+ * This engine's flex `align-items` default is STRETCH, so without this a `__vector-cell__` takes the
+ * cross size of the `__vector__` row — which takes it from the box. The box is `position: absolute`
+ * with an auto height, and on the pass right after it is mounted (before `reposition()`'s inline
+ * left/top have been applied) it is laid out against the whole plane, so the cells were briefly ~550px
+ * tall. Their own `align-items: center` then parked the axis label and the number field at y≈269 —
+ * exactly (550-12)/2 — and when the box settled back to its real ~18px, Taffy repositioned the cells
+ * but NOT the grandchildren inside them, so those two kept the centred-in-550 offset for good. That is
+ * the whole "the X/Y boxes render hundreds of pixels below their own frame" bug: the label and field
+ * were correct in x, correct in size, and correctly parented — just vertically centred in a box that
+ * had not existed for many frames.
+ *
+ * The scalar editor never showed it because its label and field are DIRECT children of the box, one
+ * level up, and that level does get repositioned. Pinning the cell's height to its content removes the
+ * two-level dependency entirely, so no intermediate box height can reach the grandchildren at all. */
+graphview .__editor__ .__vector__ { align-items: center; }
 /* BOOLEAN: same "square, and smaller than the row" exception the inspector and the control row both
  * make — `--cfg-check` (13px, from the config kit's OWN unscoped rule) would otherwise win here too,
  * same specificity trap `everyKind()` already caught for the control row. */

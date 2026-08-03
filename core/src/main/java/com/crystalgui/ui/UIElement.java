@@ -338,8 +338,18 @@ public class UIElement {
         if (hasChild(child)) throw new IllegalArgumentException("Cannot add the same child twice");
 
         if (child.hasParent()) {
-            assert child.getParent() != null;
-            child.getParent().removeChild(child);
+            UIElement previous = child.getParent();
+            assert previous != null;
+            // removeChild REFUSES an internal child — that is its contract, since internal structure
+            // must not be publicly removable. Used alone here it made reparenting an internal child a
+            // SILENT no-op: the old parent kept it in `children` while `child.parent` was repointed at
+            // the new one, so two elements both claimed it. Taffy then had it in two parents' child
+            // lists too (insertChildAtIndex does not detach from the previous parent), laid it out
+            // under both, and whichever pass ran last won — an element correctly sized inside the right
+            // box but positioned relative to a completely different one. removeInternalChild is the
+            // counterpart that can actually detach it, and it also runs the setAttachedWindow(null)
+            // that lets the re-add register a fresh Taffy node under the new parent.
+            if (!previous.removeChild(child)) previous.removeInternalChild(child);
         }
 
         child.parent = this;

@@ -97,6 +97,29 @@ public class NodePort extends UIElement {
     private UIElement defaultEditor;
 
     /**
+     * Fires whenever {@link #setDefaultEditor} actually changes which control is stored — never on the
+     * no-op case. {@link GraphView} listens from the moment it first sees this port (not from the moment
+     * it first sees a NON-NULL editor) so it can rebuild a live {@link PortDefaultEditor} when the control
+     * underneath it is swapped out from under it.
+     *
+     * <p><b>Why this has to exist at all.</b> The constructor already calls {@link #setDefaultEditor} with
+     * whatever {@link PortType#createInlineEditor()} returns — a generic, field-agnostic control — and
+     * {@link com.crystalgui.ui.elements.graph.NodeFieldBinder#attach} replaces it with the real,
+     * document-declared one <em>later</em>, on whatever tick the node's fields get bound. For a node built
+     * at scene-construction time that happens synchronously, before anything is watching, and is invisible.
+     * For a node added later — Space's create menu, mid-session — the swap happens lazily inside
+     * {@code ShaderGraphPreviews.tickFrame()}, a {@code UIFrameTicker} registered on the same
+     * hash-ordered set as {@code GraphView} itself. Without this signal, {@code GraphView}'s own discovery
+     * only ever looks at the port ONCE, and if its tick happened to run first, it would snapshot the
+     * throwaway generic control into a {@code PortDefaultEditor} forever — mounted, hit-testable, and
+     * never updated, while the real control silently took over this getter and was never shown at all.
+     * Reproduced as exactly that: a floating vector editor frozen at its very first (pre-layout, 0×0)
+     * position because the {@code PortDefaultEditor} wrapping it was built one tick before the box's true
+     * content ever existed, and nothing ever told it to rebuild.</p>
+     */
+    public final Signal.Action onDefaultEditorChanged = new Signal.Action();
+
+    /**
      * Replaces this port's default-value editor.
      *
      * <p>The slot itself is not new: a {@link PortType} may supply a default editor at construction, and
@@ -108,7 +131,9 @@ public class NodePort extends UIElement {
      */
     public NodePort setDefaultEditor(@Nullable UIElement editor) {
         if (!direction.isInput()) return this;
+        if (defaultEditor == editor) return this;
         defaultEditor = editor;
+        onDefaultEditorChanged.emit();
         return this;
     }
 
@@ -136,6 +161,15 @@ public class NodePort extends UIElement {
     @Getter
     private final String portId;
 
+    /** A concrete width resolved for a port whose TYPE has none — see {@link #setResolvedArity}.
+     * {@code 0} means "no override", so the type's own arity is shown. */
+    private int resolvedArity;
+
+    /** The {@code type-*} class currently styling this port, when it is not the declared type's own —
+     * see {@link #setResolvedTypeClass}. Null means "no override". */
+    @Nullable
+    private String resolvedTypeClass;
+
     public NodePort(PortDirection direction, PortType type, String name) {
         this.direction = direction;
         this.type = type;
@@ -160,7 +194,7 @@ public class NodePort extends UIElement {
         core.setHitTest(false);
         dot.addInternalChild(core);
 
-        this.label = new UIText(displayLabel(name, type));
+        this.label = new UIText(displayLabel(name, type.arity()));
         label.addClass(LABEL_CLASS);
         label.setHitTest(false);
         // Same reasoning as `GraphNode.title`'s identical call: this label has to drive its column's
@@ -207,9 +241,66 @@ public class NodePort extends UIElement {
         }, false, true);
     }
 
-    /** Unity's {@code Out(3)}: the name, then the arity, unless the type has none worth printing. */
-    private static String displayLabel(String name, PortType type) {
-        return type.arity() > 0 ? name + "(" + type.arity() + ")" : name;
+    /** Unity's {@code Out(3)}: the name, then the arity, unless there is none worth printing. */
+    private static String displayLabel(String name, int arity) {
+        return arity > 0 ? name + "(" + arity + ")" : name;
+    }
+
+    /**
+     * The arity this port currently <em>displays</em> — its type's own, unless something has resolved a
+     * concrete one for it (see {@link #setResolvedArity}).
+     */
+    public int displayedArity() {
+        return resolvedArity > 0 ? resolvedArity : type.arity();
+    }
+
+    /**
+     * Overrides the arity shown in this port's label, for a type that has none of its own.
+     *
+     * <p><b>Why a port can have an arity its TYPE does not.</b> A {@code dynamic} port has no width until
+     * something is wired into it — that is the whole point of the type — so {@link PortType#arity()},
+     * being a property of the type and therefore shared by every port of it, can only ever answer 0.
+     * Unity still prints one: an unwired {@code Multiply} reads {@code A(1) B(1) Out(1)}, and feeding it
+     * a vec3 turns all three into {@code (3)} at once. That number is per-PORT and changes as the graph
+     * is rewired, so it cannot live on the type.</p>
+     *
+     * <p>Kept as an override rather than replacing {@link PortType#arity()} so a concretely-typed port is
+     * untouched: {@code vec2} is 2 whatever is connected, and nothing should be able to relabel it.</p>
+     *
+     * @param arity the resolved width, or {@code 0} to fall back to the type's own
+     */
+    public void setResolvedArity(int arity) {
+        int clamped = Math.max(0, arity);
+        if (resolvedArity == clamped) return;
+        resolvedArity = clamped;
+        label.setText(displayLabel(portId, displayedArity()));
+    }
+
+    /**
+     * Swaps the {@code type-*} class this port is styled through, for a type resolved at runtime.
+     *
+     * <p><b>Colour, like arity, is per-port for a dynamic port.</b> {@link PortType#cssClass()} is fixed
+     * at construction and shared by every port of that type, so a {@code dynamic} port could only ever be
+     * the one flat "unknown" grey — while Unity colours it by whatever it actually resolved to, defaulting
+     * to the scalar colour before anything is wired in. The class is the only lever: the palette lives
+     * entirely in {@code graph.css} ({@code nodeport.type-vec3 .__dot__ { border-color: ... }}), which is
+     * the whole reason the wire follows for free — {@link #typeColor()} reads the dot's <em>computed</em>
+     * border-colour back out of the cascade rather than being told a number.</p>
+     *
+     * <p>The declared class is <b>removed</b> rather than merely overlaid: {@code type-dynamic} and
+     * {@code type-vec2} are equal-specificity selectors, so leaving both on would hand the decision to
+     * stylesheet source order — which happens to give the right answer today and would silently stop
+     * doing so the moment someone reordered the palette.</p>
+     *
+     * @param cssClass the class to style through, or {@code null} to restore the port's declared type
+     */
+    public void setResolvedTypeClass(@Nullable String cssClass) {
+        String next = cssClass == null ? type.cssClass() : cssClass;
+        String current = resolvedTypeClass == null ? type.cssClass() : resolvedTypeClass;
+        if (next.equals(current)) return;
+        removeClass(current);
+        addClass(next);
+        resolvedTypeClass = cssClass;
     }
 
     public String getName() {

@@ -2,6 +2,7 @@ package com.crystalgui.graph.shader;
 
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.shadergraph.CgPreviewGeometry;
 import com.crystalgraphics.shadergraph.CgPreviewRenderer;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.UIElement;
@@ -59,15 +60,23 @@ public class ShaderNodePreview extends UIElement {
         float h = getRuntimeCache().getHeight();
         if (w <= 0f || h <= 0f) return;
 
-        // CONTAIN, not stretch. The target is square and the slot is whatever the node's width made it,
-        // so filling the slot turns every sphere into an ellipse — which reads as a broken preview
-        // rather than as a wide box, because a sphere is the one shape everyone knows the shape of.
-        // Letterboxing instead keeps the picture honest at any node width.
-        float side = Math.min(w, h);
-        float ox = x + (w - side) * 0.5f;
-        float oy = y + (h - side) * 0.5f;
-
-        // v1 and v0 swapped: the flip described in the class docs.
-        ctx.drawImage((CgTexture2D) texture, ox, oy, side, side, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+        // CONTAIN only for a SPHERE. A sphere is rendered on a genuinely round target, so filling a
+        // non-square slot would stretch it into an ellipse — the one shape everyone knows the silhouette
+        // of, and the one case where letterboxing is worth the padding. Every other geometry (the QUAD
+        // default: colours, masks, noise, UV distortions — everything Unity itself does not letterbox
+        // either) has no aspect to protect, and stretching it to the FULL slot is what "fully take all of
+        // that space exactly like Unity's preview renderer" means for the common case. Asking the
+        // renderer rather than hard-coding a node-type list keeps this in step with propagation:
+        // CgPreviewGeometry.resolve already decided a Math node fed by a Position previews as a sphere
+        // too, and this must agree without re-deriving that itself.
+        if (renderer.geometryOf(nodeId) == CgPreviewGeometry.SPHERE) {
+            float side = Math.min(w, h);
+            float ox = x + (w - side) * 0.5f;
+            float oy = y + (h - side) * 0.5f;
+            // v1 and v0 swapped: the flip described in the class docs.
+            ctx.drawImage((CgTexture2D) texture, ox, oy, side, side, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+        } else {
+            ctx.drawImage((CgTexture2D) texture, x, y, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+        }
     }
 }
