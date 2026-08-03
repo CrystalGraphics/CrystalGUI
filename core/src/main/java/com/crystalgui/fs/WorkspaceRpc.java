@@ -3,6 +3,8 @@ package com.crystalgui.fs;
 import com.crystalgui.net.RpcRegistry;
 import com.crystalgui.serialization.StateMap;
 
+import java.util.List;
+
 /**
  * Binds a {@link WorkspaceService} onto the UI channel's RPC.
  *
@@ -23,6 +25,7 @@ public final class WorkspaceRpc<T> {
 
     private final WorkspaceService service;
     private final WorkspaceActor actor;
+    private final WorkspaceWatcher watcher;
 
     /**
      * @param actor who every request from this connection is attributed to. One session is one player, so
@@ -32,6 +35,18 @@ public final class WorkspaceRpc<T> {
     public WorkspaceRpc(WorkspaceService service, WorkspaceActor actor) {
         this.service = service;
         this.actor = actor;
+        this.watcher = new WorkspaceWatcher(service);
+    }
+
+    /**
+     * Sends a server-initiated call. {@code ServerUiSession::call} satisfies this.
+     *
+     * <p>Separate from {@link Registrar} because pushing is a different capability from answering, and a
+     * host that only wants to serve requests should not have to supply one.</p>
+     */
+    @FunctionalInterface
+    public interface Notifier<T> {
+        void notify(String method, StateMap<T> args);
     }
 
     /**
@@ -82,13 +97,18 @@ public final class WorkspaceRpc<T> {
             // matches, so the two must not collapse into one another.
             String expected = args.has(WorkspaceProtocol.ETAG)
                     ? args.getString(WorkspaceProtocol.ETAG, null) : null;
-            String etag = service.write(actor, path(args),
-                    args.getBytes(WorkspaceProtocol.CONTENT), expected);
+            CgPath target = path(args);
+            String etag = service.write(actor, target, args.getBytes(WorkspaceProtocol.CONTENT), expected);
+            // This side already knows -- see noteWritten. Otherwise the next poll reports the client's
+            // own save back to it as somebody else's change.
+            watcher.noteWritten(target, etag);
             respond.ok(new StateMap<T>(args.ops()).putString(WorkspaceProtocol.ETAG, etag));
         }));
 
         registry.register(WorkspaceProtocol.CREATE, (args, respond) -> guard(respond, () -> {
-            String etag = service.create(actor, path(args), args.getBytes(WorkspaceProtocol.CONTENT));
+            CgPath target = path(args);
+            String etag = service.create(actor, target, args.getBytes(WorkspaceProtocol.CONTENT));
+            watcher.noteWritten(target, etag);
             respond.ok(new StateMap<T>(args.ops()).putString(WorkspaceProtocol.ETAG, etag));
         }));
 
@@ -97,6 +117,46 @@ public final class WorkspaceRpc<T> {
             respond.ok(null);
         }));
 
+        registry.register(WorkspaceProtocol.WATCH, (args, respond) -> guard(respond, () -> {
+            CgPath path = path(args);
+            // AUTHORISED like any read. Watching a file you may not read would otherwise leak its
+            // existence and every subsequent change to it.
+            service.read(actor, path);
+            watcher.watch(actor, path);
+            respond.ok(null);
+        }));
+
+        registry.register(WorkspaceProtocol.UNWATCH, (args, respond) -> guard(respond, () -> {
+            watcher.unwatch(path(args));
+            respond.ok(null);
+        }));
+
+    }
+
+    /**
+     * Polls the watched files and pushes one {@code fs.changed} per file that moved.
+     *
+     * <p>Called by the host on whatever cadence suits it — a tick, a timer. Nothing here schedules
+     * itself: {@code core/} has no clock it should be using, and how often a server can afford to stat is
+     * the host's judgement, not the engine's.</p>
+     *
+     * @return how many notifications were sent
+     */
+    public int pollAndNotify(Notifier<T> notifier, com.crystalgui.serialization.DynamicOps<T> ops) {
+        List<WorkspaceWatcher.Change> changes = watcher.poll(actor);
+        for (WorkspaceWatcher.Change change : changes) {
+            StateMap<T> args = new StateMap<T>(ops)
+                    .putString(WorkspaceProtocol.PATH, change.path().toString())
+                    .putString(WorkspaceProtocol.KIND, change.kind());
+            if (change.etag() != null) args.putString(WorkspaceProtocol.ETAG, change.etag());
+            notifier.notify(WorkspaceProtocol.CHANGED, args);
+        }
+        return changes.size();
+    }
+
+    /** The watcher, for a host that wants to seed or inspect it directly. */
+    public WorkspaceWatcher watcher() {
+        return watcher;
     }
 
     private static <T> CgPath path(StateMap<T> args) {

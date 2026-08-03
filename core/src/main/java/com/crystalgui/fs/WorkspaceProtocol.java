@@ -41,6 +41,29 @@ public final class WorkspaceProtocol {
     /** Create one directory. */
     public static final String MKDIR = "fs.mkdir";
 
+    /**
+     * Start watching a path, so the server will report changes to it.
+     *
+     * <p>The server can only poll what it knows somebody is looking at. Watching everything in a project
+     * would cost a stat per file per tick for files nobody has open; watching what a client actually holds
+     * is bounded by the number of open editors.</p>
+     */
+    public static final String WATCH = "fs.watch";
+
+    /** Stop watching. Paired with closing a document. */
+    public static final String UNWATCH = "fs.unwatch";
+
+    // ── Methods (server → client) ───────────────────────────────────────────────────────────────
+
+    /**
+     * A watched path moved.
+     *
+     * <p><b>Promptness only.</b> Correctness never depended on this: a stale write is refused by the
+     * re-stat in {@code WorkspaceService.write} whatever the platform's watching story is. This exists so
+     * a client finds out <em>before</em> it tries to save, rather than at the moment it does.</p>
+     */
+    public static final String CHANGED = "fs.changed";
+
     // ── Fields ──────────────────────────────────────────────────────────────────────────────────
 
     public static final String PATH = "path";
@@ -54,6 +77,15 @@ public final class WorkspaceProtocol {
     public static final String DIRECTORY = "directory";
     public static final String SIZE = "size";
     public static final String MTIME = "mtime";
+
+    /** On {@link #CHANGED}: which of {@link #KIND_MODIFIED} / {@link #KIND_DELETED} happened. */
+    public static final String KIND = "kind";
+
+    /** The file's content moved. {@link #ETAG} carries the new one. */
+    public static final String KIND_MODIFIED = "modified";
+
+    /** The file is gone. There is no new etag. */
+    public static final String KIND_DELETED = "deleted";
 
     /** On a failure: the {@link CgFileError} name, so a client can branch without parsing prose. */
     public static final String ERROR = "error";
