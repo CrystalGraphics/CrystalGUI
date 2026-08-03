@@ -45,10 +45,33 @@ public abstract class ConfigControl extends UIElement {
     /** Fires when the <b>user</b> changes the value. Never on {@link #setValueObject}. */
     public final Signal.Value<Object> changed = new Signal.Value<>();
 
+    /**
+     * {@code true} when a continuous gesture starts, {@code false} when it ends.
+     *
+     * <h3>What this is for, and why {@link #changed} could not carry it</h3>
+     * <p>A drag — a {@linkplain com.crystalgui.ui.input.DragScrub scrub}, a slider, a colour wheel — emits
+     * a value <b>per frame</b>. Every one of those is a real change and must be reported, because that is
+     * what makes a preview update live. But the whole gesture is <em>one</em> thing the user did, and a
+     * host recording each frame as an undo step turns Ctrl+Z into a hundred presses.</p>
+     *
+     * <p>The host cannot infer the boundaries — a burst of changes and a slow scrub look identical from
+     * the outside, which is exactly the guess {@code UndoStack}'s time window is making. So the control
+     * states them, and the host maps them onto whatever it is recording into:
+     * {@code UndoStack.beginMergeRun()} / {@code endMergeRun()} for a graph document, nothing at all for a
+     * read-only inspector.</p>
+     *
+     * <p>Silent for an ordinary discrete edit — typing in a box, picking from a dropdown — since there is
+     * no gesture to bracket. A listener that only ever sees {@code changed} keeps working unchanged.</p>
+     */
+    public final Signal.Value<Boolean> interacting = new Signal.Value<>();
+
     private final ConfigDescriptor descriptor;
 
     /** True while a programmatic write is in flight; suppresses {@link #changed}. */
     private boolean updating;
+
+    /** @see #interacting */
+    private boolean interactingNow;
 
     protected ConfigControl(ConfigDescriptor descriptor) {
         this.descriptor = descriptor;
@@ -98,6 +121,36 @@ public abstract class ConfigControl extends UIElement {
     /** True while {@link #setValueObject} is running — for controls that rebuild rather than write. */
     protected final boolean isUpdating() {
         return updating;
+    }
+
+    /**
+     * Opens a continuous gesture. Idempotent, so a control that cannot easily tell whether one is already
+     * running may call it freely.
+     *
+     * @see #interacting
+     */
+    protected final void beginInteraction() {
+        if (interactingNow) return;
+        interactingNow = true;
+        interacting.emit(true);
+    }
+
+    /**
+     * Closes a continuous gesture.
+     *
+     * <p><b>Must be reached on every exit path</b>, including a cancelled drag — a host that opened a
+     * merge run and never hears it close will keep folding the next unrelated edit into this gesture's
+     * undo step, and the symptom (two actions undoing as one, occasionally) is a long way from the cause.</p>
+     */
+    protected final void endInteraction() {
+        if (!interactingNow) return;
+        interactingNow = false;
+        interacting.emit(false);
+    }
+
+    /** True between {@link #beginInteraction} and {@link #endInteraction}. */
+    public final boolean isInteracting() {
+        return interactingNow;
     }
 
     /**

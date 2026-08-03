@@ -91,6 +91,10 @@ public final class UndoStack {
      */
     private boolean mergeRunOpen;
 
+    /** Nesting depth of {@link #beginMergeRun()}. Counted rather than boolean so a gesture that calls
+     * another gesture's helper cannot end the outer one's run early. */
+    private int mergeRunHolds;
+
     /** Open transactions, outermost first. Nesting is supported so a command that groups edits can call
      * another that groups its own without either knowing about the other. */
     private final List<Transaction> transactions = new ArrayList<>();
@@ -158,8 +162,9 @@ public final class UndoStack {
         if (top == null || !mergeRunOpen) return false;
         // Zero means OFF, not "merge only within the same millisecond" — two immediate pushes are
         // routinely 0ms apart, so a `>` comparison against 0 would coalesce them.
-        if (mergeWindowMillis <= 0L) return false;
-        if (clock.getAsLong() - lastPushMillis > mergeWindowMillis) return false;
+        if (mergeWindowMillis <= 0L && !isMergeRunHeld()) return false;
+        // A held run ignores the clock entirely. @see #beginMergeRun
+        if (!isMergeRunHeld() && clock.getAsLong() - lastPushMillis > mergeWindowMillis) return false;
         Edit merged = top.mergeWith(edit);
         if (merged == null) return false;
         undoStack.pop();
@@ -340,7 +345,45 @@ public final class UndoStack {
      * What a caret move, a focus change or a selection change should call — the classic editor rule that
      * moving the cursor breaks the typing run. */
     public void breakMergeRun() {
+        mergeRunHolds = 0;
         mergeRunOpen = false;
+    }
+
+    /**
+     * Holds the merge run open for a <b>continuous gesture</b>, until the matching {@link #endMergeRun()}.
+     *
+     * <h3>Why the clock is not enough</h3>
+     * <p>The time window exists to answer "did the user pause?", which is the right question for typing
+     * and the wrong one for a drag. A slider drag, a colour-picker drag or a
+     * {@linkplain com.crystalgui.ui.input.DragScrub scrub} emits a value per frame and can legitimately
+     * sit still for several seconds while the user studies what it did to a preview — and then produces
+     * three undo steps for one gesture, on a machine slower than the one it was tested on. The gesture
+     * knows its own boundaries exactly; the clock is guessing at them.</p>
+     *
+     * <h3>Why not a transaction</h3>
+     * <p>{@link #beginTransaction} would also give one undo step, but it gives it as a
+     * {@code CompositeEdit} of however many frames the drag lasted — hundreds of edits pinning hundreds of
+     * superseded values, unwound one at a time. Merging collapses them into a <b>single</b> edit as they
+     * arrive, because {@code mergeWith} already keeps the first edit's {@code before} and the last one's
+     * {@code after}. A transaction is for grouping <em>different</em> edits; this is for one edit
+     * restated.</p>
+     *
+     * <p>Edits still have to agree to merge — an edit type whose {@code mergeWith} returns null is
+     * unaffected by this, and correctly so.</p>
+     */
+    public void beginMergeRun() {
+        mergeRunHolds++;
+    }
+
+    /** Ends a {@link #beginMergeRun()} and closes the run, so the next gesture is a separate undo step. */
+    public void endMergeRun() {
+        if (mergeRunHolds > 0) mergeRunHolds--;
+        if (mergeRunHolds == 0) mergeRunOpen = false;
+    }
+
+    /** True while a gesture is holding the merge run open. */
+    public boolean isMergeRunHeld() {
+        return mergeRunHolds > 0;
     }
 
     private void assertNotApplying(String operation) {
