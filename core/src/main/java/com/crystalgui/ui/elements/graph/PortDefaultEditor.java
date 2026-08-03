@@ -11,13 +11,28 @@ import com.crystalgui.ui.elements.config.control.VectorControl;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import org.joml.Vector2f;
 
+import javax.annotation.Nullable;
+
 /**
  * Unity's floating {@code X [0] •} — the box-and-dot pair {@link GraphView} places beside an
  * unconnected input, wrapping whatever {@link NodePort#getDefaultEditor()} returns. One instance per
- * port, built once and reused across every connect/disconnect for that port's lifetime; {@link GraphView}
- * owns the map, the discovery scan and the tick-driven repositioning, but everything about what this
- * widget IS — its two elements, their geometry, their look, and how the connecting stub gets drawn —
- * lives here.
+ * port, built once and kept for that port's whole lifetime; {@link GraphView} owns the map, the
+ * discovery scan and the tick-driven repositioning, but everything about what this widget IS — its two
+ * elements, their geometry, their look, and how the connecting stub gets drawn — lives here.
+ *
+ * <h3>One instance per port, and the control is swapped IN PLACE</h3>
+ * <p>{@link #syncControl()} is what makes that possible, and it is not a convenience: a port's control
+ * legitimately arrives <em>after</em> this widget exists. {@code NodeFieldBinder} binds a
+ * document-declared field on whatever tick the owning node is first seen, which for a node added from
+ * the create menu is a different tick — and a different {@code UIFrameTicker} — from the one
+ * {@link GraphView#tickFrame} discovers the port on. Which runs first is a coin flip.</p>
+ *
+ * <p>The previous design rebuilt the whole {@code PortDefaultEditor} on every such change. That is what
+ * made a vector editor render its X/Y boxes hundreds of pixels away from its own frame: the new box
+ * adopted a control the old box still held, and reparenting an <b>internal</b> child used to be a silent
+ * no-op (see {@code UIElement.addChildAtInternal}), so both boxes claimed it — Taffy laid it out under
+ * both and the wrong pass won. Swapping in place means there is only ever one owner, and
+ * {@link #detachControl} makes the hand-off explicit rather than leaving it to a reparent.</p>
  *
  * <h3>Two elements, deliberately never parent and child</h3>
  * <p>{@link #box} is the rounded, panel-toned frame holding the axis label and the bare control.
@@ -78,44 +93,31 @@ final class PortDefaultEditor {
 
     private final NodePort port;
     private final GraphView view;
-    private final UIElement control;
     private final UIElement box;
     private final UIElement dot;
     private final UIElement core;
+
+    /** The bare control currently inside {@link #box} — the same instance
+     * {@link NodePort#getDefaultEditor()} returns, or {@code null} while the port has none. Kept in step
+     * by {@link #syncControl()}, never assumed to be the value it had at construction. */
+    @Nullable
+    private UIElement control;
+
+    /** The axis prefix, present only while {@link #control} is one that wants one — see
+     * {@link #rebuildBoxContents}. */
+    @Nullable
+    private UIText label;
+
     private boolean mounted;
 
-    /** Builds the box and the dot around {@code port.getDefaultEditor()}. Callers must not construct one
-     * for a port whose {@link NodePort#getDefaultEditor()} is {@code null} — {@link GraphView}'s
-     * discovery scan already guards this. */
+    /** Builds the box and the dot, and adopts the port's current default editor if it already has one.
+     * A port with none yet is fine — {@link #syncControl()} picks it up whenever it arrives. */
     PortDefaultEditor(NodePort port, GraphView view) {
         this.port = port;
         this.view = view;
-        // Owned here, not just passed through to box.addInternalChild below and forgotten — this is the
-        // thing NodePort.getDefaultEditor() actually returns, and code that needs to reach it (the
-        // update-mode setup right below, a test, a future caller) should ask THIS class for it rather
-        // than dig back through box.getChildren(), which would also hand back the internal-only label.
-        this.control = port.getDefaultEditor();
-
-        // Live, not on-commit: a port default is a value you drag/scrub as much as type, and Unity's own
-        // fields update the preview on every keystroke rather than waiting for Enter or a blur. Only the
-        // two kinds that actually contain a plain number field get this — NumberControl directly, or
-        // VectorControl's own per-axis NumberControls — ColorControl and BooleanControl have no number
-        // text field to set a mode on at all.
-        if (control instanceof NumberControl number) {
-            number.field().setUpdateMode(TextField.UpdateMode.IMMEDIATE);
-        } else if (control instanceof VectorControl vector) {
-            for (NumberControl component : vector.components()) {
-                component.field().setUpdateMode(TextField.UpdateMode.IMMEDIATE);
-            }
-        }
 
         box = new UIElement();
         box.addClass(NodePort.EDITOR_CLASS);
-        UIText label = new UIText(port.getPortId());
-        label.addClass(NodePort.EDITOR_LABEL_CLASS);
-        label.setHitTest(false);
-        box.addInternalChild(label);
-        box.addInternalChild(control);
 
         core = new UIElement();
         core.addClass(NodePort.EDITOR_DOT_CORE_CLASS);
@@ -128,6 +130,98 @@ final class PortDefaultEditor {
         dot.addClass(NodePort.EDITOR_DOT_CLASS);
         dot.setHitTest(false);
         dot.addInternalChild(ring);
+
+        syncControl();
+    }
+
+    /**
+     * Adopts the port's current default editor, if it is not the one already inside the box.
+     *
+     * <p>Called by {@link GraphView} both on discovery and whenever
+     * {@link NodePort#onDefaultEditorChanged} fires. Cheap and idempotent — the common case is that
+     * nothing changed and this returns immediately.</p>
+     *
+     * @return whether the control actually changed
+     */
+    boolean syncControl() {
+        UIElement current = port.getDefaultEditor();
+        if (current == control) return false;
+
+        detachControl();
+        control = current;
+        if (control != null) applyLiveUpdateMode(control);
+        rebuildBoxContents();
+        return true;
+    }
+
+    /**
+     * Takes the current control back out of the box, explicitly.
+     *
+     * <p>{@code removeInternalChild} rather than {@code removeChild}: every {@code ConfigControl} marks
+     * itself internal in its own constructor, and the public removal API refuses internal children by
+     * design. Detaching here — rather than letting a later {@code addInternalChild} elsewhere do it as a
+     * side effect of reparenting — is what guarantees exactly one owner at a time, and it is what runs
+     * the {@code setAttachedWindow(null)} that lets the control register a fresh Taffy node under
+     * whatever adopts it next.</p>
+     */
+    private void detachControl() {
+        if (control == null) return;
+        box.removeInternalChild(control);
+        control = null;
+    }
+
+    /**
+     * Rebuilds the box's children for the current control: an optional axis prefix, then the control.
+     *
+     * <p>Unity's own axis prefix is generic, not the port's real name: a lone scalar field is always
+     * "X" (RadialScale, LengthScale, Power — whatever the port is actually called), never repeated
+     * per-port prose that would only fit once next to the port's own real label on the node itself.
+     * The exception in both directions: a port ALREADY named X/Y/Z/W (Vector4's own four constituent
+     * float ports, say) keeps its real id rather than being forced to "X" four times over; and a
+     * {@link VectorControl} gets no outer label at all — it already draws its own per-axis X/Y/Z/W
+     * sub-labels internally (see {@code VectorControl.AXES}), so a second "Center" prefix in front of
+     * them would be redundant with nothing in Unity's reference to match.</p>
+     */
+    private void rebuildBoxContents() {
+        if (label != null) {
+            box.removeInternalChild(label);
+            label = null;
+        }
+        if (control == null) return;
+
+        if (!(control instanceof VectorControl)) {
+            String portId = port.getPortId();
+            label = new UIText(isAxisLetter(portId) ? portId : "X");
+            label.addClass(NodePort.EDITOR_LABEL_CLASS);
+            label.setHitTest(false);
+            box.addInternalChild(label);
+        }
+        box.addInternalChild(control);
+    }
+
+    /**
+     * Live, not on-commit: a port default is a value you drag/scrub as much as type, and Unity's own
+     * fields update the preview on every keystroke rather than waiting for Enter or a blur. Only the two
+     * kinds that actually contain a plain number field get this — {@link NumberControl} directly, or
+     * {@link VectorControl}'s own per-axis ones — {@code ColorControl} and {@code BooleanControl} have no
+     * number text field to set a mode on at all.
+     */
+    private static void applyLiveUpdateMode(UIElement control) {
+        if (control instanceof NumberControl number) {
+            number.field().setUpdateMode(TextField.UpdateMode.IMMEDIATE);
+        } else if (control instanceof VectorControl vector) {
+            for (NumberControl component : vector.components()) {
+                component.field().setUpdateMode(TextField.UpdateMode.IMMEDIATE);
+            }
+        }
+    }
+
+    /** Whether {@code portId} is already one of the bare axis letters {@link VectorControl}'s own
+     * components use — see {@link #rebuildBoxContents} on why this is the one case that keeps its real
+     * id instead of being generalised to {@code "X"}. Case-sensitive: a port genuinely named lowercase
+     * {@code "x"} is a different (if confusing) name, not the axis. */
+    private static boolean isAxisLetter(String portId) {
+        return "X".equals(portId) || "Y".equals(portId) || "Z".equals(portId) || "W".equals(portId);
     }
 
     NodePort port() {
@@ -136,6 +230,7 @@ final class PortDefaultEditor {
 
     /** The control itself — the same instance {@link NodePort#getDefaultEditor()} returns, exposed for
      * tests and for any future caller that needs to reach it directly instead of through the port. */
+    @Nullable
     UIElement control() {
         return control;
     }
@@ -148,6 +243,11 @@ final class PortDefaultEditor {
 
     boolean isMounted() {
         return mounted;
+    }
+
+    /** Whether this has anything worth showing — a port whose field has not been bound yet has not. */
+    boolean hasControl() {
+        return control != null;
     }
 
     /**

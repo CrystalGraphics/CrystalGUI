@@ -371,6 +371,18 @@ public final class UIWindow {
     public void registerElement(UIElement element) {
         if (element == null) return;
 
+        // Registering something that still holds a node means it is being registered twice. The
+        // newLeaf() below would overwrite the reference and ORPHAN the old node — and an orphan is not
+        // inert: Taffy keeps it in its previous parent's child list and keeps laying it out, so the
+        // element has two live layouts and the stale one can win. Free it first, so registration is
+        // idempotent rather than quietly accumulating nodes.
+        if (element.taffyNodeId != null) {
+            elementByNode.remove(element.taffyNodeId);
+            if (taffyTree.containsNode(element.taffyNodeId)) taffyTree.remove(element.taffyNodeId);
+            element.taffyNodeId = null;
+        }
+        elements.remove(element);
+
         elements.add(element);
 
         element.taffyNodeId = taffyTree.newLeaf(element.getStyle().getTaffyBridge().style);

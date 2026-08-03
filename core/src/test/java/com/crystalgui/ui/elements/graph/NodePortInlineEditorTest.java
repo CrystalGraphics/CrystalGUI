@@ -226,7 +226,11 @@ public class NodePortInlineEditorTest extends UiTestBase {
         for (UIElement child : box.getChildren()) {
             if (child instanceof com.crystalgui.ui.elements.UIText text
                     && text.hasClass(NodePort.EDITOR_LABEL_CLASS)) {
-                assertEquals("the axis label is the port's own id", "Value", text.getText());
+                // NOT the port's own id ("Value") — Unity's own axis prefix is generic for a lone
+                // scalar field, always "X", regardless of what the port is actually called. See
+                // axisLabelIsGenericXUnlessThePortIsAlreadyNamedAnAxisLetter for the full rule.
+                assertEquals("a lone scalar field's axis label is the generic \"X\", not the port's "
+                        + "own name", "X", text.getText());
                 hasLabel = true;
             }
         }
@@ -248,6 +252,71 @@ public class NodePortInlineEditorTest extends UiTestBase {
                 .flatMap(ring -> ring.getChildren().stream())
                 .anyMatch(c -> c.hasClass(NodePort.EDITOR_DOT_CORE_CLASS));
         assertTrue("the ring must hold its coloured core layer", hasCore);
+    }
+
+    /**
+     * <b>A lone scalar port's axis label is always "X" — Unity's convention, not the port's own real
+     * name — with exactly one exception: a port already named X/Y/Z/W keeps its real id.</b>
+     *
+     * <p>Both halves matter and neither is provable by the other: a node with a semantically-named port
+     * ({@code RadialScale}) proves the generic-"X" rule fires at all; a node with a port genuinely
+     * named one of the four axis letters (the shape {@code Vector4}'s own four constituent float ports
+     * take) proves the exception does not get clobbered by a blanket "always X" implementation.</p>
+     */
+    @Test
+    public void axisLabelIsGenericXUnlessThePortIsAlreadyNamedAnAxisLetter() {
+        openWindow();
+        GraphDocument document = new GraphDocument();
+        NodeType type = NodeType.of("t:mixed-scalar-names").label("Node")
+                .in("RadialScale", "float", NodeField.number("RadialScale", "RadialScale", "1.0")
+                        .onPort("RadialScale"))
+                .in("Y", "float", NodeField.number("Y", "Y", "0.0").onPort("Y"))
+                .out("Out", "float")
+                .build();
+        GraphNode node = buildNode(type, document);
+        NodeFieldBinder.attach(node, type, document, null, null);
+        frame();
+
+        assertEquals("a semantically-named scalar port is relabelled to the generic axis prefix",
+                "X", axisLabelTextFor(node, "RadialScale"));
+        assertEquals("a port already named an axis letter keeps its own real id",
+                "Y", axisLabelTextFor(node, "Y"));
+    }
+
+    /**
+     * <b>A vector port editor gets NO outer axis-prefix label at all.</b> {@link VectorControl} already
+     * draws its own per-axis X/Y sub-labels internally — an outer "Center" prefix in front of them would
+     * be a second, redundant label Unity's own reference never shows.
+     */
+    @Test
+    public void vectorPortEditorsHaveNoOuterAxisLabel() {
+        openWindow();
+        GraphDocument document = new GraphDocument();
+        NodeType type = NodeType.of("t:vector-no-outer-label").label("Node")
+                .in("Center", "vec2", new NodeField("Center", "Center", NodeField.Kind.VECTOR,
+                        java.util.List.of(), "vec2(0.500, 0.500)", null))
+                .out("Out", "vec2")
+                .build();
+        GraphNode node = buildNode(type, document);
+        NodeFieldBinder.attach(node, type, document, null, null);
+        frame();
+
+        assertNull("a vector port editor's box must carry no EDITOR_LABEL_CLASS text at all",
+                axisLabelTextFor(node, "Center"));
+    }
+
+    /** The axis-prefix label text on {@code portId}'s floating editor box, or {@code null} if it has
+     * none (the vector case). */
+    private String axisLabelTextFor(GraphNode node, String portId) {
+        UIElement control = node.portNamed(portId).getDefaultEditor();
+        UIElement box = control.getParent();
+        for (UIElement child : box.getChildren()) {
+            if (child instanceof com.crystalgui.ui.elements.UIText text
+                    && text.hasClass(NodePort.EDITOR_LABEL_CLASS)) {
+                return text.getText();
+            }
+        }
+        return null;
     }
 
     /** Typing into the port's control writes back through the SAME undo-aware path a body field uses —
@@ -303,5 +372,213 @@ public class NodePortInlineEditorTest extends UiTestBase {
 
     private static float height(UIElement e) {
         return e.getRuntimeCache().getHeight();
+    }
+
+    /**
+     * <b>A vector port editor's own X/Y fields must not collapse to zero width — and the single-vector
+     * case above cannot catch this.</b>
+     *
+     * <p>{@code .__config-control__.__vector__ .__number__} is {@code width: 0; flex-grow: 1} — correct
+     * everywhere else a {@code VectorControl} lives (the inspector column, a node's own control row),
+     * both genuinely bounded flex contexts where {@code flex-grow} has real slack to distribute. {@code
+     * PortDefaultEditor}'s floating box is not: it is {@code position: absolute}, sized to its own
+     * content, so a {@code flex-grow: 1} item inside it has nothing to grow into. In real CSS a flex
+     * item's default {@code min-width} is {@code auto} — it floors at its own content's minimum size
+     * regardless — but this engine's Taffy default is {@code min-size: 0} (see AGENTS.md's own "Taffy
+     * defaults diverge from CSS" table), so nothing stopped the collapse. graph.css now floors {@code
+     * .__vector-cell__}/{@code .__number__} specifically inside {@code graphview .__editor__}.</p>
+     *
+     * <p>Two vector ports on one node, not one: {@link #aVectorAndAColorPortEditorBothFitOnceMounted}
+     * already has a single vector port and was already green while this bug was live — the collapse
+     * only reproduced with a second one present, so a fix that only re-tested the single-port shape
+     * would not have proven anything.</p>
+     */
+    @Test
+    public void twoVectorPortEditorsOnOneNodeBothKeepRealComponentWidths() {
+        openWindow();
+        GraphDocument document = new GraphDocument();
+        NodeType type = NodeType.of("t:two-vectors").label("Node")
+                .in("UV", "vec2", new NodeField("UV", "UV", NodeField.Kind.VECTOR,
+                        java.util.List.of(), "vec2(0.500, 0.500)", null))
+                .in("Center", "vec2", new NodeField("Center", "Center", NodeField.Kind.VECTOR,
+                        java.util.List.of(), "vec2(0.500, 0.500)", null))
+                .out("Out", "vec2")
+                .build();
+        GraphNode node = buildNode(type, document);
+        NodeFieldBinder.attach(node, type, document, null, null);
+        frame();
+        frame(); // extra settle — the collapse this pins showed up steady-state, not just frame one
+
+        for (String portId : new String[] {"UV", "Center"}) {
+            VectorControl control = (VectorControl) node.portNamed(portId).getDefaultEditor();
+            for (NumberControl component : control.components()) {
+                assertTrue(portId + "'s component collapsed to zero width",
+                        component.getRuntimeCache().getWidth() > 0f);
+            }
+        }
+    }
+
+    /**
+     * <b>The actual live-session bug: a port's default editor gets replaced AFTER {@code GraphView} has
+     * already discovered and mounted one for it.</b>
+     *
+     * <p>{@code NodePort}'s constructor already calls {@code setDefaultEditor} with whatever the port's
+     * {@code PortType} supplies (null for the plain types this file's helpers use, but real shader ports
+     * can supply their own), and {@link NodeFieldBinder#attach} calls it again later with the real,
+     * document-declared control — on a node added after the scene is already running, that second call
+     * happens lazily on a DIFFERENT ticker than {@code GraphView}'s own discovery, so which one runs first
+     * on any given frame is a coin flip. If discovery wins, the old code snapshotted whatever control was
+     * live at that instant into a {@link PortDefaultEditor} FOREVER — {@code portEditors.containsKey(port)}
+     * refused to ever look again — so the box kept showing the FIRST control, frozen, while the port's own
+     * {@code getDefaultEditor()} quietly pointed at a second control nobody ever mounted. That is exactly
+     * what a floating vector editor "stuck at its very first (pre-layout) position, forever" looks like.</p>
+     *
+     * <p>Simulated directly rather than raced: {@code setDefaultEditor} is called twice with two distinct
+     * controls, with a real discovery tick in between — deterministic, and exercises the same code path
+     * {@code onDefaultEditorChanged} exists to close.</p>
+     */
+    @Test
+    public void aDefaultEditorReplacedAfterDiscoveryStillGetsShown() {
+        openWindow();
+        GraphDocument document = new GraphDocument();
+        NodeType type = numberPortType();
+        GraphNode node = buildNode(type, document);
+        NodePort port = node.portNamed("Value");
+
+        // NodeFieldBinder hasn't run yet; simulate a PortType-level placeholder existing before it does.
+        assertNull("nothing should exist yet — NodeFieldBinder was never asked to attach",
+                port.getDefaultEditor());
+        NumberControl placeholder = new NumberControl(
+                com.crystalgui.ui.elements.config.ConfigDescriptor.number("Value", "Value"), 0d);
+        port.setDefaultEditor(placeholder);
+        frame(); // GraphView discovers and mounts the placeholder, exactly as if its ticker ran first
+
+        PortDefaultEditor editorBefore = view.portEditorFor(port);
+        assertNotNull(editorBefore);
+        assertSame("discovery must have wrapped the placeholder", placeholder, editorBefore.control());
+
+        // The real field binder runs late, as it would on a node added via the create menu mid-session.
+        NodeFieldBinder.attach(node, type, document, null, null);
+        NumberControl real = (NumberControl) port.getDefaultEditor();
+        assertNotSame("the field binder must have produced a DIFFERENT control instance",
+                placeholder, real);
+        frame();
+
+        PortDefaultEditor editorAfter = view.portEditorFor(port);
+        assertNotNull("the port must still have a tracked editor after the swap", editorAfter);
+        assertSame("the floating editor must now wrap the REAL, document-declared control — not the "
+                + "placeholder frozen at discovery time", real, editorAfter.control());
+        assertTrue("the real control must actually be mounted and laid out",
+                editorAfter.isMounted());
+    }
+
+    /**
+     * <b>A vector editor's axis label and number field must sit INSIDE their own cell.</b>
+     *
+     * <p>The bug this pins rendered the {@code X 0.5  Y 0.5} pair hundreds of pixels below the box that
+     * owns it, while that box drew empty beside the port. Everything about the pair was right except its
+     * y: correct size, correct x, correct parent. It was vertically centred in a cell that had been
+     * ~550px tall for one layout pass and had not been that tall since.</p>
+     *
+     * <p><b>Cause:</b> this engine's flex {@code align-items} default is {@code stretch} (Taffy's, not
+     * CSS's), and {@code .__vector__} declared none — so each {@code __vector-cell__} took its cross size
+     * from the box. The box is {@code position: absolute} with an auto height, so on the pass right after
+     * mounting (before {@code reposition()}'s inline {@code top} lands) it was laid out against the whole
+     * plane. The cells stretched with it, their own {@code align-items: center} parked the grandchildren
+     * at {@code (550-12)/2 ≈ 269}, and when the box settled to ~18px Taffy repositioned the cells but not
+     * the grandchildren two levels down. graph.css now pins {@code align-items: center} on
+     * {@code .__vector__} so a cell is content-sized and no transient box height can reach inside it.</p>
+     *
+     * <p>Asserted as "the cell is content-sized, and each grandchild is within its bounds" rather than by
+     * reproducing the transient pass: the stretch is the thing that made the staleness reachable, so
+     * removing it is what the test should defend. The scalar editor is checked alongside it because it was
+     * always correct — its parts are direct children of the box, one level up, and that level does get
+     * repositioned — so it is the control case proving the assertion is about nesting depth.</p>
+     */
+    @Test
+    public void aVectorPortEditorsFieldsSitInsideTheirOwnCell() {
+        openWindow();
+        GraphDocument document = new GraphDocument();
+        NodeType type = NodeType.of("t:vector-cell-fit").label("Node")
+                .in("Center", "vec2", new NodeField("Center", "Center", NodeField.Kind.VECTOR,
+                        java.util.List.of(), "vec2(0.500, 0.500)", null))
+                .in("Scale", "float", NodeField.number("Scale", "Scale", "1.0").onPort("Scale"))
+                .out("Out", "vec2")
+                .build();
+        GraphNode node = buildNode(type, document);
+        NodeFieldBinder.attach(node, type, document, null, null);
+        frame();
+        frame();
+
+        VectorControl vector = (VectorControl) node.portNamed("Center").getDefaultEditor();
+        UIElement box = vector.getParent();
+        float boxHeight = box.getRuntimeCache().getHeight();
+        assertTrue("the box must be content-sized, not stretched to the plane: " + boxHeight,
+                boxHeight > 0f && boxHeight < 80f);
+
+        for (UIElement cell : vector.getChildren()) {
+            float cellTop = cell.getRuntimeCache().getY();
+            float cellHeight = cell.getRuntimeCache().getHeight();
+            // A stretched cell is the precondition for the whole failure — it is what gives the
+            // grandchildren a huge box to be centred in.
+            assertTrue("a vector cell must size to its content, not stretch: " + cellHeight,
+                    cellHeight > 0f && cellHeight <= boxHeight);
+
+            for (UIElement inner : cell.getChildren()) {
+                float top = inner.getRuntimeCache().getY();
+                float bottom = top + inner.getRuntimeCache().getHeight();
+                assertTrue(inner.getClass().getSimpleName() + " sits " + (top - cellTop)
+                                + "px below its cell instead of inside it",
+                        top >= cellTop - 1f && bottom <= cellTop + cellHeight + 1f);
+            }
+        }
+    }
+
+    /**
+     * <b>The bug actually seen live: a node removed through the document's changeset, not through
+     * {@link GraphView#removeNode}, leaves its floating default editor orphaned on the plane forever.</b>
+     *
+     * <p>{@link GraphView#detachNode} and the "never bound" branch of {@link GraphView#removeNode} both
+     * call {@link GraphView#portEditorFor its own} port-editor cleanup before detaching a widget — but
+     * {@link GraphView#syncFromDocument} used to skip it for nodes it discovered as removed via the
+     * document's own changeset (an undo of an add, a server sync, or — the case that matters here — a
+     * {@code document.removeNode} call that does not go through the view). The box and dot are mounted
+     * straight onto {@link GraphView#content()}, never as descendants of the node, so
+     * {@code content().removeChild(widget)} alone never reaches them: they stayed mounted, stayed
+     * hit-testable, and never repositioned again, because the port and dot they were tracking left the
+     * tree with the node and stopped laying out. A NEW node built afterwards gets its own, correctly
+     * tracked editor — so the symptom is two widgets where the live document only has one.</p>
+     *
+     * <p>Removes through {@link GraphView#getDocument()}, not a separately constructed
+     * {@code GraphDocument} — {@code GraphView} owns its own document instance, and every other test in
+     * this file only ever hands its own local one to {@link NodeFieldBinder} for property reads/writes,
+     * never to the view. Removing on that local copy would be invisible to {@link GraphView#syncFromDocument},
+     * which reads {@code getDocument().changeset()} — proving nothing about the bug this pins.</p>
+     */
+    @Test
+    public void aNodeRemovedThroughTheChangesetTakesItsFloatingEditorWithIt() {
+        openWindow();
+        NodeType type = numberPortType();
+        GraphDocument document = view.getDocument();
+        GraphNode node = buildNode(type, document);
+        NodeFieldBinder.attach(node, type, document, null, null);
+        frame();
+
+        NodePort port = node.portNamed("Value");
+        UIElement editor = port.getDefaultEditor();
+        assertNotNull("must be mounted before the removal this test exercises",
+                editor.getAttachedWindow());
+        assertNotNull(view.portEditorFor(port));
+
+        // Bypasses view.removeNode entirely — exactly what an undo, a server push, or any other
+        // document-side removal looks like from GraphView's perspective.
+        document.removeNode(node.getNodeId());
+        view.syncFromDocument();
+        frame();
+
+        assertNull("the floating editor must not survive a removal that arrived through the changeset "
+                + "any more than one that arrived through removeNode", editor.getAttachedWindow());
+        assertNull("GraphView must stop tracking it too, or the next tick keeps trying to reposition a "
+                + "port that no longer lays out", view.portEditorFor(port));
     }
 }

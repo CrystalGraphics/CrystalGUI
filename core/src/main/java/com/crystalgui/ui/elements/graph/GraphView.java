@@ -36,8 +36,10 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A {@link CanvasView} that knows about nodes and wires: it owns the edge set, the wire layer that
@@ -107,13 +109,18 @@ public class GraphView extends CanvasView implements UndoScope {
     private final NodeWireLayer wireLayer;
 
     /**
-     * One {@link PortDefaultEditor} per port that has ever had a {@link NodePort#getDefaultEditor()} —
-     * built once ({@link #discoverPortEditors}), kept for the port's whole lifetime, mounted and
-     * unmounted as it connects and disconnects. Doubles as the "have we seen this port's editor"
-     * discovery guard. See {@link PortDefaultEditor}'s own class javadoc for what it owns and why it is
-     * a class of its own rather than a handful of parallel maps here.
+     * One {@link PortDefaultEditor} per port whose {@link NodePort#getDefaultEditor()} is currently
+     * non-null — rebuilt via {@link #rebuildPortEditor} every time that control is replaced, kept
+     * mounted/unmounted as the port connects and disconnects. See {@link PortDefaultEditor}'s own class
+     * javadoc for what it owns and why it is a class of its own rather than a handful of parallel maps
+     * here.
      */
     private final Map<NodePort, PortDefaultEditor> portEditors = new LinkedHashMap<>();
+
+    /** Ports {@link #discoverPortEditors} has already wired a listener onto — the discovery guard now
+     * that discovery itself is push-based. See {@link #rebuildPortEditor}'s own javadoc for why a port is
+     * watched from the moment it is first seen, not from the moment it first has a non-null editor. */
+    private final Set<NodePort> watchedPorts = new LinkedHashSet<>();
 
     /**
      * This document's history.
@@ -301,24 +308,50 @@ public class GraphView extends CanvasView implements UndoScope {
     }
 
     /**
-     * Finds ports whose {@link NodePort#getDefaultEditor()} has never been seen, builds a
-     * {@link PortDefaultEditor} for each, and wires it to follow its port's blank state from here on.
+     * Finds input ports that have never been seen before and starts watching them — {@code onBlankChanged}
+     * for mount state, {@code onDefaultEditorChanged} for the control itself — then does one initial
+     * {@link #rebuildPortEditor} in case the port already has an editor.
      *
      * <p>A per-tick scan over the (small) node set, the same shape as {@code ShaderGraphPreviews}'s own
-     * new-node discovery — there is no signal for "a port gained a default editor" any more than there
-     * was one for "a node was added", and for the same reason: a document-declared field can bind to its
-     * port at any point after the widget exists, not only at construction.</p>
+     * new-node discovery — there is no signal for "a node was added" any more than there is one for "a
+     * port exists now", so this is still how a port is FOUND at all. What no longer happens here is
+     * deciding whether it has an editor worth keeping: {@link #rebuildPortEditor} owns that, and it is
+     * reachable from {@code onDefaultEditorChanged} too, not just from this scan.</p>
      */
     private void discoverPortEditors() {
         for (GraphNode node : nodes()) {
             for (NodePort port : node.getInputPorts()) {
-                if (port.getDefaultEditor() == null || portEditors.containsKey(port)) continue;
+                if (!watchedPorts.add(port)) continue;
                 PortDefaultEditor editor = new PortDefaultEditor(port, this);
                 portEditors.put(port, editor);
-                port.onBlankChanged.connect(() -> editor.setMounted(port.isBlank()));
-                editor.setMounted(port.isBlank());
+                port.onBlankChanged.connect(() -> refreshPortEditor(port));
+                port.onDefaultEditorChanged.connect(() -> refreshPortEditor(port));
+                refreshPortEditor(port);
             }
         }
+    }
+
+    /**
+     * Brings {@code port}'s editor back in step with the port — the control it wraps, and whether it
+     * should be on the plane at all.
+     *
+     * <p><b>One {@link PortDefaultEditor} per port for that port's whole life, never rebuilt.</b> The
+     * control genuinely can arrive after the widget exists: {@code NodeFieldBinder} binds a
+     * document-declared field on whatever tick the owning node is first seen, and for a node added from
+     * the create menu that is a different {@code UIFrameTicker} from the one {@link #tickFrame} discovers
+     * the port on, with no ordering between them. Rebuilding on that change is what previously broke a
+     * vector editor: the replacement box adopted a control the old box still held, and two elements
+     * claiming one child put it in two Taffy parents at once — laid out under both, wrong pass winning,
+     * so the X/Y fields drew hundreds of pixels from their own frame. {@link PortDefaultEditor#syncControl}
+     * swaps it in place with an explicit detach instead, so there is only ever one owner.</p>
+     */
+    private void refreshPortEditor(NodePort port) {
+        PortDefaultEditor editor = portEditors.get(port);
+        if (editor == null) return;
+        editor.syncControl();
+        // A port with no control yet has nothing to show — mounting an empty box would draw a stray
+        // frame beside the port until the binder catches up.
+        editor.setMounted(editor.hasControl() && port.isBlank());
     }
 
     /**
@@ -345,6 +378,7 @@ public class GraphView extends CanvasView implements UndoScope {
     private void forgetPortEditor(NodePort port) {
         PortDefaultEditor editor = portEditors.remove(port);
         if (editor != null) editor.setMounted(false);
+        watchedPorts.remove(port);
     }
 
     /** The {@link PortDefaultEditor} tracked for {@code port}, or {@code null} if it never had one
@@ -521,6 +555,7 @@ public class GraphView extends CanvasView implements UndoScope {
         // node, so the loop above never touches it.
         for (PortDefaultEditor editor : portEditors.values()) editor.setMounted(false);
         portEditors.clear();
+        watchedPorts.clear();
         widgetsById.clear();
         connections.clear();
         selection.clear();
@@ -575,6 +610,13 @@ public class GraphView extends CanvasView implements UndoScope {
         for (String id : removedNodes) {
             GraphNode widget = widgetsById.remove(id);
             if (widget == null) continue;
+            // Same reason detachNode forgets them: a floating default editor is not a descendant of its
+            // node, so removeChild below never reaches it. Missing here left every port's box/dot
+            // permanently orphaned on the plane whenever a removal arrived through the document's
+            // changeset instead of through removeNode directly — undo of an add, a server sync, or a
+            // delete-then-recreate. Still mounted, still hit-testable, frozen at whatever position it
+            // last had, because its own port and dot went stale with it and never laid out again.
+            for (NodePort port : widget.getPorts()) forgetPortEditor(port);
             content().removeChild(widget);
             applied++;
         }
@@ -642,7 +684,10 @@ public class GraphView extends CanvasView implements UndoScope {
         String id = node.getNodeId();
         NodeData data = id == null ? null : document.node(id);
         if (data == null) {
-            // Never bound — nothing for the document to forget, so this is a plain detach.
+            // Never bound — nothing for the DOCUMENT to forget, but its ports may still have floating
+            // default editors mounted on the plane; see detachNode's own note on why removeChild alone
+            // never reaches them.
+            for (NodePort port : node.getPorts()) forgetPortEditor(port);
             content().removeChild(node);
             selection.prune(this);
             return this;
