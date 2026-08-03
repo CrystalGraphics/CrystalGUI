@@ -3092,3 +3092,13 @@ floatingdock {
     min-width: 160px;
     min-height: 120px;
 }
+
+/* An empty group, which only the central one can be. It is the guarantee that the work area still
+ * exists rather than a pane that failed to collapse -- so it says so, instead of reading as a dead
+ * grey box. VS Code draws a shortcut watermark here; a recessed panel is the same idea, cheaper. */
+dockgroup.__empty__ {
+    background: #232323;
+}
+dockgroup.__empty__ .__strip__ {
+    opacity: 0.5;
+}

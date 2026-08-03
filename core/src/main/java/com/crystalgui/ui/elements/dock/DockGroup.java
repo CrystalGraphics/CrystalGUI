@@ -35,6 +35,16 @@ public class DockGroup extends UIElement {
     /** The drop preview. Covers the pane it would take. */
     public static final String OVERLAY_CLASS = "__drop-overlay__";
 
+    /**
+     * On a group holding no panels — which only the {@linkplain DockLeaf#isCentral() central} one can be.
+     *
+     * <p>An empty central pane is the guarantee that the work area still exists, so it is deliberate and
+     * it has to look deliberate. VS Code draws a watermark of keyboard shortcuts in exactly this state;
+     * without something, an empty grey box is indistinguishable from a pane that failed to collapse, and
+     * it gets reported as one.</p>
+     */
+    public static final String EMPTY_CLASS = "__empty__";
+
     /** The caret between two tabs showing where a reorder would land. */
     public static final String INSERTION_CLASS = "__insertion__";
 
@@ -132,6 +142,13 @@ public class DockGroup extends UIElement {
      */
     void sync() {
         List<DockPanelRef> wanted = leaf.panels();
+        if (wanted.isEmpty() != hasClass(EMPTY_CLASS)) {
+            if (wanted.isEmpty()) {
+                addClass(EMPTY_CLASS);
+            } else {
+                removeClass(EMPTY_CLASS);
+            }
+        }
         if (!wanted.equals(new ArrayList<>(tabByPanel.keySet()))) {
             rebuildStrip(wanted);
         }
