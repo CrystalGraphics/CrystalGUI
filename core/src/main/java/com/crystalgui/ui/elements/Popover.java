@@ -102,6 +102,9 @@ public class Popover extends UIElement {
     @Getter
     private boolean freelyPositioned;
 
+    /** Whether {@link #focusBeforeOpen} was drawing a focus ring when this opened — see {@link #hide}. */
+    private boolean focusBeforeOpenWasVisible;
+
     /** Focus to hand back on close — the same restore {@code Dialog} does, for the same reason: a menu
      * that swallows your place in the page is worse than one that never took focus. */
     @Nullable
@@ -205,6 +208,9 @@ public class Popover extends UIElement {
         }
 
         focusBeforeOpen = window.getInputHandler().getFocusedElement();
+        // Captured WITH its ring state — see hide(). Read now, because opening this popover is about to
+        // take focus away and the flag goes with it.
+        focusBeforeOpenWasVisible = focusBeforeOpen != null && focusBeforeOpen.isFocusVisible();
         onOpened();
         startPlacementTicker();
         reposition();
@@ -237,10 +243,27 @@ public class Popover extends UIElement {
             window.popAutoPopover(this);
             window.popCloseWatcher(this);
             if (focusBeforeOpen != null && focusBeforeOpen.getAttachedWindow() == window) {
-                window.getInputHandler().requestFocus(focusBeforeOpen);
+                // Hand back the focus RING exactly as it was, rather than deciding afresh.
+                //
+                // requestFocus is PROGRAMMATIC and therefore always rings. Using it unconditionally meant
+                // creating a node from the create menu outlined the ENTIRE GraphView — the canvas had
+                // been focused by a CLICK (no ring), and closing the menu silently promoted that to a
+                // keyboard-style focus it never had.
+                //
+                // Deriving it from the policy instead is the trap this replaced: FocusPolicy.CLICK IS
+                // tabbable (only CLICK_NOT_TABBABLE is not), so "is it tabbable?" answers yes for the
+                // canvas and rings it anyway. How focus was ACQUIRED is the only thing that settles it,
+                // and the element already records that as :focus-visible — so remember it and put it
+                // back. A popover opened from a button the user tabbed to still returns the ring.
+                if (focusBeforeOpenWasVisible) {
+                    window.getInputHandler().requestFocus(focusBeforeOpen);
+                } else {
+                    window.getInputHandler().requestPointerFocus(focusBeforeOpen);
+                }
             }
         }
         focusBeforeOpen = null;
+        focusBeforeOpenWasVisible = false;
         anchor = null;
 
         onClosed.emit();

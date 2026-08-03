@@ -270,6 +270,16 @@ public class NodeCreationMenu extends Popover {
     private NodeCreationMenu open(float rootX, float rootY, @Nullable UIElement invoker) {
         search.setText("");
         tree.collapseAll();
+        // Back to the top. The menu is a Popover, so it is the SAME element every time — hiding it does
+        // not reset anything, and the scroll offset from the last visit survived: reopening showed the
+        // list already a row or two down, with the first category sliced off above the viewport. Read as
+        // a rendering glitch rather than as leftover state, because nothing about opening a fresh menu
+        // suggests it is a continuation.
+        //
+        // IMMEDIATE, not the animated setter: this is a reset, not a movement, and smooth-scrolling from
+        // wherever the user left off would be a visible slide on open. Before rebuild(), so the offset is
+        // already 0 when the new model is measured rather than being clamped against the old content.
+        tree.setScrollImmediate(0f, 0f);
         rebuild();
         showAt(rootX, rootY, invoker);
         // Focus the box, not the first row: the menu exists to be typed into, and a user who wanted the

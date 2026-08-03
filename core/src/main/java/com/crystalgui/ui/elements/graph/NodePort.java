@@ -194,7 +194,7 @@ public class NodePort extends UIElement {
         core.setHitTest(false);
         dot.addInternalChild(core);
 
-        this.label = new UIText(displayLabel(name, type.arityLabel()));
+        this.label = new UIText(displayLabel(humanise(name), type.arityLabel()));
         label.addClass(LABEL_CLASS);
         label.setHitTest(false);
         // Same reasoning as `GraphNode.title`'s identical call: this label has to drive its column's
@@ -241,6 +241,38 @@ public class NodePort extends UIElement {
         }, false, true);
     }
 
+    /**
+     * A port id as a reader sees it — {@code RadialScale} is drawn {@code Radial Scale}.
+     *
+     * <p>The id itself is untouched: it is a GLSL template key ({@code {RadialScale}}), the document's
+     * {@code PortSpec.portId}, and what an edge points at, so it has to stay a single identifier. Only
+     * the LABEL is spaced, which is the split {@link #getName()} already documents against
+     * {@link #getPortId()}.</p>
+     *
+     * <p>Derived rather than declared, so 93 built-in nodes did not each have to carry a second string
+     * that says the same thing with a space in it — and so a node added later reads correctly without
+     * anyone remembering to. The rule is the usual one: a boundary before an upper-case letter that
+     * follows a lower-case one ({@code RadialScale}), and before the last upper-case of a run that
+     * starts a new word ({@code RFlip} → {@code R Flip}). An acronym on its own survives intact, which
+     * is the case that matters here — {@code UV} must not become {@code U V}.</p>
+     */
+    static String humanise(String id) {
+        if (id == null || id.length() < 2) return id;
+        StringBuilder out = new StringBuilder(id.length() + 4);
+        for (int i = 0; i < id.length(); i++) {
+            char current = id.charAt(i);
+            if (i > 0 && Character.isUpperCase(current)) {
+                char previous = id.charAt(i - 1);
+                boolean afterLower = Character.isLowerCase(previous);
+                boolean startsWordAfterAcronym = Character.isUpperCase(previous)
+                        && i + 1 < id.length() && Character.isLowerCase(id.charAt(i + 1));
+                if (afterLower || startsWordAfterAcronym) out.append(' ');
+            }
+            out.append(current);
+        }
+        return out.toString();
+    }
+
     /** Unity's {@code Out(3)}: the name, then the arity, unless there is none worth printing. Takes the
      * printed FORM rather than the number, so a matrix can read {@code (2x2)} — see
      * {@link PortType#arityLabel()}. */
@@ -280,7 +312,7 @@ public class NodePort extends UIElement {
         resolvedArity = clamped;
         // A resolved width is always a plain vector count — the NxN form belongs to a DECLARED matrix
         // type, which is never what a dynamic port resolves to.
-        label.setText(displayLabel(portId,
+        label.setText(displayLabel(humanise(portId),
                 clamped > 0 ? String.valueOf(clamped) : type.arityLabel()));
         return true;
     }

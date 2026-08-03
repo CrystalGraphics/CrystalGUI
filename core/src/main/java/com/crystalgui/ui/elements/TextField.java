@@ -4,6 +4,9 @@ import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgui.text.Rope;
+import com.crystalgui.text.WordClassifier;
+import com.crystalgui.text.WordOperations;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
@@ -729,6 +732,40 @@ public class TextField extends UIElement implements UIFrameTicker {
     }
 
     /** Deletes the selection, or one code point in {@code direction} when there isn't one. */
+    /**
+     * The offset one word away from the caret, using the editor's own word rules.
+     *
+     * <p>A {@code Rope} is built per call. That is not a concern at this scale — a single-line field is
+     * short, and this runs on a keystroke, not a frame — and it is what lets the field share
+     * {@link WordOperations} with the editor instead of growing a second, subtly different idea of where
+     * a word ends.</p>
+     */
+    private int wordBoundary(int direction) {
+        Rope document = Rope.of(text);
+        return direction < 0
+                ? WordOperations.previousWordStart(document, caret, WordClassifier.DEFAULT)
+                : WordOperations.nextWordEnd(document, caret, WordClassifier.DEFAULT);
+    }
+
+    /**
+     * Ctrl+Backspace / Ctrl+Delete.
+     *
+     * <p>A selection wins: with something selected these delete <em>it</em> and nothing more, which is
+     * what every editor does — extending the removal past a deliberate selection would be destroying
+     * more than the user pointed at.</p>
+     */
+    private void deleteToWordBoundary(int direction) {
+        if (!isEnabled()) return;
+        if (hasSelection()) {
+            deleteSelectionOr(0);
+            return;
+        }
+        int to = wordBoundary(direction);
+        if (to == caret) return;
+        int start = Math.min(caret, to), end = Math.max(caret, to);
+        editText(text.substring(0, start) + text.substring(end), start);
+    }
+
     private void deleteSelectionOr(int direction) {
         if (!isEnabled()) return;
         int start = getSelectionStart(), end = getSelectionEnd();
@@ -809,6 +846,28 @@ public class TextField extends UIElement implements UIFrameTicker {
                         if (!Character.isISOControl(c) && acceptsChar(c)) kept.append(c);
                     }
                     insert(kept.toString());
+                    return true;
+                }
+                // Word-wise editing. Ported rather than hand-rolled: `WordOperations` is the same
+                // boundary logic the code editor uses, so a word means the same thing in both — and
+                // `WordClassifier` is what knows that `foo-bar` is two words and `foo_bar` is one,
+                // which a whitespace scan (what selectWordAt below still does for double-click) does
+                // not. Delete first, because that is what a user reaches for; the arrows are the same
+                // primitive and it would be strange to ship one without the other.
+                case CgKeyCodes.KEY_BACK -> {
+                    deleteToWordBoundary(-1);
+                    return true;
+                }
+                case CgKeyCodes.KEY_DELETE -> {
+                    deleteToWordBoundary(1);
+                    return true;
+                }
+                case CgKeyCodes.KEY_LEFT -> {
+                    moveCaret(wordBoundary(-1), shift);
+                    return true;
+                }
+                case CgKeyCodes.KEY_RIGHT -> {
+                    moveCaret(wordBoundary(1), shift);
                     return true;
                 }
                 default -> { }
