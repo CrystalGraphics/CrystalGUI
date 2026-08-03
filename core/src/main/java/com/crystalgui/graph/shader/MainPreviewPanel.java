@@ -87,6 +87,9 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
     /** The one entry that is deliberately inert. @see #openMeshMenu */
     public static final String CUSTOM_MESH_LABEL = "Custom Mesh";
 
+    /** Puts the orbit and zoom back to where the panel opened. @see #resetView */
+    public static final String RESET_VIEW_LABEL = "Reset Camera";
+
     @Nullable
     private Menu meshMenu;
 
@@ -344,10 +347,17 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
             // Present but inert, exactly as asked. Listed rather than omitted because an absent entry
             // reads as "this editor cannot do that", where a disabled one reads as "not yet".
             meshMenu.addItem(CUSTOM_MESH_LABEL).setEnabled(false);
+
+            // A section of its own, because it is a different KIND of thing: everything above chooses
+            // what is being looked at, and this changes where it is looked at from. That is exactly the
+            // distinction a native context menu's rules draw.
+            meshMenu.addSeparator();
+            meshMenu.addItem(RESET_VIEW_LABEL);
+
             // Resolved by LABEL at activation time rather than captured per item. Menu rows are ordinary
             // elements here, but reading the choice back from the event keeps this to one listener and
             // means an entry added later cannot be forgotten.
-            meshMenu.onItemActivated.connect(item -> applyMeshChoice(item.getText()));
+            meshMenu.onItemActivated.connect(item -> applyMenuChoice(item.getText()));
             // Must be IN the tree to be promoted to the top layer — a Menu is a Popover, and an
             // unparented one has nothing to promote from. Internal, because this panel is a composite.
             addInternalChild(meshMenu);
@@ -361,7 +371,11 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
     }
 
     /** Applies a menu row's label. Unknown labels — {@code Custom Mesh} — change nothing. */
-    private void applyMeshChoice(String label) {
+    private void applyMenuChoice(String label) {
+        if (RESET_VIEW_LABEL.equals(label)) {
+            resetView();
+            return;
+        }
         for (CgPreviewMesh option : CgPreviewMesh.values()) {
             if (option.label().equals(label)) {
                 setMesh(option);
