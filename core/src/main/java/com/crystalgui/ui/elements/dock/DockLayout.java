@@ -111,6 +111,20 @@ public final class DockLayout {
      *         widget layer means the overlay can ask the same question before it is even drawn.
      */
     public DockLeaf drop(DockLeaf target, DockDropZone zone, DockNode inserted) {
+        return drop(target, zone, inserted, -1);
+    }
+
+    /**
+     * As {@link #drop(DockLeaf, DockDropZone, DockNode)}, but a {@link DockDropZone#MERGE} lands at
+     * {@code mergeIndex} in the strip rather than at the end.
+     *
+     * <p>What separates "drop into this group" from "drop between these two tabs". Both are a merge — the
+     * index is the only difference, so making it a parameter rather than a second zone keeps the drop-zone
+     * map answering one question.</p>
+     *
+     * @param mergeIndex position in the target strip, or negative to append
+     */
+    public DockLeaf drop(DockLeaf target, DockDropZone zone, DockNode inserted, int mergeIndex) {
         if (target.isUnder(inserted)) {
             throw new IllegalArgumentException("cannot drop a node into itself or its own descendants");
         }
@@ -119,8 +133,15 @@ public final class DockLayout {
         }
 
         if (zone == DockDropZone.MERGE) {
+            int at = mergeIndex;
             for (DockLeaf leaf : inserted.leaves()) {
-                for (DockPanelRef panel : leaf.panels()) target.add(panel);
+                for (DockPanelRef panel : leaf.panels()) {
+                    if (at < 0) {
+                        target.add(panel);
+                    } else {
+                        target.add(panel, at++);   // several panels keep their order relative to each other
+                    }
+                }
             }
             return target;
         }

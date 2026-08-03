@@ -35,10 +35,17 @@ public class DockGroup extends UIElement {
     /** The drop preview. Covers the pane it would take. */
     public static final String OVERLAY_CLASS = "__drop-overlay__";
 
+    /** The caret between two tabs showing where a reorder would land. */
+    public static final String INSERTION_CLASS = "__insertion__";
+
+    /** How wide the insertion caret is drawn, in logical pixels. */
+    private static final float INSERTION_WIDTH = 2f;
+
     private final DockArea area;
     private final DockLeaf leaf;
     private final TabView tabs = new TabView();
     private final UIElement overlay = new UIElement();
+    private final UIElement insertion = new UIElement();
 
     /** Panel → its built content. Survives every rebuild of the tree above. */
     private final Map<DockPanelRef, UIElement> content = new LinkedHashMap<>();
@@ -59,6 +66,11 @@ public class DockGroup extends UIElement {
         overlay.setHitTest(false);
         hideDropPreview();
         addInternalChild(overlay);
+
+        insertion.addClass(INSERTION_CLASS);
+        insertion.setHitTest(false);
+        hideInsertionMarker();
+        addInternalChild(insertion);
 
         // A group is the unit commands resolve against, so it has to be able to hold focus. A container
         // that never sets a policy takes none, and every command that asks "which group is active" goes
@@ -162,6 +174,83 @@ public class DockGroup extends UIElement {
         } else {
             removeClass(ACTIVE_CLASS);
         }
+    }
+
+    // ── Tab strip geometry ──────────────────────────────────────────────────────────────────────
+
+    /** Whether {@code (screenX, screenY)} is over this group's tab strip rather than its content. */
+    public boolean isOverStrip(float screenX, float screenY) {
+        return tabs.getTabs().stream().anyMatch(tab -> tab.containsScreenPoint(screenX, screenY))
+                || stripBandContains(screenX, screenY);
+    }
+
+    /**
+     * The strip's own band, so the gap after the last tab still counts as "the strip".
+     *
+     * <p>Without it, dropping just past the last tab — which is exactly where you aim to append — falls
+     * through to the content area and becomes a split.</p>
+     */
+    private boolean stripBandContains(float screenX, float screenY) {
+        if (tabs.getTabs().isEmpty()) return false;
+        var strip = tabs.getTabs().get(0).getRuntimeCache();
+        var local = screenToLocal(screenX, screenY);
+        var self = getRuntimeCache();
+        float y = local.y();
+        return local.x() >= self.getX() && local.x() <= self.getX() + self.getWidth()
+                && y >= strip.getY() && y <= strip.getY() + strip.getHeight();
+    }
+
+    /**
+     * Where in the strip a drop at {@code screenX} would land.
+     *
+     * <p>The first tab whose midpoint is past the pointer — the rule every tab strip uses, and the reason
+     * a tab dropped on the left half of its neighbour goes before it rather than after.</p>
+     */
+    public int insertionIndexAt(float screenX) {
+        List<Tab> strip = tabs.getTabs();
+        for (int i = 0; i < strip.size(); i++) {
+            var cache = strip.get(i).getRuntimeCache();
+            var local = screenToLocal(screenX, cache.getY());
+            if (local.x() < cache.getX() + cache.getWidth() / 2f) return i;
+        }
+        return strip.size();
+    }
+
+    /** Draws the caret at the boundary {@code index} would insert at. */
+    void showInsertionMarker(int index) {
+        List<Tab> strip = tabs.getTabs();
+        if (strip.isEmpty()) {
+            hideInsertionMarker();
+            return;
+        }
+        float x;
+        float top;
+        float height;
+        if (index >= strip.size()) {
+            var last = strip.get(strip.size() - 1).getRuntimeCache();
+            x = last.getX() + last.getWidth();
+            top = last.getY();
+            height = last.getHeight();
+        } else {
+            var cache = strip.get(index).getRuntimeCache();
+            x = cache.getX();
+            top = cache.getY();
+            height = cache.getHeight();
+        }
+        var self = getRuntimeCache();
+        float left = x - self.getX() - INSERTION_WIDTH / 2f;
+        float y = top - self.getY();
+        StyleGroup.importantPipeline(insertion.getStyle().getLayoutGroup(), l -> l
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(left).top(y).width(INSERTION_WIDTH).height(height));
+        StyleGroup.importantPipeline(insertion.getStyle().getGeneralGroup(), g -> g.opacity(1f));
+    }
+
+    void hideInsertionMarker() {
+        StyleGroup.importantPipeline(insertion.getStyle().getLayoutGroup(), l -> l
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(0f).top(0f).width(0f).height(0f));
+        StyleGroup.importantPipeline(insertion.getStyle().getGeneralGroup(), g -> g.opacity(0f));
     }
 
     // ── Drop preview ────────────────────────────────────────────────────────────────────────────
