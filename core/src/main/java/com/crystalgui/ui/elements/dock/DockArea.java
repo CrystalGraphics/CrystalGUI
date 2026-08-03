@@ -63,8 +63,16 @@ public class DockArea extends UIElement implements UIFrameTicker {
      */
     private final Map<DockLeaf, DockGroup> groups = new IdentityHashMap<>();
 
-    /** Reused across rebuilds so a split does not throw away every pane's scroll position. */
-    private final List<SplitView> splitPool = new ArrayList<>();
+    /**
+     * Each live {@link SplitView} and the branch it was built for.
+     *
+     * <p>Paired at build time and never re-derived. The first version resolved the branch by walking the
+     * layout and matching positional index, which is correct only while the tree has not changed shape —
+     * i.e. never, at the moment it matters. A drop mutates the layout and <em>then</em> asks for the
+     * weights, so the old split views were mapped onto the new branches and their weights written to the
+     * wrong ones: split a pane and an unrelated column three panes away changed width.</p>
+     */
+    private final Map<SplitView, DockBranch> splitBranches = new IdentityHashMap<>();
 
     private boolean rebuildPending = true;
     private boolean ticking;
@@ -177,14 +185,15 @@ public class DockArea extends UIElement implements UIFrameTicker {
     }
 
     private void rebuild() {
-        // Read the user's divider positions back into the layout BEFORE tearing the split views down, or
-        // every rebuild resets the panes to whatever weights the layout was last saved with -- i.e. a
-        // split somewhere else in the tree silently undoes the drag you just did here.
+        // Weights are pulled BEFORE each mutation (see captureDividerPositions), not here: by now the
+        // layout has already changed shape and a branch's child count may no longer match its split's
+        // pane count. What is left here is the no-structural-change case -- a plain requestRebuild after
+        // a resize -- where the pairing is still exact.
         pullWeightsIntoLayout();
 
         content.clearAllChildren();
         pruneStaleGroups();
-        splitPool.clear();
+        splitBranches.clear();
 
         UIElement built = buildNode(layout.root(), 0);
         if (built != null) {
@@ -222,7 +231,7 @@ public class DockArea extends UIElement implements UIFrameTicker {
         if (branch.childCount() == 1) return buildNode(branch.child(0), depth + 1);
 
         SplitView split = new SplitView();
-        splitPool.add(split);
+        splitBranches.put(split, branch);
         split.setOrientation(branch.orientation(layout.rootOrientation()) == DockOrientation.HORIZONTAL
                 ? SplitView.Orientation.HORIZONTAL
                 : SplitView.Orientation.VERTICAL);
@@ -246,45 +255,33 @@ public class DockArea extends UIElement implements UIFrameTicker {
         return split;
     }
 
-    /** Copies every live divider position back into the layout tree it came from. */
+    /**
+     * Copies every live divider position back into the layout tree it came from.
+     *
+     * <p>Skips a split whose pane count no longer matches its branch — that pairing is stale, and writing
+     * through it is how one pane's split silently resized a different column.</p>
+     */
     public void pullWeightsIntoLayout() {
-        for (SplitView split : splitPool) {
-            DockBranch branch = branchFor(split);
-            if (branch == null) continue;
+        for (Map.Entry<SplitView, DockBranch> entry : splitBranches.entrySet()) {
+            SplitView split = entry.getKey();
+            DockBranch branch = entry.getValue();
             float[] weights = split.getWeights();
-            for (int i = 0; i < Math.min(weights.length, branch.childCount()); i++) {
+            if (weights.length != branch.childCount()) continue;
+            for (int i = 0; i < weights.length; i++) {
                 branch.child(i).size(Math.max(0.0001f, weights[i]));
             }
         }
     }
 
     /**
-     * Which branch a split view was built for.
+     * Records where the user has dragged the dividers, before the layout is changed underneath them.
      *
-     * <p>Resolved by walking the layout rather than stored on the split, because a split view is reused
-     * across rebuilds and a field would go stale exactly when the tree changed shape — the case it exists
-     * to survive.</p>
+     * <p>Every mutator calls this first. A drop reshapes the tree and only then asks for a rebuild, so
+     * reading the weights afterwards means reading them against a tree the split views no longer
+     * describe.</p>
      */
-    @Nullable
-    private DockBranch branchFor(SplitView split) {
-        return branchFor(layout.root(), split);
-    }
-
-    @Nullable
-    private DockBranch branchFor(DockBranch branch, SplitView split) {
-        int index = splitPool.indexOf(split);
-        if (index < 0) return null;
-        List<DockBranch> ordered = new ArrayList<>();
-        collectSplitBranches(layout.root(), ordered);
-        return index < ordered.size() ? ordered.get(index) : null;
-    }
-
-    /** Branches that actually became a split view, in the order {@link #buildNode} visits them. */
-    private void collectSplitBranches(DockNode node, List<DockBranch> out) {
-        if (node.isLeaf()) return;
-        DockBranch branch = (DockBranch) node;
-        if (branch.childCount() >= 2) out.add(branch);
-        for (DockNode child : branch.children()) collectSplitBranches(child, out);
+    private void captureDividerPositions() {
+        pullWeightsIntoLayout();
     }
 
     // ── Operations ──────────────────────────────────────────────────────────────────────────────
@@ -300,6 +297,7 @@ public class DockArea extends UIElement implements UIFrameTicker {
     @Nullable
     public DockLeaf performDrop(DockDragPayload payload, @Nullable DockLeaf target,
                                 DockDropZone zone, boolean outerEdge, int tabIndex) {
+        captureDividerPositions();
         // A reorder inside one strip is a MOVE, not a detach-and-reinsert. Going through detach would
         // remove the panel, find the leaf empty, and collapse the pane the user is dragging within --
         // which for a single-tab group deletes the thing being reordered.
@@ -363,11 +361,13 @@ public class DockArea extends UIElement implements UIFrameTicker {
     }
 
     public void closePanel(DockPanelRef panel) {
+        captureDividerPositions();
         if (layout.closePanel(panel)) requestRebuild();
     }
 
     /** Maximizes a group, or restores when it is already the maximized one. */
     public void toggleMaximize(DockLeaf leaf) {
+        captureDividerPositions();
         layout.maximize(layout.maximizedLeaf() == leaf ? null : leaf);
         requestRebuild();
     }

@@ -570,6 +570,72 @@ public class DockAreaTest extends UiTestBase {
         assertStripsMatchModel();
     }
 
+    // ── Splitting must not resize anything else ─────────────────────────────────────────────────
+
+    /**
+     * <b>A split divides the pane it lands on, and touches nothing else.</b>
+     *
+     * <p>Reported from the scene: splitting a shared dock produced a new pane of equal size and shrank an
+     * unrelated column. The cause was the weight write-back resolving each split view to a branch by
+     * positional index against the <em>already-mutated</em> tree — correct only while the shape has not
+     * changed, which is precisely never at the moment it runs.</p>
+     */
+    @Test
+    public void aSplitDoesNotResizeUnrelatedPanes() {
+        DockLeaf a = new DockLeaf(alpha);
+        layout = DockLayout.of(a);
+        DockLeaf b = new DockLeaf(beta);
+        layout.drop(a, DockDropZone.SPLIT_RIGHT, b);
+        DockPanelRef gammaRef = new DockPanelRef("gamma");
+        DockLeaf c = new DockLeaf(gammaRef);
+        layout.drop(b, DockDropZone.SPLIT_RIGHT, c);
+
+        a.size(1f);
+        b.size(2f);
+        c.size(3f);
+
+        area = new DockArea(registry(), layout);
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                .flexDirection(FlexDirection.COLUMN));
+        root.addChild(area);
+        area.layout(l -> l.width(600).height(400));
+        window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+        window.init(1200, 800);
+        frame();
+        frame();
+
+        // Split A in two by dropping a fresh panel on its right edge, through the layout exactly as a
+        // drop does, then let the rebuild run.
+        layout.drop(a, DockDropZone.SPLIT_RIGHT, new DockLeaf(new DockPanelRef("delta")));
+        area.requestRebuild();
+        frame();
+        frame();
+
+        assertEquals("A halved", 0.5f, a.size(), 1e-3f);
+        assertEquals("and the newcomer took the other half",
+                0.5f, layout.root().child(1).size(), 1e-3f);
+        assertEquals("B untouched", 2f, b.size(), 1e-3f);
+        assertEquals("C untouched", 3f, c.size(), 1e-3f);
+    }
+
+    /** A divider the user dragged keeps its position across an unrelated rebuild. */
+    @Test
+    public void aDividerDragSurvivesARebuild() {
+        setUpTwoGroups();
+        SplitView split = (SplitView) area.builtRoot();
+        split.setPercentage(25f);
+        frame();
+
+        area.requestRebuild();
+        frame();
+        frame();
+
+        SplitView after = (SplitView) area.builtRoot();
+        assertEquals("the drag was not thrown away by the rebuild",
+                25f, after.getPercentage(), 1.5f);
+    }
+
     // ── Active group ────────────────────────────────────────────────────────────────────────────
 
     /** Something is always active once there is anything to be active. */
