@@ -76,17 +76,16 @@ public class GraphView extends CanvasView implements UndoScope {
     private static final float DEFAULT_WIRE_WIDTH = 1f;
 
     /**
-     * The floor a wire's on-screen thickness will not go below, in <b>physical-ish logical px after
-     * zoom</b>.
-     *
-     * <p>This is the answer to the open question the plan left: {@code CgVectorRenderer} scales stroke
-     * widths by the pose, which is correct — a wire should get thicker as you zoom in, exactly like a
-     * border. Zoomed <em>out</em> the same rule takes a 2px wire to a fifth of a pixel and the graph
-     * looks empty, so the width is clamped here, against the canvas's own zoom, rather than in the
-     * shader. Keeping it out of the shader means the stroke maths stays linear and every other consumer
-     * of {@code curve()} is unaffected.</p>
+     * REMOVED — kept here as a record of why. This used to floor a wire's on-screen thickness at 1
+     * physical-ish logical px so it survived zooming out; {@link #getWireWidth()} computed
+     * {@code max(wireBaseWidth, MIN_WIRE_SCREEN_WIDTH / zoom)} against it. That is exactly what made a
+     * wire read as the SAME thickness at every zoom level below 1 — the clamp was engineered to counteract
+     * the pose's own scaling, so at zoom 0.5 the pre-pose width doubled and the pose halved it right back.
+     * Unity's own wires genuinely get thinner zoomed out, same as a border under a CSS
+     * {@code transform: scale()} would — a stroke is content, not chrome, and content shrinks with the
+     * view. {@link #getWireWidth()} now returns {@link #wireBaseWidth} unclamped and lets the pose do
+     * the whole job, the same as every other {@code curve()}/{@code quad()} caller in the engine.
      */
-    private static final float MIN_WIRE_SCREEN_WIDTH = 1f;
 
     private final List<GraphConnection> connections = new ArrayList<>();
     private final List<GraphConnection> connectionsView = Collections.unmodifiableList(connections);
@@ -1363,9 +1362,49 @@ public class GraphView extends CanvasView implements UndoScope {
         return this;
     }
 
-    /** The width handed to {@code ctx.curve()}, in pre-pose units — see {@link #MIN_WIRE_SCREEN_WIDTH}. */
+    /** The width handed to {@code ctx.curve().width(...)}, in pre-pose units. Unclamped — the pose
+     * (which already includes the plane's own zoom) is what makes this thicker zoomed in and thinner
+     * zoomed out, same as {@link #DEFAULT_WIRE_WIDTH}'s own note about matching a real border's
+     * behaviour under scale. See {@link #getWireFeather()} for why the WIDTH staying unclamped does not
+     * reintroduce the sub-pixel dropout an earlier version of this class floored it against. */
     public float getWireWidth() {
+        return wireBaseWidth;
+    }
+
+    /** {@code stroke_coverage}'s edge ramp at zoom 1 — see {@code CgVectorRenderer.Curve#feather} and
+     * {@code stroke.glsl}. Same value {@link NodeWireLayer#WIRE_FEATHER} already used before this
+     * needed to vary with zoom at all. */
+    private static final float BASE_WIRE_FEATHER = 0.5f;
+
+    /** The feather actually handed to {@code ctx.curve().feather(...)}: {@link #BASE_WIRE_FEATHER}
+     * divided by zoom, so the ANTIALIASING RAMP stays a constant width on screen (in device-ish pixels)
+     * regardless of zoom — the opposite of {@link #getWireWidth()}, which is deliberately left to shrink
+     * with zoom unclamped.
+     *
+     * <h3>Why the width shrinking and the feather NOT shrinking is correct, not a contradiction</h3>
+     * <p>{@code stroke_coverage} computes {@code signedDist = dist - halfWidth} and returns {@code 1 -
+     * smoothstep(-ramp/2, ramp/2, signedDist)}. When the ramp was left to shrink alongside the width (an
+     * earlier version), a curve zoomed out below a device pixel wide made the WHOLE transition band
+     * narrower than the space between two sampled pixel centres — every sample fell on one side of that
+     * band or the other, evaluating to a hard 0 or 1 rather than a fraction, which is a per-pixel
+     * dropout: the exact "missing pixels" a side-by-side against Unity's smooth thin line caught.
+     * Flooring the ramp against zoom instead keeps it at least ~1 real screen pixel wide always, so
+     * EVERY sample near the centreline lands inside a genuinely smooth gradient and gets a fractional,
+     * antialiased coverage value — never a coin flip.</p>
+     *
+     * <p>Once the ramp is a real screen pixel and the width keeps shrinking past it, {@code halfWidth}
+     * eventually sits INSIDE the ramp's own span at the centreline itself, so peak coverage there drops
+     * below 1.0 too — the stroke reads as thinner AND fainter, not because anything multiplies its
+     * colour's alpha (an earlier version tried exactly that, which is what desaturated a colour wire
+     * toward the dark canvas behind it into ash-grey rather than a dim but still-hued line — the fade has
+     * to happen in the SAME coverage computation the ramp already drives, or the colour and the
+     * shrinking disagree about what's happening). This is the ordinary analytic-SDF answer to sub-pixel
+     * line antialiasing, and needs no MSAA framebuffer to get right — the curve renderer already draws
+     * every pixel from an exact distance field; it only needed the ramp width to stop shrinking past the
+     * point where the pixel grid can resolve it.</p>
+     */
+    public float getWireFeather() {
         float zoom = Math.max(1e-4f, getZoom());
-        return Math.max(wireBaseWidth, MIN_WIRE_SCREEN_WIDTH / zoom);
+        return BASE_WIRE_FEATHER / zoom;
     }
 }

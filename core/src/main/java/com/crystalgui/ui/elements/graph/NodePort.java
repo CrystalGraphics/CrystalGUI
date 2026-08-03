@@ -62,6 +62,12 @@ public class NodePort extends UIElement {
     /** The coloured core at the centre of {@link #EDITOR_DOT_RING_CLASS} — see {@link PortDefaultEditor}.
      * Coloured by the port's own type in Java, same as {@link #DOT_CLASS} and the wire itself. */
     public static final String EDITOR_DOT_CORE_CLASS = "__editor-dot-core__";
+    /** The small coloured core centred inside {@link #DOT_CLASS} itself — this port's own dot, not the
+     * floating editor's. Unlike {@link #EDITOR_DOT_CORE_CLASS}, this one is coloured entirely by CSS
+     * (via the port's own {@code type-*} class, already an ancestor) rather than by Java: {@link
+     * #EDITOR_DOT_CLASS} lives outside the type-classed subtree (see {@link PortDefaultEditor}'s own
+     * javadoc for why), but this dot never leaves it. */
+    public static final String DOT_CORE_CLASS = "__dot-core__";
     /** On the port, so a theme can style the two sides differently without knowing about directions. */
     public static final String INPUT_CLASS = "__input__";
     public static final String OUTPUT_CLASS = "__output__";
@@ -144,6 +150,15 @@ public class NodePort extends UIElement {
         // The dot must never be the drop target in its own right: the port is. Hit-testing off applies
         // to the subtree, so events land on the port element and the geometry stays one box.
         dot.setHitTest(false);
+        // The ring-gap-core "target" look Unity's own port dots have — see PortDefaultEditor's own
+        // three-layer dot for the same construction. There it takes three flat elements because it sits
+        // outside the type-classed subtree; here the outer ring is DOT_CLASS's own border (still what
+        // typeColor() reads), so only the core needs a child at all — the "gap" is just DOT_CLASS's own
+        // background showing between its border and this core.
+        UIElement core = new UIElement();
+        core.addClass(DOT_CORE_CLASS);
+        core.setHitTest(false);
+        dot.addInternalChild(core);
 
         this.label = new UIText(displayLabel(name, type));
         label.addClass(LABEL_CLASS);
@@ -249,6 +264,15 @@ public class NodePort extends UIElement {
         var cache = dot.getRuntimeCache();
         return new Vector2f(cache.getX() + cache.getWidth() * 0.5f,
                 cache.getY() + cache.getHeight() * 0.5f);
+    }
+
+    /** The dot's live outer radius (half its width) — what {@link NodeWireLayer} and {@link
+     * PortDefaultEditor} trim a wire/stub endpoint back by, so the line stops at the ring's edge like
+     * Unity's own rather than running under it into the centre. Same "read the live layout, never a
+     * theme constant" reasoning as {@link #dotCenter()} — a themed {@code --graph-dot} change must not
+     * need a matching Java constant kept in step by hand. */
+    public float dotRadius() {
+        return dot.getRuntimeCache().getWidth() * 0.5f;
     }
 
     /** The colour of this port's type, taken from the dot's computed {@code border-color}.

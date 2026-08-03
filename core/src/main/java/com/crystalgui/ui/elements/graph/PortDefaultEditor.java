@@ -238,6 +238,11 @@ final class PortDefaultEditor {
      * that short would bulge into a visible loop rather than read as a nub. A cubic whose control points
      * equal its endpoints degenerates to a straight line, so this reuses {@code ctx.curve()} rather than
      * inventing a second draw path.</p>
+     *
+     * <p>Both ends trim inward by their own dot's live radius ({@link NodePort#dotRadius()}, and this
+     * dot's own {@code cache.getWidth() * 0.5f}) — same reasoning as {@link NodeWireLayer#wire}: {@link
+     * #dot} and the real port's dot sit at the same Y (see {@link #reposition}), so the segment is
+     * already purely horizontal and the trim is exact, not an approximation.</p>
      */
     void paintStub(CgUiPaintContext ctx) {
         var cache = dot.getRuntimeCache();
@@ -245,12 +250,19 @@ final class PortDefaultEditor {
         // and a zero-size box would draw a stub from nowhere to itself. Invisible either way, but
         // skipped rather than submitted as a degenerate draw call.
         if (cache.getWidth() <= 0f || cache.getHeight() <= 0f) return;
-        float x0 = cache.getX() + cache.getWidth() * 0.5f, y0 = cache.getY() + cache.getHeight() * 0.5f;
+        float radius0 = cache.getWidth() * 0.5f;
+        float centerX = cache.getX() + radius0, y0 = cache.getY() + cache.getHeight() * 0.5f;
+        float x0 = centerX + radius0; // trimmed forward, off this dot's own edge
         Vector2f target = port.dotCenter();
+        float x1 = target.x() - port.dotRadius();
         int color = port.typeColor();
         ctx.curve()
-                .cubic(x0, y0, x0, y0, target.x(), target.y(), target.x(), target.y())
+                .cubic(x0, y0, x0, y0, x1, target.y(), x1, target.y())
                 .width(view.getWireWidth())
+                // Same zoom-floored ramp NodeWireLayer's own wires use — see GraphView.getWireFeather's
+                // own note for why the ramp stays a constant screen width while the wire's own width
+                // keeps shrinking.
+                .feather(view.getWireFeather())
                 .colors(color, color)
                 .submit();
         ctx.flush();

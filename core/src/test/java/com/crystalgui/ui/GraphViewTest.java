@@ -490,27 +490,27 @@ public class GraphViewTest extends UiTestBase {
     }
 
     /**
-     * <b>A wire keeps a visible thickness when zoomed out.</b>
+     * <b>A wire's pre-pose width does not depend on zoom at all.</b>
      *
-     * <p>Stroke widths scale with the pose — correct, and what makes a wire thicken as you zoom in like
-     * a border does. The same rule takes a 2px wire to a fifth of a pixel at 0.2x, which is a graph that
-     * looks empty. Clamped against the canvas's own zoom rather than in the shader, so the stroke maths
-     * stays linear for every other consumer of {@code curve()}.</p>
+     * <p>Stroke widths scale with the pose — correct, and what makes a wire thicken as you zoom in and
+     * thin out zoomed out, exactly like a border under a CSS {@code transform: scale()} would. An earlier
+     * version clamped {@code getWireWidth()} against the canvas's own zoom specifically to counteract
+     * that scaling and keep the ON-SCREEN thickness constant below 1x — which read as "the wire never
+     * changes size no matter how far you zoom", the opposite of Unity's own reference. The clamp is gone;
+     * {@code getWireWidth()} is just {@link GraphView#getWireBaseWidth()} regardless of zoom, and the pose
+     * does the rest.</p>
      */
     @Test
-    public void wireWidthIsClampedSoItSurvivesZoomingOut() {
+    public void wireWidthIsZoomInvariantPrePose() {
         graph.setZoom(1f);
         float atOne = graph.getWireWidth();
 
         graph.setZoom(0.2f);
-        float zoomedOut = graph.getWireWidth();
-
-        assertTrue("the clamp must widen the stroke, not narrow it", zoomedOut > atOne);
-        assertTrue("and it must survive the pose scaling it back down",
-                zoomedOut * 0.2f >= 1f);
+        assertEquals("pre-pose width must not react to zoom at all — the pose alone scales it",
+                atOne, graph.getWireWidth(), 1e-4f);
 
         graph.setZoom(4f);
-        assertEquals("zoomed IN the base width stands, or wires would thin out",
+        assertEquals("same at any zoom, including zoomed in",
                 atOne, graph.getWireWidth(), 1e-4f);
     }
 

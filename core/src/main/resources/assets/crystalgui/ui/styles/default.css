@@ -1429,8 +1429,15 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
     --graph-node-w: 134px;
     --graph-head-h: 24px;      /* 31/173 of the node width */
     --graph-port-h: 18px;      /* 24/173 of the node width */
-    --graph-dot: 6px;          /* 24% of the port band */
-    --graph-dot-ring: 2px;     /* the ring IS the port when unconnected — structural, never scaled down */
+    /* Was 6px/2px: a 2px ring on a 6px circle eats 4px of the 6 (border-box), leaving a 2px hole — a
+     * bullseye, not a dot, and noticeably bigger overall than Unity's own port circles besides. A first
+     * pass took this straight down to 5px/1px, which fixed the bullseye but left no room for the
+     * ring-gap-core "target" Unity's dot actually is once you look closely (see `.__dot-core__` in
+     * graph.css) — at 5px the core's fill reached the border with no gap visible at all. 7px keeps the
+     * ring proportionally thin (1px on 7px ≈ 14%, still nowhere near the old 33%) while leaving a
+     * content box wide enough for a core plus a visible ring of gap-colour around it. */
+    --graph-dot: 7px;
+    --graph-dot-ring: 1px;     /* the ring IS the port when unconnected — structural, never scaled down */
 
     /* The control kit. `--graph-ctrl-h` is the one that makes a dozen widget kinds read as a SET:
      * before it, a text field was 16px, a dropdown 14 and a checkbox 12, so three controls in three
@@ -1886,15 +1893,25 @@ nodeport .__label__ {
     text-overflow: ellipsis;
 }
 nodeport.__output__ .__label__ { text-align: right; }
-/* 6px = the reference's 24% of the port band's height. Safe to keep this small only because the hit
- * target is the ROW's padding, never the dot. */
+/* Safe to keep this small only because the hit target is the ROW's padding, never the dot. Sized to
+ * leave room for the ring-gap-core "target" look (see NodePort's __dot-core__ child, graph.css) — a
+ * dot with no slack between its border and its core reads as one flat blob the instant the core's fill
+ * gets set, which is what a too-tight diameter did before this had a core at all. */
 nodeport .__dot__ {
     width: var(--graph-dot);
     height: var(--graph-dot);
-    border-radius: 3px;
+    /* 50%, not a hardcoded half-of-6px — so it stays a perfect circle if --graph-dot ever changes again. */
+    border-radius: 50%;
     /* The ring IS the port when unconnected, so this is structural, not decoration — and it stays 2px
      * rather than scaling with the diameter, or a hollow port stops reading as one. */
     border-width: var(--graph-dot-ring);
+    /* Centres __dot-core__ inside the ring — this element is otherwise childless everywhere else in the
+     * engine, so there is no existing flex setup to collide with. */
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-grow: 0;
+    flex-shrink: 0;
 }
 /* The inline editor an unconnected input offers (Unity's `X 0.9` field). Shown only while blank:
  * an input under a wire has a value already, and offering to type another is a lie about which one

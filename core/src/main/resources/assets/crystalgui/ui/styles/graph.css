@@ -15,9 +15,9 @@
  * HOW A WIRE GETS ITS COLOUR FROM HERE. `CgVectorRenderer` needs an ARGB int, so something has to hand
  * it a number. `NodePort.typeColor()` reads back the computed `border-color` of `.__dot__` — so the
  * number's source is still this stylesheet, and adding a type is a rule here plus a `PortType`
- * registration, with no Java colour anywhere. `border-color` rather than `background-color` because an
- * unconnected dot is hollow: its fill is transparent exactly where a theme author would be surprised to
- * find the wire colour had gone missing.
+ * registration, with no Java colour anywhere. `border-color` rather than `background-color` because the
+ * fill is a fixed dark hole regardless of type or connection state (see the `.__dot__` fill rule below)
+ * — the ring is the only part of the dot that ever carries the type's colour.
  *
  * TYPE COLOURS. Unity's, from its Data Types documentation: Float light blue, Vector 2 green,
  * Vector 3 yellow, Vector 4 pink, Matrix blue, Boolean purple, textures red, and grey for the
@@ -249,8 +249,7 @@ nodecreationmenu .__entry__.__category__ .__label__ { color: #9D9D9D; }
 nodeport { color: var(--node-text); }
 nodeport:hover .__label__ { color: #FFFFFF; }
 
-/* The type palette. `border-color` is the type's colour and the wire's; the fill follows it, and is
- * knocked back out below while the port is unconnected.
+/* The type palette. `border-color` is the type's colour and the wire's.
  *
  * Vector 3 is YELLOW and Vector 4 is PINK. They are adjacent in Unity's own table, easy to transpose,
  * and a transposed pair looks entirely plausible in a screenshot — while vec3 is the type a shader
@@ -259,30 +258,100 @@ nodeport:hover .__label__ { color: #FFFFFF; }
 /* A dynamic port takes its type from whatever is connected, so it has no colour of its own until the
  * compiler resolves one. Neutral grey states that honestly — colouring it as float would be a lie in the
  * one direction that matters, since float is the NARROWEST numeric type and reads as "scalar only". */
-nodeport.type-dynamic .__dot__ { border-color: #B4B4B4; background-color: #B4B4B4; }
+nodeport.type-dynamic .__dot__ { border-color: #B4B4B4; }
 
 nodeport.type-float .__dot__,
-nodeport.type-vec1 .__dot__    { border-color: #84E4E7; background-color: #84E4E7; }
-nodeport.type-vec2 .__dot__    { border-color: #9AEF92; background-color: #9AEF92; }
-nodeport.type-vec3 .__dot__    { border-color: #F6FF9A; background-color: #F6FF9A; }
-nodeport.type-vec4 .__dot__    { border-color: #FBCBF4; background-color: #FBCBF4; }
-nodeport.type-bool .__dot__    { border-color: #9C4FFF; background-color: #9C4FFF; }
+nodeport.type-vec1 .__dot__    { border-color: #84E4E7; }
+nodeport.type-vec2 .__dot__    { border-color: #9AEF92; }
+nodeport.type-vec3 .__dot__    { border-color: #F6FF9A; }
+nodeport.type-vec4 .__dot__    { border-color: #FBCBF4; }
+nodeport.type-bool .__dot__    { border-color: #9C4FFF; }
 nodeport.type-mat2 .__dot__,
 nodeport.type-mat3 .__dot__,
-nodeport.type-mat4 .__dot__    { border-color: #8FC1DF; background-color: #8FC1DF; }
+nodeport.type-mat4 .__dot__    { border-color: #8FC1DF; }
 nodeport.type-texture2d .__dot__,
 nodeport.type-texture3d .__dot__,
-nodeport.type-cubemap .__dot__ { border-color: #FF8B8B; background-color: #FF8B8B; }
+nodeport.type-cubemap .__dot__ { border-color: #FF8B8B; }
 nodeport.type-gradient .__dot__,
-nodeport.type-sampler .__dot__ { border-color: #C1C1C1; background-color: #C1C1C1; }
+nodeport.type-sampler .__dot__ { border-color: #C1C1C1; }
 
-/* Connected: filled. Unconnected: hollow, showing the ring only.
+/* The gap. Unity's dots do NOT go solid-colour when connected — a screenshot of a wired-up graph shows
+ * every dot, blank or connected, with the exact same dark hole between the ring and the core; only the
+ * ring and the core carry the type colour, and only a wire (drawn separately, under the node) tells you
+ * it's connected at all. So this is one flat rule, not a per-type "filled" set knocked back out for
+ * `:blank` — an earlier version of this file matched border-color and background-color per type, which
+ * made a connected port a solid disc and looked like a different (heavier, target-shaped) widget from an
+ * unconnected one instead of the same dot in two functional states.
  *
- * This must come AFTER every type rule above. All of them are one class plus one class plus a type
- * selector, so specificity ties and source order decides — declared earlier, the type's fill would win
- * and every port would look permanently connected. That is invisible until you wire one up and nothing
- * changes. */
-nodeport:blank .__dot__ { background-color: #00000000; }
+ * #212121 is darker than every panel it can sit on (`--node-header` composited is ~#565656,
+ * `--node-panel` ~#353535) specifically so the hole always reads as a hole and never blends into
+ * whatever's behind it. */
+nodeport .__dot__ { background-color: #212121; }
+
+/* The core. Sits centred inside the gap (`NodePort` adds it as `.__dot-core__`, a plain internal child —
+ * see that class's own javadoc for why this dot gets a real child element instead of the flat
+ * three-layer stack `PortDefaultEditor`'s floating dot uses). Small enough, against a 7px outer dot with
+ * a 1px ring, to leave the gap visible as its own ring rather than touching the border — that gap is
+ * what turns this into Unity's ring-hole-core "target" instead of a smaller solid dot. */
+nodeport .__dot-core__ {
+    width: 3px;
+    height: 3px;
+    min-height: 3px;
+    border-radius: 50%;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+nodeport.type-dynamic .__dot-core__ { background-color: #B4B4B4; }
+nodeport.type-float .__dot-core__,
+nodeport.type-vec1 .__dot-core__    { background-color: #84E4E7; }
+nodeport.type-vec2 .__dot-core__    { background-color: #9AEF92; }
+nodeport.type-vec3 .__dot-core__    { background-color: #F6FF9A; }
+nodeport.type-vec4 .__dot-core__    { background-color: #FBCBF4; }
+nodeport.type-bool .__dot-core__    { background-color: #9C4FFF; }
+nodeport.type-mat2 .__dot-core__,
+nodeport.type-mat3 .__dot-core__,
+nodeport.type-mat4 .__dot-core__    { background-color: #8FC1DF; }
+nodeport.type-texture2d .__dot-core__,
+nodeport.type-texture3d .__dot-core__,
+nodeport.type-cubemap .__dot-core__ { background-color: #FF8B8B; }
+nodeport.type-gradient .__dot-core__,
+nodeport.type-sampler .__dot-core__ { background-color: #C1C1C1; }
+
+/* An unconnected port shows the core only while its own dot is being interacted with — hovered here,
+ * or (see `PortDefaultEditor`) its floating default-value editor is focused, which lands here the same
+ * way any other typing-driven state does: through the port's own pseudo-classes, not a separate rule.
+ * At rest a blank port is a plain hollow ring — the gap's own colour standing in for the core, same as
+ * it always did before this dot had a core at all — so "does this look connected" stays an honest
+ * signal instead of every unconnected port wearing the full connected-looking target by default.
+ *
+ * Same specificity as the base per-type rules above (`nodeport:blank` and `nodeport.type-X` both weigh
+ * one type selector plus one pseudo/class), so source order decides and this MUST come after them —
+ * declared earlier, the type rule would win the tie and every blank port would show its core regardless.
+ * The `:hover` rules below outrank this one on specificity alone (they add a second class/pseudo to the
+ * same compound), so hovering a blank port still lights it up without needing a `:blank:hover` rule of
+ * its own. */
+nodeport:blank .__dot-core__ { background-color: #00000000; }
+
+/* Hover brightens the core toward white — the "glossy button" bevel Unity's reference shows — rather
+ * than the core staying flat. This has to be its own rule per type (no way to say "this element's
+ * border-color, lighter" from CSS alone), so it mirrors the palette above one-for-one: each tint here is
+ * that type's colour blended 50% toward white. The ring and the gap are untouched by hover — only the
+ * core lights up. */
+nodeport.type-dynamic:hover .__dot-core__ { background-color: #DADADA; }
+nodeport.type-float:hover .__dot-core__,
+nodeport.type-vec1:hover .__dot-core__    { background-color: #C2F2F3; }
+nodeport.type-vec2:hover .__dot-core__    { background-color: #CDF7C9; }
+nodeport.type-vec3:hover .__dot-core__    { background-color: #FBFFCD; }
+nodeport.type-vec4:hover .__dot-core__    { background-color: #FDE5FA; }
+nodeport.type-bool:hover .__dot-core__    { background-color: #CEA7FF; }
+nodeport.type-mat2:hover .__dot-core__,
+nodeport.type-mat3:hover .__dot-core__,
+nodeport.type-mat4:hover .__dot-core__    { background-color: #C7E0EF; }
+nodeport.type-texture2d:hover .__dot-core__,
+nodeport.type-texture3d:hover .__dot-core__,
+nodeport.type-cubemap:hover .__dot-core__ { background-color: #FFC5C5; }
+nodeport.type-gradient:hover .__dot-core__,
+nodeport.type-sampler:hover .__dot-core__ { background-color: #E0E0E0; }
 
 /* `PortDefaultEditor` — Unity's little floating `X 0 •` beside an unconnected input. Not a descendant of
  * `nodeport` at all: it floats on the plane beside the port, rather than sharing the port's own row
