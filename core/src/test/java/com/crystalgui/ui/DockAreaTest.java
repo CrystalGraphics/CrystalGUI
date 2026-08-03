@@ -46,7 +46,7 @@ public class DockAreaTest extends UiTestBase {
 
     private DockPanelRegistry<UIElement> registry() {
         DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
-        for (String id : new String[]{"alpha", "beta", "gamma"}) {
+        for (String id : new String[]{"alpha", "beta", "gamma", "delta", "console"}) {
             registry.register(new DockPanelDescriptor(id, id), ref -> new UIElement());
         }
         return registry;
@@ -386,6 +386,158 @@ public class DockAreaTest extends UiTestBase {
 
         assertEquals(List.of("alpha+beta"), panelIdsPerGroup());
         layout.checkInvariants();
+    }
+
+    // ── The strip must match the model ──────────────────────────────────────────────────────────
+
+    /**
+     * Every group's tab strip holds exactly its leaf's panels, in order.
+     *
+     * <p>Asserted after every structural change, because until now every drag test checked
+     * {@code panelIdsPerGroup()} — which reads the <b>layout</b>. The tree can be perfectly correct while
+     * the strips show stale tabs from before the rebuild, and that is exactly what shipped.</p>
+     */
+    private void assertStripsMatchModel() {
+        for (DockLeaf leaf : layout.leaves()) {
+            DockGroup group = area.groupFor(leaf);
+            assertNotNull("no group for " + leaf, group);
+            List<String> inStrip = new ArrayList<>();
+            for (Tab tab : group.tabView().getTabs()) inStrip.add(tab.getText());
+            List<String> inModel = new ArrayList<>();
+            for (int i = 0; i < leaf.panelCount(); i++) {
+                inModel.add(area.registry().titleOf(leaf.panel(i)));
+            }
+            assertEquals("strip does not match model for " + leaf, inModel, inStrip);
+        }
+    }
+
+    /** The reported bug: drag a tab into another group and both strips keep their old tabs too. */
+    @Test
+    public void aCrossGroupMergeLeavesNoStaleTabsBehind() {
+        setUpTwoGroups();
+        assertStripsMatchModel();
+
+        DockGroup right = area.groupFor(layout.leafContaining(beta));
+        dragPanelTo(alpha, right, 0.5f, 0.5f);
+
+        assertStripsMatchModel();
+    }
+
+    /** The same for a split, which rebuilds a different part of the tree. */
+    @Test
+    public void aSplitLeavesNoStaleTabsBehind() {
+        setUpTwoGroups();
+        DockGroup right = area.groupFor(layout.leafContaining(beta));
+
+        dragPanelTo(alpha, right, 0.05f, 0.5f);
+
+        assertStripsMatchModel();
+    }
+
+    /** And for a group that keeps some panels while losing one. */
+    @Test
+    public void movingOnePanelOutOfAPairLeavesNoStaleTabs() {
+        DockLeaf pair = new DockLeaf(alpha, beta);
+        layout = DockLayout.of(pair);
+        DockPanelRef gamma = new DockPanelRef("gamma");
+        layout.drop(pair, DockDropZone.SPLIT_RIGHT, new DockLeaf(gamma));
+
+        area = new DockArea(registry(), layout);
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                .flexDirection(FlexDirection.COLUMN));
+        root.addChild(area);
+        area.layout(l -> l.width(600).height(400));
+        window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+        window.init(1200, 800);
+        frame();
+        frame();
+        assertStripsMatchModel();
+
+        dragPanelTo(beta, area.groupFor(layout.leafContaining(gamma)), 0.5f, 0.5f);
+
+        assertStripsMatchModel();
+    }
+
+    /** Every DockGroup actually attached under the area, found by walking the element tree. */
+    private List<DockGroup> attachedGroups() {
+        List<DockGroup> out = new ArrayList<>();
+        collectGroups(area, out);
+        return out;
+    }
+
+    private static void collectGroups(UIElement element, List<DockGroup> out) {
+        if (element instanceof DockGroup group) out.add(group);
+        for (UIElement child : element.getChildren()) collectGroups(child, out);
+    }
+
+    /**
+     * <b>The scene's own layout, which is the shape that broke.</b>
+     *
+     * <p>A central leaf holding two documents, inside a nested branch with a console below it, with a
+     * tool panel either side. The two-group test could not produce the bug; this is the difference
+     * between testing a widget and testing the thing people actually build with it.</p>
+     */
+    private void setUpSceneLayout() {
+        DockLeaf centre = new DockLeaf(alpha, beta);
+        centre.setCentral(true);
+        layout = DockLayout.of(centre);
+        layout.drop(centre, DockDropZone.SPLIT_LEFT, new DockLeaf(new DockPanelRef("gamma")));
+        layout.drop(centre, DockDropZone.SPLIT_RIGHT, new DockLeaf(new DockPanelRef("delta")));
+        layout.drop(centre, DockDropZone.SPLIT_DOWN, new DockLeaf(new DockPanelRef("console")));
+
+        area = new DockArea(registry(), layout);
+        UIElement root = new UIElement().layout(l -> l.width(900).height(600)
+                .flexDirection(FlexDirection.COLUMN));
+        root.addChild(area);
+        area.layout(l -> l.width(900).height(600));
+        window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+        window.init(1800, 1200);
+        frame();
+        frame();
+    }
+
+    /** One group per leaf in the tree — no stale one left attached by a rebuild. */
+    private void assertOneGroupPerLeaf() {
+        assertEquals("attached DockGroups should equal leaves",
+                layout.leaves().size(), attachedGroups().size());
+    }
+
+    /** The reported bug, in the layout it was reported in. */
+    @Test
+    public void draggingADocumentIntoTheConsoleLeavesNoStaleTabs() {
+        setUpSceneLayout();
+        assertOneGroupPerLeaf();
+        assertStripsMatchModel();
+
+        DockLeaf consoleLeaf = layout.leafContaining(new DockPanelRef("console"));
+        dragPanelTo(beta, area.groupFor(consoleLeaf), 0.5f, 0.5f);
+
+        assertOneGroupPerLeaf();
+        assertStripsMatchModel();
+    }
+
+    /** And the same drag onto the console's tab strip rather than its body. */
+    @Test
+    public void draggingADocumentOntoTheConsolesStripLeavesNoStaleTabs() {
+        setUpSceneLayout();
+        DockLeaf consoleLeaf = layout.leafContaining(new DockPanelRef("console"));
+        DockGroup console = area.groupFor(consoleLeaf);
+
+        int[] from = centre(tabOf(beta));
+        int[] to = centre(console.tabView().getTabs().get(0));
+        mouseTo(from[0], from[1]);
+        frame();
+        press(from[0], from[1]);
+        mouseTo(to[0], to[1]);
+        frame();
+        release(to[0], to[1]);
+        frame();
+        frame();
+
+        assertOneGroupPerLeaf();
+        assertStripsMatchModel();
     }
 
     // ── Active group ────────────────────────────────────────────────────────────────────────────
