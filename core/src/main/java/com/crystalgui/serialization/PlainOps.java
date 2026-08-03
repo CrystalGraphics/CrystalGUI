@@ -65,6 +65,28 @@ public final class PlainOps implements DynamicOps<Object> {
         return s;
     }
 
+    /**
+     * Bytes, held as themselves.
+     *
+     * <p>Overridden because this ops is the in-process transport, and Base64 round-tripping a file
+     * through a {@code String} inside one JVM is pure waste — it is a cost textual formats have no way
+     * to avoid and this one has no reason to pay.</p>
+     *
+     * <p><b>The array is copied in and out.</b> Every other value this ops handles is immutable, and a
+     * shared {@code byte[]} would let a caller mutate a tree it had already encoded — which for a
+     * content-addressed value means the hash and the bytes silently disagree.</p>
+     */
+    @Override
+    public Object createBytes(byte[] value) {
+        return value.clone();
+    }
+
+    @Override
+    public byte[] getBytesValue(Object value) {
+        if (!(value instanceof byte[] bytes)) throw new CodecException("Not bytes: " + value);
+        return bytes.clone();
+    }
+
     @Override
     public Number getNumberValue(Object value) {
         if (!(value instanceof Number n)) throw new CodecException("Not a number: " + value);

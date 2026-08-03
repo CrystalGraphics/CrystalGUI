@@ -39,6 +39,9 @@ public final class ContentHash {
     private static final byte TAG_BOOL = 'B';
     private static final byte TAG_LIST = 'L';
     private static final byte TAG_MAP = 'M';
+    /** Raw bytes. Distinct from {@link #TAG_STRING} so a base64 string and the bytes it denotes do
+     * not hash alike — they are different values and a content address must say so. */
+    private static final byte TAG_BYTES = 'Y';
 
     private ContentHash() {
     }
@@ -88,6 +91,12 @@ public final class ContentHash {
             for (T element : list) write(ops, element, out);
             return;
         }
+        byte[] bytes = tryBytes(ops, value);
+        if (bytes != null) {
+            out.write(TAG_BYTES);
+            writeBytes(bytes, out);
+            return;
+        }
         String string = tryString(ops, value);
         if (string != null) {
             out.write(TAG_STRING);
@@ -107,6 +116,35 @@ public final class ContentHash {
             return;
         }
         throw new CodecException("Value is not representable in canonical form: " + value);
+    }
+
+    /**
+     * Bytes, or null when {@code value} is not bytes.
+     *
+     * <p><b>Only ever true for an ops with a NATIVE byte representation.</b> The default
+     * {@link DynamicOps#getBytesValue} decodes base64 out of a string, so on a textual ops this would
+     * report bytes for any string that happens to be valid base64 — {@code "abcd"} among them. That is why
+     * the probe asks whether the ops <em>round-trips</em> the value rather than merely decoding it: a
+     * native ops returns the same bytes it was given, a base64 default does not survive the comparison
+     * against its own re-encoding.</p>
+     */
+    private static <T> byte[] tryBytes(DynamicOps<T> ops, T value) {
+        byte[] decoded;
+        try {
+            decoded = ops.getBytesValue(value);
+        } catch (RuntimeException e) {
+            return null;
+        }
+        if (decoded == null) return null;
+        // A textual ops answers this from a String; re-creating from the decoded bytes gives a String
+        // again, never the original value. A native ops gives back something equal to what it holds.
+        try {
+            T recreated = ops.createBytes(decoded);
+            if (recreated instanceof byte[] && value instanceof byte[]) return decoded;
+            return null;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private static <T> void writeMap(DynamicOps<T> ops, Map<T, T> map, ByteArrayOutputStream out) {

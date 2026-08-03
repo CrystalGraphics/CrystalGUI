@@ -1,5 +1,6 @@
 package com.crystalgui.serialization;
 
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -36,6 +37,40 @@ public interface DynamicOps<T> {
      * values (e.g. JSON object keys are strings, which are already representable as {@code T} via
      * {@link #createString}). */
     T createMap(Map<T, T> entries);
+
+    /**
+     * A block of raw bytes.
+     *
+     * <p><b>Defaulted, not abstract</b>, so adding it broke no existing implementation — and the default
+     * is correct rather than a stub: Base64 through {@link #createString} is exactly how a textual format
+     * represents bytes, and it is what {@link JsonOps} would have had to do anyway, since JSON has no byte
+     * type at all.</p>
+     *
+     * <p>A format with a native representation — NBT's {@code ByteArrayTag}, or an in-process ops that can
+     * simply hold the array — overrides both this and {@link #getBytesValue} and pays nothing. That is the
+     * whole reason this is a pair of methods rather than a convention of "base64 it yourself at the call
+     * site": the cost becomes the format's business instead of every caller's.</p>
+     *
+     * <p>Added for the remote workspace, where file contents cross the wire and Base64's ~33% is charged
+     * on every asset in a project.</p>
+     */
+    default T createBytes(byte[] value) {
+        return createString(Base64.getEncoder().encodeToString(value));
+    }
+
+    /**
+     * Reads a block of raw bytes.
+     *
+     * <p>Symmetric with {@link #createBytes}, including the default: it decodes Base64 out of a string.
+     * Throws {@link CodecException} if {@code value} is not bytes in this format.</p>
+     */
+    default byte[] getBytesValue(T value) {
+        try {
+            return Base64.getDecoder().decode(getStringValue(value));
+        } catch (IllegalArgumentException e) {
+            throw new CodecException("Not a base64 byte block: " + value, e);
+        }
+    }
 
     /** Throws {@link CodecException} if {@code value} isn't a string in this format. */
     String getStringValue(T value);
