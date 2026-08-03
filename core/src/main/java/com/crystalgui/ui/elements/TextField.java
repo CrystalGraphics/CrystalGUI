@@ -976,16 +976,46 @@ public class TextField extends UIElement implements UIFrameTicker {
         return getRuntimeCache().getX() + layout.border().left + layout.padding().left;
     }
 
-    /** Scrolls horizontally so the caret stays inside the box on a string longer than the field. */
+    /**
+     * Scrolls horizontally so the caret stays inside the box on a string longer than the field.
+     *
+     * <h3>An unfocused field shows its START, never its tail</h3>
+     * <p>{@link #setText} puts the caret at the end, as assigning to a browser input's {@code .value}
+     * does — so without this an overlong string would arrive already scrolled to the right, and a field
+     * showing {@code -0.6…} would instead show {@code …5005}: the least informative half of the number,
+     * with the sign and the leading digits off the left edge. Browsers behave the same way, and the
+     * reason is the same: scrolling to the caret is a service to someone <em>typing</em>, and there is no
+     * caret to serve when the field is not focused.</p>
+     *
+     * <p>Cheap to get wrong in the other direction too — resetting on every call rather than only while
+     * unfocused would drag the view back to the start on every keystroke.</p>
+     */
     private void ensureCaretVisible() {
-        var layout = getTaffyLayout();
-        float inner = Math.max(1f, layout.contentBoxWidth());
-        float x = caretX(caret);
-        if (x - displayOffset < 0f) displayOffset = x;
-        else if (x - displayOffset > inner) displayOffset = x - inner;
+        float inner = Math.max(1f, getTaffyLayout().contentBoxWidth());
+        displayOffset = scrollOffsetFor(isFocused(), caretX(caret), caretX(text.length()),
+                inner, displayOffset);
+    }
+
+    /**
+     * The rule behind {@link #ensureCaretVisible}, as a function so it can be pinned.
+     *
+     * <p>Split out because {@code ensureCaretVisible} runs only from {@code paintOverlay}, and painting
+     * needs a GL context — so the decision itself was unreachable from any test that could run on a build
+     * machine. The bug it now carries a guard for was invisible for exactly that reason: it only shows on
+     * a string wider than its box, which no assertion was in a position to look at.</p>
+     *
+     * @param caretX      pen position of the caret, from the text's own origin
+     * @param totalX      pen position of the end of the string
+     * @param inner       usable width of the box
+     * @param current     the offset in force now
+     */
+    static float scrollOffsetFor(boolean focused, float caretX, float totalX, float inner, float current) {
+        if (!focused) return 0f;
+        float offset = current;
+        if (caretX - offset < 0f) offset = caretX;
+        else if (caretX - offset > inner) offset = caretX - inner;
         // Don't strand the text scrolled past its end when it shrinks.
-        float total = caretX(text.length());
-        displayOffset = Math.max(0f, Math.min(displayOffset, Math.max(0f, total - inner)));
+        return Math.max(0f, Math.min(offset, Math.max(0f, totalX - inner)));
     }
 
     // ── Painting ────────────────────────────────────────────────────────────

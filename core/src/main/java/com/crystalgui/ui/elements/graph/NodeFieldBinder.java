@@ -7,6 +7,7 @@ import com.crystalgui.graph.NodeField;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.SetNodeFieldEdit;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.config.ConfigControl;
 
 import javax.annotation.Nullable;
 
@@ -100,8 +101,32 @@ public final class NodeFieldBinder {
                                          @Nullable UndoStack undo, @Nullable Runnable onChange,
                                          @Nullable String presetValue) {
         String current = presetValue != null ? presetValue : currentValue(document, nodeId, field);
-        return NodeFieldWidgets.create(field, current,
+        UIElement control = NodeFieldWidgets.create(field, current,
                 value -> write(document, undo, nodeId, field, value, onChange));
+        bracketGestures(control, undo);
+        return control;
+    }
+
+    /**
+     * Makes a continuous gesture — a scrub, a slider drag — <b>one</b> undo step.
+     *
+     * <p>{@link #write} records an edit per change, which is right for typing and picking and wrong for a
+     * drag: a scrub emits a value every frame, so a two-second one would put ~120 entries on the stack and
+     * leave Ctrl+Z useless. The values still have to arrive live, or the node preview would not recompile
+     * until the button came up.</p>
+     *
+     * <p>Both at once is what a held merge run is for. {@code SetNodeFieldEdit.mergeWith} already collapses
+     * consecutive writes to the same field into a single edit keeping the first {@code before} and the
+     * last {@code after} — so the run costs one stack entry, not a composite of a hundred. Holding it is
+     * what makes the collapse independent of how long the user lingered; see
+     * {@link UndoStack#beginMergeRun()}.</p>
+     */
+    private static void bracketGestures(@Nullable UIElement control, @Nullable UndoStack undo) {
+        if (undo == null || !(control instanceof ConfigControl config)) return;
+        config.interacting.connect(active -> {
+            if (Boolean.TRUE.equals(active)) undo.beginMergeRun();
+            else undo.endMergeRun();
+        });
     }
 
     private static String currentValue(GraphDocument document, String nodeId, NodeField field) {

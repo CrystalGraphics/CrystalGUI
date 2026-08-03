@@ -45,9 +45,6 @@ public class VectorControl extends ValueControl<double[]> {
 
             UIText axisLabel = new UIText(AXES[i]);
             axisLabel.addClass("__axis__");
-            // Scenery: a press on the letter belongs to the field beside it, and a label that ate the
-            // click would make the leftmost pixels of every component dead.
-            axisLabel.setHitTest(false);
 
             NumberControl component = new NumberControl(
                     ConfigDescriptor.number(descriptor.id() + "." + AXES[i], AXES[i])
@@ -55,11 +52,36 @@ public class VectorControl extends ValueControl<double[]> {
                     defaultValue != null && axis < defaultValue.length ? defaultValue[axis] : 0d);
             component.changed.connect(v -> onComponentChanged(axis, (Double) v));
 
+            // The letter is the DRAG HANDLE, so it takes the press rather than passing it on.
+            //
+            // This reverses a deliberate earlier decision — the label used to be scenery with
+            // setHitTest(false), on the grounds that "a press on the letter belongs to the field beside
+            // it". That was right until the letter grew a gesture, and it cannot be both. Nothing is lost:
+            // a press that does not travel far enough to scrub focuses the field anyway, which is what the
+            // original note was protecting. Restore the hit-test opt-out and the gesture simply never
+            // starts, with no test failing to say why.
+            component.scrubWith(axisLabel);
+            // A scrub is one gesture, so the whole vector reports one — otherwise the host brackets the
+            // component's run while the value it is recording arrives from this class.
+            component.interacting.connect(this::interactionRelay);
+
             cell.addChild(axisLabel);
             cell.addChild(component);
             components.add(component);
             addInternalChild(cell);
         }
+    }
+
+    /**
+     * Re-reports a component's gesture as this control's own.
+     *
+     * <p>A host listens to the <b>vector</b> — that is the control it was handed — so a scrub on the
+     * {@code Y} letter has to surface here or the host sees a stream of changes with no gesture around
+     * them and records one undo step per frame.</p>
+     */
+    private void interactionRelay(Boolean active) {
+        if (Boolean.TRUE.equals(active)) beginInteraction();
+        else endInteraction();
     }
 
     private void onComponentChanged(int axis, @Nullable Double value) {

@@ -1384,6 +1384,21 @@ splitview .__vertical__ .__divider__ { cursor: ns-resize; }
  * of its rules. */
 canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
 
+/* A drag-scrub handle — the `X` letter beside a vector component, an inspector row's label.
+ *
+ * `slide-arrow` is the one cursor keyword in this engine with no CSS behind it. The gesture has no web
+ * equivalent, so CSS never had reason to name a shape for it; every desktop tool that HAS the gesture
+ * ships one. Deliberately not `ew-resize`: in a node editor a scrubbable number sits inside a resizable
+ * panel, so "this value slides" and "this edge moves" appear pixels apart and have to be distinguishable.
+ *
+ * No `.__scrubbing__` companion rule here, unlike splitview and canvasview above — and the difference is
+ * worth stating because those two look like precedent. Their gestures capture the pointer on a parent
+ * (the SplitView root, the canvas), so the cursor resolves from an element that never carried the
+ * keyword. A scrub captures on the HANDLE ITSELF, which is the element this rule already matches, so it
+ * holds for the whole drag no matter how far outside the letter the pointer travels. The class is still
+ * set, as a hook for a theme that wants to show the gesture. */
+.__scrub-handle__ { cursor: slide-arrow; }
+
 /* ── Graph nodes and ports (P6.2.3) ─────────────────────────────────────────────────────────────
  * Functional geometry only. Every colour — including the per-type port palette, which is the whole
  * readability of a graph — belongs to a theme; see `graph.css`.

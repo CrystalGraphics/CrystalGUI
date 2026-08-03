@@ -193,7 +193,11 @@ final class PortDefaultEditor {
             String portId = port.getPortId();
             label = new UIText(isAxisLetter(portId) ? portId : "X");
             label.addClass(NodePort.EDITOR_LABEL_CLASS);
-            label.setHitTest(false);
+            // Hit-testable, NOT scenery, when there is a number behind it: this letter is the drag handle
+            // that scrubs the value. `VectorControl` needs no equivalent here — it labels its own
+            // components internally and hands each letter to its own component in its constructor.
+            if (control instanceof NumberControl number) number.scrubWith(label);
+            else label.setHitTest(false);
             box.addInternalChild(label);
         }
         box.addInternalChild(control);
