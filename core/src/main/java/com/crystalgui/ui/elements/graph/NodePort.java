@@ -194,7 +194,7 @@ public class NodePort extends UIElement {
         core.setHitTest(false);
         dot.addInternalChild(core);
 
-        this.label = new UIText(displayLabel(name, type.arity()));
+        this.label = new UIText(displayLabel(name, type.arityLabel()));
         label.addClass(LABEL_CLASS);
         label.setHitTest(false);
         // Same reasoning as `GraphNode.title`'s identical call: this label has to drive its column's
@@ -241,9 +241,11 @@ public class NodePort extends UIElement {
         }, false, true);
     }
 
-    /** Unity's {@code Out(3)}: the name, then the arity, unless there is none worth printing. */
-    private static String displayLabel(String name, int arity) {
-        return arity > 0 ? name + "(" + arity + ")" : name;
+    /** Unity's {@code Out(3)}: the name, then the arity, unless there is none worth printing. Takes the
+     * printed FORM rather than the number, so a matrix can read {@code (2x2)} — see
+     * {@link PortType#arityLabel()}. */
+    private static String displayLabel(String name, @Nullable String arityLabel) {
+        return arityLabel == null ? name : name + "(" + arityLabel + ")";
     }
 
     /**
@@ -268,12 +270,19 @@ public class NodePort extends UIElement {
      * untouched: {@code vec2} is 2 whatever is connected, and nothing should be able to relabel it.</p>
      *
      * @param arity the resolved width, or {@code 0} to fall back to the type's own
+     * @return whether this actually changed anything — a caller that has more work to do on a width
+     *         change (rebuilding the inline editor to N fields) can hang it off this rather than
+     *         redoing it on every resolve pass
      */
-    public void setResolvedArity(int arity) {
+    public boolean setResolvedArity(int arity) {
         int clamped = Math.max(0, arity);
-        if (resolvedArity == clamped) return;
+        if (resolvedArity == clamped) return false;
         resolvedArity = clamped;
-        label.setText(displayLabel(portId, displayedArity()));
+        // A resolved width is always a plain vector count — the NxN form belongs to a DECLARED matrix
+        // type, which is never what a dynamic port resolves to.
+        label.setText(displayLabel(portId,
+                clamped > 0 ? String.valueOf(clamped) : type.arityLabel()));
+        return true;
     }
 
     /**

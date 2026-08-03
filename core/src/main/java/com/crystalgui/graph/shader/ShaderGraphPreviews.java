@@ -110,6 +110,13 @@ public final class ShaderGraphPreviews implements UIFrameTicker {
         for (GraphNode node : view.nodes()) attachTo(node);
         var window = view.getAttachedWindow();
         if (window != null) window.registerTicker(this);
+        // Dynamic port widths, colours and inline-editor shapes. Installed from here rather than left to
+        // the caller because this class is what owns the "a field changed, recompile" hook a rebuilt
+        // editor has to write through — the same one NodeFieldBinder is given below.
+        ShaderPortArity.install(view, () -> {
+            invalidate();
+            requestRecompile();
+        });
         invalidate();
         return this;
     }

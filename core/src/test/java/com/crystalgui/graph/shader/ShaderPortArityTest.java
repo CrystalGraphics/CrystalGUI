@@ -14,7 +14,10 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.ui.elements.graph.GraphView;
 import com.crystalgui.ui.elements.graph.NodePort;
+import com.crystalgui.ui.elements.graph.NodeFieldBinder;
 import com.crystalgui.ui.elements.graph.NodeWidgetFactory;
+import com.crystalgui.ui.elements.config.control.NumberControl;
+import com.crystalgui.ui.elements.config.control.VectorControl;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -50,7 +53,10 @@ public class ShaderPortArityTest extends UiTestBase {
         library = ShaderGraphBridge.asNodeLibrary(shaderNodes);
         view.setNodeLibrary(library, NodeWidgetFactory.of(library).build(),
                 ShaderGraphBridge.GLSL_PROMOTION);
-        ShaderPortArity.install(view);
+        // Installed with a non-null onChange, which is what enables the inline-editor rebuild — bare,
+        // it would only do labels and colours. NOT via ShaderGraphPreviews (the real caller): that
+        // constructs a CgPreviewRenderer, which needs a GL context this test deliberately has none of.
+        ShaderPortArity.install(view, () -> { });
         document = view.getDocument();
     }
 
@@ -59,6 +65,9 @@ public class ShaderPortArityTest extends UiTestBase {
         NodeData data = document.addNode(type.create(x, y));
         GraphNode node = view.getNodeFactory().create(type, data);
         view.addNode(node, x, y);
+        // What ShaderGraphPreviews.attachTo does for real, minus the previews: without it a port has no
+        // inline editor at all and there is nothing for the arity rebuild to re-shape.
+        NodeFieldBinder.attach(node, type, document, view.undoStack(), null);
         return node;
     }
 
@@ -224,6 +233,47 @@ public class ShaderPortArityTest extends UiTestBase {
         assertTrue("resolved to vec3, so it is coloured as one", out.hasClass("type-vec3"));
         assertFalse("and the previous class is REMOVED, not merely overlaid — equal specificity would "
                 + "otherwise leave the answer to stylesheet source order", out.hasClass("type-float"));
+    }
+
+    /**
+     * <b>The unconnected sibling's inline editor grows to N fields.</b>
+     *
+     * <p>Unity's {@code B} becomes {@code X 2  Y 2  Z 2} when a vec3 lands on {@code A}. A control cannot
+     * restructure itself — a {@code VectorControl}'s component count is fixed when it is built — so the
+     * editor is rebuilt and handed to the port, and {@code PortDefaultEditor} swaps it in place.</p>
+     */
+    @Test
+    public void anUnconnectedSiblingsEditorGrowsToTheResolvedWidth() {
+        openWindow();
+        GraphNode position = add(CgBuiltinShaderNodes.POSITION.id(), 0f, 0f);   // vec3
+        GraphNode multiply = add(CgBuiltinShaderNodes.MULTIPLY.id(), 200f, 0f);
+        window.updateWithoutPainting();
+
+        assertTrue("a scalar port starts as a single number field",
+                multiply.portNamed("B").getDefaultEditor() instanceof NumberControl);
+
+        view.connect(position.portNamed("Out"), multiply.portNamed("A"));
+        window.updateWithoutPainting();
+
+        UIElement editor = multiply.portNamed("B").getDefaultEditor();
+        assertTrue("resolved to vec3, so the editor must now be a vector one",
+                editor instanceof VectorControl);
+        assertEquals("with one box per component", 3, ((VectorControl) editor).components().size());
+    }
+
+    /**
+     * Re-shaping the stored literal <b>splats</b> an existing scalar rather than zero-filling.
+     *
+     * <p>Unity shows {@code X 2 Y 2 Z 2} after a {@code 2} was widened — keeping the value on every axis
+     * is what makes widening read as a change of shape rather than a reset.</p>
+     */
+    @Test
+    public void wideningSplatsTheExistingScalarAcrossTheNewComponents() {
+        assertEquals("vec3(2.000, 2.000, 2.000)", ShaderPortArity.literalAtArity("2.0", 3));
+        assertEquals("an existing vector keeps its own components",
+                "vec3(1.000, 2.000, 0.000)", ShaderPortArity.literalAtArity("vec2(1.0, 2.0)", 3));
+        assertEquals("and narrowing back to a scalar keeps the first",
+                "1.000", ShaderPortArity.literalAtArity("vec3(1.0, 2.0, 3.0)", 1));
     }
 
     /** A concretely-typed port is never relabelled — {@code vec2} is 2 whatever is wired into it. */

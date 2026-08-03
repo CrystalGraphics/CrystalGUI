@@ -66,6 +66,12 @@ public final class ShaderVectorFieldWidget {
         return out;
     }
 
+    /** One component on its own — what a {@code vecN} literal collapses to when a dynamic port narrows
+     * back to a scalar. Same fixed precision as {@link #format}, for the same reason. */
+    static String formatScalar(double value) {
+        return String.format(Locale.ROOT, "%.3f", value);
+    }
+
     /** Components back to {@code vecN(...)}, at a fixed precision so an unchanged vector is an
      * unchanged string. */
     static String format(double[] values) {

@@ -2,6 +2,10 @@ package com.crystalgui.graph.shader;
 
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphDocument;
+import com.crystalgui.graph.NodeData;
+import com.crystalgui.graph.NodeField;
+import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.graph.NodeFieldBinder;
 import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.ui.elements.graph.GraphView;
 import com.crystalgui.ui.elements.graph.NodePort;
@@ -62,12 +66,27 @@ public final class ShaderPortArity {
      * anything is touched — then again on every connection change.</p>
      */
     public static void install(GraphView view) {
-        view.onConnectionsChanged.connect(() -> resolve(view));
-        resolve(view);
+        install(view, null);
+    }
+
+    /**
+     * As {@link #install(GraphView)}, but also rebuilding a dynamic port's inline editor to match the
+     * width it resolves to — {@code B} becoming three boxes when a vec3 lands on {@code A}.
+     *
+     * @param onChange run after a rebuilt editor writes a value, for a caller that needs to recompile
+     */
+    public static void install(GraphView view, @Nullable Runnable onChange) {
+        view.onConnectionsChanged.connect(() -> resolve(view, onChange));
+        resolve(view, onChange);
     }
 
     /** Recomputes every dynamic port's displayed width. Cheap and idempotent; safe to call at any time. */
     public static void resolve(GraphView view) {
+        resolve(view, null);
+    }
+
+    /** @param onChange run after a rebuilt inline editor writes a value; null to leave editors alone */
+    public static void resolve(GraphView view, @Nullable Runnable onChange) {
         GraphDocument document = view.getDocument();
         Map<String, GraphNode> byId = new HashMap<>();
         for (GraphNode node : view.nodes()) {
@@ -127,14 +146,85 @@ public final class ShaderPortArity {
                 // makes Add(float, vec3) read (3) on every one of its ports rather than (1) on the float
                 // input it happens to still be fed by.
                 if (!isDynamic(port)) continue;
-                port.setResolvedArity(arity);
+                boolean widthChanged = port.setResolvedArity(arity);
                 // Colour follows the same resolution the label does. A dynamic port is otherwise stuck on
                 // the flat "unknown" grey `type-dynamic` paints, where Unity shows the resolved type's own
                 // colour — the scalar one before anything is wired in. The WIRE follows for free: it reads
                 // the dot's computed border-colour back out of the cascade, so re-classing the port is the
                 // whole change. See NodePort.setResolvedTypeClass.
                 port.setResolvedTypeClass(typeClassFor(arity));
+                // Only on a real change: rebuilding every pass would throw away a control the user may
+                // be mid-edit in, and setResolvedArity is the one thing that knows the width moved.
+                if (widthChanged && onChange != null) {
+                    rebuildInlineEditor(view, entry.getKey(), port, arity, onChange);
+                }
             }
+        }
+    }
+
+    /**
+     * Replaces a dynamic input's inline editor with one of {@code arity} components — Unity's {@code B}
+     * turning into {@code X 2  Y 2  Z 2} when a vec3 lands on {@code A}.
+     *
+     * <p>A control cannot restructure itself: how many boxes a {@code VectorControl} draws is fixed when
+     * it is built. So the editor is rebuilt and handed to the port, and
+     * {@link NodePort#onDefaultEditorChanged} carries it the rest of the way — {@code PortDefaultEditor}
+     * already swaps a control in place, which is the machinery this reuses rather than duplicates.</p>
+     *
+     * <p>The stored literal is re-shaped to match, <b>splatting a scalar across the new components</b>
+     * rather than zero-filling: Unity shows {@code X 2 Y 2 Z 2} after a {@code 2} was widened, and
+     * keeping the value the user typed on every axis is what makes the widening feel like a change of
+     * shape rather than a reset.</p>
+     */
+    private static void rebuildInlineEditor(GraphView view, String nodeId, NodePort port, int arity,
+                                            Runnable onChange) {
+        if (!port.getDirection().isInput()) return;
+        // No editor means the port never had a document-declared field — nothing to re-shape.
+        if (port.getDefaultEditor() == null) return;
+
+        NodeData data = view.getDocument().node(nodeId);
+        String stored = data == null ? null : data.properties().get(port.getPortId());
+        String literal = literalAtArity(stored, arity);
+
+        NodeField field = arity <= 1
+                ? new NodeField(port.getPortId(), port.getPortId(), NodeField.Kind.NUMBER,
+                        List.of(), literal, port.getPortId())
+                : new NodeField(port.getPortId(), port.getPortId(), NodeField.Kind.VECTOR,
+                        List.of(), literal, port.getPortId());
+
+        // The literal is passed as the PRESET rather than left to the document: a widget infers its
+        // shape from the value it is handed, so a stored scalar would build two boxes for a vec3.
+        UIElement rebuilt = NodeFieldBinder.buildControl(field, view.getDocument(), nodeId,
+                view.undoStack(), onChange, literal);
+        if (rebuilt != null) port.setDefaultEditor(rebuilt);
+    }
+
+    /**
+     * {@code stored} re-shaped to {@code arity} components — a bare number at 1, {@code vecN(...)} above.
+     *
+     * <p>A single existing component is splatted across all of them; anything beyond what was stored is
+     * zero. Reading the components back out rather than starting from the port's declared default is what
+     * preserves a value the user typed while the port was narrower.</p>
+     */
+    static String literalAtArity(@Nullable String stored, int arity) {
+        double[] parsed = componentsOf(stored);
+        if (arity <= 1) return ShaderVectorFieldWidget.formatScalar(parsed.length > 0 ? parsed[0] : 0d);
+        double[] out = new double[arity];
+        for (int i = 0; i < arity; i++) {
+            if (i < parsed.length) out[i] = parsed[i];
+            else if (parsed.length == 1) out[i] = parsed[0];   // splat, per the note above
+        }
+        return ShaderVectorFieldWidget.format(out);
+    }
+
+    /** The numbers in {@code vecN(a, b, ...)} or a bare scalar; empty when it is neither. */
+    private static double[] componentsOf(@Nullable String stored) {
+        if (stored == null || stored.isBlank()) return new double[0];
+        if (stored.indexOf('(') >= 0) return ShaderVectorFieldWidget.parse(stored);
+        try {
+            return new double[] { Double.parseDouble(stored.trim()) };
+        } catch (NumberFormatException notANumber) {
+            return new double[0];
         }
     }
 
