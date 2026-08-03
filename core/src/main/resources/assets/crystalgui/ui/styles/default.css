@@ -1030,6 +1030,24 @@ menu .__items__ {
     gap-all: 1px;
 }
 
+/* A grouping rule, as every native context menu uses. Margins rather than padding on the neighbours:
+ * the rule belongs to the GAP between two groups, and giving it to the rows either side means every row
+ * has to know whether it happens to sit next to one.
+ *
+ * Inset from the menu's edges — a rule running the full width reads as the bottom of the menu rather
+ * than as a divider inside it, which is why Windows insets its own. */
+menu .__separator__ {
+    height: 1px;
+    min-height: 1px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    margin-left: 6px;
+    margin-right: 6px;
+    background: #6E6E6E;
+}
+
 /* Items are Buttons, so they inherit the button rule above; these overrides make them read as rows
  * rather than as a stack of separate controls — full width, left-aligned, no rounding between them. */
 menuitem {

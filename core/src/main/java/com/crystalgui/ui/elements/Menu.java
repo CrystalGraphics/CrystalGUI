@@ -48,6 +48,9 @@ public class Menu extends Popover {
 
     public static final String ITEMS_CLASS = "__items__";
 
+    /** A grouping rule between items. @see #addSeparator() */
+    public static final String SEPARATOR_CLASS = "__separator__";
+
     /** Fires with the activated item. Emitted before the menu closes, so a listener can inspect it. */
     public final Signal.Value<MenuItem> onItemActivated = new Signal.Value<>();
 
@@ -132,10 +135,36 @@ public class Menu extends Popover {
         return addItemAt(item, itemList.size());
     }
 
+    /**
+     * A horizontal rule grouping the items around it — the sections every native context menu uses.
+     *
+     * <h3>It is not an item, and that is the whole implementation</h3>
+     * <p>A separator is kept out of {@link #itemList} entirely. Arrow keys, {@code Home}/{@code End} and
+     * {@link #getItemCount()} all work in terms of that list, so a separator is skipped by every one of them
+     * for free, with no "is this selectable?" check anywhere. That matches ARIA, where a
+     * {@code separator} is not a {@code menuitem} and is never in the focus order.</p>
+     *
+     * <p>It is also {@code setHitTest(false)}, so the row cannot take hover or swallow a press aimed at
+     * the item beneath it — a 1px strip that eats clicks is very hard to attribute to anything.</p>
+     */
+    public UIElement addSeparator() {
+        UIElement separator = new UIElement();
+        separator.addClass(SEPARATOR_CLASS);
+        separator.setHitTest(false);
+        items.addChild(separator);
+        return separator;
+    }
+
     public MenuItem addItemAt(MenuItem item, int index) {
         int at = Math.max(0, Math.min(itemList.size(), index));
+        // The item's index is NOT its child index once separators exist: separators are children of
+        // `items` without being in `itemList`, so appending at `itemList.size()` would insert an item
+        // BEFORE any trailing separator. Resolved against the element actually occupying that slot.
+        int childIndex = at < itemList.size()
+                ? items.getChildren().indexOf(itemList.get(at))
+                : items.getChildren().size();
         itemList.add(at, item);
-        items.addChildAt(item, at);
+        items.addChildAt(item, childIndex);
         // Activation closes the menu, which is what a menu is for — UNLESS the item owns a submenu, in
         // which case closing would dismiss the parent and strand the child. That was an earlier bug:
         // pressing a submenu item opened the child and shut the menu it belonged to in the same breath, so
@@ -295,8 +324,14 @@ public class Menu extends Popover {
         return true;
     }
 
+    /** Empties the menu — separators included, since a menu of nothing but rules is not "cleared". */
     public void clearItems() {
         for (MenuItem item : new ArrayList<>(itemList)) removeItem(item);
+        // Separators are not in itemList, so the loop above cannot reach them. Rebuilding a menu without
+        // this leaves the old rules stacked up with no items between them.
+        for (UIElement child : new ArrayList<>(items.getChildren())) {
+            if (child.hasClass(SEPARATOR_CLASS)) items.removeChild(child);
+        }
     }
 
     /** The items in order. Unmodifiable — use {@link #addItem}/{@link #removeItem}. */
