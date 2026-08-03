@@ -916,12 +916,260 @@ when there is a match.
 
 ---
 
+### 6.3.11 The Vertex and Fragment blocks · `MOSTLY DONE` (2026-08-04) — ports shipped, section headers not
+
+> **Shipped**: `CgMasterNode` restructured into `VERTEX_PORTS` / `FRAGMENT_PORTS` declared as data, with
+> `BaseColor` narrowed to `vec3` and real `Alpha` / `AlphaClipThreshold` ports. `CgShaderEmitter`
+> generalised to **multiple roots per stage**. 9 new tests in `CgMasterBlocksTest`, all asserting the
+> emitted file parses through the real `CgShaderParser`.
+>
+> **Not shipped**: the two-box *visual*. The master still draws as one flat node with four ports rather
+> than `Vertex` / `Fragment` sections — that needs a port-group concept in `GraphNode`, which is a widget
+> change rather than a compiler one.
+>
+> #### Three things contact with the code changed
+>
+> **1. Vertex `Normal` was dropped, and this reverses the plan below.** The plan argued it was in scope
+> because it feeds the normal varying a fragment-stage `Normal Vector` node reads. That is true of
+> `CgPreviewEmitter` and **false of the real one**: `cg:Input/Geometry/normal` is a `VERTEX`-domain node
+> whose body is `{Out} = cg_Normal;`, so it hoists itself into the vertex stage and crosses as its own
+> varying — it never consults the master. A master `Normal` port would therefore be *exactly* the dead
+> port the whole scope argument is against, unless the emitter special-cased that node id. Making it real
+> means unifying the two emitters on one normal varying, which is worth doing deliberately rather than as
+> a rider on this item.
+>
+> **2. A latent off-by-one in `CgGraphCompiler`'s line map surfaced.** `chunk.split("\n", -1)` on a chunk
+> ending in a newline yields a trailing empty element, and mapping it claimed one line *too many* — the
+> line after the node's code. It stayed invisible for as long as that next line always mentioned the same
+> node's variable (`fragColor = node_c_Out;` did), and broke the moment the emitter started writing a
+> `float cg_alpha = …` of its own in between. Fixed, and `CgShaderEmitter.merge` now **shifts** each
+> part's line owners instead of keeping only the first part's — latent while only hoisted nodes made a
+> second part, routine now that a stage has several roots.
+>
+> **3. The master narrows where an ordinary port refuses to.** A `vec4` into `BaseColor(vec3)` had to
+> become `.xyz`. The compiler's `mayNarrow` never sees it — the master emits no code, so it has no inputs
+> for the compiler to resolve — so the swizzle is applied in the emitter, as the same
+> "the compiler may narrow what it wired itself" carve-out the implicit-UV links already have.
+
+### 6.3.11 The Vertex and Fragment blocks · original plan (2026-08-03)
+
+Unity's Master Stack, drawn as two blocks. Ours is `CgMasterNode`, which today has exactly two ports —
+`Position` (vertex) and `BaseColor` (fragment, `vec4`).
+
+#### What Unity ships, for reference
+
+| Block | Ports |
+|---|---|
+| Vertex | Position(3), Normal(3), Tangent(3) |
+| Fragment (URP Lit) | Base Color(3), Normal Tangent Space(3), Metallic(1), Smoothness(1), Emission(3), Ambient Occlusion(1), Alpha(1), Alpha Clip Threshold(1) |
+
+#### One fact decides most of the scope question
+
+**There is no lighting model.** Not "a simple one" — none:
+
+- `cg_env.glsl`'s `CgFrameBlock` carries `cg_ViewMatrix`, `cg_ProjMatrix`, `cg_Time`, `cg_Resolution`.
+  No light direction, no light colour, no ambient term, not even a camera position.
+- `CgFrameData.hasDirectionalLight()` is `return false`, commented *"MVP: directional light deferred to
+  v2. Shadow pass is not executed in Phase 1."*
+
+So the question "will we need Smoothness?" has a definite answer rather than a taste answer. **A port
+whose only consumer is a lighting model that does not exist is a port that silently does nothing** — it
+accepts a wire, shows a value, changes no pixel, and gives no indication which of those three it is
+failing at. That is worse than its absence, because absence is at least legible.
+
+#### Scope
+
+| Unity port | Verdict | Reasoning |
+|---|---|---|
+| **Position** (vertex) | **IN** — already exists | |
+| **Normal** (vertex) | **IN** — new | *Not* for lighting. It feeds the `normal` varying `CgPreviewEmitter` already computes (`o.normal = CG_NORMAL_MATRIX * cg_Normal`), which is what a fragment-stage `Normal Vector` node reads. The consumer is the graph itself, and it is real today. |
+| **Tangent** (vertex) | **OUT** | Exists solely to build the tangent basis for tangent-space normal mapping. No normal mapping without lighting. |
+| **Base Color** (fragment) | **IN** — exists, but **`vec4` → `vec3`** | Unity parity, and it has to change anyway to pair with a real Alpha port. See the migration note below. |
+| **Alpha** | **IN** — new | The one PBR-adjacent port that is genuinely consumable *today*: `Blend SRC_ALPHA ONE_MINUS_SRC_ALPHA` is expressible in a `.shader` `RenderState`, `Queue = "Transparent"` exists, and `CgTransparentRenderer` actually runs. Nothing is pretending. |
+| **Alpha Clip Threshold** | **IN** — new | One `discard` in the fragment body. `Queue = "AlphaTest"` already exists. Cheap, real, and the only way to get cutout foliage. |
+| **Normal (Tangent Space)** | **OUT** | Nothing lights it. |
+| **Metallic** | **OUT** | Nothing lights it. |
+| **Smoothness** | **OUT** | Nothing lights it — this is the direct answer to the question asked. |
+| **Ambient Occlusion** | **OUT** | Nothing lights it, and AO is a *multiplier on ambient*, of which there is none. |
+| **Emission** | **OUT** | The subtle one. Emission means "colour added after lighting". With no lighting, everything is already emissive — `Emission` and `BaseColor` would be two ports that add together with neither attenuated, i.e. the same port twice. It returns the day lighting does, and not before. |
+
+**Result: Vertex { Position, Normal } · Fragment { Base Color, Alpha, Alpha Clip Threshold }.**
+
+#### Make the port list data, because the OUT column is a queue, not a graveyard
+
+Every rejection above is "no lighting yet", and `CgFrameData` says v2 explicitly. `CgMasterNode.PORTS` is
+currently a `static final List.of(...)` with the stage split implied by which port the emitter reads.
+Restructure it as a **per-block declaration keyed by `CgShaderDomain`**, so that adding Smoothness later
+is one list entry plus one line in `CgShaderEmitter` rather than a re-think. This is cheap now and
+expensive to retrofit.
+
+#### One node or two? — recommend **one node, two labelled sections**
+
+Unity draws two boxes joined by a wire. That wire is **decorative** — it is not an edge, it carries no
+value, and it exists to show stage order.
+
+| Option | Cost |
+|---|---|
+| **One master, one widget with `Vertex`/`Fragment` section headers** ✅ | No new concepts. One id, so selection, drag, undo and graph-level settings all keep working unchanged. Visually one box instead of two. |
+| Two document nodes (`cg:master/vertex`, `cg:master/fragment`) | Needs a rule for which one owns `#type`/`Queue`/`Tags`/`Properties`, and deleting one half leaves a graph that compiles to nothing. Two things to keep in sync that are conceptually one. |
+| One master rendered as two widgets | Breaks the assumption `GraphSelection`, `GraphNode` and the drag path all rest on — that a node id maps to one widget. |
+
+The domain split is already how the compiler thinks (`CgShaderDomain`, and rooting a compile at
+`Position` versus `BaseColor` is what tells the emitter which stage it is writing), so sections are a
+*presentation* of a distinction that already exists rather than a new one.
+
+#### Migration: `BaseColor` `vec4` → `vec3`
+
+Not free. A graph wiring a `vec4` into `BaseColor` currently works; afterwards it is a narrowing
+conversion, and per the existing invariant truncating swizzles are only permitted into `DYNAMIC` ports or
+compiler-synthesised implicit links. Options are to let the emitter synthesise a `.rgb` for this one port
+(consistent with `wireImplicitDefaults` already existing) or to reject it and make the user add a Split.
+**Recommend the former** — it is the same "the compiler may narrow what it wired itself" carve-out.
+
+#### Tests
+
+Follow 6.3.5's precedent: the load-bearing assertion is that the emitted shader **parses through the real
+`CgShaderParser`**, because substring assertions pass happily while emitting a file the parser rejects.
+Then: Alpha reaches `fragColor.a`; a wired Alpha Clip Threshold emits a `discard`; a vertex `Normal`
+reaches the varying rather than being dropped; and the `vec4`→`vec3` narrowing is synthesised rather than
+erroring.
+
+---
+
+### 6.3.12 The Main Preview · `DONE` (2026-08-04)
+
+> **Shipped**: `CgMeshBuilder.cylinder` / `capsule` over a shared `revolve` sweep · `CgPreviewMesh` (the
+> shape set) · `CgMainPreviewRenderer` (own target, orbit, zoom, redraw-on-change) ·
+> `MainPreviewPanel` (title, surface, right-click shape menu, drag to orbit, wheel to zoom) · CSS in
+> `default.css` + `graph.css` · wired into the gallery's shader page. 16 new tests.
+>
+> #### Where it diverged
+>
+> **It compiles the real `CgShaderEmitter`, not `CgPreviewEmitter`.** The plan said to reuse
+> `CgPreviewRenderer.render(graph, nodeId)` rooted at the master. That cannot work — the master has no
+> output port for a preview to visualise — and would have been wrong even if it did: the preview wrapper
+> only follows the colour chain, so a graph displacing `Position` would draw un-deformed, which is most of
+> the reason to want a mesh under it.
+>
+> **The quad cannot be framed to survive orbit, and that is now a stated decision.** Writing the framing
+> test turned up that a flat quad tilted 45° after a 90° yaw presents its *diagonal* — `√2`, not 1. Framing
+> for that leaves a permanent 40% margin around every 2D preview, which is exactly the letterboxing
+> `ShaderNodePreview` already refuses for quads. So solids fit at every angle and the quad fills at rest
+> and clips when tilted, asserted separately in `CgPreviewMeshTest`.
+>
+> **No checkerboard yet** — the surface is a solid dark colour. The two honest ways to draw one are a
+> repeating texture asset (does not exist) or a grid of quads painted in Java (which would put two colours
+> in Java, against this project's rule). Recorded in `graph.css` beside the rule it replaces.
+>
+> #### The bug the main preview existed to find: `struct v2f { };`
+>
+> The panel drew a plain white sphere for a graph whose GLSL was correct in every other respect.
+> **GLSL has no empty struct** — `struct v2f { };` is a syntax error, not an empty type — and the emitter
+> has written one for every zero-varying graph since 6.3.5.
+>
+> It hid because **nothing had ever fed the real emitter's output to a driver.** `CgShaderParser` accepts
+> it (structurally it is a fine `.shader`), so every test passed; the editor's source pane displayed it
+> looking entirely right; and node thumbnails go through `CgPreviewEmitter`, whose v2f always carries
+> `uv`/`objectPos`/`normal` and is therefore never empty. The driver's own report was
+> `error C0000: syntax error, unexpected '}'` followed by a cascade about `cg_InstanceId` that had nothing
+> to do with anything — and `CgMaterial`'s fallback drew white.
+>
+> Fixed with a single padding member, and pinned by `aGraphWithNoVaryingsStillEmitsALegalStruct`. The
+> broader lesson is the one `--mode=shader-compile-audit` already exists for: **a parse is not a compile**,
+> and the first consumer to actually run generated GLSL will find whatever the parser was willing to
+> forgive. Every zero-varying graph — which is to say anything purely fragment-side, the most common shape
+> there is — was affected.
+>
+> **A `ByteBuffer.duplicate()` trap, for the next person reading a mesh back in a test:** `duplicate()`
+> returns a `BIG_ENDIAN` buffer whatever the original was, so every absolute `getFloat` is byte-swapped —
+> silently, into plausible-looking garbage. Both new mesh tests restate `order(nativeOrder())`.
+
+### 6.3.12 The Main Preview · original plan (2026-08-03)
+
+A floating panel showing the **whole graph** on a real mesh, with a right-click menu of mesh presets.
+
+#### Most of this already exists
+
+| Need | Have |
+|---|---|
+| Floating, resizable, movable panel | `Dialog` + `DialogManager`, `resize:` handles, `UIResizer` |
+| Right-click mesh menu | `Menu` / `MenuItem` / `Popover`, with light dismiss and Escape already correct |
+| Render a graph to a texture | `CgPreviewRenderer` — FBO pool, MSAA, per-frame budget, visibility culling, caching |
+| Show that texture | `ShaderNodePreview` |
+| Drive it per frame | `ShaderGraphPreviews`, a `UIFrameTicker` that already holds the master node |
+
+So the Main Preview is mostly **composition**. The genuinely new parts are the mesh set, the orbit
+gesture, and one decision below.
+
+#### Meshes — two of Unity's seven do not exist yet
+
+`CgMeshBuilder` ships `unitCube`, `quad2D`, `plane`, `uvSphere`, `icosahedron`.
+
+| Preset | Status |
+|---|---|
+| Sphere | ✓ `uvSphere` — already what node previews use |
+| Cube | ✓ `unitCube` |
+| Quad | ✓ `quad2D` |
+| **Cylinder** | ✗ **new `CgMeshBuilder.cylinder(...)`** |
+| **Capsule** | ✗ **new** — a cylinder with hemispherical caps, so cheapest as a variant of the same builder rather than a second one |
+| Sprite | ✓ = Quad. Unity distinguishes them by *material* (a sprite is unlit and premultiplied); with no lighting ours would render identically. **Recommend dropping it** rather than shipping two menu entries that produce the same picture. |
+| Custom Mesh | no-op, as asked |
+
+New procedural meshes are a legitimate CrystalGraphics addition under the ownership rule — a new backend
+capability goes in the backend.
+
+#### The decision to make before building: **the preview cannot be lit**
+
+Unity's preview ball is shaded, which is what makes it read as a ball. Ours cannot be, for the same
+reason Metallic and Smoothness are out of 6.3.11: there is no light.
+
+| Option | Verdict |
+|---|---|
+| **Unlit — draw exactly what the engine draws** ✅ | Honest. Any graph whose output varies with UV, position or normal reads perfectly; only a *constant* colour renders as a flat silhouette, and a constant colour has nothing to show anyway. |
+| Preview-only headlight/Lambert | Pretty, and a lie. The user would tune a shader against shading the pipeline cannot produce and never see it in game. This is the worst outcome available: it looks the most finished. |
+| Unlit with a toggle | The toggle is a setting for a feature we decided against; revisit if lighting lands. |
+
+**Recommend unlit**, recorded alongside 6.3.11 because it is the same fact — when lighting arrives, the
+preview shading and the PBR ports come back together, and they should be one piece of work.
+
+Add a **checkerboard backdrop** instead. That is not decoration: with `Alpha` becoming a real port,
+transparency is the one thing a flat colour field genuinely cannot show against a solid background.
+
+#### Orbit and zoom
+
+Drag to orbit, wheel to zoom. Without it a cube is a square and the mesh menu is close to pointless. The
+gesture machinery is all present (pointer capture, `UIDragController`).
+
+**Rotation and zoom are view state** — never an `Edit`, per the boundary the invariants already draw for
+scroll and selection. Same for the **chosen mesh**: which shape you are looking at does not change what
+the shader does, so it must not enter `UIDescriptionCodec`/the graph document and must not be undoable.
+
+#### Rendering cost
+
+`CgPreviewRenderer` defaults to 256px with a budget of 4 draws per frame. The Main Preview is larger
+(~320–400px) and must **share that budget** rather than bypass it, or one big preview starves every node
+thumbnail on a busy graph. It re-renders when the graph changes or the view moves — not per frame.
+
+Rooting: reuse `CgPreviewRenderer.render(graph, nodeId)` with the **master node** as the root rather than
+compiling the real emitted `.shader` separately. One code path, one set of bugs, and the preview stays
+consistent with the node thumbnails it sits beside.
+
+#### Tests
+
+Mesh builders are headless and GL-free: cylinder and capsule produce closed manifolds, unit-length
+normals, sane vertex/index counts, and UVs in range. Then: the mesh choice does not appear in the encoded
+document and leaves `UndoStack` empty; the panel requests a re-render on a graph change and *not* on an
+idle frame.
+
+---
+
 ## Ordering, and what blocks what
 
 **Status as of 2026-08-03:** 6.3.1–6.3.5 `DONE` · 6.3.7 `DONE` · 6.3.6 `IN PROGRESS` (93 nodes; Math
 63/64 done, Channel 3/4, UV 6/10, Utility Logic 6/12, Procedural 6/9, Input 8/54, Artistic untouched)
 · 6.3.8 `IN PROGRESS` (dropdowns, inline value editors, implicit-UV port defaults and dynamic port
-arity/colour-by-resolved-type all done; error mapping and debounce remain) · 6.3.9 `DONE`.
+arity/colour-by-resolved-type all done; error mapping and debounce remain) · 6.3.9 `DONE` ·
+6.3.11 `MOSTLY DONE` (ports shipped; the two-box visual is not) · 6.3.12 `DONE`.
 The whole stack runs end to end in the gallery's **shadergraph** page.
 
 **6.3.9 blocks nothing and is blocked by nothing** — it is a general search facility the create menu

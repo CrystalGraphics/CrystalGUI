@@ -73,7 +73,15 @@ public class ShaderGraphBridgeTest extends UiTestBase {
     public void promotionAgreesWithTheCompiler() {
         assertTrue(ShaderGraphBridge.GLSL_PROMOTION.accepts("float", "vec3"));
         assertTrue(ShaderGraphBridge.GLSL_PROMOTION.accepts("vec3", "vec3"));
-        assertFalse("nothing demotes", ShaderGraphBridge.GLSL_PROMOTION.accepts("vec3", "float"));
+        // Narrowing is ALLOWED, matching Unity: a Vector4 dropped on a Vector3 slot connects and loses
+        // its w. The compiler swizzles it down; see CgGraphCompiler.mayNarrow, which had to be reversed
+        // in the same breath so the two cannot disagree.
+        assertTrue("a wider value truncates rather than being refused",
+                ShaderGraphBridge.GLSL_PROMOTION.accepts("vec3", "float"));
+        assertTrue("UV(4) into Base Color(3) is the case this exists for",
+                ShaderGraphBridge.GLSL_PROMOTION.accepts("vec4", "vec3"));
+        // Still refused: a sampler is not a number, and no swizzle turns one into one.
+        assertFalse(ShaderGraphBridge.GLSL_PROMOTION.accepts("sampler2D", "vec3"));
     }
 
     /**
@@ -99,7 +107,7 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         assertTrue("a vec4 must be able to reach a dynamic port", vec4.isCompatibleWith(dynamic));
         assertTrue("and a dynamic port must be able to feed anything", dynamic.isCompatibleWith(vec4));
         assertTrue("a scalar promotes", floatType.isCompatibleWith(vec4));
-        assertFalse("nothing demotes", vec4.isCompatibleWith(floatType));
+        assertTrue("and a wider value truncates", vec4.isCompatibleWith(floatType));
 
         // The two checks must not disagree, or a drag and a document write reach opposite conclusions.
         assertEquals(ShaderGraphBridge.GLSL_PROMOTION.accepts("vec4", ShaderGraphBridge.DYNAMIC_TYPE),
@@ -142,8 +150,10 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         assertTrue(result.source(), result.source().contains("vec4 node_" + multiply.id() + "_Out;"));
         assertTrue("the scalar side was promoted",
                 result.source().contains("vec4(node_" + time.id() + "_Time)"));
+        // Narrowed to .xyz: BaseColor is a vec3 now that Alpha is a port of its own, and the master is
+        // the one boundary allowed to truncate a user-drawn edge. @see CgShaderEmitter#adapted
         assertTrue("and it reaches the output",
-                result.source().contains("fragColor = node_" + multiply.id() + "_Out;"));
+                result.source().contains("fragColor = vec4(node_" + multiply.id() + "_Out.xyz, cg_alpha);"));
     }
 
     /** Port values the editor collected become literals in the generated GLSL. */
@@ -250,6 +260,6 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         assertTrue(String.join("\n", result.errors()), result.ok());
         assertNotNull(CgShaderParser.parse(result.source()));
         assertTrue("the master's own default stands in for the missing branch",
-                result.source().contains("fragColor = vec4(1.0"));
+                result.source().contains("fragColor = vec4(vec3(1.0, 1.0, 1.0), cg_alpha);"));
     }
 }
