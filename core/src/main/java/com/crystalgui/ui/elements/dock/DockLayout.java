@@ -181,6 +181,10 @@ public final class DockLayout {
         }
         inserted.size(1f);
         root.addChild(inserted, zone.after() ? root.childCount() : 0);
+        // The carrier can be left holding a single node -- the common case is a drag that emptied the tree
+        // down to one pane on its way here, since detaching the source collapses behind it. normalise
+        // knows how to dissolve that correctly, including the splice a surviving branch needs.
+        normalise();
         return firstLeafOf(inserted);
     }
 
