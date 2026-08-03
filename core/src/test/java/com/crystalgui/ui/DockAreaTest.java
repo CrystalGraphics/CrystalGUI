@@ -153,7 +153,7 @@ public class DockAreaTest extends UiTestBase {
     public void aBranchBecomesASplitViewOfGroups() {
         setUpTwoGroups();
 
-        UIElement built = area.getChildren().get(0);
+        UIElement built = area.builtRoot();
         assertTrue("a branch of two is a SplitView", built instanceof SplitView);
         SplitView split = (SplitView) built;
         assertEquals(2, split.paneCount());
@@ -179,7 +179,7 @@ public class DockAreaTest extends UiTestBase {
         frame();
         frame();
 
-        UIElement built = area.getChildren().get(0);
+        UIElement built = area.builtRoot();
         assertTrue(built instanceof SplitView);
         assertEquals(SplitView.Orientation.VERTICAL, ((SplitView) built).getOrientation());
     }
@@ -217,12 +217,12 @@ public class DockAreaTest extends UiTestBase {
     @Test
     public void aRebuildIsDeferredToTheNextFrame() {
         setUpTwoGroups();
-        UIElement before = area.getChildren().get(0);
+        UIElement before = area.builtRoot();
 
         layout.drop(layout.leaves().get(0), DockDropZone.SPLIT_DOWN, new DockLeaf(new DockPanelRef("gamma")));
         area.requestRebuild();
 
-        assertSame("nothing moved yet", before, area.getChildren().get(0));
+        assertSame("nothing moved yet", before, area.builtRoot());
         frame();
         assertEquals("and on the next frame it has", 3, layout.leaves().size());
     }
@@ -502,6 +502,36 @@ public class DockAreaTest extends UiTestBase {
     private void assertOneGroupPerLeaf() {
         assertEquals("attached DockGroups should equal leaves",
                 layout.leaves().size(), attachedGroups().size());
+
+        // Counted as ELEMENTS, not through TabView.getTabs().
+        //
+        // This is the assertion that found the bug, after two rounds of tests that could not. A Tab can
+        // survive a rebuild while being absent from every TabView's list -- markAsInternal() recurses, so
+        // one addInternalChild on a built tree stamped every Tab internal and removeChild silently refused
+        // them from then on. The list stayed correct; the rail grew a dead tab per rebuild. Anything
+        // asserted through getTabs() agreed with the model the whole time.
+        int panels = 0;
+        for (DockLeaf leaf : layout.leaves()) panels += leaf.panelCount();
+        StringBuilder where = new StringBuilder();
+        reportStrayTabs(area, where);
+        assertEquals("Tab elements in the tree should equal panels in the model." + where,
+                panels, countTabElements(area));
+    }
+
+    /** Per group: what its tab list says, versus how many Tab elements are actually under it. */
+    private static void reportStrayTabs(UIElement element, StringBuilder out) {
+        if (element instanceof DockGroup group) {
+            out.append(" | group(").append(group.leaf().panelCount()).append(" panels) list=")
+               .append(group.tabView().getTabCount())
+               .append(" elements=").append(countTabElements(group));
+        }
+        for (UIElement child : element.getChildren()) reportStrayTabs(child, out);
+    }
+
+    private static int countTabElements(UIElement element) {
+        int count = element instanceof Tab ? 1 : 0;
+        for (UIElement child : element.getChildren()) count += countTabElements(child);
+        return count;
     }
 
     /** The reported bug, in the layout it was reported in. */
@@ -577,6 +607,6 @@ public class DockAreaTest extends UiTestBase {
 
         assertEquals(List.of("alpha"), panelIdsPerGroup());
         assertTrue("and the split view is gone with it",
-                !(area.getChildren().get(0) instanceof SplitView));
+                !(area.builtRoot() instanceof SplitView));
     }
 }
