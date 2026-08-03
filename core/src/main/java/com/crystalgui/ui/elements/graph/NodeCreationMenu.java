@@ -8,13 +8,22 @@ import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.TypeCompatibility;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.tree.TreeDataSource;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
 import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.ui.elements.SearchField;
 import com.crystalgui.ui.elements.tree.TreeView;
+import com.crystalgui.core.search.SearchMatch;
+import com.crystalgui.core.search.SearchMatcher;
+import com.crystalgui.core.search.SearchQuery;
+import com.crystalgui.ui.text.TextRange;
+
+import java.util.ArrayList;
+import java.util.List;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import lombok.Getter;
 
@@ -76,6 +85,17 @@ public class NodeCreationMenu extends Popover {
     public static final String TWISTY_CLASS = "__twisty__";
     public static final String LABEL_CLASS = "__label__";
     public static final String CATEGORY_CLASS = "__category__";
+    /** The dimmed {@code Math ▸ Vector} suffix on a search result — what makes a category-only match
+     * legible instead of arbitrary. */
+    public static final String ENTRY_CATEGORY_CLASS = "__entry-category__";
+    /** One segment of that suffix — {@code Math}, then {@code Vector}. */
+    public static final String CATEGORY_SEGMENT_CLASS = "__category-segment__";
+    /** The mark between two segments. A DRAWN shape, never a character — see
+     * {@code NodeMenuTree.categorySegments} for the blank-advance trap that forced it. */
+    public static final String CATEGORY_SEPARATOR_CLASS = "__category-separator__";
+    /** The {@code ::highlight(...)} name the matched characters are registered under. Styled in CSS, so
+     * the tint is a theme's business — see this class's own note on the renderer. */
+    public static final String MATCH_HIGHLIGHT = "search-match";
 
     /**
      * At or below this many entries, every folder starts open.
@@ -89,7 +109,7 @@ public class NodeCreationMenu extends Popover {
     private final NodeTypeRegistry library;
     private final UIElement titleBar = new UIElement();
     private final UIText titleLabel = new UIText("Create Node");
-    private final TextField search = new TextField();
+    private final SearchField search = new SearchField();
     private final TreeView<NodeMenuTree.Node> tree;
     private final UIText emptyLabel = new UIText("no matching nodes");
 
@@ -139,8 +159,9 @@ public class NodeCreationMenu extends Popover {
         // IMMEDIATE, not the default ON_COMMIT: the list has to narrow as you type. On commit-only the
         // menu would sit showing everything until Enter, which is not a search box, it is a filter you
         // have to submit.
-        search.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
-        search.attachListener(text -> rebuild());
+        // IMMEDIATE update mode now lives inside SearchField — a box that only filters on Enter is
+        // not a search box, and that reasoning belongs with the widget rather than with each user of it.
+        search.onQueryChanged.connect(this::rebuild);
 
         tree = new TreeView<>(new TreeDataSource<NodeMenuTree.Node>() {
             @Override
@@ -176,7 +197,7 @@ public class NodeCreationMenu extends Popover {
         // round trip — and it would have silently done nothing anyway: a ListView takes no focus policy of
         // its own, and requestFocus refuses a FocusPolicy.NONE element without reporting it. Forwarding
         // keeps one focus owner and one obvious place for the caret.
-        search.onKeyDown.attachListener((element, event) -> {
+        search.field().onKeyDown.attachListener((element, event) -> {
             if (!handleListKey(event.getKeyCode())) return;
             event.stopPropagation();
             // Stops TextField's own caret handling for these keys; Left/Right are deliberately NOT taken,
@@ -254,7 +275,7 @@ public class NodeCreationMenu extends Popover {
         // Focus the box, not the first row: the menu exists to be typed into, and a user who wanted the
         // first row would have clicked it.
         var window = getAttachedWindow();
-        if (window != null) window.getInputHandler().requestFocus(search);
+        if (window != null) focusSearch();
         return this;
     }
 
@@ -267,9 +288,12 @@ public class NodeCreationMenu extends Popover {
         List<NodeTypeRegistry.Offer> offers = currentOffers(query);
 
         // A query flattens. See the class note: a result set is ranked, not filed.
+        // ranked, NOT flat: `offers` already arrives best-first from the registry, and flat() re-sorted
+        // alphabetically — which threw the ranking away and is what made `vec` + Enter create Cross
+        // Product. See NodeMenuTree.ranked.
         roots = query.trim().isEmpty()
                 ? NodeMenuTree.categorised(offers)
-                : NodeMenuTree.flat(offers);
+                : NodeMenuTree.ranked(offers);
 
         tree.refresh();
         if (NodeMenuTree.leafCount(roots) <= autoExpandThreshold) {
@@ -350,6 +374,21 @@ public class NodeCreationMenu extends Popover {
 
     /** Enter on a focused row, and what a row's own press delegates to — one path, so a category behaves
      * identically however it was reached. */
+    /**
+     * Puts the caret back in the search box — the menu's standing invariant, since every key it responds
+     * to is handled on that field.
+     *
+     * <p>The FIELD, not the {@link SearchField} wrapper: that is a row of parts and only the text field
+     * can hold a caret. And {@code requestPointerFocus}, not {@code requestFocus}: this is always
+     * pointer-driven, and the programmatic call is the one that rings {@code :focus-visible} — a focus
+     * ring drawn around the search box on every click of a folder is exactly the noise that
+     * pseudo-class exists to avoid.</p>
+     */
+    private void focusSearch() {
+        UIWindow window = getAttachedWindow();
+        if (window != null) window.getInputHandler().requestPointerFocus(search.field());
+    }
+
     private void activateRow(int index) {
         TreeRow<NodeMenuTree.Node> row = tree.rowAt(index);
         if (row == null) return;
@@ -389,6 +428,17 @@ public class NodeCreationMenu extends Popover {
             row.onMouseDown.attachListener((element, event) -> {
                 int index = tree.indexOfRowElement(element);
                 if (index >= 0) activateRow(index);
+                // Put focus back in the search box. A press BLURS whatever was focused and re-focuses
+                // only if what it hit is click-focusable — a row is a plain element, so clicking one
+                // (opening a folder, most obviously) left the menu with NO focused element at all, and
+                // the arrow/Enter handling hangs off the search field's own key events. The menu looked
+                // alive and had gone completely deaf.
+                //
+                // Safe to do during dispatch: UIInputHandler.emitMouseDown settles focus BEFORE it sends
+                // the event, so nothing undoes this afterwards. Skipped when the press chose a node,
+                // because activateRow has already hidden the menu and restoring focus is the Popover's
+                // job from there.
+                if (isOpen()) focusSearch();
                 event.stopPropagation();
             }, false, true);
             return row;
@@ -404,6 +454,50 @@ public class NodeCreationMenu extends Popover {
             // __expanded__/__collapsed__/__leaf__ classes TreeView already applies to `template` — see
             // default.css's nodecreationmenu .__twisty__ rules.
             entry.label.setText(item.label());
+
+            // The category suffix, and the match tint. BOTH are recomputed here on EVERY bind rather
+            // than stored on the row, because TreeView recycles row elements — its own note says a
+            // realised row "represents a different row every time it is recycled". Anything captured
+            // once would be correct until the first scroll and then wear another result's ranges, the
+            // same trap the editor's pooled gutter arrows already document.
+            //
+            // Matching against the string being DRAWN (rather than reusing a range computed upstream)
+            // is what keeps the tint aligned: the category is displayed title-cased with a different
+            // separator, so offsets taken from the raw `math/vector` would creep sideways.
+            SearchQuery query = SearchQuery.of(search.getText());
+            List<String> segments = item.isCategory() || item.offer() == null || query.isEmpty()
+                    ? List.of() : NodeMenuTree.categorySegments(item.offer().type().category());
+            entry.setCategory(segments);
+
+            highlight(entry.label, query, item.label(), SearchMatch.FIELD_PRIMARY);
+            // Each segment matched on its own, so the tint needs no offset arithmetic — see
+            // NodeMenuTree.categorySegments.
+            for (int i = 0; i < EntryRow.MAX_CATEGORY_SEGMENTS; i++) {
+                UIText segment = entry.categorySegments[i];
+                highlight(segment, query, i < segments.size() ? segments.get(i) : "",
+                        SearchMatch.FIELD_CONTEXT);
+            }
+        }
+
+        /**
+         * Registers the matched ranges under {@link #MATCH_HIGHLIGHT}, or clears them.
+         *
+         * <p><b>Always calls {@code set}, including with nothing.</b> Clearing only when a match exists
+         * would leave the previous occupant's ranges on a recycled row — visible as a tint that drifts to
+         * unrelated rows as you scroll, which reads as a rendering bug rather than a stale-data one.</p>
+         */
+        private void highlight(UIText text, SearchQuery query, String drawn, int fieldWeight) {
+            SearchMatch match = query.isEmpty() || drawn.isEmpty()
+                    ? null : SearchMatcher.match(query, drawn, fieldWeight);
+            if (match == null) {
+                text.highlights().set(MATCH_HIGHLIGHT, List.of());
+                return;
+            }
+            List<TextRange> ranges = new ArrayList<>(match.ranges().size());
+            for (SearchMatch.Range range : match.ranges()) {
+                ranges.add(TextRange.of(range.start(), range.end()));
+            }
+            text.highlights().set(MATCH_HIGHLIGHT, ranges);
         }
     }
 
@@ -412,8 +506,15 @@ public class NodeCreationMenu extends Popover {
      * inserted anything. */
     private static final class EntryRow extends UIElement {
 
+        /** Deepest category this can draw. Three covers every shipped path ({@code procedural/shape/…});
+         * anything deeper collapses into the last segment rather than being dropped. */
+        static final int MAX_CATEGORY_SEGMENTS = 3;
+
         private final UIElement twisty = new UIElement();
         private final UIText label = new UIText("");
+        private final UIElement category = new UIElement();
+        private final UIText[] categorySegments = new UIText[MAX_CATEGORY_SEGMENTS];
+        private final UIElement[] categorySeparators = new UIElement[MAX_CATEGORY_SEGMENTS - 1];
 
         EntryRow() {
             addClass(ENTRY_CLASS);
@@ -421,14 +522,65 @@ public class NodeCreationMenu extends Popover {
             twisty.setHitTest(false);
             label.addClass(LABEL_CLASS);
             label.setHitTest(false);
+
+            // Built ONCE and shown/hidden per bind, never rebuilt. TreeView recycles rows, so creating
+            // elements in bind would register and drop Taffy nodes on every keystroke — churn, for a
+            // structure that is at most three labels and two marks.
+            category.addClass(ENTRY_CATEGORY_CLASS);
+            category.setHitTest(false);
+            for (int i = 0; i < MAX_CATEGORY_SEGMENTS; i++) {
+                if (i > 0) {
+                    UIElement separator = new UIElement();
+                    separator.addClass(CATEGORY_SEPARATOR_CLASS);
+                    separator.setHitTest(false);
+                    categorySeparators[i - 1] = separator;
+                    category.addChild(separator);
+                }
+                UIText segment = new UIText("");
+                segment.addClass(CATEGORY_SEGMENT_CLASS);
+                segment.setHitTest(false);
+                categorySegments[i] = segment;
+                category.addChild(segment);
+            }
+
             addChild(twisty);
             addChild(label);
+            addChild(category);
+        }
+
+        /** Shows exactly {@code segments.size()} labels and the marks between them; hides the rest. */
+        void setCategory(List<String> segments) {
+            int shown = Math.min(segments.size(), MAX_CATEGORY_SEGMENTS);
+            for (int i = 0; i < MAX_CATEGORY_SEGMENTS; i++) {
+                boolean visible = i < shown;
+                // The last slot absorbs anything deeper, so an unexpectedly nested category loses its
+                // separators rather than its tail.
+                String text = !visible ? ""
+                        : i == MAX_CATEGORY_SEGMENTS - 1 && segments.size() > MAX_CATEGORY_SEGMENTS
+                        ? String.join(" ", segments.subList(i, segments.size()))
+                        : segments.get(i);
+                categorySegments[i].setText(text);
+                show(categorySegments[i], visible);
+                if (i > 0) show(categorySeparators[i - 1], visible);
+            }
+            show(category, shown > 0);
+        }
+
+        private static void show(UIElement element, boolean visible) {
+            StyleGroup.importantPipeline(element.getStyle().getLayoutGroup(),
+                    l -> l.display(visible ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
         }
     }
 
     // ── Accessors, for a theme or a test ────────────────────────────────────
 
     public TextField searchField() {
+        return search.field();
+    }
+
+    /** The whole search box — icon, field and clear — for a theme or a test that needs the wrapper
+     * rather than the text field inside it. */
+    public SearchField searchBox() {
         return search;
     }
 

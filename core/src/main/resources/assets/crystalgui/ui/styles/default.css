@@ -1982,7 +1982,10 @@ nodecreationmenu .__items__ {
 nodecreationmenu .__entry__ {
     width: 100%;
     flex-direction: row;
-    padding-right: 4px;
+    /* Clears the scroller's own bar, which overlays the row rather than taking layout space — at 4px the
+       category ran under it and "Basic" was sliced down its last letter. Wide enough for the bar plus a
+       gap, so the text stops short of it rather than touching. */
+    padding-right: 14px;
     justify-content: flex-start;
     align-items: center;
     /* A label past the ceiling clips at its own row rather than escaping the menu. */
@@ -2021,6 +2024,92 @@ nodecreationmenu .__entry__ .__label__ {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+/* The dimmed `Math ▸ Vector` after a search result's label — what makes a match legible.
+ *
+ * The menu matches a node's CATEGORY as well as its name, so for `vec` most rows (Cross Product,
+ * Distance, Dot Product …) matched only through `Math/Vector`. Without the category on the row there was
+ * nothing on screen to explain why any of them were there, and a correct result set read as noise.
+ *
+ * `flex-shrink` and no `flex-grow`: the label owns the slack and ellipsizes first, so the category is the
+ * last thing to be given up rather than the first — it is short, and it is the part carrying the
+ * explanation. Only drawn while searching; browsing shows the real tree, where the folder above the row
+ * already says this. */
+nodecreationmenu .__entry__ .__entry-category__ {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 0;
+    flex-shrink: 1;
+    padding-left: 6px;
+    overflow: hidden;
+}
+nodecreationmenu .__entry__ .__category-segment__ {
+    flex-shrink: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: #7A7A7A;
+}
+/* A DRAWN triangle, not a character. `MinecraftRegular.otf` has no U+25B8, and a missing glyph draws a
+ * blank advance rather than failing — so a text separator rendered as a mystery gap. `CgUiShape` needs no
+ * font at all, and `triangle-right` is already in its catalog (the same one the twisty and the group
+ * arrows use). Smaller and dimmer than the segments either side: it is punctuation, not a word. */
+nodecreationmenu .__entry__ .__category-separator__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    margin-left: 3px;
+    margin-right: 3px;
+    overlay: shape("triangle-right");
+    color: #6E6E6E;
+}
+/* The matched characters, via the CSS Custom Highlight API — `UIText.highlights()` names the ranges in
+ * Java, this decides what they look like. That split is the whole reason the tint is not a colour
+ * constant somewhere in the menu: a theme can restyle or ignore it, and registering a name no stylesheet
+ * styles is legal and simply does nothing.
+ *
+ * Colour only. `::highlight()` refuses layout properties by design, and rightly — a highlight that could
+ * set `font-size` would reflow the very text being searched, on every keystroke. */
+::highlight(search-match) {
+    color: #E0A040;
+}
+
+/* ── SearchField ────────────────────────────────────────────────────────────────────────────────
+ * A general widget, NOT a config control — see its class javadoc for why that distinction is worth
+ * keeping. Styled here rather than in graph.css because nothing about it is graph-specific: a command
+ * palette and a settings filter want the same box. */
+searchfield {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+}
+/* The magnifier is NOT drawn, deliberately, and this is a real gap rather than an oversight:
+ * `CgUiShape`'s catalog has no magnifier (it runs chevrons/triangles/checkmark/cross/plus/minus/arrows),
+ * and the two cheap fakes are both worse than nothing. A text glyph is out — the bundled Minecraft font
+ * has no U+1F50D and a missing glyph draws a blank advance rather than failing, which is the exact trap
+ * the create menu's twisty already documents. A stand-in shape that is not a magnifier would just be a
+ * wrong icon. So the element stays as a structural hook with no box, and a theme (or a MAGNIFIER kind
+ * added to the catalog — a circle plus a handle, more than the stroke helpers currently do) turns it on. */
+searchfield .__icon__ {
+    display: none;
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    margin-left: 3px;
+}
+/* The field owns the slack; icon and clear keep their own size. */
+searchfield .__field__ {
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+searchfield .__clear__ {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    margin-right: 3px;
+    overlay: shape("cross");
+    cursor: pointer;
 }
 nodecreationmenu .__empty__ { padding-all: 4px; }
 
