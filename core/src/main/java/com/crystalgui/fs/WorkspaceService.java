@@ -1,0 +1,192 @@
+package com.crystalgui.fs;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The workspace, as a server offers it: projects, authorisation, and the etag rules.
+ *
+ * <p>The layer VS Code calls {@code FileService} — it sits above a {@link CgFileSystem} and adds the two
+ * things a provider has no business knowing: <b>who is asking</b>, and <b>whether the file moved since
+ * the caller last looked</b>.</p>
+ *
+ * <h3>What each layer owes</h3>
+ * <table>
+ *   <tr><td>{@link CgPath}</td><td>cannot lexically escape its project</td></tr>
+ *   <tr><td>{@link CgFileSystem}</td><td>reads and writes bytes; on a real disk, no symlink escapes</td></tr>
+ *   <tr><td><b>this</b></td><td>resolves the project, authorises, and enforces etags</td></tr>
+ *   <tr><td>the RPC layer</td><td>carries it to a client</td></tr>
+ * </table>
+ *
+ * <p>Keeping them apart is what makes the whole server side testable with no disk and no network: this
+ * class over an {@link InMemoryFileSystem} is a complete, exercisable workspace.</p>
+ */
+public final class WorkspaceService {
+
+    private final ProjectRegistry projects;
+    private final CgFileSystem files;
+    private final WorkspacePermission permission;
+
+    public WorkspaceService(ProjectRegistry projects, CgFileSystem files, WorkspacePermission permission) {
+        if (projects == null || files == null) throw new IllegalArgumentException();
+        this.projects = projects;
+        this.files = files;
+        // A host that registers projects and forgets the callback gets a workspace nobody can open,
+        // rather than one everybody can.
+        this.permission = permission == null ? WorkspacePermission.DENY_ALL : permission;
+    }
+
+    /**
+     * The projects this actor may see.
+     *
+     * <p>Filtered by a READ check on each project's own root, so "may not read the project" and "the
+     * project is not there" look identical from outside — which is the same reason
+     * {@link ProjectRegistry#require} answers {@code FILE_NOT_FOUND}.</p>
+     */
+    public List<ProjectInfo> projects(WorkspaceActor actor) {
+        List<ProjectInfo> visible = new ArrayList<>();
+        for (WorkspaceProject project : projects.all()) {
+            CgPath root = CgPath.ofProject(project.id());
+            if (permission.allows(actor, project, root, WorkspaceOperation.READ)) {
+                visible.add(project.info());
+            }
+        }
+        return visible;
+    }
+
+    /**
+     * One directory's entries — the listing a client caches, {@code etag} and all.
+     *
+     * <p>Per directory and lazy, matching a tree that expands lazily anyway. A whole-project manifest is
+     * a large single response and pays for directories nobody opens.</p>
+     */
+    public List<CgFileEntry> manifest(WorkspaceActor actor, CgPath directory) {
+        authorise(actor, directory, WorkspaceOperation.READ);
+        List<CgFileEntry> entries = files.list(directory);
+        List<String> excludes = projects.require(directory).excludes();
+        if (excludes.isEmpty()) return entries;
+
+        List<CgFileEntry> kept = new ArrayList<>(entries.size());
+        for (CgFileEntry entry : entries) {
+            if (!isExcluded(entry.name(), excludes)) kept.add(entry);
+        }
+        return kept;
+    }
+
+    /** A file, with the etag a later write must quote back. */
+    public FileContent read(WorkspaceActor actor, CgPath path) {
+        authorise(actor, path, WorkspaceOperation.READ);
+        // STAT BEFORE READ, and the etag comes from the stat. Taking it afterwards would describe the
+        // file as it is once the bytes are in hand, which is a different moment.
+        CgFileEntry entry = files.stat(path);
+        if (entry.isDirectory()) throw CgFileSystemException.isADirectory(path);
+        return new FileContent(path, files.read(path), entry.etag());
+    }
+
+    /**
+     * Replaces a file, refusing if it moved since {@code expectedEtag} was taken.
+     *
+     * <p><b>The re-stat is the guarantee, and it is here rather than in a watcher.</b> Whatever a
+     * platform's file-watching story is — and on a network mount it is often nothing — a write cannot land
+     * on a file that changed underneath, because this looks immediately before writing. Watching only ever
+     * makes a client find out <em>sooner</em>; correctness never rests on it.</p>
+     *
+     * @param expectedEtag the etag the caller last saw, or {@code null} to write unconditionally
+     * @return the etag the file now has
+     * @throws WorkspaceConflictException if the file moved
+     */
+    public String write(WorkspaceActor actor, CgPath path, byte[] content, String expectedEtag) {
+        authorise(actor, path, WorkspaceOperation.WRITE);
+        if (expectedEtag != null) {
+            String actual = files.stat(path).etag();          // throws FILE_NOT_FOUND if it vanished
+            if (!expectedEtag.equals(actual)) {
+                throw new WorkspaceConflictException(path, expectedEtag, actual);
+            }
+        }
+        files.write(path, content, false, true);
+        return files.stat(path).etag();
+    }
+
+    /**
+     * Creates a file that is not there.
+     *
+     * <p>Separate from {@link #write} because the failure is different and matters: New File onto an
+     * existing path must refuse, not clobber something that appeared while the user was typing a name.</p>
+     */
+    public String create(WorkspaceActor actor, CgPath path, byte[] content) {
+        authorise(actor, path, WorkspaceOperation.WRITE);
+        files.write(path, content, true, false);
+        return files.stat(path).etag();
+    }
+
+    public void mkdir(WorkspaceActor actor, CgPath path) {
+        authorise(actor, path, WorkspaceOperation.WRITE);
+        files.mkdir(path);
+    }
+
+    public void delete(WorkspaceActor actor, CgPath path, boolean recursive) {
+        authorise(actor, path, WorkspaceOperation.WRITE);
+        files.delete(path, recursive);
+    }
+
+    /** Both ends are authorised — a move is a write in two places. */
+    public void rename(WorkspaceActor actor, CgPath from, CgPath to, boolean overwrite) {
+        authorise(actor, from, WorkspaceOperation.WRITE);
+        authorise(actor, to, WorkspaceOperation.WRITE);
+        if (!from.project().equals(to.project())) {
+            throw new CgFileSystemException(CgFileError.INVALID_PATH,
+                    "cannot rename across projects: " + from + " -> " + to);
+        }
+        files.rename(from, to, overwrite);
+    }
+
+    /** The bytes of a file and the etag they were read at. */
+    public record FileContent(CgPath path, byte[] content, String etag) {
+    }
+
+    // ── Internals ───────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Resolves the project and asks the host, in that order.
+     *
+     * <p>Refusal is {@link CgFileError#NO_PERMISSIONS} with a message that does not say whether the path
+     * exists. Anything more specific is an oracle a client can probe to map a server's disk.</p>
+     */
+    private void authorise(WorkspaceActor actor, CgPath path, WorkspaceOperation operation) {
+        WorkspaceProject project = projects.require(path);
+        if (!permission.allows(actor, project, path, operation)) {
+            throw CgFileSystemException.denied(path);
+        }
+    }
+
+    /**
+     * Glob matching, restricted to what an exclusion list actually needs.
+     *
+     * <p>{@code *} matches within one name and {@code ?} matches one character; there is no {@code **},
+     * because these are applied per directory entry rather than to a whole path. A full glob engine here
+     * would be a lot of surface for {@code node_modules} and {@code .git}.</p>
+     */
+    private static boolean isExcluded(String name, List<String> patterns) {
+        for (String pattern : patterns) {
+            if (matches(name, pattern, 0, 0)) return true;
+        }
+        return false;
+    }
+
+    private static boolean matches(String name, String pattern, int n, int p) {
+        while (p < pattern.length()) {
+            char c = pattern.charAt(p);
+            if (c == '*') {
+                for (int skip = n; skip <= name.length(); skip++) {
+                    if (matches(name, pattern, skip, p + 1)) return true;
+                }
+                return false;
+            }
+            if (n >= name.length()) return false;
+            if (c != '?' && c != name.charAt(n)) return false;
+            n++;
+            p++;
+        }
+        return n == name.length();
+    }
+}

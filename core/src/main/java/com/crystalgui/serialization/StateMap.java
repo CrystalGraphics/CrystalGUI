@@ -124,6 +124,52 @@ public final class StateMap<T> {
         }
     }
 
+    /**
+     * Raw bytes — file content, and anything else that is not text.
+     *
+     * <p>Goes through {@link DynamicOps#createBytes}, so a format with a native byte type pays nothing
+     * and a textual one base64s. Added with the remote workspace; before it, nothing on the wire was
+     * binary.</p>
+     */
+    public StateMap<T> putBytes(String key, byte[] value) {
+        entries.put(key, ops.createBytes(value == null ? new byte[0] : value));
+        return this;
+    }
+
+    /**
+     * A list of sub-maps — a directory listing, a set of results.
+     *
+     * <p>The one shape this needed beyond scalars. Each element is written by {@code element}, which gets
+     * a fresh {@link StateMap} to fill, so a caller never touches {@link DynamicOps} directly.</p>
+     */
+    public <E> StateMap<T> putList(String key, java.util.List<E> values,
+                                   java.util.function.BiConsumer<StateMap<T>, E> element) {
+        java.util.List<T> encoded = new java.util.ArrayList<>(values.size());
+        for (E value : values) {
+            StateMap<T> entry = new StateMap<>(ops);
+            element.accept(entry, value);
+            encoded.add(entry.encode());
+        }
+        entries.put(key, ops.createList(encoded));
+        return this;
+    }
+
+    public byte[] getBytes(String key) {
+        T value = entries.get(key);
+        return value == null ? new byte[0] : ops.getBytesValue(value);
+    }
+
+    /** Reads back what {@link #putList} wrote. Absent or empty both give an empty list. */
+    public <E> java.util.List<E> getList(String key, java.util.function.Function<StateMap<T>, E> element) {
+        T value = entries.get(key);
+        if (value == null) return java.util.List.of();
+        java.util.List<E> out = new java.util.ArrayList<>();
+        for (T encoded : ops.getListValue(value)) {
+            out.add(element.apply(new StateMap<>(ops, encoded)));
+        }
+        return out;
+    }
+
     // ── Plumbing ────────────────────────────────────────────────────────────
 
     public boolean isEmpty() {
