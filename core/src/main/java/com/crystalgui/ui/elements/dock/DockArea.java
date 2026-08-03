@@ -60,6 +60,8 @@ public class DockArea extends UIElement implements UIFrameTicker {
     @Nullable
     private DockDropZone previewZone;
     private boolean previewIsOuterEdge;
+    /** Where in the target strip a MERGE would land, or negative to append. */
+    private int previewTabIndex = -1;
 
     public DockArea(DockPanelRegistry<UIElement> registry, DockLayout layout) {
         this.registry = registry;
@@ -160,8 +162,11 @@ public class DockArea extends UIElement implements UIFrameTicker {
 
         UIElement built = buildNode(layout.root(), 0);
         if (built != null) {
+            // flex-grow plus a zero basis, and deliberately NOT an explicit width/height: this area is a
+            // flex container, so the child fills the main axis by growing and the cross axis by stretch.
+            // A literal size here would have to be a real number, and there is no "auto" to write.
             StyleGroup.defaultPipeline(built.getStyle().getLayoutGroup(),
-                    l -> l.width(-1f).height(-1f).flexGrow(1f).flexBasis(0));
+                    l -> l.flexGrow(1f).flexBasis(0));
             addInternalChild(built);
         }
         if (activeGroup == null || activeGroup.leaf().parent() == null) {
@@ -265,6 +270,29 @@ public class DockArea extends UIElement implements UIFrameTicker {
     @Nullable
     public DockLeaf performDrop(DockDragPayload payload, @Nullable DockLeaf target,
                                 DockDropZone zone, boolean outerEdge) {
+        return performDrop(payload, target, zone, outerEdge, -1);
+    }
+
+    /** As above, with a position in the target strip for a merge. Negative appends. */
+    @Nullable
+    public DockLeaf performDrop(DockDragPayload payload, @Nullable DockLeaf target,
+                                DockDropZone zone, boolean outerEdge, int tabIndex) {
+        // A reorder inside one strip is a MOVE, not a detach-and-reinsert. Going through detach would
+        // remove the panel, find the leaf empty, and collapse the pane the user is dragging within --
+        // which for a single-tab group deletes the thing being reordered.
+        if (!outerEdge && zone == DockDropZone.MERGE && target != null
+                && target == payload.sourceLeaf() && !payload.isWholeGroup()) {
+            int from = target.indexOf(payload.panel());
+            if (from >= 0 && tabIndex >= 0) {
+                // An insertion index counts boundaries, a target index counts slots: removing the panel
+                // first shifts everything after it down by one.
+                target.move(from, tabIndex > from ? tabIndex - 1 : tabIndex);
+                requestRebuild();
+                return target;
+            }
+            return target;
+        }
+
         DockNode moved = detach(payload);
         if (moved == null) return null;
 
@@ -278,7 +306,7 @@ public class DockArea extends UIElement implements UIFrameTicker {
                 // answer that cannot lose it.
                 landed = layout.dropOnOuterEdge(DockDropZone.SPLIT_RIGHT, moved);
             } else {
-                landed = layout.drop(target, zone, moved);
+                landed = layout.drop(target, zone, moved, tabIndex);
             }
         }
         requestRebuild();
@@ -393,7 +421,7 @@ public class DockArea extends UIElement implements UIFrameTicker {
                 return;
             }
             DockLeaf target = previewGroup != null ? previewGroup.leaf() : null;
-            performDrop(payload, target, previewZone, previewIsOuterEdge);
+            performDrop(payload, target, previewZone, previewIsOuterEdge, previewTabIndex);
             clearPreview();
         }, false, true);
     }
@@ -409,15 +437,28 @@ public class DockArea extends UIElement implements UIFrameTicker {
         float areaX = localArea.x() - areaCache.getX();
         float areaY = localArea.y() - areaCache.getY();
 
-        // The outer edge is asked first: it is the only way to say "beside ALL of these", and a pointer in
-        // the band is over some group as well, so a group-first order would never reach it.
-        DockDropZone outer = DockDropZones.forOuterEdge(areaX, areaY, areaCache.getWidth(), areaCache.getHeight());
-        if (outer != null) {
-            setPreview(null, outer, true);
+        DockGroup group = groupUnder(pointerX, pointerY);
+
+        // A tab strip beats the outer edge, and the ordering is load-bearing rather than a preference.
+        // The topmost group's strip sits INSIDE the area's top edge band, so an edge-first order makes
+        // tab reordering impossible in exactly the group people reorder tabs in most. An explicit aim at
+        // a strip is unambiguous; an edge band is ambient.
+        if (group != null && !payload.isWholeGroup() && group.isOverStrip(pointerX, pointerY)) {
+            int index = group.insertionIndexAt(pointerX);
+            if (isNoOpReorder(payload, group, index)) return false;
+            setPreview(group, DockDropZone.MERGE, false, index);
             return true;
         }
 
-        DockGroup group = groupUnder(pointerX, pointerY);
+        // Otherwise the outer edge wins over the group under the pointer: it is the only way to say
+        // "beside ALL of these", and a pointer in the band is always over some group as well, so a
+        // group-first order would never reach it.
+        DockDropZone outer = DockDropZones.forOuterEdge(areaX, areaY, areaCache.getWidth(), areaCache.getHeight());
+        if (outer != null) {
+            setPreview(null, outer, true, -1);
+            return true;
+        }
+
         if (group == null) return false;
 
         // Dropping a group into itself or its own descendants would detach the tree from its own root.
@@ -438,8 +479,21 @@ public class DockArea extends UIElement implements UIFrameTicker {
                 localGroup.x() - groupCache.getX(), localGroup.y() - groupCache.getY(),
                 groupCache.getWidth(), groupCache.getHeight(),
                 true, payload.isGroupDrag());
-        setPreview(group, zone, false);
+        setPreview(group, zone, false, -1);
         return true;
+    }
+
+    /**
+     * Whether dropping here would put the panel back exactly where it already is.
+     *
+     * <p>Both boundaries of a tab count as "no move": dragging a tab onto its own left edge and onto its
+     * own right edge are the same non-gesture, and offering a caret for either is a promise the drop
+     * cannot keep.</p>
+     */
+    private boolean isNoOpReorder(DockDragPayload payload, DockGroup group, int index) {
+        if (group.leaf() != payload.sourceLeaf()) return false;
+        int from = group.leaf().indexOf(payload.panel());
+        return from >= 0 && (index == from || index == from + 1);
     }
 
     @Nullable
@@ -450,18 +504,34 @@ public class DockArea extends UIElement implements UIFrameTicker {
         return null;
     }
 
-    private void setPreview(@Nullable DockGroup group, DockDropZone zone, boolean outerEdge) {
-        if (previewGroup != null && previewGroup != group) previewGroup.hideDropPreview();
+    private void setPreview(@Nullable DockGroup group, DockDropZone zone, boolean outerEdge, int tabIndex) {
+        if (previewGroup != null && previewGroup != group) hidePreviewOn(previewGroup);
         previewGroup = group;
         previewZone = zone;
         previewIsOuterEdge = outerEdge;
-        if (group != null) group.showDropPreview(zone);
+        previewTabIndex = tabIndex;
+        if (group == null) return;
+        if (tabIndex >= 0) {
+            // A caret between tabs, not a half-pane wash: the two previews answer different questions and
+            // showing both at once says the drop will do two things.
+            group.hideDropPreview();
+            group.showInsertionMarker(tabIndex);
+        } else {
+            group.hideInsertionMarker();
+            group.showDropPreview(zone);
+        }
     }
 
     private void clearPreview() {
-        if (previewGroup != null) previewGroup.hideDropPreview();
+        if (previewGroup != null) hidePreviewOn(previewGroup);
         previewGroup = null;
         previewZone = null;
         previewIsOuterEdge = false;
+        previewTabIndex = -1;
+    }
+
+    private static void hidePreviewOn(DockGroup group) {
+        group.hideDropPreview();
+        group.hideInsertionMarker();
     }
 }

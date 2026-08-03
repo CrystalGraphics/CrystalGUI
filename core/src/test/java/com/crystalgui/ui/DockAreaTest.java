@@ -287,6 +287,107 @@ public class DockAreaTest extends UiTestBase {
         layout.checkInvariants();
     }
 
+    // ── Reordering within a strip ───────────────────────────────────────────────────────────────
+
+    /** Two panels in one group, so there is a strip to reorder in. */
+    private DockGroup setUpOneGroupOfTwo() {
+        DockLeaf only = new DockLeaf(alpha, beta);
+        layout = DockLayout.of(only);
+
+        area = new DockArea(registry(), layout);
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                .flexDirection(FlexDirection.COLUMN));
+        root.addChild(area);
+        area.layout(l -> l.width(600).height(400));
+        window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+        window.init(1200, 800);
+        frame();
+        frame();
+        return area.groupFor(only);
+    }
+
+    /** Drags {@code panel}'s tab onto another tab, at the given fraction across that tab. */
+    private void dragTabOntoTab(DockPanelRef panel, DockPanelRef onto, float fx) {
+        int[] from = centre(tabOf(panel));
+        int[] to = at(tabOf(onto), fx, 0.5f);
+
+        mouseTo(from[0], from[1]);
+        frame();
+        press(from[0], from[1]);
+        mouseTo(to[0], to[1]);
+        frame();
+        release(to[0], to[1]);
+        frame();
+        frame();
+    }
+
+    /**
+     * <b>A drag inside the strip reorders; it never splits.</b>
+     *
+     * <p>Aiming at a strip is unambiguous, so offering a split there would make the top tenth of every
+     * group unable to do the one thing its tabs are for.</p>
+     */
+    @Test
+    public void draggingATabWithinItsStripReordersIt() {
+        setUpOneGroupOfTwo();
+        assertEquals(List.of("alpha+beta"), panelIdsPerGroup());
+
+        dragTabOntoTab(alpha, beta, 0.9f);   // past beta's midpoint, so alpha lands after it
+
+        assertEquals("still one group -- no split", 1, layout.leaves().size());
+        assertEquals(List.of("beta+alpha"), panelIdsPerGroup());
+        layout.checkInvariants();
+    }
+
+    /** Dropping on the left half of a tab lands before it, the rule every tab strip uses. */
+    @Test
+    public void droppingOnTheLeftHalfOfATabLandsBeforeIt() {
+        setUpOneGroupOfTwo();
+
+        dragTabOntoTab(beta, alpha, 0.1f);   // before alpha's midpoint
+
+        assertEquals(List.of("beta+alpha"), panelIdsPerGroup());
+        layout.checkInvariants();
+    }
+
+    /**
+     * <b>Reordering a single-tab group must not delete it.</b>
+     *
+     * <p>A reorder inside one strip is a move, not a detach-and-reinsert: going through the detach path
+     * would remove the panel, find the leaf empty, and collapse the very pane being dragged within.</p>
+     */
+    @Test
+    public void reorderingWithinASingleTabGroupDoesNotDeleteIt() {
+        setUpTwoGroups();
+        DockGroup own = area.groupFor(layout.leafContaining(alpha));
+
+        int[] tab = centre(tabOf(alpha));
+        mouseTo(tab[0], tab[1]);
+        frame();
+        press(tab[0], tab[1]);
+        mouseTo(tab[0] + 12, tab[1]);
+        frame();
+        release(tab[0] + 12, tab[1]);
+        frame();
+        frame();
+
+        assertEquals("both groups still there", List.of("alpha", "beta"), panelIdsPerGroup());
+        layout.checkInvariants();
+    }
+
+    /** A panel dragged into another group's strip lands at the position aimed at, not at the end. */
+    @Test
+    public void aPanelDroppedOnAnotherStripLandsWhereItWasAimed() {
+        setUpTwoGroups();
+        DockGroup right = area.groupFor(layout.leafContaining(beta));
+
+        dragTabOntoTab(alpha, beta, 0.1f);   // before beta, not appended after it
+
+        assertEquals(List.of("alpha+beta"), panelIdsPerGroup());
+        layout.checkInvariants();
+    }
+
     // ── Active group ────────────────────────────────────────────────────────────────────────────
 
     /** Something is always active once there is anything to be active. */
