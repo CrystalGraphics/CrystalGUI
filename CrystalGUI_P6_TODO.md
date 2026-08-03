@@ -1511,7 +1511,52 @@ An interface in `core/` with per-platform implementations, following `UIClipboar
 >   one the sketch never raises — whether a *server-authored* tree may touch the filesystem at all — is
 >   the one with security consequences.
 
-### 6.1.11 Docking and workspace layout · `TODO` — researched 2026-08-04
+### 6.1.11 Docking and workspace layout · `DONE` (2026-08-04)
+
+> **Shipped, all eleven deliverables.** `com.crystalgui.ui.elements.dock` plus an n-ary `SplitView`, driven
+> end to end by `--mode=cgui-dock`. **1934 tests, 0 failures** — 44 of them headless (the tree, the drop
+> geometry, the codec) and 15 in the widget layer.
+>
+> **Four divergences from the plan below, each deliberate.**
+>
+> 1. **D7 is not what shipped.** Sizes are **weights within a branch**, not absolute pixels. The renderer
+>    is flex-based and `flex-grow` *is* a weight, so pixels would mean converting on every layout and back
+>    on every save — a lossy round trip that drifts. What the pixel model was buying ("this sidebar is
+>    240px regardless") moved to `SplitView`'s per-pane minimums, which is where a constraint belongs. The
+>    codec still records the viewport, so absolute reconstruction stays possible.
+> 2. **`LayoutPriority` was not ported.** VS Code's only has meaning when its `proportionalLayout` is off;
+>    flex weights are inherently proportional — VS Code's own default — so there is nothing for the enum to
+>    select between. A pane that must keep its pixel width across a resize is a fixed `flex-basis` with
+>    `flex-grow: 0`, a different mechanism, to add when something asks rather than by analogy.
+> 3. **Trap 4 dissolved itself.** Deriving orientation from depth means a node moved by a collapse
+>    re-derives its axis, so VS Code's `orthogonal(sibling.orientation)` rebuild has no counterpart here.
+>    What *does* still need care, and is tested: promoting a branch to root must flip the root orientation,
+>    or the whole layout turns on its side after an unrelated close.
+> 4. **A new ordering rule, not in the plan: the tab strip beats the outer edge.** The topmost group's
+>    strip sits *inside* the area's top edge band, so an edge-first order makes tab reordering impossible
+>    in exactly the group people reorder tabs in most. An explicit aim at a strip is unambiguous; an edge
+>    band is ambient.
+>
+> **Three bugs the tests caught**, all mine and all worth the record:
+>
+> - The outer-edge corner tie-break compared penetration depths with `min()` when "deeper" is the *larger*
+>   value — and `Float.MAX_VALUE` as the absent sentinel is the same inversion in the other direction.
+> - An outer-edge drop after the tree had collapsed to one pane left a one-child carrier branch. Only
+>   reachable through a real drag (detaching what you are moving collapses the branch behind it), which is
+>   why the headless suite had not produced it.
+> - The built root was written with `width(-1)` as an invented "auto" sentinel, so it laid out at zero and
+>   nothing inside it was hit-testable. It went unnoticed because a `SplitView` root is rescued by
+>   `default.css`'s `splitview { width: 100%; height: 100% }` at STYLESHEET origin, which outranks a
+>   DEFAULT-origin write — so it broke only for a single-group layout, where there is no split view and
+>   `DockGroup` has no sheet rule of its own. **Found by probing, not by reasoning.**
+>
+> **Still deferred, unchanged from D9:** auto-hide, stripe rails, `SLIDING` mode. All purely additive.
+> A float's position is not yet persisted (the format carries one root, not a list) — see the open
+> questions, which stand.
+
+<details><summary>The research and the plan, as written before implementation</summary>
+
+### 6.1.11 Docking and workspace layout · researched 2026-08-04
 
 > **The one-line version of the old sketch was wrong in a way worth keeping.** It said *"serialisation is
 > close to free — `UIDescriptionCodec` and `StateMap` already round-trip a tree."* They do, and it is the
@@ -1789,6 +1834,8 @@ last.
 | Does a float survive a session, or reset to docked? | D8 | VS Code persists auxiliary windows; IntelliJ persists `type`. Persisting is more work only in that the format needs a list of roots rather than one |
 | Is the layout per-world, per-server, or global? | D8 | Interacts with 6.1.10: a workspace layout naming shader-graph documents is meaningless against a different server's projects. Probably keyed by project, defaulting to global |
 | Do tool panels need the stripe rail before this is usable in-game? | D9 | Screen space in Minecraft is scarcer than in an IDE; auto-hide may turn out to be load-bearing rather than a nicety. Cheap to answer from the scene once it exists |
+
+</details>
 
 ### 6.1.12 Chrome · `TODO`
 
@@ -2850,7 +2897,7 @@ leave it empty** rather than inventing a preview pipeline the graph compiler wil
 ```
 
 **Recommended sequence:** ~~6.1.1~~ → ~~6.1.2~~ → ~~6.1.3~~ → ~~6.1.4~~ → ~~6.1.5~~ → ~~6.1.6~~ →
-~~6.1.7~~ → ~~6.1.7b~~ → ~~6.1.8~~ → ~~6.1.10~~ (MVP complete) → **6.1.11 (next)**, then 6.1.12, then the 6.2
+~~6.1.7~~ → ~~6.1.7b~~ → ~~6.1.8~~ → ~~6.1.10~~ → ~~6.1.11~~ (complete) → **6.1.12 (next)**, then the 6.2
 chain. ~~6.1.9's *design* settled before 6.1.6 starts~~ — done, see 6.1.9; its implementation lands with
 6.1.6.
 
