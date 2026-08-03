@@ -1084,9 +1084,19 @@ menuitem:focus-visible {
 /* `Menu.onOpened` parks focus on the menu itself so nothing looks pre-selected on open (see that
  * method's doc) — but `requestFocus` RINGS by default, and a ring around the whole popup the instant
  * it appears is exactly the affordance this was trying to avoid. Every real highlight in a menu is the
- * row's own `menuitem:focus` background; the container never needs a ring of its own. */
+ * row's own `menuitem:focus` background; the container never needs a ring of its own.
+ *
+ * RESTATES the border rather than zeroing it, and that is the whole point of this rule now.
+ * `outline: 0` suppressed the focus ring correctly and took the menu's own 1px chrome with it, because
+ * in this engine they are the same property — so a menu opened straight into focus had NO border, and
+ * grew one the moment you hovered a row and focus moved off the container. It read as "the border only
+ * appears on hover", which points at `:hover` and is nowhere near the cause.
+ *
+ * The value is repeated literally from the base rule above rather than shared through a custom property:
+ * `outline` is a shorthand, and a `var()` inside a shorthand silently resolves to nothing here — the
+ * same trap that produced zero padding on the main preview's header. */
 menu:focus-visible {
-    outline: 0;
+    outline: 1px #8C8C8C;
 }
 menuitem:disabled {
     background: #00000000;
@@ -1310,6 +1320,15 @@ dialog .__title-bar__ .__close__:hover {
     width: 8px;
     height: 8px;
     z-index: 11;
+}
+
+/* ONLY the bottom-right corner draws a grip. The other three stay full-size and fully draggable —
+ * this is `background`, not `display` or `width`, so the hit area is untouched.
+ *
+ * That asymmetry is the convention every desktop toolkit landed on, and the web's single grabber is the
+ * same idea taken further: one visible grip says "this resizes" without ringing the element in four
+ * marks that read as selection handles. A panel wearing all four looks selected rather than resizable. */
+.__resizer-bottom-right__ {
     background: #FFFFFF40;
 }
 .__resizer-top-left__     { top: 0;    left: 0; }
@@ -3034,6 +3053,73 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     min-height: 12px;
     flex-grow: 0;
 }
+
+/* ── Main Preview (P6.3.12) ─────────────────────────────────────────────────────────────────────
+ * The finished shader on a mesh, in a floating resizable panel. Functional geometry only — every
+ * colour is graph.css's, per the usual rule.
+ *
+ * `resize: both` rather than a fixed size: the whole reason to have a panel rather than a fixed
+ * thumbnail is to be able to make it big enough to judge a material on. The min-* pair stops a drag
+ * collapsing it to nothing, which is unrecoverable from the user's side — there is no handle left. */
+.__main-preview__ {
+    flex-direction: column;
+    width: 160px;
+    height: 176px;
+    min-width: 140px;
+    min-height: 160px;
+    resize: both;
+    /* Bottom-right of the VIEWPORT, which is where CanvasView.addOverlay puts it — so it holds station
+     * while the graph pans underneath. Unity docks its Main Preview in the same corner. */
+    right: 16px;
+    bottom: 16px;
+}
+
+/* The header strip, copied from the configurator's group heading rather than derived.
+ *
+ * `.__configurator-group__ > .__head__` is a flex ROW with `align-items: center` and the title as a
+ * CHILD, and that structure is the whole reason its headings sit centred: a UIText draws its glyphs from
+ * its own box top, so a text element that IS the strip has nothing for `align-items` to act on and its
+ * ascenders clip against the panel edge. Same tokens, same shape. */
+.__main-preview__ > .__head__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: var(--cfg-gap);
+    min-height: var(--cfg-row-h);
+    /* The two long-hands, NOT `padding-all: 0px var(--cfg-pad-x)`. The shorthand silently produced zero
+     * padding — measured, not guessed: the title's inset went from 12px to 0. Whether it is the two-value
+     * form or `var()` inside a shorthand that fails to substitute, the shorthand is not a safe place for
+     * a custom property, and the configurator writes these as long-hands for the same reason. */
+    padding-left: var(--cfg-pad-x);
+    padding-right: var(--cfg-pad-x);
+    flex-grow: 0;
+    flex-shrink: 0;
+    cursor: move;
+}
+
+/* Ellipsis, not wrap — the configurator's own reasoning verbatim: width:0/flex-grow reserves the
+ * shrink-to space, flex-shrink:1 allows it, and white-space:nowrap is what makes text-overflow mean
+ * anything at all. A panel dragged narrow must clip its title, never grow a second line. */
+.__main-preview__ > .__head__ > .__title__ {
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* `height: 0; flex-grow: 1` — this engine's flex-shrink defaults to 0, so without the zero basis the
+ * surface keeps its content height and overhangs the panel that contains it. The same trap
+ * FlexShrinkOverflowTest pins for `__panes__`. */
+.__main-preview__ .__surface__ {
+    height: 0;
+    flex-grow: 1;
+    /* The picture is drawn in Java, but the surface still has to be hittable: it carries the orbit
+     * drag and the right-click mesh menu. */
+    cursor: grab;
+}
+
+.__main-preview__.__orbiting__ .__surface__ { cursor: grabbing; }
 
 /* ── Dock ────────────────────────────────────────────────────────────────────────
  *

@@ -613,3 +613,36 @@ graphnode .__config-control__.__color__ .__swatch__ {
 colorselector .__channel-row__ slider .__thumb__ {
     outline: none;
 }
+
+/* ── Main Preview (P6.3.12) ─────────────────────────────────────────────────────────────────────
+ * Unity's floating preview panel: a title strip over a dark stage.
+ *
+ * The stage is deliberately DARKER than the node canvas rather than matching it. A preview is a
+ * picture, and a picture needs a border of its own to read as one — matching the canvas would make a
+ * dark shader look like a hole in the editor. */
+.__main-preview__ {
+    background: var(--node-canvas);
+    border-color: var(--node-edge);
+    outline-width: 1px;
+    outline-color: var(--node-edge);
+    border-radius: 3px;
+}
+
+/* The NODE palette's header colours, not the configurator's band. Reverted deliberately: --cfg-band
+ * (#383838) sits too close to this panel's own --node-canvas body for the strip to read as a separate
+ * surface, and the contrast that made the header legible went with it. The configurator's SHAPE is what
+ * was worth copying here (see default.css) — its palette is tuned against an inspector's lighter panel,
+ * not against a graph canvas. */
+.__main-preview__ > .__head__ {
+    background: var(--node-header);
+    color: var(--node-text-bright);
+}
+
+/* Solid, not a checkerboard — yet. With `Alpha` now a real master port, a transparent material over a
+ * flat colour is genuinely ambiguous, and a checkerboard is the standard answer. It is not here because
+ * the honest ways to draw one are a repeating texture asset (which does not exist) or a grid of quads
+ * painted in Java (which would put two colours in Java, against this project's rule). Worth doing
+ * properly rather than quickly. */
+.__main-preview__ .__surface__ {
+    background: #1A1A1A;
+}

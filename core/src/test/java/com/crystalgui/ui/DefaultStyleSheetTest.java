@@ -20,6 +20,41 @@ import static org.junit.Assert.*;
  */
 public class DefaultStyleSheetTest extends UiTestBase {
 
+    /**
+     * <b>An open menu keeps its border while it holds focus.</b>
+     *
+     * <p>{@code Menu.onOpened} parks focus on the container so no row looks pre-selected, and
+     * {@code menu:focus-visible} suppressed the resulting ring with {@code outline: 0}. In this engine a
+     * popup's chrome border <em>is</em> an outline, so that took the border with it: a menu opened
+     * straight into focus had none, and grew one the instant you hovered a row and focus moved off the
+     * container. Reported as "the border only appears on hover", which points at {@code :hover} and is
+     * nowhere near the cause.</p>
+     *
+     * <p>Asserted through the real cascade with the element genuinely focused, because the bug is
+     * precisely that one rule silently cancels another — reading either rule alone shows nothing wrong.</p>
+     */
+    @Test
+    public void aFocusedMenuKeepsItsBorder() {
+        com.crystalgui.ui.elements.Menu menu = new com.crystalgui.ui.elements.Menu();
+        menu.addItem("Sphere");
+
+        UIElement root = new UIElement().layout(l -> l.width(300).height(300));
+        root.addChild(menu);
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(300, 300);
+        window.updateWithoutPainting();
+
+        float unfocused = menu.getStyle().getGeneralGroup().outlineWidth().resolve(100f);
+        assertTrue("the base rule must give a menu a border at all", unfocused > 0f);
+
+        window.getInputHandler().requestFocus(menu);
+        window.updateWithoutPainting();
+
+        assertEquals("focus must not erase the menu's own chrome",
+                unfocused, menu.getStyle().getGeneralGroup().outlineWidth().resolve(100f), 0.001f);
+    }
+
     /** A missing/misplaced default.css degrades into every widget laying out at 0x0, which is easy to
      * miss. StyleSheetRegistry hands back an empty sheet rather than failing, and DEFAULT holds that
      * forever — so pin it here. */

@@ -148,7 +148,7 @@ public class CanvasView extends UIElement implements UIFrameTicker {
         // i.e. everywhere except where you actually want to grab.
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!panEnabled || !isEnabled()) return;
-            if (isInsidePromotedChild(event.getTarget())) return;
+            if (isBackgroundGestureExempt(event.getTarget())) return;
             if (!isPanTrigger(event)) return;
             event.stopPropagation();
             beginPan(event.getPosition().x(), event.getPosition().y(), event.getButtonId());
@@ -162,7 +162,7 @@ public class CanvasView extends UIElement implements UIFrameTicker {
             // only claims the wheel while it actually scrolls -- deliberately, so a list at its end chains
             // outward -- so a menu whose list is short or already at the bottom hands the wheel straight
             // to this handler, and the graph zooms under an open menu. That is never what was meant.
-            if (isInsidePromotedChild(event.getTarget())) return;
+            if (isBackgroundGestureExempt(event.getTarget())) return;
             float notches = event.getScroll();
             if (notches == 0f) return;
             // NEGATED, and the sign is not guessable: in this engine a POSITIVE notch means the wheel
@@ -196,6 +196,58 @@ public class CanvasView extends UIElement implements UIFrameTicker {
     @Override
     public boolean acceptsPublicChildren() {
         return false;
+    }
+
+    /**
+     * Adds a panel that floats <b>over</b> the canvas and does not pan or zoom with it.
+     *
+     * <h3>This is the case {@link #acceptsPublicChildren()} refuses, turned into a feature</h3>
+     * <p>That method's note says a child of the viewport "would sit outside the transform and stay nailed
+     * to the screen while everything else panned" — which is exactly right, and exactly what a floating
+     * inspector, minimap or shader preview wants. Refusing it wholesale left a caller with only two
+     * options: put the panel on the plane, where it drifts off-screen the moment you pan, or put it
+     * outside the canvas entirely, where it stops being <em>over</em> the graph at all.</p>
+     *
+     * <p>The overlay is an internal child, so it stays out of {@link #content()}, out of node iteration,
+     * and out of anything that treats the plane's children as the document.</p>
+     */
+    /** Floating panels that sit over the canvas and are not part of it. @see #addOverlay */
+    private final java.util.Set<UIElement> overlays = new java.util.HashSet<>();
+
+    public CanvasView addOverlay(UIElement panel) {
+        StyleGroup.defaultPipeline(panel.getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE));
+        overlays.add(panel);
+        addInternalChild(panel);
+        return this;
+    }
+
+    /**
+     * Whether a press or wheel landed inside a floating overlay. @see #addOverlay
+     *
+     * <p><b>Separate from {@link #isInsidePromotedChild} because an overlay is neither promoted nor a
+     * node</b>, and every background gesture this class and its subclasses run has to exclude all three.
+     * Missing this one is not subtle in its effect but is very subtle in its symptom: a press on an
+     * overlay's resize handle starts a resize drag, then bubbles on to the marquee handler, which starts
+     * a drag <em>of its own</em> with pointer capture — and {@code UIDragController} cancels the first to
+     * make room. The handle looks completely dead, and the press "releases immediately", because the
+     * gesture that would have finished it was torn down a microsecond after it began.</p>
+     *
+     * <p>Membership rather than a structural test: an overlay is an internal child, and so are the
+     * canvas's own resize handles and anything else the engine hangs there, so "internal child of this"
+     * would claim things that are genuinely the canvas's.</p>
+     */
+    protected boolean isInsideOverlay(@Nullable UIElement target) {
+        if (overlays.isEmpty()) return false;
+        for (UIElement element = target; element != null && element != this; element = element.getParent()) {
+            if (overlays.contains(element)) return true;
+        }
+        return false;
+    }
+
+    /** Whether a background gesture should ignore this target entirely — promoted, or a floating panel. */
+    protected boolean isBackgroundGestureExempt(@Nullable UIElement target) {
+        return isInsidePromotedChild(target) || isInsideOverlay(target);
     }
 
     /** Adds {@code node} to the plane at a world position. Absolute positioning is what makes a node

@@ -1,12 +1,6 @@
 package com.crystalgui.graph.shader;
 
-import com.crystalgraphics.shadergraph.CgMasterNode;
-import com.crystalgraphics.shadergraph.CgShaderEmitter;
-import com.crystalgraphics.shadergraph.CgShaderGraph;
-import com.crystalgraphics.shadergraph.CgShaderNode;
-import com.crystalgraphics.shadergraph.CgShaderNodeProperty;
-import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
-import com.crystalgraphics.shadergraph.CgShaderPort;
+import com.crystalgraphics.shadergraph.*;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.NodeData;
@@ -233,7 +227,11 @@ public final class ShaderGraphBridge {
             // Dynamic has no type until the compiler resolves one from what is connected, so refusing
             // here would refuse the connection that decides it.
             if (DYNAMIC_TYPE.equals(id) || DYNAMIC_TYPE.equals(other.id())) return true;
-            return id.equals(other.id()) || "float".equals(id);
+            // Delegates rather than restating the rule. There are TWO compatibility checks — a widget
+            // drag asks this one, a document write asks GLSL_PROMOTION — and they once disagreed, which
+            // produced a connection that was silently refused with no wire, no error and nothing to read.
+            // Sharing the implementation is what makes that impossible rather than merely tested.
+            return GLSL_PROMOTION.accepts(id, other.id());
         }
     }
 
@@ -320,7 +318,24 @@ public final class ShaderGraphBridge {
         // resolves one from what is actually connected, so refusing here would refuse the very
         // connection that decides it.
         if (DYNAMIC_TYPE.equals(from) || DYNAMIC_TYPE.equals(to)) return true;
-        return from.equals(to) || from.equals("float");
+        if (from.equals(to)) return true;
+
+        // Any numeric vector reaches any other: a narrower one is splatted, a wider one is truncated.
+        //
+        // <b>The truncating half reverses an earlier decision, deliberately.</b> The rule used to be that
+        // only a `float` promotes and nothing ever narrows, on the grounds that dropping components from
+        // an edge the user drew is a silent loss and belongs in a Split node they can see. That is a
+        // defensible position and it is not Unity's: there, a Vector4 dropped onto a Vector3 slot simply
+        // connects and loses its w, and a graph author reaching for `UV` → `Base Color` expects exactly
+        // that. Refusing it does not teach the rule, it reads as the editor being broken — which is how it
+        // was reported.
+        //
+        // Nothing is hidden by allowing it: the port labels carry their arity (`Out(4)` into
+        // `Base Color(3)`), so the truncation is visible at both ends of the wire before it is drawn.
+        CgShaderType source = CgShaderType.parse(from);
+        CgShaderType target = CgShaderType.parse(to);
+        return source != null && target != null
+                && source.isNumericVector() && target.isNumericVector();
     };
 
     // ── Compiler side: document to IR ───────────────────────────────────────
