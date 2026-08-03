@@ -3034,3 +3034,61 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     min-height: 12px;
     flex-grow: 0;
 }
+
+/* ── Dock ────────────────────────────────────────────────────────────────────────
+ *
+ * None of these widgets is in ElementRegistry, so their tag comes from UIElement.tagName()'s
+ * fallback: the simple class name, lowercased. That is deliberate rather than an omission — a
+ * DockArea needs a panel registry and a layout to exist at all, so there is no no-arg factory to
+ * register, and the same is already true of graphview and canvasview.
+ *
+ * A widget's cascade identity is its TAG, never its Java supertype, so floatingdock inherits nothing
+ * from `dialog` and has to name whatever it wants. */
+
+dockarea {
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+}
+
+dockgroup {
+    flex-direction: column;
+    background: #2B2B2B;
+    /* The group is a positioned ancestor for its own overlay and insertion caret, both of which are
+     * absolute and expect this box as their containing block. */
+    position: relative;
+}
+
+/* The drop preview: a translucent wash over the half of the pane the drop would take. Hit-testing is
+ * switched off in Java (setHitTest covers the whole subtree) rather than here — there is no
+ * pointer-events property, and an overlay that takes the pointer ends the drag on top of itself. */
+dockgroup .__drop-overlay__ {
+    background: #4A88C766;
+    border-all-radius: 2px;
+}
+
+/* The caret between two tabs during a reorder. Deliberately brighter than the overlay: it marks a
+ * single boundary rather than an area, so it has to read at 2px wide. */
+dockgroup .__insertion__ {
+    background: #7EB6FF;
+}
+
+/* Which group commands act on. An outline rather than a background, so a panel's own colour is not
+ * repainted every time focus moves. */
+dockgroup.__active__ {
+    outline-width: 1px;
+    outline-color: #4A88C7;
+}
+
+/* A panel whose type is registered but has no factory. Visible on purpose: a tab with nothing behind
+ * it is reportable, while a silently absent tab looks like the layout failed to restore. */
+dockgroup .__missing__ {
+    flex-grow: 1;
+    background: #3A2B2B;
+}
+
+floatingdock {
+    background: #1E1E1EF0;
+    min-width: 160px;
+    min-height: 120px;
+}
