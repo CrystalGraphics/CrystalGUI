@@ -97,6 +97,20 @@ first few KB. Git's heuristic, and right about files whose extension lies.
 
 ## MVP scope — what ships first
 
+> **Status: shipped, 2026-08-03.** Every "In" row below is implemented and covered by
+> `core/src/headlessTest/java/com/crystalgui/headless/Workspace*Test.java`, and driven end to end by the
+> harness scene `--mode=cgui-workspace`. `fs.changed` landed last; the "Out" list is unchanged and is now
+> the post-MVP backlog.
+>
+> **What `fs.changed` actually is.** Polling, seeded with each watched path's current etag, over *only*
+> what a client says it has open — a real `WatchService` is still deferred. It is **promptness, not
+> correctness**: a stale write was already refused by the re-stat in `WorkspaceService.write` before any
+> of this existed. This is how a client finds out *before* it tries to save. Two things it must not do,
+> both pinned by tests: announce the same change on every poll (an undismissable prompt), and report a
+> client's own save back to it (`WorkspaceRpc` calls `watcher.noteWritten` after a successful write —
+> without it, saving asks the user whether to reload their own work, and looks exactly like the conflict
+> the feature exists to report).
+
 **The goal is a foundation in motion, not a product.** Everything below is judged by one question: *does
 getting this wrong later mean a rewrite, or an addition?* Rewrites are in. Additions are out, however
 obviously useful.

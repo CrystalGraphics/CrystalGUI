@@ -38,6 +38,9 @@ public final class WorkspaceClient<T> {
      */
     private final Map<CgPath, String> etags = new HashMap<>();
 
+    /** Paths this client has asked the server to watch, so a re-read does not ask twice. */
+    private final java.util.Set<CgPath> watched = new java.util.HashSet<>();
+
     /**
      * @param ops the wire format. Taken here rather than read off the session, which does not expose
      *            its own — widening {@code ClientUiSession} for one caller would be the worse trade.
@@ -45,6 +48,37 @@ public final class WorkspaceClient<T> {
     public WorkspaceClient(ClientUiSession<T> session, com.crystalgui.serialization.DynamicOps<T> ops) {
         this.session = session;
         this.ops = ops;
+        // The server pushes these; nothing asks for them. Registered here rather than left to a caller,
+        // because a client that reads a file is watching it (see read) and would otherwise be sent
+        // notifications with no handler.
+        session.onCall(WorkspaceProtocol.CHANGED, (args, respond) -> {
+            CgPath path = CgPath.parse(args.getString(WorkspaceProtocol.PATH, ""));
+            String kind = args.getString(WorkspaceProtocol.KIND, WorkspaceProtocol.KIND_MODIFIED);
+            String etag = args.has(WorkspaceProtocol.ETAG)
+                    ? args.getString(WorkspaceProtocol.ETAG, null) : null;
+            if (onChanged != null) onChanged.accept(new FileChanged(path, kind, etag));
+            respond.ok(null);
+        });
+    }
+
+    /** What the server reports when a watched file moves. */
+    public record FileChanged(CgPath path, String kind, String etag) {
+
+        public boolean isDeleted() {
+            return WorkspaceProtocol.KIND_DELETED.equals(kind);
+        }
+    }
+
+    private Consumer<FileChanged> onChanged;
+
+    /**
+     * Called when a watched file moves under us.
+     *
+     * <p>A UI reacts by reloading a clean document silently and prompting on a dirty one — the etag is
+     * carried so it can tell whether what it holds is already current.</p>
+     */
+    public void onFileChanged(Consumer<FileChanged> handler) {
+        this.onChanged = handler;
     }
 
     /** What a failed call reports: a {@link CgFileError} name, or a conflict carrying the live etag. */
@@ -109,12 +143,23 @@ public final class WorkspaceClient<T> {
                 }, onError);
     }
 
-    /** Reads a file and remembers its etag, so a later {@link #save} needs no arguments but the bytes. */
+    /**
+     * Reads a file, remembers its etag, and starts watching it.
+     *
+     * <p>Watching is paired with reading rather than left to the caller: you watch what you have open, and
+     * a UI that had to remember to ask separately would forget on exactly the paths it cared about. The
+     * pair is {@link #forget}, which unwatches.</p>
+     */
     public void read(CgPath path, Consumer<Document> onResult, Consumer<Failure> onError) {
         call(WorkspaceProtocol.READ, args().putString(WorkspaceProtocol.PATH, path.toString()),
                 result -> {
                     String etag = result.getString(WorkspaceProtocol.ETAG, "");
                     etags.put(path, etag);
+                    if (watched.add(path)) {
+                        call(WorkspaceProtocol.WATCH,
+                                args().putString(WorkspaceProtocol.PATH, path.toString()),
+                                ignored -> { }, ignored -> watched.remove(path));
+                    }
                     onResult.accept(new Document(path, result.getBytes(WorkspaceProtocol.CONTENT), etag));
                 }, onError);
     }
@@ -189,6 +234,10 @@ public final class WorkspaceClient<T> {
      */
     public void forget(CgPath path) {
         etags.remove(path);
+        if (watched.remove(path)) {
+            call(WorkspaceProtocol.UNWATCH, args().putString(WorkspaceProtocol.PATH, path.toString()),
+                    ignored -> { }, ignored -> { });
+        }
     }
 
     // ── Plumbing ────────────────────────────────────────────────────────────────────────────────
