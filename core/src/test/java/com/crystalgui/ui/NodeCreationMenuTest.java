@@ -120,6 +120,120 @@ public class NodeCreationMenuTest extends UiTestBase {
         assertEquals(1, node.getInputPorts().size());
     }
 
+    // ── Search: ranking, and the category that explains it ─────────────────
+
+    /**
+     * <b>A NAME match must rank above a CATEGORY-only match — the "Enter creates the wrong node" bug.</b>
+     *
+     * <p>The menu pre-selects row 0 so Enter takes the best match, but results were only ever sorted
+     * alphabetically. In the real shader library that made {@code vec} pre-select <b>Cross Product</b> —
+     * which does not contain the string and matched solely through its {@code Math/Vector} category —
+     * while {@code Vector 2} sat twelfth. Reproduced here in miniature: {@code plu} names Plus and is
+     * also the category of two other types.</p>
+     */
+    @Test
+    public void aNameMatchRanksAboveACategoryOnlyMatch() {
+        library.register(NodeType.of("t.plus").label("Plus").category("Math"));
+        library.register(NodeType.of("t.alpha").label("Alpha").category("Plumbing"));
+        library.register(NodeType.of("t.beta").label("Beta").category("Plumbing"));
+
+        graph.openCreationMenu(10f, 10f);
+        frame();
+        NodeCreationMenu menu = graph.creationMenu();
+        menu.searchField().setText("plu");
+        frame();
+
+        assertEquals("the name match must be first, because Enter takes row 0",
+                "Plus", menu.visibleEntries().get(0).label());
+    }
+
+    /** Everything that matches is still offered — ranking reorders, it does not filter. */
+    @Test
+    public void rankingKeepsEveryMatchRatherThanDroppingTheWeakOnes() {
+        library.register(NodeType.of("t.plus").label("Plus").category("Math"));
+        library.register(NodeType.of("t.alpha").label("Alpha").category("Plumbing"));
+
+        graph.openCreationMenu(10f, 10f);
+        frame();
+        NodeCreationMenu menu = graph.creationMenu();
+        menu.searchField().setText("plu");
+        frame();
+
+        var labels = menu.visibleEntries().stream().map(e -> e.label()).toList();
+        assertTrue(labels.contains("Plus"));
+        assertTrue("the category-only match is kept, just ranked below", labels.contains("Alpha"));
+    }
+
+    /**
+     * <b>A search result shows its category; browsing does not.</b>
+     *
+     * <p>Flattening throws away the folder a row came from, and the menu matches categories — so without
+     * this a correct result set reads as noise. Browsing needs none of it: the folder is on screen
+     * directly above the row.</p>
+     */
+    @Test
+    public void searchResultsCarryTheirCategoryAndBrowsingDoesNot() {
+        graph.openCreationMenu(10f, 10f);
+        frame();
+        NodeCreationMenu menu = graph.creationMenu();
+
+        menu.searchField().setText("add");
+        frame();
+        assertEquals("Math", categoryTextOfFirstRow(menu));
+
+        menu.searchField().setText("");
+        frame();
+        assertEquals("browsing shows the tree, so the row repeats nothing",
+                "", categoryTextOfFirstRow(menu));
+    }
+
+    /**
+     * <b>The matched characters are registered for {@code ::highlight(search-match)}.</b>
+     *
+     * <p>Asserted through the highlight registry rather than pixels — the ranges are what Java owns; the
+     * colour is the stylesheet's. Also the regression guard for row RECYCLING: a row that stops matching
+     * must be cleared, or it keeps the previous occupant's ranges and the tint drifts onto unrelated rows
+     * as the list scrolls.</p>
+     */
+    @Test
+    public void matchedCharactersAreRegisteredAsHighlightsAndClearedWhenTheyStop() {
+        graph.openCreationMenu(10f, 10f);
+        frame();
+        NodeCreationMenu menu = graph.creationMenu();
+
+        menu.searchField().setText("ad");
+        frame();
+        UIText label = firstRowLabel(menu);
+        var ranges = label.highlights().get(NodeCreationMenu.MATCH_HIGHLIGHT);
+        assertEquals(1, ranges.size());
+        assertEquals(0, ranges.get(0).start());
+        assertEquals(2, ranges.get(0).end());
+
+        menu.searchField().setText("");
+        frame();
+        assertTrue("a row with no match must be cleared, not left wearing the last one's ranges",
+                firstRowLabel(menu).highlights().get(NodeCreationMenu.MATCH_HIGHLIGHT).isEmpty());
+    }
+
+    /** The label of the first realised row — reaching through the row template by class, as a theme would. */
+    private static UIText firstRowLabel(NodeCreationMenu menu) {
+        return (UIText) menu.treeView().querySelectorAll("." + NodeCreationMenu.LABEL_CLASS).get(0);
+    }
+
+    /** The first row's category, segments joined — the separator between them is a drawn shape, not text. */
+    private static String categoryTextOfFirstRow(NodeCreationMenu menu) {
+        var found = menu.treeView().querySelectorAll("." + NodeCreationMenu.CATEGORY_SEGMENT_CLASS);
+        StringBuilder out = new StringBuilder();
+        for (var element : found) {
+            String text = ((UIText) element).getText();
+            if (text.isEmpty()) continue;
+            if (out.length() > 0) out.append('/');
+            out.append(text);
+            if (out.length() > 40) break;
+        }
+        return out.toString();
+    }
+
     // ── The menu ────────────────────────────────────────────────────────────
 
     @Test

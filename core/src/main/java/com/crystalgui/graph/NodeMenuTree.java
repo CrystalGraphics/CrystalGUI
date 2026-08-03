@@ -125,14 +125,33 @@ public final class NodeMenuTree {
         return root.freeze().children();
     }
 
-    /** Every offer as a root-level leaf, alphabetically — the search-result shape. */
+    /**
+     * Every offer as a root-level leaf, <b>in the order given</b>, each carrying its category for display
+     * — the search-result shape.
+     *
+     * <p><b>Order is the caller's, and that is the point.</b> This used to re-sort alphabetically, which
+     * silently discarded whatever ranking produced the list: {@code NodeTypeRegistry} returns offers best
+     * first, and the menu pre-selects row 0, so re-sorting here is what made {@code vec} + Enter create
+     * <b>Cross Product</b> rather than {@code Vector 2}. A function that reorders its input is the wrong
+     * place to decide relevance.</p>
+     *
+     * <p>The category rides along because a flat result hides <em>why</em> a row matched. Ten of thirteen
+     * rows for {@code vec} matched only through {@code Math/Vector}, and dropping the category (this
+     * passed {@code ""}) left them looking arbitrary. The menu draws it dimmed after the label.</p>
+     */
+    public static List<Node> ranked(List<NodeTypeRegistry.Offer> offers) {
+        List<Node> leaves = new ArrayList<>(offers.size());
+        for (NodeTypeRegistry.Offer offer : offers) leaves.add(leaf(offer, ""));
+        return Collections.unmodifiableList(leaves);
+    }
+
+    /** @deprecated ranking belongs to whoever searched — use {@link #ranked}. Kept so an existing caller
+     * that genuinely wants alphabetical says so. */
+    @Deprecated
     public static List<Node> flat(List<NodeTypeRegistry.Offer> offers) {
         List<NodeTypeRegistry.Offer> sorted = new ArrayList<>(offers);
         sorted.sort((a, b) -> compareLabels(a.label(), b.label()));
-
-        List<Node> leaves = new ArrayList<>(sorted.size());
-        for (NodeTypeRegistry.Offer offer : sorted) leaves.add(leaf(offer, ""));
-        return Collections.unmodifiableList(leaves);
+        return ranked(sorted);
     }
 
     // ── Counting, for the auto-expand rule ──────────────────────────────────
@@ -197,6 +216,33 @@ public final class NodeMenuTree {
     private static Node leaf(NodeTypeRegistry.Offer offer, String parentPath) {
         String label = offer.label();
         return new Node(label, join(parentPath, label), offer, Collections.emptyList());
+    }
+
+    /**
+     * A type's category as a reader sees it — {@code math/vector} becomes {@code [Math, Vector]}.
+     *
+     * <p><b>Segments, not one joined string</b>, and the separator is a drawn shape rather than a
+     * character. Two reasons, and both bit:</p>
+     * <ul>
+     *   <li>The bundled {@code MinecraftRegular.otf} has no {@code U+25B8}, and a missing glyph draws a
+     *       <b>blank advance</b> rather than failing — so a joined {@code Math ▸ Vector} rendered as
+     *       "Math&nbsp;&nbsp;&nbsp;Vector", which reads as a spacing bug. {@code UIText}'s own ellipsis
+     *       fallback documents the same trap for {@code U+2026}. {@code CgUiShape}'s
+     *       {@code triangle-right} draws it with no font involved.</li>
+     *   <li>Segments make the match tint <b>exact for free</b>. Highlighting a joined string means
+     *       offsets computed against text whose separators may differ in length from the source's, and
+     *       the tint creeps sideways after the first segment. Matching each segment on its own has no
+     *       offset arithmetic to get wrong.</li>
+     * </ul>
+     */
+    public static List<String> categorySegments(String category) {
+        if (category == null || category.isEmpty()) return List.of();
+        List<String> out = new ArrayList<>();
+        for (String segment : split(category)) {
+            if (segment.isEmpty()) continue;
+            out.add(Character.toUpperCase(segment.charAt(0)) + segment.substring(1));
+        }
+        return Collections.unmodifiableList(out);
     }
 
     private static int compareLabels(String a, String b) {

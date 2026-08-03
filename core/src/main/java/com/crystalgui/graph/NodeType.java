@@ -3,6 +3,10 @@ package com.crystalgui.graph;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import com.crystalgui.core.search.SearchMatch;
+import com.crystalgui.core.search.SearchMatcher;
+import com.crystalgui.core.search.SearchQuery;
+
 import java.util.Locale;
 import java.util.Map;
 
@@ -116,14 +120,29 @@ public record NodeType(String id, String label, String category, List<String> sy
      * approximating. Case-insensitive, and an empty query matches everything so the menu opens full.</p>
      */
     public boolean matches(String query) {
-        if (query == null || query.isBlank()) return true;
-        String needle = query.toLowerCase(Locale.ROOT).trim();
-        if (label.toLowerCase(Locale.ROOT).contains(needle)) return true;
-        if (category.toLowerCase(Locale.ROOT).contains(needle)) return true;
-        for (String synonym : synonyms) {
-            if (synonym.toLowerCase(Locale.ROOT).contains(needle)) return true;
-        }
-        return false;
+        return query == null || query.isBlank() || bestMatch(SearchQuery.of(query)) != null;
+    }
+
+    /**
+     * How well this type answers {@code query}, across its label, its synonyms and its category — or
+     * {@code null} for no match at all.
+     *
+     * <p><b>This is what a menu should rank by, and the reason a boolean was not enough.</b> The three
+     * fields are not equal: a hit in the <em>label</em> outranks one in a <em>synonym</em>, which outranks
+     * one in the <em>category</em> — which is exactly what {@link SearchMatch#FIELD_PRIMARY} and its
+     * siblings encode. Ranking alphabetically instead put {@code Cross Product} (matched only through its
+     * {@code Math/Vector} category) above {@code Vector 2} for the query {@code vec}, and the create menu
+     * pre-selects its top row, so Enter created the wrong node.</p>
+     *
+     * <p>An empty query returns {@code null} rather than a zero score: "show everything" is a decision
+     * about what to display, not a match. See {@link SearchMatcher#match}.</p>
+     */
+    @javax.annotation.Nullable
+    public SearchMatch bestMatch(SearchQuery query) {
+        SearchMatch best = SearchMatcher.match(query, label, SearchMatch.FIELD_PRIMARY);
+        best = SearchMatch.best(best, SearchMatcher.matchAny(query, synonyms, SearchMatch.FIELD_ALIAS));
+        return SearchMatch.best(best,
+                SearchMatcher.match(query, category, SearchMatch.FIELD_CONTEXT));
     }
 
     /** Fluent construction, the same shape — and for the same reasons — as {@link NodeBuilder}. */

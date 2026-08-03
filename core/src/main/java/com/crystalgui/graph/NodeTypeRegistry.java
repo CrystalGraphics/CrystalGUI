@@ -1,6 +1,9 @@
 package com.crystalgui.graph;
 
 import javax.annotation.Nullable;
+import com.crystalgui.core.search.SearchMatch;
+import com.crystalgui.core.search.SearchQuery;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -76,13 +79,48 @@ public final class NodeTypeRegistry {
 
     // ── What the menu asks ──────────────────────────────────────────────────
 
-    /** Types whose label, category or synonyms answer to {@code query}; everything when it is blank. */
+    /**
+     * Types whose label, category or synonyms answer to {@code query}, <b>best first</b>; everything, in
+     * registration order, when it is blank.
+     *
+     * <p>Ranked rather than filtered — see {@link #rank}. A blank query is not ranked at all because
+     * there is nothing to rank by, and imposing an order on "everything" would only fight the category
+     * tree the menu shows instead.</p>
+     */
     public List<NodeType> search(String query) {
+        SearchQuery parsed = SearchQuery.of(query);
         List<NodeType> found = new ArrayList<>();
-        for (NodeType type : types.values()) {
-            if (type.matches(query)) found.add(type);
+        if (parsed.isEmpty()) {
+            found.addAll(types.values());
+            return found;
         }
-        return found;
+        List<Ranked<NodeType>> ranked = new ArrayList<>();
+        for (NodeType type : types.values()) {
+            SearchMatch match = type.bestMatch(parsed);
+            if (match != null) ranked.add(new Ranked<>(type, match, type.label()));
+        }
+        return rank(ranked);
+    }
+
+    /** A candidate paired with why it matched, so {@link #rank} can order without re-matching. */
+    private record Ranked<T>(T value, SearchMatch match, String label) {
+    }
+
+    /**
+     * Sorts by score descending, then alphabetically.
+     *
+     * <p>The alphabetical tiebreak is not cosmetic: {@code types} is a {@code LinkedHashMap}, so without
+     * it two equally-scored entries would be ordered by whoever happened to register first — an order the
+     * user cannot see, cannot predict, and which changes when a library adds a node.</p>
+     */
+    private static <T> List<T> rank(List<Ranked<T>> ranked) {
+        ranked.sort((a, b) -> {
+            int byScore = Integer.compare(b.match().score(), a.match().score());
+            return byScore != 0 ? byScore : a.label().compareToIgnoreCase(b.label());
+        });
+        List<T> out = new ArrayList<>(ranked.size());
+        for (Ranked<T> entry : ranked) out.add(entry.value());
+        return out;
     }
 
     /**
@@ -110,25 +148,38 @@ public final class NodeTypeRegistry {
      *                      graphs that needed it
      */
     public List<Offer> offersForOutput(String sourceTypeId, TypeCompatibility compatibility, String query) {
-        List<Offer> offers = new ArrayList<>();
+        SearchQuery parsed = SearchQuery.of(query);
+        List<Ranked<Offer>> ranked = new ArrayList<>();
         for (NodeType type : types.values()) {
-            if (!type.matches(query)) continue;
+            SearchMatch match = parsed.isEmpty() ? null : type.bestMatch(parsed);
+            if (!parsed.isEmpty() && match == null) continue;
             for (PortSpec port : type.inputsAccepting(sourceTypeId, compatibility)) {
-                offers.add(new Offer(type, port));
+                Offer offer = new Offer(type, port);
+                ranked.add(new Ranked<>(offer, match, offer.label()));
             }
         }
-        return offers;
+        return parsed.isEmpty() ? unranked(ranked) : rank(ranked);
+    }
+
+    /** The offers in registration order, for a blank query — see {@link #search}. */
+    private static <T> List<T> unranked(List<Ranked<T>> ranked) {
+        List<T> out = new ArrayList<>(ranked.size());
+        for (Ranked<T> entry : ranked) out.add(entry.value());
+        return out;
     }
 
     /** The mirror, for a wire dragged out of an input. */
     public List<Offer> offersForInput(String targetTypeId, TypeCompatibility compatibility, String query) {
-        List<Offer> offers = new ArrayList<>();
+        SearchQuery parsed = SearchQuery.of(query);
+        List<Ranked<Offer>> ranked = new ArrayList<>();
         for (NodeType type : types.values()) {
-            if (!type.matches(query)) continue;
+            SearchMatch match = parsed.isEmpty() ? null : type.bestMatch(parsed);
+            if (!parsed.isEmpty() && match == null) continue;
             for (PortSpec port : type.outputsFeeding(targetTypeId, compatibility)) {
-                offers.add(new Offer(type, port));
+                Offer offer = new Offer(type, port);
+                ranked.add(new Ranked<>(offer, match, offer.label()));
             }
         }
-        return offers;
+        return parsed.isEmpty() ? unranked(ranked) : rank(ranked);
     }
 }
