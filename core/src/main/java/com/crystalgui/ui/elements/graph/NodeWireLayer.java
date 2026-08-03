@@ -39,6 +39,7 @@ public class NodeWireLayer extends UIElement {
      * two ports reads as a wire passing behind the node rather than into it. */
     private static final float MIN_TANGENT = 24f;
 
+
     /** Wires are drawn under nodes, so a stroke that clipped a node's corner would be hidden anyway —
      * but a wire whose endpoints are both off-screen can still cross the viewport, so the cull rect is
      * grown rather than tested exactly. */
@@ -196,15 +197,17 @@ public class NodeWireLayer extends UIElement {
             boolean hovered = connection.equals(view.getHoveredWire());
             int colorA = selected ? SELECTED_WIRE_COLOR : connection.from().typeColor();
             int colorB = selected ? SELECTED_WIRE_COLOR : connection.to().typeColor();
-            wire(ctx, a.x(), a.y(), b.x(), b.y(), colorA, colorB, selected || hovered);
+            wire(ctx, a.x(), a.y(), b.x(), b.y(), connection.from().dotRadius(), connection.to().dotRadius(),
+                    colorA, colorB, selected || hovered);
         }
 
         if (pendingLive && pendingFrom != null) {
             Vector2f a = pendingFrom.dotCenter();
             int color = pendingFrom.typeColor();
             // Drawn from the port toward the pointer regardless of which direction the port is, so a
-            // drag started from an input still reads as a wire being pulled out of it.
-            wire(ctx, a.x(), a.y(), pendingX, pendingY, color, color, false);
+            // drag started from an input still reads as a wire being pulled out of it. The pointer end
+            // trims by 0 — there is no dot there to stop short of.
+            wire(ctx, a.x(), a.y(), pendingX, pendingY, pendingFrom.dotRadius(), 0f, color, color, false);
         }
 
         ctx.flush();
@@ -225,15 +228,30 @@ public class NodeWireLayer extends UIElement {
      * <p>Horizontal tangents are the whole visual idiom of a node editor — a wire must leave an output
      * to the right and enter an input from the left, so that a backwards connection loops visibly
      * instead of drawing a straight diagonal that looks like a mistake.</p>
+     *
+     * <h3>Endpoints stop at the dot's edge, not its centre</h3>
+     * <p>{@code radius0}/{@code radius1} trim {@code x0}/{@code x1} inward before the curve is built, so
+     * the line ends at the ring's outer edge — Unity's own construction (see the reference this was
+     * checked against) — rather than running under the ring into the hole. Trimming along X alone, not
+     * toward the other endpoint, is exact rather than an approximation: the cubic's tangent at t=0 is
+     * {@code (P1-P0) = (pull, 0)} and at t=1 is {@code (P3-P2) = (pull, 0)} — both purely horizontal by
+     * construction — so shrinking {@code x0} forward and {@code x1} backward by a dot's radius moves each
+     * endpoint exactly along the curve's own initial/final direction, however the two ports sit
+     * vertically. {@code pull} is recomputed from the ALREADY-trimmed span, matching what the curve
+     * would have used from the true endpoints closely enough that a several-pixel trim on a
+     * `MIN_TANGENT`-or-wider curve is not worth a second computation.</p>
      */
     private void wire(CgUiPaintContext ctx, float x0, float y0, float x1, float y1,
-                      int color0, int color1, boolean emphasised) {
+                      float radius0, float radius1, int color0, int color1, boolean emphasised) {
+        x0 += radius0;
+        x1 -= radius1;
         float pull = Math.max(MIN_TANGENT, Math.abs(x1 - x0) * 0.5f);
         ctx.curve()
                 .cubic(x0, y0, x0 + pull, y0, x1 - pull, y1, x1, y1)
                 // Exactly double, so hover reads as "the same wire, thicker" — Unity's own pair is a
                 // hairline and twice a hairline.
                 .width(view.getWireWidth() * (emphasised ? 2f : 1f))
+                .feather(view.getWireFeather())
                 .colors(color0, color1)
                 .submit();
     }
