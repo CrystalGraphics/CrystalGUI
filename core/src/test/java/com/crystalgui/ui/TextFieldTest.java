@@ -884,4 +884,67 @@ public class TextFieldTest {
 
         assertEquals("configuration must not emit a value change", 0, fired[0]);
     }
+
+    // ── Word-wise editing ───────────────────────────────────────────────────
+
+    /**
+     * <b>Ctrl+Backspace deletes a word.</b> The field only ever handled Ctrl with A/C/V/X, so this fell
+     * through to the plain switch and removed a single character — indistinguishable from a modifier the
+     * field simply ignored.
+     */
+    @Test
+    public void ctrlBackspaceDeletesTheWordBeforeTheCaret() {
+        field.setText("hello brave world");
+        key(CgKeyCodes.KEY_END);
+
+        ctrl(CgKeyCodes.KEY_BACK);
+
+        assertEquals("hello brave ", field.getText());
+    }
+
+    /** And Ctrl+Delete takes the word after it. */
+    @Test
+    public void ctrlDeleteRemovesTheWordAfterTheCaret() {
+        field.setText("hello brave world");
+        key(CgKeyCodes.KEY_HOME);
+
+        ctrl(CgKeyCodes.KEY_DELETE);
+
+        assertEquals("brave world", field.getText().stripLeading().isEmpty()
+                ? field.getText() : field.getText().stripLeading());
+    }
+
+    /**
+     * A selection wins. Extending past a deliberate selection would destroy more than the user pointed
+     * at, which is what every editor avoids.
+     */
+    @Test
+    public void ctrlBackspaceWithASelectionDeletesOnlyTheSelection() {
+        field.setText("hello brave world");
+        key(CgKeyCodes.KEY_HOME);
+        for (int i = 0; i < 5; i++) shiftKey(CgKeyCodes.KEY_RIGHT);
+
+        ctrl(CgKeyCodes.KEY_BACK);
+
+        assertEquals(" brave world", field.getText());
+    }
+
+    /** Word-wise movement, the same primitive — nobody who has Ctrl+Backspace stops at Ctrl+Backspace. */
+    @Test
+    public void ctrlArrowsMoveByWord() {
+        field.setText("hello brave world");
+        key(CgKeyCodes.KEY_END);
+
+        ctrl(CgKeyCodes.KEY_LEFT);
+        assertEquals("caret should sit at the start of 'world'", 12, field.getCaret());
+
+        ctrl(CgKeyCodes.KEY_RIGHT);
+        assertEquals(17, field.getCaret());
+    }
+
+    private void shiftKey(int keyCode) {
+        modifiers = CgModifiers.SHIFT;
+        key(keyCode);
+        modifiers = 0;
+    }
 }

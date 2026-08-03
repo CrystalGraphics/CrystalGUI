@@ -21,6 +21,7 @@ import com.crystalgui.ui.elements.config.control.VectorControl;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -285,7 +286,38 @@ public class ShaderPortArityTest extends UiTestBase {
 
         assertEquals("UV(2)", labelOf(polar, "UV"));
         assertEquals("Center(2)", labelOf(polar, "Center"));
-        assertEquals("RadialScale(1)", labelOf(polar, "RadialScale"));
+        assertEquals("a camelCase port id is DRAWN spaced, while the id itself stays one identifier",
+                "Radial Scale(1)", labelOf(polar, "RadialScale"));
         assertEquals("Out(2)", labelOf(polar, "Out"));
+    }
+
+    /**
+     * <b>A port id is drawn spaced, but stays one identifier.</b>
+     *
+     * <p>{@code RadialScale} is a GLSL template key, a {@code PortSpec.portId} and what an edge points
+     * at — it cannot contain a space. Only the label is humanised, which is the split {@code getName()}
+     * already documents against {@code getPortId()}.</p>
+     *
+     * <p>The acronym case is the one that matters: {@code UV} must not become {@code U V}, which is
+     * exactly what a naive "space before every capital" would do.</p>
+     */
+    @Test
+    public void portLabelsAreSpacedWithoutTouchingTheId() {
+        openWindow();
+        GraphNode polar = add(CgBuiltinShaderNodes.POLAR_COORDINATES.id(), 0f, 0f);
+        window.updateWithoutPainting();
+
+        assertEquals("Radial Scale(1)", labelOf(polar, "RadialScale"));
+        assertEquals("Length Scale(1)", labelOf(polar, "LengthScale"));
+        assertEquals("an acronym stays whole", "UV(2)", labelOf(polar, "UV"));
+        assertNotNull("and the id is untouched, or every edge and template key would break",
+                polar.portNamed("RadialScale"));
+    }
+
+    /** The category comes from the id VERBATIM, so `cg:UV/...` reads "UV" and not "Uv". */
+    @Test
+    public void aCategoryKeepsTheCaseTheIdWroteItIn() {
+        assertEquals("UV", com.crystalgui.graph.shader.ShaderGraphBridge
+                .asNodeType(CgBuiltinShaderNodes.POLAR_COORDINATES).category());
     }
 }

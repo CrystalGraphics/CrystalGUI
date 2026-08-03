@@ -237,10 +237,13 @@ public final class NodeMenuTree {
      */
     public static List<String> categorySegments(String category) {
         if (category == null || category.isEmpty()) return List.of();
+        // Verbatim, for the reason ShaderGraphBridge.categoryOf gives: capitalising the first letter is
+        // right for `Math` and wrong for `UV`, and a category is authored text that can already say what
+        // it means. A consumer wanting different casing should write it differently.
         List<String> out = new ArrayList<>();
         for (String segment : split(category)) {
             if (segment.isEmpty()) continue;
-            out.add(Character.toUpperCase(segment.charAt(0)) + segment.substring(1));
+            out.add(segment);
         }
         return Collections.unmodifiableList(out);
     }

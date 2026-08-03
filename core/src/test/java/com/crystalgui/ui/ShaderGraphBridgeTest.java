@@ -49,19 +49,19 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         // turns every new built-in into a test failure that says nothing about the bridge.
         assertEquals("every shader node plus the master",
                 CgShaderNodeRegistry.builtins().all().size() + 1, library.size());
-        assertNotNull(library.get("cg:math/basic/multiply"));
+        assertNotNull(library.get("cg:Math/Basic/multiply"));
         assertNotNull(library.get(ShaderGraphBridge.MASTER_TYPE));
-        assertEquals("Multiply", library.get("cg:math/basic/multiply").label());
+        assertEquals("Multiply", library.get("cg:Math/Basic/multiply").label());
         assertEquals("categories come from the id's own namespace, nested to match Unity's own "
                         + "Math ▸ Basic/Advanced/Range/Round grouping",
-                "Math/Basic", library.get("cg:math/basic/multiply").category());
+                "Math/Basic", library.get("cg:Math/Basic/multiply").category());
     }
 
     /** A dynamic port has no GLSL name, so it is presented as float — the identity of the promotion
      * order — rather than as something the editor cannot colour or validate. */
     @Test
     public void dynamicPortsArePresentedConcretelyToTheEditor() {
-        NodeType multiply = library().get("cg:math/basic/multiply");
+        NodeType multiply = library().get("cg:Math/Basic/multiply");
 
         assertTrue(multiply.ports().stream().allMatch(p -> !p.typeId().isEmpty()));
         assertEquals("dynamic ports are their own type, not float — float would refuse every vector",
@@ -122,9 +122,9 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         GraphDocument document = new GraphDocument();
         document.setTypeCompatibility(ShaderGraphBridge.GLSL_PROMOTION);
 
-        NodeData colour = document.addNode(library.get("cg:input/basic/color").create(0f, 0f));
-        NodeData time = document.addNode(library.get("cg:input/basic/time").create(0f, 120f));
-        NodeData multiply = document.addNode(library.get("cg:math/basic/multiply").create(200f, 40f));
+        NodeData colour = document.addNode(library.get("cg:Input/Basic/color").create(0f, 0f));
+        NodeData time = document.addNode(library.get("cg:Input/Basic/time").create(0f, 120f));
+        NodeData multiply = document.addNode(library.get("cg:Math/Basic/multiply").create(200f, 40f));
         NodeData master = document.addNode(library.get(ShaderGraphBridge.MASTER_TYPE).create(400f, 40f));
 
         document.link(colour, "Out", multiply, "A");
@@ -153,7 +153,7 @@ public class ShaderGraphBridgeTest extends UiTestBase {
         GraphDocument document = new GraphDocument();
         document.setTypeCompatibility(ShaderGraphBridge.GLSL_PROMOTION);
         NodeData floatNode = document.addNode(
-                library.get("cg:input/basic/float").create(0f, 0f).withProperty("X", "0.25"));
+                library.get("cg:Input/Basic/float").create(0f, 0f).withProperty("X", "0.25"));
         NodeData master = document.addNode(library.get(ShaderGraphBridge.MASTER_TYPE).create(200f, 0f));
         document.link(floatNode, "Out", master, CgMasterNode.BASE_COLOR);
 
@@ -173,7 +173,7 @@ public class ShaderGraphBridgeTest extends UiTestBase {
     public void aDocumentWithNoMasterIsReported() {
         NodeTypeRegistry library = library();
         GraphDocument document = new GraphDocument();
-        document.addNode(library.get("cg:input/basic/color").create(0f, 0f));
+        document.addNode(library.get("cg:Input/Basic/color").create(0f, 0f));
 
         CgShaderEmitter.Result result = ShaderGraphBridge.compile(
                 document, CgShaderNodeRegistry.builtins(), new CgMasterNode());
@@ -192,13 +192,13 @@ public class ShaderGraphBridgeTest extends UiTestBase {
      * coverage is the EDITOR half — {@code ShaderGraphBridge.asNodeType} turning
      * {@link com.crystalgraphics.shadergraph.CgShaderNode#outputs()} into {@code NodeType} ports, and
      * {@code GraphDocument.link} accepting two edges out of the same node on two different port ids.
-     * Nothing before {@code cg:channel/split} existed for either of those to have ever run against a
+     * Nothing before {@code cg:Channel/split} existed for either of those to have ever run against a
      * real multi-output node.</p>
      */
     @Test
     public void splitsFourOutputsBecomeFourPortsAndWireIndependently() {
         NodeTypeRegistry library = library();
-        NodeType split = library.get("cg:channel/split");
+        NodeType split = library.get("cg:Channel/split");
         assertNotNull(split);
         assertEquals("one input, four outputs", 5, split.ports().size());
         assertEquals(4, split.ports().stream()
@@ -206,9 +206,9 @@ public class ShaderGraphBridgeTest extends UiTestBase {
 
         GraphDocument document = new GraphDocument();
         document.setTypeCompatibility(ShaderGraphBridge.GLSL_PROMOTION);
-        NodeData colour = document.addNode(library.get("cg:input/basic/color").create(0f, 0f));
+        NodeData colour = document.addNode(library.get("cg:Input/Basic/color").create(0f, 0f));
         NodeData splitNode = document.addNode(split.create(200f, 0f));
-        NodeData multiply = document.addNode(library.get("cg:math/basic/multiply").create(400f, 0f));
+        NodeData multiply = document.addNode(library.get("cg:Math/Basic/multiply").create(400f, 0f));
         NodeData master = document.addNode(library.get(ShaderGraphBridge.MASTER_TYPE).create(600f, 0f));
 
         document.link(colour, "Out", splitNode, "In");

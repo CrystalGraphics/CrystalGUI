@@ -982,4 +982,49 @@ public class PopoverTest extends UiTestBase {
         assertEquals(2, target.getSelectedIndex());
         assertEquals("c", target.getText());
     }
+
+    /**
+     * <b>Closing hands back the focus RING exactly as it was, rather than deciding afresh.</b>
+     *
+     * <p>{@code requestFocus} is PROGRAMMATIC and always rings, so restoring through it outlined the
+     * whole {@code GraphView} every time a node was created from the create menu: the canvas had been
+     * focused by a CLICK (no ring), and closing the popover silently promoted that to a keyboard-style
+     * focus it never had.</p>
+     *
+     * <p>Deriving it from the focus POLICY is the trap this replaced — {@code FocusPolicy.CLICK} is
+     * tabbable (only {@code CLICK_NOT_TABBABLE} is not), so "is it tabbable?" answers yes for a canvas
+     * and rings it anyway. Only how focus was <em>acquired</em> settles it.</p>
+     */
+    @Test
+    public void closingRestoresFocusWithoutRingingWhatWasClickFocused() {
+        // Pointer-driven, exactly like clicking a canvas: focused, but no ring.
+        input.requestPointerFocus(invoker);
+        settle();
+        assertTrue(invoker.isFocused());
+        assertFalse("precondition: a click does not ring", invoker.isFocusVisible());
+
+        popover.showFor(invoker, invoker);
+        settle();
+        popover.hide();
+        settle();
+
+        assertTrue("focus comes back", invoker.isFocused());
+        assertFalse("and comes back WITHOUT a ring it never had", invoker.isFocusVisible());
+    }
+
+    /** The other half: a ring the element genuinely had must survive the round trip. */
+    @Test
+    public void closingReturnsTheRingToSomethingThatWasKeyboardFocused() {
+        input.requestFocus(invoker);
+        settle();
+        assertTrue("precondition: programmatic focus rings", invoker.isFocusVisible());
+
+        popover.showFor(invoker, invoker);
+        settle();
+        popover.hide();
+        settle();
+
+        assertTrue(invoker.isFocused());
+        assertTrue("a ring it really had must come back", invoker.isFocusVisible());
+    }
 }

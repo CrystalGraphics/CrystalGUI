@@ -280,7 +280,7 @@ public final class ShaderGraphBridge {
     /**
      * Every path segment but the last, title-cased and rejoined.
      *
-     * <p>{@code cg:math/basic/add} → {@code Math/Basic}; {@code cg:input/basic/vector4} →
+     * <p>{@code cg:Math/Basic/add} → {@code Math/Basic}; {@code cg:Input/Basic/vector4} →
      * {@code Input/Basic}; {@code cg:master} → {@code Output}.</p>
      *
      * <p>Nested rather than just the first segment, because the menu is a tree and Unity's is two deep —
@@ -293,11 +293,16 @@ public final class ShaderGraphBridge {
         int lastSlash = path.lastIndexOf('/');
         if (lastSlash < 0) return "Output";
 
+        // VERBATIM — the id's own case is the answer, never a derived one. Title-casing the first
+        // letter and lower-casing nothing else is right for `math` and silently wrong for an acronym:
+        // `uv` came out as the category "Uv", which no shader editor calls it. An id is authored, so it
+        // can simply say `cg:UV/...` and be believed. The alternative — a known-acronym list in the
+        // formatter — is a second place to remember every time a category is added.
         StringBuilder category = new StringBuilder();
         for (String segment : path.substring(0, lastSlash).split("/")) {
             if (segment.isEmpty()) continue;
             if (category.length() > 0) category.append('/');
-            category.append(Character.toUpperCase(segment.charAt(0))).append(segment.substring(1));
+            category.append(segment);
         }
         return category.toString();
     }
