@@ -1511,13 +1511,284 @@ An interface in `core/` with per-platform implementations, following `UIClipboar
 >   one the sketch never raises — whether a *server-authored* tree may touch the filesystem at all — is
 >   the one with security consequences.
 
-### 6.1.11 Docking and workspace layout · `TODO`
+### 6.1.11 Docking and workspace layout · `TODO` — researched 2026-08-04
 
-`SplitView` + `TabView` + `Dialog` already cover roughly 80%. The remaining 20% is a dock manager: tear a
-tab out into a floating window, drop it on an edge to split, drop it on a tab strip to join, and
-serialise/restore the whole arrangement.
+> **The one-line version of the old sketch was wrong in a way worth keeping.** It said *"serialisation is
+> close to free — `UIDescriptionCodec` and `StateMap` already round-trip a tree."* They do, and it is the
+> wrong tree. A layout is a tree of **sizes and panel identities**, not of elements; round-tripping the
+> element tree restores a *snapshot of a graph editor's DOM* instead of reopening the document it was
+> showing. Every system surveyed below keeps the leaf payload **opaque** and hands it back to a factory.
 
-Serialisation is close to free — `UIDescriptionCodec` and `StateMap` already round-trip a tree.
+#### Three systems get called "docking", and conflating them is the usual failure
+
+| System | Question it answers | Who has it |
+|---|---|---|
+| **Layout tree** | How is the space divided, and what resizes when a divider moves? | everyone |
+| **Drag and drop** | What happens when a tab is dropped, and what is previewed before it is? | everyone |
+| **Presentation modes** | Docked / floating / auto-hidden / windowed — how a panel is *shown* | IntelliJ, Qt, VS; **not** ImGui or Blender |
+
+They are separable, they have different difficulty, and only the first two are needed for a working
+workspace. The third is where the scope explodes, so it is where the MVP line goes.
+
+#### What already exists — audited, not assumed
+
+| Piece | State | Gap |
+|---|---|---|
+| `SplitView` | Shipped, with drag, limits, orientation | **Binary.** `first()`/`second()`/`divider()` and one percentage. A layout branch is n-ary — see [the engine gap](#the-engine-gap--splitview-is-binary-and-a-branch-is-not) |
+| `TabView` / `Tab` | Shipped: add/remove/select/reorder-by-index, `TabSide`, `__strip__` scrolling | No drag-to-reorder, no tear-out, no insertion marker |
+| `Dialog` | Shipped: top-layer promotion, drag-to-move (`beginMove`), `resize:` + `UIResizer` + `applyResizeOrigin`, containing-block clamp | Modal and light-dismiss machinery a floating dock must **not** inherit |
+| `UIDragController` | Shipped: threshold, payload, ghost, `Enter`/`Leave`/`Over`/`Drop`, reject-by-default, Escape cancel | Nothing dock-specific; this is the right primitive as-is |
+| `TopLayer` | Shipped | — |
+| `UIDescriptionCodec` / `StateMap` | Shipped | Wrong tool for layout persistence, see above |
+| Stripe rail / auto-hide | **Absent** | Deliberately out — see D9 |
+
+So the old "roughly 80%" is fair for the *widgets* and optimistic for the *system*: the three things with
+no equivalent at all are the layout tree, the drop-zone geometry, and the persistence format.
+
+#### Prior art, and the verdict
+
+| Source | Model | Licence | Verdict |
+|---|---|---|---|
+| **VS Code** `base/browser/ui/grid/` + `parts/editor/editorDropTarget.ts` | n-ary `SplitView` under a `GridView` tree whose **orientation alternates with depth**; `SerializableGrid`; a per-group drop overlay | **MIT** | **The port target.** Closest to our constraints, and the only one whose exact drop geometry is readable |
+| **IntelliJ** | Editors split in the centre (`EditorsSplitters`, a binary tree of `Splitter`s); tool windows anchor to frame edges with stripes; `ToolWindowType` = `DOCKED`/`FLOATING`/`WINDOWED`/`SLIDING`; layout persisted per tool window as `anchor`/`order`/`weight`/`sideWeight`/`type` | closed | **Take the presentation-mode vocabulary and the `weight`/`sideWeight` idea; reject the asymmetry** (D1) |
+| **Dear ImGui** (docking branch) | Uniform `DockNode` tree; a **central node** that cannot be closed and absorbs slack; 5-way docking cross | MIT | **Take the central node.** It is the one idea VS Code and IntelliJ get by accident, through having a hardcoded editor area |
+| **Qt** `QMainWindow` | Dock areas + `saveState(version)` / `restoreState(data, version)` returning an opaque versioned blob | LGPL/commercial | **Read only.** Take the *versioning* lesson (D8); do not port code |
+| **Golden Layout** | JSON config tree of `row`/`column`/`stack`/`component` with percentage sizes | MIT | Confirms the shape. Percentages-only is a mistake it has been patching for a decade — VS Code's absolute-plus-saved-viewport is better (D7) |
+| **Visual Studio** | The "docking guide diamond": a 5-way compass over the hovered pane **plus** four at the window edge | closed | **Take the outer-edge zones** — without them a full-height column beside a multi-row grid is unreachable (D5) |
+| **Blender** | No floating at all. Areas tile the window; split and join by dragging a corner | GPL-3.0 | **Read for shape only** (licence). Kept in the table as the live counter-example: it proves floating is a *choice*, and it is the one system nobody complains is missing it |
+| **wxAUI**, **DockPanel Suite**, **rc-dock**, **FlexLayout** | Same tree, same JSON | MIT-ish | Corroborating. Nothing to take that VS Code does not already have |
+
+**The convergence is the finding.** Six independent systems, one model: *a tree whose branches divide an
+axis and whose leaves are tab strips.* Where they differ is only in what the leaf is allowed to be and in
+whether anything may leave the tree. So the tree is not a design question — it is a port — and the design
+questions are all about the edges.
+
+#### Decisions
+
+**D1 — Uniform tree with one central node, not VS Code's / IntelliJ's asymmetry.** Both of those hardcode
+"the editor area" as a grid and make everything else a fixed Part around it. That is twenty years of
+product opinion about where things belong, and a new system does not inherit it — ImGui, Qt and Golden
+Layout are all uniform and none of them suffers for it. But the asymmetry *is* protecting something real:
+the main work area must always exist, and it must not be closable into nothing. ImGui's **central node**
+buys that for one flag: the leaf that cannot be closed, floated or absorbed, and that takes the slack when
+its neighbours are removed.
+
+> The distinction the asymmetry was really about survives, but it moves off the *layout* and onto the
+> *panel descriptor*: a **singleton** panel has one instance and is reopened from a menu when closed (the
+> node library, the inspector); a **document** panel has many and is opened from a file (a shader graph, a
+> `.glsl` buffer). That is a property of the thing, not of where it sits.
+
+**D2 — The layout tree is a pure data structure, headless, with no `UIElement` in it.** The whole of
+`text/cursor` earned its correctness this way: the logic became reachable without a `UIWindow`, fonts or a
+style engine, and a real bug surfaced within minutes of the extraction. Split/join/collapse/serialise are
+exactly that kind of logic. `DockLayout` goes in `headlessTest`; the widget layer is a renderer over it.
+
+**D3 — Float is an in-window promoted panel, because Minecraft has one window.** VS Code's tear-out opens
+an actual OS window (`auxiliaryWindowService.open` — `auxiliaryEditorPart.ts` is 496 lines of second-window
+plumbing: its own titlebar, its own statusbar, its own layout pass). None of that is available to us and
+none of it is wanted. A float is a top-layer element that already has drag-to-move, resize and
+containing-block clamping — i.e. `Dialog`'s machinery, minus the two things it must **not** inherit:
+modality and light dismiss. A floating panel that vanishes when you click the graph behind it is a bug that
+would ship, because dismissal is the default for promoted elements.
+
+**D4 — A float is still a `DockLayout`, not a special case.** ImGui's rule, and the reason its floating
+windows can be split and tabbed exactly like docked ones. One root per float, plus the main root. A
+"tear-out" is `remove from tree A` + `insert into a fresh tree B`, and a "re-dock" is the reverse — so the
+two hardest-looking gestures are the same two operations the drop code already needs.
+
+**D5 — Drop zones: VS Code's geometry, plus Visual Studio's outer edge.** Ported numbers in
+[the next section](#drop-zones--the-geometry-ported-verbatim). The outer-edge zones are an addition, not a
+disagreement: VS Code reaches the frame edge through whichever group happens to be there, which cannot
+express *"a full-height column beside all four of these rows."* Visual Studio and ImGui both add explicit
+window-edge targets for exactly that.
+
+**D6 — Reordering and tearing out are one gesture with a threshold.** Drag inside the strip reorders, with
+an insertion marker; leave the strip and it becomes a dock drag with an overlay. `UIDragController` already
+has the activation threshold (`DEFAULT_THRESHOLD_PX = 4`) and reject-by-default drops, so this is
+composition rather than new input machinery.
+
+**D7 — Sizes are absolute pixels, saved alongside the viewport they were measured in.** VS Code's
+`ISerializedGrid` carries `width` and `height` at the top so a restore into a different window scales
+proportionally. Golden Layout stores percentages instead and has spent a decade patching what that does to
+minimum sizes — a percentage cannot express "this sidebar is 240px regardless." Absolute-plus-viewport
+degrades gracefully in both directions; percentages only degrade in one.
+
+**D8 — The layout blob is versioned, and a restore never fails.** Qt's `restoreState(data, version)` exists
+because restoring an old layout into new code is the single most common crash in this class of system. Two
+rules, and both must hold: a blob whose version we do not know is **discarded for the default layout**, not
+parsed hopefully; and a leaf naming a panel type no longer registered — a mod was removed — is **dropped
+and its size redistributed**, with the rest of the layout intact. Refusing the whole restore because one
+panel is missing loses the user's entire arrangement to somebody else's uninstall.
+
+**D9 — Auto-hide, stripe rails and `SLIDING` mode are out of MVP.** IntelliJ's unpinned tool windows and
+VS Code's activity bar are a *second layout system* — a rail of buttons, a slide-over surface that is not
+in the tree, and focus-loss handling — bolted beside the first. Purely additive: nothing in the tree, the
+drop geometry or the format changes when it lands.
+
+**D10 — Maximize is in, because it is in the format.** One boolean on a leaf, and the layout skips its
+siblings. Trivial to build and a format change to retrofit, which is the only reason it is not deferred
+with everything else. VS Code serialises exactly this (`maximized?: boolean`).
+
+#### The model
+
+```
+DockLayout                  the tree, pure data, no UIElement anywhere
+ └── DockNode
+      ├── DockBranch   { children: List<DockNode>, sizes: float[] }   orientation is DERIVED, see below
+      └── DockLeaf     { panels: List<PanelRef>, active: int, central: bool, maximized: bool }
+
+PanelRef  { typeId: String, state: StateMap }     opaque to the layout — see Serialisation
+```
+
+**Orientation is not stored — it alternates with depth.** VS Code's `getLocationOrientation` is one line:
+
+```ts
+return location.length % 2 === 0 ? orthogonal(rootOrientation) : rootOrientation;
+```
+
+A branch at even depth splits one way, at odd depth the other, all the way down. Storing an orientation per
+branch permits a tree that cannot be drawn — two nested branches both splitting horizontally, which is not
+a nested split at all but one branch with more children. Deriving it makes that state unrepresentable, and
+it is why `sanitizeGridNodeDescriptor` can flatten a one-child branch without asking anything.
+
+#### Drop zones — the geometry, ported verbatim
+
+From `editorDropTarget.ts`'s `positionOverlay`, which is the only readable statement of numbers every IDE
+has and none document:
+
+| Quantity | Value | Note |
+|---|---|---|
+| Edge threshold | **10%** of the pane | Inside it on both axes ⇒ no split; this is the *merge* zone |
+| …when dragging a whole group | **30%** along the preferred split axis | A group is a bigger thing, so it gets a bigger target |
+| Split threshold | **1/3** and **2/3** | `< 1/3` ⇒ leading edge, `> 2/3` ⇒ trailing, else the other axis decides |
+| Overlay preview | **50%** of the pane on the chosen side | Full pane when merging |
+| Overlay cleanup | **300 ms** after the pointer leaves | Prevents flicker across the seam between two panes |
+
+The resulting hit map, for a pane whose preferred split is horizontal — VS Code's own comment, kept because
+it is clearer than prose:
+
+```
+----------------------------------------------
+|                SPLIT UP                    |
+|--------------------------------------------|
+|  SPLIT LEFT  |    MERGE    |  SPLIT RIGHT  |
+|--------------------------------------------|
+|                SPLIT DOWN                  |
+----------------------------------------------
+```
+
+**The centre is a merge, not a no-op** — it appends to that leaf's tab strip. This is the single most-used
+drop in the whole system and it is the one an edge-zones-only implementation forgets.
+
+#### Serialisation — the leaf payload is opaque, and that is the whole trick
+
+```
+{ version: 1, viewport: {w, h}, rootOrientation: …, root: node }
+
+node := { type: "branch", size: n, children: [node…] }
+      | { type: "leaf",   size: n, panels: [{typeId, state}], active: i, central?, maximized? }
+```
+
+The layout **never** knows what a panel is. It stores a `typeId` and a `StateMap`, and on restore hands
+both to a factory registered under that id — VS Code's `IViewDeserializer.fromJSON`, Golden Layout's
+`componentType` + `componentState`, ImGui's window name. `DockPanelRegistry` is that seam, and it is also
+D8's degradation point: an unregistered id is a dropped leaf, not a failed restore.
+
+Where `StateMap` *is* the right tool: a panel's own state (which file, scroll offset, selected node) is
+exactly what `StateMap` already round-trips, and `Tab` already implements `writeState`/`readState`. What is
+wrong is using `UIDescriptionCodec` on the panel's **element tree** — a shader graph editor would come back
+as a frozen DOM of whatever nodes were on screen, detached from the document.
+
+#### The engine gap — `SplitView` is binary, and a branch is not
+
+A `DockBranch` has n children. `SplitView` has `first()`, `second()`, `divider()` and one percentage. Three
+panes must therefore nest as `(A | (B | C))`, and **that is not a cosmetic difference**: dragging the A/B
+divider then resizes A against the *whole* `(B|C)` group, splitting the change proportionally between B and
+C. Every IDE moves only A and B. The picture is the same and the feel is wrong, which is the worst kind of
+difference because no screenshot shows it.
+
+It also breaks round-tripping: resize, save and restore, and the nested tree is a different tree.
+
+**Recommendation: generalise `SplitView` to n children and keep the binary API as a facade** —
+`first()`/`second()` become sugar over `child(0)`/`child(1)`, the percentage a two-element size list. Two
+split containers is precisely the duplication `gui_curve.shader` is a standing monument to: the cap logic
+was wrong three times, every version rendered something plausible, and two copies meant the fourth fix
+landed in one file. The risk is real and named — `SplitView` is shipped, used by the gallery and the
+configurator, and has tests — so the binary API keeps its exact behaviour and its tests, and the n-ary path
+is new surface beside it.
+
+While it is open, VS Code's `SplitView` carries three things ours does not, all of which a dock needs:
+per-view `minimumSize`/`maximumSize` (ours has one percentage clamp for the pair), `LayoutPriority`
+(`Low`/`Normal`/`High` — who absorbs a window resize), and `snap` (a pane that collapses when dragged past
+its minimum instead of stopping dead).
+
+#### Traps, named now
+
+1. **The drop overlay must not be hittable — and `setHitTest(false)` applies to the whole subtree.** An
+   overlay that takes the pointer ends the drag on top of itself, which reads as "drop does nothing."
+2. **A drop target rejects by default.** Accept by calling `preventDefault()` on `DragOver`, re-read every
+   frame and never latched. Already the engine's model; a dock that latches acceptance keeps accepting
+   after the pointer has moved to a pane that should refuse.
+3. **A tab strip must not rebuild itself while it is being dragged on.** The table header froze exactly
+   this way — sort once and no header could be clicked or resized again, because the mouse-down handler
+   detached the element under the cursor and `screenToLocal` went stale. Reorder updates in place.
+4. **Collapsing a one-child branch must re-derive the survivor's orientation.** Because orientation
+   alternates with depth, a leaf promoted one level up is now on the wrong axis — VS Code rebuilds it with
+   `orthogonal(sibling.orientation)`, and splices a surviving *branch*'s children into the grandparent
+   rather than the branch itself. Get this wrong and a pane silently resizes along the wrong axis after an
+   unrelated close. It is four lines and it is invisible in every screenshot.
+5. **The grandparent's sizes are captured before a collapse and re-applied after**, or removing one pane
+   quietly redistributes three others.
+6. **Dropping a group into itself or its own descendants must be refused** before the overlay is even
+   shown, not at drop time.
+7. **`flex-shrink` defaults to 0 here.** A `flex-grow: 1` pane needs `height: 0`/`width: 0` as its basis or
+   it keeps its content size and overflows — the gallery's `__panes__` overhung its frame this way, and
+   only at small window sizes, because at large ones there was room.
+8. **The drag ghost is registered per drag.** `UIDragController` drops it at drag end; registering once
+   gives a ghost for the first drag only, and a retained one has already been seen outliving its drag.
+9. **The active group is tracked explicitly, never inferred from focus.** Commands resolve against it, and
+   clicking inside a graph canvas focuses the *canvas*. Related and already recorded: a widget whose keys
+   are commands must be able to hold focus, or its whole command set is silently inert.
+10. **A floating dock must be promoted but neither modal nor light-dismissable.** Both stacks are opt-in
+    (`UIWindow` keeps `autoPopovers` and `closeWatchers` separately, precisely so a thing can be in one,
+    the other, or neither) — but `Dialog` is the class being borrowed from, so this is an omission rather
+    than a decision unless it is written down.
+11. **Never serialise mid-drag.** Save on a settled layout; a drag has a node removed from one tree and not
+    yet in another.
+
+#### Deliverables
+
+New package `com.crystalgui.ui.elements.dock`, mirroring how `.editor`, `.canvas` and `.graph` sit beside
+their widgets.
+
+| | Class | Where it is tested |
+|---|---|---|
+| 1 | `DockNode` (`DockBranch` / `DockLeaf`), `DockLayout` — insert, remove, move, collapse, maximize | `headlessTest` |
+| 2 | `DockDropZones` — pane rect + pointer ⇒ `MERGE`/`SPLIT_{UP,DOWN,LEFT,RIGHT}`, and the outer-edge variant | `headlessTest`, pure geometry |
+| 3 | `DockLayoutCodec` — the versioned format, D8's two degradation rules | `headlessTest` |
+| 4 | `DockPanelRegistry`, `DockPanel` descriptor (`typeId`, `singleton`/`document`, title, icon) | `headlessTest` |
+| 5 | n-ary `SplitView` with per-child min/max, `LayoutPriority`, `snap`; binary API preserved | `test` |
+| 6 | `DockArea` (renders a `DockLayout`), `DockGroup` (a leaf: `TabView` + drop target) | `test` + scene |
+| 7 | `DockDropOverlay` — the 50% preview, 300 ms cleanup, not hittable | scene |
+| 8 | Tab drag: reorder in strip, insertion marker, tear-out past the threshold | scene |
+| 9 | `FloatingDock` — promoted, movable, resizable, non-modal, non-dismissable; hosts its own `DockLayout` | scene |
+| 10 | `DockCommands` — split, close, maximize, focus-next-group, move-panel-to-group | `test` |
+| 11 | Harness scene `cgui-dock`, registered in `SceneRegistry` | — |
+
+**Order of work.** 1–4 first and entirely headless: the tree, the geometry, the format and the registry are
+the whole system, and every one of them is testable with no GL context, no fonts and no window. 5 next,
+because it is the one piece of engine surgery and everything visual sits on it. 6–9 are the renderer. 10–11
+last.
+
+#### Open questions
+
+| Question | Blocks | Notes |
+|---|---|---|
+| Generalise `SplitView`, or add a second n-ary container? | Deliverable 5 | Recommended above (generalise, keep the binary facade), but it touches a shipped widget the gallery and configurator use, so it is the one decision worth confirming before it is made |
+| Does the central node move, or is it pinned to the root? | D1 | ImGui lets it move. Pinning is simpler and nothing yet wants it to move |
+| Does a float survive a session, or reset to docked? | D8 | VS Code persists auxiliary windows; IntelliJ persists `type`. Persisting is more work only in that the format needs a list of roots rather than one |
+| Is the layout per-world, per-server, or global? | D8 | Interacts with 6.1.10: a workspace layout naming shader-graph documents is meaningless against a different server's projects. Probably keyed by project, defaulting to global |
+| Do tool panels need the stripe rail before this is usable in-game? | D9 | Screen space in Minecraft is scarcer than in an IDE; auto-hide may turn out to be load-bearing rather than a nicety. Cheap to answer from the scene once it exists |
 
 ### 6.1.12 Chrome · `TODO`
 
