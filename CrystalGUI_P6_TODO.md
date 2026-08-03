@@ -1484,7 +1484,33 @@ pointers.
 
 </details>
 
-### 6.1.10 Remote project workspace · `TODO` — planned 2026-08-03
+### 6.1.10 Remote project workspace · `DONE` (2026-08-03) — **MVP shipped**
+
+> **Shipped.** The `com.crystalgui.fs` package plus `fs.*` on the existing session/RPC layer, driven end
+> to end by `--mode=cgui-workspace` and covered by the `Workspace*Test` set in `headlessTest` — the whole
+> feature is headless by construction, because a server has no GL context. Ported from VS Code's
+> `platform/files` triple: `IFileSystemProvider`, `diskFileSystemProviderClient`, `Server` (MIT).
+>
+> **What "MVP" bought.** Every in-scope row was chosen by one question — *does getting this wrong later
+> mean a rewrite, or an addition?* `CgPath`, the etag scheme, byte payloads on `DynamicOps` and root
+> confinement are all one-way doors and all shipped. Everything deferred is purely additive:
+> `fs.writeDelta`, chunked transfer with the 100 MB ceiling, the per-loader `CgFileSystem`
+> implementations (mc1201 ×3 and mc1710 — the 1.7.10 payload limit is still unverified), a client cache,
+> `fs.rename`/`fs.delete`, and `Show Difference` (which needs a Myers diff ported from VS Code's
+> `common/diff/`).
+>
+> **The per-loader `CgFileSystem` is the gap that matters**: until it exists none of this runs in-game.
+>
+> **Three invariants worth not rediscovering**, each pinned by a test: a watch seeded with no etag reports
+> every file as stale the moment it opens; an un-recorded change re-announces on every poll, which is a
+> reload prompt the user cannot dismiss; and a write that does not update the watcher echoes a client's
+> own save back as somebody else's change — indistinguishable from the real conflict, so it is believed.
+>
+> 📄 **[`CrystalGUI_P6.1.10_FILESYSTEM_PLAN.md`](CrystalGUI_P6.1.10_FILESYSTEM_PLAN.md)** is the record.
+
+<details><summary>The superseded sketch, kept for the record</summary>
+
+**The original sketch, superseded 2026-08-03:**
 
 > **This item is not what the sketch below describes.** It is a **server-hosted project workspace** —
 > the files live on the server's machine, the client is a thin IDE frontend over them, and singleplayer
@@ -1510,6 +1536,8 @@ An interface in `core/` with per-platform implementations, following `UIClipboar
 >   directory are the writable roots. The plan turns this into seven numbered decisions, of which the
 >   one the sketch never raises — whether a *server-authored* tree may touch the filesystem at all — is
 >   the one with security consequences.
+
+</details>
 
 ### 6.1.11 Docking and workspace layout · `DONE` (2026-08-04)
 
