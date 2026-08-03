@@ -171,6 +171,13 @@ public record KeyStroke(int key, int modifiers) {
         // implementation detail of a backend leaking into a user-facing string. Missing this alias
         // crashed a scene at startup on the first binding that wanted it.
         BY_NAME.put("BACKSPACE", BY_NAME.get("BACK"));
+        // Same leak, second occurrence — and it crashed a scene at startup in exactly the same way, which
+        // is why the aliases now come with `ShippedKeymapDefaultsTest` rather than another comment. LWJGL2
+        // named the page keys after the PC/AT scancodes (PRIOR/NEXT); nobody has typed those since.
+        BY_NAME.put("PAGEUP", BY_NAME.get("PRIOR"));
+        BY_NAME.put("PAGEDOWN", BY_NAME.get("NEXT"));
+        BY_NAME.put("PGUP", BY_NAME.get("PRIOR"));
+        BY_NAME.put("PGDN", BY_NAME.get("NEXT"));
         BY_NAME.put("PLUS", BY_NAME.get("ADD"));
         BY_NAME.values().removeIf(value -> value == null);
     }
