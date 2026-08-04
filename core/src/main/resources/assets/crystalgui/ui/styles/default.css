@@ -3610,3 +3610,30 @@ menuitem .__accelerator__ {
     margin-left: 24px;
     white-space: nowrap;
 }
+
+/* ── Modal prompts ──
+ *
+ * The name prompt and the delete confirmation. Both are Dialogs, so the frame, the title bar, the focus
+ * trap and Escape all come from there -- what is left is the content's rhythm.
+ *
+ * A width, because a Dialog is out of flow and sizes to its content: without one the box is exactly as
+ * wide as the longest word in the message, which for "Delete 'x'?" is unreadably narrow. */
+dialog.__prompt__ {
+    width: 260px;
+    padding-all: 8px;
+    gap-all: 8px;
+}
+
+dialog.__prompt__ .__prompt-message__ {
+    width: 100%;
+    color: #DDDDDD;
+}
+
+/* Right-aligned, affirmative last -- the Windows and web convention, and the one the title bar's own
+ * close button on the right already implies. Consistency inside one application beats picking a side. */
+dialog.__prompt__ .__prompt-buttons__ {
+    flex-direction: row;
+    justify-content: flex-end;
+    gap-all: 6px;
+    width: 100%;
+}

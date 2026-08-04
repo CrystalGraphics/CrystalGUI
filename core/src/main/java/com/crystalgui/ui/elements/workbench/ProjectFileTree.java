@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceClient;
@@ -7,11 +8,15 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
+import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.elements.tree.TreeRow;
 import com.crystalgui.ui.elements.tree.TreeView;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
+
+import javax.annotation.Nullable;
 
 /**
  * The project's files, as a tree — click a directory to expand, click a file to open it.
@@ -131,6 +136,54 @@ public class ProjectFileTree extends UIElement {
         return true;
     }
 
+    /**
+     * What a command should act on — the selected row, or null when nothing is selected.
+     *
+     * <p>Derived from the tree's selection rather than remembered, for the reason the dock's active group
+     * already records: a field updated on click answers correctly right up until something else changes
+     * the selection, and then answers confidently and wrongly.</p>
+     */
+    @Nullable
+    public CgPath selectedPath() {
+        for (int index : tree.getSelectedIndices()) {
+            TreeRow<CgPath> row = tree.rowAt(index);
+            if (row != null) return row.item();
+        }
+        return null;
+    }
+
+    /** Whether a path is a folder, as far as the listings this tree has seen are concerned. */
+    public boolean isDirectory(CgPath path) {
+        return source.isDirectory(path);
+    }
+
+    /**
+     * Opens a right-click menu built per row.
+     *
+     * <p>The menu is the host's, not the tree's — a tree in a different application wants different verbs,
+     * and the widget has no business naming commands it does not own.</p>
+     */
+    public ProjectFileTree setContextMenu(CommandRegistry registry, Supplier<ContextMenu> menu) {
+        ContextMenu.attach(tree, registry, element -> {
+            // SELECT THE ROW FIRST. Every command resolves its target through selectedPath(), so a
+            // right-click on an unselected row would otherwise act on whatever was selected before it --
+            // which is the single most dangerous thing a file context menu can get wrong.
+            int index = tree.indexOfRowElement(rowElementFor(element));
+            if (index >= 0) tree.select(index);
+            return menu.get();
+        });
+        return this;
+    }
+
+    /** Walks up from whatever was hit to the row element the tree knows about. */
+    @Nullable
+    private UIElement rowElementFor(@Nullable UIElement hit) {
+        for (UIElement element = hit; element != null; element = element.getParent()) {
+            if (element.hasClass(ROW_CLASS)) return element;
+        }
+        return null;
+    }
+
     /** Expands a directory, or reports a file. */
     private void activate(CgPath path) {
         if (source.isDirectory(path)) {
@@ -153,7 +206,12 @@ public class ProjectFileTree extends UIElement {
             // in this engine does this.
             label.setHitTest(false);
             row.addChild(label);
+            // DOUBLE CLICK OPENS; a single click only selects, which ListView does for itself through the
+            // row's focus. IntelliJ's rule, and taking it is what makes preview tabs unnecessary: they
+            // exist to stop single-click-to-open burying you in tabs as you walk a tree with the arrow
+            // keys, and a tree that does not open on a single click never has that problem.
             row.onMouseDown.attachListener((element, event) -> {
+                if (event.getDetail() < 2) return;
                 CgPath item = rowItems.get(row);
                 if (item != null) activate(item);
             }, false, false);
