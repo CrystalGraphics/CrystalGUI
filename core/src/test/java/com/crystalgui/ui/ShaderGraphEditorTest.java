@@ -5,8 +5,9 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
-import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -102,5 +103,34 @@ public class ShaderGraphEditorTest extends UiTestBase {
         assertTrue("the GraphView is stamped internal -- removals under it are silently refused, "
                 + "which is what made the tree grow without bound", removable);
         pane.addChild(editor.graph());
+    }
+
+    /**
+     * <b>The emitted source is detached, and stays live once a host parents it.</b>
+     *
+     * <p>It used to sit in an internal {@code SplitView} beside the canvas, which is a layout decision
+     * taken away from the host: a docking host wants it as an ordinary tab — draggable, closable,
+     * restorable — and it can be none of those while it is nailed inside one element. So the widget keeps
+     * it compiled and parents it nowhere.</p>
+     *
+     * <p>Both halves are asserted, because only the pair is the contract. That it is detached without also
+     * checking it still recompiles would pass just as well for a source pane that had been forgotten
+     * about — which is precisely the failure this shape invites.</p>
+     */
+    @Test(timeout = 15_000)
+    public void theEmittedSourceIsDetachedSoAHostCanPlaceIt() {
+        build();
+        assertNull("source() must not be in the editor's own tree -- a host places it",
+                editor.source().getParent());
+
+        UIElement host = new UIElement().layout(l -> l.width(300).height(200));
+        editor.getParent().addChild(host);
+        host.addChild(editor.source());
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+
+        String before = editor.source().getText();
+        editor.addStarterGraph();
+        assertNotEquals("a recompile does not reach a source pane the host parented",
+                before, editor.source().getText());
     }
 }
