@@ -76,6 +76,66 @@ public class MainPreviewPanelTest extends UiTestBase {
         assertEquals(CgPreviewMesh.CYLINDER, panel.mesh());
     }
 
+    // ── Preview shading ─────────────────────────────────────────────────────
+
+    /**
+     * Lit by default, and the menu says so.
+     *
+     * <p>The state has to be <b>readable</b>, not merely correct: the entry first shipped without a mark
+     * gutter, so it looked like a command rather than a toggle and there was no way to tell whether
+     * lighting was on except by studying the sphere. {@code setCheckable} is what reserves the gutter —
+     * ordinary context-menu rows deliberately have none.</p>
+     */
+    @Test
+    public void lightingIsOnByDefaultAndReadsAsAToggle() {
+        assertTrue(panel.isLit());
+
+        UIElement root = new UIElement().layout(l -> l.width(600).height(600));
+        root.addChild(panel);
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(com.crystalgui.style.sheet.StyleSheet.DEFAULT);
+        window.init(600, 600);
+        window.updateWithoutPainting();
+
+        com.crystalgui.ui.elements.MenuItem lighting = lightingEntry();
+        assertNotNull("the menu must offer a Lighting toggle", lighting);
+        assertTrue("it must reserve a mark gutter, or its state is invisible",
+                lighting.hasClass(com.crystalgui.ui.elements.MenuItem.CHECKABLE_CLASS));
+        assertTrue("and start checked, matching the default", lighting.isSelected());
+    }
+
+    @Test
+    public void togglingLightingUpdatesBothTheStateAndTheMark() {
+        openMenu();
+        panel.setLit(false);
+        assertFalse(panel.isLit());
+        assertFalse("the mark must follow the state", lightingEntry().isSelected());
+
+        panel.setLit(true);
+        assertTrue(lightingEntry().isSelected());
+    }
+
+    /** Builds the menu by opening it once, which is when it is lazily constructed. */
+    private void openMenu() {
+        UIElement root = new UIElement().layout(l -> l.width(600).height(600));
+        root.addChild(panel);
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(com.crystalgui.style.sheet.StyleSheet.DEFAULT);
+        window.init(600, 600);
+        window.updateWithoutPainting();
+        lightingEntry();
+    }
+
+    private com.crystalgui.ui.elements.MenuItem lightingEntry() {
+        for (UIElement child : panel.getChildren()) {
+            if (!(child instanceof com.crystalgui.ui.elements.Menu menu)) continue;
+            for (com.crystalgui.ui.elements.MenuItem item : menu.getItems()) {
+                if (MainPreviewPanel.LIGHTING_LABEL.equals(item.getText())) return item;
+            }
+        }
+        return null;
+    }
+
     // ── The boundary ────────────────────────────────────────────────────────
 
     /**
