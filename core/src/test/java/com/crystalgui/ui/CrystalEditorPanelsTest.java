@@ -107,6 +107,40 @@ public class CrystalEditorPanelsTest extends UiTestBase {
     }
 
     /**
+     * <b>The inspector shares the source's strip rather than taking a pane.</b>
+     *
+     * <p>Same leaf, because reading the generated GLSL and adjusting a node's properties are alternatives
+     * — a third column would spend the work area on whichever you are not looking at. The graph, by
+     * contrast, must stay visible alongside both, so it keeps its own pane.</p>
+     */
+    @Test
+    public void theInspectorIsATabBesideTheEmittedSourceNotAThirdPane() {
+        CrystalEditor editor = new CrystalEditor(client());
+
+        DockLeaf source = leafOf(editor, CrystalEditor.SHADER_SOURCE_TYPE);
+        DockLeaf inspector = leafOf(editor, CrystalEditor.INSPECTOR_TYPE);
+        assertNotNull("the inspector did not open at all", inspector);
+        assertSame("the inspector took a pane of its own instead of joining the source's strip",
+                source, inspector);
+        assertNotSame("the inspector landed in the graph's pane",
+                leafOf(editor, CrystalEditor.SHADER_GRAPH_TYPE), inspector);
+        editor.workbench().dock().layout().checkInvariants();
+    }
+
+    /**
+     * It opens <em>behind</em> the source rather than on top of it.
+     *
+     * <p>A panel that steals its sibling's tab on open is a panel that opens by hiding the thing you were
+     * looking at — and the emitted source is what the pane was split off for.</p>
+     */
+    @Test
+    public void theInspectorDoesNotStealTheActiveTabOnOpen() {
+        CrystalEditor editor = new CrystalEditor(client());
+        DockLeaf leaf = leafOf(editor, CrystalEditor.SHADER_SOURCE_TYPE);
+        assertEquals(CrystalEditor.SHADER_SOURCE_TYPE, leaf.activePanel().typeId());
+    }
+
+    /**
      * Opening an already-open panel reveals it where it is rather than splitting again.
      *
      * <p>Without this a menu item wired to "show the compiled source" adds a pane every time it is chosen,

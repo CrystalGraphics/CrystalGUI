@@ -3513,6 +3513,16 @@ texteditor.__shader-source__ {
     font-size: 7px;
 }
 
+/* The node inspector. Everything it LOOKS like already comes from `.__configurator-panel__` above --
+ * background, padding rhythm, scrolling -- because it IS a ConfiguratorPanel. What that rule cannot give
+ * it is a size: it is a widget rule, and how big a panel should be depends on where it was put. This is
+ * the dock's answer, and it is the same `height: 0; flex-grow: 1` every other panel in a pane uses. */
+shadernodeinspector {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
 /* ── Workbench ──
  * The project editor's shell: a dock, a file tree, and the panels a host adds to it. */
 workbench {
