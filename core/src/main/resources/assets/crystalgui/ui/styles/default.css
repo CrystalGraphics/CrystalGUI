@@ -3188,50 +3188,18 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * TOP-LEFT, where Unity puts it, against the Main Preview's bottom-right. Anchored by left/top here
  * rather than right/bottom, so a viewport resize leaves it where it is; CanvasOverlayMove takes over
  * both insets the first time it is dragged. */
+/* THE BLACKBOARD'S OWN PARTS. Its FRAME, HEAD and TITLE are not here -- they are the Main Preview's
+ * rules, which name both panels, so the two cannot drift apart. See that block above.
+ *
+ * Only the position differs: top-left, where Unity puts the board, against the preview's bottom-right.
+ * `left`/`top` rather than `right`/`bottom`, and CanvasOverlayMove takes both over on the first drag. */
 .__blackboard__ {
-    flex-direction: column;
-    width: 200px;
-    height: 240px;
-    min-width: 140px;
-    min-height: 120px;
-    resize: both;
     left: 16px;
     top: 16px;
-    background: #333333;
-    border-radius-all: 3px;
-    outline: 1px #1F1F1F;
 }
 
-/* The header. A two-line block, unlike the Main Preview's single strip: title over subtitle on the
- * left, the + on the right. So it is a ROW whose first child is a COLUMN -- the text cannot be the
- * strip itself, for the reason the Main Preview's header records at length. */
-.__blackboard__ > .__head__ {
-    flex-direction: row;
-    align-items: center;
-    gap-all: var(--cfg-gap);
-    /* Long-hands, never `padding-all` with a var() in it -- the shorthand silently substitutes to zero.
-     * Measured on this exact rule set once already. */
-    padding-left: var(--cfg-pad-x);
-    padding-right: var(--cfg-pad-x);
-    padding-top: var(--cfg-pad-y);
-    padding-bottom: var(--cfg-pad-y);
-    flex-grow: 0;
-    flex-shrink: 0;
-    background: #3A3A3A;
-    cursor: move;
-}
-.__blackboard__ > .__head__ > .__title__ {
-    width: 0;
-    flex-grow: 1;
-    flex-shrink: 1;
-    font-size: var(--cfg-font);
-    color: #E4E4E4;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-/* The asset path. Dim and secondary, and it must never push the title out of the way -- so it does not
- * grow, and it clips first. */
+/* The asset path, beside the title. Dim, secondary, and it must never push the title around -- so it
+ * does not grow, and it is the first thing to clip. */
 .__blackboard__ > .__head__ > .__subtitle__ {
     flex-grow: 0;
     flex-shrink: 1;
@@ -3241,24 +3209,23 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* The + button. A fixed square so the head's height does not depend on it. */
+/* The + button. A fixed square, so the head's height never depends on it. */
 .__blackboard__ > .__head__ > .__add__ {
-    width: 12px;
-    height: 12px;
-    min-width: 12px;
+    width: 10px;
+    height: 10px;
+    min-width: 10px;
     flex-grow: 0;
     flex-shrink: 0;
-    background: #4A4A4A;
-    border-radius-all: 2px;
     overlay: shape("plus");
+    color: #C8C8C8;
     cursor: pointer;
 }
 .__blackboard__ > .__head__ > .__add__:hover {
-    background: #5A5A5A;
+    color: #FFFFFF;
 }
 
-/* `height: 0; flex-grow: 1` -- this engine's flex-shrink defaults to 0, so without the zero basis the
- * list keeps its content height and overhangs the panel. Same trap FlexShrinkOverflowTest pins. */
+/* `height: 0; flex-grow: 1` -- flex-shrink defaults to 0 here, so without the zero basis the list keeps
+ * its content height and overhangs the panel. Same trap FlexShrinkOverflowTest pins. */
 .__blackboard__ > .__body__ {
     height: 0;
     flex-grow: 1;
@@ -3266,6 +3233,15 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     overflow: scroll;
     padding-top: 2px;
     padding-bottom: 2px;
+}
+/* NO SCROLLBARS. A ScrollerView is still what holds the list, because a bare `overflow` box scrolls by
+ * API and ignores the wheel -- so the bars are hidden rather than the scroller replaced, and the wheel
+ * keeps working. Unity's board has no visible bars either; the panel is small and the list is short, and
+ * two bars around a four-row list is more furniture than content. */
+.__blackboard__ .__v-scroller__,
+.__blackboard__ .__h-scroller__,
+.__blackboard__ .__corner__ {
+    display: none;
 }
 .__blackboard__ .__empty__ {
     font-size: var(--cfg-font);
@@ -3337,15 +3313,25 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     text-overflow: ellipsis;
 }
 
-.__main-preview__ {
+.__main-preview__,
+.__blackboard__ {
     flex-direction: column;
     width: 220px;
     height: 236px;
     min-width: 140px;
     min-height: 160px;
     resize: both;
-    /* Bottom-right of the VIEWPORT, which is where CanvasView.addOverlay puts it — so it holds station
-     * while the graph pans underneath. Unity docks its Main Preview in the same corner. */
+    /* Anchored to the VIEWPORT, which is where CanvasView.addOverlay puts these — so they hold station
+     * while the graph pans underneath, exactly as Unity's do.
+     *
+     * BOTH panels share this whole block on purpose. The Blackboard is meant to be visually identical
+     * to the Main Preview -- same frame, same header, same tokens, same size -- and naming both in one
+     * selector is the only way that stays true. A second rule set that merely LOOKED the same drifted
+     * the first time either was touched, which is what shipped once already.
+     *
+     * The Blackboard overrides only `left`/`top`, below: Unity puts it in the opposite corner. All four
+     * insets end up set on it, which is well-defined with a definite size -- Taffy resolves in favour of
+     * the start edge -- and CanvasOverlayMove takes both over on the first drag. */
     right: 16px;
     bottom: 16px;
 }
@@ -3356,7 +3342,8 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * CHILD, and that structure is the whole reason its headings sit centred: a UIText draws its glyphs from
  * its own box top, so a text element that IS the strip has nothing for `align-items` to act on and its
  * ascenders clip against the panel edge. Same tokens, same shape. */
-.__main-preview__ > .__head__ {
+.__main-preview__ > .__head__,
+.__blackboard__ > .__head__ {
     flex-direction: row;
     align-items: center;
     gap-all: var(--cfg-gap);
@@ -3375,7 +3362,8 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
 /* Ellipsis, not wrap — the configurator's own reasoning verbatim: width:0/flex-grow reserves the
  * shrink-to space, flex-shrink:1 allows it, and white-space:nowrap is what makes text-overflow mean
  * anything at all. A panel dragged narrow must clip its title, never grow a second line. */
-.__main-preview__ > .__head__ > .__title__ {
+.__main-preview__ > .__head__ > .__title__,
+.__blackboard__ > .__head__ > .__title__ {
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
