@@ -3772,21 +3772,21 @@ projectfiletree .__project-row__ {
     padding-left: 2px;
 }
 
-/* SELECTION IS THE PROMINENT STATE, hover is the faint one -- IntelliJ's weighting, and the right way
- * round. Selection is what every command in the panel acts on, so it has to be readable at a glance and
- * has to survive the pointer moving away; a hover that outshines it means the row you are about to act on
- * is the one that looks unselected.
+/* SELECTION IS THE ONLY HIGHLIGHT, and there is deliberately no :hover rule beside it.
  *
- * Listed BEFORE the hover rule so that, at equal specificity, a hovered selected row keeps the hover
- * tint -- the two read as "selected, and the pointer is here" rather than fighting. */
+ * IntelliJ's Project view highlights the selected row and nothing else, and the reason shows up the moment
+ * both exist: the two are the same kind of signal -- a filled row -- so whichever wins reads as "this is
+ * the one", and the pointer is almost never over the row you are about to act on. A hover tint made the
+ * selected file look unselected while you moved toward the menu.
+ *
+ * Ordering could not fix it either: at equal specificity the later rule wins, so hover and selection
+ * simply take turns being wrong. The answer is that a list with a selection does not need a hover state --
+ * the cursor already says where the pointer is. */
 projectfiletree .__project-row__.__selected__ {
     background-color: #2F5F9E;
     color: #FFFFFF;
 }
 
-projectfiletree .__project-row__:hover {
-    background-color: #2A2D2E;
-}
 
 /* ── The editor ──
  * The whole application: a workbench, the panels it ships, and the commands it answers to. */
