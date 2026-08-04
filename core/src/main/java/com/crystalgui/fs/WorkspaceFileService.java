@@ -1,6 +1,8 @@
 package com.crystalgui.fs;
 
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.undo.Edit;
+import com.crystalgui.core.undo.UndoStack;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -79,10 +81,27 @@ public class WorkspaceFileService {
     private final WorkspaceClient<?> client;
     private final WorkingCopies copies;
 
+    /**
+     * The workspace's own history — <b>separate from any document's</b>.
+     *
+     * <p>{@code AGENTS.md} states that an {@code UndoStack} belongs to a document rather than a window, and
+     * that stays true: a file operation is not a document edit, so it does not go on any document's stack.
+     * VS Code's answer is a second, workspace-scoped stack alongside the per-document ones
+     * ({@code explorer.enableUndo} defaults to <b>true</b>), and {@code UndoScope.nearest} already resolves
+     * outward from focus — so Ctrl+Z in the explorer finds this one and Ctrl+Z in an editor finds its
+     * own.</p>
+     */
+    private final UndoStack undoStack = new UndoStack();
+
     public WorkspaceFileService(WorkspaceClient<?> client, WorkingCopies copies) {
         if (client == null) throw new IllegalArgumentException("a file service needs a workspace client");
         this.client = client;
         this.copies = copies == null ? WorkingCopies.NONE : copies;
+    }
+
+    /** The workspace history. Ctrl+Z in the explorer resolves here; an editor's own stack is its own. */
+    public UndoStack undoStack() {
+        return undoStack;
     }
 
     // ── Operations ──────────────────────────────────────────────────────────────────────────────
@@ -91,8 +110,15 @@ public class WorkspaceFileService {
     public void create(CgPath path, String content, Runnable onDone, Consumer<WorkspaceClient.Failure> onError) {
         Operation op = Operation.of(Kind.CREATE, path);
         onWillRun.emit(op);
-        client.create(path, content.getBytes(StandardCharsets.UTF_8),
-                etag -> succeed(op, onDone), failure -> fail(op, failure, onError));
+        client.create(path, content.getBytes(StandardCharsets.UTF_8), etag -> {
+            // PUSHED, not executed: the operation already happened, and UndoStack.execute would run it a
+            // second time. push records what to undo without re-applying.
+            undoStack.push(new FileEdit("create " + path.name(),
+                    () -> client.create(path, content.getBytes(StandardCharsets.UTF_8),
+                            ignored -> refresh(op), this::report),
+                    () -> client.delete(path, false, (String id) -> refresh(op), this::report)));
+            succeed(op, onDone);
+        }, failure -> fail(op, failure, onError));
     }
 
     public void createFolder(CgPath path, Runnable onDone, Consumer<WorkspaceClient.Failure> onError) {
@@ -119,6 +145,18 @@ public class WorkspaceFileService {
         onWillRun.emit(op);
         client.rename(from, to, overwrite, () -> {
             retargetUnder(from, to);
+            undoStack.push(new FileEdit("move " + from.name(),
+                    () -> client.rename(from, to, overwrite, () -> {
+                        retargetUnder(from, to);
+                        refresh(op);
+                    }, this::report),
+                    // The inverse is the same operation the other way round, and NEVER overwriting: the
+                    // source was empty when the move started, so anything there now arrived afterwards and
+                    // is not ours to replace.
+                    () -> client.rename(to, from, false, () -> {
+                        retargetUnder(to, from);
+                        refresh(op);
+                    }, this::report)));
             succeed(op, onDone);
         }, failure -> fail(op, failure, onError));
     }
@@ -134,8 +172,19 @@ public class WorkspaceFileService {
                        Runnable onDone, Consumer<WorkspaceClient.Failure> onError) {
         Operation op = Operation.of(Kind.DELETE, path);
         onWillRun.emit(op);
-        client.delete(path, recursive, () -> {
+        client.delete(path, recursive, (String trashId) -> {
             closeUnder(path);
+            // Undoable only when the server kept a copy. A trash-less workspace reports the delete as
+            // final rather than offering an undo that would silently do nothing -- which is the worse of
+            // the two, because it is discovered by pressing Ctrl+Z and watching nothing happen.
+            if (trashId != null) {
+                undoStack.push(new FileEdit("delete " + path.name(),
+                        () -> client.delete(path, recursive, (String id) -> {
+                            closeUnder(path);
+                            refresh(op);
+                        }, this::report),
+                        () -> client.restore(trashId, restored -> refresh(op), this::report)));
+            }
             succeed(op, onDone);
         }, failure -> fail(op, failure, onError));
     }
@@ -185,6 +234,53 @@ public class WorkspaceFileService {
     }
 
     // ── Plumbing ────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * One undoable file operation.
+     *
+     * <p>Both halves only <b>issue</b> an RPC — they do not wait for it. That is the honest shape here: the
+     * operation is already asynchronous, and an {@link Edit} that blocked would block the frame. The view
+     * updates when the result arrives, through the same {@link #onDidRun} path every other change takes,
+     * so undo is not a second way for the tree to learn about a change.</p>
+     */
+    private static final class FileEdit implements Edit {
+
+        private final String label;
+        private final Runnable redo;
+        private final Runnable undo;
+
+        // A class rather than a record: a record's component accessors would be named apply() and undo(),
+        // which collide with Edit's own methods.
+        FileEdit(String label, Runnable redo, Runnable undo) {
+            this.label = label;
+            this.redo = redo;
+            this.undo = undo;
+        }
+
+        @Override
+        public void apply() {
+            redo.run();
+        }
+
+        @Override
+        public void undo() {
+            undo.run();
+        }
+
+        @Override
+        public String label() {
+            return label;
+        }
+    }
+
+    /** An undo or redo landed: tell the view, using the operation that produced the edit. */
+    private void refresh(Operation op) {
+        onDidRun.emit(op);
+    }
+
+    private void report(WorkspaceClient.Failure failure) {
+        onDidFail.emit(null, failure);
+    }
 
     private void succeed(Operation op, Runnable onDone) {
         onDidRun.emit(op);
