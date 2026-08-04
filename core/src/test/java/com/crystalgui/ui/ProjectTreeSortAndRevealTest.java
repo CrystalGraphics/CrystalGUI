@@ -55,6 +55,9 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
                 .seed("mymod.proj:Apple.md", "a")
                 .seed("mymod.proj:src/deep/target.java", "t")
                 .seed("mymod.proj:src/Main.java", "m");
+        // A folder with a REALISTIC number of children. The churn this measures is per model mutation, so
+        // two files hide it completely -- the first version of the test below passed with the defect in.
+        for (int i = 0; i < 40; i++) files.seed("mymod.proj:src/bulk/file" + i + ".txt", "x");
 
         ProjectRegistry projects = new ProjectRegistry().register(() -> List.of(
                 new WorkspaceProject("mymod.proj", "My Project", Paths.get("/srv/proj"))));
@@ -266,6 +269,148 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
                 row.hasClass(com.crystalgui.ui.elements.list.ListView.SELECTED_CLASS));
     }
 
+    /**
+     * <b>Clicking a FOLDER selects it, exactly as clicking a file does.</b>
+     *
+     * <p>It did not. Expanding ran {@code refresh()} synchronously from the press, which re-flattens the
+     * model and recycles every realised row — and {@code recycle} blurs what it takes back, so the focus
+     * that was about to select the clicked row never landed. Files selected perfectly and folders never
+     * did, which read as the two being styled differently rather than as one of them not being selected
+     * at all.</p>
+     *
+     * <p>The engine's own rule, stated in {@code DockArea.syncGroups} and paid for once by the table
+     * header: a widget must never rebuild the elements it is being clicked on.</p>
+     */
+    @Test
+    public void clickingAFolderSelectsItAndExpandsIt() {
+        UIElement row = rowElementFor("src");
+        assertNotNull("no realised row for src", row);
+        assertTrue("fixture wrong -- src is already expanded",
+                !tree.treeView().isExpanded(CgPath.parse("mymod.proj:src")));
+
+        clickCentreOf(row);
+
+        assertNotNull("clicking a folder selected nothing", tree.selectedPath());
+        assertEquals("src", tree.selectedPath().name());
+        assertTrue("the folder did not expand", tree.treeView().isExpanded(CgPath.parse("mymod.proj:src")));
+    }
+
+    /**
+     * <b>Folding never lights up a row that is not selected.</b>
+     *
+     * <p>Restoring the selection across a re-flatten stamps the {@code __selected__} class by <em>index</em>
+     * — but recycling is deferred so the old rows stay on screen rather than blanking the frame, which
+     * means the realised map still holds the <em>previous</em> occupants when that stamp lands. Collapsing
+     * a folder shifts every row beneath it up, so the restored index pointed at one file and the element
+     * still sitting there showed another: an unrelated row lit up for the frame or two before the rows
+     * were rebound.</p>
+     *
+     * <p>Checked <b>immediately</b> after the fold, with no frame advanced — that instant is the whole
+     * bug, and it is invisible once the rows rebind.</p>
+     */
+    @Test
+    public void foldingNeverHighlightsAnUnselectedRow() {
+        tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), true);
+        settle();
+
+        // Something BELOW the folder about to collapse, so its index moves.
+        clickCentreOf(rowElementFor("zebra.txt"));
+        assertEquals("zebra.txt", tree.selectedPath().name());
+
+        tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), false);
+
+        for (UIElement row : highlightedRows()) {
+            assertTrue("a row showing '" + textOf(row) + "' is highlighted while zebra.txt is selected",
+                    textOf(row).contains("zebra.txt"));
+        }
+    }
+
+    /**
+     * <b>What a row PAINTS agrees with what it is, on every frame.</b>
+     *
+     * <p>The class and the selection were provably right the whole time this was being chased; what was
+     * wrong was the <em>computed</em> style behind them. A frame ran style, then tickers, then layout — and
+     * a virtualised list binds its rows from inside layout, so the class each bind sets was not re-matched
+     * until the following frame. The row that had just become selected painted unfilled, and the pooled
+     * element it took the fill from painted blue underneath some unrelated file's name.</p>
+     *
+     * <p>Which file it landed on depended purely on pool order, so it moved every time it was reported —
+     * README.md once, notes.txt the next — and each looked like a fresh bug in whatever widget showed it.
+     * Nothing about selection was involved: any class-driven visual set from a ticker or an
+     * {@code onLayoutChanged} hook had the same one-frame lag, and selection was only the one with a colour
+     * loud enough to see.</p>
+     *
+     * <p>Asserted against {@code background-color} rather than the class, because the class was never the
+     * thing that was wrong — a test that reads it passes with the defect fully present. Every frame of the
+     * expansion is checked, since one frame is the entire lifetime of the fault.</p>
+     */
+    @Test
+    public void aRowNeverPaintsAnotherRowsSelection() {
+        // A pooled row has to come back bound to a DIFFERENT index for this to bite, and expanding alone
+        // never does that -- the pool hands elements out in the order it took them, so every row lands back
+        // where it was. Collapsing the project root first is what shuffles them: the whole tree goes into
+        // the pool, the selected row's element with it, and re-expanding deals that element to whichever
+        // index its position in the queue happens to reach.
+        clickCentreOf(rowElementFor("src"));
+        assertEquals("fixture wrong -- src is not the selected row", "src", tree.selectedPath().name());
+
+        UIElement projectRoot = rowElementFor("My Project");
+        assertNotNull("no realised row for the project root", projectRoot);
+        clickCentreOf(projectRoot);
+        pressAndRelease(rowElementFor("My Project"));
+
+        // Every frame of the expansion, including the one where the listing lands and the rows rebind.
+        // Advanced FIRST: the instant between the press and the next frame is never painted, so it is not
+        // observable and asserting on it would fail against correct behaviour.
+        for (int frame = 0; frame < 12; frame++) {
+            a.deliver();
+            b.deliver();
+            session.tick();
+            server.tick();
+            window.updateWithoutPainting();
+
+            for (UIElement row : projectRows()) {
+                boolean selected = row.hasClass(com.crystalgui.ui.elements.list.ListView.SELECTED_CLASS);
+                int background = row.getStyle().getGeneralGroup().backgroundColor();
+                assertEquals("frame " + frame + ": '" + textOf(row).trim() + "' paints "
+                                + String.format("%08X", background) + " while its selection class says "
+                                + selected,
+                        selected, background == SELECTION_FILL);
+            }
+        }
+    }
+
+    /** {@code projectfiletree .__project-row__.__selected__} in {@code default.css}. */
+    private static final int SELECTION_FILL = 0xFF2F5F9E;
+
+    /** Every realised row element, selected or not. */
+    private List<UIElement> projectRows() {
+        List<UIElement> rows = new ArrayList<>();
+        for (UIElement child : tree.treeView().getChildren()) {
+            if (child.hasClass(ProjectFileTree.ROW_CLASS)) rows.add(child);
+        }
+        return rows;
+    }
+
+    /** Every realised row currently carrying the selection class. */
+    private List<UIElement> highlightedRows() {
+        List<UIElement> lit = new ArrayList<>();
+        for (UIElement child : tree.treeView().getChildren()) {
+            if (child.hasClass(ProjectFileTree.ROW_CLASS)
+                    && child.hasClass(com.crystalgui.ui.elements.list.ListView.SELECTED_CLASS)) {
+                lit.add(child);
+            }
+        }
+        return lit;
+    }
+
+    private static String textOf(UIElement row) {
+        for (UIElement child : row.getChildren()) {
+            if (child instanceof com.crystalgui.ui.elements.UIText text) return text.getText();
+        }
+        return "";
+    }
+
     /** And clicking another row moves the selection rather than adding to it. */
     @Test
     public void clickingAnotherRowMovesTheSelection() {
@@ -292,8 +437,15 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
         return null;
     }
 
-    /** A real press and release at the row's centre, through the input handler. */
+    /** A real press and release at the row's centre, then settled. */
     private void clickCentreOf(UIElement row) {
+        pressAndRelease(row);
+        settle();
+    }
+
+    /** The gesture alone, with no frames run after it — for anything asserting on what the NEXT frame
+     * paints, which settling steps straight past. */
+    private void pressAndRelease(UIElement row) {
         var cache = row.getRuntimeCache();
         // Through the engine's own matrix, so this stays correct under uiScale and any ancestor
         // transform -- the same conversion GraphViewTest uses to aim at a port.
@@ -311,7 +463,116 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
                 x, y, 0, 0, CgMouseCodes.LEFT_BUTTON, false, 0f, 2L));
         window.getInputHandler().beginFrame();
         window.getInputHandler().endFrame();
+    }
+
+    /**
+     * <b>Rows tile with no gap between them.</b>
+     *
+     * <p>A virtualised list positions rows from its size strategy and sizes them from the same strategy,
+     * so the two have to agree. They did not: the stylesheet declared {@code height: 12px} on the row and
+     * won the cascade against the DEFAULT-origin height the list writes, so every row was painted and
+     * hit-tested 12px tall inside a 16px slot. The 4px band between each pair belonged to nothing and
+     * swallowed clicks — slight enough to read as imprecision rather than a bug.</p>
+     *
+     * <p>Asserted as {@code bottom == next.top} rather than against a fixed height, because the rule is
+     * that they tile, not that they are any particular size.</p>
+     */
+    @Test
+    public void rowsTileWithNoDeadBandBetweenThem() {
+        List<UIElement> rows = new ArrayList<>();
+        for (UIElement child : tree.treeView().getChildren()) {
+            if (child.hasClass(ProjectFileTree.ROW_CLASS)) rows.add(child);
+        }
+        rows.sort((x, y) -> Float.compare(x.getRuntimeCache().getY(), y.getRuntimeCache().getY()));
+        assertTrue("fewer than two rows realised -- the fixture proves nothing", rows.size() >= 2);
+
+        for (int i = 0; i + 1 < rows.size(); i++) {
+            var above = rows.get(i).getRuntimeCache();
+            var below = rows.get(i + 1).getRuntimeCache();
+            assertEquals("row " + i + " leaves a dead band before row " + (i + 1)
+                            + " -- a click landing there hits nothing",
+                    above.getY() + above.getHeight(), below.getY(), 0.5f);
+        }
+    }
+
+    /**
+     * <b>A row that leaves the visible set stops being visible.</b>
+     *
+     * <p>Rows are pooled rather than destroyed — removing one would throw away its Taffy node and every
+     * style candidate on it, which is the cost a pool exists to avoid. Hiding it is therefore a
+     * {@code display: none} write, and it is made from a <em>different</em> place than the show, so the
+     * two only work while neither can outrank the other.</p>
+     *
+     * <p>They stopped agreeing: raising the realise write to IMPORTANT (to stop a stylesheet's row height
+     * fighting the size strategy) took {@code display} up with it, and {@code recycle}'s DEFAULT-origin
+     * {@code none} could no longer win. Pooled rows stayed painted where they last were, so collapsing a
+     * folder left a tail of duplicate rows that showed real names and answered no clicks.</p>
+     */
+    @Test
+    public void collapsingAFolderLeavesNoGhostRows() {
+        // CAPTURED rather than assumed: hard-coding the child count made this fail the moment the fixture
+        // grew a folder, for a reason that had nothing to do with ghost rows.
+        int collapsed = visibleNames().size();
+        tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), true);
         settle();
+        assertTrue("fixture wrong -- expanding src added nothing", visibleNames().size() > collapsed);
+
+        tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), false);
+        settle();
+
+        assertEquals("the model still lists the collapsed folder's children",
+                collapsed, visibleNames().size());
+        assertEquals("rows left behind after collapsing -- they paint, and they answer no clicks",
+                visibleNames().size() + 1, displayedRows().size());   // +1 for the project root
+    }
+
+    /** Every row element the tree is actually showing — pooled ones are display:none and excluded. */
+    private List<UIElement> displayedRows() {
+        List<UIElement> shown = new ArrayList<>();
+        for (UIElement child : tree.treeView().getChildren()) {
+            if (!child.hasClass(ProjectFileTree.ROW_CLASS)) continue;
+            if (child.getRuntimeCache().getHeight() > 0f) shown.add(child);
+        }
+        return shown;
+    }
+
+    /**
+     * <b>A re-flatten never leaves a frame with nothing on screen.</b>
+     *
+     * <p>The flicker, and the observable is not what I first reached for. Invalidating the window used to
+     * {@code recycleAll()} <em>immediately</em> — every realised row set to {@code display: none} the
+     * instant the model changed. Re-realising happens in {@code updateWindow}, which runs from the frame
+     * ticker <b>before</b> layout; but a fold is a click, and clicks are dispatched at the <em>end</em> of
+     * a frame whose tick has already run. So the frame that had just recycled everything painted empty,
+     * and the next one filled it back in.</p>
+     *
+     * <p>Coalescing moved the recycle into {@code updateWindow}, so the old rows stay on screen until the
+     * new ones replace them in the same call. This asserts exactly that: refresh, then look
+     * <em>without</em> advancing a frame.</p>
+     *
+     * <p>The layout pass count is <b>not</b> the observable — it does not move either way, because all the
+     * recycles happen synchronously before layout runs. A test written against it passed with the defect
+     * in.</p>
+     */
+    @Test
+    public void aReFlattenNeverBlanksTheFrame() {
+        tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), true);
+        settle();
+        assertTrue("fixture wrong -- nothing realised", tree.treeView().shownRowCount() > 1);
+
+        // The shape of a click: the model changes after this frame's tick has already run.
+        tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), false);
+        tree.treeView().refresh();
+
+        // realisedCount, not the laid-out heights: a recycle writes display:none as a style candidate,
+        // and nothing measures until layout runs -- so the boxes are still their old size at this instant
+        // whichever way the code behaves. What has already happened is that the rows left the realised
+        // set, and the frame about to paint has nothing to draw.
+        // shownRowCount, not realisedCount: a re-flatten deliberately empties the index map -- an index
+        // no longer names a row -- while the elements stay on screen awaiting recycle. What matters here
+        // is that the frame still has something to paint.
+        assertTrue("every row was recycled the instant the model changed, so this frame paints empty -- "
+                        + "that is the flicker", tree.treeView().shownRowCount() > 1);
     }
 
     /** A reveal of something that does not exist gives up rather than retrying forever. */

@@ -169,6 +169,10 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             ticking = false;
             return false;
         }
+        if (pendingRefresh) {
+            pendingRefresh = false;
+            tree.refresh();
+        }
         if (source.drainRefresh()) tree.refresh();
         // Re-driven every frame while a reveal is outstanding: each step needs one more listing, and the
         // listing arrives on some later frame.
@@ -446,11 +450,22 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
     private void activate(CgPath path) {
         if (source.isDirectory(path)) {
             tree.setExpanded(path, !tree.isExpanded(path));
-            tree.refresh();
+            // DEFERRED to the next tick, never called here. This runs from the press that expanded the
+            // folder, and refreshing re-flattens the model -- which recycles every realised row, including
+            // the one under the pointer. recycle() BLURS what it takes back, so the focus that was about
+            // to select the clicked row never landed: folding a folder left it unselected while the file
+            // rows selected perfectly, which read as folders and files being styled differently.
+            //
+            // The engine's own rule, stated in DockArea.syncGroups and paid for by the table header: a
+            // widget must never rebuild the elements it is being clicked on.
+            pendingRefresh = true;
             return;
         }
         onFileChosen.emit(path);
     }
+
+    /** Set by a fold, drained by the ticker — see {@link #activate}. */
+    private boolean pendingRefresh;
 
     private final class RowRenderer implements TreeRenderer<CgPath> {
 

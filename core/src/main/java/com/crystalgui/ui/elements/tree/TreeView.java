@@ -198,9 +198,34 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         List<TreeRow<T>> flattened = new ArrayList<>();
         for (T root : source.roots()) flatten(root, 0, -1, flattened);
 
+        // SELECTION FOLLOWS ITEMS, not indices — captured before the rebuild and restored after.
+        //
+        // Two things make this necessary rather than nice. A re-flatten is a clear followed by one add
+        // per row, and ListView clamps the selection to the model on every change: the clear reports size
+        // zero, so the clamp discarded everything before a single row had been re-added. Expanding a
+        // folder therefore deselected it — the click had selected it correctly and the expand threw the
+        // answer away, which read as folders not being selectable at all.
+        //
+        // And even without that, indices do not survive a re-flatten. Folding a directory above the
+        // selected file renumbers every row beneath it, so an index-based selection silently moves to a
+        // different file. Every tree that keeps a selection across expansion tracks items for this reason.
+        List<T> selectedItems = new ArrayList<>();
+        for (int index : getSelectedIndices()) {
+            TreeRow<T> row = rowAt(index);
+            if (row != null) selectedItems.add(row.item());
+        }
+
         ObservableList<TreeRow<T>> model = getModel();
         model.clear();
         for (TreeRow<T> row : flattened) model.add(row);
+
+        if (selectedItems.isEmpty()) return;
+        for (int index = 0; index < flattened.size(); index++) {
+            // toggle(), because it is the additive one -- select() replaces, so restoring a multi-selection
+            // through it would leave only the last row. Anything no longer in the tree simply drops out,
+            // which is what a deleted or collapsed-away row should do.
+            if (selectedItems.contains(flattened.get(index).item()) && !isSelected(index)) toggle(index);
+        }
     }
 
     private void flatten(T item, int depth, int parentIndex, List<TreeRow<T>> out) {
