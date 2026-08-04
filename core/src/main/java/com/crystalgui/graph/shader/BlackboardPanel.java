@@ -97,6 +97,9 @@ public class BlackboardPanel extends UIElement {
     /** Records which menu entry created a property, so a pill can say {@code Color} and not {@code vec4}. */
     public static final String KIND_OPTION = "kind";
 
+    /** The one menu entry whose wire type does not name it — see {@link #TYPES}. */
+    public static final String KIND_COLOR = "Color";
+
     /**
      * The type menu, in Unity's order.
      *
@@ -197,6 +200,9 @@ public class BlackboardPanel extends UIElement {
     /** @see #refresh */
     private boolean refreshing;
     private boolean refreshPending;
+
+    /** What the list currently shows. @see #refresh */
+    private String shownSignature = "never built";
 
     public BlackboardPanel(GraphDocument document, String documentName, @Nullable UndoStack undo) {
         this.document = document;
@@ -312,9 +318,26 @@ public class BlackboardPanel extends UIElement {
             refreshPending = true;
             return;
         }
+        // NOTHING TO DO when the property list is unchanged, and this is not merely an optimisation.
+        //
+        // document.onChanged fires for ANY change -- every node added, moved or wired -- and this panel
+        // cares about none of them. Rebuilding anyway destroyed the pills, and a pill being dragged onto
+        // the canvas IS the drag source: creating the node fired onChanged, the source left the tree
+        // mid-drop, UIDragController cancelled and cleared its listener, and endDrag then dereferenced
+        // it. A NullPointerException from a successful drop.
+        //
+        // Comparing what the list would show against what it shows is cheap and, unlike a narrower
+        // signal, cannot go stale: anything that changes a pill changes the signature.
+        String signature = listSignature();
+        if (signature.equals(shownSignature)) {
+            applySelectionClasses();
+            return;
+        }
+
         refreshing = true;
         try {
             rebuild();
+            shownSignature = signature;
         } finally {
             refreshing = false;
         }
@@ -363,7 +386,10 @@ public class BlackboardPanel extends UIElement {
 
         for (GraphProperty property : document.properties()) {
             PropertyPill pill = new PropertyPill(property);
-            pill.capsule().onMouseDown.attachListener((element, event) -> {
+            // Through the pill's own signal, NOT a second listener on the same group: the pill has to
+            // stopPropagation to keep the press off the panel, and that stops the rest of the group --
+            // so a listener attached here afterwards would silently never run. See PropertyPill.onPressed.
+            pill.onPressed.connect(event -> {
                 // FOCUS THE PANEL, explicitly. Click-focus targets the exact element hit, never the
                 // nearest focusable ancestor -- so pressing a pill focuses the pill, which has no focus
                 // policy, and nothing takes focus at all. Every command here resolves outward from the
@@ -383,8 +409,7 @@ public class BlackboardPanel extends UIElement {
                     // Double-click renames, which is what Unity's Blackboard documents.
                     pill.beginRename();
                 }
-                event.stopPropagation();
-            }, false, true);
+            });
             pill.onRenamed.connect(newName -> renameProperty(property.id(), newName));
             // Focus comes back to the BOARD when a rename ends. Detaching the editor leaves focus null,
             // and commands resolve outward from the focused element -- so without this, Delete, F2 and
@@ -412,6 +437,25 @@ public class BlackboardPanel extends UIElement {
         // The selected property may have been deleted by whatever triggered this.
         if (selectedId != null && document.property(selectedId) == null) select(null);
         else applySelectionClasses();
+    }
+
+    /**
+     * Everything the list draws, as one string.
+     *
+     * <p>Every field a pill renders is in here, so a change that would look different forces a rebuild
+     * and one that would not does not. Selection is deliberately absent — it is applied to the existing
+     * pills rather than rebuilt into new ones.</p>
+     */
+    private String listSignature() {
+        StringBuilder out = new StringBuilder();
+        for (GraphProperty property : document.properties()) {
+            out.append(property.id()).append('')
+                    .append(property.name()).append('')
+                    .append(property.typeId()).append('')
+                    .append(property.exposed()).append('')
+                    .append(BlackboardPanel.displayTypeOf(property)).append('');
+        }
+        return out.toString();
     }
 
     /** The pills, in list order — for a host that wants to drag one. */

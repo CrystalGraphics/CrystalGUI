@@ -15,7 +15,10 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.editor.TextEditor;
 import com.crystalgui.ui.elements.graph.GraphCommands;
+import com.crystalgui.graph.GraphProperty;
+import com.crystalgui.graph.NodeData;
 import com.crystalgui.ui.elements.graph.GraphNode;
+import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.elements.graph.GraphView;
 
 import javax.annotation.Nullable;
@@ -155,12 +158,20 @@ public class ShaderGraphEditor extends UIElement {
         // The Blackboard is the SECOND consumer of the overlay seam, which is what makes it worth
         // having been a seam. Same viewport placement, same clamp -- see CanvasOverlayMove.
         blackboard = new BlackboardPanel(graph.getDocument(), "shader_graph", graph.undoStack());
-        blackboard.onPropertySelected.connect(id -> {
-            // Two selection sources, one inspector subject: picking a property clears the node
-            // selection so the two cannot both claim to be what is being inspected.
-            if (id != null) graph.getSelection().clear();
-        });
+        // THE PILL AND THE NODE ARE TWO VIEWS OF ONE PROPERTY, so selecting either lights both. Unity
+        // does the same, and it is what makes a board of a dozen properties navigable: click a pill to
+        // find its nodes, click a node to find its pill.
+        //
+        // The loop this obviously risks closes itself: both GraphSelection.replaceWith and
+        // BlackboardPanel.select return early when handed what they already hold, so the second hop is
+        // a no-op rather than a bounce.
+        blackboard.onPropertySelected.connect(this::highlightNodesForProperty);
+        graph.getSelection().onChanged.connect(this::syncBoardToGraphSelection);
+        // A rename, a retype or an Exposed toggle has to reach the nodes reading that property -- they
+        // show what it IS, not a copy taken when they were made.
+        graph.getDocument().onChanged.connect(this::syncPropertyNodes);
         graph.addOverlay(blackboard);
+        installPropertyDrop();
 
         recompile();
     }
@@ -191,6 +202,99 @@ public class ShaderGraphEditor extends UIElement {
     /** The floating preview, so a second host can share its view state rather than keep a copy. */
     public MainPreviewPanel mainPreview() {
         return mainPreview;
+    }
+
+    /**
+     * Lets a property pill be dropped on the canvas, where it becomes a node reading that property.
+     *
+     * <p>Wired HERE rather than in {@code GraphView}, which knows nothing about shaders and should not:
+     * a graph view drops whatever its host teaches it to. This is the same seam the node library and the
+     * type-promotion rules already come through.</p>
+     *
+     * <p><b>Rejection is the default</b>, so accepting is an explicit {@code preventDefault()} on every
+     * {@code DragOver} — re-read per frame and never latched, which is HTML5 drag-and-drop's one good
+     * idea. Without it the drop never arrives and the gesture silently does nothing.</p>
+     */
+    private void installPropertyDrop() {
+        graph.events.getGroup(DragEvent.Over.class).attachListener((element, event) -> {
+            if (event.getPayload() instanceof PropertyPill.Payload) event.preventDefault();
+        }, false, true);
+
+        graph.events.getGroup(DragEvent.Drop.class).attachListener((element, event) -> {
+            if (!(event.getPayload() instanceof PropertyPill.Payload dropped)) return;
+            GraphProperty property = graph.getDocument().property(dropped.propertyId());
+            // Gone between the press and the release -- deleted from the board mid-drag. Dropping a node
+            // that references nothing would create an error node for no reason the user could see.
+            if (property == null) return;
+
+            var world = graph.screenToWorld(event.getPosition().x(), event.getPosition().y());
+            NodeData data = ShaderPropertyNodes.create(property, world.x(), world.y());
+
+            // ADDED TO THE DOCUMENT FIRST, and that order is load-bearing.
+            //
+            // GraphView.addNode derives a node's data from the WIDGET when the document does not already
+            // know the id -- and for a library-typed widget it derives `properties = Map.of()`, on the
+            // reasonable assumption that a type's defaults can be rebuilt from the type. A property
+            // node's `propertyId` is instance state and its type is synthesised per property and never
+            // registered, so there is nothing to rebuild it from: the reference was dropped on the way
+            // in and every node came back as "Missing Property" the moment anything re-read it.
+            //
+            // Pre-adding makes dataFor find the real record and keep it. attachNode skips an id it
+            // already has, so this is idempotent rather than a double insert.
+            graph.getDocument().addNode(data);
+
+            GraphNode node = graph.getNodeFactory().create(
+                    ShaderPropertyNodes.typeFor(property), data);
+            ShaderPropertyNodes.decorate(node, property);
+            graph.addNode(node, world.x(), world.y());
+            recompile();
+            event.stopPropagation();
+        }, false, true);
+    }
+
+    /**
+     * Marks every node reading {@code propertyId}, so picking a pill shows where it is used.
+     *
+     * <p>A HIGHLIGHT, never the graph selection. Selecting them was the first implementation and it made
+     * dragging one node drag every other node reading the same property — because a selection is exactly
+     * "the things a drag moves". Answering "where is this used?" must not also answer "what am I about
+     * to move?".</p>
+     */
+    private void highlightNodesForProperty(@Nullable String propertyId) {
+        for (GraphNode node : graph.nodes()) {
+            String id = ShaderPropertyNodes.propertyIdOf(graph.getDocument().node(node.getNodeId()));
+            boolean linked = propertyId != null && propertyId.equals(id);
+            if (linked == node.hasClass(ShaderPropertyNodes.LINKED_CLASS)) continue;
+            // addClass/removeClass invalidate the style match themselves, so nothing else is needed.
+            if (linked) node.addClass(ShaderPropertyNodes.LINKED_CLASS);
+            else node.removeClass(ShaderPropertyNodes.LINKED_CLASS);
+        }
+    }
+
+    /**
+     * Points the board at the selected node's property, or clears it.
+     *
+     * <p>Only for a property node. Selecting an ordinary node clears the board, because the inspector
+     * then has a node to show and a lit pill would claim otherwise.</p>
+     */
+    private void syncBoardToGraphSelection() {
+        String property = null;
+        for (GraphNode node : graph.getSelection().nodes()) {
+            String id = ShaderPropertyNodes.propertyIdOf(graph.getDocument().node(node.getNodeId()));
+            if (id == null) continue;
+            property = id;
+            break;
+        }
+        blackboard.select(property);
+    }
+
+    /** Re-reads every property node from the document. @see ShaderPropertyNodes#sync */
+    private void syncPropertyNodes() {
+        for (GraphNode node : graph.nodes()) {
+            NodeData data = graph.getDocument().node(node.getNodeId());
+            if (!ShaderPropertyNodes.isPropertyNode(data)) continue;
+            ShaderPropertyNodes.sync(node, ShaderPropertyNodes.resolve(graph.getDocument(), data));
+        }
     }
 
     /** The floating property board. @see BlackboardPanel */

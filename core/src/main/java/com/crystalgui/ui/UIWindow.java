@@ -6,6 +6,7 @@ import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.style.StyleEngine;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.input.UIInputHandler;
@@ -186,7 +187,51 @@ public final class UIWindow {
         for (UIElement element = near; element != null; element = element.getParent()) {
             if (element.acceptsPublicChildren()) return element;
         }
-        return ui.rootElement;
+        // The root when it CAN take children -- the long-standing answer, and the one every caller already
+        // expects -- and the window's own layer only when it cannot. Falling through to the layer
+        // unconditionally also works, but it would move every window-level overlay in the engine for the
+        // sake of the one case that was broken.
+        return ui.rootElement.acceptsPublicChildren() ? ui.rootElement : windowOverlayLayer();
+    }
+
+    /** @see #windowOverlayLayer() */
+    private final UIElement overlayLayer = new UIElement();
+
+    /**
+     * The host of last resort — a layer this window owns, which <b>cannot</b> refuse an overlay.
+     *
+     * <p>This exists because the search above has no guaranteed answer, and the obvious fallback is the one
+     * element most likely to be wrong. Returning {@code ui.rootElement} unconditionally is what let the
+     * composite-root crash come back a fourth time: the walk fixed every overlay anchored to something, and
+     * a <em>window-level</em> overlay — a command palette, a New File prompt — passes {@code near == null},
+     * never enters the loop, and fell straight through to a root that refuses. Each fix covered the case in
+     * front of it and left the fallback as the original bug, which is why it kept reappearing somewhere new
+     * and looking unrelated.</p>
+     *
+     * <p>Attached with {@code addInternalChild}, which bypasses {@code acceptsPublicChildren} by design —
+     * the same mechanism every composite uses to build its own parts, and what makes this legal under a
+     * root that accepts nothing. The layer itself is internal; overlays added to it are ordinary public
+     * children, so they still remove themselves, still match selectors and still serialize exactly as they
+     * did when parented anywhere else. Marking the overlays internal too would be shorter and would leave
+     * every menu unable to close itself, since {@code removeChild} refuses an internal child.</p>
+     *
+     * <p>Zero-sized and absolutely positioned, so it contributes nothing to layout. That is sound because
+     * everything routed here is promoted to the top layer, whose containing block is the root rather than
+     * this — an overlay that is <em>not</em> promoted has no business being parented by the window at all,
+     * which is the contract {@link #addOverlay} already states.</p>
+     *
+     * <p>Built on first use rather than in {@link #init}: a window is legally constructed, handed a root and
+     * asked for an overlay in any order, and a field that is only correct when init ran first is the same
+     * shape of latent bug this method exists to remove.</p>
+     */
+    private UIElement windowOverlayLayer() {
+        if (overlayLayer.getParent() == null) {
+            overlayLayer.addClass("__overlays__");
+            StyleGroup.importantPipeline(overlayLayer.getStyle().getLayoutGroup(),
+                    l -> l.positionType(TaffyPosition.ABSOLUTE).left(0).top(0).width(0).height(0));
+            ui.rootElement.addInternalChild(overlayLayer);
+        }
+        return overlayLayer;
     }
 
     /**

@@ -7,6 +7,7 @@ import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeTypeRegistry;
+import com.crystalgui.ui.elements.graph.GraphView;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -123,6 +124,41 @@ public class ShaderPropertyCompileTest {
         assertTrue(result.source(), result.source().contains("_Tint"));
         assertEquals("the node must record which property it reads",
                 tint.id(), ShaderPropertyNodes.propertyIdOf(document.node(node.id())));
+    }
+
+    /**
+     * <b>A node added through the view keeps its property reference.</b>
+     *
+     * <p>The regression this pins is data loss, not styling. {@code GraphView.addNode} derives a node's
+     * data from the WIDGET when the document does not already know its id, and for a library-typed
+     * widget it derives {@code properties = Map.of()} — reasonable, since a type's defaults can normally
+     * be rebuilt from the type. A property node's {@code propertyId} is instance state and its type is
+     * synthesised per property and never registered, so there is nothing to rebuild it from: the
+     * reference was dropped on the way in.</p>
+     *
+     * <p>It stayed invisible while the node's title was baked in at creation, and surfaced only once the
+     * node started re-reading its property — every one of them turned into "Missing Property" the first
+     * time anything changed.</p>
+     */
+    @Test
+    public void aNodeAddedThroughTheViewKeepsItsPropertyReference() {
+        GraphView view = new GraphView();
+        view.setNodeLibrary(library, com.crystalgui.ui.elements.graph.NodeWidgetFactory.of(library).build(),
+                ShaderGraphBridge.GLSL_PROMOTION);
+        GraphProperty tint = view.getDocument().addProperty(
+                GraphProperty.of("Tint", "vec4", "(1,0,0,1)"));
+
+        NodeData data = ShaderPropertyNodes.create(tint, 40f, 40f);
+        view.getDocument().addNode(data);
+        var node = view.getNodeFactory().create(ShaderPropertyNodes.typeFor(tint), data);
+        view.addNode(node, 40f, 40f);
+
+        NodeData stored = view.getDocument().node(node.getNodeId());
+        assertNotNull("the node must be in the document", stored);
+        assertEquals("and must still say which property it reads",
+                tint.id(), ShaderPropertyNodes.propertyIdOf(stored));
+        assertNotNull("so it resolves rather than reading as Missing Property",
+                ShaderPropertyNodes.resolve(view.getDocument(), stored));
     }
 
     /**

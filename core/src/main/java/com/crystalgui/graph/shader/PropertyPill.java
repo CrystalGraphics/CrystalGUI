@@ -4,7 +4,10 @@ import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.ui.input.UIDragController;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
@@ -42,12 +45,19 @@ public class PropertyPill extends UIElement {
     public static final String RENAMING_CLASS = "__renaming__";
     public static final String EDITOR_CLASS = "__rename__";
 
+    /** On the floating copy that follows the cursor during a drag. */
+    public static final String GHOST_CLASS = "__ghost__";
+
     private final String propertyId;
 
     private final UIElement capsule = new UIElement();
     private final UIElement dot = new UIElement();
     private final UIText name;
     private final UIText type;
+
+    /** The floating copy shown while dragging. One per pill, re-registered per drag. @see #buildGhost */
+    private final UIElement ghost = new UIElement();
+    private final UIText ghostName = new UIText("");
 
     private boolean selected;
 
@@ -67,6 +77,17 @@ public class PropertyPill extends UIElement {
      * cannot fix that itself: which element should hold focus is the host's business, not a row's.</p>
      */
     public final Signal.Action onRenameEnded = new Signal.Action();
+
+    /**
+     * A press on the capsule, forwarded so the host can select, focus or open a menu.
+     *
+     * <p><b>One listener owns the capsule's press</b>, and that is not tidiness. The host's own listener
+     * called {@code stopPropagation()} to keep the press off the panel behind it, and
+     * {@code EventListenerGroup} stops emitting to the REST OF THE GROUP once that is set — so a second
+     * listener attached afterwards, for the drag, never ran at all. The gesture simply did nothing, with
+     * nothing to see anywhere. So the press arrives here once and is shared through this signal.</p>
+     */
+    public final Signal.Value<MouseEvent.Down> onPressed = new Signal.Value<>();
 
     public PropertyPill(GraphProperty property) {
         this.propertyId = property.id();
@@ -98,11 +119,23 @@ public class PropertyPill extends UIElement {
         capsule.addChild(name);
         addInternalChild(capsule);
         addInternalChild(type);
+        buildGhost();
+        installPress();
     }
 
     @Override
     public boolean acceptsPublicChildren() {
         return false;
+    }
+
+    /**
+     * What a drag from a pill carries.
+     *
+     * <p>A dedicated type rather than the bare id string: a payload is matched by {@code instanceof} at
+     * the drop target, and a raw {@code String} would be accepted by anything else that happened to drag
+     * text. One record makes "is this a property?" unambiguous.</p>
+     */
+    public record Payload(String propertyId) {
     }
 
     public String propertyId() {
@@ -133,6 +166,93 @@ public class PropertyPill extends UIElement {
      * decide, which keeps one writer for a property exactly as {@code NodeFieldBinder} does for a field —
      * the alternative is a widget that can edit a document it was never given.</p>
      */
+    /**
+     * Makes this pill draggable onto the canvas, where it becomes a node reading the property.
+     *
+     * <p>The gesture is Unity's: there is no "create property node" in the create menu, because the node
+     * <em>is</em> a reference to a board entry and dragging it out is how you say which one.</p>
+     *
+     * <p>Started with the default threshold, so a press that does not travel is still a click — the pill
+     * has to stay selectable, and a drag that armed immediately would make selecting one impossible.</p>
+     */
+    private void installPress() {
+        capsule.onMouseDown.attachListener((element, event) -> {
+            // Reported FIRST, so the host has selected and focused before a drag can begin -- dragging
+            // an unselected pill should still act on that pill.
+            onPressed.emit(event);
+            beginDrag(event);
+            // Kept off the panel behind us, which would otherwise clear the selection we just made. Safe
+            // to set here because this is the only listener on this group -- see onPressed.
+            event.stopPropagation();
+        }, false, true);
+    }
+
+    /**
+     * Starts a drag carrying this property, so it can be dropped on the canvas as a node.
+     *
+     * <p>The gesture is Unity's: there is no "create property node" in the create menu, because the node
+     * <em>is</em> a reference to a board entry and dragging it out is how you say which one.</p>
+     *
+     * <p>Uses the default threshold, so a press that does not travel is still a click — the pill has to
+     * stay selectable, and a drag that armed immediately would make selecting one impossible.</p>
+     */
+    private void beginDrag(MouseEvent.Down event) {
+        if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
+        UIWindow window = getAttachedWindow();
+        // Never while renaming: the field is a text control, and a drag from inside it is a text
+        // selection rather than a move.
+        if (window == null || editor != null) return;
+
+        float rawX = event.getPosition().x(), rawY = event.getPosition().y();
+        UIDragController drag = window.getInputHandler().getDragController();
+        // PER DRAG, which is what the controller expects -- it drops the ghost when the drag ends, so a
+        // ghost registered once would appear for the first drag and never again.
+        // The name may have changed since the ghost was built.
+        ghostName.setText(name.getText());
+        drag.setGhost(ghost);
+        drag.startDrag(capsule, rawX, rawY, new Payload(propertyId),
+                new UIDragController.DragListener() {
+                    @Override
+                    public void onDragUpdate(float mouseX, float mouseY, float startX, float startY,
+                                             float deltaX, float deltaY) {
+                        // Nothing to move: the pill stays put, the ghost follows the cursor and the DROP
+                        // does the work. The controller still needs a listener -- that is the gesture.
+                    }
+                });
+    }
+
+    /**
+     * Builds the floating copy that follows the cursor. Called once, at construction.
+     *
+     * <p><b>It has to be IN THE TREE.</b> {@code UIDragController.showGhost} promotes it to the top
+     * layer, and promotion needs a window to promote from — so it checks {@code getAttachedWindow()} and
+     * silently does nothing for an unparented element. A ghost built fresh per drag and handed straight
+     * to {@code setGhost} was therefore never shown at all, with no error to explain it. Same lesson the
+     * row menu already learned: a Popover must be in the tree before it can be promoted.</p>
+     *
+     * <p>So one ghost, parented here and hidden by the stylesheet until a drag promotes it —
+     * {@code showGhost} writes {@code display} at IMPORTANT origin, which is what lets a resting
+     * {@code display: none} in CSS be overridden for the duration.</p>
+     */
+    private void buildGhost() {
+        ghost.addClass(PILL_CLASS);
+        ghost.addClass(GHOST_CLASS);
+
+        UIElement body = new UIElement();
+        body.addClass(CAPSULE_CLASS);
+        UIElement ghostDot = new UIElement();
+        ghostDot.addClass(DOT_CLASS);
+        ghostName.addClass(NAME_CLASS);
+
+        // Nothing in a ghost may take the pointer: it sits under the cursor for the whole drag, so a
+        // hittable ghost would be the drop target for every frame of it.
+        ghost.setHitTest(false);
+        body.addChild(ghostDot);
+        body.addChild(ghostName);
+        ghost.addChild(body);
+        addInternalChild(ghost);
+    }
+
     public void beginRename() {
         if (editor != null) return;
         UIWindow window = getAttachedWindow();
