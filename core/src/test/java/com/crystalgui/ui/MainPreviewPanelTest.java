@@ -136,6 +136,36 @@ public class MainPreviewPanelTest extends UiTestBase {
         return null;
     }
 
+    /**
+     * <b>Deleting the Output node must not take the editor down.</b>
+     *
+     * <p>{@code ShaderGraphBridge.toShaderGraph} returns null when the document has no master, and the
+     * panel handed that straight to {@code CgShaderEmitter.emit}, which dereferences the graph on its
+     * first line. Deleting Output is a perfectly ordinary thing to do halfway through rewiring, and the
+     * NPE came from inside a frame ticker — so it killed the whole harness rather than one panel.</p>
+     *
+     * <p>{@code ShaderGraphPreviews} already guarded this for node thumbnails. The fix went in the
+     * renderer rather than at the call site so the method is total for every caller, present and future.</p>
+     */
+    @Test
+    public void aDocumentWithNoOutputNodeDoesNotCrashTheTicker() {
+        UIElement root = new UIElement().layout(l -> l.width(600).height(600));
+        root.addChild(panel);
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.init(600, 600);
+        window.updateWithoutPainting();
+
+        // The document is empty, which is exactly the state deleting Output leaves behind: no master, so
+        // the bridge has nothing to compile toward and hands back null.
+        assertNull("this fixture depends on the bridge returning null for a masterless document",
+                com.crystalgui.graph.shader.ShaderGraphBridge.toShaderGraph(
+                        document, CgShaderNodeRegistry.builtins(), new CgMasterNode()));
+
+        // No GL here, so the tick must survive on the null path alone — which is the path that crashed.
+        panel.tickFrame(0.016f);
+        panel.tickFrame(0.016f);
+    }
+
     // ── The boundary ────────────────────────────────────────────────────────
 
     /**
