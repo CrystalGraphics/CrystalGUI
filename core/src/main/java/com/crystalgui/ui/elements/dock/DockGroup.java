@@ -2,6 +2,8 @@ package com.crystalgui.ui.elements.dock;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.event.FocusEvent;
+import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.elements.Tab;
 import com.crystalgui.ui.elements.TabView;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -86,6 +88,27 @@ public class DockGroup extends UIElement {
         // that never sets a policy takes none, and every command that asks "which group is active" goes
         // silently inert while the widget still looks alive — the way GraphView shipped.
         setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
+
+        // A PRESS ANYWHERE IN THIS GROUP MAKES IT THE ACTIVE ONE, content included.
+        //
+        // Every dock command acts on DockArea.activeGroup(), and until now the only thing that set it was
+        // the tab listener below -- so focus could sit in an editor while the "active" group was whichever
+        // HEADER was last clicked. Ctrl+W then closed a panel in another pane, or nothing at all, and the
+        // workaround looked like "click the tab first".
+        //
+        // CAPTURE phase, so it lands before whatever was clicked can stopPropagation -- a TextEditor
+        // consumes its own presses, and that is exactly the case this exists for. It only reads, never
+        // consumes: activating a group must not cost the click that caused it.
+        this.events.getGroup(MouseEvent.Down.class).attachListener(
+                (element, event) -> area.setActiveGroup(this), true, false);
+
+        // AND ON FOCUS, which is not the same question and does not subsume it either way. A press
+        // activates a group even where nothing is focusable -- blank space in a panel, a read-only label
+        // -- and focus activates it when nobody pressed anything, which is a real path here: the Problems
+        // panel calls requestFocus on an editor to jump to a diagnostic, and the pane holding that editor
+        // has to become the one Ctrl+W acts on. FocusEvent bubbles, so this sees focus anywhere inside.
+        this.events.getGroup(FocusEvent.Focus.class).attachListener(
+                (element, event) -> area.setActiveGroup(this), false, true);
 
         tabs.attachListener(tab -> {
             // ONLY a user's selection writes back. See the field's note: the strip emits selections while

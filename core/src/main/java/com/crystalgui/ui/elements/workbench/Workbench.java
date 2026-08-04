@@ -59,6 +59,21 @@ public class Workbench extends UIElement {
     /** UNIQUE, never the shared "__content__" -- see ProjectFileTree.CONTENT_CLASS. */
     public static final String CONTENT_CLASS = "__workbench-content__";
 
+    /**
+     * On every editor opened for a file, so the sheet can give it a size.
+     *
+     * <p><b>A {@code TextEditor} has no intrinsic height at all.</b> Its lines are absolutely positioned
+     * inside its text viewport, so it contributes nothing to its own content size — the same shape as
+     * {@code CanvasView} and its transformed plane. Dropped into a dock pane with nothing sizing it, it
+     * lays out ZERO pixels tall and paints a blank pane while holding the file perfectly well: the read
+     * succeeds, the status line says "opened README.md", and there is nothing on screen.</p>
+     *
+     * <p>A class rather than a Java-side size, per the widget rule — geometry lives in {@code
+     * default.css}. A bare {@code texteditor} rule would reach every editor in the engine, including the
+     * ones a page deliberately gives a fixed height.</p>
+     */
+    public static final String FILE_EDITOR_CLASS = "__file-editor__";
+
     /** Whatever a status line should say — an open, a save, or a refusal. */
     public final Signal.Value<String> onStatus = new Signal.Value<>();
 
@@ -310,6 +325,7 @@ public class Workbench extends UIElement {
     public TextEditor editorFor(CgPath path) {
         return editors.computeIfAbsent(path, key -> {
             TextEditor created = new TextEditor("");
+            created.addClass(FILE_EDITOR_CLASS);
             LanguageRegistry.Entry entry = LanguageRegistry.forFileName(key.name());
             created.setLanguage(entry.language());
             // A FRESH tokenizer per document -- the interface exists for implementations holding a parse

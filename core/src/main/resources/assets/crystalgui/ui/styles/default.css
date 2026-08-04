@@ -3537,6 +3537,21 @@ workbench .__workbench-content__ {
     flex-basis: 0;
 }
 
+/* AN EDITOR OPENED FOR A FILE, which needs a size given to it because it has none of its own.
+ *
+ * A TextEditor's lines are absolutely positioned inside its text viewport, so the widget contributes
+ * NOTHING to its own intrinsic height -- the same shape as canvasview and its transformed plane. In a
+ * dock pane with no rule sizing it that resolves to zero, and the tab paints blank while the editor holds
+ * the file perfectly well: the read succeeded, the status line said so, and there was nothing on screen.
+ *
+ * Class-qualified rather than a bare `texteditor` rule, which would reach every editor in the engine --
+ * including the ones a page deliberately gives a fixed height. */
+texteditor.__file-editor__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
 projectfiletree {
     flex-grow: 1;
     background: #252526;
