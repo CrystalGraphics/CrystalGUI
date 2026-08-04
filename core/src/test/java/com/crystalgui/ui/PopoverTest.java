@@ -114,10 +114,29 @@ public class PopoverTest extends UiTestBase {
     }
 
     @Test
-    public void aDetachedPopoverCannotBeShown() {
+    public void aDetachedPopoverAttachesItselfWhenShownForAnAnchor() {
+        // CONTRACT CHANGED, deliberately. This asserted that showing a detached popover threw, and the
+        // requirement it encoded -- "parent it before you show it" -- turned out to be the source of four
+        // separate crashes in one afternoon, every one arriving somewhere that named neither the popover
+        // nor the show: from a hover ticker a frame later, from light dismiss, from registerElement.
+        //
+        // Menu.addSubmenu deliberately does not parent its child, so the requirement was not even
+        // consistently satisfiable by a caller who knew about it. A popover shown FOR an anchor now
+        // attaches beside that anchor; see Popover.hostFor.
+        Popover orphan = new Popover();
+        orphan.showFor(invoker, invoker);
+        settle();
+
+        assertNotNull("the popover did not attach itself", orphan.getParent());
+        assertTrue(orphan.isOpen());
+    }
+
+    /** What still cannot be shown: a point-anchored popup has no anchor to find a host from. */
+    @Test
+    public void aDetachedPopoverWithNoAnchorStillCannotBeShown() {
         Popover orphan = new Popover();
         try {
-            orphan.showFor(invoker, invoker);
+            orphan.showAt(10f, 10f, null);
             fail("expected an IllegalStateException");
         } catch (IllegalStateException expected) {
             assertTrue(expected.getMessage().contains("attached"));

@@ -216,9 +216,12 @@ public final class TopLayer {
         // removeChildInternal has already dropped this element from its parent's child list, so
         // there is no slot to restore it to — and the node is about to be removed entirely anyway.
         // Reinsert only when it really is still a child.
-        int siblingIndex = domParent.getChildren().indexOf(element);
-        if (siblingIndex < 0) return;
-        taffyTree.insertChildAtIndex(domParent.taffyNodeId, siblingIndex, element.taffyNodeId);
+        if (domParent.getChildren().indexOf(element) < 0) return;
+        // The element is demoted by now -- TopLayer.remove clears inTopLayer before calling this -- so it
+        // counts itself, and every sibling still promoted is correctly skipped. Using the raw DOM index
+        // here threw whenever a SECOND popup was open: closing one asked to insert at a slot the parent's
+        // Taffy child list did not have, because the other one's node was still parked under the root.
+        taffyTree.insertChildAtIndex(domParent.taffyNodeId, element.taffyChildIndex(), element.taffyNodeId);
     }
 
     /** Both position-accumulation paths cache against the DOM parent, and promotion changes the

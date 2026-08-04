@@ -151,6 +151,10 @@ public class Popover extends UIElement {
      * pressed, and is excluded from light dismiss so the press that opens it cannot also close it. */
     public Popover showFor(UIElement anchor, @Nullable UIElement invoker) {
         this.anchor = anchor;
+        // Self-attaching, so no caller has to remember. This is what makes Menu.addSubmenu's
+        // "the caller parents the child" contract stop being a trap -- a submenu is always shown FOR its
+        // parent item, which is in the tree by definition.
+        attachIfNeeded(anchor);
         this.anchoredToPoint = false;
         this.freelyPositioned = false;
         setPopoverInvoker(invoker != null ? invoker : anchor);
@@ -179,10 +183,34 @@ public class Popover extends UIElement {
         return open();
     }
 
+    /**
+     * Puts this popover in the tree if it is not there, next to whatever it is being shown from.
+     *
+     * <p><b>A popover that can be shown but is not attached is a trap, and it caught this codebase four
+     * times in one afternoon.</b> Promotion needs a node in the tree, so every caller had to remember to
+     * parent one first — and the failure arrives a frame later, from inside a hover ticker, with nothing
+     * in the stack naming the show that caused it. Submenus made it worse: {@link Menu#addSubmenu}
+     * deliberately does not parent its child, so a caller had to know to attach each one separately.</p>
+     *
+     * <p>Attaching on demand removes the requirement rather than documenting it. {@link #hostFor} picks
+     * the nearest ancestor that accepts children, so the popover lands beside the thing it belongs to and
+     * inherits its cascade — which is where a caller doing this by hand should have put it anyway.</p>
+     */
+    private void attachIfNeeded(@Nullable UIElement near) {
+        if (getParent() != null || near == null) return;
+        UIWindow window = near.getAttachedWindow();
+        if (window == null) return;
+        hostFor(window, near).addChild(this);
+    }
+
     private Popover open() {
         UIWindow window = getAttachedWindow();
         if (window == null) throw new IllegalStateException(
-                "A Popover must be attached to a window before it can be shown");
+                "A Popover must be attached to a window before it can be shown"
+                        + " — and it could not attach itself, because " + (anchor == null
+                        ? "it has no anchor to find a host from. Add it to the tree, or show it with an"
+                                + " anchor that is already in one."
+                        : "its anchor is not in a window either."));
         // Bumped for a re-show too, not just a first open: a context menu re-shown at a new position by a
         // press must be exempt from that press's light dismiss, or right-clicking elsewhere closes it instead
         // of moving it.

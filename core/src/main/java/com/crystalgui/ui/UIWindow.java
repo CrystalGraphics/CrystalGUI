@@ -492,7 +492,9 @@ public final class UIWindow {
         if (element.getParent() != null) {
             var parentID = element.getParent().taffyNodeId;
             if (taffyTree.containsNode(parentID)) {
-                taffyTree.insertChildAtIndex(parentID, element.getSiblingIndex(), element.taffyNodeId);
+                // taffyChildIndex, NOT getSiblingIndex: a promoted sibling holds a DOM slot and no
+                // Taffy slot, so the two drift apart by one per open popup. See UIElement.
+                taffyTree.insertChildAtIndex(parentID, element.taffyChildIndex(), element.taffyNodeId);
             }
         }
         styleEngine.markDirty(element);
