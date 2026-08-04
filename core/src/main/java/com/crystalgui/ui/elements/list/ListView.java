@@ -5,6 +5,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.style.StyleGroup;
@@ -408,13 +409,24 @@ public class ListView<T> extends ScrollerView {
                 int index2 = indexOf(tracked);
                 if (index2 < 0) return;
                 focusedIndex = index2;
-                // Focus and selection are separate concepts, and a genuine focus gesture sets both — the
-                // row was aimed at. But focus the VIEW ITSELF moved must not come back through here, or
-                // Ctrl+arrow (move without selecting) and Shift+arrow (extend a range) would both be
-                // overwritten by a plain select, and restoring focus to a recycled row would silently
-                // re-select it.
-                if (suppressFocusSelection || selectionMode == SelectionMode.NONE) return;
-                select(index2);
+            }, false, true);
+            // THE POINTER SELECTS HERE, not in the focus listener above, and the difference is the whole
+            // of Ctrl-click, Shift-click and dragging a multi-selection.
+            //
+            // Selection used to be driven entirely by focus, which reads well until you notice that focus
+            // has no modifiers and no press/release pair to hang them on: every click could only ever mean
+            // "replace the selection with this one row". So Ctrl-click and Shift-click did nothing at all
+            // in the mouse, while working perfectly from the keyboard -- moveFocusTo has always selected
+            // explicitly -- which is why it looked like a broken modifier rather than a missing feature.
+            //
+            // The keyboard is unaffected: it never went through the focus listener either.
+            tracked.onMouseDown.attachListener((el, event) -> {
+                int index2 = indexOf(tracked);
+                if (index2 >= 0) pressRow(index2);
+            }, false, true);
+            tracked.onMouseUp.attachListener((el, event) -> {
+                int index2 = indexOf(tracked);
+                if (index2 >= 0) releaseRow(index2);
             }, false, true);
             // Absolute, so a row sits at its true content offset and the scroll translate moves it for
             // free — the realised set changes, the positions never do.
@@ -507,6 +519,79 @@ public class ListView<T> extends ScrollerView {
         }
         selectionChanged();
         return this;
+    }
+
+    /**
+     * What a press on a row means — ported from the behaviour every file manager shares, and the one
+     * VS Code's {@code listWidget} implements.
+     *
+     * <p>Four cases, and the last is the one that is always missing when multi-select "randomly" breaks:</p>
+     *
+     * <ul>
+     *   <li><b>Shift</b> — extend from the anchor. The anchor deliberately does not move, so
+     *       Shift-clicking twice grows and shrinks one range instead of walking it.</li>
+     *   <li><b>Ctrl</b> — toggle this row and leave the rest alone.</li>
+     *   <li><b>Plain, on an unselected row</b> — replace the selection with it.</li>
+     *   <li><b>Plain, on a row that is ALREADY selected</b> — do nothing yet, and decide on release.</li>
+     * </ul>
+     *
+     * <p>That last case exists entirely so that dragging a multi-selection works. Selecting on press
+     * collapses the selection to the row under the pointer <em>before</em> the drag begins, so picking up
+     * five files and moving them moves one and silently deselects four — and deleting after a drag acts on
+     * whatever survived. Deferring to release keeps the whole set intact for the drag, and still collapses
+     * to the clicked row when the press turns out to be a plain click.</p>
+     */
+    private void pressRow(int index) {
+        if (selectionMode == SelectionMode.NONE || !isValid(index)) return;
+        pendingSelectOnRelease = -1;
+
+        if (selectionMode == SelectionMode.MULTIPLE && isShiftDown()) {
+            selectRangeTo(index);
+            return;
+        }
+        if (selectionMode == SelectionMode.MULTIPLE && isMultiSelectModifierDown()) {
+            toggle(index);
+            return;
+        }
+        if (isSelected(index)) {
+            pendingSelectOnRelease = index;
+            return;
+        }
+        select(index);
+    }
+
+    /** @see #pressRow(int) */
+    private void releaseRow(int index) {
+        int pending = pendingSelectOnRelease;
+        pendingSelectOnRelease = -1;
+        if (pending != index) return;
+        // NOT after a drag. The press was the start of moving this selection somewhere, and collapsing it
+        // now would land the drop and then throw away the very set that was dropped -- which reads as the
+        // selection changing on its own once the mouse comes up.
+        //
+        // isActivated, NOT isDragging. A drag is ARMED on mouse-down -- ProjectFileTree calls startDrag
+        // straight out of its press handler -- so isDragging is true for every ordinary click, and using it
+        // suppressed the collapse always: a plain click on one of five selected files left all five
+        // selected, which is the same "randomly multi-selects" complaint from the other end. isActivated
+        // only becomes true once the pointer has passed the threshold, which is exactly "this turned out to
+        // be a drag".
+        var window = getAttachedWindow();
+        if (window != null && window.getInputHandler().getDragController().isActivated()) return;
+        select(index);
+    }
+
+    /** A plain press on an already-selected row, waiting to see whether it becomes a drag. */
+    private int pendingSelectOnRelease = -1;
+
+    private static boolean isShiftDown() {
+        var input = CgPlatform.input();
+        return input != null && CgModifiers.hasShift(input.getCurrentModifiers());
+    }
+
+    /** Ctrl, or Command on a Mac — {@code CgModifiers} already resolves which one this platform means. */
+    private static boolean isMultiSelectModifierDown() {
+        var input = CgPlatform.input();
+        return input != null && CgModifiers.hasCtrl(input.getCurrentModifiers());
     }
 
     public ListView<T> selectAll() {

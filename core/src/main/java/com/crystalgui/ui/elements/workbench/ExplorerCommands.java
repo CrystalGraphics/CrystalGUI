@@ -281,8 +281,18 @@ public final class ExplorerCommands {
                 workbench.files().createFolder(path, () -> workbench.onStatus.emit("created " + name),
                         failure -> workbench.onStatus.emit("create failed: " + failure.code()));
             } else {
-                workbench.files().create(path, "", () -> workbench.onStatus.emit("created " + name),
-                        failure -> workbench.onStatus.emit("create failed: " + failure.code()));
+                // OPENED, not merely created. Making a file is a statement of intent to edit it, and every
+                // editor that has a New File treats it that way -- VS Code, IntelliJ and Visual Studio all
+                // leave you in the new file with the caret in it. Creating one and leaving the user to find
+                // it in the tree makes New File feel like it did nothing at all, which is how it was
+                // reported.
+                //
+                // A FOLDER is deliberately not opened: there is nothing to edit, and revealing it would
+                // fight the selection the user is about to make inside it.
+                workbench.files().create(path, "", () -> {
+                    workbench.onStatus.emit("created " + name);
+                    workbench.openFile(path);
+                }, failure -> workbench.onStatus.emit("create failed: " + failure.code()));
             }
         });
     }
