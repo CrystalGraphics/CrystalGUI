@@ -97,14 +97,27 @@ public final class WorkspaceService {
      */
     public String write(WorkspaceActor actor, CgPath path, byte[] content, String expectedEtag) {
         authorise(actor, path, WorkspaceOperation.WRITE);
-        if (expectedEtag != null) {
-            String actual = files.stat(path).etag();          // throws FILE_NOT_FOUND if it vanished
-            if (!expectedEtag.equals(actual)) {
-                throw new WorkspaceConflictException(path, expectedEtag, actual);
-            }
-        }
+        requireUnchanged(path, expectedEtag);
         files.write(path, content, false, true);
         return files.stat(path).etag();
+    }
+
+    /**
+     * Refuses if {@code path} no longer carries {@code expectedEtag}. A null expectation checks nothing.
+     *
+     * <p>Extracted so {@link #write}, {@link #delete} and {@link #rename} cannot drift. Three copies of a
+     * four-line guard is three chances for one of them to compare the wrong way round, and the one that
+     * got it wrong would be the one nobody wrote a test for.</p>
+     *
+     * <p>A directory has an etag too ({@code mtime + size}), so this is meaningful for a recursive delete
+     * as well — though far weaker there, since a directory's mtime says nothing about its contents.</p>
+     */
+    private void requireUnchanged(CgPath path, String expectedEtag) {
+        if (expectedEtag == null) return;
+        String actual = files.stat(path).etag();   // throws FILE_NOT_FOUND if it vanished
+        if (!expectedEtag.equals(actual)) {
+            throw new WorkspaceConflictException(path, expectedEtag, actual);
+        }
     }
 
     /**
@@ -125,14 +138,42 @@ public final class WorkspaceService {
     }
 
     public void delete(WorkspaceActor actor, CgPath path, boolean recursive) {
+        delete(actor, path, recursive, null);
+    }
+
+    /**
+     * Removes a file or directory, refusing if it moved since {@code expectedEtag} was taken.
+     *
+     * <p><b>The guard matters more here than it does on {@link #write}.</b> A stale write loses the other
+     * author's edit; a stale delete loses the file. Same re-stat, same {@link WorkspaceConflictException},
+     * and for the same reason: whatever the platform's watching story is, this looks immediately before
+     * acting.</p>
+     *
+     * @param expectedEtag the etag the caller last saw, or {@code null} to delete unconditionally
+     */
+    public void delete(WorkspaceActor actor, CgPath path, boolean recursive, String expectedEtag) {
         authorise(actor, path, WorkspaceOperation.WRITE);
+        requireUnchanged(path, expectedEtag);
         files.delete(path, recursive);
     }
 
     /** Both ends are authorised — a move is a write in two places. */
     public void rename(WorkspaceActor actor, CgPath from, CgPath to, boolean overwrite) {
+        rename(actor, from, to, overwrite, null);
+    }
+
+    /**
+     * Moves a file or directory, refusing if the <em>source</em> moved since {@code expectedEtag}.
+     *
+     * <p>The source, not the destination: what the caller read and is acting on is the thing at
+     * {@code from}. A destination that appeared underneath is what {@code overwrite} is for, and it is a
+     * different question with a different answer.</p>
+     */
+    public void rename(WorkspaceActor actor, CgPath from, CgPath to, boolean overwrite,
+                       String expectedEtag) {
         authorise(actor, from, WorkspaceOperation.WRITE);
         authorise(actor, to, WorkspaceOperation.WRITE);
+        requireUnchanged(from, expectedEtag);
         if (!from.project().equals(to.project())) {
             throw new CgFileSystemException(CgFileError.INVALID_PATH,
                     "cannot rename across projects: " + from + " -> " + to);

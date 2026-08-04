@@ -42,6 +42,29 @@ public final class WorkspaceProtocol {
     public static final String MKDIR = "fs.mkdir";
 
     /**
+     * Remove a file or directory, quoting the etag it was last seen at.
+     *
+     * <p><b>The etag is not optional ceremony.</b> Deleting a file that changed underneath you is the same
+     * class of mistake as overwriting one, and it is the worse of the two — an overwrite loses the other
+     * edit, a delete loses the file. The guard is the same re-stat {@link #WRITE} uses and reports the
+     * same {@link #ERROR_CONFLICT}.</p>
+     *
+     * <p>Whether the bytes are actually destroyed or kept somewhere recoverable is the <em>server's</em>
+     * business and deliberately absent from this method. A trash store is a policy the service applies;
+     * the client asks for a deletion either way, and does not get to choose.</p>
+     */
+    public static final String DELETE = "fs.delete";
+
+    /**
+     * Move a file or directory, quoting the etag the source was last seen at.
+     *
+     * <p>Rename and move are one method because within a workspace they are one operation — the same
+     * reason POSIX has {@code rename(2)} and not a separate {@code move}. Cross-project moves are refused
+     * by the service.</p>
+     */
+    public static final String RENAME = "fs.rename";
+
+    /**
      * Start watching a path, so the server will report changes to it.
      *
      * <p>The server can only poll what it knows somebody is looking at. Watching everything in a project
@@ -77,6 +100,16 @@ public final class WorkspaceProtocol {
     public static final String DIRECTORY = "directory";
     public static final String SIZE = "size";
     public static final String MTIME = "mtime";
+
+    /** On {@link #RENAME}: where it is moving from and to. {@link #PATH} is unused there. */
+    public static final String FROM = "from";
+    public static final String TO = "to";
+
+    /** On {@link #DELETE}: whether a non-empty directory may go. Absent means false. */
+    public static final String RECURSIVE = "recursive";
+
+    /** On {@link #RENAME}: whether an existing destination may be replaced. Absent means false. */
+    public static final String OVERWRITE = "overwrite";
 
     /** On {@link #CHANGED}: which of {@link #KIND_MODIFIED} / {@link #KIND_DELETED} happened. */
     public static final String KIND = "kind";

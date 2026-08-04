@@ -219,6 +219,58 @@ public final class WorkspaceClient<T> {
                 result -> onDone.run(), onError);
     }
 
+    /**
+     * Removes a file or directory, quoting the etag this client last saw.
+     *
+     * <p>The etag is quoted <b>automatically</b> from {@link #etagOf}, exactly as {@link #save} does, so a
+     * caller cannot forget to guard a destructive call. A path this client has never read carries no etag
+     * and is deleted unconditionally, which is right: there is nothing to be stale about.</p>
+     *
+     * <p>{@code recursive} is the caller's decision and not inferable here — the client does not know
+     * whether a path is a directory, and guessing wrong either refuses a legitimate delete or silently
+     * takes a subtree with it.</p>
+     */
+    public void delete(CgPath path, boolean recursive, Runnable onDone, Consumer<Failure> onError) {
+        StateMap<T> args = args()
+                .putString(WorkspaceProtocol.PATH, path.toString())
+                .putBool(WorkspaceProtocol.RECURSIVE, recursive);
+        String etag = etags.get(path);
+        if (etag != null) args.putString(WorkspaceProtocol.ETAG, etag);
+        call(WorkspaceProtocol.DELETE, args, result -> {
+            // FORGET, not merely remove: the path is gone, so its etag describes nothing and its watch
+            // would report a deletion this client performed as an external change.
+            forget(path);
+            onDone.run();
+        }, onError);
+    }
+
+    /**
+     * Moves a file or directory, quoting the etag this client last saw for the <em>source</em>.
+     *
+     * <p><b>The etag moves with the file.</b> Nothing else read the bytes, so what this client knew about
+     * {@code from} is exactly what is now true of {@code to} — dropping it would make the next save quote
+     * nothing and write unconditionally, silently giving up the conflict guard for every renamed file.</p>
+     *
+     * <p>The <em>watch</em> deliberately does not move. Watching is per open document and the caller is
+     * the one that knows whether anything still has this open; re-watching a path nothing is looking at
+     * costs a stat per tick forever.</p>
+     */
+    public void rename(CgPath from, CgPath to, boolean overwrite,
+                       Runnable onDone, Consumer<Failure> onError) {
+        StateMap<T> args = args()
+                .putString(WorkspaceProtocol.FROM, from.toString())
+                .putString(WorkspaceProtocol.TO, to.toString())
+                .putBool(WorkspaceProtocol.OVERWRITE, overwrite);
+        String etag = etags.get(from);
+        if (etag != null) args.putString(WorkspaceProtocol.ETAG, etag);
+        call(WorkspaceProtocol.RENAME, args, result -> {
+            String carried = etags.get(from);
+            forget(from);
+            if (carried != null) etags.put(to, carried);
+            onDone.run();
+        }, onError);
+    }
+
     // ── Etag bookkeeping ────────────────────────────────────────────────────────────────────────
 
     /** The etag this client last saw for a path, or {@code null} if it has never read it. */
