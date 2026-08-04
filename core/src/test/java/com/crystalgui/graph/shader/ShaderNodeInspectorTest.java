@@ -128,6 +128,58 @@ public class ShaderNodeInspectorTest extends UiTestBase {
         assertSame("the panel must be the same controls, not equivalent ones", before, after);
     }
 
+    /**
+     * <b>A rebuild REPLACES the panel; it must never append to it.</b>
+     *
+     * <p>The bug this exists for: {@code clearAllChildren()} deliberately skips internal children, and a
+     * {@code Configurator} marks itself internal — so the clear removed nothing and every selection
+     * stacked another copy of the panel below the last. On screen it read as the inspector keeping a
+     * history of everything ever selected, headers and all.</p>
+     *
+     * <p>Asserts the row COUNT after cycling selections, because every individual row was correct
+     * throughout — there was simply an unbounded number of them.</p>
+     */
+    @Test
+    public void rebuildingReplacesTheRowsRatherThanAppending() {
+        mount();
+        GraphNode colour = add("cg:Input/Basic/color", 0f, 0f);
+        GraphNode time = add("cg:Input/Basic/time", 200f, 0f);
+
+        graph.getSelection().selectOnly(colour);
+        int forOneNode = inspector.getChildren().size();
+        assertTrue("the fixture needs the panel to actually build rows", forOneNode > 0);
+
+        for (int cycle = 0; cycle < 4; cycle++) {
+            graph.getSelection().selectOnly(time);
+            graph.getSelection().clear();
+            graph.getSelection().selectOnly(colour);
+        }
+
+        assertEquals("the panel grew instead of being replaced",
+                forOneNode, inspector.getChildren().size());
+    }
+
+    /**
+     * Deselecting must REPLACE what was there, not append the empty state under it.
+     *
+     * <p>Asserts the child count, and that is the whole point of the test. The obvious assertion — count
+     * the headers in {@code controls()} — <b>passes even with the bug present</b>, because
+     * {@code clearRows} really did clear the control index; it was only the child elements that survived.
+     * So the index always described the latest build while the screen showed every build ever made, and
+     * every value-level assertion agreed with the index.</p>
+     */
+    @Test
+    public void theEmptyStateReplacesWhatWasThere() {
+        mount();
+        graph.getSelection().selectOnly(add("cg:Input/Basic/color", 0f, 0f));
+        int forOneNode = inspector.getChildren().size();
+
+        graph.getSelection().clear();
+        assertEquals(ShaderNodeInspector.EMPTY_MESSAGE, header());
+        assertTrue("the empty state must be smaller than a node's panel, not added to it",
+                inspector.getChildren().size() < forOneNode);
+    }
+
     /** A genuinely different selection does rebuild. */
     @Test
     public void aDifferentSelectionRebuilds() {

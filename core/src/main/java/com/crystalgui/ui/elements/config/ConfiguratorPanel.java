@@ -110,9 +110,25 @@ public class ConfiguratorPanel extends ScrollerView {
      * <p>For a panel that is <b>rebuilt</b> rather than merely updated, which any inspector bound to a
      * selection is. Clearing the children without clearing the index would leave {@link #control} handing
      * back widgets that are no longer on screen, and {@link #setValue} silently writing into them.</p>
+     *
+     * <h3>Why this cannot be {@code clearAllChildren()}</h3>
+     * <p>It was, and it removed <b>nothing at all</b>. {@link Configurator} and {@link ConfiguratorGroup}
+     * each call {@code markAsInternal()} on themselves — they are assembled widgets whose parts an
+     * inspector should not walk into — and {@code clearAllChildren()} deliberately skips internal
+     * children. So every rebuild appended, and a panel bound to a selection grew a fresh copy of itself
+     * on each change while showing every previous one above it.</p>
+     *
+     * <p>{@code removeInternalChild} is the documented escape hatch for exactly this: a widget removing a
+     * part it owns. It is applied <b>by type</b> rather than to every internal child, because a
+     * {@link ScrollerView} owns internal children too — its two scrollbars and their corner — and
+     * sweeping those out would leave the panel unable to scroll and unable to get them back.</p>
      */
     public void clearRows() {
-        clearAllChildren();
+        for (UIElement child : new java.util.ArrayList<>(getChildren())) {
+            if (child instanceof Configurator || child instanceof ConfiguratorGroup) {
+                removeInternalChild(child);
+            }
+        }
         controls.clear();
     }
 
