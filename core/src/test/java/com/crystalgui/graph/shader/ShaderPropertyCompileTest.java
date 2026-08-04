@@ -127,6 +127,34 @@ public class ShaderPropertyCompileTest {
     }
 
     /**
+     * <b>A preview substitutes the property's default instead of reading its uniform.</b>
+     *
+     * <p>{@code CgPreviewEmitter} writes no {@code Properties} block — a node preview is a tiny
+     * standalone shader, not the material — so a preview referencing {@code _Float} had an undeclared
+     * identifier, failed to compile, and fell back to white. Every preview downstream of a property node
+     * was blank: a Float set to 0 multiplied by anything showed a white square.</p>
+     *
+     * <p>Declaring the block in previews would not have helped: a preview has no material to SET the
+     * uniform, so the only value it could ever show is the default.</p>
+     */
+    @Test
+    public void aPreviewUsesTheDefaultRatherThanTheUniform() {
+        assertEquals("0", ShaderPropertyForm.glslLiteral(
+                GraphProperty.of("A", "float", "0")));
+        assertEquals("vec2(1, 0)", ShaderPropertyForm.glslLiteral(
+                GraphProperty.of("B", "vec2", "(1,0)")));
+        assertEquals("a Vector 3 stores four components and reads three",
+                "vec3(1, 0, 0)", ShaderPropertyForm.glslLiteral(
+                        GraphProperty.of("C", "vec3", "(1,0,0,1)")));
+        assertNull("a texture cannot be a literal, so there is nothing to substitute",
+                ShaderPropertyForm.glslLiteral(GraphProperty.of("D", "sampler2D", "\"white\"")));
+
+        // And the node really carries it, rather than the helper merely being correct.
+        var node = ShaderPropertyNodes.compilerNodeFor(GraphProperty.of("Amount", "float", "0"));
+        assertTrue("the node must offer a preview form", node.hasPreviewForm());
+    }
+
+    /**
      * <b>A node added through the view keeps its property reference.</b>
      *
      * <p>The regression this pins is data loss, not styling. {@code GraphView.addNode} derives a node's

@@ -332,14 +332,28 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
 
     private void installDropTarget() {
         tree.events.getGroup(DragEvent.Over.class).attachListener((element, event) -> {
-            if (event.getPayload() instanceof DragPayload && dropTargetFor(event.getTarget()) != null) {
+            if (!(event.getPayload() instanceof DragPayload)) return;
+            // OUTLINED WHEREVER THE POINTER IS, not only where a drop would be accepted.
+            //
+            // IntelliJ marks the row under the cursor even when dropping there does nothing, and that is
+            // the more useful signal: an outline that appears only over valid targets leaves you unable to
+            // tell "this cannot take it" from "the drag is not tracking me at all". The refusal is carried
+            // by the cursor, which is what a cursor is for.
+            markDropTarget(rowElementFor(event.getTarget()));
+            if (dropTargetFor(event.getTarget()) != null) {
                 // ACCEPTING is preventDefault. Re-read every frame, so a drag that wanders over
                 // something invalid stops being accepted without anything having to un-latch it.
                 event.preventDefault();
             }
         }, false, true);
 
+        // The pointer left the tree entirely -- over the editor, or off the window. Over stops firing, so
+        // without this the last row keeps its outline for the rest of the drag.
+        tree.events.getGroup(DragEvent.Leave.class).attachListener(
+                (element, event) -> markDropTarget(null), false, true);
+
         tree.events.getGroup(DragEvent.Drop.class).attachListener((element, event) -> {
+            markDropTarget(null);
             if (!(event.getPayload() instanceof DragPayload payload)) return;
             CgPath destination = dropTargetFor(event.getTarget());
             if (destination == null) return;
@@ -349,6 +363,33 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             boolean copy = (CgPlatform.input().getCurrentModifiers() & CgModifiers.CTRL) != 0;
             onFilesDropped.emit(payload.paths(), new DropRequest(destination, copy));
         }, false, true);
+    }
+
+    /** On the row the pointer is over during a drag. */
+    public static final String DROP_TARGET_CLASS = "__drop-target__";
+
+    /** The row currently outlined, so the class can be taken off again without searching for it. */
+    @Nullable
+    private UIElement outlinedRow;
+
+    /**
+     * Moves the drop outline to {@code row}, or clears it for {@code null}.
+     *
+     * <p>Held as a reference rather than re-derived, because the row it has to come <em>off</em> may no
+     * longer be under the pointer, may have scrolled out of the window, and — since rows are pooled — may
+     * by then be showing a different file entirely. A pooled row that kept this class would wear an outline
+     * around whatever it was next bound to.</p>
+     *
+     * <p>Cleared from {@code Drop} and from {@code Leave}, and those two are enough: a cancelled drag
+     * leaves the pointer's boundary and so raises {@code Leave} on the way out. A third, defensive
+     * clear driven off "is a drag still live" was written and removed again -- no path could reach
+     * it, and an untestable backstop is a claim of safety nothing checks.</p>
+     */
+    private void markDropTarget(@Nullable UIElement row) {
+        if (outlinedRow == row) return;
+        if (outlinedRow != null) outlinedRow.removeClass(DROP_TARGET_CLASS);
+        outlinedRow = row;
+        if (row != null) row.addClass(DROP_TARGET_CLASS);
     }
 
     /** The folder a drop on {@code hit} lands in, or null if it is not over a row. */

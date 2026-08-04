@@ -791,4 +791,136 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
                 ghost.getRuntimeCache().getX() > pointerLogicalX);
         assertTrue("the ghost is above the cursor", ghost.getRuntimeCache().getY() > pointerLogicalY);
     }
+
+    /** Moves the pointer, one frame, so a live drag re-targets. */
+    private void moveTo(UIElement row) {
+        var cache = row.getRuntimeCache();
+        var centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(centre.x()), Math.round(centre.y()), 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.updateWithoutPainting();
+    }
+
+    /** Presses a row and drags past the activation threshold, leaving the drag live. */
+    private void beginDragFrom(UIElement row) {
+        var cache = row.getRuntimeCache();
+        var centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
+        int x = Math.round(centre.x()), y = Math.round(centre.y());
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(x + 30, y + 30, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.updateWithoutPainting();
+    }
+
+    private boolean isOutlined(UIElement row) {
+        return row != null && row.hasClass(ProjectFileTree.DROP_TARGET_CLASS);
+    }
+
+    /**
+     * <b>The row under a drag is outlined, and only that row.</b>
+     *
+     * <p>Marked wherever the pointer is rather than only over valid targets, which is IntelliJ's signal and
+     * the more useful one: an outline that appeared only where a drop is accepted leaves "this cannot take
+     * it" and "the drag is not tracking the pointer" looking exactly the same. Refusal is the cursor's job.</p>
+     */
+    @Test
+    public void draggingOverARowOutlinesIt() {
+        UIElement from = rowElementFor("Apple.md");
+        UIElement over = rowElementFor("zebra.txt");
+        assertNotNull(from);
+        assertNotNull(over);
+
+        beginDragFrom(from);
+        moveTo(over);
+
+        assertTrue("the row under the drag was not outlined", isOutlined(over));
+        assertFalse("the row the drag started from is still outlined", isOutlined(from));
+    }
+
+    /** And the outline follows the pointer rather than accumulating on every row it crossed. */
+    @Test
+    public void theOutlineMovesWithThePointer() {
+        UIElement from = rowElementFor("Apple.md");
+        UIElement first = rowElementFor("zebra.txt");
+        UIElement second = rowElementFor("src");
+        assertNotNull(second);
+
+        beginDragFrom(from);
+        moveTo(first);
+        moveTo(second);
+
+        assertTrue("the outline did not move to the row now under the pointer", isOutlined(second));
+        assertFalse("a row the drag merely passed over kept its outline", isOutlined(first));
+    }
+
+    /**
+     * <b>Releasing clears it.</b>
+     *
+     * <p>Worth its own test because the class is taken off by REFERENCE, not by re-deriving what is under
+     * the pointer — rows are pooled, so one that kept it would wear an outline around whatever file it was
+     * next bound to, somewhere else in the tree, with no drag in progress at all.</p>
+     */
+    @Test
+    public void endingTheDragClearsTheOutline() {
+        UIElement from = rowElementFor("Apple.md");
+        UIElement over = rowElementFor("zebra.txt");
+
+        beginDragFrom(from);
+        moveTo(over);
+        assertTrue(isOutlined(over));
+
+        var cache = over.getRuntimeCache();
+        var centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(centre.x()), Math.round(centre.y()), 0, 0,
+                CgMouseCodes.LEFT_BUTTON, false, 0f, 2L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        settle();
+
+        for (UIElement row : tree.treeView().getChildren()) {
+            assertFalse("a row is still outlined after the drag ended: " + textOf(row).trim(),
+                    isOutlined(row));
+        }
+    }
+
+    /**
+     * <b>Escape cancels the drag, and the outline goes with it.</b>
+     *
+     * <p>Its own case because a cancel is dispatched to the drag SOURCE — the tree hears neither
+     * {@code Drop} nor {@code Leave}, so the two handlers that normally clear the outline both sit idle and
+     * the row would keep it with no drag in progress. Releasing outside the panel takes the same path.</p>
+     */
+    @Test
+    public void escapingADragClearsTheOutline() {
+        UIElement from = rowElementFor("Apple.md");
+        UIElement over = rowElementFor("zebra.txt");
+
+        beginDragFrom(from);
+        moveTo(over);
+        assertTrue("fixture wrong -- nothing was outlined to begin with", isOutlined(over));
+
+        window.getInputHandler().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
+                ' ', com.crystalgraphics.platform.input.CgKeyCodes.KEY_ESCAPE, true, false, 3L));
+        settle();
+
+        for (UIElement row : tree.treeView().getChildren()) {
+            assertFalse("a row kept its outline after the drag was cancelled: " + textOf(row).trim(),
+                    isOutlined(row));
+        }
+    }
 }

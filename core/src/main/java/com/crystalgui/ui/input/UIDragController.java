@@ -217,8 +217,8 @@ public final class UIDragController {
      * cursor does not scale with it, which is why the value is generous at scale 1 rather than tight.
      * These two numbers are the whole of the placement and are meant to be tuned by eye.</p>
      */
-    private static final float CURSOR_NUDGE_X = 14f;
-    private static final float CURSOR_NUDGE_Y = 9f;
+    private static final float CURSOR_NUDGE_X = 5f;
+    private static final float CURSOR_NUDGE_Y = 5f;
 
     private GhostAnchor ghostAnchor = GhostAnchor.GRAB;
 

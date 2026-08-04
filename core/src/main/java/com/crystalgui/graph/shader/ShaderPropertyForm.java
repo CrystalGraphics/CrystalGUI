@@ -122,6 +122,47 @@ public final class ShaderPropertyForm {
         }
     }
 
+    /**
+     * The property's default as a <b>GLSL</b> literal, or null for a type that cannot be one.
+     *
+     * <p>Not the same text as the stored default, and that is the point: a {@code Properties} block takes
+     * {@code (0,0,0,1)} while GLSL needs {@code vec4(0,0,0,1)}. Two vocabularies, one value.</p>
+     *
+     * <p>Null for every sampler kind — a texture cannot be written as a literal at all, so there is
+     * nothing to substitute and a caller has to fall back to the uniform.</p>
+     */
+    @Nullable
+    public static String glslLiteral(GraphProperty property) {
+        String stored = property.defaultValue();
+        CgShaderType type = CgShaderType.parse(property.typeId());
+        if (type == null) return null;
+
+        switch (type) {
+            case BOOL:
+                return String.valueOf(Boolean.parseBoolean(stored.trim()));
+            case INT:
+                return String.valueOf((int) scalar(stored));
+            case FLOAT:
+                return trim(scalar(stored));
+            case VEC2:
+            case VEC3:
+            case VEC4: {
+                // The COMPONENT count, not the declared width: a VEC3 stores four (it is declared vec4)
+                // and reads three, so the literal a graph consumes is three-wide.
+                int width = type.components();
+                double[] parts = components(stored, width);
+                StringBuilder out = new StringBuilder(type.glsl()).append('(');
+                for (int i = 0; i < width; i++) {
+                    if (i > 0) out.append(", ");
+                    out.append(trim(parts[i]));
+                }
+                return out.append(')').toString();
+            }
+            default:
+                return null;
+        }
+    }
+
     // ── Literal forms ───────────────────────────────────────────────────────
 
     /** {@code "(1,0,0,1)"} → {@code [1,0,0,1]}, padded or truncated to {@code want} components. */

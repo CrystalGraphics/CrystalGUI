@@ -3358,6 +3358,18 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     display: none;
 }
 
+/* THE ROW UNDER A DRAG, outlined whether or not a drop there would be accepted -- IntelliJ's signal,
+ * and the reason it marks refusals too: an outline that appeared only over valid targets would leave
+ * "this cannot take it" and "the drag has lost the pointer" looking identical. The cursor is what
+ * says no.
+ *
+ * An OUTLINE rather than a fill, so it reads on top of the selection band instead of replacing it --
+ * you can still see what you had selected while you carry it somewhere. The engine's outline is
+ * inset by 1px on `*`, so it survives the panel's own clipping at the edges. */
+projectfiletree .__project-row__.__drop-target__ {
+    outline: 1px #4A90D9;
+}
+
 /* THE DRAG GHOST. A loose copy of the capsule that follows the cursor -- sized to its own content
  * rather than to a row, since it is not in the list any more. Slightly transparent so what is underneath
  * still reads, which is what tells you WHERE you are about to drop. */

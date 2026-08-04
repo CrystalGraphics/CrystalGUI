@@ -257,7 +257,16 @@ public class BlackboardPanel extends UIElement {
 
         // A press anywhere on the panel focuses it, not only a press on a pill -- otherwise clicking the
         // empty area below the list silently drops the board out of key scope.
-        onMouseDown.attachListener((element, event) -> focusSelf(), false, true);
+        //
+        // EXCEPT on something that takes typing. A press on the rename field bubbles up to here, and
+        // focusing the panel from it moved focus OFF the field -- which blurs it, which commits and
+        // closes the rename. Clicking into the box you are typing in shut it, which reads as the field
+        // refusing to be clicked rather than as a focus fight two elements apart.
+        onMouseDown.attachListener((element, event) -> {
+            UIElement target = event.getTarget();
+            if (target != null && target.consumesTextInput()) return;
+            focusSelf();
+        }, false, true);
 
         document.onChanged.connect(this::refresh);
         refresh();
