@@ -359,11 +359,39 @@ public class SplitView extends UIElement {
      * the basis is the pane's content size, so a 2000px child would start the pane at 2000px and the
      * weights would merely distribute whatever was left over.</p>
      *
+     * <h3>The cross axis is written as an explicit 100%, not left to stretch</h3>
+     *
+     * <p>It <em>looks</em> redundant — {@code align-items: stretch} already gives the pane the split's
+     * full cross size, and the measured box is identical either way. What differs is whether that size is
+     * <b>definite</b>. A stretched box is not, so Taffy resolves the pane's children against an
+     * indeterminate cross size, and a grow chain below it survives exactly one level before collapsing to
+     * zero.</p>
+     *
+     * <p>That is a real bug and it shipped: two dock panels side by side put a {@code SplitView} above
+     * every group, and the shader graph — {@code shadergrapheditor > __shader-content__ > graphview}, all
+     * three growing — came out <b>376px, 0px, 0px</b>. The pane was the right size, the widget was the
+     * right size, and everything inside it was gone. A single panel has no split above it, which is why it
+     * only appeared when the emitted source moved into a pane of its own, and why dragging the divider
+     * brought it back: that writes real weights and forces a layout with definite space.</p>
+     *
+     * <p>Two levels of growth under a pane is not exotic — it is what any composite widget with a content
+     * wrapper does, which is most of them.</p>
+     *
      * <p>All at DEFAULT origin, so a stylesheet can still override any of it.</p>
      */
     private void configurePane(UIElement pane) {
         StyleGroup.defaultPipeline(pane.getStyle().getGeneralGroup(), g -> g.overflow(Overflow.HIDDEN));
-        StyleGroup.defaultPipeline(pane.getStyle().getLayoutGroup(), l -> l.flexBasis(0));
+        StyleGroup.defaultPipeline(pane.getStyle().getLayoutGroup(), l -> {
+            l.flexBasis(0);
+            // BOTH axes every time, because setOrientation re-runs this: writing only the cross axis would
+            // leave the previous orientation's 100% on what is now the MAIN axis, where it fights
+            // flex-basis: 0 and the weights stop deciding the split.
+            if (isVertical()) {
+                l.widthPercent(100f).heightAuto();
+            } else {
+                l.widthAuto().heightPercent(100f);
+            }
+        });
     }
 
     // ── Split ───────────────────────────────────────────────────────────────
