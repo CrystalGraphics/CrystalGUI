@@ -184,4 +184,54 @@ public class ContextMenuTest extends UiTestBase {
         assertEquals(List.of("New File"), labelsOf(newItem.getSubmenu()));
         assertFalse("enablement did not reach the outer item", menu.getItems().get(1).isEnabled());
     }
+
+    /**
+     * <b>A submenu row's label starts where every other label starts.</b>
+     *
+     * <p>It did not: the rule reached for {@code justify-content: space-between}, which distributes ALL the
+     * children — and a menu row has three, because every item carries a zero-width {@code __mark__}
+     * pre-icon whether or not the menu is checkable. The mark took the left edge, the arrow took the right,
+     * and the label was spaced into the middle, so {@code New} sat centred above a column of left-aligned
+     * verbs.</p>
+     *
+     * <p>Asserted as "the same x as a plain row", not against a number: the padding is the sheet's to
+     * choose, and what must hold is that owning a submenu changes nothing about where the text begins.</p>
+     */
+    @Test
+    public void aSubmenuRowsLabelIsNotCentred() {
+        Menu menu = new Menu();
+        MenuItem plain = menu.addItem("Rename");
+        Menu sub = new Menu();
+        sub.addItem("File");
+        MenuItem parent = menu.addSubmenu("New", sub);
+        window.addOverlay(menu, root);
+        menu.showAt(0f, 0f, null);
+        for (int i = 0; i < 8; i++) window.updateWithoutPainting();
+
+        float plainLabelX = labelXOf(plain);
+        float submenuLabelX = labelXOf(parent);
+        assertEquals("the submenu row's label is not aligned with the others -- it is centred in the row",
+                plainLabelX, submenuLabelX, 0.5f);
+
+        // And the arrow is still hard right, which is what the auto margin buys -- a fix that merely
+        // un-centred the label by dropping the rule would leave the arrow tucked against the text.
+        UIElement arrow = parent.querySelector("." + MenuItem.SUBMENU_ARROW_CLASS);
+        assertNotNull("the submenu row has no arrow", arrow);
+        float rowRight = parent.getRuntimeCache().getWidth();
+        float arrowRight = arrow.getRuntimeCache().getX() + arrow.getRuntimeCache().getWidth();
+        assertTrue("the arrow is not at the trailing edge -- it sits at " + arrowRight
+                        + " in a row " + rowRight + " wide",
+                arrowRight >= rowRight - 8f);
+    }
+
+    /** Where the row's text actually begins, in the row's own space. */
+    private static float labelXOf(MenuItem item) {
+        for (UIElement child : item.getChildren()) {
+            if (child instanceof com.crystalgui.ui.elements.UIText text && !text.getText().isEmpty()
+                    && !child.hasClass(MenuItem.ACCELERATOR_CLASS)) {
+                return child.getRuntimeCache().getX();
+            }
+        }
+        throw new AssertionError("no label found on " + item.getText());
+    }
 }

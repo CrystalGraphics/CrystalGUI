@@ -614,6 +614,149 @@ colorselector .__channel-row__ slider .__thumb__ {
     outline: none;
 }
 
+/* ── THE PROPERTY NODE ──
+ * Unity reference: docs/research/unity-blackboard/14-drag-property-to-node.png and the side-by-side in
+ * the 6.3.14 notes.
+ *
+ * ONE ROW, not a node box. A property node is a name and a dot: it has no input column, no controls row
+ * and no preview, so the title bar and the single output sit SIDE BY SIDE rather than stacked. That is
+ * done by turning the node itself into a flex row -- the same children an ordinary node has, laid out
+ * along the other axis -- rather than by rebuilding the widget, so a property node stays an ordinary
+ * GraphNode and keeps selection, dragging, hit testing and wires for free.
+ *
+ * The radius is half the node's height, which is what makes the ends semicircles rather than soft
+ * corners. Keep the two in step if either moves. */
+graphnode.__property-node__ {
+    flex-direction: row;
+    align-items: center;
+    /* BRIGHTER than --node-header (#393939), which every other node's header uses. Unity lifts a
+     * property node above the ordinary ones on purpose: it is a reference rather than a computation, and
+     * the extra lift is what separates it from the canvas at a glance without a border. */
+    background: #565656;
+    border-radius: 13px;
+    min-height: 26px;
+    /* SYMMETRIC. Both edges frame a dot -- the green exposed dot on the left, the port dot on the right
+     * -- so equal padding reads as equal. It was 10/8 on the assumption the port needed less room, which
+     * only made the right side look tighter. */
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+/* Every region paints its own background normally -- the node paints none -- so these have to be cleared
+ * rather than left to inherit, or the pill reads as stacked bands again.
+ *
+ * BOTH `background` AND `background-color`, because they are two different properties here: one is a
+ * drawable and the other a colour, and clearing only the drawable leaves the colour painting. The
+ * output column uses `background-color: #35353576`, so with only `background: none` the port kept a
+ * darker block behind its dot -- the node was the right colour everywhere except the one place a
+ * separate rule was still painting. */
+graphnode.__property-node__ .__title-bar__,
+graphnode.__property-node__ .__ports__,
+graphnode.__property-node__ .__outputs__,
+graphnode.__property-node__ .__inputs__ {
+    background: none;
+    background-color: #00000000;
+    border-radius: 0;
+}
+
+/* CONTENT-SIZED, and emphatically NOT `width: 0; flex-grow: 1`.
+ *
+ * A graphnode's width comes from its content. A zero-basis title bar therefore contributes NOTHING to
+ * that content width, so the node shrank to just its two dots -- and with no slack left there was
+ * nothing for flex-grow to grow into. The name vanished entirely: a pill with a green dot, a port dot
+ * and no text at all.
+ *
+ * The pill is meant to be the width of its name, which is what `auto` already gives. */
+graphnode.__property-node__ .__title-bar__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 6px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    padding-left: 0;
+    padding-right: 0;
+}
+/* The gap between the name and its port dot. On the NODE, since the two are siblings there. */
+graphnode.__property-node__ {
+    gap-all: 6px;
+}
+graphnode.__property-node__ .__ports__ {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 0;
+    flex-shrink: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+graphnode.__property-node__ .__outputs__ {
+    flex-grow: 0;
+    flex-shrink: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* Nothing else a node normally carries applies: no inputs to show, nothing under the title to fold
+ * away, no settings and no preview. */
+graphnode.__property-node__ .__inputs__,
+graphnode.__property-node__ .__collapse__,
+graphnode.__property-node__ .__controls__,
+graphnode.__property-node__ .__preview__ {
+    display: none;
+}
+
+/* The port shows its DOT only. Unity labels the NODE, not the port -- the arity is already in the title
+ * (ShaderPropertyNodes.titleFor), so a port label would say it twice. */
+graphnode.__property-node__ nodeport .__label__ {
+    display: none;
+}
+graphnode.__property-node__ nodeport {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* LINKED -- this node reads the property picked on the Blackboard. GREEN, deliberately not the selection
+ * blue: a link and a selection are different answers ("where is this used" versus "what am I about to
+ * move"), and green is already this feature's colour, carried by the exposed dot on both the pill and
+ * the node.
+ *
+ * SPECIFICITY, NOT SOURCE ORDER, decides against the selection rules -- and getting that backwards is
+ * what made a selected node stay green. `graphnode.__property-node__.__property-linked__` weighs 21;
+ * `graphnode:checked` weighs 11, so the link won outright wherever both applied and there was no way to
+ * tell which of several linked nodes was the selected one. Every combined state therefore needs a rule
+ * of its own, each heavier than the one it must beat.
+ *
+ * SELECTION ALWAYS READS BLUE. It is the more urgent state: linkage says where a property is used,
+ * selection says what the next keystroke acts on. */
+graphnode.__property-node__.__property-linked__ {
+    outline: 2px #7BD64B;
+    outline-offset: 1px;
+}
+graphnode.__property-node__.__property-linked__:hover {
+    outline: 3px #7BD64B;
+    outline-offset: 1px;
+}
+graphnode.__property-node__.__property-linked__:checked {
+    outline: 2px #44C0FF;
+    outline-offset: 1px;
+}
+graphnode.__property-node__.__property-linked__:checked:hover {
+    outline: 3px #44C0FF;
+    outline-offset: 1px;
+}
+
+/* EXPOSED. The same green dot the Blackboard pill carries, and drawn the same way -- a plain element
+ * with a full corner radius, exactly as NodePort draws its own. Whether a property is exposed is
+ * otherwise invisible once it is on the graph. */
+graphnode.__property-node__ .__exposed-dot__ {
+    width: 5px;
+    height: 5px;
+    min-width: 5px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    background: #7BD64B;
+    border-radius: 3px;
+}
+
 /* ── Main Preview (P6.3.12) ─────────────────────────────────────────────────────────────────────
  * Unity's floating preview panel: a title strip over a dark stage.
  *

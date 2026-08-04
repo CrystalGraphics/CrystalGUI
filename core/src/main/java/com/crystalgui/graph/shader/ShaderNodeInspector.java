@@ -6,7 +6,9 @@ import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeField;
 import com.crystalgui.graph.NodeType;
+import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.NodeTypeRegistry;
+import com.crystalgui.graph.PropertyEdits;
 import com.crystalgui.graph.PortSpec;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.config.ConfigControl;
@@ -63,15 +65,32 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
     @Nullable
     private final Runnable onChange;
 
+    @Nullable
+    private final BlackboardPanel board;
+
     /** What the last rebuild was showing, so a redundant one can be skipped. @see #refresh */
     private String shownKey = "";
 
     public ShaderNodeInspector(GraphView graph, NodeTypeRegistry library, @Nullable Runnable onChange) {
+        this(graph, library, onChange, null);
+    }
+
+    /**
+     * @param board the property board whose selection this also reflects, or null for a graph with none
+     */
+    public ShaderNodeInspector(GraphView graph, NodeTypeRegistry library, @Nullable Runnable onChange,
+                               @Nullable BlackboardPanel board) {
         this.graph = graph;
         this.library = library;
         this.onChange = onChange;
+        this.board = board;
         addClass(PANEL_CLASS);
         graph.getSelection().onChanged.connect(this::refresh);
+        // Only LISTENS. Which of the two selections leads is ShaderGraphEditor's business -- it keeps the
+        // pill and the nodes pointing at the same property -- and a second opinion here fought it: this
+        // panel is built lazily, so its listener ran last and cleared the board the editor had just set,
+        // and selecting a property node lit no pill at all.
+        if (board != null) board.onPropertySelected.connect(id -> refresh());
         rebuild();
     }
 
@@ -117,6 +136,10 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
     /** Identity of what is on screen — cheap, and stable across a re-assertion of the same selection. */
     private String selectionKey() {
         GraphSelection selection = graph.getSelection();
+        String property = board == null ? null : board.selectedPropertyId();
+        // The property first: it is shown INSTEAD of the graph selection, so it has to be part of what
+        // identifies the panel's subject or picking one would look like no change at all.
+        if (property != null) return "property:" + property;
         if (selection.wire() != null) return "wire:" + System.identityHashCode(selection.wire());
         StringBuilder key = new StringBuilder("nodes");
         for (GraphNode node : selection.nodes()) key.append(':').append(node.getNodeId());
@@ -125,6 +148,12 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
 
     private void rebuild() {
         clearRows();
+
+        GraphProperty property = board == null ? null : board.selectedProperty();
+        if (property != null) {
+            showProperty(property);
+            return;
+        }
 
         GraphSelection selection = graph.getSelection();
         if (selection.wire() != null) {
@@ -152,6 +181,16 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
             add(ConfigDescriptor.header(EMPTY_MESSAGE), null);
             return;
         }
+        // A PROPERTY NODE IS A REFERENCE, so the thing worth editing is the property, not the node -- it
+        // has no fields of its own and its only port is an output. Showing the generic node form gave a
+        // header reading `cg:property` and three read-only facts, which is everything except what the
+        // user was actually looking at.
+        GraphProperty referenced = ShaderPropertyNodes.resolve(document(), data);
+        if (referenced != null) {
+            showProperty(referenced);
+            return;
+        }
+
         NodeType type = library.get(data.typeId());
         add(ConfigDescriptor.header(type == null ? data.typeId() : type.label()), null);
 
@@ -256,6 +295,79 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
      */
     private void readOnly(ConfiguratorGroup group, String label, String value) {
         addTo(group.content(), ConfigDescriptor.info(label, label), value);
+    }
+
+    // ── A property ──────────────────────────────────────────────────────────
+
+    /**
+     * The Blackboard form: what a property is called, what it is called in the shader, what it starts as,
+     * and whether a material may edit it.
+     *
+     * <p>Unity reference: {@code docs/research/unity-blackboard/12-property-vector2-settings.png}. Its
+     * {@code Precision} and {@code Override Property Declaration} rows are deliberately absent — no
+     * precision modes are emitted and nothing would read either, which is the same test 6.3.11 used to
+     * reject six master ports. A row that changes nothing is worse than a missing one.</p>
+     */
+    private void showProperty(GraphProperty property) {
+        add(ConfigDescriptor.header("Property: " + property.name()), null);
+
+        Configurator name = addTo(this, ConfigDescriptor.text("property.name", "Name")
+                .tooltip("What the Blackboard and its nodes show."), property.name());
+        if (name != null) {
+            name.control().changed.connect(value ->
+                    editProperty(property.id(), p -> p.withName(String.valueOf(value))));
+        }
+
+        Configurator reference = addTo(this, ConfigDescriptor.text("property.reference", "Reference")
+                .tooltip("The uniform's name in the generated shader. Sanitised on entry."),
+                property.reference());
+        if (reference != null) {
+            reference.control().changed.connect(value ->
+                    editProperty(property.id(), p -> p.withReference(String.valueOf(value))));
+        }
+
+        // TYPED, and that is why the form cannot be a fixed list of rows: two boxes for a Vector 2, a
+        // swatch for a Colour, a checkbox for a Boolean. See ShaderPropertyForm.
+        Configurator value = addTo(this, ShaderPropertyForm.describeDefault(property)
+                .tooltip("What a material starts with when it has said nothing else."),
+                ShaderPropertyForm.readDefault(property));
+        if (value != null) {
+            value.control().changed.connect(raw -> {
+                String literal = ShaderPropertyForm.writeDefault(property, raw);
+                if (literal != null) editProperty(property.id(), p -> p.withDefaultValue(literal));
+            });
+        }
+
+        Configurator exposed = addTo(this, ConfigDescriptor.bool("property.exposed", "Exposed")
+                .tooltip("Whether a material inspector offers it. It is a uniform either way."),
+                property.exposed());
+        if (exposed != null) {
+            exposed.control().changed.connect(value2 ->
+                    editProperty(property.id(), p -> p.withExposed(Boolean.TRUE.equals(value2))));
+        }
+
+        ConfiguratorGroup about = group("About", true);
+        addChild(about);
+        readOnly(about, "Type", BlackboardPanel.displayTypeOf(property));
+        readOnly(about, "Wire type", property.typeId());
+        readOnly(about, "Property id", property.id());
+    }
+
+    /**
+     * Applies an edit to a property, undoably.
+     *
+     * <p>Re-read by id rather than closing over the record: the panel may have rebuilt since the row was
+     * built, and writing a stale copy back would silently undo whatever changed in between.</p>
+     */
+    private void editProperty(String propertyId, java.util.function.UnaryOperator<GraphProperty> edit) {
+        GraphProperty current = document().property(propertyId);
+        if (current == null) return;
+        PropertyEdits.Change change = PropertyEdits.Change.of(document(), edit.apply(current));
+        if (change == null || !change.changesAnything()) return;
+
+        UndoStack undo = undo();
+        if (undo != null) undo.execute(change); else change.apply();
+        if (onChange != null) onChange.run();
     }
 
     // ── A wire ──────────────────────────────────────────────────────────────

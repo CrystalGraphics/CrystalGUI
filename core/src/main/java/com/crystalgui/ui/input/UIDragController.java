@@ -128,7 +128,13 @@ public final class UIDragController {
      * re-registering on mouse-down.</p>
      */
     public void setGhost(@Nullable UIElement ghost) {
+        setGhost(ghost, GhostAnchor.GRAB);
+    }
+
+    /** @see GhostAnchor */
+    public void setGhost(@Nullable UIElement ghost, GhostAnchor anchor) {
         this.ghost = ghost;
+        this.ghostAnchor = anchor == null ? GhostAnchor.GRAB : anchor;
         if (ghost == null) return;
         // A ghost sitting under the cursor would otherwise be the drop target for its own drag.
         ghost.setHitTest(false);
@@ -167,10 +173,43 @@ public final class UIDragController {
         // against for a promoted element (its Taffy node is reparented to the root).
         Vector2f inRoot = Transform2D.apply(rootCache.worldToLocal.get(), mouseX, mouseY);
 
-        final float left = inRoot.x() - rootCache.getX() - grabOffsetX;
-        final float top = inRoot.y() - rootCache.getY() - grabOffsetY;
+        float offsetX = ghostAnchor == GhostAnchor.GRAB ? grabOffsetX : -CURSOR_NUDGE_X;
+        float offsetY = ghostAnchor == GhostAnchor.GRAB ? grabOffsetY : -CURSOR_NUDGE_Y;
+        final float left = inRoot.x() - rootCache.getX() - offsetX;
+        final float top = inRoot.y() - rootCache.getY() - offsetY;
         StyleGroup.importantPipeline(g.getStyle().getLayoutGroup(), l -> l.left(left).top(top));
     }
+
+    /**
+     * How a ghost is placed relative to the pointer. Two genuinely different gestures, and neither
+     * placement is right for the other.
+     */
+    public enum GhostAnchor {
+        /**
+         * Keep the grab offset — the ghost sits exactly where the source was relative to the pointer.
+         *
+         * <p>Right when the ghost <em>is</em> the thing being moved, at the same size: a pill, a card, a
+         * tab. Grabbing one by its corner and having it jump to centre-on-cursor is the classic tell of a
+         * ghost positioned the lazy way.</p>
+         */
+        GRAB,
+        /**
+         * Sit just below and right of the pointer, ignoring where the source was grabbed.
+         *
+         * <p>Right when the ghost is a small stand-in for something much larger or for several things at
+         * once — a full-width file row, or "3 items". Preserving the grab offset there places a two-inch
+         * label a whole row-width to the left of the cursor, which reads as the ghost being detached from
+         * the pointer rather than as fidelity to the grab. Every file manager anchors this way.</p>
+         */
+        CURSOR
+    }
+
+    /** Where the CURSOR-anchored ghost sits relative to the pointer, in logical units. Below and right,
+     * so it never covers the drop target the pointer is aiming at. */
+    private static final float CURSOR_NUDGE_X = 10f;
+    private static final float CURSOR_NUDGE_Y = 14f;
+
+    private GhostAnchor ghostAnchor = GhostAnchor.GRAB;
 
     /** Positional drag — no payload, no drop targeting, activates immediately. What Slider,
      * Scroller and SplitView use, unchanged. */

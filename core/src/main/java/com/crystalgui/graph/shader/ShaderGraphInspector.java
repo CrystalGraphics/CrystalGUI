@@ -35,7 +35,10 @@ public class ShaderGraphInspector extends UIElement {
     public ShaderGraphInspector(ShaderGraphEditor editor) {
         addClass(INSPECTOR_CLASS);
 
-        nodeTab = new ShaderNodeInspector(editor.graph(), editor.library(), editor::recompile);
+        // The BOARD is passed in, so a selected property fills the same tab a selected node does --
+        // which is where Unity puts the property form too. Two sources, one subject.
+        nodeTab = new ShaderNodeInspector(editor.graph(), editor.library(), editor::recompile,
+                editor.blackboard());
         settingsTab = new ShaderGraphSettingsPanel(editor.graph().getDocument(), editor.mainPreview(),
                 editor.graph().undoStack(), editor::lastCompile);
 

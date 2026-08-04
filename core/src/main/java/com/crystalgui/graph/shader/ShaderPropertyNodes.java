@@ -8,6 +8,8 @@ import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.PortSpec;
+import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.graph.GraphNode;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -47,6 +49,28 @@ public final class ShaderPropertyNodes {
     /** The one output every property node has. */
     public static final String OUT_PORT = "Out";
 
+    /**
+     * On a property node's widget, so the theme can draw it as a capsule.
+     *
+     * <p>A property node is not shaped like an ordinary node: no title bar over a body, no input column,
+     * just a name and one dot. Unity draws it as a pill for exactly that reason — the shape says "this
+     * is a reference, not a computation" before you read a word of it.</p>
+     */
+    public static final String NODE_CLASS = "__property-node__";
+
+    /** The exposed dot drawn on a property node's own header. @see #decorate */
+    public static final String EXPOSED_DOT_CLASS = "__exposed-dot__";
+
+    /**
+     * On a property node whose property is picked on the Blackboard — a LINK, not a selection.
+     *
+     * <p>Selecting the nodes instead was the obvious implementation and is wrong: a graph selection is
+     * what a drag moves, so picking a pill and nudging one node dragged every other node reading that
+     * property with it. "Show me where this is used" and "these are the things I am about to move" are
+     * different questions, and only one of them is the selection.</p>
+     */
+    public static final String LINKED_CLASS = "__property-linked__";
+
     /** Shown when the property a node points at is gone. */
     public static final String MISSING_LABEL = "Missing Property";
 
@@ -63,10 +87,74 @@ public final class ShaderPropertyNodes {
             return NodeType.of(TYPE_ID).label(MISSING_LABEL).category("Property")
                     .out(OUT_PORT, ShaderGraphBridge.DYNAMIC_TYPE).build();
         }
-        return NodeType.of(TYPE_ID).label(property.name()).category("Property")
+        // Name AND arity, as Unity titles it -- `Float(1)`, `Vector4(4)`. The width is the one thing a
+        // reader cannot get from the name, and a property node has no port label to carry it: its single
+        // output shows a bare dot, so the title is the only place left.
+        return NodeType.of(TYPE_ID).label(titleFor(property)).category("Property")
                 .out(OUT_PORT, property.typeId())
                 .defaultProperty(PROPERTY_ID, property.id())
                 .build();
+    }
+
+    /** {@code Vector4(4)} — the display name with the resolved component count. */
+    public static String titleFor(GraphProperty property) {
+        CgShaderType type = CgShaderType.parse(property.typeId());
+        int arity = type == null ? 0 : type.components();
+        return arity <= 0 ? property.name() : property.name() + "(" + arity + ")";
+    }
+
+    /**
+     * Turns an ordinary node widget into Unity's property pill.
+     *
+     * <p>Two things, and both are structural rather than paint. The node gets {@link #NODE_CLASS}, which
+     * is what lets the theme lay its title bar and its single output side by side instead of stacked —
+     * a property node has no port column, no controls row and no preview, so the whole thing collapses
+     * to one line.</p>
+     *
+     * <p>And the <b>exposed dot</b> is added to the title bar. Unity draws it there, left of the name,
+     * and it is the same green dot the Blackboard pill shows for the same reason: whether a property is
+     * exposed is otherwise invisible on the graph. A plain element with a full corner radius, exactly as
+     * {@code NodePort} draws its own dots — there is no circle in {@code CgUiShape} and none is needed.</p>
+     */
+    public static void decorate(GraphNode node, GraphProperty property) {
+        node.addClass(NODE_CLASS);
+        sync(node, property);
+    }
+
+    /**
+     * Brings a property node back in line with its property — its title and its exposed dot.
+     *
+     * <p><b>Called on every document change, not only at creation.</b> A node reads its property by id
+     * and shows what that property currently is, so a rename, a retype or an Exposed toggle has to reach
+     * it. It did not: turning Exposed off cleared the dot on the Blackboard pill and left the node's dot
+     * exactly where it was, so the same property said two different things a few inches apart.</p>
+     *
+     * <p>Idempotent, and cheap enough to run over every property node per change: it is a string compare
+     * and at most one element added or removed.</p>
+     */
+    public static void sync(GraphNode node, @Nullable GraphProperty property) {
+        String title = property == null ? MISSING_LABEL : titleFor(property);
+        if (!title.equals(node.getTitle())) node.setTitle(title);
+
+        boolean wanted = property != null && property.exposed();
+        UIElement dot = findDot(node);
+        if (wanted && dot == null) {
+            UIElement added = new UIElement();
+            added.addClass(EXPOSED_DOT_CLASS);
+            // Scenery: the title bar is the node's drag handle, so the dot must not take the press.
+            added.setHitTest(false);
+            node.titleBar().addChildAt(added, 0);
+        } else if (!wanted && dot != null) {
+            node.titleBar().removeChild(dot);
+        }
+    }
+
+    @Nullable
+    private static UIElement findDot(GraphNode node) {
+        for (UIElement child : node.titleBar().getChildren()) {
+            if (child.hasClass(EXPOSED_DOT_CLASS)) return child;
+        }
+        return null;
     }
 
     /** A fresh property node at a world position, reading {@code property}. */
