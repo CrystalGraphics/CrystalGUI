@@ -289,7 +289,8 @@ public class ShaderGraphEditor extends UIElement {
      */
     private boolean attachPreviews(float deltaSeconds) {
         ensureGraphTheme();
-        ensureGraphCommands();
+        // Commands are NOT installed here: GraphView installs its own, so a bare graph anywhere gets
+        // Delete, Space, F and Ctrl+Z without a host remembering to ask for them.
         if (!previewsAttached) {
             previews.attach();
             previewsAttached = true;
@@ -321,32 +322,6 @@ public class ShaderGraphEditor extends UIElement {
         if (window.getStyleEngine().getSheets().contains(theme)) return;
         window.getStyleEngine().addStylesheet(theme);
     }
-
-    /**
-     * Registers {@link GraphCommands}, bound on <b>this widget</b>, once.
-     *
-     * <p><b>The widget owns them, for the same reason it owns {@code graph.css}.</b> Delete, Space to
-     * create, F to frame — those are not a host's choices, they are what a shader graph <em>is</em>, and a
-     * requirement every consumer has to remember is one that gets forgotten. It was: the gallery scene
-     * installed them and the dock never did, so in the editor the graph took focus, highlighted a
-     * selection, and answered no key at all.</p>
-     *
-     * <p><b>Bound on {@code this}, never on the window root.</b> The defaults include bare {@code A},
-     * {@code F}, {@code Space} and {@code Backspace}; a keymap resolves from the focused element upward,
-     * so binding them at the root would make typing {@code a} into any file in the dock frame the graph
-     * instead. Scoped here they exist exactly while focus is inside the graph.</p>
-     *
-     * <p>{@code register} is idempotent, and {@code Keymap.bind} overwrites rather than accumulating, so
-     * running this from the per-frame ticker costs one map lookup once the first pass has been made.</p>
-     */
-    private void ensureGraphCommands() {
-        UIWindow window = getAttachedWindow();
-        if (window == null || commandsInstalled) return;
-        GraphCommands.install(window.getCommands(), this);
-        commandsInstalled = true;
-    }
-
-    private boolean commandsInstalled;
 
     /** Releases the preview renderers' GL resources. Safe to call more than once. */
     public void delete() {

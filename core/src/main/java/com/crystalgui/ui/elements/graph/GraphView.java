@@ -15,6 +15,7 @@ import com.crystalgui.graph.PortSpec;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.TypeCompatibility;
 import com.crystalgui.core.undo.Edit;
+import com.crystalgui.core.undo.UndoCommands;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.render.CgUiPaintContext;
@@ -305,6 +306,45 @@ public class GraphView extends CanvasView implements UndoScope {
         // calling it again every layout pass is idempotent rather than wasteful.
         UIWindow window = getAttachedWindow();
         if (window != null) window.registerTicker(this);
+        installCommands();
+    }
+
+    private boolean commandsInstalled;
+
+    /**
+     * Registers this widget's own commands, bound on <b>itself</b>, once it has a window.
+     *
+     * <p><b>The widget owns them, exactly as {@code TextEditor} owns {@link
+     * com.crystalgui.ui.elements.editor.EditorCommands}.</b> Delete, Space to create a node, F to frame,
+     * Ctrl+Z — those are not a host's choices, they are what a node graph <em>is</em>, and a graph that
+     * does nothing on Delete is broken rather than neutral. Leaving it to the host meant one harness scene
+     * installed them and nothing else did, so the shader graph in the dock took focus, drew a selection,
+     * and answered no key at all. Twice: once for {@code GraphCommands}, once for undo.</p>
+     *
+     * <h3>Bound on this element, never on the window root</h3>
+     *
+     * <p>The defaults include bare {@code A}, {@code F}, {@code Space} and {@code Backspace}. A keymap
+     * resolves from the focused element outward, so at the root those would fire while typing into any
+     * text editor that happens to share the window — which, in a dock, is most of them. Scoped here they
+     * exist exactly while focus is inside the graph.</p>
+     *
+     * <h3>Undo binds {@code edit.undo}; it does not invent {@code graph.undo}</h3>
+     *
+     * <p>{@link UndoCommands}' own rule, and the reason it stays correct: {@link UndoScope#nearest} walks
+     * outward from whatever was focused and finds <em>this</em> view's stack, so one command id serves
+     * every history in the window and the palette shows one Undo rather than one per widget. This is the
+     * same thing {@code TextEditor} does with the same ids.</p>
+     *
+     * <p>Which is also why binding it here does not conflict with a host that installs undo application-
+     * wide: the inner scope wins while focus is inside the graph, and both routes end at the same lookup.</p>
+     */
+    private void installCommands() {
+        if (commandsInstalled) return;
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        GraphCommands.install(window.getCommands(), this);
+        UndoCommands.install(window.getCommands(), this);
+        commandsInstalled = true;
     }
 
     /**
