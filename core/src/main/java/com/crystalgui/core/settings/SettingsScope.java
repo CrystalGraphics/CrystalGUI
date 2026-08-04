@@ -30,6 +30,20 @@ public interface SettingsScope {
     /** This scope's own values. Never null — an owner with nothing set still owns an empty store. */
     Settings settings();
 
+    /**
+     * This scope's values <b>if it has any</b>, without bringing a store into existence.
+     *
+     * <p>Override this wherever {@link #settings()} builds lazily. The resolution walk visits every
+     * ancestor on every read, so a walk that called {@link #settings()} would allocate an empty
+     * {@link Settings} for each one and permanently keep it — turning a read into a write and giving the
+     * tree a store per element. {@code UIElement.keymapOrNull()} exists for the identical reason and is
+     * the precedent to copy.</p>
+     */
+    @Nullable
+    default Settings settingsOrNull() {
+        return settings();
+    }
+
     /** The scope enclosing this one, or null at the root. */
     @Nullable
     default SettingsScope settingsParent() {
@@ -53,7 +67,8 @@ public interface SettingsScope {
     default String resolveRaw(String key) {
         SettingsScope scope = this;
         for (int depth = 0; scope != null && depth < 64; depth++) {
-            String held = scope.settings().raw(key);
+            Settings own = scope.settingsOrNull();
+            String held = own == null ? null : own.raw(key);
             if (held != null) return held;
             scope = scope.settingsParent();
         }
@@ -65,7 +80,8 @@ public interface SettingsScope {
     default SettingsScope scopeDefining(String key) {
         SettingsScope scope = this;
         for (int depth = 0; scope != null && depth < 64; depth++) {
-            if (scope.settings().raw(key) != null) return scope;
+            Settings own = scope.settingsOrNull();
+            if (own != null && own.raw(key) != null) return scope;
             scope = scope.settingsParent();
         }
         return null;

@@ -8,6 +8,8 @@ import com.crystalgui.core.data.IntCacheCell;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.CgUiCrossFade;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.core.settings.Settings;
+import com.crystalgui.core.settings.SettingsScope;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.render.texture.CgUiLayerBox;
 import com.crystalgui.render.texture.CgUiQuad;
@@ -58,7 +60,7 @@ import static com.crystalgui.ui.UIWindow.EMPTY_LAYOUT;
  * like an HTML {@code <div>}).
  */
 @Accessors(chain = true)
-public class UIElement {
+public class UIElement implements SettingsScope {
     private static final Comparator<UIElement> Z_INDEX_DESCENDING = (a, b) -> Integer.compare(b.style.generalGroup.zIndex(), a.style.generalGroup.zIndex());
 
     // ── Core state ───────────────────────────────────────────────────────────
@@ -978,6 +980,50 @@ public class UIElement {
     @Nullable
     public Keymap keymapOrNull() {
         return keymap;
+    }
+
+    // ── Settings ─────────────────────────────────────────────────────────────
+
+    /** Built lazily, exactly like {@link #keymap} — almost no element sets anything. */
+    @Nullable
+    private Settings settings;
+
+    /**
+     * This element's own settings. Read through {@link #resolve}, which walks outward.
+     *
+     * <p>The third registry-plus-scope pair in the engine, and deliberately the same shape as the other
+     * two: {@code CommandRegistry} declares actions that a per-element {@link Keymap} binds, and
+     * {@code StylePropertyRegistry} declares properties that a per-element {@code ElementStyle} holds
+     * values for. {@code SettingsRegistry} declares settings and this holds their values.</p>
+     *
+     * <p>Scope is the tree here for the same reason it is for keys: an inner element's answer beats an
+     * outer one's, so a panel can override the application without either knowing the other exists, and
+     * an application-wide setting is not a special case — it is written on the root.</p>
+     */
+    public Settings settings() {
+        if (settings == null) settings = new Settings();
+        return settings;
+    }
+
+    /**
+     * The settings if any were ever created, without creating them.
+     *
+     * <p>Load-bearing, not an optimisation: {@link SettingsScope#resolveRaw} visits every ancestor on
+     * every read, so resolving through {@link #settings()} would allocate and permanently keep an empty
+     * store on each — turning a read into a write, on every element the walk passes. Same reason
+     * {@link #keymapOrNull()} exists.</p>
+     */
+    @Override
+    @Nullable
+    public Settings settingsOrNull() {
+        return settings;
+    }
+
+    /** The enclosing scope: this element's parent. That is the whole of the scoping rule. */
+    @Override
+    @Nullable
+    public SettingsScope settingsParent() {
+        return getParent();
     }
 
     // ── Top layer ────────────────────────────────────────────────────────────
