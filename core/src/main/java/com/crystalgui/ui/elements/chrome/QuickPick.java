@@ -177,7 +177,7 @@ public class QuickPick extends Popover {
     public QuickPick open(UIWindow window) {
         // hostFor, not the root: a root that refuses public children -- any composite, CrystalEditor
         // included -- would throw here. Null `near` means "window level", which the palette is.
-        if (getParent() == null) com.crystalgui.ui.elements.Popover.hostFor(window, null).addChild(this);
+        window.addOverlay(this, null);
         search.setText("");
         // Point-anchored with a null invoker: reposition() below overrides placement entirely, and a null
         // invoker is correct because a palette is not a toggle -- naming a trigger surface as the invoker

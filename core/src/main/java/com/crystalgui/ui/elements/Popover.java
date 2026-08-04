@@ -267,10 +267,7 @@ public class Popover extends UIElement {
      *             root, which is correct for a window-level popup like the command palette
      */
     public static UIElement hostFor(UIWindow window, @Nullable UIElement near) {
-        for (UIElement element = near; element != null; element = element.getParent()) {
-            if (element.acceptsPublicChildren()) return element;
-        }
-        return window.ui.rootElement;
+        return window.overlayHost(near);
     }
 
     /** Hook for subclasses to move focus inside, once the popover is open and promoted. */
