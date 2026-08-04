@@ -5,6 +5,8 @@ import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.ProjectInfo;
 import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.core.search.SearchMatcher;
+import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.ui.elements.tree.TreeDataSource;
 
 import java.util.ArrayList;
@@ -199,9 +201,62 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
     @Override
     public List<CgPath> children(CgPath parent) {
         List<CgPath> known = children.get(parent);
-        if (known != null) return known;
-        request(parent);
-        return List.of();
+        if (known == null) {
+            request(parent);
+            return List.of();
+        }
+        return filter.isEmpty() ? known : filtered(known);
+    }
+
+    /**
+     * Type-to-filter — IntelliJ's speed search, VS Code's list keyboard navigation in {@code filter} mode.
+     *
+     * <p>Matching is {@link SearchMatcher}'s, already ported from VS Code's {@code filters.ts}, so the
+     * explorer ranks the same way the command palette does rather than inventing a second idea of what
+     * "matches" means.</p>
+     *
+     * <p><b>It filters what has been listed, and says so.</b> A tree loaded a directory at a time cannot
+     * answer "does anything under here match" without fetching the whole project — so a folder is kept if
+     * its own name matches, or if something already listed beneath it does. Typing into a collapsed tree
+     * therefore narrows what you can see rather than searching the workspace; searching the workspace is
+     * Find in Files, which is a different feature with a server behind it.</p>
+     */
+    public WorkspaceTreeSource setFilter(String query) {
+        String next = query == null ? "" : query.trim();
+        if (next.equals(filter)) return this;
+        filter = next;
+        parsedFilter = next.isEmpty() ? null : SearchQuery.of(next);
+        dirty = true;
+        return this;
+    }
+
+    public String filter() {
+        return filter;
+    }
+
+    private String filter = "";
+
+    @Nullable
+    private SearchQuery parsedFilter;
+
+    private List<CgPath> filtered(List<CgPath> candidates) {
+        List<CgPath> kept = new ArrayList<>();
+        for (CgPath child : candidates) {
+            if (matches(child)) kept.add(child);
+        }
+        return kept;
+    }
+
+    /** A path survives the filter if its own name matches, or anything listed beneath it does. */
+    private boolean matches(CgPath path) {
+        if (parsedFilter == null) return true;
+        if (SearchMatcher.match(parsedFilter, path.name(), 0) != null) return true;
+        List<CgPath> listed = children.get(path);
+        if (listed == null) return false;
+        for (CgPath child : listed) {
+            if (matches(child)) return true;
+        }
+        return false;
     }
 
     @Override
