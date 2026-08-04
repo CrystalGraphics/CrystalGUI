@@ -1,6 +1,9 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
@@ -11,6 +14,9 @@ import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.ui.event.DragEvent;
+import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.ui.input.UIDragController;
 import com.crystalgui.ui.elements.tree.TreeView;
 
 import java.util.HashMap;
@@ -112,6 +118,7 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
         addInternalChild(content);
         content.addChild(tree);
         installTypeToFilter();
+        installDropTarget();
     }
 
     @Override
@@ -243,6 +250,92 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             if (rows.get(i).item().equals(path)) return i;
         }
         return -1;
+    }
+
+    /**
+     * A drag finished over a folder: these paths, into that one, copying or moving.
+     *
+     * <p>Reported rather than performed, exactly as {@link #onFileChosen} is. The tree does not own the
+     * file service — {@link Workbench} does — and a tree that reached for one could serve a single host.</p>
+     */
+    public final Signal.Pair<List<CgPath>, DropRequest> onFilesDropped = new Signal.Pair<>();
+
+    /** Where a drop landed and what it meant. */
+    public record DropRequest(CgPath destination, boolean copy) {
+    }
+
+    /** What is being dragged. A record so a foreign payload cannot be mistaken for ours. */
+    private record DragPayload(List<CgPath> paths) {
+    }
+
+    /**
+     * Makes a row draggable and the tree a drop target.
+     *
+     * <p><b>Dropping on a FILE targets its parent folder.</b> VS Code's rule, and the one that makes a
+     * tree forgiving: rows are small, a folder's children are directly beneath it, and "into the folder
+     * this thing is in" is almost always what was meant. Refusing the drop instead means aiming at a
+     * 12-pixel row.</p>
+     *
+     * <p>Rejection is the default — a target accepts by calling {@code preventDefault()} on {@code Over},
+     * re-read every frame and never latched. HTML5 drag-and-drop's one good idea, which this engine
+     * already keeps.</p>
+     */
+    private void installRowDrag(UIElement row) {
+        row.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
+            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
+            UIWindow window = getAttachedWindow();
+            CgPath item = rowItems.get(row);
+            if (window == null || item == null || item.isProjectRoot()) return;
+
+            // The whole SELECTION when the pressed row is part of it, otherwise just this row -- the
+            // same rule the graph uses for node drags, and for the same reason: "drag the five I
+            // selected" is the common gesture, and a press that collapsed the selection breaks it.
+            List<CgPath> dragged = selectedPaths().contains(item) ? selectedPaths() : List.of(item);
+
+            window.getInputHandler().getDragController().startDrag(row,
+                    event.getPosition().x(), event.getPosition().y(), new DragPayload(dragged),
+                    new UIDragController.DragListener() {
+                        @Override
+                        public void onDragUpdate(float mx, float my, float sx, float sy,
+                                                 float dx, float dy) {
+                            // Nothing per frame: where the drop would land is decided by DragEvent.Over
+                            // on the TREE, which is dispatched against what is geometrically under the
+                            // pointer. This listener is pinned to the source by pointer capture and can
+                            // never tell.
+                        }
+                    });
+        }, false, false);
+    }
+
+    private void installDropTarget() {
+        tree.events.getGroup(DragEvent.Over.class).attachListener((element, event) -> {
+            if (event.getPayload() instanceof DragPayload && dropTargetFor(event.getTarget()) != null) {
+                // ACCEPTING is preventDefault. Re-read every frame, so a drag that wanders over
+                // something invalid stops being accepted without anything having to un-latch it.
+                event.preventDefault();
+            }
+        }, false, true);
+
+        tree.events.getGroup(DragEvent.Drop.class).attachListener((element, event) -> {
+            if (!(event.getPayload() instanceof DragPayload payload)) return;
+            CgPath destination = dropTargetFor(event.getTarget());
+            if (destination == null) return;
+            // The modifier means COPY, matching every file manager. Read at DROP time rather than at
+            // press time, because the decision is made while dragging -- you pick the folder first and
+            // then hold the key.
+            boolean copy = (CgPlatform.input().getCurrentModifiers() & CgModifiers.CTRL) != 0;
+            onFilesDropped.emit(payload.paths(), new DropRequest(destination, copy));
+        }, false, true);
+    }
+
+    /** The folder a drop on {@code hit} lands in, or null if it is not over a row. */
+    @Nullable
+    private CgPath dropTargetFor(@Nullable UIElement hit) {
+        UIElement row = rowElementFor(hit);
+        if (row == null) return null;
+        CgPath item = rowItems.get(row);
+        if (item == null) return null;
+        return source.isDirectory(item) ? item : item.parent();
     }
 
     /**
@@ -383,6 +476,7 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             // VS Code's explorer draws the line in the same place. IntelliJ wants the chevron for a single
             // click, which is only better once the chevron is its own hit target; ours is still part of
             // the label's text.
+            installRowDrag(row);
             row.onMouseDown.attachListener((element, event) -> {
                 CgPath item = rowItems.get(row);
                 if (item == null) return;

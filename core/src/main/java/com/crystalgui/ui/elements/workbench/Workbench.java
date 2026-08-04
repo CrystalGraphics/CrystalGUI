@@ -113,6 +113,7 @@ public class Workbench extends UIElement {
         // Ctrl+Z in the tree reaches file operations and Ctrl+Z in an editor still reaches its own text.
         this.fileTree.setUndoStack(fileService.undoStack());
         fileTree.onFileChosen.connect(this::openFile);
+        fileTree.onFilesDropped.connect(this::dropFiles);
         // RENDERED FROM THE RESULT, never from the call site. One update path serves this client's own
         // operations and another client's alike -- see Q11 in the chrome plan, and WorkspaceFileService's
         // note on why two paths into one model always end up disagreeing.
@@ -493,6 +494,37 @@ public class Workbench extends UIElement {
         if (active == null || active.equals(revealed)) return;
         revealed = active;
         fileTree.reveal(active);
+    }
+
+    /**
+     * Performs a drag-and-drop from the tree — move by default, copy with the modifier.
+     *
+     * <p>Each item is issued independently, for the reason paste is: several files dropped into a folder
+     * are several operations that can succeed or fail separately, and stopping on the first refusal leaves
+     * the user guessing which ones landed.</p>
+     */
+    private void dropFiles(List<CgPath> sources, ProjectFileTree.DropRequest request) {
+        for (CgPath source : sources) {
+            // A folder dropped into itself or its own descendant would move a directory under itself,
+            // which the filesystem refuses with a message about paths rather than about the gesture.
+            if (source.equals(request.destination()) || source.contains(request.destination())) {
+                onStatus.emit("cannot move " + source.name() + " into itself");
+                continue;
+            }
+            CgPath target = request.destination().resolve(source.name());
+            if (target.equals(source)) continue;   // dropped back where it already is
+            if (request.copy()) {
+                fileService.copyFile(source, target,
+                        () -> onStatus.emit("copied " + source.name()),
+                        failure -> onStatus.emit("copy failed: " + source.name()
+                                + " -- " + failure.code()));
+            } else {
+                fileService.move(source, target, false,
+                        () -> onStatus.emit("moved " + source.name()),
+                        failure -> onStatus.emit("move failed: " + source.name()
+                                + " -- " + failure.code()));
+            }
+        }
     }
 
     private boolean commandsInstalled;
