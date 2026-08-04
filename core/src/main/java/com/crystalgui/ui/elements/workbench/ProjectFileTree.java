@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
@@ -110,6 +111,7 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         content.addChild(tree);
+        installTypeToFilter();
     }
 
     @Override
@@ -241,6 +243,63 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             if (rows.get(i).item().equals(path)) return i;
         }
         return -1;
+    }
+
+    /**
+     * Narrows the tree to what matches, and reports what is being typed.
+     *
+     * <p>Kept on the widget rather than only on the source so a host can show it — a filter with nothing
+     * saying it is on is a tree that has mysteriously lost half its files, which is IntelliJ's one real
+     * weakness with speed search.</p>
+     */
+    public final Signal.Value<String> onFilterChanged = new Signal.Value<>();
+
+    public ProjectFileTree setFilter(String query) {
+        source.setFilter(query);
+        tree.refresh();
+        onFilterChanged.emit(source.filter());
+        return this;
+    }
+
+    public String filter() {
+        return source.filter();
+    }
+
+    /**
+     * Type-to-filter, IntelliJ's speed search.
+     *
+     * <p>Bound here rather than as commands, and that is the exception rather than a lapse: this is not
+     * <em>an</em> action, it is every printable character meaning "narrow to this". A command per letter is
+     * not a thing, and a keymap that owned the alphabet would collide with every other binding in the
+     * panel.</p>
+     *
+     * <p><b>Escape clears before it does anything else.</b> A filter you cannot see is a tree that has lost
+     * files, so the way out has to be the key everyone already tries.</p>
+     */
+    private void installTypeToFilter() {
+        tree.onKeyDown.attachListener((element, event) -> {
+            if (event.getModifiers() != 0) return;     // Ctrl+C is a command, not a letter
+            int key = event.getKeyCode();
+            if (key == CgKeyCodes.KEY_ESCAPE) {
+                if (filter().isEmpty()) return;
+                setFilter("");
+                event.stopPropagation();
+                return;
+            }
+            if (key == CgKeyCodes.KEY_BACK) {
+                if (filter().isEmpty()) return;
+                setFilter(filter().substring(0, filter().length() - 1));
+                event.stopPropagation();
+                return;
+            }
+            char typed = event.getCharacter();
+            // Printable only. A tree that filtered on Delete would eat the delete key, and the arrows have
+            // to keep moving the selection.
+            if (typed >= ' ' && typed != 127) {
+                setFilter(filter() + typed);
+                event.stopPropagation();
+            }
+        }, false, true);
     }
 
     /**

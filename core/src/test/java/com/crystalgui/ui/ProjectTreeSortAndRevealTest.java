@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -162,6 +163,48 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
         assertTrue("the tree did not expand down to the file",
                 visibleNames().contains("target.java"));
         assertEquals("the revealed file is not selected", target, tree.selectedPath());
+    }
+
+    /**
+     * <b>Type-to-filter narrows the tree.</b>
+     *
+     * <p>Matching is {@link com.crystalgui.core.search.SearchMatcher}'s, already ported from VS Code's
+     * {@code filters.ts} — so the explorer ranks the same way the palette does rather than inventing a
+     * second idea of what "matches" means.</p>
+     */
+    @Test
+    public void typeToFilterNarrowsTheTree() {
+        assertEquals(List.of("src", "Apple.md", "zebra.txt"), visibleNames());
+
+        tree.setFilter("zeb");
+        settle();
+        assertEquals(List.of("zebra.txt"), visibleNames());
+
+        tree.setFilter("");
+        settle();
+        assertEquals(List.of("src", "Apple.md", "zebra.txt"), visibleNames());
+    }
+
+    /**
+     * <b>A folder survives the filter when something listed beneath it matches.</b>
+     *
+     * <p>Otherwise filtering would hide the only route to the match. The limit is honest and documented:
+     * it can only consider what has been LISTED, because a lazily-loaded tree cannot answer "does anything
+     * under here match" without fetching the whole project — that is Find in Files, with a server behind
+     * it.</p>
+     */
+    @Test
+    public void aFolderSurvivesWhenSomethingListedInsideItMatches() {
+        tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), true);
+        settle();
+        assertTrue("fixture wrong -- src was never listed", visibleNames().contains("Main.java"));
+
+        tree.setFilter("Main");
+        settle();
+
+        assertTrue("the folder holding the match was filtered away", visibleNames().contains("src"));
+        assertTrue(visibleNames().contains("Main.java"));
+        assertFalse("a non-matching sibling survived", visibleNames().contains("zebra.txt"));
     }
 
     /** A reveal of something that does not exist gives up rather than retrying forever. */
