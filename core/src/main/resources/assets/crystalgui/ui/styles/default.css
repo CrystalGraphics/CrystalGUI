@@ -3458,3 +3458,32 @@ problemspanel .__problems-empty__ {
     padding-all: 8px;
     color: #8A8A8A;
 }
+
+/* ── Shader graph editor ──
+ *
+ * The canvas and the GLSL it emits, side by side. Geometry only: what a node LOOKS like is graph.css's
+ * job, and the syntax colours come from the texteditor rules above. */
+shadergrapheditor {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+shadergrapheditor .__shader-split__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* height: 100%, not the `height: 0; flex-grow: 1` a column parent would want -- the split lays its panes
+ * out in a ROW, where growing claims width and the cross axis is what needs filling. */
+shadergrapheditor .__shader-graph__ {
+    width: 100%;
+    height: 100%;
+}
+
+shadergrapheditor .__shader-source__ {
+    width: 100%;
+    height: 100%;
+    font-size: 7px;
+}
