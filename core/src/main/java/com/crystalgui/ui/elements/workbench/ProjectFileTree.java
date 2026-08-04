@@ -13,6 +13,7 @@ import com.crystalgui.ui.elements.tree.TreeRow;
 import com.crystalgui.ui.elements.tree.TreeView;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -155,6 +156,9 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             return false;
         }
         if (source.drainRefresh()) tree.refresh();
+        // Re-driven every frame while a reveal is outstanding: each step needs one more listing, and the
+        // listing arrives on some later frame.
+        if (revealTarget != null) stepReveal();
         return true;
     }
 
@@ -172,6 +176,66 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             if (row != null) return row.item();
         }
         return null;
+    }
+
+    /**
+     * Expands to a path, selects it and scrolls it into view — VS Code's {@code explorer.autoReveal}.
+     *
+     * <p><b>Asynchronous by nature, so it retries rather than failing.</b> Revealing
+     * {@code proj:a/b/c.txt} needs {@code a} listed to know {@code b} exists, and {@code b} listed to find
+     * {@code c.txt} — each a round trip. This expands as far as it currently can, asks for the next
+     * listing, and is re-driven from the ticker until it arrives or the path turns out not to exist.</p>
+     *
+     * <p>Doing it in one pass and giving up is the tempting version, and it works exactly when the folders
+     * happen to be open already — which is to say, when reveal was not needed.</p>
+     */
+    public void reveal(@Nullable CgPath path) {
+        this.revealTarget = path;
+        stepReveal();
+    }
+
+    @Nullable
+    private CgPath revealTarget;
+
+    private void stepReveal() {
+        CgPath target = revealTarget;
+        if (target == null) return;
+
+        // Walk down from the project root, expanding and requesting as far as the listings allow.
+        List<CgPath> chain = new java.util.ArrayList<>();
+        for (CgPath at = target.parent(); at != null && !at.isProjectRoot(); at = at.parent()) {
+            chain.add(0, at);
+        }
+        chain.add(0, CgPath.ofProject(target.project()));
+
+        for (CgPath directory : chain) {
+            if (!source.isListed(directory)) {
+                source.ensureListed(directory);
+                return;                       // wait for it; the ticker calls back
+            }
+            if (!tree.isExpanded(directory)) tree.setExpanded(directory, true);
+        }
+        tree.refresh();
+
+        int index = indexOf(target);
+        if (index < 0) {
+            // Listed all the way down and still not there: the file does not exist, or an operation
+            // removed it while the reveal was in flight. Stop rather than retrying forever.
+            revealTarget = null;
+            return;
+        }
+        tree.select(index);
+        tree.scrollToIndex(index);
+        revealTarget = null;
+    }
+
+    /** The visible row for a path, or -1. */
+    private int indexOf(CgPath path) {
+        List<TreeRow<CgPath>> rows = tree.visibleRows();
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i).item().equals(path)) return i;
+        }
+        return -1;
     }
 
     /** Whether a path is a folder, as far as the listings this tree has seen are concerned. */

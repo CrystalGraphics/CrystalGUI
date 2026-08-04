@@ -117,6 +117,14 @@ public class Workbench extends UIElement {
         // operations and another client's alike -- see Q11 in the chrome plan, and WorkspaceFileService's
         // note on why two paths into one model always end up disagreeing.
         fileService.onDidRun.connect(this::refreshAfter);
+        // ANOTHER CLIENT'S CHANGES, through the same path as our own -- which is the whole reason the
+        // explorer renders from events rather than from its own call sites (Q11). The server pushes
+        // fs.changed for anything watched; a create or delete elsewhere shows up here without the tree
+        // knowing who did it.
+        client.onFileChanged(change -> {
+            fileTree.source().invalidate(change.path().parent());
+            fileTree.treeView().refresh();
+        });
 
         registry.register(DockPanelDescriptor.singleton(PROJECT_TYPE, "Project"), ref -> fileTree);
         registry.register(DockPanelDescriptor.singleton(PROBLEMS_TYPE, "Problems"), ref -> problems);
@@ -457,6 +465,36 @@ public class Workbench extends UIElement {
     @Nullable
     private TextEditor boundTo;
 
+    /**
+     * Whether the tree follows the active tab — VS Code's {@code explorer.autoReveal}, default on.
+     *
+     * <p>Off is a real preference rather than a hypothetical: revealing scrolls the tree, and somebody
+     * navigating the tree while switching tabs loses their place every time.</p>
+     */
+    private boolean autoReveal = true;
+
+    public Workbench setAutoReveal(boolean enabled) {
+        this.autoReveal = enabled;
+        return this;
+    }
+
+    @Nullable
+    private CgPath revealed;
+
+    /**
+     * Selects the active file in the tree when the active tab changes.
+     *
+     * <p>On a CHANGE only. Revealing every frame would fight the user for the selection — they click a
+     * folder, and a frame later the tree jumps back to whatever file is open.</p>
+     */
+    private void revealActiveFile() {
+        if (!autoReveal) return;
+        CgPath active = activeFilePath();
+        if (active == null || active.equals(revealed)) return;
+        revealed = active;
+        fileTree.reveal(active);
+    }
+
     private boolean commandsInstalled;
 
     /**
@@ -484,6 +522,7 @@ public class Workbench extends UIElement {
             return false;
         }
         installExplorerCommands(getAttachedWindow());
+        revealActiveFile();
         fileTree.loadProjects();
         // Follows the active tab. Only on a CHANGE -- rebinding every frame would rebuild the table's
         // rows sixty times a second for a set that has not moved.
