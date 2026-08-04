@@ -9,7 +9,10 @@ import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.ui.elements.graph.NodeWidgetFactory;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.KeywordTokenizer;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.editor.TextEditor;
 import com.crystalgui.ui.elements.graph.GraphNode;
@@ -40,6 +43,8 @@ import javax.annotation.Nullable;
  */
 public class ShaderGraphEditor extends UIElement {
 
+    /** UNIQUE, never the shared "__content__" -- see ProjectFileTree.CONTENT_CLASS for why. */
+    public static final String CONTENT_CLASS = "__shader-content__";
     public static final String SPLIT_CLASS = "__shader-split__";
     public static final String GRAPH_CLASS = "__shader-graph__";
     public static final String SOURCE_CLASS = "__shader-source__";
@@ -116,7 +121,7 @@ public class ShaderGraphEditor extends UIElement {
         //
         // Same fix as QuickPick and ProblemsPanel, for the same reason, which is why the wrapper exists
         // rather than a comment saying "do not stamp this".
-        content.addClass("__content__");
+        content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         content.addChild(split);
 
@@ -273,12 +278,37 @@ public class ShaderGraphEditor extends UIElement {
      * are up, so the retry costs one comparison per frame until then.</p>
      */
     private boolean attachPreviews(float deltaSeconds) {
+        ensureGraphTheme();
         if (!previewsAttached) {
             previews.attach();
             previewsAttached = true;
         }
         if (!mainPreviewAttached) mainPreviewAttached = mainPreview.attach();
         return !(previewsAttached && mainPreviewAttached);
+    }
+
+    /**
+     * Installs {@code crystalgui:graph} on the window, once.
+     *
+     * <p><b>The widget owns this, not its host.</b> {@code graph.css} is not decoration a scene may choose
+     * to skip: a wire reads its colour <em>out of the cascade</em> — {@code NodePort.typeColor()} returns
+     * the dot's computed {@code border-color} — so without the sheet the nodes are grey boxes and every
+     * wire is colourless. A requirement that every consumer has to remember is a requirement that gets
+     * forgotten, and it was: the dock scene shipped without it and looked broken.</p>
+     *
+     * <p>From the ticker rather than {@link #onLayoutChanged()}, because adding a sheet invalidates style
+     * matching and doing that inside the layout pass is how this widget hung the window once already. The
+     * cost is that the first frame or two are unthemed, which is invisible.</p>
+     *
+     * <p>{@code StyleSheetRegistry.of} caches, so the identity check is meaningful: two editors in one
+     * window install one sheet, and re-adding would otherwise append it again at the highest priority.</p>
+     */
+    private void ensureGraphTheme() {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        StyleSheet theme = StyleSheetRegistry.of("crystalgui:graph");
+        if (window.getStyleEngine().getSheets().contains(theme)) return;
+        window.getStyleEngine().addStylesheet(theme);
     }
 
     /** Releases the preview renderers' GL resources. Safe to call more than once. */

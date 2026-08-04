@@ -55,6 +55,16 @@ public class ShippedKeymapDefaultsTest {
         UndoCommands.bindDefaults(freshKeymap());
     }
 
+    @Test
+    public void editorAppDefaultsParse() {
+        com.crystalgui.editor.CrystalEditorCommands.bindDefaults(freshKeymap());
+    }
+
+    @Test
+    public void chromeDefaultsParse() {
+        com.crystalgui.ui.elements.chrome.ChromeCommands.bindDefaults(freshKeymap());
+    }
+
     // ── The two names that have caught us out ───────────────────────────────────────────────────
 
     /**
