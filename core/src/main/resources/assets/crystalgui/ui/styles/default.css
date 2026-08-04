@@ -3082,24 +3082,31 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * what says "type here", and a row that looks typeable while silently discarding what you type is worse
  * than one that never offered. It keeps the kit's height so a panel mixing facts and fields stays on one
  * rhythm, and `--cfg-value-text` rather than the label colour, because it IS the row's value. */
+/* `min-height`, never `height`: a wrapped fact is TALLER than one control row, and a fixed height would
+ * clip the second line while the text below it thought it had room. */
 .__configurator__ > .__inline__ > .__config-control__.__info__ {
     flex-direction: row;
     align-items: center;
-    height: var(--cfg-ctrl-h);
     min-height: var(--cfg-ctrl-h);
 }
-/* Ellipsizes rather than wrapping. A resolved port list ("Position(vec3), BaseColor(vec3), ...") is
- * genuinely longer than any column, and a fact that reflowed the row would push every row below it
- * around as the selection changed. The tooltip carries the full text. */
+/* WRAPS rather than ellipsizing, and the row grows to fit. A resolved port list -- "Position(vec3),
+ * BaseColor(vec3), Alpha(float), AlphaClipThreshold(float)" -- is genuinely longer than any column this
+ * panel will ever have, so truncating it hides the one thing the row exists to say.
+ *
+ * The alternative considered and rejected was making the panel scroll HORIZONTALLY. No inspector does
+ * that -- not Unity, IntelliJ, VS Code or Blender -- because a sideways scrollbar in a properties panel
+ * is a gesture nobody thinks to try, so the hidden text reads as absent rather than as off-screen. A
+ * panel is a column of rows; when a row has more to say it gets taller, which is the one direction the
+ * container already scrolls.
+ *
+ * The row's `min-height` keeps single-line facts on the kit rhythm, so only the long ones grow. */
 .__config-control__.__info__ .__value__ {
     font-size: var(--cfg-font);
     color: var(--cfg-value-text);
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
 }
 
 /* ── Arrays ─────────────────────────────────────────────────────────────────────────────────────
