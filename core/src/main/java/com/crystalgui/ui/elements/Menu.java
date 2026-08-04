@@ -51,6 +51,21 @@ public class Menu extends Popover {
     /** A grouping rule between items. @see #addSeparator() */
     public static final String SEPARATOR_CLASS = "__separator__";
 
+    /**
+     * On a menu that contains at least one checkable row, so <b>every</b> row reserves the mark gutter.
+     *
+     * <h3>The gutter belongs to the menu, not the item</h3>
+     * <p>Reserving it per-item indents that row against its neighbours, which reads as broken alignment
+     * rather than as a checkmark. Every native menu reserves the column once for the whole menu — in
+     * Windows' own context menu, {@code Refresh} and {@code Paste} line up with the rows that have icons
+     * precisely because of this. Reserving it on <em>all</em> menus is the other wrong answer: an ordinary
+     * context menu would carry a dead column for a mark none of its rows can ever show, which is why the
+     * base sheet gives {@code __mark__} zero width by default.</p>
+     *
+     * @see #addCheckableItem(String)
+     */
+    public static final String HAS_CHECKABLE_CLASS = "__has-checkable__";
+
     /** Fires with the activated item. Emitted before the menu closes, so a listener can inspect it. */
     public final Signal.Value<MenuItem> onItemActivated = new Signal.Value<>();
 
@@ -133,6 +148,24 @@ public class Menu extends Popover {
 
     public MenuItem addItem(MenuItem item) {
         return addItemAt(item, itemList.size());
+    }
+
+    /**
+     * A row whose checked state is shown with a mark — a toggle, as opposed to a command.
+     *
+     * <p>Adding one switches the <b>whole menu</b> to a reserved mark gutter, so every row's label stays
+     * on the same left edge whether or not it can be checked. See {@link #HAS_CHECKABLE_CLASS} for why
+     * that is a menu-level decision rather than a per-item one.</p>
+     *
+     * <p>Use {@link MenuItem#setSelected} to tick it. The two are separate on purpose: this says the mark
+     * <em>can</em> appear, that says whether it currently does — so a toggle reserves its space while
+     * switched off and the label does not jump the first time it is ticked.</p>
+     */
+    public MenuItem addCheckableItem(String label) {
+        MenuItem item = addItem(label);
+        item.setCheckable(true);
+        addClass(HAS_CHECKABLE_CLASS);
+        return item;
     }
 
     /**
