@@ -1,5 +1,7 @@
 package com.crystalgui.graph;
 
+import com.crystalgui.core.settings.SettingsCodec;
+import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.serialization.Codec;
 import com.crystalgui.serialization.CodecException;
 import com.crystalgui.serialization.Codecs;
@@ -122,11 +124,21 @@ public final class GraphCodecs {
     public static final Codec<GraphDocument> DOCUMENT = new Codec<>() {
         @Override
         public <T> T encode(DynamicOps<T> ops, GraphDocument input) {
-            return Codecs.map(ops)
+            var builder = Codecs.map(ops)
                     .field("v", Codecs.INT, GraphDocument.SCHEMA_VERSION)
                     .optionalList("nodes", NODE, new ArrayList<>(input.nodes()))
-                    .optionalList("edges", EDGE, input.edges())
-                    .build();
+                    .optionalList("edges", EDGE, input.edges());
+            // The DOCUMENT layer alone. The others come from different FILES -- a user's preferences and
+            // a project's overrides -- and writing those in here would mean opening this graph elsewhere
+            // silently re-applied someone else's preferences as if the document had asked for them.
+            //
+            // Omitted when empty rather than written as an empty map: a document is content-addressed, so
+            // "absent" and "present but empty" must not be two encodings of one graph.
+            var documentLayer = input.settings().layer(SettingsLayer.DOCUMENT);
+            if (SettingsCodec.isWorthWriting(documentLayer)) {
+                builder.raw("settings", SettingsCodec.MODEL.encode(ops, documentLayer));
+            }
+            return builder.build();
         }
 
         @Override
@@ -140,6 +152,10 @@ public final class GraphCodecs {
             }
 
             GraphDocument document = new GraphDocument();
+            if (in.has("settings")) {
+                document.settings().replaceLayer(SettingsLayer.DOCUMENT,
+                        SettingsCodec.MODEL.decode(ops, in.raw("settings")).asMap());
+            }
             if (in.has("nodes")) {
                 for (NodeData node : in.field("nodes", Codecs.listOf(NODE))) document.addNode(node);
             }

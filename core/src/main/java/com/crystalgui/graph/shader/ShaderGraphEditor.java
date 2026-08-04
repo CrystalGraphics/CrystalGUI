@@ -98,6 +98,11 @@ public class ShaderGraphEditor extends UIElement {
     private CgShaderEmitter.Result lastCompile;
 
     public ShaderGraphEditor() {
+        // Explicit, like every command set in this engine -- a registry that quietly acquired
+        // declarations nobody asked for surprises anything that walks it, and a generated settings panel
+        // is precisely such a thing. Idempotent, since registering replaces.
+        ShaderGraphSettings.register();
+
         graph.addClass(GRAPH_CLASS);
         source.addClass(SOURCE_CLASS);
 
@@ -170,6 +175,16 @@ public class ShaderGraphEditor extends UIElement {
 
     public NodeTypeRegistry library() {
         return library;
+    }
+
+    /** The floating preview, so a second host can share its view state rather than keep a copy. */
+    public MainPreviewPanel mainPreview() {
+        return mainPreview;
+    }
+
+    /** The compiler-side master. Written only at compile time — see {@link ShaderGraphSettings}. */
+    public com.crystalgraphics.shadergraph.CgMasterNode master() {
+        return master;
     }
 
     /** The last emit, or null before the first compile. */

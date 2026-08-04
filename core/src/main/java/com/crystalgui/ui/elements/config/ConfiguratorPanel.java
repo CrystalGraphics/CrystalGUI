@@ -88,6 +88,34 @@ public class ConfiguratorPanel extends ScrollerView {
         addTo(parent, descriptor, values.apply(descriptor.id()));
     }
 
+    /**
+     * Appends a row built around a control the caller already has.
+     *
+     * <p>The seam a host needs when the widget cannot come from {@link ConfigControls} — a shader
+     * inspector builds its rows through {@code NodeFieldWidgets} so that a value has exactly one writer
+     * whether it is edited on the node or in the panel, and it still wants this panel's row rhythm,
+     * label column and change signal.</p>
+     */
+    public Configurator addRow(UIElement parent, String label, String id, ConfigControl control) {
+        Configurator row = new Configurator(label, control);
+        controls.put(id, control);
+        control.changed.connect(value -> changed.emit(id, value));
+        parent.addChild(row);
+        return row;
+    }
+
+    /**
+     * Empties the panel — every row, every group, and the control index with them.
+     *
+     * <p>For a panel that is <b>rebuilt</b> rather than merely updated, which any inspector bound to a
+     * selection is. Clearing the children without clearing the index would leave {@link #control} handing
+     * back widgets that are no longer on screen, and {@link #setValue} silently writing into them.</p>
+     */
+    public void clearRows() {
+        clearAllChildren();
+        controls.clear();
+    }
+
     /** The control for an id, or null. */
     @Nullable
     public ConfigControl control(String id) {

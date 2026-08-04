@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.graph;
 
+import com.crystalgui.core.undo.CompositeEdit;
+import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.NodeData;
@@ -10,6 +12,8 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.config.ConfigControl;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Puts a node type's editable fields onto a node widget, and writes changes back through the undo stack.
@@ -111,6 +115,46 @@ public final class NodeFieldBinder {
         });
         bracketGestures(control, undo);
         followDocument(control, document, nodeId, field, lastWritten, onChange);
+        return control;
+    }
+
+    /**
+     * One control writing the same field on <b>several</b> nodes, as a single undo step.
+     *
+     * <p>What an inspector needs for a multi-selection, and the reason it is here rather than there:
+     * everything about where a value comes from and where it goes stays in this class, so there is still
+     * exactly one writer however many nodes are on the far end of it.</p>
+     *
+     * <p>The control shows {@code displayNodeId}'s value, which is what every inspector does with a
+     * multi-selection — the write applies to all of them regardless of what they held, so the displayed
+     * value is a starting point rather than a claim that they agree.</p>
+     *
+     * <p>A {@link CompositeEdit} rather than N pushes: N pushes is N presses of Ctrl+Z to undo one
+     * action. It undoes in reverse, which costs nothing here (these edits are independent) but is the
+     * behaviour the type guarantees and the reason not to hand-roll a loop.</p>
+     *
+     * @param nodeIds every node to write; ones that no longer exist are skipped at apply time
+     */
+    @Nullable
+    public static UIElement buildMultiControl(NodeField field, GraphDocument document,
+                                              List<String> nodeIds, String displayNodeId,
+                                              @Nullable UndoStack undo, @Nullable Runnable onChange) {
+        String current = currentValue(document, displayNodeId, field);
+        UIElement control = NodeFieldWidgets.create(field, current, value -> {
+            List<Edit> edits = new ArrayList<>();
+            for (String nodeId : nodeIds) {
+                SetNodeFieldEdit edit = SetNodeFieldEdit.of(document, nodeId, field.id(), value);
+                if (edit.changesAnything()) edits.add(edit);
+            }
+            if (edits.isEmpty()) return;
+
+            Edit combined = edits.size() == 1 ? edits.get(0)
+                    : new CompositeEdit(edits, "set " + field.id() + " on " + edits.size() + " nodes");
+            if (undo != null) undo.execute(combined);
+            else combined.apply();
+            if (onChange != null) onChange.run();
+        });
+        bracketGestures(control, undo);
         return control;
     }
 

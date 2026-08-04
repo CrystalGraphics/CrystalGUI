@@ -417,6 +417,12 @@ public final class ShaderGraphBridge {
     public static CgShaderEmitter.Result compile(GraphDocument document,
                                                  CgShaderNodeRegistry shaderNodes,
                                                  CgMasterNode master) {
+        // The document's own settings reach the master HERE, immediately before the emit, and nowhere
+        // else. The master is the compiler's object rather than storage — see ShaderGraphSettings for
+        // what holding them on it used to cost — so it is written at the last possible moment and never
+        // read from as though it were the truth.
+        ShaderGraphSettings.applyTo(document, master);
+
         CgShaderGraph graph = toShaderGraph(document, shaderNodes, master);
         if (graph == null) {
             return new CgShaderEmitter.Result("", java.util.List.of(),
