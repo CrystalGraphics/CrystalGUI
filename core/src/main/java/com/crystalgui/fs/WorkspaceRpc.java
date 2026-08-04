@@ -117,6 +117,29 @@ public final class WorkspaceRpc<T> {
             respond.ok(null);
         }));
 
+        registry.register(WorkspaceProtocol.DELETE, (args, respond) -> guard(respond, () -> {
+            CgPath target = path(args);
+            service.delete(actor, target, args.getBool(WorkspaceProtocol.RECURSIVE, false),
+                    expectedEtag(args));
+            // The path is gone, so there is nothing left to poll and no etag to remember. Without this the
+            // watcher keeps stat-ing a file that no longer exists and reports its own caller's deletion
+            // back to it as an external change.
+            watcher.unwatch(target);
+            respond.ok(null);
+        }));
+
+        registry.register(WorkspaceProtocol.RENAME, (args, respond) -> guard(respond, () -> {
+            CgPath from = CgPath.parse(args.getString(WorkspaceProtocol.FROM, ""));
+            CgPath to = CgPath.parse(args.getString(WorkspaceProtocol.TO, ""));
+            service.rename(actor, from, to, args.getBool(WorkspaceProtocol.OVERWRITE, false),
+                    expectedEtag(args));
+            // Same reasoning as the delete above, for the SOURCE only: the destination is a path this
+            // client has never read, so it has no etag to seed a watch with and no business watching it
+            // until it opens it.
+            watcher.unwatch(from);
+            respond.ok(null);
+        }));
+
         registry.register(WorkspaceProtocol.WATCH, (args, respond) -> guard(respond, () -> {
             CgPath path = path(args);
             // AUTHORISED like any read. Watching a file you may not read would otherwise leak its
@@ -161,6 +184,19 @@ public final class WorkspaceRpc<T> {
 
     private static <T> CgPath path(StateMap<T> args) {
         return CgPath.parse(args.getString(WorkspaceProtocol.PATH, ""));
+    }
+
+    /**
+     * The etag a caller is acting on, or {@code null} for "unconditionally".
+     *
+     * <p><b>Absent and null must mean the same thing</b>, and the distinction is not academic: the codec
+     * omits absent optionals rather than writing them null (descriptions are content-addressed, see
+     * {@code UIDescriptionCodec}), so a client that simply does not know an etag sends no key at all. A
+     * {@code getString(ETAG, "")} here would turn that into an empty-string expectation and refuse every
+     * such call as a conflict against a file whose etag is never {@code ""}.</p>
+     */
+    private static <T> String expectedEtag(StateMap<T> args) {
+        return args.has(WorkspaceProtocol.ETAG) ? args.getString(WorkspaceProtocol.ETAG, null) : null;
     }
 
     /**
