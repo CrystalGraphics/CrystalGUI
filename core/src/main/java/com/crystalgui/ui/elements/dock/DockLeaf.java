@@ -113,6 +113,27 @@ public final class DockLeaf extends DockNode {
         return true;
     }
 
+    /**
+     * Swaps one panel reference for another <b>in place</b>, keeping its position and its selection.
+     *
+     * <p>What renaming a file needs, and what remove-then-add cannot express. A {@link DockPanelRef} is
+     * identified by its type and state, so a file panel's reference carries the path — rename the file and
+     * it is a <em>different</em> reference for the same tab. Removing and re-adding would send it to the
+     * end of the strip and, if it was the active one, hand the selection to its neighbour on the way
+     * through: the file you just renamed disappears from where you were looking and something else comes
+     * forward.</p>
+     *
+     * @return false when {@code from} is not in this strip, or {@code to} already is — replacing onto an
+     *         existing tab would leave the strip holding the same reference twice, and every lookup here
+     *         is by equality
+     */
+    public boolean replace(DockPanelRef from, DockPanelRef to) {
+        int index = panels.indexOf(from);
+        if (index < 0 || panels.contains(to)) return false;
+        panels.set(index, to);
+        return true;
+    }
+
     /** Moves a panel within this strip. Used by tab reordering, which must not rebuild the strip. */
     public boolean move(int from, int to) {
         if (from < 0 || from >= panels.size()) return false;
