@@ -620,7 +620,13 @@ colorselector .__channel-row__ slider .__thumb__ {
  * The stage is deliberately DARKER than the node canvas rather than matching it. A preview is a
  * picture, and a picture needs a border of its own to read as one — matching the canvas would make a
  * dark shader look like a hole in the editor. */
-.__main-preview__ {
+/* BOTH panels, one rule. The Blackboard is meant to be visually identical to the Main Preview, and the
+ * look actually lives HERE rather than in default.css -- which is where three rounds of "it looks
+ * nothing like it" came from: the shared frame went into the user-agent sheet while the theme, loaded
+ * after it and therefore winning, still named only one panel. A theme is where a panel's palette lives;
+ * default.css gives it geometry. Both files have to name both panels or neither does. */
+.__main-preview__,
+.__blackboard__ {
     background: var(--node-canvas);
     border-color: var(--node-edge);
     outline-width: 1px;
@@ -633,9 +639,39 @@ colorselector .__channel-row__ slider .__thumb__ {
  * surface, and the contrast that made the header legible went with it. The configurator's SHAPE is what
  * was worth copying here (see default.css) — its palette is tuned against an inspector's lighter panel,
  * not against a graph canvas. */
-.__main-preview__ > .__head__ {
+.__main-preview__ > .__head__,
+.__blackboard__ > .__head__ {
     background: var(--node-header);
     color: var(--node-text-bright);
+}
+
+/* The Blackboard's own parts, in the theme's palette rather than invented greys. */
+.__blackboard__ > .__head__ > .__subtitle__ {
+    color: var(--node-text);
+}
+.__blackboard__ > .__head__ > .__add__ {
+    color: var(--node-text-bright);
+}
+.__blackboard__ .__empty__ {
+    color: var(--node-text);
+}
+.__property-pill__:hover {
+    background: var(--node-header);
+}
+/* Selection is an OUTLINE in the graph's own accent, not a fill -- a selected NODE is outlined #44C0FF
+ * and a selected pill reading differently would be two vocabularies for one idea. */
+.__property-pill__.__selected__ {
+    outline-width: 1px;
+    outline-color: #44C0FF;
+}
+.__property-pill__ > .__capsule__ {
+    background: var(--node-header);
+}
+.__property-pill__ .__name__ {
+    color: var(--node-text-bright);
+}
+.__property-pill__ > .__type__ {
+    color: var(--node-text);
 }
 
 /* Solid, not a checkerboard — yet. With `Alpha` now a real master port, a transparent material over a

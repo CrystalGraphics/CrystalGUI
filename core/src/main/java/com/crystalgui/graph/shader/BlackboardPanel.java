@@ -56,6 +56,9 @@ public class BlackboardPanel extends UIElement {
     /** What the {@code +} menu's first entry says. A category is created like a property, not around one. */
     public static final String CATEGORY_LABEL = "Category";
 
+    /** Pixels per wheel notch. One pill's height, so a notch moves the list by one row. */
+    private static final float WHEEL_STEP_PX = 14f;
+
     /** Shown in place of the list while nothing is declared. */
     public static final String EMPTY_MESSAGE = "No properties yet";
 
@@ -122,7 +125,18 @@ public class BlackboardPanel extends UIElement {
     private final UIText title = new UIText("");
     private final UIText subtitle = new UIText("Shader Graphs");
     private final UIElement add = new UIElement();
-    private final ScrollerView body = new ScrollerView();
+    /**
+     * The list. A PLAIN box, not a {@link ScrollerView}, and that is forced rather than chosen.
+     *
+     * <p>{@code ScrollerView} writes its bars' {@code display} from Java at IMPORTANT origin and says so
+     * in its own javadoc — <em>"not expressible in CSS"</em> — so no stylesheet rule can hide them. A
+     * rule that tried was a guaranteed no-op, which is exactly what shipped once.</p>
+     *
+     * <p>The cost is that a bare {@code overflow} box scrolls by API and ignores the wheel, so the wheel
+     * is wired by hand below. That is five lines against a widget whose entire purpose is the bars we do
+     * not want.</p>
+     */
+    private final UIElement body = new UIElement();
 
     private final List<PropertyPill> pills = new ArrayList<>();
 
@@ -174,6 +188,15 @@ public class BlackboardPanel extends UIElement {
             event.stopPropagation();
         }, false, true);
 
+        // A bare overflow box has no wheel handling of its own -- see the `body` field. A POSITIVE notch
+        // means the wheel rolled DOWN, which ScrollerView is the only other statement of; taking the sign
+        // at face value is how CanvasView shipped zooming the wrong way.
+        body.onMouseScroll.attachListener((element, event) -> {
+            float before = body.getScrollTop();
+            body.setScrollTop(before + event.getScroll() * WHEEL_STEP_PX);
+            if (body.getScrollTop() != before) event.stopPropagation();
+        }, false, true);
+
         document.onChanged.connect(this::refresh);
         refresh();
     }
@@ -210,15 +233,26 @@ public class BlackboardPanel extends UIElement {
      * a rebuild does not lose it — which matters, since every edit to the selected property triggers one.</p>
      */
     public void refresh() {
-        // Removed BY REFERENCE, never with clearAllChildren(): a PropertyPill calls markAsInternal() on
-        // itself -- it is an assembled widget whose parts nothing should walk into -- and
-        // clearAllChildren deliberately skips internal children. So the clear removed nothing and every
-        // refresh stacked another copy of the list. Exactly the bug ConfiguratorPanel.clearRows already
-        // records, hit a second time by a second panel, which is why this one removes what it added.
+        // EVERYTHING here is added and removed through the INTERNAL pair, and that is load-bearing twice
+        // over.
+        //
+        // First: a PropertyPill marks itself internal, and clearAllChildren() deliberately skips internal
+        // children -- so a bulk clear removed nothing and every refresh stacked another copy of the list.
+        // ConfiguratorPanel.clearRows records the same bug from the inspector.
+        //
+        // Second, and the one that survived that fix: GraphView.addOverlay marks this panel internal
+        // AFTER it is constructed, and markAsInternal() RECURSES -- so it stamps whatever refresh() had
+        // already put in the body. That element then becomes unremovable through removeChild, which
+        // refuses internal children by contract. The symptom was one stubborn placeholder with a fresh
+        // one stacked under it on the next refresh, visible only in the assembled editor: a panel built
+        // in isolation is never stamped, so it looked perfect in every isolated test.
+        //
+        // Using the internal pair for both directions makes this immune to being stamped from outside,
+        // which is the only thing that can be, since a widget cannot stop its host promoting it.
         for (PropertyPill pill : pills) body.removeInternalChild(pill);
         pills.clear();
         if (emptyMessage != null) {
-            body.removeChild(emptyMessage);
+            body.removeInternalChild(emptyMessage);
             emptyMessage = null;
         }
 
@@ -235,7 +269,8 @@ public class BlackboardPanel extends UIElement {
             emptyMessage = new UIText(EMPTY_MESSAGE);
             emptyMessage.addClass("__empty__");
             emptyMessage.setHitTest(false);
-            body.addChild(emptyMessage);
+            // addInternalChild/removeInternalChild, never the public pair -- see the note on refresh().
+            body.addInternalChild(emptyMessage);
         }
         // The selected property may have been deleted by whatever triggered this.
         if (selectedId != null && document.property(selectedId) == null) select(null);
