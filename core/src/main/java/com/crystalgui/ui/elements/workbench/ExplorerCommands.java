@@ -71,11 +71,11 @@ public final class ExplorerCommands {
 
         registry.register(Command.of(NEW_FILE, "New File…")
                 .run(context -> promptNew(workbench, context, false))
-                .enabledWhen(context -> target(context) != null));
+                .enabledWhen(context -> destinationFor(workbench, context) != null));
 
         registry.register(Command.of(NEW_FOLDER, "New Folder…")
                 .run(context -> promptNew(workbench, context, true))
-                .enabledWhen(context -> target(context) != null));
+                .enabledWhen(context -> destinationFor(workbench, context) != null));
 
         registry.register(Command.of(RENAME, "Rename…")
                 .run(context -> promptRename(workbench, context))
@@ -106,17 +106,18 @@ public final class ExplorerCommands {
 
         registry.register(Command.of(PASTE, "Paste")
                 .run(context -> paste(workbench, context))
-                .enabledWhen(context -> !CLIPBOARD.isEmpty() && target(context) != null));
+                // Pasting into the empty space below the files means pasting into the project root,
+                // which is both useful and what every file manager does.
+                .enabledWhen(context -> !CLIPBOARD.isEmpty()
+                        && destinationFor(workbench, context) != null));
 
         registry.register(Command.of(REFRESH, "Reload from Disk")
                 .run(context -> {
-                    CgPath path = target(context);
-                    CgPath directory = path == null ? null
-                            : workbench.fileTree().isDirectory(path) ? path : path.parent();
-                    workbench.fileTree().source().invalidate(directory);
+                    workbench.fileTree().source().invalidate(destinationFor(workbench, context));
                     workbench.fileTree().treeView().refresh();
                 })
-                .enabledWhen(context -> target(context) != null));
+                // Reloading the project root with nothing selected is what F5 should mean.
+                .enabledWhen(context -> destinationFor(workbench, context) != null));
     }
 
     /**
@@ -133,14 +134,26 @@ public final class ExplorerCommands {
         keymap.bind("Mod+V", PASTE);
         keymap.bind("F2", RENAME);
         keymap.bind("Delete", DELETE);
-        keymap.bind("Mod+N", NEW_FILE);
         keymap.bind("F5", REFRESH);
+    }
+
+    /**
+     * The keys that work from <b>anywhere</b> in the editor.
+     *
+     * <p>{@code Ctrl+N} is an application verb rather than a panel one — IntelliJ's New is reachable from
+     * the editor, the tool windows and the menu alike, and a New File that worked only while the Project
+     * panel held focus is one nobody would find. It is a chord rather than a bare letter, so binding it at
+     * the root is safe in a way {@code Delete} is not: a chord cannot fire while typing.</p>
+     */
+    public static void bindGlobalDefaults(Keymap keymap) {
+        keymap.bind("Mod+N", NEW_FILE);
     }
 
     /** Registers on the window and binds on the file tree, which is what scopes the bare keys. */
     public static void install(UIWindow window, Workbench workbench) {
         register(window.getCommands(), workbench);
         bindDefaults(workbench.fileTree().keymap());
+        bindGlobalDefaults(window.ui.rootElement.keymap());
     }
 
     /** The menu the Project panel opens on a right-click. */
@@ -179,9 +192,8 @@ public final class ExplorerCommands {
      * refusal would leave the user guessing which ones landed. Each reports its own status.</p>
      */
     private static void paste(Workbench workbench, CommandContext context) {
-        CgPath selected = target(context);
-        if (selected == null || CLIPBOARD.isEmpty()) return;
-        CgPath destination = newParentFor(workbench, selected);
+        CgPath destination = destinationFor(workbench, context);
+        if (destination == null || CLIPBOARD.isEmpty()) return;
         boolean moving = CLIPBOARD.mode() == ExplorerClipboard.Mode.CUT;
 
         for (CgPath source : CLIPBOARD.consumeIfCut()) {
@@ -239,12 +251,29 @@ public final class ExplorerCommands {
         return workbench.fileTree().isDirectory(selected) ? selected : selected.parent();
     }
 
+    /**
+     * Where a New or a Paste goes when nothing is selected — the first project's root.
+     *
+     * <p><b>Nothing selected is the normal state, not an edge case.</b> Right-clicking the empty space
+     * below the files is how you make a file at the top level, and it is what the panel looks like the
+     * moment it opens. Requiring a selection made New File unavailable in exactly the situation it is most
+     * wanted, and made a global Ctrl+N do nothing anywhere.</p>
+     *
+     * <p>IntelliJ resolves the same way: with no selection its New acts on the project root.</p>
+     */
+    @Nullable
+    private static CgPath destinationFor(Workbench workbench, CommandContext context) {
+        CgPath selected = target(context);
+        if (selected != null) return newParentFor(workbench, selected);
+        List<CgPath> roots = workbench.fileTree().source().roots();
+        return roots.isEmpty() ? null : roots.get(0);
+    }
+
     // ── Actions ─────────────────────────────────────────────────────────────────────────────────
 
     private static void promptNew(Workbench workbench, CommandContext context, boolean folder) {
-        CgPath selected = target(context);
-        if (selected == null) return;
-        CgPath parent = newParentFor(workbench, selected);
+        CgPath parent = destinationFor(workbench, context);
+        if (parent == null) return;
 
         InputDialog.ask(context.source(), folder ? "New Folder" : "New File", "Name", "", name -> {
             CgPath path = parent.resolve(name);

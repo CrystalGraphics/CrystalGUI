@@ -90,6 +90,7 @@ public class ShaderGraphEditor extends UIElement {
 
     private final ShaderGraphPreviews previews;
     private final MainPreviewPanel mainPreview;
+    private final BlackboardPanel blackboard;
 
     private boolean previewsAttached;
     private boolean mainPreviewAttached;
@@ -151,6 +152,16 @@ public class ShaderGraphEditor extends UIElement {
         mainPreview = new MainPreviewPanel(graph.getDocument(), shaderNodes, master);
         graph.addOverlay(mainPreview);
 
+        // The Blackboard is the SECOND consumer of the overlay seam, which is what makes it worth
+        // having been a seam. Same viewport placement, same clamp -- see CanvasOverlayMove.
+        blackboard = new BlackboardPanel(graph.getDocument(), "shader_graph", graph.undoStack());
+        blackboard.onPropertySelected.connect(id -> {
+            // Two selection sources, one inspector subject: picking a property clears the node
+            // selection so the two cannot both claim to be what is being inspected.
+            if (id != null) graph.getSelection().clear();
+        });
+        graph.addOverlay(blackboard);
+
         recompile();
     }
 
@@ -180,6 +191,11 @@ public class ShaderGraphEditor extends UIElement {
     /** The floating preview, so a second host can share its view state rather than keep a copy. */
     public MainPreviewPanel mainPreview() {
         return mainPreview;
+    }
+
+    /** The floating property board. @see BlackboardPanel */
+    public BlackboardPanel blackboard() {
+        return blackboard;
     }
 
     /** The compiler-side master. Written only at compile time — see {@link ShaderGraphSettings}. */
@@ -311,6 +327,7 @@ public class ShaderGraphEditor extends UIElement {
             previewsAttached = true;
         }
         if (!mainPreviewAttached) mainPreviewAttached = mainPreview.attach();
+        blackboard.reclamp();
         return !(previewsAttached && mainPreviewAttached);
     }
 
