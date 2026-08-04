@@ -573,6 +573,43 @@ texteditor text::highlight(bracket) {
     color: #4EC9A0;
 }
 
+/* ── Syntax colours ──
+ *
+ * THE SAME TRAP THE BRACKET RULE ABOVE RECORDS, and it caught us a second time. A tokenizer publishes
+ * its ranges whether or not anything styles them, so setting a language on an editor made it tokenize
+ * correctly and look *identical* — every keyword, string and comment resolved, was handed to the
+ * cascade, and rendered in the default colour. That is not "unthemed": with no rule here, choosing a
+ * language does nothing observable at all, and the bug reads as the tokenizer failing.
+ *
+ * The names are what SyntaxTokenizer emits. SyntaxToken.generalName() falls back from `function.builtin`
+ * to `function`, so a sheet that names only the general forms still colours every specialisation —
+ * which is why these six are enough for any tokenizer, including a future tree-sitter one.
+ *
+ * VS Code's Dark+ values, matching the diagnostic colours already in this sheet. */
+texteditor text::highlight(keyword) {
+    color: #569CD6;
+}
+
+texteditor text::highlight(type) {
+    color: #4EC9A0;
+}
+
+texteditor text::highlight(function) {
+    color: #DCDCAA;
+}
+
+texteditor text::highlight(string) {
+    color: #CE9178;
+}
+
+texteditor text::highlight(number) {
+    color: #B5CEA8;
+}
+
+texteditor text::highlight(comment) {
+    color: #6A9955;
+}
+
 /* THE ACTIVE GUIDE — the block the caret is actually inside, which IntelliJ draws brighter than the rest.
  *
  * Brighter, not thicker or a different hue: the guides are a background layer the eye is meant to be able
