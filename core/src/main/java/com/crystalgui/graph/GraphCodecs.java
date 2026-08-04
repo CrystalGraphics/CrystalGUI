@@ -121,13 +121,58 @@ public final class GraphCodecs {
         }
     };
 
+    public static final Codec<GraphProperty> PROPERTY = new Codec<>() {
+        @Override
+        public <T> T encode(DynamicOps<T> ops, GraphProperty input) {
+            var builder = Codecs.map(ops)
+                    .field("id", Codecs.STRING, input.id())
+                    .field("name", Codecs.STRING, input.name())
+                    .field("ref", Codecs.STRING, input.reference())
+                    .field("type", Codecs.STRING, input.typeId())
+                    .field("def", Codecs.STRING, input.defaultValue())
+                    .field("exposed", Codecs.BOOL, input.exposed());
+            // Omitted when empty rather than written blank, so the encoding of a plain property is
+            // stable and its content hash is not disturbed by fields nobody set.
+            if (input.isCategorised()) builder.field("cat", Codecs.STRING, input.category());
+            if (!input.options().isEmpty()) {
+                Map<T, T> options = new LinkedHashMap<>();
+                for (Map.Entry<String, String> entry : input.options().entrySet()) {
+                    options.put(ops.createString(entry.getKey()), ops.createString(entry.getValue()));
+                }
+                builder.raw("opts", ops.createMap(options));
+            }
+            return builder.build();
+        }
+
+        @Override
+        public <T> GraphProperty decode(DynamicOps<T> ops, T input) {
+            var in = Codecs.read(ops, input);
+            Map<String, String> options = new LinkedHashMap<>();
+            if (in.has("opts")) {
+                for (Map.Entry<T, T> entry : ops.getMapValue(in.raw("opts")).entrySet()) {
+                    options.put(ops.getStringValue(entry.getKey()), ops.getStringValue(entry.getValue()));
+                }
+            }
+            return new GraphProperty(
+                    in.field("id", Codecs.STRING),
+                    in.field("name", Codecs.STRING),
+                    in.field("ref", Codecs.STRING),
+                    in.field("type", Codecs.STRING),
+                    in.field("def", Codecs.STRING),
+                    in.optional("exposed", Codecs.BOOL, true),
+                    in.optional("cat", Codecs.STRING, ""),
+                    options);
+        }
+    };
+
     public static final Codec<GraphDocument> DOCUMENT = new Codec<>() {
         @Override
         public <T> T encode(DynamicOps<T> ops, GraphDocument input) {
             var builder = Codecs.map(ops)
                     .field("v", Codecs.INT, GraphDocument.SCHEMA_VERSION)
                     .optionalList("nodes", NODE, new ArrayList<>(input.nodes()))
-                    .optionalList("edges", EDGE, input.edges());
+                    .optionalList("edges", EDGE, input.edges())
+                    .optionalList("props", PROPERTY, input.properties());
             // The DOCUMENT layer alone. The others come from different FILES -- a user's preferences and
             // a project's overrides -- and writing those in here would mean opening this graph elsewhere
             // silently re-applied someone else's preferences as if the document had asked for them.
@@ -155,6 +200,11 @@ public final class GraphCodecs {
             if (in.has("settings")) {
                 document.settings().replaceLayer(SettingsLayer.DOCUMENT,
                         SettingsCodec.MODEL.decode(ops, in.raw("settings")).asMap());
+            }
+            if (in.has("props")) {
+                for (GraphProperty property : in.field("props", Codecs.listOf(PROPERTY))) {
+                    document.addProperty(property);
+                }
             }
             if (in.has("nodes")) {
                 for (NodeData node : in.field("nodes", Codecs.listOf(NODE))) document.addNode(node);

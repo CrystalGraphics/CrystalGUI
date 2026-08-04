@@ -110,7 +110,124 @@ public final class GraphDocument implements SettingsScope {
         return nodes.size();
     }
 
+    // ── Properties ─────────────────────────────────────────────────
+
+    /** Every declared property, in authored order. @see #properties */
+    public List<GraphProperty> properties() {
+        return Collections.unmodifiableList(properties);
+    }
+
+    @Nullable
+    public GraphProperty property(String id) {
+        for (GraphProperty property : properties) {
+            if (property.id().equals(id)) return property;
+        }
+        return null;
+    }
+
+    public int propertyCount() {
+        return properties.size();
+    }
+
+    /** Where {@code id} sits in the list, or -1. */
+    public int indexOfProperty(String id) {
+        for (int i = 0; i < properties.size(); i++) {
+            if (properties.get(i).id().equals(id)) return i;
+        }
+        return -1;
+    }
+
+    /**
+     * Appends a property, or inserts it at {@code index}.
+     *
+     * <p>An index is taken rather than always appending because <b>undoing a delete must put it back
+     * where it was</b>. A delete-then-undo that appended would silently reorder the generated
+     * {@code Properties} block, which is a diff in the output for an operation the user believes was a
+     * no-op.</p>
+     *
+     * @throws IllegalArgumentException if the id is already present
+     */
+    public GraphProperty addProperty(GraphProperty property, int index) {
+        if (property(property.id()) != null) {
+            throw new IllegalArgumentException(
+                    "A property with id '" + property.id() + "' is already in this graph");
+        }
+        int at = index < 0 || index > properties.size() ? properties.size() : index;
+        properties.add(at, property);
+        onChanged.emit();
+        return property;
+    }
+
+    public GraphProperty addProperty(GraphProperty property) {
+        return addProperty(property, -1);
+    }
+
+    public boolean removeProperty(String id) {
+        int at = indexOfProperty(id);
+        if (at < 0) return false;
+        properties.remove(at);
+        onChanged.emit();
+        return true;
+    }
+
+    /**
+     * Replaces a property in place, keeping its position.
+     *
+     * <p>Every edit to a property goes through here rather than remove-then-add, so a rename cannot
+     * move it to the end of the Blackboard.</p>
+     */
+    public boolean replaceProperty(GraphProperty property) {
+        int at = indexOfProperty(property.id());
+        if (at < 0) return false;
+        properties.set(at, property);
+        onChanged.emit();
+        return true;
+    }
+
+    /** Moves a property to {@code index}. Returns whether anything moved. */
+    public boolean moveProperty(String id, int index) {
+        int from = indexOfProperty(id);
+        if (from < 0) return false;
+        int to = Math.max(0, Math.min(properties.size() - 1, index));
+        if (from == to) return false;
+        properties.add(to, properties.remove(from));
+        onChanged.emit();
+        return true;
+    }
+
+    /**
+     * A display name not already taken, case-insensitively — {@code Colour}, {@code Colour (1)}…
+     *
+     * <p>Two properties may legally share a name (they are identified by id), but the Blackboard would
+     * then show two identical pills and the generated references would collide. Suggesting rather than
+     * refusing keeps the {@code +} button a single click.</p>
+     */
+    public String uniquePropertyName(String desired) {
+        String base = desired == null || desired.isEmpty() ? "Property" : desired;
+        Set<String> taken = new HashSet<>();
+        for (GraphProperty property : properties) taken.add(property.nameKey());
+        if (!taken.contains(base.toLowerCase(java.util.Locale.ROOT))) return base;
+        for (int n = 1; n < 1000; n++) {
+            String candidate = base + " (" + n + ")";
+            if (!taken.contains(candidate.toLowerCase(java.util.Locale.ROOT))) return candidate;
+        }
+        return base + " " + GraphIds.generate();
+    }
+
     // ── Settings ──────────────────────────────────────────────────────
+
+    /**
+     * The values this graph exposes — uniforms a material sets, declared once and referenced by id.
+     *
+     * <p>A list rather than a map because <b>order is authored</b>: the Blackboard shows them in the
+     * order they were created and lets you drag to reorder, and the generated {@code Properties} block
+     * follows that order. A map keyed by id would make "the third property" unanswerable.</p>
+     *
+     * <p>Peers of {@link #nodes} and {@link #edges}, which is why they are here rather than in
+     * {@link Settings}: the gear is right for scalar options keyed by a stable name, and a property is
+     * an ordered record that other entities reference. @see GraphProperty</p>
+     */
+    private final List<GraphProperty> properties = new ArrayList<>();
 
     /**
      * What this graph <b>is</b>, as opposed to what is in it — the shader domain's vertex format, render
@@ -465,5 +582,6 @@ public final class GraphDocument implements SettingsScope {
     public void clear() {
         for (String id : new ArrayList<>(nodes.keySet())) removeNode(id);
         settings.replaceLayer(com.crystalgui.core.settings.SettingsLayer.DOCUMENT, null);
+        properties.clear();
     }
 }
