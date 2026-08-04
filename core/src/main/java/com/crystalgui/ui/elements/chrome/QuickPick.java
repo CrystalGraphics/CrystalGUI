@@ -88,7 +88,7 @@ public class QuickPick extends Popover {
      * here, deriving the list's own height from it is consistent rather than a second violation of
      * "no pixel values in Java".</p>
      */
-    private static final float ROW_HEIGHT = 22f;
+    private static final float ROW_HEIGHT = 22f;   // authoritative: the sheet cannot override it
 
     /** How many rows are shown before the list scrolls. VS Code shows roughly this many. */
     private static final int MAX_VISIBLE_ROWS = 12;

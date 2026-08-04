@@ -230,9 +230,40 @@ public class ListView<T> extends ScrollerView {
      * dozen rows, which is what a model change means anyway.</p>
      */
     protected void invalidateWindow() {
-        recycleAll();
+        // COALESCED, not done here. A model change arrives once per MUTATION, and a re-flatten is a clear
+        // followed by one add per row -- so a tree with twenty children fired twenty-one of these, each
+        // recycling every realised row and dirtying the tree again. updateWindow then re-realised from
+        // inside the layout pass, dirtying it once more, and the settle loop spent its budget churning
+        // elements. What that looks like on screen is the panel going blank for a few frames.
+        //
+        // Deferring to the next updateWindow makes it one recycle per frame however many mutations
+        // arrived, which is what a re-flatten actually means.
+        // THE ROWS LEAVE THE INDEX MAP, and this is the whole fix rather than an optimisation.
+        //
+        // `realised` maps INDEX to element, and a model change makes every one of those indices a lie:
+        // row 4 is now a different item, or no item. Everything that reaches into the map by index was
+        // therefore wrong for the frame or two before the rows rebind -- restoring a selection lit up an
+        // unrelated file, restoring focus focused one, and each looked like its own bug in whatever
+        // widget happened to show it.
+        //
+        // Guarding each of those call sites is a rule to remember at every future one. Moving the
+        // elements to a list instead makes the index map genuinely empty, so every lookup answers "not
+        // realised" on its own -- which is the truth. They stay children and stay displayed, so the frame
+        // still paints what it painted before; they simply stop being addressable.
+        for (UIElement row : realised.values()) awaitingRecycle.add(row);
+        realised.clear();
+        firstRealised = -1;
+        lastRealised = -1;
         markTreeDirty();
     }
+
+    /**
+     * Rows still on screen whose index no longer means anything — recycled by the next
+     * {@link #updateWindow}.
+     *
+     * <p>Deliberately a list rather than a map: the point is that they have no index.</p>
+     */
+    private final java.util.List<UIElement> awaitingRecycle = new java.util.ArrayList<>();
 
     @Override
     protected void onLayoutChanged() {
@@ -298,6 +329,13 @@ public class ListView<T> extends ScrollerView {
      */
     public void updateWindow() {
         if (renderer == null || getAttachedWindow() == null) return;
+
+        // Held until now so the old rows stayed on screen -- recycling at invalidation time hid every row
+        // the instant the model changed, and the frame that had already ticked painted empty.
+        if (!awaitingRecycle.isEmpty()) {
+            for (UIElement row : awaitingRecycle) recycle(row);
+            awaitingRecycle.clear();
+        }
 
         int count = model.size();
         if (count == 0) {
@@ -386,8 +424,27 @@ public class ListView<T> extends ScrollerView {
         }
         final float top = rowOffset() + sizeStrategy.offsetOf(index);
         final float height = sizeStrategy.sizeOf(index);
+        // IMPORTANT, not DEFAULT: this is virtualisation state, not a suggestion.
+        //
+        // The strategy decides BOTH where a row sits and how tall it is, and the two have to agree or the
+        // rows stop tiling. A stylesheet that set `height` on a row won that comparison at DEFAULT origin,
+        // so rows were painted and hit-tested at the sheet's height inside slots spaced at the strategy's
+        // -- leaving a dead band between every pair that swallowed clicks. Same reasoning as SplitView's
+        // weights, which are IMPORTANT for exactly this reason.
+        //
+        // A caller that wants a different row height says so with setItemHeight, which the strategy reads,
+        // rather than through CSS the layout cannot see.
+        StyleGroup.importantPipeline(row.getStyle().getLayoutGroup(),
+                l -> l.top(top).left(0).widthPercent(100f).height(height));
+        // DISPLAY IS DEFAULT ORIGIN, and must stay at whatever origin `recycle` uses.
+        //
+        // It is lifecycle state -- realised or pooled -- written from TWO places, and the pair only works
+        // if neither can outrank the other. Raising this one to IMPORTANT alongside the geometry above
+        // made recycle's `display: none` unable to win, so a pooled row stayed painted at its last
+        // position forever: the list grew a tail of unclickable ghost rows showing whatever used to be
+        // there. Geometry has one writer and can be authoritative; display has two and cannot.
         StyleGroup.defaultPipeline(row.getStyle().getLayoutGroup(),
-                l -> l.top(top).left(0).widthPercent(100f).height(height).display(dev.vfyjxf.taffy.style.TaffyDisplay.FLEX));
+                l -> l.display(dev.vfyjxf.taffy.style.TaffyDisplay.FLEX));
         renderer.bind(model.get(index), index, row);
         applySelectionClass(row, index);
         return row;
@@ -496,6 +553,9 @@ public class ListView<T> extends ScrollerView {
         // Realised rows carry the class; unrealised ones get it when they are next bound, which is why
         // applySelectionClass is also called from realise(). Two call sites for one rule, because the
         // window and the selection change independently.
+        //
+        // No guard needed for a stale window: invalidateWindow empties this map, so a selection restored
+        // across a re-flatten finds nothing to stamp and realise() applies the class as it rebinds.
         realised.forEach((index, row) -> applySelectionClass(row, index));
         onSelectionChanged.emit(Collections.unmodifiableSet(new TreeSet<>(selected)));
     }
@@ -634,6 +694,16 @@ public class ListView<T> extends ScrollerView {
         return realised.size();
     }
 
+    /**
+     * Row elements currently on screen — realised, plus any still awaiting recycle after a model change.
+     *
+     * <p>The honest answer to "does this frame have anything to paint", which {@link #realisedCount()} is
+     * not during the window between a model change and the next {@link #updateWindow}.</p>
+     */
+    public int shownRowCount() {
+        return realised.size() + awaitingRecycle.size();
+    }
+
     /** Pooled-but-unused elements. Exposed because "does scrolling allocate?" is otherwise unobservable,
      * and it is the property that makes this widget worth having. */
     public int pooledCount() {
@@ -688,7 +758,15 @@ public class ListView<T> extends ScrollerView {
             // multi-selection had been built since.
             suppressFocusSelection = true;
             try {
-                window.getInputHandler().requestFocus(row);
+                // requestPointerFocus, NOT requestFocus. The latter is PROGRAMMATIC and therefore rings,
+                // and :focus-visible exists precisely to ring keyboard focus and not clicks -- so a row
+                // that merely scrolled back into view drew a focus outline the user never asked for. It
+                // showed up as folder rows wearing a blue box while file rows wore a blue fill: two
+                // different states that looked like two different styles.
+                //
+                // The comment above already says this restore is the view's own doing rather than the
+                // user's; the ring is the other half of that same statement.
+                window.getInputHandler().requestPointerFocus(row);
             } finally {
                 suppressFocusSelection = false;
             }
