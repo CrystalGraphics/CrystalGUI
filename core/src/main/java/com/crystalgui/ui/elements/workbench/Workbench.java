@@ -3,6 +3,8 @@ package com.crystalgui.ui.elements.workbench;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.fs.WorkingCopies;
+import com.crystalgui.fs.WorkspaceFileService;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -19,7 +21,9 @@ import com.crystalgui.ui.elements.editor.EditorCommands;
 import com.crystalgui.ui.elements.editor.TextEditor;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -86,6 +90,15 @@ public class Workbench extends UIElement {
     /** One editor per open file. See the class note on why this is cached. */
     private final Map<CgPath, TextEditor> editors = new HashMap<>();
 
+    /**
+     * Every file operation goes through this, never straight to the client.
+     *
+     * <p>It is what keeps {@link #editors} honest across a rename or a delete. Before it existed, nothing
+     * updated that map when a path changed: the tab kept its old title, {@code Ctrl+S} wrote to the old
+     * name, and opening the new name produced a second editor for the same file.</p>
+     */
+    private final WorkspaceFileService fileService;
+
     /** Marked internal exactly ONCE, while empty. {@code markAsInternal()} RECURSES, and stamping a
      * populated subtree makes {@code removeChild} silently refuse everything under it — which is how the
      * dock grew duplicate unclickable tabs and how the shader graph editor hung the window. */
@@ -94,8 +107,13 @@ public class Workbench extends UIElement {
     public Workbench(WorkspaceClient<?> client) {
         if (client == null) throw new IllegalArgumentException("A Workbench needs a workspace client");
         this.client = client;
+        this.fileService = new WorkspaceFileService(client, new Copies());
         this.fileTree = new ProjectFileTree(client);
         fileTree.onFileChosen.connect(this::openFile);
+        // RENDERED FROM THE RESULT, never from the call site. One update path serves this client's own
+        // operations and another client's alike -- see Q11 in the chrome plan, and WorkspaceFileService's
+        // note on why two paths into one model always end up disagreeing.
+        fileService.onDidRun.connect(this::refreshAfter);
 
         registry.register(DockPanelDescriptor.singleton(PROJECT_TYPE, "Project"), ref -> fileTree);
         registry.register(DockPanelDescriptor.singleton(PROBLEMS_TYPE, "Problems"), ref -> problems);
@@ -312,6 +330,72 @@ public class Workbench extends UIElement {
                         ? "CONFLICT: " + target.name() + " changed on disk — reopen to take theirs"
                         : "save failed: " + failure.code()));
         return true;
+    }
+
+    /** Every file operation, with the open editors accounted for. */
+    public WorkspaceFileService files() {
+        return fileService;
+    }
+
+    /**
+     * Re-reads the folders an operation touched.
+     *
+     * <p>Both ends of a move, because a rename empties one directory and fills another — invalidating only
+     * the destination leaves the file visible in the folder it left, which reads as the rename having
+     * duplicated it.</p>
+     */
+    private void refreshAfter(WorkspaceFileService.Operation op) {
+        fileTree.source().invalidate(op.target().parent());
+        if (op.source() != null) fileTree.source().invalidate(op.source().parent());
+        fileTree.treeView().refresh();
+    }
+
+    /**
+     * How {@link WorkspaceFileService} reaches the open editors without being able to see a widget.
+     *
+     * <p>An inner class rather than {@code Workbench implements WorkingCopies}: these three methods are
+     * the file service's business and nobody else's, and putting them on the public surface invites a
+     * caller to {@code close()} an editor directly — which drops it from the map and leaves its tab in the
+     * dock, because closing a document and closing a tab are two different things that look like one.</p>
+     */
+    private final class Copies implements WorkingCopies {
+
+        @Override
+        public List<CgPath> openUnder(CgPath path) {
+            List<CgPath> found = new ArrayList<>();
+            for (CgPath open : editors.keySet()) {
+                // contains() covers "the path itself" as well as "beneath it", so a file delete and a
+                // directory delete are one question. Deleting a folder with six files open in it is
+                // exactly the case a per-path lookup misses.
+                if (open.equals(path) || path.contains(open)) found.add(open);
+            }
+            return found;
+        }
+
+        @Override
+        public void close(CgPath path) {
+            editors.remove(path);
+            // The TAB goes too, and this is the half that is easy to forget: an editor dropped from the
+            // map with its tab left behind leaves the dock asking the registry to rebuild a panel for a
+            // file that no longer exists, which comes back as the "__missing__" placeholder.
+            dock.layout().closePanel(refFor(path));
+            dock.requestRebuild();
+        }
+
+        @Override
+        public void retarget(CgPath from, CgPath to) {
+            TextEditor editor = editors.remove(from);
+            if (editor == null) return;
+            editors.put(to, editor);
+            // In place, so the tab keeps its position and its selection. A remove-then-add would send the
+            // renamed file to the end of the strip and, if it was active, hand the selection to a
+            // neighbour on the way -- the file you just renamed vanishing from where you were looking.
+            DockPanelRef was = refFor(from);
+            for (DockLeaf leaf : dock.layout().leaves()) {
+                if (leaf.replace(was, refFor(to))) break;
+            }
+            dock.requestRebuild();
+        }
     }
 
     private DockLeaf centralLeaf() {

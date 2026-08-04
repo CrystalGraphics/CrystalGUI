@@ -93,6 +93,24 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
         return directories.contains(path);
     }
 
+    /**
+     * Forgets a directory's contents so the next read re-fetches them.
+     *
+     * <p>What a file operation invalidates. <b>Both {@code children} and {@code requested} have to go</b>
+     * — the second is the in-flight guard, and leaving it behind means {@code request} declines to ask
+     * again and the folder stays permanently empty. That is a one-line omission with no symptom until
+     * somebody creates a file and it never appears.</p>
+     *
+     * <p>Directory-scoped rather than a full clear: a rename touches one folder, or two, and dropping the
+     * whole tree would collapse every expanded node the user had opened.</p>
+     */
+    public void invalidate(CgPath directory) {
+        if (directory == null) return;
+        children.remove(directory);
+        requested.remove(directory);
+        dirty = true;
+    }
+
     /** True once since the last call — a view uses it to decide whether to refresh. */
     public boolean drainRefresh() {
         if (!dirty) return false;
