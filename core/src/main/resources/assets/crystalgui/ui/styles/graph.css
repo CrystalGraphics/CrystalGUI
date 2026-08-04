@@ -646,8 +646,13 @@ colorselector .__channel-row__ slider .__thumb__ {
 }
 
 /* The Blackboard's own parts, in the theme's palette rather than invented greys. */
-.__blackboard__ > .__head__ > .__subtitle__ {
-    color: var(--node-text);
+.__blackboard__ .__titles__ > .__title__ {
+    color: var(--node-text-bright);
+}
+/* DARKER than the title. The two lines are a heading and its caption; equal weight makes them read as
+ * two competing labels, which is exactly how the side-by-side against Unity showed up. */
+.__blackboard__ .__titles__ > .__subtitle__ {
+    color: #8A8A8A;
 }
 .__blackboard__ > .__head__ > .__add__ {
     color: var(--node-text-bright);
@@ -659,13 +664,19 @@ colorselector .__channel-row__ slider .__thumb__ {
     background: var(--node-header);
 }
 /* Selection is an OUTLINE in the graph's own accent, not a fill -- a selected NODE is outlined #44C0FF
- * and a selected pill reading differently would be two vocabularies for one idea. */
-.__property-pill__.__selected__ {
-    outline-width: 1px;
+ * and a selected pill reading differently would be two vocabularies for one idea. On the CAPSULE, since
+ * that is the thing being selected; the row is merely the width of the panel. */
+.__property-pill__.__selected__ > .__capsule__ {
     outline-color: #44C0FF;
 }
 .__property-pill__ > .__capsule__ {
     background: var(--node-header);
+}
+.__property-pill__:hover > .__capsule__ {
+    background: var(--node-panel);
+}
+.__property-pill__ .__dot__ {
+    background: #7BD64B;
 }
 .__property-pill__ .__name__ {
     color: var(--node-text-bright);

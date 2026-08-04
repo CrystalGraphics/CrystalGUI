@@ -50,6 +50,8 @@ public class BlackboardPanel extends UIElement {
     public static final String HEAD_CLASS = "__head__";
     public static final String TITLE_CLASS = "__title__";
     public static final String SUBTITLE_CLASS = "__subtitle__";
+    /** The column holding the title over the subtitle. @see BlackboardPanel */
+    public static final String TITLES_CLASS = "__titles__";
     public static final String ADD_CLASS = "__add__";
     public static final String BODY_CLASS = "__body__";
 
@@ -122,6 +124,7 @@ public class BlackboardPanel extends UIElement {
     private final UndoStack undo;
 
     private final UIElement head = new UIElement();
+    private final UIElement titles = new UIElement();
     private final UIText title = new UIText("");
     private final UIText subtitle = new UIText("Shader Graphs");
     private final UIElement add = new UIElement();
@@ -173,8 +176,14 @@ public class BlackboardPanel extends UIElement {
         // the head. The + is not -- it has its own job and takes its own press.
         title.setHitTest(false);
         subtitle.setHitTest(false);
-        head.addChild(title);
-        head.addChild(subtitle);
+        // Title OVER subtitle, so the head is a row whose first item is a COLUMN. Unity stacks them and
+        // the two lines read as one identity -- side by side they read as two unrelated labels, which is
+        // what the first version looked like.
+        titles.addClass(TITLES_CLASS);
+        titles.setHitTest(false);
+        titles.addChild(title);
+        titles.addChild(subtitle);
+        head.addChild(titles);
         head.addChild(add);
 
         body.addClass(BODY_CLASS);
