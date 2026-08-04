@@ -3469,6 +3469,12 @@ shadergrapheditor {
     flex-basis: 0;
 }
 
+shadergrapheditor .__content__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
 shadergrapheditor .__shader-split__ {
     width: 100%;
     height: 0;
@@ -3482,8 +3488,16 @@ shadergrapheditor .__shader-graph__ {
     height: 100%;
 }
 
+/* height: 300px, NOT 100%, and this is load-bearing rather than a taste.
+ *
+ * A TextEditor whose height comes from its parent makes scrollbar sizing circular: a bar changes the
+ * viewport and the viewport decides the bar. Measured -- fixed size fine, 300px fine at ~4ms/frame,
+ * `height: 100%` hangs, `height: 0; flex-grow: 1` hangs. The gallery used 300px for exactly this reason
+ * and it is why that page never showed the bug. TextEditor now latches bar visibility once per pass,
+ * which removes the recursion, but the hang has not been reproduced in a test -- so this stays until it
+ * has been. */
 shadergrapheditor .__shader-source__ {
     width: 100%;
-    height: 100%;
+    height: 300px;
     font-size: 7px;
 }

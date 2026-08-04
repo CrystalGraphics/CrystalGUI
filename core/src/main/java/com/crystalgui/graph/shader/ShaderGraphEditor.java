@@ -65,6 +65,10 @@ public class ShaderGraphEditor extends UIElement {
     private final GraphView graph = new GraphView();
     private final TextEditor source = new TextEditor();
     private final SplitView split = new SplitView();
+
+    /** Marked internal exactly ONCE, while empty -- see the constructor for what stamping a populated
+     * subtree cost. */
+    private final UIElement content = new UIElement();
     private final NodeTypeRegistry library;
 
     private final ShaderGraphPreviews previews;
@@ -100,7 +104,21 @@ public class ShaderGraphEditor extends UIElement {
         split.setLimits(20f, 95f);
         split.first().addChild(graph);
         split.second().addChild(source);
-        addInternalChild(split);
+        // THE WRAPPER IS MARKED INTERNAL WHILE EMPTY; the split is an ordinary child of it.
+        //
+        // addInternalChild(split) would be the obvious line and it is what hung both scenes.
+        // markAsInternal() RECURSES, so it stamps the split, both panes, the GraphView, its canvas and
+        // every node and preview under them -- and removeChild/clearAllChildren SILENTLY REFUSE internal
+        // children. The previews add and retire a thumbnail per node as the graph changes, so every
+        // retirement was declined, the tree grew without bound, and layout took longer every frame until
+        // the window stopped responding. The thread dump was pure Taffy, which reads as a layout cycle
+        // and is really an unbounded tree.
+        //
+        // Same fix as QuickPick and ProblemsPanel, for the same reason, which is why the wrapper exists
+        // rather than a comment saying "do not stamp this".
+        content.addClass("__content__");
+        addInternalChild(content);
+        content.addChild(split);
 
         // A connection is a discrete user action, so this needs no debouncing; a per-keystroke trigger
         // would (6.3.8).

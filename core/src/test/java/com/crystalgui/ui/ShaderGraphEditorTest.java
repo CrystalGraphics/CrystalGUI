@@ -75,4 +75,32 @@ public class ShaderGraphEditorTest extends UiTestBase {
         assertTrue("the starter graph does not compile: "
                 + String.join("; ", editor.lastCompile().errors()), editor.lastCompile().ok());
     }
+
+    /**
+     * <b>The graph's own subtree is not marked internal.</b>
+     *
+     * <p>The bug that hung both scenes, and the third time this exact trap has been hit in this widget
+     * layer. {@code addInternalChild(split)} looks right and {@code markAsInternal()} <b>recurses</b>, so
+     * it stamped the split, both panes, the {@code GraphView}, its canvas and everything under them — and
+     * {@code removeChild}/{@code clearAllChildren} <b>silently refuse</b> internal children. The previews
+     * add and retire a thumbnail per node, so every retirement was declined, the tree grew without bound,
+     * and layout took longer every frame until the window stopped responding.</p>
+     *
+     * <p>The thread dump was pure Taffy, which reads as a layout cycle and was really an unbounded tree —
+     * which is why this is asserted structurally rather than by timing. A wrapper marked internal
+     * <em>while empty</em> is the fix, the same one {@code QuickPick} and {@code ProblemsPanel} carry.</p>
+     */
+    @Test(timeout = 15_000)
+    public void theGraphSubtreeIsNotStampedInternal() {
+        build();
+        // removeChild REFUSES an internal child and reports false, so asking the engine to remove the
+        // GraphView is the observable form of "was this subtree stamped?" -- and it asks the engine
+        // rather than a private flag this test would have to guess the name of.
+        UIElement pane = editor.graph().getParent();
+        assertNotNull("the graph is not in the tree at all", pane);
+        boolean removable = pane.removeChild(editor.graph());
+        assertTrue("the GraphView is stamped internal -- removals under it are silently refused, "
+                + "which is what made the tree grow without bound", removable);
+        pane.addChild(editor.graph());
+    }
 }

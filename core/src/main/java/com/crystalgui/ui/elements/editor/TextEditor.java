@@ -1045,15 +1045,83 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return Math.max(0f, getClientHeight() - horizontalBarThickness());
     }
 
+    /**
+     * Whether each bar is showing, <b>decided once per pass</b> by {@link #measureScrollbars()}.
+     *
+     * <h3>Why these are latched rather than derived</h3>
+     *
+     * <p>Both thicknesses used to ask "does the content overflow?" live. That is mutually recursive by
+     * construction — a bar's presence changes the viewport, and the viewport decides the bar — and while
+     * the query itself terminates, the <em>answer flips between layout passes</em>: adding the bar shrinks
+     * the viewport, which removes the need for the bar, which grows it back.</p>
+     *
+     * <p>With a <b>definite</b> height the values converge and {@code replaceOrPutCandidate} no-ops, so it
+     * settles and nobody notices. With a <b>parent-derived</b> height — {@code height: 100%}, or
+     * {@code height: 0; flex-grow: 1} — nothing pins the viewport, the two answers never agree, and
+     * {@code calculateLayout}'s {@code while (isLayoutDirty())} never exits. The window hangs on the first
+     * layout of that page, with a stack that is pure Taffy and names nothing in this file.</p>
+     *
+     * <p>Measured: a fixed size or {@code height: 300px} was fine at ~4 ms a frame; {@code height: 100%}
+     * and {@code height: 0; flex-grow: 1} both hung outright.</p>
+     */
+    private boolean horizontalBarShown;
+    private boolean verticalBarShown;
+
+    /**
+     * The browser's algorithm: assume no bars, measure, add what overflows, re-measure <b>once</b>.
+     *
+     * <p>Bounded on purpose. Each bar steals from the other axis, so one correction is all that can be
+     * needed — and iterating to a fixed point is exactly the oscillation this exists to stop. CSS
+     * overflow resolution stops here for the same reason.</p>
+     *
+     * <p>Reads the previous pass's {@code widestSeen}, which is the same bargain {@link #getScrollWidth()}
+     * already documents: a high-water mark that only grows between resets, stale by at most a frame.</p>
+     */
+    private void measureScrollbars() {
+        float clientWidth = getClientWidth();
+        float clientHeight = getClientHeight();
+        float contentWidth = getScrollWidth();
+        float barWidth = Math.max(0f, verticalScroller().getRuntimeCache().getWidth());
+        float barHeight = Math.max(0f, horizontalScroller().getRuntimeCache().getHeight());
+
+        // Pass one: no bars at all.
+        boolean vertical = contentHeightWithin(clientHeight) > clientHeight;
+        boolean horizontal = contentWidth > clientWidth;
+
+        // Pass two: whichever bar appeared takes room from the other axis, which can bring the other in.
+        // Only one of these can fire -- if both were already true there is nothing to correct.
+        if (vertical && !horizontal) horizontal = contentWidth > clientWidth - barWidth;
+        else if (horizontal && !vertical) {
+            vertical = contentHeightWithin(clientHeight - barHeight) > clientHeight;
+        }
+
+        horizontalBarShown = horizontal;
+        verticalBarShown = vertical;
+    }
+
+    /**
+     * How tall the content would be inside a viewport of {@code viewport}.
+     *
+     * <p>Takes the viewport as an argument rather than calling {@link #viewportHeight()}, which is the
+     * whole point: that method reads the latch, and this runs while the latch is being decided.</p>
+     */
+    private float contentHeightWithin(float viewport) {
+        float content = viewLineCount() * lineHeight();
+        // Scrolling past the end already leaves a viewport of empty space below the last line, so the
+        // horizontal bar's allowance is the ELSE branch -- adding it here too would be a second allowance
+        // for the same problem. Same split getScrollHeight() makes.
+        return scrollBeyondLastLine ? content + Math.max(0f, viewport - lineHeight()) : content;
+    }
+
     /** The horizontal bar's thickness when it is showing, otherwise zero. */
     float horizontalBarThickness() {
-        if (getMaxScrollLeft() <= 0f) return 0f;
+        if (!horizontalBarShown) return 0f;
         return Math.max(0f, horizontalScroller().getRuntimeCache().getHeight());
     }
 
     /** The vertical bar's thickness when it is showing, otherwise zero. */
     float verticalBarThickness() {
-        if (getMaxScrollTop() <= 0f) return 0f;
+        if (!verticalBarShown) return 0f;
         return Math.max(0f, verticalScroller().getRuntimeCache().getWidth());
     }
 
@@ -2844,6 +2912,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public void updateWindow() {
         var window = getAttachedWindow();
         if (window == null) return;
+        // FIRST, and before anything reads a viewport. Everything below -- the gutter width, the wrap
+        // width, where each line is laid out -- is measured against a viewport whose size depends on which
+        // bars are showing, so that question has to be answered once and held for the rest of the pass.
+        // Answering it live is what made a parent-derived height loop forever.
+        measureScrollbars();
         // ScrollerView registers its ticker only when a scroll begins, so an editor that has never been
         // scrolled would never tick — and the caret would never blink. Registration is a HashSet insert,
         // so repeating it is free and there is deliberately no unregister in the SPI.
