@@ -79,7 +79,7 @@ public class ShaderGraphSettingsPanel extends ConfiguratorPanel {
 
     private void addPreviewGroup() {
         if (preview == null) return;
-        ConfiguratorGroup group = new ConfiguratorGroup("Preview");
+        ConfiguratorGroup group = group("Preview");
         addChild(group);
 
         List<String> meshes = new ArrayList<>();
@@ -124,7 +124,7 @@ public class ShaderGraphSettingsPanel extends ConfiguratorPanel {
      * worth a group.</p>
      */
     private void addCompileGroup() {
-        ConfiguratorGroup group = new ConfiguratorGroup("Compile", true);
+        ConfiguratorGroup group = group("Compile", true);
         addChild(group);
         statRows.clear();
         statRows.add(stat(group, "Nodes"));

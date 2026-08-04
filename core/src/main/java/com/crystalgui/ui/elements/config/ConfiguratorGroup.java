@@ -29,10 +29,22 @@ public class ConfiguratorGroup extends UIElement {
     public static final String CONTENT_CLASS = "__content__";
     public static final String COLLAPSED_CLASS = "__collapsed__";
 
+    /**
+     * Fires when the group opens or closes, with the new collapsed state.
+     *
+     * <p>Exists so a panel that <b>rebuilds</b> can remember what was open. Foldout state is view state —
+     * it says how you are looking at the thing, not what the thing is — so it must survive a rebuild the
+     * same way a scroll position does, and a panel cannot remember what it is never told.</p>
+     */
+    public final com.crystalgui.core.signal.Signal.Value<Boolean> collapsedChanged =
+            new com.crystalgui.core.signal.Signal.Value<>();
+
     private final UIElement head = new UIElement();
     private final UIElement arrow = new UIElement();
     private final UIText title;
     private final UIElement content = new UIElement();
+
+    private final String titleText;
 
     private boolean collapsed;
 
@@ -41,6 +53,7 @@ public class ConfiguratorGroup extends UIElement {
     }
 
     public ConfiguratorGroup(String titleText, boolean startCollapsed) {
+        this.titleText = titleText;
         addClass(GROUP_CLASS);
         markAsInternal();
 
@@ -75,17 +88,27 @@ public class ConfiguratorGroup extends UIElement {
         return head;
     }
 
+    /** What the head says — the key a panel remembers this group's open state under. */
+    public String title() {
+        return titleText;
+    }
+
     public boolean isCollapsed() {
         return collapsed;
     }
 
     public ConfiguratorGroup setCollapsed(boolean value) {
+        boolean changed = this.collapsed != value;
         this.collapsed = value;
         if (value) addClass(COLLAPSED_CLASS); else removeClass(COLLAPSED_CLASS);
         // The arrow's rotation and the content's display both hang off the class, in CSS. Nothing here
         // sets a size, an angle or a duration -- that is the project's rule and it is what lets a theme
         // animate the disclosure without this class gaining a tween.
         invalidateStyleMatch();
+        // After the class is applied, and only on an actual change — a listener re-reading the group
+        // must see the state it is being told about, and a panel recording every no-op set would write
+        // its memo on construction as well as on a toggle.
+        if (changed) collapsedChanged.emit(value);
         return this;
     }
 

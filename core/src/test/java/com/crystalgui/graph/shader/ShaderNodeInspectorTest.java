@@ -8,6 +8,7 @@ import com.crystalgui.ui.Ui;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.config.ConfigControl;
+import com.crystalgui.ui.elements.config.ConfiguratorGroup;
 import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.ui.elements.graph.GraphView;
 import com.crystalgui.ui.elements.graph.NodeWidgetFactory;
@@ -178,6 +179,60 @@ public class ShaderNodeInspectorTest extends UiTestBase {
         assertEquals(ShaderNodeInspector.EMPTY_MESSAGE, header());
         assertTrue("the empty state must be smaller than a node's panel, not added to it",
                 inspector.getChildren().size() < forOneNode);
+    }
+
+    /**
+     * <b>An opened foldout stays open when the selection changes.</b>
+     *
+     * <p>A foldout is view state — how you are looking at the thing, not what the thing is — so it sits
+     * on the same side of the line as scroll position and selection, and has to survive a rebuild. Before
+     * this it did not: you opened {@code About} to read a node's type, clicked the next node, and it had
+     * shut itself again.</p>
+     *
+     * <p>The state is remembered by <b>title</b>, because the group object itself is destroyed on every
+     * rebuild — there is no identity to key on that outlives the thing being remembered.</p>
+     */
+    @Test
+    public void anOpenedGroupStaysOpenAcrossSelections() {
+        mount();
+        GraphNode colour = add("cg:Input/Basic/color", 0f, 0f);
+        GraphNode time = add("cg:Input/Basic/time", 200f, 0f);
+
+        graph.getSelection().selectOnly(colour);
+        ConfiguratorGroup about = groupTitled("About");
+        assertNotNull("the fixture needs an About group", about);
+        assertTrue("About starts collapsed", about.isCollapsed());
+
+        about.setCollapsed(false);
+        graph.getSelection().selectOnly(time);
+
+        ConfiguratorGroup rebuilt = groupTitled("About");
+        assertNotNull(rebuilt);
+        assertNotSame("the group really is a new object", about, rebuilt);
+        assertFalse("but it must remember it was open", rebuilt.isCollapsed());
+    }
+
+    /** And a closed one stays closed — the memory is of the user's answer, not of "always open". */
+    @Test
+    public void aClosedGroupStaysClosedAcrossSelections() {
+        mount();
+        GraphNode colour = add("cg:Input/Basic/color", 0f, 0f);
+        GraphNode time = add("cg:Input/Basic/time", 200f, 0f);
+
+        graph.getSelection().selectOnly(colour);
+        groupTitled("About").setCollapsed(false);
+        graph.getSelection().selectOnly(time);
+        groupTitled("About").setCollapsed(true);
+        graph.getSelection().selectOnly(colour);
+
+        assertTrue("it must stay shut", groupTitled("About").isCollapsed());
+    }
+
+    private ConfiguratorGroup groupTitled(String title) {
+        for (UIElement child : inspector.getChildren()) {
+            if (child instanceof ConfiguratorGroup group && title.equals(group.title())) return group;
+        }
+        return null;
     }
 
     /** A genuinely different selection does rebuild. */
