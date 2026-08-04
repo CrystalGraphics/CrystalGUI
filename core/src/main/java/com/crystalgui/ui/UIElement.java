@@ -565,6 +565,36 @@ public class UIElement implements SettingsScope {
         return parent.children.indexOf(this);
     }
 
+    /**
+     * Where this element's node belongs in its parent's <b>Taffy</b> child list.
+     *
+     * <p><b>Not the same as {@link #getSiblingIndex()}, and assuming it was is a whole class of crash.</b>
+     * Promoting an element to the top layer moves its Taffy node to the root while leaving it a DOM child
+     * of its parent — so a promoted sibling occupies a DOM slot and no Taffy slot, and every promoted
+     * sibling before this one shifts the two indices further apart. Insert at the DOM index and Taffy
+     * refuses:</p>
+     *
+     * <pre>Index (is 2) should be &lt; child_count (1) for parent node NodeId[value=33]</pre>
+     *
+     * <p>Which is what it did, from three unrelated-looking places in one afternoon — registering a new
+     * child beside an open popup, demoting one popup while another was still up, and unregistering.
+     * Counting only the siblings that actually have a node there is the one answer all of them needed.</p>
+     *
+     * @return the index, or 0 when this element has no parent
+     */
+    final int taffyChildIndex() {
+        if (parent == null) return 0;
+        int index = 0;
+        for (UIElement sibling : parent.children) {
+            if (sibling == this) return index;
+            if (!sibling.inTopLayer) index++;
+        }
+        // Not a child of its own parent's list: only reachable mid-removal, where the caller is about to
+        // drop the node anyway. Appending is the harmless answer -- refusing would be a second failure
+        // mode for a case that has no slot to want.
+        return index;
+    }
+
     private void onAdded() {
         this.runtimeCache.depth.invalidate().get();
         children.forEach(UIElement::onAdded);
