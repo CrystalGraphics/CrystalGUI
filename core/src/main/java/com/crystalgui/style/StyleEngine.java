@@ -129,10 +129,23 @@ public final class StyleEngine {
         transitionEngine.onElementDetached(element);
     }
 
-    /** Called once per frame from {@link UIWindow#paintFrame()}, before layout is recomputed. */
+    /** Called from {@link UIWindow#paintFrame()}, before layout is recomputed — and again afterwards for
+     * as long as {@link #hasPendingMatches()} reports work that layout itself created. */
     public void calculateStyle(float deltaSeconds) {
         drainDirtyMatch();
         transitionEngine.tick(deltaSeconds);
+    }
+
+    /**
+     * Whether any element is waiting to be re-matched.
+     *
+     * <p>Exists so {@code UIWindow} can tell whether <em>layout</em> dirtied the cascade — a ticker or an
+     * {@code onLayoutChanged} hook that sets a class runs after this frame's {@link #calculateStyle}, so
+     * without a second pass the class is set and its computed style is a frame behind it. Reported rather
+     * than acted on here because only the window knows that re-cascading means re-laying-out too.</p>
+     */
+    public boolean hasPendingMatches() {
+        return !dirtyMatch.isEmpty();
     }
 
     private void drainDirtyMatch() {

@@ -423,8 +423,39 @@ public final class UIWindow {
         styleEngine.calculateStyle(deltaSeconds);
         tickAnimations(deltaSeconds);
         calculateLayout();
+
+        // STYLE AND LAYOUT INTERLEAVE UNTIL CLEAN — they are not one pass each in a fixed order.
+        //
+        // Both of the steps above can dirty the cascade. A ticker or an onLayoutChanged hook that sets a
+        // class is a normal thing to write, and every virtualised list is one: ListView binds its rows from
+        // inside layout, and each bind adds or removes the selection class. But drainDirtyMatch only runs
+        // inside calculateStyle, which has already happened — so the class landed and the COMPUTED style
+        // did not, and the row painted once with the previous occupant's.
+        //
+        // What that looks like is the bug that took three attempts to find, because the class and the
+        // selection were provably correct the whole time: expanding a folder handed a pooled row that used
+        // to be selected to some unrelated file, and that file flashed blue for one frame while the row
+        // that really was selected stayed unpainted. The same is true of any class-driven visual set from a
+        // ticker; selection is merely the one with a colour loud enough to notice.
+        //
+        // Re-running BOTH is what makes it correct: a re-cascade can change a layout input (a matched rule
+        // carrying width, or a font-size a measure function reads), so laying out again is not optional.
+        // Passing zero states that the frame's time is already spent — TransitionEngine reads
+        // System.nanoTime() and ignores this argument entirely, so it cannot double-advance either way.
+        //
+        // The bound is a backstop, not an expected limit. Two rules that dirty each other would otherwise
+        // spin inside a single frame with the window unpainted, which is worse than one stale frame; the
+        // observed case settles in one extra pass, and UIText's own measure-and-push loop already settles
+        // inside calculateLayout rather than here.
+        for (int pass = 0; pass < MAX_RESTYLE_PASSES && styleEngine.hasPendingMatches(); pass++) {
+            styleEngine.calculateStyle(0f);
+            calculateLayout();
+        }
         return deltaSeconds;
     }
+
+    /** @see #advanceFrame() */
+    private static final int MAX_RESTYLE_PASSES = 4;
 
     public void paintFrame() {
         advanceFrame();
