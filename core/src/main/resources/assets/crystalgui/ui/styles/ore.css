@@ -130,7 +130,7 @@ slider:focus-visible .__thumb__ {
 checkbox:focus,
 switch:focus,
 slider:focus,
-splitview .__divider__:focus {
+splitview > .__divider__:focus {
     outline: none;
 }
 
@@ -406,14 +406,14 @@ splitview {
      * makes a split view fight its host for size, and 100% already fills a sized parent. A caller
      * who wants it to flex can add flex-grow themselves. */
 }
-splitview .__divider__ {
+splitview > .__divider__ {
     width: 4px;
     background: asset("crystalgui:ore", "divider");
 }
-splitview .__divider__:hover {
+splitview > .__divider__:hover {
     background: asset("crystalgui:ore", "divider-hover");
 }
-splitview .__divider__:active {
+splitview > .__divider__:active {
     background: asset("crystalgui:ore", "divider-hover");
     /* 6-digit = opaque; see the note on button:active about 8-digit hex being #RRGGBBAA. */
     background-color: #DDDDDD;
@@ -425,12 +425,12 @@ splitview .__divider__:active {
  * 4px: `focus-ring` is a nine-slice with 2px borders, and at 4px it is nothing but border — the
  * centre never gets drawn and it renders as a solid block. Same nine-slicing size limit called out
  * for the tab strip's hairline scrollbar below. */
-splitview .__divider__:focus-visible {
+splitview > .__divider__:focus-visible {
     background: asset("crystalgui:ore", "divider-hover");
     background-color: #AACCFF;
 }
 /* SplitView adds `__vertical__` to itself when the orientation flips, purely so this rule can match. */
-splitview.__vertical__ .__divider__ {
+splitview.__vertical__ > .__divider__ {
     width: auto;
     height: 4px;
 }

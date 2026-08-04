@@ -279,17 +279,25 @@ splitview {
     width: 100%;
     height: 100%;
 }
-splitview .__divider__ {
+/* CHILD combinator on every one of these, and it is load-bearing.
+ *
+ * A SplitView nests: the dock puts a horizontal split inside a vertical one routinely. With a
+ * DESCENDANT selector, `splitview.__vertical__ .__divider__` matches the INNER split.s divider too and
+ * hands it `width: auto`, which in a row resolves to ZERO -- an invisible, ungrabbable divider between
+ * two panes that can then never be resized. Measured: 0.0 x 4.0 where 4.0 x 348 was wanted.
+ *
+ * Only shows up once a split is nested in a split, which is why it survived until the dock did it. */
+splitview > .__divider__ {
     width: 4px;
     background: #777777;
 }
-splitview .__divider__:hover {
+splitview > .__divider__:hover {
     background: #AAAAAA;
 }
-splitview .__divider__:active {
+splitview > .__divider__:active {
     background: #DDDDDD;
 }
-splitview.__vertical__ .__divider__ {
+splitview.__vertical__ > .__divider__ {
     width: auto;
     height: 4px;
 }
@@ -1468,11 +1476,10 @@ dialog .__title-bar__ { cursor: move; }
  * SplitView ROOT rather than on the divider — the drag maths live in the root's local space — and the cursor
  * resolves from the capture target, so without these the cursor reverts to the arrow the instant you press
  * and only returns if you happen to release back over the divider. */
-splitview .__divider__ { cursor: ew-resize; }
+splitview > .__divider__ { cursor: ew-resize; }
 splitview.__dragging__ { cursor: ew-resize; }
-splitview.__vertical__ .__divider__ { cursor: ns-resize; }
+splitview.__vertical__ > .__divider__ { cursor: ns-resize; }
 splitview.__vertical__.__dragging__ { cursor: ns-resize; }
-splitview .__vertical__ .__divider__ { cursor: ns-resize; }
 
 /* A canvas advertises the grab only while it is actually being panned. Deliberately NOT `cursor: grab`
  * on the canvas at rest: a bare left-drag does not pan (that gesture is reserved for the marquee), so a
@@ -3282,7 +3289,9 @@ quickpick {
     padding-all: 4px;
 }
 
-quickpick .__content__ {
+/* CHILD combinator, not descendant: "__content__" is a shared structural class -- CanvasView uses it
+ * for its transformed world plane -- so a descendant rule reaches into any graph nested below. */
+quickpick > .__content__ {
     flex-direction: column;
 }
 
@@ -3435,7 +3444,8 @@ problemspanel {
     background: #1E1E1E;
 }
 
-problemspanel .__content__ {
+/* Child combinator, for the reason given on the quickpick rule above. */
+problemspanel > .__content__ {
     flex-grow: 1;
     flex-basis: 0;
 }
@@ -3469,7 +3479,7 @@ shadergrapheditor {
     flex-basis: 0;
 }
 
-shadergrapheditor .__content__ {
+shadergrapheditor .__shader-content__ {
     width: 100%;
     flex-grow: 1;
     flex-basis: 0;
@@ -3500,4 +3510,63 @@ shadergrapheditor .__shader-source__ {
     width: 100%;
     height: 300px;
     font-size: 7px;
+}
+
+/* ── Workbench ──
+ * The project editor's shell: a dock, a file tree, and the panels a host adds to it. */
+workbench {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+workbench .__workbench-content__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+projectfiletree {
+    flex-grow: 1;
+    background: #252526;
+    padding-all: 4px;
+}
+
+projectfiletree .__tree-content__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+projectfiletree .__project-tree__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+    font-size: 7px;
+}
+
+projectfiletree .__project-row__ {
+    height: 12px;
+    padding-left: 2px;
+}
+
+projectfiletree .__project-row__:hover {
+    background-color: #2A2D2E;
+}
+
+/* ── The editor ──
+ * The whole application: a workbench, the panels it ships, and the commands it answers to. */
+crystaleditor {
+    width: 100%;
+    height: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+/* Child combinator, and a unique class name -- "__content__" is shared (CanvasView uses it for its
+ * transformed world plane), so a descendant rule naming it reaches into every graph below. */
+crystaleditor > .__editor-content__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
 }
