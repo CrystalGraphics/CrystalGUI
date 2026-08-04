@@ -3,6 +3,7 @@ package com.crystalgui.editor;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.graph.shader.ShaderGraphEditor;
+import com.crystalgui.graph.shader.ShaderNodeInspector;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -60,6 +61,15 @@ public class CrystalEditor extends UIElement {
     /** What the tab says. A generated file still reads best as a file name. */
     public static final String SHADER_SOURCE_TITLE = "compiled_graph.shader";
 
+    /**
+     * The node inspector, sharing the emitted source's strip.
+     *
+     * <p>A tab rather than a third pane because the two are <b>alternatives</b>: reading the generated GLSL
+     * and adjusting a node's properties are different things to be doing, and giving each a permanent
+     * column would spend the work area on whichever you are not using.</p>
+     */
+    public static final String INSPECTOR_TYPE = "inspector";
+
     /** How much of the work area the emitted source takes when it is first opened. */
     private static final float SOURCE_SHARE = 0.28f;
 
@@ -74,6 +84,9 @@ public class CrystalEditor extends UIElement {
 
     @Nullable
     private ShaderGraphEditor shaderGraph;
+
+    @Nullable
+    private ShaderNodeInspector inspector;
 
     /** The last {@link #saveLayout} result, so {@link #restoreLayout()} has something to restore. */
     @Nullable
@@ -95,8 +108,11 @@ public class CrystalEditor extends UIElement {
         // BESIDE the canvas, not in its strip. A tab in the same group would hide the graph, and the whole
         // point of the emitted source is watching it change as you wire -- a panel you have to switch away
         // from the graph to read is a panel that is never read.
-        workbench.openPanelBeside(new DockPanelRef(SHADER_SOURCE_TYPE),
-                DockDropZone.SPLIT_RIGHT, SOURCE_SHARE);
+        workbench.registerPanel(DockPanelDescriptor.singleton(INSPECTOR_TYPE, "Inspector"),
+                ref -> inspector());
+        DockPanelRef source = new DockPanelRef(SHADER_SOURCE_TYPE);
+        workbench.openPanelBeside(source, DockDropZone.SPLIT_RIGHT, SOURCE_SHARE);
+        workbench.openPanelWith(source, new DockPanelRef(INSPECTOR_TYPE));
 
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
@@ -114,6 +130,17 @@ public class CrystalEditor extends UIElement {
 
     public Workbench workbench() {
         return workbench;
+    }
+
+    /**
+     * The node inspector, built on first use.
+     *
+     * <p><b>Its rows are a placeholder</b> — the control kit, showing fixed sample values, bound to
+     * nothing. Selecting a node does not change them. See {@link ShaderNodeInspector}.</p>
+     */
+    public ShaderNodeInspector inspector() {
+        if (inspector == null) inspector = new ShaderNodeInspector();
+        return inspector;
     }
 
     /** Built on first use, so an editor that never opens the graph never pays for its previews. */

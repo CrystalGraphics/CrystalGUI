@@ -157,6 +157,37 @@ public class Workbench extends UIElement {
     }
 
     /**
+     * Opens a panel as a tab in whichever leaf already holds {@code sibling}.
+     *
+     * <p>The third placement, and the one neither of the others can express: {@link #openPanel} always
+     * targets the central leaf, {@link #openPanelBeside} always makes a new pane. This puts two panels in
+     * one strip — right when they are alternatives rather than companions, so the pane's space is spent on
+     * whichever you are reading.</p>
+     *
+     * <p>Falls back to the central leaf when {@code sibling} is nowhere to be found, which is what happens
+     * after a layout restore that dropped it: a tab in the work area is a worse place than beside its
+     * sibling and a far better one than not being opened at all.</p>
+     */
+    public Workbench openPanelWith(DockPanelRef sibling, DockPanelRef ref) {
+        DockLeaf target = dock.layout().leafContaining(sibling);
+        if (target == null) return openPanel(ref);
+        if (target.indexOf(ref) >= 0) {
+            target.activate(ref);
+            dock.syncGroups();
+            return this;
+        }
+
+        // The selection is captured and PUT BACK, because DockLeaf.add activates what it inserts -- right
+        // for "open this file", wrong here. A panel that steals its sibling's tab on open is one that
+        // opens by hiding the thing you were looking at, and the source pane exists to be looked at.
+        DockPanelRef wasActive = target.activePanel();
+        target.add(ref);
+        if (wasActive != null) target.activate(wasActive);
+        dock.syncGroups();
+        return this;
+    }
+
+    /**
      * Opens a panel in a pane of its <em>own</em>, beside the central work area.
      *
      * <p>{@link #openPanel} merges into the central strip, where a second panel <b>hides</b> the first —
