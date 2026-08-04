@@ -224,25 +224,43 @@ public class ShaderGraphEditor extends UIElement {
     // ── Lifecycle ───────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Attaches the preview renderers once there is a window to tick them.
+     * Registers the attach ticker once there is a window. <b>Registration only — never the attach.</b>
      *
-     * <p>{@code attach()} registers a frame ticker and builds GL resources, neither of which exists at
-     * construction. Layout is the earliest point at which the element is attached <em>by definition</em>,
-     * which is what makes this the right hook rather than a flag the caller has to remember to poll —
-     * {@code ListView} starts its own ticker the same way and for the same reason.</p>
+     * <p>{@code onLayoutChanged} runs <em>inside</em> {@code calculateLayout()}'s
+     * {@code while (isLayoutDirty())} loop, and attaching the previews adds elements. Doing it here
+     * re-dirties the tree on every pass, so the loop never terminates and the window hangs before it
+     * paints a frame. It is not a slow frame — it is an infinite one.</p>
      *
-     * <p>The main preview reports whether it succeeded and is retried until it does: it needs the GL
-     * context, and on the very first layout there may not be one yet.</p>
+     * <p>{@code ListView} looks like a precedent for doing work in this hook and is not one: what it calls
+     * here is {@code ensureTicking()}, and the realisation happens in {@code tickFrame}. The rule is the
+     * same one the fold arrows and the caret follow — <b>structural changes belong outside the layout
+     * pass</b>.</p>
      */
     @Override
     protected void onLayoutChanged() {
         super.onLayoutChanged();
-        if (getAttachedWindow() == null) return;
+        if (ticking || getAttachedWindow() == null) return;
+        ticking = true;
+        getAttachedWindow().registerTicker(this::attachPreviews);
+    }
+
+    private boolean ticking;
+
+    /**
+     * Attaches the preview renderers, retrying until they take.
+     *
+     * <p>Runs from a frame ticker, which is ahead of layout and therefore free to change the tree. The
+     * main preview reports whether it succeeded and is retried because it needs the GL context, which may
+     * not exist on the first frame; {@code registerTicker} is idempotent and this drops itself once both
+     * are up, so the retry costs one comparison per frame until then.</p>
+     */
+    private boolean attachPreviews(float deltaSeconds) {
         if (!previewsAttached) {
             previews.attach();
             previewsAttached = true;
         }
         if (!mainPreviewAttached) mainPreviewAttached = mainPreview.attach();
+        return !(previewsAttached && mainPreviewAttached);
     }
 
     /** Releases the preview renderers' GL resources. Safe to call more than once. */
