@@ -1,0 +1,297 @@
+package com.crystalgui.ui.elements.workbench;
+
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.text.syntax.LanguageRegistry;
+import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.chrome.ProblemsPanel;
+import com.crystalgui.ui.elements.dock.DockArea;
+import com.crystalgui.ui.elements.dock.DockDropZone;
+import com.crystalgui.ui.elements.dock.DockGroup;
+import com.crystalgui.ui.elements.dock.DockLayout;
+import com.crystalgui.ui.elements.dock.DockLeaf;
+import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
+import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.ui.elements.dock.DockPanelRegistry;
+import com.crystalgui.ui.elements.editor.EditorCommands;
+import com.crystalgui.ui.elements.editor.TextEditor;
+
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
+import javax.annotation.Nullable;
+
+/**
+ * A project editor: a dock, a file tree, one editor per open file, and a Problems panel — the shell.
+ *
+ * <h3>It owns its panel registry and requires a workspace</h3>
+ *
+ * <p>Owning the registry is what lets it guarantee its own panel types exist; {@link #registerPanel} is
+ * there for a host's extras, which is how a shader graph or a console gets a tab. Requiring a
+ * {@link WorkspaceClient} is the sharper line: "open a file" is the verb this widget exists for, and a
+ * project editor with no project is a different widget rather than a degraded one.</p>
+ *
+ * <h3>The dock is asked, not remembered</h3>
+ *
+ * <p>Which file {@link #saveActiveFile()} writes is derived from the dock's active tab, never from a field
+ * updated on open. A remembered path saves the last file <em>opened</em>, which is the wrong one the moment
+ * you switch tabs — and silently, because it reports success.</p>
+ *
+ * <h3>Editors are cached per path</h3>
+ *
+ * <p>{@code DockArea} asks the registry for a panel's content on every rebuild, so handing back a fresh
+ * editor each time would discard unsaved edits on every split, drag or close.</p>
+ */
+public class Workbench extends UIElement {
+
+    /** A document panel — one instance per file, distinguished by its {@code path} state. */
+    public static final String FILE_TYPE = "file";
+    public static final String PROJECT_TYPE = "project";
+    public static final String PROBLEMS_TYPE = "problems";
+
+    /** The state key carrying which file a {@link #FILE_TYPE} panel shows. */
+    public static final String PATH_STATE = "path";
+
+    /** UNIQUE, never the shared "__content__" -- see ProjectFileTree.CONTENT_CLASS. */
+    public static final String CONTENT_CLASS = "__workbench-content__";
+
+    /** Whatever a status line should say — an open, a save, or a refusal. */
+    public final Signal.Value<String> onStatus = new Signal.Value<>();
+
+    private final WorkspaceClient<?> client;
+    private final DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
+    private final ProjectFileTree fileTree;
+    private final ProblemsPanel problems = new ProblemsPanel();
+    private final DockArea dock;
+
+    /** One editor per open file. See the class note on why this is cached. */
+    private final Map<CgPath, TextEditor> editors = new HashMap<>();
+
+    /** Marked internal exactly ONCE, while empty. {@code markAsInternal()} RECURSES, and stamping a
+     * populated subtree makes {@code removeChild} silently refuse everything under it — which is how the
+     * dock grew duplicate unclickable tabs and how the shader graph editor hung the window. */
+    private final UIElement content = new UIElement();
+
+    public Workbench(WorkspaceClient<?> client) {
+        if (client == null) throw new IllegalArgumentException("A Workbench needs a workspace client");
+        this.client = client;
+        this.fileTree = new ProjectFileTree(client);
+        fileTree.onFileChosen.connect(this::openFile);
+
+        registry.register(DockPanelDescriptor.singleton(PROJECT_TYPE, "Project"), ref -> fileTree);
+        registry.register(DockPanelDescriptor.singleton(PROBLEMS_TYPE, "Problems"), ref -> problems);
+        registry.register(DockPanelDescriptor.document(FILE_TYPE, "File"), this::fileEditorPanel);
+
+        dock = new DockArea(registry, defaultLayout());
+        content.addClass(CONTENT_CLASS);
+        addInternalChild(content);
+        content.addChild(dock);
+
+        problems.onProblemChosen.connect(diagnostic -> {
+            TextEditor editor = activeEditor();
+            if (editor == null) return;
+            editor.setCaret(editor.buffer().pointToOffset(diagnostic.start()));
+            UIWindow window = getAttachedWindow();
+            if (window != null) window.getInputHandler().requestFocus(editor);
+        });
+    }
+
+    /**
+     * Project down the left, documents in the middle, Problems beneath.
+     *
+     * <p>Authored rather than accumulated. A split halves the <em>target's</em> share and gives the other
+     * half to the newcomer, so building this in the obvious order would hand half the screen to the file
+     * tree — a default layout has to state what it wants.</p>
+     */
+    private DockLayout defaultLayout() {
+        DockLeaf centre = new DockLeaf();
+        centre.setCentral(true);
+        DockLayout layout = DockLayout.of(centre);
+        layout.drop(centre, DockDropZone.SPLIT_LEFT, new DockLeaf(new DockPanelRef(PROJECT_TYPE)));
+        layout.drop(centre, DockDropZone.SPLIT_DOWN, new DockLeaf(new DockPanelRef(PROBLEMS_TYPE)));
+        layout.root().child(0).size(0.20f);
+        layout.root().child(1).size(0.80f);
+        return layout;
+    }
+
+    @Override
+    public boolean acceptsPublicChildren() {
+        return false;
+    }
+
+    public DockArea dock() {
+        return dock;
+    }
+
+    public DockPanelRegistry<UIElement> panels() {
+        return registry;
+    }
+
+    public ProjectFileTree fileTree() {
+        return fileTree;
+    }
+
+    public ProblemsPanel problems() {
+        return problems;
+    }
+
+    /** Adds a host's own panel type — a shader graph, a console, an inspector. */
+    public Workbench registerPanel(DockPanelDescriptor descriptor,
+                                   Function<DockPanelRef, UIElement> factory) {
+        registry.register(descriptor, factory::apply);
+        return this;
+    }
+
+    /** Drops a panel into the central work area and selects it. */
+    public Workbench openPanel(DockPanelRef ref) {
+        DockLeaf target = centralLeaf();
+        if (target.indexOf(ref) < 0) target.add(ref);
+        target.activate(ref);
+        dock.syncGroups();
+        dock.setActiveGroup(dock.groupFor(target));
+        return this;
+    }
+
+    // ── Files ───────────────────────────────────────────────────────────────────────────────────
+
+    /** The panel reference identifying one open file — {@code path} is what makes two of them distinct. */
+    public static DockPanelRef refFor(CgPath path) {
+        return new DockPanelRef(FILE_TYPE)
+                .withState(PATH_STATE, path.toString())
+                .withState(DockPanelRef.TITLE, path.name());
+    }
+
+    /**
+     * Opens a file in its own tab, or focuses the tab it is already in.
+     *
+     * <p><b>Reads first, adds the tab second.</b> A tab created before the content arrives stays empty when
+     * the read fails, and the failure has nowhere to go but a status line nobody was watching — leaving a
+     * blank editor with no explanation.</p>
+     */
+    public void openFile(CgPath path) {
+        DockPanelRef ref = refFor(path);
+        for (DockLeaf leaf : dock.layout().leaves()) {
+            if (leaf.indexOf(ref) < 0) continue;
+            leaf.activate(ref);
+            // syncGroups, not requestRebuild: only the selection changed, and this usually runs inside the
+            // click that asked for it -- a widget must never rebuild the elements it is being clicked on.
+            dock.syncGroups();
+            dock.setActiveGroup(dock.groupFor(leaf));
+            onStatus.emit("focused " + path.name());
+            return;
+        }
+        client.read(path, document -> {
+            editorFor(path).setText(document.text());
+            openPanel(ref);
+            onStatus.emit("opened " + path.name());
+        }, failure -> onStatus.emit("open failed: " + failure.code()));
+    }
+
+    /** The file behind the active tab, or null when the active tab is not a file. */
+    @Nullable
+    public CgPath activeFilePath() {
+        DockGroup group = dock.activeGroup();
+        if (group == null) return null;
+        DockPanelRef panel = group.leaf().activePanel();
+        if (panel == null || !FILE_TYPE.equals(panel.typeId())) return null;
+        return CgPath.parse(panel.state(PATH_STATE, ""));
+    }
+
+    @Nullable
+    public TextEditor activeEditor() {
+        CgPath path = activeFilePath();
+        return path == null ? null : editors.get(path);
+    }
+
+    /** Writes the active tab back. A stale write is reported distinctly — it has a recovery path. */
+    public boolean saveActiveFile() {
+        CgPath target = activeFilePath();
+        if (target == null) {
+            onStatus.emit("no file tab active");
+            return false;
+        }
+        TextEditor editor = editors.get(target);
+        if (editor == null) return false;
+        client.save(target, editor.getText().getBytes(StandardCharsets.UTF_8),
+                etag -> onStatus.emit("saved " + target.name()),
+                failure -> onStatus.emit(failure.isConflict()
+                        ? "CONFLICT: " + target.name() + " changed on disk — reopen to take theirs"
+                        : "save failed: " + failure.code()));
+        return true;
+    }
+
+    private DockLeaf centralLeaf() {
+        for (DockLeaf leaf : dock.layout().leaves()) {
+            if (leaf.isCentral()) return leaf;
+        }
+        return dock.layout().leaves().get(0);
+    }
+
+    /** The editor for a path, created on first use and given the language its name implies. */
+    public TextEditor editorFor(CgPath path) {
+        return editors.computeIfAbsent(path, key -> {
+            TextEditor created = new TextEditor("");
+            LanguageRegistry.Entry entry = LanguageRegistry.forFileName(key.name());
+            created.setLanguage(entry.language());
+            // A FRESH tokenizer per document -- the interface exists for implementations holding a parse
+            // tree per file, and sharing one would cross-contaminate them.
+            created.setTokenizer(entry.newTokenizer());
+            UIWindow window = getAttachedWindow();
+            if (window != null) EditorCommands.install(window, created);
+            return created;
+        });
+    }
+
+    /** Built by the dock when it needs a file panel — including after a layout restore, where the read
+     * has not happened yet and the content arrives late into an editor that already exists. */
+    private UIElement fileEditorPanel(DockPanelRef ref) {
+        CgPath path = CgPath.parse(ref.state(PATH_STATE, ""));
+        TextEditor target = editorFor(path);
+        if (target.getText().isEmpty()) {
+            client.read(path, document -> target.setText(document.text()),
+                    failure -> onStatus.emit("open failed: " + failure.code()));
+        }
+        return target;
+    }
+
+    // ── Lifecycle ───────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Binds Problems to whichever editor is active, and asks the tree for its projects.
+     *
+     * <p>Both from a ticker, not from {@code onLayoutChanged}: rebinding replaces the panel's rows and
+     * asking for projects eventually refreshes the tree, and neither is safe inside the layout pass.</p>
+     */
+    @Override
+    protected void onLayoutChanged() {
+        super.onLayoutChanged();
+        if (ticking || getAttachedWindow() == null) return;
+        ticking = true;
+        getAttachedWindow().registerTicker(this::tick);
+    }
+
+    private boolean ticking;
+
+    @Nullable
+    private TextEditor boundTo;
+
+    private boolean tick(float deltaSeconds) {
+        if (getAttachedWindow() == null) {
+            ticking = false;
+            return false;
+        }
+        fileTree.loadProjects();
+        // Follows the active tab. Only on a CHANGE -- rebinding every frame would rebuild the table's
+        // rows sixty times a second for a set that has not moved.
+        TextEditor active = activeEditor();
+        if (active != boundTo) {
+            boundTo = active;
+            problems.bindTo(active == null ? null : active.diagnostics());
+        }
+        return true;
+    }
+}
