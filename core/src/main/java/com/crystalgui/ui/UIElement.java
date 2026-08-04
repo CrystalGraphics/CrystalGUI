@@ -2149,6 +2149,10 @@ public class UIElement {
         var taffyTree = getTaffyTree();
         if (taffyTree != null) {
             taffyTree.markDirty(taffyNodeId);
+            // Recorded only while UIWindow is diagnosing a layout that will not settle. A field read and
+            // a branch on the hottest write in the layout system, which is why it is opt-in there rather
+            // than a list maintained every frame.
+            if (attachedWindow != null) attachedWindow.noteDirtied(this);
         }
     }
 

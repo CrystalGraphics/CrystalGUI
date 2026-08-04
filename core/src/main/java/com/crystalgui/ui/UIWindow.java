@@ -3,6 +3,7 @@ package com.crystalgui.ui;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.property.StyleProperty;
@@ -234,7 +235,26 @@ public final class UIWindow {
                 Float.isNaN(layoutHeight) ? AvailableSpace.MAX_CONTENT : AvailableSpace.definite(layoutHeight)
         );
 
+        int passes = 0;
         while (isLayoutDirty()) {
+            // A LAYOUT THAT DOES NOT SETTLE MUST NOT HANG THE PROCESS.
+            //
+            // This loop runs until nothing is dirty, and an element that re-dirties the tree from its own
+            // onLayoutChanged makes that never happen. Every occurrence so far has presented identically:
+            // the window stops responding before it paints, with a stack that is pure Taffy and names
+            // nothing that could be searched for. Three separate causes have worn that same disguise --
+            // a subtree wrongly marked internal so removals were refused and the tree grew without bound,
+            // preview attachment adding elements from inside this very loop, and a stylesheet rule
+            // reaching into a canvas's absolutely positioned plane.
+            //
+            // So the loop is bounded, and the overflow is REPORTED rather than silently tolerated: one
+            // more pass runs with dirtying recorded, and the elements responsible are named. A frame
+            // abandoned mid-settle is a visibly wrong frame; a hung window is an unusable program, and
+            // the log line is the difference between a five-attempt hunt and a name.
+            if (++passes > MAX_LAYOUT_PASSES) {
+                reportUnsettledLayout(availableSpace);
+                break;
+            }
             if (taffyTree.isDirty(ui.rootElement.taffyNodeId)) {
                 taffyTree.computeLayout(ui.rootElement.taffyNodeId, availableSpace);
 
@@ -255,6 +275,84 @@ public final class UIWindow {
 
     public boolean isLayoutDirty() {
         return taffyTree.isDirty(ui.rootElement.taffyNodeId);
+    }
+
+    /**
+     * How many settle passes a frame may take before the layout is declared broken.
+     *
+     * <p>Generous on purpose. A tree that genuinely needs several passes is normal — {@code UIText}
+     * re-wraps against its settled width and pushes a height back, and a few of those chained together
+     * take a handful. Sixty-four is far past anything legitimate and far short of a frame a human would
+     * notice, so this only ever fires on a real cycle.</p>
+     */
+    private static final int MAX_LAYOUT_PASSES = 64;
+
+    /** Set only while diagnosing an unsettled layout — see {@link #noteDirtied}. */
+    private boolean recordingDirtySources;
+
+    private final java.util.LinkedHashSet<UIElement> dirtySources = new java.util.LinkedHashSet<>();
+
+    /**
+     * Records an element that dirtied the tree, <b>while diagnosing only</b>.
+     *
+     * <p>Called from {@link UIElement#markTreeDirty()}. Costs a field read and a branch on the normal
+     * path, which is why the recording is opt-in rather than always on: this is the hottest write in the
+     * layout system.</p>
+     */
+    void noteDirtied(UIElement element) {
+        if (recordingDirtySources) dirtySources.add(element);
+    }
+
+    /**
+     * Runs one more pass with dirtying recorded, then names the culprits.
+     *
+     * <p>The elements listed are the ones re-dirtying the tree after it has been laid out — i.e. the
+     * cycle. Reported with tag and classes rather than identity, because what a reader needs is
+     * "{@code shadergrapheditor.__content__}" — something to grep for.</p>
+     */
+    private void reportUnsettledLayout(TaffySize<AvailableSpace> availableSpace) {
+        dirtySources.clear();
+        recordingDirtySources = true;
+        try {
+            if (taffyTree.isDirty(ui.rootElement.taffyNodeId)) {
+                taffyTree.computeLayout(ui.rootElement.taffyNodeId, availableSpace);
+                for (var nodeId : nodesWithNewLayout) {
+                    var element = elementByNode.get(nodeId);
+                    if (element != null) {
+                        element.onLayoutChanged(nodesWithNewGeometry.contains(nodeId));
+                    }
+                }
+                nodesWithNewLayout.clear();
+                nodesWithNewGeometry.clear();
+            }
+        } finally {
+            recordingDirtySources = false;
+        }
+
+        StringBuilder culprits = new StringBuilder();
+        int listed = 0;
+        for (UIElement element : dirtySources) {
+            if (listed++ == 12) {
+                culprits.append(" ...and ").append(dirtySources.size() - 12).append(" more");
+                break;
+            }
+            culprits.append("\n    ").append(describe(element));
+        }
+        dirtySources.clear();
+
+        CrystalGuiCore.LOGGER.error(
+                "Layout did not settle after {} passes — abandoning this frame. Something re-dirties the "
+                        + "tree from inside onLayoutChanged; structural changes belong in a frame ticker, "
+                        + "not in the layout pass. Dirtied by:{}",
+                MAX_LAYOUT_PASSES, culprits.length() == 0 ? " (nothing recorded)" : culprits);
+    }
+
+    /** {@code shadergrapheditor.__content__#id} — something a reader can grep for. */
+    private static String describe(UIElement element) {
+        StringBuilder out = new StringBuilder(element.tagName());
+        for (String cssClass : element.getClasses()) out.append('.').append(cssClass);
+        if (element.getId() != null && !element.getId().isEmpty()) out.append('#').append(element.getId());
+        return out.toString();
     }
 
     /**

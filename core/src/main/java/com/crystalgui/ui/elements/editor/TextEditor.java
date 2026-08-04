@@ -2868,7 +2868,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // resize it moves every one of them.
             layOutLine(viewLine, entry.getValue());
         }
-        markTreeDirty();
+        // NO markTreeDirty() HERE, and its absence is the point.
+        //
+        // This method's own contract, three lines up in updateWindow, is that it is safe to call every
+        // frame BECAUSE a frame that changed nothing writes nothing -- setText no-ops on an unchanged
+        // string and replaceOrPutCandidate no-ops on an unchanged value. An unconditional dirty defeated
+        // exactly that: this runs from onLayoutChanged, so every settled pass ended by declaring the tree
+        // dirty again, and calculateLayout's while (isLayoutDirty()) had no reason to ever exit.
+        //
+        // Whatever genuinely moved has already dirtied the tree by writing a different value, which is the
+        // mechanism the rest of the widget layer relies on. Adding a blanket dirty on top is not
+        // belt-and-braces; it is the belt sewn to the floor.
     }
 
     protected void invalidateWindow() {
