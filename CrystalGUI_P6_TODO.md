@@ -1870,6 +1870,154 @@ last.
 Toolbar, status bar, breadcrumbs, command palette. All composition over finished parts (the palette is a
 `Dialog` + `TextField` + 6.1.3). Grouped as one item because none of them is individually interesting.
 
+### 6.1.13 Settings — VS Code's configuration service, ported · `PLANNED` (2026-08-04)
+
+**An engine-wide gear, not a shader-graph feature.** It is written up here rather than in P6.3 because
+the graph is merely its first consumer: editor preferences, panel state, workspace options and a
+document's own options are all the same problem, and the project currently has *no* answer to it.
+
+#### What forced the question
+
+6.3.13 wanted a `Queue` dropdown in the shader graph's inspector, and there was nowhere to put the
+value. `CgMasterNode` holds `vertexFormat`, `renderType` and `queue`; it is the **compiler's** object,
+constructed once and never serialised — so those were unsaved, unreachable from Ctrl+Z, and invisible to
+`ContentHash`, meaning two graphs differing only in their queue hashed identically.
+
+The obvious fix is a `Map<String, String>` on `GraphDocument`. That is the wrong fix, and recognisably
+so: it is the *third* per-domain answer to "hold some named values" after `NodeData.properties()` and
+`ElementStyle`, and the fourth consumer would write a fifth. **This is exactly the shape the
+Command/Keymap stack already solved once** — a declaration addressed by a stable string id, values held
+per scope, resolved by walking outward, loadable as data.
+
+#### Ported, not invented — VS Code `platform/configuration/`
+
+**MIT, so the code may be ported.** Attribute in each class javadoc naming the source file, per the
+licence table in `AGENTS.md`.
+
+| Source file | What we take |
+|---|---|
+| `common/configurationRegistry.ts` | `IConfigurationRegistry` + `IConfigurationPropertySchema` — declarations with `type`, `default`, `description`, `scope` |
+| `common/configuration.ts` | `IConfigurationService.getValue` / `updateValue` / `inspect` / `onDidChangeConfiguration` |
+| `common/configurationModels.ts` | `ConfigurationModel` (one layer) and `Configuration` (the composed stack) |
+| `common/configurationRegistry.ts` | `ConfigurationScope` — which layers a setting is *allowed* to be written at |
+| `common/configuration.ts` | `ConfigurationTarget` — the layer a write lands on |
+
+**IntelliJ was read and mostly not taken.** Its `PersistentStateComponent` + `@State(storages)` model
+serialises a *state class* per component rather than a flat key space, which makes a settings **UI**
+generated from declarations impossible — you cannot enumerate what does not exist as data. The one idea
+worth keeping is its `RoamingType`, which is the same concept as VS Code's scope and is already covered.
+
+#### The layer stack — VS Code's, with two substitutions
+
+VS Code composes: `default < policy < application < user < userLocal < userRemote < workspace < folder <
+memory`. Ours drops the ones that describe a remote-development product we are not, and adds the one
+thing we have that VS Code does not — a **document**:
+
+```
+DEFAULT  <  USER  <  WORKSPACE  <  DOCUMENT  <  MEMORY
+```
+
+| Layer | Holds | Undoable? |
+|---|---|---|
+| `DEFAULT` | the declaration's own `defaultValue`. **Never written to** | — |
+| `USER` | the user's preferences file | no — it is not document state |
+| `WORKSPACE` | per-project overrides | no |
+| `DOCUMENT` | a single open document's own options — the shader graph's `Queue` lives here | **yes** |
+| `MEMORY` | this session only; never saved. What a debug toggle writes | no |
+
+> **This IS `StyleOrigin`, and the resemblance is worth stating rather than leaving to be noticed.**
+> `DEFAULT(0) < USER_AGENT(1) < STYLESHEET(2) < INLINE(3) < IMPORTANT(4) < ANIMATION(5)` is the same
+> mechanism for visual properties, and its lesson transfers directly: the ordering must be *declared as
+> data on an enum* rather than implied by the order of `if` statements, or the two ends of the stack
+> drift and nobody can say which layer supplied a value. That is what `inspect()` is for.
+
+#### `inspect()` is not optional garnish
+
+VS Code's `inspect(key)` returns *every* layer's answer, not just the winner. It is what makes three
+things possible that are otherwise guesswork:
+
+- **"Reset to default"** — you cannot offer it without knowing whether the value came from a layer that
+  can be cleared
+- **the modified indicator** — the dot beside a changed setting is `inspect().userValue !== undefined`
+- **diagnosing "why is this value what it is"** — the settings equivalent of the cascade's origin
+  question, which `ElementStyle`'s two winner maps exist to answer
+
+Skipping it is how a settings UI ends up unable to tell "explicitly set to the default" from "never
+set", which are different states with different reset behaviour.
+
+#### Scope resolution is the tree, not a `{resource}` override
+
+VS Code's `getValue(key, { resource })` selects folder-level overrides by URI, because it has no tree to
+walk. **We have a real DOM, and `Keymap` already made exactly this argument** for `when` clauses:
+
+> Scope is the tree, not a condition language. […] a binding is simply attached to an element and is
+> live whenever focus is inside that element's subtree.
+
+So a `Settings` belongs to a **scope owner**, and reading walks outward to the nearest owner that
+defines the key. An element's settings override its ancestors'; the root holds the application's. That
+is VS Code's folder-over-workspace precedence obtained structurally, and it costs one interface:
+
+```java
+public interface SettingsScope {
+    Settings settings();
+    @Nullable SettingsScope settingsParent();
+}
+```
+
+`UIElement` implements it with `settingsParent() = getParent()`. `GraphDocument` implements it with no
+parent. **Neither has to know the other exists**, which is the test of whether the gear is actually
+general.
+
+#### Declarations are data, and that is what unlocks the UI
+
+A `Setting<T>` carries what `IConfigurationPropertySchema` carries: id, label, description, value type,
+default, permitted layers, and — for an enumerated setting — its options. Which means a settings panel
+is **generated**, not hand-written, exactly as the command palette is generated from `CommandRegistry`.
+
+> The engine already proves this works twice. `StylePropertyRegistry` is a registry of typed declarations
+> with parsers and defaults; `CommandRegistry` is a registry of named actions a palette enumerates.
+> A third one is not a new idea here — **it is the missing third leg**.
+
+The bridge to the existing control kit is one adapter, in the ui layer, mapping `Setting` →
+`ConfigDescriptor`. That is the identical seam `NodeFieldWidgets` already is for `NodeField`, and it
+keeps `core/` free of any dependency on the widgets.
+
+#### What this is NOT
+
+- **Not a replacement for `ElementStyle`.** Visual properties cascade by selector and transition; that is
+  a different and much larger mechanism. A setting is a value with a default, not a cascaded property.
+- **Not a replacement for `NodeData.properties()`.** Those are per-*node* values in a document that a
+  server may author with no Java type behind them. A setting is a declaration the code owns.
+- **Not a preferences UI.** The panel is downstream and cheap once the declarations are data.
+
+#### Files
+
+```
+com.crystalgui.core.settings
+    Setting<T>          the declaration          <- IConfigurationPropertySchema
+    SettingsRegistry    id -> Setting            <- IConfigurationRegistry, shaped like CommandRegistry
+    SettingsLayer       the precedence enum      <- ConfigurationTarget
+    SettingsModel       one layer's raw values   <- ConfigurationModel
+    Settings            the composed stack       <- Configuration + IConfigurationService
+    SettingsScope       outward resolution       <- {resource} overrides, done structurally
+    SettingsChange      what changed             <- IConfigurationChangeEvent.affectsConfiguration
+    SetSettingEdit      undoable write           <- ours; VS Code has no undo for settings
+```
+
+#### Tests
+
+- precedence: a value at every layer resolves to the highest; removing a layer falls back to the next
+- `inspect` reports each layer separately, and tells "set to the default value" from "never set"
+- scope resolution walks outward and stops at the first owner that defines the key
+- a change signal fires once per write and reports the affected key
+- `SetSettingEdit` undoes to **absent**, not to empty — an absent key means "whatever the default is",
+  and undoing to `""` would pin a default that a later build changes
+- a settings map round-trips through a codec, and is omitted entirely when empty so a content hash is
+  not disturbed by a layer nobody wrote to
+- `Setting` declarations are enumerable, which is what a generated panel depends on
+
+---
+
 ---
 
 # 6.2 — Node graph view
