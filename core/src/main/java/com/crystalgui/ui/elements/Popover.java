@@ -219,6 +219,32 @@ public class Popover extends UIElement {
 
 
 
+    /**
+     * Somewhere legal to parent a popup, near {@code source}.
+     *
+     * <p><b>The window root is not a safe answer, and assuming it was is a shipped crash.</b>
+     * {@code TopLayer.add} refuses an element that is not already attached, so a popover has to be
+     * parented before it can be promoted — and every call site reached for {@code ui.rootElement}. That
+     * works right up until the root is a composite: {@code CrystalEditor} returns
+     * {@code acceptsPublicChildren() == false}, so right-clicking the Project panel threw
+     * {@code UnsupportedOperationException} out of the mouse-down dispatch.</p>
+     *
+     * <p>Walking outward from the source to the first element that accepts children is the right answer
+     * rather than merely a working one. Promotion reparents the <em>Taffy</em> node to the root anyway, so
+     * the DOM parent decides only cascade inheritance and lifetime — and both of those are better served
+     * by the nearest legal ancestor than by the root. A menu opened inside a themed panel inherits that
+     * panel's colours, and it goes away when the panel does.</p>
+     *
+     * @param near where the popup belongs, usually the element that was clicked. Null falls back to the
+     *             root, which is correct for a window-level popup like the command palette
+     */
+    public static UIElement hostFor(UIWindow window, @Nullable UIElement near) {
+        for (UIElement element = near; element != null; element = element.getParent()) {
+            if (element.acceptsPublicChildren()) return element;
+        }
+        return window.ui.rootElement;
+    }
+
     /** Hook for subclasses to move focus inside, once the popover is open and promoted. */
     protected void onOpened() {}
 
