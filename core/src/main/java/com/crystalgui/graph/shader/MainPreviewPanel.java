@@ -37,9 +37,17 @@ import javax.annotation.Nullable;
  * would make Ctrl+Z rotate a sphere instead of undoing an edit — the boundary this project already draws
  * for scroll and selection.</p>
  *
- * <h3>It is unlit, deliberately</h3>
- * <p>See {@link CgMainPreviewRenderer}. There is no lighting model to preview with, and faking one would
- * have someone tuning a shader against shading the pipeline cannot produce.</p>
+ * <h3>It is lit by default, and that is viewport shading rather than a lighting model</h3>
+ * <p>This panel used to be unlit on the grounds that the pipeline has no lighting, so shading it would
+ * show something the game cannot produce. True, and it made the panel nearly useless: an unlit sphere is
+ * a filled circle, and the shape menu, the orbit and the zoom all exist to show <em>form</em>. The
+ * framing that matters is not whether the picture matches the game but whether it is clear which you are
+ * looking at — the same distinction a modelling tool's "material preview" viewport draws against its
+ * final render.</p>
+ *
+ * <p>So the shading is a fixed key light baked into the preview's generated source
+ * ({@link com.crystalgraphics.shadergraph.CgShaderEmitter.Shading}), touching no engine state, and the
+ * {@code Lighting} menu entry turns it off when the colour matters more than the form.</p>
  */
 public class MainPreviewPanel extends UIElement implements UIFrameTicker {
 
@@ -73,6 +81,16 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
     private float pitch;
     private float zoom = 1f;
 
+    /**
+     * Whether the preview lights its own output. On by default.
+     *
+     * <p>Viewport shading, not a lighting model — the engine has none, and this is a fixed key light
+     * baked into the preview's generated source. Unlit is what the material actually draws in game, which
+     * is why the toggle exists rather than the mode simply being on: when the colour matters more than
+     * the form, the honest picture is one menu entry away.</p>
+     */
+    private boolean lit = true;
+
     /** Orbit at the moment the drag began — accumulating onto the live value compounds. */
     private float dragYaw;
     private float dragPitch;
@@ -90,8 +108,15 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
     /** Puts the orbit and zoom back to where the panel opened. @see #resetView */
     public static final String RESET_VIEW_LABEL = "Reset Camera";
 
+    /** Toggles the preview's own shading. @see #setLit */
+    public static final String LIGHTING_LABEL = "Lighting";
+
     @Nullable
     private Menu meshMenu;
+
+    /** Kept so the check mark can be re-synced if the mode changes from outside the menu. */
+    @Nullable
+    private MenuItem lightingItem;
 
     public MainPreviewPanel(GraphDocument document, CgShaderNodeRegistry shaderNodes,
                             CgMasterNode master) {
@@ -122,6 +147,7 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
         addInternalChild(head);
         addInternalChild(surface);
 
+        buildMeshMenu();
         installGestures();
     }
 
@@ -163,6 +189,17 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
 
     public float zoom() {
         return zoom;
+    }
+
+    public boolean isLit() {
+        return lit;
+    }
+
+    /** @see #lit */
+    public MainPreviewPanel setLit(boolean value) {
+        this.lit = value;
+        if (lightingItem != null) lightingItem.setSelected(value);
+        return this;
     }
 
     /** Puts the camera back where it started. What a double-click or a menu entry would call. */
@@ -337,11 +374,16 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
         pitch = Math.max(-limit, Math.min(limit, dragPitch + deltaY * ORBIT_PER_PIXEL));
     }
 
-    private void openMeshMenu(float screenX, float screenY) {
-        UIWindow window = getAttachedWindow();
-        if (window == null) return;
-
-        if (meshMenu == null) {
+    /**
+     * Builds the context menu once, at construction.
+     *
+     * <p>Eager rather than lazy on first right-click. The laziness saved nothing measurable and cost real
+     * clarity: the toggle's state lived in a menu that did not exist until someone opened it, so
+     * {@code lightingItem} was null for most of the panel's life and nothing could inspect the menu
+     * without simulating a press.</p>
+     */
+    private void buildMeshMenu() {
+        {
             meshMenu = new Menu();
             for (CgPreviewMesh option : CgPreviewMesh.values()) meshMenu.addItem(option.label());
             // Present but inert, exactly as asked. Listed rather than omitted because an absent entry
@@ -352,6 +394,12 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
             // what is being looked at, and this changes where it is looked at from. That is exactly the
             // distinction a native context menu's rules draw.
             meshMenu.addSeparator();
+            // Checkable, so its state is readable at a glance. Without it the entry looked like a command
+            // rather than a toggle — there was no way to tell whether lighting was on except by studying
+            // the sphere. Going through the MENU rather than the item is what reserves the mark gutter for
+            // every row, so this one does not sit indented against its neighbours.
+            lightingItem = meshMenu.addCheckableItem(LIGHTING_LABEL);
+            lightingItem.setSelected(lit);
             meshMenu.addItem(RESET_VIEW_LABEL);
 
             // Resolved by LABEL at activation time rather than captured per item. Menu rows are ordinary
@@ -362,6 +410,11 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
             // unparented one has nothing to promote from. Internal, because this panel is a composite.
             addInternalChild(meshMenu);
         }
+    }
+
+    private void openMeshMenu(float screenX, float screenY) {
+        UIWindow window = getAttachedWindow();
+        if (window == null || meshMenu == null) return;
         // ROOT space, not physical pixels. showAt's parameters are named rootX/rootY and mean it: the
         // menu is promoted to the top layer, whose containing block is the root, so a raw pointer
         // position lands wherever that number happens to fall in root coordinates — which put a menu
@@ -374,6 +427,10 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
     private void applyMenuChoice(String label) {
         if (RESET_VIEW_LABEL.equals(label)) {
             resetView();
+            return;
+        }
+        if (LIGHTING_LABEL.equals(label)) {
+            setLit(!lit);
             return;
         }
         for (CgPreviewMesh option : CgPreviewMesh.values()) {
@@ -397,7 +454,7 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
     public boolean tickFrame(float delta) {
         reclampIfPlaced();
         CgShaderGraph graph = ShaderGraphBridge.toShaderGraph(document, shaderNodes, master);
-        renderer.render(graph, master, mesh, yaw, pitch, zoom);
+        renderer.render(graph, master, mesh, yaw, pitch, zoom, lit);
         return true;
     }
 
