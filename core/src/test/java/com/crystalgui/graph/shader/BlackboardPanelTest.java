@@ -264,6 +264,29 @@ public class BlackboardPanelTest extends UiTestBase {
         assertTrue(heard.isEmpty());
     }
 
+    /**
+     * <b>Focus comes back to the board when a rename ends.</b>
+     *
+     * <p>Detaching the editor drops the window's focus to nothing, and every command resolves outward
+     * from the focused element — so after pressing Enter the row stayed highlighted while Delete, F2 and
+     * Mod+D were all dead until it was clicked again. Highlighted-but-inert is the worst version of this:
+     * it looks like the selection simply does not work.</p>
+     */
+    @Test
+    public void endingARenameGivesFocusBackToTheBoard() {
+        mount();
+        GraphProperty added = board.addProperty("Float");
+        PropertyPill pill = board.pillFor(added.id());
+        assertNotNull(pill);
+        assertTrue("a fresh property opens in a rename", pill.isRenaming());
+
+        pill.endRename();
+        window.updateWithoutPainting();
+
+        assertSame("the board must hold focus, or its whole key set is inert",
+                board, window.getInputHandler().getFocusedElement());
+    }
+
     // ── Removing ────────────────────────────────────────────────────────────
 
     @Test

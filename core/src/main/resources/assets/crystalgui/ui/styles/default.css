@@ -3216,12 +3216,16 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     flex-shrink: 0;
     cursor: move;
 }
-/* The stacked pair. It takes the slack so the + stays pinned right. */
+/* The stacked pair. It takes the slack so the + stays pinned right.
+ *
+ * `gap-all` IS a real layout shorthand, unlike the `border-radius-all` that silently did nothing on the
+ * capsule -- worth the note, since the two look like the same convention and only one is. */
 .__blackboard__ .__titles__ {
     flex-direction: column;
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
+    gap-all: 3px;
 }
 .__blackboard__ .__titles__ > .__title__ {
     font-size: var(--cfg-font);
@@ -3239,9 +3243,10 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
 }
 /* The + button. A fixed square, so the head's height never depends on it. */
 .__blackboard__ > .__head__ > .__add__ {
-    width: 10px;
-    height: 10px;
+    width: 13px;
+    height: 13px;
     min-width: 10px;
+    padding-right: -2;
     flex-grow: 0;
     flex-shrink: 0;
     overlay: shape("plus");
@@ -3255,8 +3260,14 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     flex-grow: 1;
     flex-direction: column;
     overflow: scroll;
-    padding-top: 2px;
-    padding-bottom: 2px;
+    /* The list breathes: a gap between rows and an inset from the panel edge, so the capsules read as
+     * separate chips rather than a stack pressed together. `gap-all` IS a real layout shorthand, unlike
+     * the `border-radius-all` that silently did nothing above. */
+    gap-all: 4px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-left: 4px;
+    padding-right: 4px;
 }
 /* NO SCROLLBARS, and the list is a PLAIN box rather than a ScrollerView to get that.
  *
@@ -3277,10 +3288,9 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     flex-direction: row;
     align-items: center;
     gap-all: var(--cfg-gap);
-    min-height: 14px;
+    min-height: 18px;
     padding-left: 6px;
     padding-right: 6px;
-    cursor: pointer;
 }
 /* NO row-level fill or ring. Unity highlights the capsule alone, and it is the better read: the row is
  * the full width of the panel, so filling it makes the selection look like a table row while the thing
@@ -3293,20 +3303,48 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     gap-all: 4px;
     flex-grow: 0;
     flex-shrink: 1;
-    padding-left: 6px;
-    padding-right: 6px;
-    padding-top: 1px;
-    padding-bottom: 1px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    /* The only clickable part of the row -- see PropertyPill. */
+    cursor: pointer;
     /* A real capsule: the radius is half the pill's height, so the ends are semicircles rather than
-     * merely soft corners. That shape is what makes the board read as a list of THINGS. */
-    border-radius-all: 7px;
+     * merely soft corners. That shape is what makes the board read as a list of THINGS.
+     *
+     * `border-radius`, NOT `border-radius-all`. The layout shorthands take an `-all` suffix
+     * (`padding-all`, `gap-all`) and this one does not -- it is plain `border-radius`, expanded at parse
+     * time into eight corner longhands. An unregistered property name is dropped silently by the
+     * cascade, which is the right call for a malformed sheet and means a typo here draws SQUARE corners
+     * with no warning anywhere. That shipped, on this rule and on the dot below.
+     *
+     * KEEP THIS AT HALF THE CAPSULE'S HEIGHT. It is text height plus the vertical padding above, so
+     * changing either without changing this turns the capsule back into a rounded rectangle -- which is
+     * a slow drift rather than an obvious break. */
+    border-radius: 9px;
 }
-/* Selection rings the capsule, and only the capsule. */
-.__property-pill__.__selected__ > .__capsule__ {
-    outline-width: 1px;
-}
+/* Hover, selected and both are stated together in graph.css, width and colour at once -- see there for
+ * why the ORDER of those three rules is load-bearing. */
 /* Exposed. The ONLY place that state is visible -- a declared-but-hidden property is otherwise
  * indistinguishable from an exposed one, and the difference does not show in the graph at all. */
+/* THE RENAME EDITOR. Full width of the row, replacing the capsule -- Unity does the same, and it is the
+ * right call: a field sized to the capsule would be a few characters wide, so a name longer than the old
+ * one would scroll while being typed. */
+.__property-pill__ .__rename__ {
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    height: 14px;
+    min-height: 14px;
+    font-size: var(--cfg-font);
+}
+/* The capsule and the type step aside while the field is up, rather than being removed -- the row keeps
+ * its height, so the list does not jump by a row the moment a rename starts. */
+.__property-pill__.__renaming__ > .__capsule__,
+.__property-pill__.__renaming__ > .__type__ {
+    display: none;
+}
+
 /* Round, not a square with soft corners -- at 4px a 1px radius still reads as a box. */
 .__property-pill__ .__dot__ {
     width: 4px;
@@ -3314,7 +3352,7 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     min-width: 4px;
     flex-grow: 0;
     flex-shrink: 0;
-    border-radius-all: 2px;
+    border-radius: 2px;
 }
 .__property-pill__ .__name__ {
     font-size: var(--cfg-font);

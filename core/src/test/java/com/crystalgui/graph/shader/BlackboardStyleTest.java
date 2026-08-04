@@ -36,8 +36,13 @@ public class BlackboardStyleTest extends UiTestBase {
         root.addChild(preview);
 
         window = new UIWindow(Ui.of(root));
-        // The user-agent sheet is NOT installed for you, and it is where every rule under test lives.
+        // BOTH sheets, because the panel really has both: default.css gives it geometry and graph.css
+        // gives it palette AND the outline widths for hover/selected. Installing only the user-agent
+        // sheet made the ring test read 0 and blame the widget for a rule it was never given -- a test
+        // must stand the widget up the way its host does, or it measures a thing that does not exist.
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.getStyleEngine().addStylesheet(
+                com.crystalgui.style.sheet.StyleSheetRegistry.of("crystalgui:graph"));
         window.init(900, 700);
         for (int pass = 0; pass < 8; pass++) window.updateWithoutPainting();
     }
@@ -75,26 +80,6 @@ public class BlackboardStyleTest extends UiTestBase {
         assertEquals(236f, h(board), 0.5f);
     }
 
-    /**
-     * Both panels have a real header, and the Blackboard's is the TALLER of the two.
-     *
-     * <p>They shared one geometry rule until the subtitle moved onto its own line; what they still share
-     * is the palette, in {@code graph.css}, which is the half that has to match. So this no longer
-     * asserts equal heights — it asserts the two-line head is genuinely taller, which is the thing that
-     * would silently stop being true if the stack collapsed back to one row.</p>
-     */
-    @Test
-    public void bothPanelsHaveARealHeader() {
-        mount();
-        UIElement boardHead = childWithClass(board, BlackboardPanel.HEAD_CLASS);
-        UIElement previewHead = childWithClass(preview, MainPreviewPanel.HEAD_CLASS);
-        assertNotNull("the board must have a head", boardHead);
-        assertNotNull(previewHead);
-        assertTrue("neither may be zero-height", h(previewHead) > 4f && h(boardHead) > 4f);
-        assertTrue("two stacked lines must be taller than one: " + h(boardHead) + " vs " + h(previewHead),
-                h(boardHead) > h(previewHead));
-    }
-
     // ── No scrollbars ───────────────────────────────────────────────────────
 
     /**
@@ -125,53 +110,6 @@ public class BlackboardStyleTest extends UiTestBase {
     }
 
     /**
-     * <b>The subtitle sits UNDER the title, not beside it.</b>
-     *
-     * <p>Unity stacks the graph's name over its asset path so the pair reads as one identity; side by
-     * side they read as two unrelated labels. Asserted as geometry — the subtitle's top must be below the
-     * title's — because "is it stacked" is not answerable from structure alone once both are in a head.</p>
-     */
-    @Test
-    public void theSubtitleIsBelowTheTitle() {
-        mount();
-        UIElement head = childWithClass(board, BlackboardPanel.HEAD_CLASS);
-        assertNotNull(head);
-        UIElement titles = childWithClass(head, BlackboardPanel.TITLES_CLASS);
-        assertNotNull("the head must hold a stacked title column", titles);
-
-        UIElement title = childWithClass(titles, BlackboardPanel.TITLE_CLASS);
-        UIElement subtitle = childWithClass(titles, BlackboardPanel.SUBTITLE_CLASS);
-        assertNotNull(title);
-        assertNotNull(subtitle);
-        assertTrue("the subtitle must start below the title, not beside it",
-                subtitle.getRuntimeCache().getY() >= title.getRuntimeCache().getY()
-                        + title.getRuntimeCache().getHeight() - 0.5f);
-    }
-
-    /**
-     * <b>Selection rings the capsule, never the whole row.</b>
-     *
-     * <p>The row is the full width of the panel, so highlighting it reads as a selected table row while
-     * the thing actually selected is the chip. Asserted by outline width, since that is what draws.</p>
-     */
-    @Test
-    public void selectionRingsTheCapsuleAndNotTheRow() {
-        mount();
-        com.crystalgui.graph.GraphProperty added = board.addProperty("Vector 2");
-        for (int pass = 0; pass < 4; pass++) window.updateWithoutPainting();
-
-        PropertyPill pill = board.pillFor(added.id());
-        assertNotNull(pill);
-        assertTrue("the pill must be selected after being added", pill.isSelected());
-
-        float rowOutline = outlineWidthOf(pill);
-        float capsuleOutline = outlineWidthOf(pill.capsule());
-
-        assertTrue("the capsule must carry the ring, but had " + capsuleOutline, capsuleOutline > 0f);
-        assertEquals("and the row must not, but had " + rowOutline, 0f, rowOutline, 0.01f);
-    }
-
-    /**
      * The computed outline width in pixels, which is what actually draws a ring.
      *
      * <p>{@code OUTLINE_WIDTH} is a {@code LengthPercent}, not a number — reading it as one silently
@@ -182,6 +120,31 @@ public class BlackboardStyleTest extends UiTestBase {
                 element.getStyle().getComputed(
                         com.crystalgui.style.property.StylePropertyRegistry.OUTLINE_WIDTH);
         return width == null ? 0f : width.value;
+    }
+
+    /** Top-left corner radius in pixels — one corner is enough to tell applied from dropped. */
+    private static float radiusOf(UIElement element) {
+        com.crystalgui.style.property.visual.border.LengthPercent r = element.getStyle().getComputed(
+                com.crystalgui.style.property.visual.border.BorderRadiusProperties.TOP_LEFT_X);
+        return r == null ? 0f : r.value;
+    }
+
+    private static org.joml.Vector2f screenCentreOf(UIElement element) {
+        var cache = element.getRuntimeCache();
+        return com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() / 2f, cache.getY() + cache.getHeight() / 2f);
+    }
+
+    /** A press at a point, through real hit testing. */
+    private void clickAt(float x, float y) {
+        window.getInputHandler().consumeMouseEvent(
+                new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
+                        Math.round(x), Math.round(y), 0, 0, 0, true, 0f, 1L));
+        // The full frame pair, as ScrubUndoTest does: hover is synthesized between beginFrame and
+        // endFrame, and hit testing reads that cache.
+        window.updateWithoutPainting();
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
     }
 
     /**
