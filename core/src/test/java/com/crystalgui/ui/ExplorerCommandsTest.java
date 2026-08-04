@@ -20,6 +20,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Menu;
 import com.crystalgui.ui.elements.MenuItem;
+import com.crystalgui.ui.elements.workbench.ExplorerClipboard;
 import com.crystalgui.ui.elements.workbench.ExplorerCommands;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -160,6 +161,44 @@ public class ExplorerCommandsTest extends UiTestBase {
             if (item.hasSubmenu()) continue;   // the submenu row itself is always available
             assertFalse("'" + item.getText() + "' is enabled with nothing selected", item.isEnabled());
         }
+    }
+
+    /**
+     * <b>Cut is consumed by a paste; copy is not.</b>
+     *
+     * <p>Pasting a cut a second time would move files from a path that no longer exists, and fail with an
+     * error about a missing file rather than saying the obvious thing. Pasting a copy into three folders
+     * is a real gesture. Windows Explorer, Finder and VS Code all behave this way.</p>
+     */
+    @Test
+    public void aCutIsSpentByItsPasteButACopyIsNot() {
+        ExplorerClipboard clipboard = ExplorerCommands.clipboard();
+
+        clipboard.cut(List.of(CgPath.parse("mymod.proj:README.md")));
+        assertFalse(clipboard.isEmpty());
+        assertEquals(ExplorerClipboard.Mode.CUT, clipboard.mode());
+        clipboard.consumeIfCut();
+        assertTrue("a cut survived its paste", clipboard.isEmpty());
+
+        clipboard.copy(List.of(CgPath.parse("mymod.proj:README.md")));
+        clipboard.consumeIfCut();
+        assertFalse("a copy was spent by a paste", clipboard.isEmpty());
+        clipboard.clear();
+    }
+
+    /** Paste is refused with nothing held, so the menu row is dim rather than a no-op. */
+    @Test
+    public void pasteIsDisabledWithAnEmptyClipboard() {
+        ExplorerCommands.clipboard().clear();
+        assertFalse(registry().get(ExplorerCommands.PASTE)
+                .isEnabled(CommandContext.of(workbench.fileTree())));
+    }
+
+    /** The tree takes multi-select, which is what every command acting on "the selection" needs. */
+    @Test
+    public void theTreeAllowsMoreThanOneSelection() {
+        assertEquals(com.crystalgui.ui.elements.list.SelectionMode.MULTIPLE,
+                workbench.fileTree().treeView().getSelectionMode());
     }
 
     /** Rename and Delete stay refused for a project root, which is not a file and has no parent. */

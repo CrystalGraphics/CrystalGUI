@@ -5,12 +5,14 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.WorkspaceFileService;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.elements.chrome.InputDialog;
 import com.crystalgui.ui.input.keymap.Keymap;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -49,6 +51,17 @@ public final class ExplorerCommands {
     public static final String COPY_PATH = "explorer.copyPath";
     public static final String COPY_RELATIVE_PATH = "explorer.copyRelativePath";
     public static final String REFRESH = "explorer.refresh";
+    public static final String CUT = "explorer.cut";
+    public static final String COPY = "explorer.copy";
+    public static final String PASTE = "explorer.paste";
+
+    /** One clipboard per application, not per tree — cut in one panel, paste in another. */
+    private static final ExplorerClipboard CLIPBOARD = new ExplorerClipboard();
+
+    /** What Cut and Copy currently hold. Exposed so a test can assert on the intent, not just the effect. */
+    public static ExplorerClipboard clipboard() {
+        return CLIPBOARD;
+    }
 
     private ExplorerCommands() {
     }
@@ -81,6 +94,20 @@ public final class ExplorerCommands {
                 .run(context -> copy(workbench, target(context), true))
                 .enabledWhen(context -> target(context) != null));
 
+        registry.register(Command.of(CUT, "Cut")
+                .run(context -> CLIPBOARD.cut(targets(context)))
+                .enabledWhen(context -> !targets(context).isEmpty()
+                        && targets(context).stream().noneMatch(CgPath::isProjectRoot)));
+
+        registry.register(Command.of(COPY, "Copy")
+                .run(context -> CLIPBOARD.copy(targets(context)))
+                .enabledWhen(context -> !targets(context).isEmpty()
+                        && targets(context).stream().noneMatch(CgPath::isProjectRoot)));
+
+        registry.register(Command.of(PASTE, "Paste")
+                .run(context -> paste(workbench, context))
+                .enabledWhen(context -> !CLIPBOARD.isEmpty() && target(context) != null));
+
         registry.register(Command.of(REFRESH, "Reload from Disk")
                 .run(context -> {
                     CgPath path = target(context);
@@ -101,6 +128,9 @@ public final class ExplorerCommands {
      * a bare key at the root fires while typing into any editor sharing the window.</p>
      */
     public static void bindDefaults(Keymap keymap) {
+        keymap.bind("Mod+X", CUT);
+        keymap.bind("Mod+C", COPY);
+        keymap.bind("Mod+V", PASTE);
         keymap.bind("F2", RENAME);
         keymap.bind("Delete", DELETE);
         keymap.bind("Mod+N", NEW_FILE);
@@ -118,6 +148,10 @@ public final class ExplorerCommands {
         return ContextMenu.builder()
                 .submenu("New", sub -> sub.item(NEW_FILE, "File…").item(NEW_FOLDER, "Folder…"))
                 .separator()
+                .item(CUT)
+                .item(COPY)
+                .item(PASTE)
+                .separator()
                 .item(COPY_PATH)
                 .item(COPY_RELATIVE_PATH)
                 .separator()
@@ -128,6 +162,64 @@ public final class ExplorerCommands {
     }
 
     // ── Target resolution ───────────────────────────────────────────────────────────────────────
+
+    /** Everything selected — what the commands that act on several things ask for. */
+    private static List<CgPath> targets(CommandContext context) {
+        for (UIElement element = context.source(); element != null; element = element.getParent()) {
+            if (element instanceof ProjectFileTree tree) return tree.selectedPaths();
+        }
+        return List.of();
+    }
+
+    /**
+     * Pastes whatever is held into the selected folder.
+     *
+     * <p><b>Each item is issued independently rather than as one transaction.</b> Two files pasted into a
+     * folder are two operations that can succeed or fail separately, and stopping the batch on the first
+     * refusal would leave the user guessing which ones landed. Each reports its own status.</p>
+     */
+    private static void paste(Workbench workbench, CommandContext context) {
+        CgPath selected = target(context);
+        if (selected == null || CLIPBOARD.isEmpty()) return;
+        CgPath destination = newParentFor(workbench, selected);
+        boolean moving = CLIPBOARD.mode() == ExplorerClipboard.Mode.CUT;
+
+        for (CgPath source : CLIPBOARD.consumeIfCut()) {
+            // A folder pasted into itself, or into its own descendant, would move a directory under
+            // itself -- which the filesystem refuses with a message about paths rather than about the
+            // gesture. Refusing here says the useful thing.
+            if (source.equals(destination) || source.contains(destination)) {
+                workbench.onStatus.emit("cannot paste " + source.name() + " into itself");
+                continue;
+            }
+            CgPath into = destination.resolve(source.name());
+            if (source.equals(into)) {
+                // Pasting a copy back where it came from: give it VS Code's incremental name rather than
+                // refusing, which is what makes Copy then Paste a duplicate-in-place gesture.
+                into = destination.resolve(WorkspaceFileService.incrementalName(
+                        source.name(), namesIn(workbench, destination)));
+            }
+            CgPath finalTarget = into;
+            if (moving) {
+                workbench.files().move(source, finalTarget, false,
+                        () -> workbench.onStatus.emit("moved " + finalTarget.name()),
+                        failure -> workbench.onStatus.emit(
+                                "move failed: " + source.name() + " -- " + failure.code()));
+            } else {
+                workbench.files().copyFile(source, finalTarget,
+                        () -> workbench.onStatus.emit("copied " + finalTarget.name()),
+                        failure -> workbench.onStatus.emit(
+                                "copy failed: " + source.name() + " -- " + failure.code()));
+            }
+        }
+    }
+
+    /** The names already in a folder, as far as the tree has listed it — for incremental naming. */
+    private static List<String> namesIn(Workbench workbench, CgPath directory) {
+        List<String> names = new ArrayList<>();
+        for (CgPath child : workbench.fileTree().source().children(directory)) names.add(child.name());
+        return names;
+    }
 
     @Nullable
     private static CgPath target(CommandContext context) {
@@ -215,6 +307,7 @@ public final class ExplorerCommands {
 
     /** Every command id this set owns, for a host building its own menus. */
     public static List<String> ids() {
-        return List.of(NEW_FILE, NEW_FOLDER, RENAME, DELETE, COPY_PATH, COPY_RELATIVE_PATH, REFRESH);
+        return List.of(NEW_FILE, NEW_FOLDER, RENAME, DELETE, COPY_PATH, COPY_RELATIVE_PATH, REFRESH,
+                CUT, COPY, PASTE);
     }
 }

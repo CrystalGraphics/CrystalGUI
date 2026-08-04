@@ -13,6 +13,7 @@ import com.crystalgui.ui.elements.tree.TreeRow;
 import com.crystalgui.ui.elements.tree.TreeView;
 
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -92,6 +93,10 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
         this.tree = new TreeView<>(source);
         tree.addClass(TREE_CLASS);
         tree.setRenderer(new RowRenderer());
+        // MULTIPLE, which ListView already implements in full -- Ctrl to toggle, Shift for a range. This
+        // is configuration rather than code, and it is what every file command that acts on "the
+        // selection" rather than "the selected path" needs.
+        tree.setSelectionMode(com.crystalgui.ui.elements.list.SelectionMode.MULTIPLE);
         // THE WRAPPER IS MARKED INTERNAL WHILE EMPTY; the tree is an ordinary child of it.
         //
         // addInternalChild(tree) is the obvious line and it is wrong, because markAsInternal() RECURSES.
@@ -236,6 +241,21 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             if (rows.get(i).item().equals(path)) return i;
         }
         return -1;
+    }
+
+    /**
+     * Everything selected, in the order it appears in the tree.
+     *
+     * <p>{@link #selectedPath()} is the first of these, and remains the right question for the commands
+     * that act on exactly one thing — Rename cannot mean anything for four files at once.</p>
+     */
+    public List<CgPath> selectedPaths() {
+        List<CgPath> found = new ArrayList<>();
+        List<TreeRow<CgPath>> rows = tree.visibleRows();
+        for (int index : tree.getSelectedIndices()) {
+            if (index >= 0 && index < rows.size()) found.add(rows.get(index).item());
+        }
+        return found;
     }
 
     /** Whether a path is a folder, as far as the listings this tree has seen are concerned. */
