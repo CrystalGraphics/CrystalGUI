@@ -1,5 +1,7 @@
 package com.crystalgui.graph;
 
+import com.crystalgui.core.settings.Settings;
+import com.crystalgui.core.settings.SettingsScope;
 import com.crystalgui.core.signal.Signal;
 import lombok.Getter;
 import lombok.Setter;
@@ -44,7 +46,7 @@ import java.util.Set;
  * identical, while an unknown node type means somebody opened a file without a plugin. Eating their
  * graph is the worse outcome by a wide margin.</p>
  */
-public final class GraphDocument {
+public final class GraphDocument implements SettingsScope {
 
     /** Bumped when the encoded shape changes in a way a reader must know about. Version 1 is the first
      * written form; a document is saved to disk and outlives the code that wrote it, which is exactly
@@ -106,6 +108,25 @@ public final class GraphDocument {
 
     public int nodeCount() {
         return nodes.size();
+    }
+
+    // ── Settings ──────────────────────────────────────────────────────
+
+    /**
+     * What this graph <b>is</b>, as opposed to what is in it — the shader domain's vertex format, render
+     * type and queue, and whatever another domain's equivalent turns out to be.
+     *
+     * <p>The general gear rather than a map of its own: see {@link Settings}. A document is a
+     * {@link SettingsScope} with <b>no parent</b>, because a document is not inside anything — the editor
+     * showing it is, and that is a different chain. Anything a document does not define falls through to
+     * the declaration's default and stops there, which is what keeps two open graphs from silently
+     * inheriting each other's options.</p>
+     */
+    private final Settings settings = new Settings();
+
+    @Override
+    public Settings settings() {
+        return settings;
     }
 
     /** Every edge touching {@code nodeId}. */
@@ -434,8 +455,15 @@ public final class GraphDocument {
         return added;
     }
 
-    /** Everything, gone. */
+    /**
+     * Everything, gone — the settings too.
+     *
+     * <p>They are part of the document rather than of the editor showing it, so a cleared document must
+     * not keep the previous one's queue. {@link #merge}, which is paste, deliberately does <b>not</b>
+     * touch them for the mirror-image reason: pasting nodes is not a statement about what the shader is.</p>
+     */
     public void clear() {
         for (String id : new ArrayList<>(nodes.keySet())) removeNode(id);
+        settings.replaceLayer(com.crystalgui.core.settings.SettingsLayer.DOCUMENT, null);
     }
 }

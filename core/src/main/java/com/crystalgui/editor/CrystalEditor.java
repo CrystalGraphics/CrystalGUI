@@ -3,7 +3,7 @@ package com.crystalgui.editor;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.graph.shader.ShaderGraphEditor;
-import com.crystalgui.graph.shader.ShaderNodeInspector;
+import com.crystalgui.graph.shader.ShaderGraphInspector;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -86,7 +86,7 @@ public class CrystalEditor extends UIElement {
     private ShaderGraphEditor shaderGraph;
 
     @Nullable
-    private ShaderNodeInspector inspector;
+    private ShaderGraphInspector inspector;
 
     /** The last {@link #saveLayout} result, so {@link #restoreLayout()} has something to restore. */
     @Nullable
@@ -133,13 +133,18 @@ public class CrystalEditor extends UIElement {
     }
 
     /**
-     * The node inspector, built on first use.
+     * The Graph Inspector, built on first use — a {@code Node} tab and a {@code Graph} tab.
      *
-     * <p><b>Its rows are a placeholder</b> — the control kit, showing fixed sample values, bound to
-     * nothing. Selecting a node does not change them. See {@link ShaderNodeInspector}.</p>
+     * <p>Bound to the graph's selection and to the document's own settings, so it needs the graph — which
+     * is why it is built here rather than in the panel factory: {@link #shaderGraph()} is itself lazy, and
+     * asking for the inspector first has to bring the graph into being rather than binding to nothing.</p>
+     *
+     * <p>The editor's {@code recompile} becomes the change hook, so editing a value in the inspector
+     * re-emits the shader exactly as editing the same field on the node does. They are two bindings of
+     * one field.</p>
      */
-    public ShaderNodeInspector inspector() {
-        if (inspector == null) inspector = new ShaderNodeInspector();
+    public ShaderGraphInspector inspector() {
+        if (inspector == null) inspector = new ShaderGraphInspector(shaderGraph());
         return inspector;
     }
 
