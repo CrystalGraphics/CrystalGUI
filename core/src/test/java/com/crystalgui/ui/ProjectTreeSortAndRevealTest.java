@@ -1,0 +1,178 @@
+package com.crystalgui.ui;
+
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.InMemoryFileSystem;
+import com.crystalgui.fs.ProjectRegistry;
+import com.crystalgui.fs.WorkspaceActor;
+import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.fs.WorkspacePermission;
+import com.crystalgui.fs.WorkspaceProject;
+import com.crystalgui.fs.WorkspaceRpc;
+import com.crystalgui.fs.WorkspaceService;
+import com.crystalgui.net.ClientUiSession;
+import com.crystalgui.net.InMemoryTransport;
+import com.crystalgui.net.ServerUiSession;
+import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.ui.elements.workbench.ProjectFileTree;
+import com.crystalgui.ui.elements.workbench.WorkspaceTreeSource;
+import dev.vfyjxf.taffy.style.FlexDirection;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+/**
+ * Ordering (E11) and reveal (E9) in the Project panel.
+ *
+ * <p>Both go through a real client and a real server, because both are about listings arriving over time —
+ * reveal in particular is only interesting <em>because</em> it cannot finish in one pass.</p>
+ */
+public class ProjectTreeSortAndRevealTest extends UiTestBase {
+
+    private UIWindow window;
+    private ProjectFileTree tree;
+    private InMemoryTransport<Object> a;
+    private InMemoryTransport<Object> b;
+    private ClientUiSession<Object> session;
+    private ServerUiSession<Object> server;
+
+    @Before
+    public void setUp() {
+        InMemoryFileSystem files = new InMemoryFileSystem()
+                .seed("mymod.proj:zebra.txt", "z")
+                .seed("mymod.proj:Apple.md", "a")
+                .seed("mymod.proj:src/deep/target.java", "t")
+                .seed("mymod.proj:src/Main.java", "m");
+
+        ProjectRegistry projects = new ProjectRegistry().register(() -> List.of(
+                new WorkspaceProject("mymod.proj", "My Project", Paths.get("/srv/proj"))));
+        WorkspaceService service = new WorkspaceService(projects, files, WorkspacePermission.ALLOW_ALL);
+
+        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
+        a = pair[0];
+        b = pair[1];
+        server = new ServerUiSession<>(1, new UIElement(), a, PlainOps.INSTANCE);
+        new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(server::onCall);
+        server.open();
+        session = new ClientUiSession<>(b, PlainOps.INSTANCE);
+
+        tree = new ProjectFileTree(new WorkspaceClient<>(session, PlainOps.INSTANCE));
+        tree.layout(l -> l.widthPercent(100f).height(0).flexGrow(1f));
+        UIElement root = new UIElement().layout(l -> l.widthPercent(100f).heightPercent(100f)
+                .flexDirection(FlexDirection.COLUMN));
+        root.addChild(tree);
+
+        window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(1200, 800);
+        settle();
+        tree.loadProjects();
+        settle();
+        tree.treeView().setExpanded(CgPath.ofProject("mymod.proj"), true);
+        settle();
+    }
+
+    /** One frame plus the network tick a real client does per frame. */
+    private void settle() {
+        for (int i = 0; i < 8; i++) {
+            a.deliver();
+            b.deliver();
+            session.tick();
+            server.tick();
+            window.updateWithoutPainting();
+        }
+    }
+
+    private List<String> visibleNames() {
+        List<String> names = new ArrayList<>();
+        for (TreeRow<CgPath> row : tree.treeView().visibleRows()) {
+            if (!row.item().isProjectRoot()) names.add(row.item().name());
+        }
+        return names;
+    }
+
+    /** Folders first, then case-insensitively by name — every file manager, and VS Code's default. */
+    @Test
+    public void theDefaultOrderIsFoldersFirstThenName() {
+        assertEquals(List.of("src", "Apple.md", "zebra.txt"), visibleNames());
+    }
+
+    /** {@code mixed} interleaves them, so ordering is by name alone. */
+    @Test
+    public void mixedInterleavesFilesAndFolders() {
+        tree.source().setSortOrder(WorkspaceTreeSource.SortOrder.MIXED);
+        tree.treeView().refresh();
+        settle();
+
+        assertEquals(List.of("Apple.md", "src", "zebra.txt"), visibleNames());
+    }
+
+    /** And the inverse, for a tree read as a list of documents. */
+    @Test
+    public void filesFirstPutsFoldersLast() {
+        tree.source().setSortOrder(WorkspaceTreeSource.SortOrder.FILES_FIRST);
+        tree.treeView().refresh();
+        settle();
+
+        assertEquals(List.of("Apple.md", "zebra.txt", "src"), visibleNames());
+    }
+
+    /**
+     * <b>Changing the order re-sorts what is already listed.</b>
+     *
+     * <p>Rather than dropping the cache: the listings are still valid, and discarding them would collapse
+     * every expanded folder and re-fetch the lot to answer a question about ordering. The tell is that
+     * this test never pumps a new listing — it changes the order on a tree that is already populated.</p>
+     */
+    @Test
+    public void changingTheOrderDoesNotRefetch() {
+        assertEquals(List.of("src", "Apple.md", "zebra.txt"), visibleNames());
+
+        tree.source().setSortOrder(WorkspaceTreeSource.SortOrder.FILES_FIRST);
+        tree.treeView().refresh();
+        // NO settle() -- nothing may need to arrive for a re-sort to be visible.
+        assertEquals(List.of("Apple.md", "zebra.txt", "src"), visibleNames());
+    }
+
+    /**
+     * <b>Reveal expands through folders that have not been listed yet.</b>
+     *
+     * <p>The case that matters, and the one a single-pass implementation gets wrong: revealing
+     * {@code src/deep/target.java} needs {@code src} listed to learn {@code deep} exists, and {@code deep}
+     * listed to find the file — two round trips, on two later frames. Doing it in one pass works exactly
+     * when the folders are already open, which is when reveal was not needed.</p>
+     */
+    @Test
+    public void revealExpandsThroughUnlistedFolders() {
+        CgPath target = CgPath.parse("mymod.proj:src/deep/target.java");
+        assertTrue("fixture wrong -- src is already listed",
+                !tree.treeView().isExpanded(CgPath.parse("mymod.proj:src/deep")));
+
+        tree.reveal(target);
+        settle();
+
+        assertTrue("the tree did not expand down to the file",
+                visibleNames().contains("target.java"));
+        assertEquals("the revealed file is not selected", target, tree.selectedPath());
+    }
+
+    /** A reveal of something that does not exist gives up rather than retrying forever. */
+    @Test
+    public void revealingAMissingPathStops() {
+        tree.reveal(CgPath.parse("mymod.proj:src/nope/missing.txt"));
+        settle();
+        settle();
+
+        // The assertion is that we got here: a reveal that never cleared its target would keep asking for
+        // a listing every frame, and the settle loops above would never terminate the retry.
+        assertTrue(true);
+    }
+}

@@ -39,6 +39,69 @@ import javax.annotation.Nullable;
  */
 public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
 
+    /**
+     * How a directory's entries are ordered — VS Code's {@code explorer.sortOrder}, minus the two that
+     * need data we do not carry.
+     *
+     * <p>{@code modified} and {@code foldersNestsFiles} are deliberately absent rather than stubbed:
+     * {@code CgFileEntry} does carry an mtime, but sorting by it across a lazily-listed tree means a
+     * folder re-orders itself the moment it is expanded, and file nesting is off by default even in VS
+     * Code. Adding a constant that sorts wrongly is worse than not offering it.</p>
+     */
+    public enum SortOrder {
+        /** Folders first, then by name. VS Code's default and every file manager's. */
+        DEFAULT,
+        /** Files and folders interleaved, by name alone. */
+        MIXED,
+        /** Files first — the inverse, for a tree read as a list of documents. */
+        FILES_FIRST,
+        /** By extension, then name, with folders still first. Groups a directory of assets by kind. */
+        TYPE
+    }
+
+    private SortOrder sortOrder = SortOrder.DEFAULT;
+
+    /**
+     * Changes the order and re-sorts everything already listed.
+     *
+     * <p>Re-sorting rather than dropping the cache: the listings are still valid, and discarding them
+     * would collapse every expanded folder and re-fetch the lot to answer a question about ordering.</p>
+     */
+    public WorkspaceTreeSource setSortOrder(SortOrder order) {
+        this.sortOrder = order == null ? SortOrder.DEFAULT : order;
+        for (List<CgPath> listing : children.values()) listing.sort(this::compare);
+        dirty = true;
+        return this;
+    }
+
+    public SortOrder sortOrder() {
+        return sortOrder;
+    }
+
+    /** The comparator for {@link #sortOrder}. */
+    private int compare(CgPath x, CgPath y) {
+        boolean dx = directories.contains(x);
+        boolean dy = directories.contains(y);
+        if (dx != dy) {
+            switch (sortOrder) {
+                case MIXED -> { }
+                case FILES_FIRST -> {
+                    return dx ? 1 : -1;
+                }
+                default -> {
+                    return dx ? -1 : 1;
+                }
+            }
+        }
+        if (sortOrder == SortOrder.TYPE && !dx) {
+            int byType = x.extension().compareToIgnoreCase(y.extension());
+            if (byType != 0) return byType;
+        }
+        // compareToIgnoreCase, so "Zebra" and "apple" sort as a human reads them rather than by code
+        // point -- which is what VS Code's sortOrderLexicographicOptions 'default' means.
+        return x.name().compareToIgnoreCase(y.name());
+    }
+
     private final WorkspaceClient<?> client;
     private final List<CgPath> roots = new ArrayList<>();
     private final Map<String, String> projectNames = new HashMap<>();
@@ -111,6 +174,16 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
         dirty = true;
     }
 
+    /** Whether this directory's listing has been fetched — what a reveal needs, to know when to wait. */
+    public boolean isListed(CgPath directory) {
+        return children.containsKey(directory);
+    }
+
+    /** Asks for a directory's listing if it has not been requested. */
+    public void ensureListed(CgPath directory) {
+        if (directory != null && !children.containsKey(directory)) request(directory);
+    }
+
     /** True once since the last call — a view uses it to decide whether to refresh. */
     public boolean drainRefresh() {
         if (!dirty) return false;
@@ -145,11 +218,9 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
                 paths.add(child);
                 if (entry.isDirectory()) directories.add(child);
             }
-            paths.sort((x, y) -> {
-                boolean dx = directories.contains(x), dy = directories.contains(y);
-                if (dx != dy) return dx ? -1 : 1;      // directories first, as every file tree does
-                return x.name().compareToIgnoreCase(y.name());
-            });
+            // Sorted AFTER every child has been recorded as a directory or not -- the comparator asks
+            // `directories`, so sorting inside the loop above would order against a set still being built.
+            paths.sort(this::compare);
             children.put(directory, paths);
             dirty = true;
         }, failed -> {
