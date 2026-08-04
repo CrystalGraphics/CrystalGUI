@@ -1265,12 +1265,22 @@ on reload — a worse outcome than the placeholder.
 | Preview **mesh** | **view** | Which shape you are looking at. Already settled in 6.3.12 and pinned by a test asserting it stays out of the encoded document |
 | Preview **lighting** on/off | **view** | Same — it is viewport shading, which `CgShaderEmitter.Shading`'s javadoc is explicit about |
 
-So: **`GraphDocument` gains a `settings()` map** — `Map<String, String>`, the same string-valued shape
-`NodeData.properties()` already uses and for the same serialisability reason — plus a
-`SetGraphSettingEdit` mirroring `SetNodeFieldEdit` exactly, merge behaviour included.
-`ShaderGraphBridge` applies the map onto `CgMasterNode` at compile time, so the master stays the
-compiler's object and stops pretending to be storage. `GraphCodecs` picks the map up, which also moves
-the **persistence** gap forward for free.
+**The fix is NOT a map on `GraphDocument`.** That was the first draft and it is recognisably wrong: it
+would be the *third* per-domain answer to "hold some named values" after `NodeData.properties()` and
+`ElementStyle`, and the fourth consumer would write a fifth. The same shape has already been solved once
+in this engine by the Command/Keymap stack — a declaration addressed by a stable string id, values held
+per scope, resolved by walking outward, loadable as data.
+
+So this item is **blocked on P6's 6.1.13**, the general settings gear, which is VS Code's
+`platform/configuration/` ported (MIT). `GraphDocument` becomes a `SettingsScope` holding a `Settings`
+like anything else, its options are declared as `Setting<T>`s the same way commands are declared, and the
+inspector's Graph tab is *generated* from those declarations rather than hand-written — exactly as the
+command palette is generated from `CommandRegistry`.
+
+What 6.3.13 then owns is only the shader-specific half: **which** settings exist (`#type`, `RenderType`,
+`Queue`), that they resolve onto `CgMasterNode` at compile time so the master goes back to being purely
+the compiler's object, and that they reach `GraphCodecs` — which moves the **persistence** gap forward
+for free.
 
 #### Properties (the Blackboard) — a tab now, a panel later
 
@@ -1328,8 +1338,8 @@ CrystalEditor
                          +-- Tab "Properties"  -> ShaderGraphProperties  NEW
 
 ShaderGraphEditor  gains  master() / selection() / document()         (accessors only)
-GraphDocument      gains  settings() / setting(k) / setSetting(k,v)   NEW
-SetGraphSettingEdit                                                   NEW  -- mirrors SetNodeFieldEdit
+GraphDocument      implements SettingsScope                           6.1.13 -- the general gear
+ShaderGraphSettingKeys  the shader domain's Setting<T> declarations   NEW
 GraphCodecs        gains  the settings map                            CHANGED
 ShaderGraphBridge  applies settings onto CgMasterNode at compile      CHANGED
 ConfiguratorPanel  gains  addRow(descriptor, prebuiltControl)         NEW  -- the seam that lets the
