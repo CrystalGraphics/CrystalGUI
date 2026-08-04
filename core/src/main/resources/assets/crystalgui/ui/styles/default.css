@@ -3513,11 +3513,31 @@ texteditor.__shader-source__ {
     font-size: 7px;
 }
 
-/* The node inspector. Everything it LOOKS like already comes from `.__configurator-panel__` above --
- * background, padding rhythm, scrolling -- because it IS a ConfiguratorPanel. What that rule cannot give
- * it is a size: it is a widget rule, and how big a panel should be depends on where it was put. This is
- * the dock's answer, and it is the same `height: 0; flex-grow: 1` every other panel in a pane uses. */
-shadernodeinspector {
+/* THE GRAPH INSPECTOR -- the tabbed frame, and what its two tabs need to fill it.
+ *
+ * A NEW ELEMENT WITH NO RULE HAS NO SIZE, and that is the whole of what went wrong here. A widget's
+ * cascade identity is its TAG, never its Java supertype, and an unregistered class's tag is its
+ * lowercased simple name -- so `ShaderGraphInspector` matched nothing and took its height from its
+ * content. `tabview` is `height: 100%`, which against an indefinite parent resolves to the content
+ * height too, so the strip drew at its natural size and `__panes__` had nothing left to grow into.
+ * The tabs appeared, correctly styled, above a permanently empty box.
+ *
+ * Same failure `Dropdown extends Button` had: it laid out at zero height until `default.css` named it.
+ * The lesson is cheap to restate and expensive to rediscover -- WHEN YOU ADD A PANEL CLASS, ADD ITS
+ * RULE IN THE SAME EDIT. ShaderGraphInspectorLayoutTest asserts on geometry rather than structure,
+ * because a structural test passes with every row present and none of them on screen. */
+shadergraphinspector {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* The two tabs. Everything they LOOK like already comes from `.__configurator-panel__` above --
+ * background, padding rhythm, scrolling -- because they ARE ConfiguratorPanels. What that rule cannot
+ * give them is a size: it is a widget rule, and how big a panel should be depends on where it was put.
+ * This is the pane's answer, and it is the same `height: 0; flex-grow: 1` every other panel uses. */
+shadernodeinspector,
+shadergraphsettingspanel {
     width: 100%;
     height: 0;
     flex-grow: 1;
