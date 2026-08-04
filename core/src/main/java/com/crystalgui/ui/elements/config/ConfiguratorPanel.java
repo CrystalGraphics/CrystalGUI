@@ -35,6 +35,22 @@ public class ConfiguratorPanel extends ScrollerView {
 
     private final Map<String, ConfigControl> controls = new LinkedHashMap<>();
 
+    /**
+     * Which groups the user has opened or closed, by title — and <b>deliberately outlives
+     * {@link #clearRows}</b>.
+     *
+     * <p>A foldout is view state: it says how you are looking at the thing rather than what the thing is,
+     * so it belongs on the same side of the line as scroll position and selection, and it must survive a
+     * rebuild. Without this, a panel bound to a selection re-collapses every group each time you click
+     * something else — you open {@code About} to read a node's type, click the next node, and it has shut
+     * itself again.</p>
+     *
+     * <p>Keyed by <b>title</b> rather than by identity, because the group object is destroyed and
+     * rebuilt; the title is the only thing that survives, and it is also what the user recognises. Two
+     * groups sharing a title in one panel would share a state, which is the correct answer anyway.</p>
+     */
+    private final Map<String, Boolean> groupCollapsed = new LinkedHashMap<>();
+
     public ConfiguratorPanel() {
         addClass(PANEL_CLASS);
     }
@@ -130,6 +146,33 @@ public class ConfiguratorPanel extends ScrollerView {
             }
         }
         controls.clear();
+    }
+
+    /**
+     * A group whose open state is <b>remembered across rebuilds</b>. Use this instead of
+     * {@code new ConfiguratorGroup(...)} in any panel that rebuilds itself.
+     *
+     * <p>{@code defaultCollapsed} applies only the first time this panel sees the title; after that the
+     * user's own answer wins. It is not added to the panel for you — a group may belong inside another
+     * group, and only the caller knows.</p>
+     *
+     * @see #groupCollapsed
+     */
+    public ConfiguratorGroup group(String title, boolean defaultCollapsed) {
+        ConfiguratorGroup group =
+                new ConfiguratorGroup(title, groupCollapsed.getOrDefault(title, defaultCollapsed));
+        group.collapsedChanged.connect(collapsed -> groupCollapsed.put(title, collapsed));
+        return group;
+    }
+
+    /** As {@link #group(String, boolean)}, starting open. */
+    public ConfiguratorGroup group(String title) {
+        return group(title, false);
+    }
+
+    /** Forgets every remembered foldout state — for a panel switching to an unrelated subject. */
+    public void forgetGroupStates() {
+        groupCollapsed.clear();
     }
 
     /** The control for an id, or null. */

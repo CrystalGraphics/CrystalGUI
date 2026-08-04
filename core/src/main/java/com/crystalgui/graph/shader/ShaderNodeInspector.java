@@ -171,21 +171,44 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
      * named, rather than hidden.</p>
      */
     private void addFieldRow(UIElement parent, NodeData data, NodeField field) {
-        UIElement control = NodeFieldBinder.buildControl(field, document(), data.id(), undo(), onChange);
-        if (!(control instanceof ConfigControl typed)) return;
-
-        String label = field.label();
         EdgeData incoming = field.isPortField()
                 ? document().edgeInto(new com.crystalgui.graph.PortRef(data.id(), field.portId()))
                 : null;
         if (incoming != null) {
-            typed.setEnabled(false);
-            NodeData source = document().node(incoming.from().nodeId());
-            NodeType sourceType = source == null ? null : library.get(source.typeId());
-            label = field.label() + "  ← " + (sourceType == null
-                    ? incoming.from().nodeId() : sourceType.label()) + "." + incoming.from().portId();
+            addConnectedRow(parent, field, incoming);
+            return;
         }
-        addRow(parent, label, field.id(), typed);
+        UIElement control = NodeFieldBinder.buildControl(field, document(), data.id(), undo(), onChange);
+        if (control instanceof ConfigControl typed) addRow(parent, field.label(), field.id(), typed);
+    }
+
+    /**
+     * A port that something is wired into: the row says <em>what</em> is wired into it.
+     *
+     * <h3>The source goes in the CONTROL column, never in the label</h3>
+     * <p>It was in the label, appended after the field name, and it truncated to {@code Multiply.O…} on
+     * every connected port. The label column is deliberately a fixed 114px — that is what gives a stack of
+     * unlike controls a common left edge, and widening it for this one row would ragged-edge every panel
+     * in the engine. The control column is already wide, already flexible, and already the place a row
+     * puts its <em>value</em> — and for a connected port the source IS the value.</p>
+     *
+     * <p>The field's own widget is dropped rather than disabled, because it would be showing a literal
+     * that nothing reads. A colour swatch under a live wire is not "the current value greyed out", it is
+     * a value that has been overridden and is no longer true of anything.</p>
+     *
+     * <p>Spelled {@code from Multiply.Out}, not with an arrow: the bundled Minecraft fonts have no
+     * U+2190, so the arrow drew as a blank advance — the same gap that makes {@code UIText} fall back
+     * from {@code …} to {@code ...} for its ellipsis.</p>
+     */
+    private void addConnectedRow(UIElement parent, NodeField field, EdgeData incoming) {
+        NodeData source = document().node(incoming.from().nodeId());
+        NodeType sourceType = source == null ? null : library.get(source.typeId());
+        String from = (sourceType == null ? incoming.from().nodeId() : sourceType.label())
+                + "." + incoming.from().portId();
+
+        Configurator row = addTo(parent, ConfigDescriptor.text(field.id(), field.label())
+                .tooltip("Driven by " + from + ", so this port's own value is unused."), "from " + from);
+        if (row != null) row.control().setEnabled(false);
     }
 
     /**
@@ -196,7 +219,7 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
      * node that is.</p>
      */
     private void addAbout(NodeData data, @Nullable NodeType type) {
-        ConfiguratorGroup about = new ConfiguratorGroup("About", true);
+        ConfiguratorGroup about = group("About", true);
         addChild(about);
         readOnly(about, "Type", data.typeId());
         if (type != null && !type.category().isEmpty()) readOnly(about, "Category", type.category());
@@ -258,7 +281,7 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
             if (data != null) byType.merge(data.typeId(), 1, Integer::sum);
         }
         if (byType.size() != 1) {
-            ConfiguratorGroup group = new ConfiguratorGroup("Selection", true);
+            ConfiguratorGroup group = group("Selection", true);
             addChild(group);
             for (Map.Entry<String, Integer> entry : byType.entrySet()) {
                 NodeType type = library.get(entry.getKey());
