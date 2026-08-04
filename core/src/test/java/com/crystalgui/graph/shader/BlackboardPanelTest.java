@@ -182,6 +182,60 @@ public class BlackboardPanelTest extends UiTestBase {
         assertTrue(board.pillFor(tint.id()).isSelected());
     }
 
+    /**
+     * <b>A refresh REPLACES the list; it must never append to it.</b>
+     *
+     * <p>{@code clearAllChildren()} deliberately skips internal children and a {@link PropertyPill} marks
+     * itself internal — so the clear removed nothing and every refresh stacked another copy of the list.
+     * On screen the empty placeholder appeared twice, then three times. The identical bug
+     * {@code ConfiguratorPanel.clearRows} already records, hit again by a second panel, which is why this
+     * one removes what it added rather than asking for a sweep.</p>
+     */
+    @Test
+    public void refreshingReplacesTheListRatherThanAppending() {
+        mount();
+        UIElement list = board.pills().isEmpty() ? null : board.pills().get(0).getParent();
+
+        board.refresh();
+        board.refresh();
+        board.refresh();
+        assertEquals("the empty placeholder must appear once, not once per refresh",
+                1, countBodyChildren());
+
+        board.addProperty("Float");
+        board.addProperty("Color");
+        int withTwo = countBodyChildren();
+        assertEquals("two properties, two rows", 2, withTwo);
+
+        board.refresh();
+        board.refresh();
+        assertEquals("and refreshing does not grow it", withTwo, countBodyChildren());
+    }
+
+    /** Removing the last property puts the placeholder back exactly once. */
+    @Test
+    public void theEmptyPlaceholderComesAndGoesCleanly() {
+        mount();
+        board.addProperty("Float");
+        assertEquals(1, countBodyChildren());
+        board.removeSelected();
+        assertEquals("one placeholder, not a placeholder beside a stale row", 1, countBodyChildren());
+    }
+
+    /** Whatever the body is, count everything in it — pills are internal, the placeholder is not. */
+    private int countBodyChildren() {
+        UIElement body = null;
+        for (UIElement child : board.getChildren()) {
+            if (child.hasClass(BlackboardPanel.BODY_CLASS)) body = child;
+        }
+        assertNotNull("the panel must have a body", body);
+        int found = 0;
+        for (UIElement child : body.getChildren()) {
+            if (child instanceof PropertyPill || child.hasClass("__empty__")) found++;
+        }
+        return found;
+    }
+
     // ── Selection ───────────────────────────────────────────────────────────
 
     /** Selecting emits, and clearing emits too — a listener has to be able to hide the form. */

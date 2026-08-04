@@ -128,6 +128,10 @@ public class BlackboardPanel extends UIElement {
 
     private final CanvasOverlayMove move;
 
+    /** The placeholder, held so a rebuild can take it away again. @see #refresh */
+    @Nullable
+    private UIText emptyMessage;
+
     @Nullable
     private String selectedId;
 
@@ -206,8 +210,17 @@ public class BlackboardPanel extends UIElement {
      * a rebuild does not lose it — which matters, since every edit to the selected property triggers one.</p>
      */
     public void refresh() {
-        body.clearAllChildren();
+        // Removed BY REFERENCE, never with clearAllChildren(): a PropertyPill calls markAsInternal() on
+        // itself -- it is an assembled widget whose parts nothing should walk into -- and
+        // clearAllChildren deliberately skips internal children. So the clear removed nothing and every
+        // refresh stacked another copy of the list. Exactly the bug ConfiguratorPanel.clearRows already
+        // records, hit a second time by a second panel, which is why this one removes what it added.
+        for (PropertyPill pill : pills) body.removeInternalChild(pill);
         pills.clear();
+        if (emptyMessage != null) {
+            body.removeChild(emptyMessage);
+            emptyMessage = null;
+        }
 
         for (GraphProperty property : document.properties()) {
             PropertyPill pill = new PropertyPill(property);
@@ -219,10 +232,10 @@ public class BlackboardPanel extends UIElement {
             body.addChild(pill);
         }
         if (pills.isEmpty()) {
-            UIText empty = new UIText(EMPTY_MESSAGE);
-            empty.addClass("__empty__");
-            empty.setHitTest(false);
-            body.addChild(empty);
+            emptyMessage = new UIText(EMPTY_MESSAGE);
+            emptyMessage.addClass("__empty__");
+            emptyMessage.setHitTest(false);
+            body.addChild(emptyMessage);
         }
         // The selected property may have been deleted by whatever triggered this.
         if (selectedId != null && document.property(selectedId) == null) select(null);
