@@ -143,6 +143,42 @@ public class ScrubUndoTest extends UiTestBase {
         assertEquals("undo must land on the value the drag started from", before, stored());
     }
 
+    /**
+     * <b>A scrub must not be absorbed by the edit before it.</b>
+     *
+     * <p>The mirror of the test below, and the harder direction. {@code mergeRunOpen} is true after
+     * <em>any</em> push, so a gesture starting right after an ordinary edit inherited that run — and when
+     * the earlier edit touched the same node and field, which is the natural order (type a value, then
+     * drag it), {@code SetNodeFieldEdit.mergeWith} accepted and swallowed the whole drag.</p>
+     *
+     * <p>The symptom was that Ctrl+Z appeared to undo <em>something earlier</em> rather than the scrub:
+     * one merged entry whose {@code before} came from before the typing. Nothing about the scrub looked
+     * wrong — the edit existed, the stack was reachable, and the depth was even plausible.</p>
+     */
+    @Test
+    public void aScrubDoesNotMergeIntoTheEditBeforeIt() {
+        mount();
+        String original = stored();
+
+        // An ordinary edit first — typed, not dragged, so no gesture brackets it.
+        undo.execute(SetNodeFieldEdit.of(document, nodeId, "Scale", "7.0"));
+        assertEquals(1, undo.undoDepth());
+        String afterTyping = stored();
+
+        press();
+        moveBy(60f);
+        release(60f);
+
+        assertEquals("the scrub is its own step, not an addendum to the typing", 2, undo.undoDepth());
+
+        undo.undo();
+        assertEquals("undoing the scrub must land on the typed value, not on what preceded it",
+                afterTyping, stored());
+
+        undo.undo();
+        assertEquals("and the step before it is still the typing", original, stored());
+    }
+
     /** The gesture must also close, or the NEXT unrelated edit is folded into the scrub's step. */
     @Test
     public void theNextEditAfterAScrubIsItsOwnStep() {

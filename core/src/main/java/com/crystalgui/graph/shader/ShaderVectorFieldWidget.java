@@ -35,6 +35,10 @@ public final class ShaderVectorFieldWidget {
     /** Registers the control for vector fields. Idempotent. */
     public static void install() {
         NodeFieldWidgets.register(NodeField.Kind.VECTOR, ShaderVectorFieldWidget::build);
+        // The inverse — see ShaderColorFieldWidget.install for why every kind needs one.
+        NodeFieldWidgets.registerApplier(NodeField.Kind.VECTOR, (control, field, value) -> {
+            if (control instanceof VectorControl vector) vector.setValue(parse(field.resolve(value)));
+        });
     }
 
     private static UIElement build(NodeField field, String value, Consumer<String> onChange) {

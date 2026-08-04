@@ -372,6 +372,18 @@ public final class UndoStack {
      * unaffected by this, and correctly so.</p>
      */
     public void beginMergeRun() {
+        // A gesture starts its OWN step. Closing the current run first is the whole of that, and leaving
+        // it out is subtly wrong in a way that reads as undo being broken rather than as merging being
+        // over-eager:
+        //
+        // `mergeRunOpen` is true after ANY push, so a gesture beginning right after an ordinary edit
+        // inherited that run. If the previous edit touched the SAME node and field — typing a value and
+        // then scrubbing it, which is the natural order — `SetNodeFieldEdit.mergeWith` accepted, and the
+        // whole drag was absorbed into the earlier entry. Ctrl+Z then reverted BOTH, landing on the value
+        // from before the typing: "undo does not undo the scrub, it undoes something earlier".
+        //
+        // Only when the run is not already held, or a nested begin would break its own outer gesture.
+        if (mergeRunHolds == 0) mergeRunOpen = false;
         mergeRunHolds++;
     }
 
