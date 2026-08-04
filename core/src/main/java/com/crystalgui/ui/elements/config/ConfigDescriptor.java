@@ -68,7 +68,16 @@ public final class ConfigDescriptor {
          * self-labelling {@link ConfigControl} rather than special-cased in {@link ConfiguratorPanel}, so
          * it goes through the same registry, row and kit-height machinery every other kind does.</p>
          */
-        HEADER
+        HEADER,
+        /**
+         * Structure, not a value: a read-only <b>fact</b> — a label and some text, with no input chrome.
+         *
+         * <p>A node's id, its resolved port types, a compile's error count. The second non-value kind
+         * after {@link #HEADER}, and it exists because the obvious alternative does not work: a disabled
+         * {@link #TEXT} row still draws a sunken box that says "type here", and disabling the wrapper
+         * never reached the text field inside it, so those rows stayed genuinely editable.</p>
+         */
+        INFO
     }
 
     /** An inclusive numeric range. {@code null} anywhere means "no bound stated". */
@@ -140,6 +149,11 @@ public final class ConfigDescriptor {
 
     public static ConfigDescriptor header(String label) {
         return of(label, label, Kind.HEADER);
+    }
+
+    /** A read-only fact — label on the left, text on the right, nothing to type into. @see Kind#INFO */
+    public static ConfigDescriptor info(String id, String label) {
+        return of(id, label, Kind.INFO);
     }
 
     // ── Reads ───────────────────────────────────────────────────────────────

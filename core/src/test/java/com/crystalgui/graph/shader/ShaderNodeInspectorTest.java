@@ -9,6 +9,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.config.ConfigControl;
 import com.crystalgui.ui.elements.config.ConfiguratorGroup;
+import com.crystalgui.ui.elements.config.control.InfoControl;
 import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.ui.elements.graph.GraphView;
 import com.crystalgui.ui.elements.graph.NodeWidgetFactory;
@@ -235,6 +236,67 @@ public class ShaderNodeInspectorTest extends UiTestBase {
         return null;
     }
 
+    /**
+     * <b>A fact is not a field.</b>
+     *
+     * <p>The About rows and the connected-port rows were disabled {@code TEXT} controls, which failed
+     * twice over: they drew the full sunken input chrome, and {@code setEnabled(false)} on the wrapper
+     * never reached the {@code TextField} inside — so a node's id and its resolved port types really were
+     * editable. Typing into one changed nothing, which is the worst of both: it invites an edit and then
+     * discards it.</p>
+     *
+     * <p>Asserts {@code consumesTextInput()}, because that is the property that actually matters — a
+     * control which does not consume text has no caret and no way to receive a keystroke, whatever it
+     * looks like.</p>
+     */
+    @Test
+    public void factsAreNotEditable() {
+        mount();
+        GraphNode colour = add("cg:Input/Basic/color", 0f, 0f);
+        graph.getSelection().selectOnly(colour);
+
+        ConfigControl typeRow = inspector.control("Type");
+        assertNotNull("the About group must state the node's type", typeRow);
+        assertTrue("a fact must be an InfoControl, not a text box", typeRow instanceof InfoControl);
+        assertFalse("and it must not take typing", consumesText(typeRow));
+    }
+
+    /** A connected port names its source, and that is a fact too — not something to type over. */
+    @Test
+    public void aConnectedPortNamesItsSourceAsAFact() {
+        mount();
+        GraphNode colour = add("cg:Input/Basic/color", 0f, 0f);
+        GraphNode multiply = add("cg:Math/Basic/multiply", 240f, 0f);
+        graph.connect(colour.getOutputPorts().get(0), multiply.getInputPorts().get(0));
+        graph.getSelection().selectOnly(multiply);
+
+        ConfigControl connected = inspector.control(multiply.getInputPorts().get(0).getPortId());
+        assertNotNull("the row must still be there", connected);
+        assertTrue(connected instanceof InfoControl);
+        assertFalse(consumesText(connected));
+        assertTrue("it must say what drives it",
+                String.valueOf(connected.getValueObject()).contains("Color"));
+    }
+
+    /** But a fact stays writable PROGRAMMATICALLY — the compile stats change on every emit. */
+    @Test
+    public void aFactCanStillBeRefreshedInPlace() {
+        mount();
+        graph.getSelection().selectOnly(add("cg:Input/Basic/color", 0f, 0f));
+        ConfigControl typeRow = inspector.control("Type");
+        typeRow.setValueObject("something else");
+        assertEquals("something else", typeRow.getValueObject());
+    }
+
+    /** Nothing in the subtree takes text input — a control is only read-only if none of its parts is not. */
+    private boolean consumesText(UIElement element) {
+        if (element.consumesTextInput()) return true;
+        for (UIElement child : element.getChildren()) {
+            if (consumesText(child)) return true;
+        }
+        return false;
+    }
+
     /** A genuinely different selection does rebuild. */
     @Test
     public void aDifferentSelectionRebuilds() {
@@ -277,9 +339,17 @@ public class ShaderNodeInspectorTest extends UiTestBase {
         assertEquals("and Ctrl+Z must reach it", before, storedValueFor(node, control));
     }
 
-    /** A connected port keeps its row, disabled — see the class note on why it does not vanish. */
+    /**
+     * A connected port keeps its row — see the class note on why it does not vanish — and the port beside
+     * it stays a live editor.
+     *
+     * <p>What "not editable" means here changed once facts became {@link InfoControl}s: the row is not a
+     * disabled field, it is not a field. {@link #aConnectedPortNamesItsSourceAsAFact} asserts that half;
+     * this one is about the PAIR, because the failure worth catching is a rule that accidentally applies
+     * to every port rather than only the connected one.</p>
+     */
     @Test
-    public void aConnectedPortKeepsItsRowDisabled() {
+    public void aConnectedPortKeepsItsRowAndItsNeighbourStaysEditable() {
         mount();
         GraphNode colour = add("cg:Input/Basic/color", 0f, 0f);
         GraphNode multiply = add("cg:Math/Basic/multiply", 240f, 0f);
@@ -290,11 +360,12 @@ public class ShaderNodeInspectorTest extends UiTestBase {
         ConfigControl connected = inspector.control(multiply.getInputPorts().get(0).getPortId());
         assertNotNull("the row must still be there — a vanished control looks like one that never was",
                 connected);
-        assertFalse("but it must not be editable, because the literal is unused", connected.isEnabled());
+        assertTrue("and it is a fact, not a field", connected instanceof InfoControl);
 
         ConfigControl free = inspector.control(multiply.getInputPorts().get(1).getPortId());
         assertNotNull(free);
-        assertTrue("the unconnected one stays live", free.isEnabled());
+        assertFalse("the unconnected one is still a real editor", free instanceof InfoControl);
+        assertTrue("and still live", free.isEnabled());
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

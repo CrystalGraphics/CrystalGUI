@@ -3078,6 +3078,30 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     text-overflow: ellipsis;
 }
 
+/* A FACT, not a field. `InfoControl` deliberately has no background and no border: the input chrome is
+ * what says "type here", and a row that looks typeable while silently discarding what you type is worse
+ * than one that never offered. It keeps the kit's height so a panel mixing facts and fields stays on one
+ * rhythm, and `--cfg-value-text` rather than the label colour, because it IS the row's value. */
+.__configurator__ > .__inline__ > .__config-control__.__info__ {
+    flex-direction: row;
+    align-items: center;
+    height: var(--cfg-ctrl-h);
+    min-height: var(--cfg-ctrl-h);
+}
+/* Ellipsizes rather than wrapping. A resolved port list ("Position(vec3), BaseColor(vec3), ...") is
+ * genuinely longer than any column, and a fact that reflowed the row would push every row below it
+ * around as the selection changed. The tooltip carries the full text. */
+.__config-control__.__info__ .__value__ {
+    font-size: var(--cfg-font);
+    color: var(--cfg-value-text);
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* ── Arrays ─────────────────────────────────────────────────────────────────────────────────────
  * Header, body, and the +/- pair at the BOTTOM RIGHT — Unity's arrangement in every list it draws. */
 .__config-control__.__array__ { flex-direction: column; }
