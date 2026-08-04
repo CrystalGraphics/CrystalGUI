@@ -68,7 +68,9 @@ public final class InputDialog {
         dialog.getContent().addChild(buttons(dialog, "OK", accept));
         field.onSubmit.connect(value -> accept.run());
 
-        window.ui.rootElement.addChild(dialog);
+        // addOverlay, never rootElement.addChild: the root may refuse public children. See
+        // UIWindow.overlayHost -- this exact line threw on right-click > New > File.
+        window.addOverlay(dialog, from);
         dialog.showModal();
         // FOCUSED and SELECTED, so typing replaces the old name. A rename prompt that opens with the
         // caret at one end makes the commonest case -- replace the whole name -- start with a select-all
@@ -94,7 +96,7 @@ public final class InputDialog {
             onConfirm.run();
         }));
 
-        window.ui.rootElement.addChild(dialog);
+        window.addOverlay(dialog, from);
         dialog.showModal();
     }
 

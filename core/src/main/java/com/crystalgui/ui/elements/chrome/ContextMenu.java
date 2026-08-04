@@ -211,7 +211,7 @@ public final class ContextMenu {
             // out of the mouse-down dispatch. See Popover.hostFor.
             // Resolved from the ATTACHMENT SITE, not the clicked element: `on` is always in the tree,
             // while a target can be anything the pointer happened to be over.
-            UIElement host = Popover.hostFor(window, on);
+            UIElement host = window.overlayHost(on);
             collect(menu, live);
             for (Menu open : live) host.addChild(open);
             // Dropped from the tree when the ROOT closes by any route -- light dismiss, Escape, or

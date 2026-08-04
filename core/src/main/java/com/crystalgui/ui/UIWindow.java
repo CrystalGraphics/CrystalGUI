@@ -164,6 +164,42 @@ public final class UIWindow {
         calculateLayout();
     }
 
+    /**
+     * Where an overlay — a menu, a dialog, a toast — may legally be parented, near {@code near}.
+     *
+     * <p><b>{@code ui.rootElement} is not the answer, and assuming it was is a bug this codebase hit five
+     * times in one afternoon.</b> A promoted element must be in the tree before it can be promoted, so
+     * every overlay has to be parented first — and the obvious place to put it is the root. That works
+     * right up until the root is a composite: {@code CrystalEditor} returns
+     * {@code acceptsPublicChildren() == false}, and every one of those five call sites threw
+     * {@code UnsupportedOperationException} from wherever it happened to be standing.</p>
+     *
+     * <p>The nearest ancestor that accepts children is the better answer rather than merely a working one.
+     * Promotion reparents the Taffy node to the root anyway, so the DOM parent decides only cascade
+     * inheritance and lifetime — and an overlay inherits the colours of the panel it belongs to, and goes
+     * away when that panel does.</p>
+     *
+     * @param near where the overlay belongs, usually what was clicked. Null means window-level, which is
+     *             right for a command palette and wrong for a context menu
+     */
+    public UIElement overlayHost(@Nullable UIElement near) {
+        for (UIElement element = near; element != null; element = element.getParent()) {
+            if (element.acceptsPublicChildren()) return element;
+        }
+        return ui.rootElement;
+    }
+
+    /**
+     * Parents an overlay somewhere legal and returns it.
+     *
+     * <p>Use this rather than {@code addChild} for anything that will be promoted. {@code OverlayHostTest}
+     * enforces that nothing in {@code core/} reaches for {@code rootElement.addChild} instead.</p>
+     */
+    public <T extends UIElement> T addOverlay(T overlay, @Nullable UIElement near) {
+        if (overlay.getParent() == null) overlayHost(near).addChild(overlay);
+        return overlay;
+    }
+
     /** The root's declared width/height, or {@code auto} when unset. */
     private TaffyDimension rootDimension(StyleProperty<TaffyDimension> property) {
         return Optional.ofNullable(ui.rootElement.getStyle().computeCandidate(property))
