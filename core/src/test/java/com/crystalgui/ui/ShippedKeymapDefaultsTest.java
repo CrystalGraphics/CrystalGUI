@@ -78,6 +78,35 @@ public class ShippedKeymapDefaultsTest {
         assertEquals(KeyStroke.parse("Back"), KeyStroke.parse("Backspace"));
     }
 
+    /**
+     * An accelerator renders under the name printed on the key, not the one LWJGL2 used.
+     *
+     * <p>The parsing half of this leak was fixed twice; the <b>display</b> half was still live and only
+     * became visible once something rendered accelerators. The command palette did, and listed real
+     * bindings as {@code Ctrl+NEXT}, {@code Ctrl+PRIOR} and {@code Ctrl+Shift+BACKSLASH} — correct
+     * strokes under names nobody can act on, in the column that exists precisely to teach the shortcut.</p>
+     */
+    @Test
+    public void acceleratorsRenderUnderTheNameOnTheKey() {
+        assertEquals("Ctrl+PageDown", KeyStroke.parse("Ctrl+PageDown").toString());
+        assertEquals("Ctrl+PageUp", KeyStroke.parse("Ctrl+PgUp").toString());
+        assertEquals("Ctrl+Shift+\\", KeyStroke.parse("Mod+Shift+Backslash").toString());
+        assertEquals("Backspace", KeyStroke.parse("Back").toString());
+        assertEquals("Enter", KeyStroke.parse("Return").toString());
+    }
+
+    /** Whatever {@code toString} prints must parse back to the same stroke — otherwise a keymap file
+     * written from a rendered accelerator names a key the parser rejects. */
+    @Test
+    public void everyRenderedAcceleratorParsesBackToItself() {
+        for (String chord : new String[]{"Mod+PageDown", "Mod+PageUp", "Mod+Shift+Backslash",
+                "Mod+Backslash", "Back", "Return", "Escape", "Space", "Tab", "Mod+Minus"}) {
+            KeyStroke original = KeyStroke.parse(chord);
+            assertEquals("'" + original + "' does not parse back to itself",
+                    original, KeyStroke.parse(original.toString()));
+        }
+    }
+
     /** An alias must resolve to something — a null value would silently vanish from the table. */
     @Test
     public void everyAliasResolves() {

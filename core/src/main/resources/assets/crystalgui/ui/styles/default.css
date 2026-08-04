@@ -3232,3 +3232,192 @@ dockgroup.__empty__ {
 dockgroup.__empty__ .__strip__ {
     opacity: 0.5;
 }
+
+/* ── Quick pick / command palette ──────────────────────────────────────────────────────────────
+ *
+ * left/top/width are written from Java at IMPORTANT origin by QuickPick.reposition(), because they are
+ * computed from the window rather than authored. Everything else belongs here, per the widget rule.
+ */
+quickpick {
+    background: #252526;
+    outline-width: 1px;
+    outline-color: #454545;
+    padding-all: 4px;
+}
+
+quickpick .__content__ {
+    flex-direction: column;
+}
+
+quickpick .__search__ {
+    margin-bottom: 4px;
+}
+
+/* AUTO, not SCROLL: SCROLL draws both bars unconditionally, which put a horizontal scrollbar across a
+ * one-row palette that had nothing to scroll. Height is written from Java -- min(rows, 12) * row
+ * height -- and deliberately NOT flex-grow. A popover
+ * sizes to its own content, so there is no free space for a grow to claim and the list would resolve to
+ * zero: a search box with nothing under it. See QuickPick.sizeListToContent. */
+quickpick .__results__ {
+    overflow: auto;
+}
+
+/* Paired with QuickPick.ROW_HEIGHT -- a virtualised list needs its row height in Java to map an index to
+ * a scroll offset, and the two must agree or rows drift from the boxes drawn for them. */
+quickpick .__row__ {
+    flex-direction: row;
+    align-items: center;
+    height: 22px;
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
+quickpick .__row__.__selected__ {
+    background-color: #04395E;
+}
+
+/* Listed but not choosable. Dimmed rather than hidden: hiding is VS Code's rule and it does not survive
+ * enablement predicates that walk up from the focused element, which answer "no" to everything when
+ * nothing is focused. IntelliJ's Find Action dims instead, and that is what this is. */
+quickpick .__row__.__qp-disabled__ {
+    opacity: 0.4;
+}
+
+/* Dimmer than the label, so "Dock: " reads as provenance rather than as part of the name. */
+quickpick .__qp-category__ {
+    color: #9D9D9D;
+}
+
+quickpick .__qp-label__ {
+    color: #CCCCCC;
+}
+
+quickpick .__qp-spacer__ {
+    flex-grow: 1;
+}
+
+quickpick .__qp-accelerator__ {
+    color: #8A8A8A;
+}
+
+/* Which characters the query matched. Java says WHERE (QuickPickEntry's ranges); this says how it
+ * looks -- the whole point of the Custom Highlight API. */
+quickpick ::highlight(quickpick-match) {
+    color: #2AAAFF;
+}
+
+/* ── Diagnostics ───────────────────────────────────────────────────────────────────────────────
+ *
+ * Java says WHERE (SquigglesPart places a band per view line); this says what a severity looks like.
+ * A new severity is a rule here, not a recompile -- the same split the node graph's port palette uses.
+ * HINT is absent on purpose: it draws no band at all, so a style suggestion cannot be mistaken for a
+ * compile error. See DiagnosticSeverity.
+ */
+.__squiggle__ {
+    z-index: -1;
+}
+
+.__squiggle-error__ {
+    background-color: #F14C4C;
+}
+
+.__squiggle-warning__ {
+    background-color: #CCA700;
+}
+
+.__squiggle-information__ {
+    background-color: #3794FF;
+}
+
+/* The error stripe — marks in the vertical scrollbar's groove, one per problem in the WHOLE document.
+ *
+ * ABOVE the thumb, not below. Under it these vanish for exactly the documents where the stripe matters
+ * least to lose them: a file that mostly fits gives a thumb covering most of the groove, so most marks
+ * are hidden -- observed with only two of four visible. IntelliJ dodges this by giving the stripe its own
+ * lane beside the scrollbar; VS Code draws the ruler over a translucent slider. A 1.2%-tall mark over a
+ * solid thumb is the cheaper version of the second and costs the thumb nothing readable. */
+.__error-stripe__ {
+    z-index: 1;
+    opacity: 0.85;
+}
+
+.__error-stripe-error__ {
+    background-color: #F14C4C;
+}
+
+.__error-stripe-warning__ {
+    background-color: #CCA700;
+}
+
+.__error-stripe-information__ {
+    background-color: #3794FF;
+}
+
+/* The inspection widget — the problem readout in the editor's top-right corner.
+ * Position is written from Java (right/top insets, content-sized); everything else is here. */
+.__inspection__ {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 6px;
+    padding-right: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    background: #2D2D2DE0;
+    border-radius: 3px;
+    z-index: 2;
+}
+
+.__inspection-status__ {
+    font-size: 7px;
+    margin-right: 4px;
+}
+
+.__inspection-clean__ .__inspection-status__ { color: #6A9955; }
+.__inspection-errors__ .__inspection-status__ { color: #F14C4C; }
+.__inspection-warnings__ .__inspection-status__ { color: #CCA700; }
+
+/* Drawn shapes, never glyphs: MinecraftRegular.otf has no U+25B2/U+25BC and a missing glyph renders as
+ * a blank advance, so a text arrow would be an empty button that reads as a layout bug. */
+.__inspection-previous__, .__inspection-next__ {
+    width: 11px;
+    height: 11px;
+    background: none;
+    overlay-fit: contain;
+}
+
+.__inspection-previous__ { overlay: shape("triangle-up"); }
+.__inspection-next__ { overlay: shape("triangle-down"); }
+
+.__inspection-previous__:disabled, .__inspection-next__:disabled {
+    opacity: 0.3;
+}
+
+/* The Problems panel. Sized by its dock pane, so it only has to fill it. */
+problemspanel {
+    flex-grow: 1;
+    background: #1E1E1E;
+}
+
+problemspanel .__content__ {
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+/* Stacked, not swapped: the table and the empty state occupy the same box and cross-fade on opacity, so
+ * neither one's arrival resizes the panel. */
+problemspanel .__problems-table__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+}
+
+problemspanel .__problems-empty__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding-all: 8px;
+    color: #8A8A8A;
+}

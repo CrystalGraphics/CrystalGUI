@@ -88,6 +88,10 @@ public class DockGroup extends UIElement {
         setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
 
         tabs.attachListener(tab -> {
+            // ONLY a user's selection writes back. See the field's note: the strip emits selections while
+            // it is being rebuilt FROM the model, and taking those as input overwrites the very value the
+            // rebuild is trying to display.
+            if (syncing) return;
             DockPanelRef panel = panelOf(tab);
             if (panel != null) {
                 leaf.activate(panel);
@@ -140,20 +144,45 @@ public class DockGroup extends UIElement {
      * did. That distinction is the whole reason this is not simply "clear and re-add": a widget must never
      * rebuild the elements it is being clicked or dragged on, and selecting a tab is a click on a tab.</p>
      */
+    /**
+     * True while the strip is being brought into line with the leaf — the model→view direction.
+     *
+     * <p><b>The write-back listener must not fire during this.</b> {@code TabView} emits
+     * {@code onTabSelected} whenever its selection changes, and a rebuild changes it repeatedly for
+     * reasons that have nothing to do with the user: {@code clearTabs()} removes tabs one at a time and
+     * each removal promotes a survivor, then the first {@code addTab} selects itself because nothing is
+     * selected yet. Every one of those was being written straight back into {@code leaf.activate(...)}.</p>
+     *
+     * <p>So the model's selection was destroyed by the act of displaying it, and {@code sync()} then
+     * faithfully showed the corrupted value. The symptom was a <b>one-step lag</b>: open a file and the
+     * <em>previously</em> opened tab is the one that looks selected. Every part in isolation was correct —
+     * {@code DockLeaf.add} activates what it inserts, {@code TabView.selectTab} is exclusive, and the
+     * computed styles tracked the model exactly — which is why this survived the suite: nothing tested the
+     * two directions running at once.</p>
+     */
+    private boolean syncing;
+
     void sync() {
-        List<DockPanelRef> wanted = leaf.panels();
-        if (wanted.isEmpty() != hasClass(EMPTY_CLASS)) {
-            if (wanted.isEmpty()) {
-                addClass(EMPTY_CLASS);
-            } else {
-                removeClass(EMPTY_CLASS);
+        boolean wasSyncing = syncing;
+        syncing = true;
+        try {
+            List<DockPanelRef> wanted = leaf.panels();
+            if (wanted.isEmpty() != hasClass(EMPTY_CLASS)) {
+                if (wanted.isEmpty()) {
+                    addClass(EMPTY_CLASS);
+                } else {
+                    removeClass(EMPTY_CLASS);
+                }
             }
+            if (!wanted.equals(new ArrayList<>(tabByPanel.keySet()))) {
+                rebuildStrip(wanted);
+            }
+            Tab active = tabByPanel.get(leaf.activePanel());
+            if (active != null && tabs.getSelectedTab() != active) tabs.selectTab(active);
+        } finally {
+            // Restored rather than cleared, so a nested sync cannot re-open the door on the way out.
+            syncing = wasSyncing;
         }
-        if (!wanted.equals(new ArrayList<>(tabByPanel.keySet()))) {
-            rebuildStrip(wanted);
-        }
-        Tab active = tabByPanel.get(leaf.activePanel());
-        if (active != null && tabs.getSelectedTab() != active) tabs.selectTab(active);
     }
 
     private void rebuildStrip(List<DockPanelRef> wanted) {
