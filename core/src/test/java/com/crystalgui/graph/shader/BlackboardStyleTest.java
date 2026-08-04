@@ -75,16 +75,24 @@ public class BlackboardStyleTest extends UiTestBase {
         assertEquals(236f, h(board), 0.5f);
     }
 
-    /** Both headers are the same height, from the same rule. */
+    /**
+     * Both panels have a real header, and the Blackboard's is the TALLER of the two.
+     *
+     * <p>They shared one geometry rule until the subtitle moved onto its own line; what they still share
+     * is the palette, in {@code graph.css}, which is the half that has to match. So this no longer
+     * asserts equal heights — it asserts the two-line head is genuinely taller, which is the thing that
+     * would silently stop being true if the stack collapsed back to one row.</p>
+     */
     @Test
-    public void bothHeadersMatch() {
+    public void bothPanelsHaveARealHeader() {
         mount();
         UIElement boardHead = childWithClass(board, BlackboardPanel.HEAD_CLASS);
         UIElement previewHead = childWithClass(preview, MainPreviewPanel.HEAD_CLASS);
         assertNotNull("the board must have a head", boardHead);
         assertNotNull(previewHead);
-        assertEquals("one rule, one height", h(previewHead), h(boardHead), 0.5f);
-        assertTrue("and it must not be zero-height", h(boardHead) > 4f);
+        assertTrue("neither may be zero-height", h(previewHead) > 4f && h(boardHead) > 4f);
+        assertTrue("two stacked lines must be taller than one: " + h(boardHead) + " vs " + h(previewHead),
+                h(boardHead) > h(previewHead));
     }
 
     // ── No scrollbars ───────────────────────────────────────────────────────
@@ -114,6 +122,66 @@ public class BlackboardStyleTest extends UiTestBase {
             if (child.hasClass("__empty__")) placeholders++;
         }
         assertEquals("one placeholder, not one per refresh", 1, placeholders);
+    }
+
+    /**
+     * <b>The subtitle sits UNDER the title, not beside it.</b>
+     *
+     * <p>Unity stacks the graph's name over its asset path so the pair reads as one identity; side by
+     * side they read as two unrelated labels. Asserted as geometry — the subtitle's top must be below the
+     * title's — because "is it stacked" is not answerable from structure alone once both are in a head.</p>
+     */
+    @Test
+    public void theSubtitleIsBelowTheTitle() {
+        mount();
+        UIElement head = childWithClass(board, BlackboardPanel.HEAD_CLASS);
+        assertNotNull(head);
+        UIElement titles = childWithClass(head, BlackboardPanel.TITLES_CLASS);
+        assertNotNull("the head must hold a stacked title column", titles);
+
+        UIElement title = childWithClass(titles, BlackboardPanel.TITLE_CLASS);
+        UIElement subtitle = childWithClass(titles, BlackboardPanel.SUBTITLE_CLASS);
+        assertNotNull(title);
+        assertNotNull(subtitle);
+        assertTrue("the subtitle must start below the title, not beside it",
+                subtitle.getRuntimeCache().getY() >= title.getRuntimeCache().getY()
+                        + title.getRuntimeCache().getHeight() - 0.5f);
+    }
+
+    /**
+     * <b>Selection rings the capsule, never the whole row.</b>
+     *
+     * <p>The row is the full width of the panel, so highlighting it reads as a selected table row while
+     * the thing actually selected is the chip. Asserted by outline width, since that is what draws.</p>
+     */
+    @Test
+    public void selectionRingsTheCapsuleAndNotTheRow() {
+        mount();
+        com.crystalgui.graph.GraphProperty added = board.addProperty("Vector 2");
+        for (int pass = 0; pass < 4; pass++) window.updateWithoutPainting();
+
+        PropertyPill pill = board.pillFor(added.id());
+        assertNotNull(pill);
+        assertTrue("the pill must be selected after being added", pill.isSelected());
+
+        float rowOutline = outlineWidthOf(pill);
+        float capsuleOutline = outlineWidthOf(pill.capsule());
+
+        assertTrue("the capsule must carry the ring, but had " + capsuleOutline, capsuleOutline > 0f);
+        assertEquals("and the row must not, but had " + rowOutline, 0f, rowOutline, 0.01f);
+    }
+
+    /**
+     * The computed outline width in pixels, which is what actually draws a ring.
+     *
+     * <p>{@code OUTLINE_WIDTH} is a {@code LengthPercent}, not a number — reading it as one silently
+     * yields zero for every element and makes this test pass or fail for the wrong reason.</p>
+     */
+    private static float outlineWidthOf(UIElement element) {
+        com.crystalgui.style.property.visual.border.LengthPercent width =
+                element.getStyle().getComputed(
+                        com.crystalgui.style.property.StylePropertyRegistry.OUTLINE_WIDTH);
+        return width == null ? 0f : width.value;
     }
 
     /**

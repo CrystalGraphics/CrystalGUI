@@ -3198,13 +3198,41 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     top: 16px;
 }
 
-/* The asset path, beside the title. Dim, secondary, and it must never push the title around -- so it
- * does not grow, and it is the first thing to clip. */
-.__blackboard__ > .__head__ > .__subtitle__ {
+/* THE HEAD IS TWO LINES, which is why it no longer shares the Main Preview's geometry rule above -- it
+ * still shares its PALETTE, in graph.css, which is the half that has to match. Unity stacks the graph's
+ * name over its asset path so the pair reads as one identity; side by side they read as two unrelated
+ * labels, which is what the first version looked like. */
+.__blackboard__ > .__head__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: var(--cfg-gap);
+    /* Long-hands, never `padding-all` with a var() inside -- the shorthand silently substitutes to zero,
+     * measured on this exact panel once already. */
+    padding-left: var(--cfg-pad-x);
+    padding-right: var(--cfg-pad-x);
+    padding-top: 3px;
+    padding-bottom: 3px;
     flex-grow: 0;
+    flex-shrink: 0;
+    cursor: move;
+}
+/* The stacked pair. It takes the slack so the + stays pinned right. */
+.__blackboard__ .__titles__ {
+    flex-direction: column;
+    width: 0;
+    flex-grow: 1;
     flex-shrink: 1;
+}
+.__blackboard__ .__titles__ > .__title__ {
+    font-size: var(--cfg-font);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* The asset path. Dimmer and smaller, so the two lines are a heading and its caption rather than two
+ * headings -- the colour is the theme's, in graph.css. */
+.__blackboard__ .__titles__ > .__subtitle__ {
     font-size: 8px;
-    color: #8C8C8C;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3217,11 +3245,7 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     flex-grow: 0;
     flex-shrink: 0;
     overlay: shape("plus");
-    color: #C8C8C8;
     cursor: pointer;
-}
-.__blackboard__ > .__head__ > .__add__:hover {
-    color: #FFFFFF;
 }
 
 /* `height: 0; flex-grow: 1` -- flex-shrink defaults to 0 here, so without the zero basis the list keeps
@@ -3258,12 +3282,9 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     padding-right: 6px;
     cursor: pointer;
 }
-.__property-pill__:hover {
-    background: #3E3E3E;
-}
-.__property-pill__.__selected__ {
-    background: #4A5A6A;
-}
+/* NO row-level fill or ring. Unity highlights the capsule alone, and it is the better read: the row is
+ * the full width of the panel, so filling it makes the selection look like a table row while the thing
+ * actually selected is the little chip. Both states live on `> .__capsule__` below. */
 /* The capsule is sized to its TEXT, not to the row -- that is what makes the board read as a list of
  * things rather than a table of values, and it is what gives a drag something to grab. */
 .__property-pill__ > .__capsule__ {
@@ -3276,18 +3297,23 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     padding-right: 6px;
     padding-top: 1px;
     padding-bottom: 1px;
-    background: #4E4E4E;
-    border-radius-all: 6px;
+    /* A real capsule: the radius is half the pill's height, so the ends are semicircles rather than
+     * merely soft corners. That shape is what makes the board read as a list of THINGS. */
+    border-radius-all: 7px;
+}
+/* Selection rings the capsule, and only the capsule. */
+.__property-pill__.__selected__ > .__capsule__ {
+    outline-width: 1px;
 }
 /* Exposed. The ONLY place that state is visible -- a declared-but-hidden property is otherwise
  * indistinguishable from an exposed one, and the difference does not show in the graph at all. */
+/* Round, not a square with soft corners -- at 4px a 1px radius still reads as a box. */
 .__property-pill__ .__dot__ {
     width: 4px;
     height: 4px;
     min-width: 4px;
     flex-grow: 0;
     flex-shrink: 0;
-    background: #7BD64B;
     border-radius-all: 2px;
 }
 .__property-pill__ .__name__ {
@@ -3339,8 +3365,7 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * CHILD, and that structure is the whole reason its headings sit centred: a UIText draws its glyphs from
  * its own box top, so a text element that IS the strip has nothing for `align-items` to act on and its
  * ascenders clip against the panel edge. Same tokens, same shape. */
-.__main-preview__ > .__head__,
-.__blackboard__ > .__head__ {
+.__main-preview__ > .__head__ {
     flex-direction: row;
     align-items: center;
     gap-all: var(--cfg-gap);
@@ -3359,8 +3384,7 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
 /* Ellipsis, not wrap — the configurator's own reasoning verbatim: width:0/flex-grow reserves the
  * shrink-to space, flex-shrink:1 allows it, and white-space:nowrap is what makes text-overflow mean
  * anything at all. A panel dragged narrow must clip its title, never grow a second line. */
-.__main-preview__ > .__head__ > .__title__,
-.__blackboard__ > .__head__ > .__title__ {
+.__main-preview__ > .__head__ > .__title__ {
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
