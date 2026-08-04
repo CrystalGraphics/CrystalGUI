@@ -156,6 +156,50 @@ public class Workbench extends UIElement {
         return this;
     }
 
+    /**
+     * Opens a panel in a pane of its <em>own</em>, beside the central work area.
+     *
+     * <p>{@link #openPanel} merges into the central strip, where a second panel <b>hides</b> the first —
+     * right for a second document, wrong for anything meant to be read <em>alongside</em> one. This splits
+     * instead, so both are on screen at once.</p>
+     *
+     * <p>Idempotent through the layout rather than through a flag: a panel already somewhere in the tree is
+     * activated where it is, so a host may call this freely and a pane the user has since dragged elsewhere
+     * stays where they put it.</p>
+     *
+     * @param share how much of the central area's slice the new pane takes, 0..1. Applied after the drop,
+     *              which halves the target — a split pane is a reading companion far more often than an
+     *              equal, and a caller that wanted half can say so.
+     */
+    public Workbench openPanelBeside(DockPanelRef ref, DockDropZone zone, float share) {
+        DockLeaf existing = dock.layout().leafContaining(ref);
+        if (existing != null) {
+            existing.activate(ref);
+            dock.syncGroups();
+            dock.setActiveGroup(dock.groupFor(existing));
+            return this;
+        }
+
+        DockLeaf central = centralLeaf();
+        float whole = central.size();
+        DockLeaf placed = dock.layout().drop(central, zone, new DockLeaf(ref));
+        // Ratios within a branch are all that matter, so this is correct whether drop inserted a sibling
+        // (the two weights still sum to the target's old share, leaving every other child untouched) or
+        // wrapped the target in a new branch (where the pair are the branch's only children).
+        central.size(whole * (1f - share));
+        placed.size(whole * share);
+
+        // requestRebuild, not syncGroups: the TREE changed, not just a selection. Safe here because
+        // nothing is being clicked -- this runs from a host's setup, never from inside an event on a tab.
+        //
+        // The new pane is deliberately NOT made active. It has no group yet -- the rebuild is deferred to
+        // the next frame -- so asking for one now yields null, and setting THAT sends rebuild() down its
+        // "nothing is active" path, which picks leaves.get(0): the file tree. A companion pane should not
+        // steal the work area's focus anyway.
+        dock.requestRebuild();
+        return this;
+    }
+
     // ── Files ───────────────────────────────────────────────────────────────────────────────────
 
     /** The panel reference identifying one open file — {@code path} is what makes two of them distinct. */

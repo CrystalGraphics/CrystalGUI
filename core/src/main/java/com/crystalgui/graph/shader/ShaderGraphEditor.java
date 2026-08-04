@@ -13,8 +13,8 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.editor.TextEditor;
+import com.crystalgui.ui.elements.graph.GraphCommands;
 import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.ui.elements.graph.GraphView;
 
@@ -34,6 +34,19 @@ import javax.annotation.Nullable;
  * <p>What stays with a scene is genuinely scene-shaped: buttons, hint text, and where the status line is
  * painted. Those are reported through {@link #onStatusChanged} rather than built here.</p>
  *
+ * <h3>This widget IS the canvas; {@link #source()} is a panel it owns but does not contain</h3>
+ *
+ * <p>The two used to share an internal {@code SplitView}, which is a layout decision — and layout is the
+ * <em>host's</em>, not a widget's. A host that docks its panels wants the generated GLSL to be a tab like
+ * every other tab: draggable to another pane, closable, restorable from a saved arrangement. It cannot be
+ * any of those while it is nailed beside the canvas inside one element.</p>
+ *
+ * <p>So {@code source()} hands back a {@link TextEditor} this widget keeps compiled and up to date and
+ * <b>never parents</b>. Whoever wants it on screen adds it wherever it belongs — {@code CrystalEditor}
+ * gives it a dock panel of its own titled {@code compiled_graph.shader}. A host that adds it nowhere still
+ * gets a working editor; the emit simply has no viewer, which is a legitimate configuration rather than a
+ * broken one.</p>
+ *
  * <h3>Previews attach on first layout, not on construction</h3>
  *
  * <p>{@link ShaderGraphPreviews#attach()} registers a frame ticker, so it needs a window — and at
@@ -45,13 +58,11 @@ public class ShaderGraphEditor extends UIElement {
 
     /** UNIQUE, never the shared "__content__" -- see ProjectFileTree.CONTENT_CLASS for why. */
     public static final String CONTENT_CLASS = "__shader-content__";
-    public static final String SPLIT_CLASS = "__shader-split__";
     public static final String GRAPH_CLASS = "__shader-graph__";
-    public static final String SOURCE_CLASS = "__shader-source__";
 
-    /** How much of the width the canvas takes. A generated shader is sometimes the thing you are reading
-     * and sometimes just confirmation, which is why the divider is draggable rather than fixed. */
-    private static final float GRAPH_PERCENT = 80f;
+    /** On {@link #source()}, which this widget does NOT contain — so the rule for it is tag-qualified
+     * rather than a descendant of {@code shadergrapheditor}. See the class note. */
+    public static final String SOURCE_CLASS = "__shader-source__";
 
     /** One compile's summary, or its first error — whatever a status line should say. */
     public final Signal.Value<String> onStatusChanged = new Signal.Value<>();
@@ -68,8 +79,9 @@ public class ShaderGraphEditor extends UIElement {
     private final CgMasterNode master = new CgMasterNode();
 
     private final GraphView graph = new GraphView();
+
+    /** Kept compiled and never parented — see the class note on why this widget does not contain it. */
     private final TextEditor source = new TextEditor();
-    private final SplitView split = new SplitView();
 
     /** Marked internal exactly ONCE, while empty -- see the constructor for what stamping a populated
      * subtree cost. */
@@ -88,7 +100,6 @@ public class ShaderGraphEditor extends UIElement {
     public ShaderGraphEditor() {
         graph.addClass(GRAPH_CLASS);
         source.addClass(SOURCE_CLASS);
-        split.addClass(SPLIT_CLASS);
 
         // The library IS the shader node set -- the create menu, its search and the widget factory all
         // come from one bridge call, so there is no shader-specific UI code anywhere below this line.
@@ -103,27 +114,21 @@ public class ShaderGraphEditor extends UIElement {
         source.setTokenizer(KeywordTokenizer.glsl());
         source.onSelectionChanged.connect(this::reportLineOwner);
 
-        split.setPercentage(GRAPH_PERCENT);
-        // Either pane collapsed to nothing is a state with no way back -- the divider would have no width
-        // left to grab.
-        split.setLimits(20f, 95f);
-        split.first().addChild(graph);
-        split.second().addChild(source);
-        // THE WRAPPER IS MARKED INTERNAL WHILE EMPTY; the split is an ordinary child of it.
+        // THE WRAPPER IS MARKED INTERNAL WHILE EMPTY; the graph is an ordinary child of it.
         //
-        // addInternalChild(split) would be the obvious line and it is what hung both scenes.
-        // markAsInternal() RECURSES, so it stamps the split, both panes, the GraphView, its canvas and
-        // every node and preview under them -- and removeChild/clearAllChildren SILENTLY REFUSE internal
-        // children. The previews add and retire a thumbnail per node as the graph changes, so every
-        // retirement was declined, the tree grew without bound, and layout took longer every frame until
-        // the window stopped responding. The thread dump was pure Taffy, which reads as a layout cycle
-        // and is really an unbounded tree.
+        // addInternalChild(graph) would be the obvious line and it is what hung both scenes.
+        // markAsInternal() RECURSES, so it stamps the GraphView, its canvas and every node and preview
+        // under them -- and removeChild/clearAllChildren SILENTLY REFUSE internal children. The previews
+        // add and retire a thumbnail per node as the graph changes, so every retirement was declined, the
+        // tree grew without bound, and layout took longer every frame until the window stopped
+        // responding. The thread dump was pure Taffy, which reads as a layout cycle and is really an
+        // unbounded tree.
         //
         // Same fix as QuickPick and ProblemsPanel, for the same reason, which is why the wrapper exists
         // rather than a comment saying "do not stamp this".
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
-        content.addChild(split);
+        content.addChild(graph);
 
         // A connection is a discrete user action, so this needs no debouncing; a per-keystroke trigger
         // would (6.3.8).
@@ -153,7 +158,12 @@ public class ShaderGraphEditor extends UIElement {
         return graph;
     }
 
-    /** The generated GLSL, read-only. */
+    /**
+     * The generated GLSL, read-only — <b>detached</b>, for a host to place.
+     *
+     * <p>Recompiled in place, so a caller may parent it once and never ask again. It is not a child of
+     * this widget: see the class note.</p>
+     */
     public TextEditor source() {
         return source;
     }
@@ -279,6 +289,7 @@ public class ShaderGraphEditor extends UIElement {
      */
     private boolean attachPreviews(float deltaSeconds) {
         ensureGraphTheme();
+        ensureGraphCommands();
         if (!previewsAttached) {
             previews.attach();
             previewsAttached = true;
@@ -310,6 +321,32 @@ public class ShaderGraphEditor extends UIElement {
         if (window.getStyleEngine().getSheets().contains(theme)) return;
         window.getStyleEngine().addStylesheet(theme);
     }
+
+    /**
+     * Registers {@link GraphCommands}, bound on <b>this widget</b>, once.
+     *
+     * <p><b>The widget owns them, for the same reason it owns {@code graph.css}.</b> Delete, Space to
+     * create, F to frame — those are not a host's choices, they are what a shader graph <em>is</em>, and a
+     * requirement every consumer has to remember is one that gets forgotten. It was: the gallery scene
+     * installed them and the dock never did, so in the editor the graph took focus, highlighted a
+     * selection, and answered no key at all.</p>
+     *
+     * <p><b>Bound on {@code this}, never on the window root.</b> The defaults include bare {@code A},
+     * {@code F}, {@code Space} and {@code Backspace}; a keymap resolves from the focused element upward,
+     * so binding them at the root would make typing {@code a} into any file in the dock frame the graph
+     * instead. Scoped here they exist exactly while focus is inside the graph.</p>
+     *
+     * <p>{@code register} is idempotent, and {@code Keymap.bind} overwrites rather than accumulating, so
+     * running this from the per-frame ticker costs one map lookup once the first pass has been made.</p>
+     */
+    private void ensureGraphCommands() {
+        UIWindow window = getAttachedWindow();
+        if (window == null || commandsInstalled) return;
+        GraphCommands.install(window.getCommands(), this);
+        commandsInstalled = true;
+    }
+
+    private boolean commandsInstalled;
 
     /** Releases the preview renderers' GL resources. Safe to call more than once. */
     public void delete() {

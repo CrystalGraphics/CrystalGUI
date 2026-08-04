@@ -3471,44 +3471,45 @@ problemspanel .__problems-empty__ {
 
 /* ── Shader graph editor ──
  *
- * The canvas and the GLSL it emits, side by side. Geometry only: what a node LOOKS like is graph.css's
- * job, and the syntax colours come from the texteditor rules above. */
+ * The canvas. Geometry only: what a node LOOKS like is graph.css's job, and the syntax colours for the
+ * emitted source come from the texteditor rules above.
+ *
+ * The GLSL it emits is NOT in here -- it is a panel the widget owns and does not contain, so a host can
+ * dock it wherever it likes. Its rule is the tag-qualified one below, not a descendant of this. */
 shadergrapheditor {
-    width: 100%;
-    flex-grow: 1;
-    flex-basis: 0;
-}
-
-shadergrapheditor .__shader-content__ {
-    width: 100%;
-    flex-grow: 1;
-    flex-basis: 0;
-}
-
-shadergrapheditor .__shader-split__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
 }
 
-/* height: 100%, not the `height: 0; flex-grow: 1` a column parent would want -- the split lays its panes
- * out in a ROW, where growing claims width and the cross axis is what needs filling. */
-shadergrapheditor .__shader-graph__ {
+shadergrapheditor .__shader-content__ {
     width: 100%;
-    height: 100%;
+    height: 0;
+    flex-grow: 1;
 }
 
-/* height: 300px, NOT 100%, and this is load-bearing rather than a taste.
- *
- * A TextEditor whose height comes from its parent makes scrollbar sizing circular: a bar changes the
- * viewport and the viewport decides the bar. Measured -- fixed size fine, 300px fine at ~4ms/frame,
- * `height: 100%` hangs, `height: 0; flex-grow: 1` hangs. The gallery used 300px for exactly this reason
- * and it is why that page never showed the bug. TextEditor now latches bar visibility once per pass,
- * which removes the recursion, but the hang has not been reproduced in a test -- so this stays until it
- * has been. */
-shadergrapheditor .__shader-source__ {
+/* `height: 0; flex-grow: 1` -- the content wrapper is a COLUMN, so filling it means growing on the main
+ * axis, and this engine's flex-shrink defaults to 0 so the zero basis is what makes the growth bounded.
+ * (It read `height: 100%` when a SplitView sat here and laid its panes out in a row.) */
+shadergrapheditor .__shader-graph__ {
     width: 100%;
-    height: 300px;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* THE EMITTED SOURCE, wherever its host has put it -- so this is tag-qualified rather than a descendant
+ * rule. It is a dock panel in CrystalEditor and could be anything else elsewhere.
+ *
+ * `height: 0; flex-grow: 1` is the shape that used to hang. A TextEditor whose height came from its
+ * parent made scrollbar sizing circular -- a bar changes the viewport, the viewport decides the bar --
+ * and this rule read `height: 300px` as the workaround. The real cause was elsewhere and is fixed:
+ * rebindRealisedLines re-dirtied the tree on every settled pass, so the loop had no fixed point to reach.
+ * EditorIndefiniteHeightTest pins both indefinite shapes, and UIWindow now bounds the settle loop and
+ * names the culprit rather than hanging. */
+texteditor.__shader-source__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
     font-size: 7px;
 }
 

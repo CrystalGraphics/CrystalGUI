@@ -8,6 +8,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.ChromeCommands;
 import com.crystalgui.ui.elements.dock.DockCommands;
+import com.crystalgui.ui.elements.dock.DockDropZone;
 import com.crystalgui.ui.elements.dock.DockGroup;
 import com.crystalgui.ui.elements.dock.DockLayout;
 import com.crystalgui.ui.elements.dock.DockLayoutCodec;
@@ -47,6 +48,21 @@ public class CrystalEditor extends UIElement {
     /** The node graph, as a document panel — several may be open at once. */
     public static final String SHADER_GRAPH_TYPE = "shadergraph";
 
+    /**
+     * The GLSL the graph emits, as a panel of its own.
+     *
+     * <p><b>Singleton, not a document.</b> There is one emit and it is a <em>view of</em> the graph rather
+     * than a thing you can have two of; closing it means "hide it", and opening it again must find the same
+     * editor — with its scroll position and its caret — rather than a second copy showing the same text.</p>
+     */
+    public static final String SHADER_SOURCE_TYPE = "shadersource";
+
+    /** What the tab says. A generated file still reads best as a file name. */
+    public static final String SHADER_SOURCE_TITLE = "compiled_graph.shader";
+
+    /** How much of the work area the emitted source takes when it is first opened. */
+    private static final float SOURCE_SHARE = 0.28f;
+
     /** Whatever a status line should say: an open, a save, a compile summary, or a refusal. */
     public final Signal.Value<String> onStatus = new Signal.Value<>();
 
@@ -72,7 +88,15 @@ public class CrystalEditor extends UIElement {
 
         workbench.registerPanel(DockPanelDescriptor.document(SHADER_GRAPH_TYPE, "Shader Graph"),
                 ref -> shaderGraph());
+        workbench.registerPanel(
+                DockPanelDescriptor.singleton(SHADER_SOURCE_TYPE, SHADER_SOURCE_TITLE),
+                ref -> shaderGraph().source());
         workbench.openPanel(new DockPanelRef(SHADER_GRAPH_TYPE));
+        // BESIDE the canvas, not in its strip. A tab in the same group would hide the graph, and the whole
+        // point of the emitted source is watching it change as you wire -- a panel you have to switch away
+        // from the graph to read is a panel that is never read.
+        workbench.openPanelBeside(new DockPanelRef(SHADER_SOURCE_TYPE),
+                DockDropZone.SPLIT_RIGHT, SOURCE_SHARE);
 
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);

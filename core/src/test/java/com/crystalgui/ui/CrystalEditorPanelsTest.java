@@ -1,0 +1,127 @@
+package com.crystalgui.ui;
+
+import com.crystalgui.editor.CrystalEditor;
+import com.crystalgui.fs.InMemoryFileSystem;
+import com.crystalgui.fs.ProjectRegistry;
+import com.crystalgui.fs.WorkspaceActor;
+import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.fs.WorkspacePermission;
+import com.crystalgui.fs.WorkspaceProject;
+import com.crystalgui.fs.WorkspaceRpc;
+import com.crystalgui.fs.WorkspaceService;
+import com.crystalgui.net.ClientUiSession;
+import com.crystalgui.net.InMemoryTransport;
+import com.crystalgui.net.ServerUiSession;
+import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.ui.elements.dock.DockDropZone;
+import com.crystalgui.ui.elements.dock.DockLeaf;
+import com.crystalgui.ui.elements.dock.DockPanelRef;
+import org.junit.Test;
+
+import java.nio.file.Paths;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
+
+/**
+ * Which panels the editor ships, and where they land.
+ *
+ * <h3>Asserted against the LAYOUT, not the built widgets</h3>
+ *
+ * <p>{@code DockLayout} is pure data and needs no window, which is what makes this testable at all: the
+ * built tree only exists after a frame, and a frame here attaches the shader graph's previews — which
+ * allocate an FBO per node and therefore want a GL context. Reaching for {@code updateWithoutPainting}
+ * would test the dock by way of the one thing in the tree that cannot run headlessly.</p>
+ */
+public class CrystalEditorPanelsTest extends UiTestBase {
+
+    private static WorkspaceClient<Object> client() {
+        InMemoryFileSystem files = new InMemoryFileSystem().seed("mymod.proj:src/Main.java", "class Main {}");
+        ProjectRegistry projects = new ProjectRegistry().register(() -> List.of(
+                new WorkspaceProject("mymod.proj", "My Project", Paths.get("/srv/proj"))));
+        WorkspaceService service = new WorkspaceService(projects, files, WorkspacePermission.ALLOW_ALL);
+
+        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
+        ServerUiSession<Object> server = new ServerUiSession<>(1, new UIElement(), pair[0], PlainOps.INSTANCE);
+        new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(server::onCall);
+        server.open();
+        return new WorkspaceClient<>(new ClientUiSession<>(pair[1], PlainOps.INSTANCE), PlainOps.INSTANCE);
+    }
+
+    private static DockLeaf leafOf(CrystalEditor editor, String typeId) {
+        return editor.workbench().dock().layout().leafContaining(new DockPanelRef(typeId));
+    }
+
+    /**
+     * <b>The emitted source opens beside the canvas, not on top of it.</b>
+     *
+     * <p>The two shared an internal {@code SplitView} and are now two dock panels, and the risk of that
+     * move is landing the source in the graph's own strip — where it is a tab, so exactly one of the two is
+     * ever visible. Watching the GLSL change as you wire is the entire reason it is on screen, so a panel
+     * you must switch away from the graph to read is a panel that is never read.</p>
+     *
+     * <p>Two different leaves is the observable form of "both at once", and it is what the tab-vs-pane
+     * mistake would break while every other assertion here still passed.</p>
+     */
+    @Test
+    public void theEmittedSourceGetsAPaneOfItsOwn() {
+        CrystalEditor editor = new CrystalEditor(client());
+
+        DockLeaf graph = leafOf(editor, CrystalEditor.SHADER_GRAPH_TYPE);
+        DockLeaf source = leafOf(editor, CrystalEditor.SHADER_SOURCE_TYPE);
+        assertNotNull("the shader graph did not open", graph);
+        assertNotNull("the emitted source did not open", source);
+        assertNotSame("the source is a TAB beside the graph, so only one of them is ever visible",
+                graph, source);
+        editor.workbench().dock().layout().checkInvariants();
+    }
+
+    /** The tab says what the file is. A generated shader still reads best as a file name. */
+    @Test
+    public void theSourceTabIsNamedForTheFileItIs() {
+        CrystalEditor editor = new CrystalEditor(client());
+        assertEquals("compiled_graph.shader", editor.workbench().panels()
+                .titleOf(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE)));
+    }
+
+    /**
+     * The panel IS the graph's source editor, not a copy of its text.
+     *
+     * <p>{@code DockArea} asks the registry for content on every rebuild, so a factory returning anything
+     * freshly built would hand back an empty editor after each split, drag or close — and the recompiles
+     * would go on landing in an editor nobody is looking at.</p>
+     */
+    @Test
+    public void theSourcePanelIsTheGraphsOwnEditor() {
+        CrystalEditor editor = new CrystalEditor(client());
+        UIElement built = editor.workbench().panels()
+                .create(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE));
+        assertSame(editor.shaderGraph().source(), built);
+        assertSame("a second build must not produce a second editor",
+                built, editor.workbench().panels()
+                        .create(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE)));
+    }
+
+    /**
+     * Opening an already-open panel reveals it where it is rather than splitting again.
+     *
+     * <p>Without this a menu item wired to "show the compiled source" adds a pane every time it is chosen,
+     * and each one is a legitimate leaf so nothing complains — the work area just gets narrower.</p>
+     */
+    @Test
+    public void openingItAgainRevealsItRatherThanSplittingAgain() {
+        CrystalEditor editor = new CrystalEditor(client());
+        int before = editor.workbench().dock().layout().leaves().size();
+
+        editor.workbench().openPanelBeside(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE),
+                DockDropZone.SPLIT_RIGHT, 0.28f);
+
+        assertEquals("a second open split the work area again",
+                before, editor.workbench().dock().layout().leaves().size());
+        editor.workbench().dock().layout().checkInvariants();
+    }
+}
