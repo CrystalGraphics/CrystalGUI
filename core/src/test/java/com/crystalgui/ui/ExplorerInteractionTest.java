@@ -6,6 +6,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Menu;
+import com.crystalgui.ui.elements.MenuItem;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -213,6 +214,58 @@ public class ExplorerInteractionTest extends UiTestBase {
 
         Menu after = findMenu(root);
         assertTrue("pressing the panel did not dismiss the menu", after == null || !after.isOpen());
+    }
+
+    /**
+     * <b>A submenu is attached too, and opening one does not throw.</b>
+     *
+     * <p>{@code Menu.addSubmenu} deliberately does not parent its child — {@code PopoverTest} adds both to
+     * the tree by hand — so a submenu built by {@link ContextMenu} and never attached threw
+     * {@code "A Popover must be attached to a window before it can be shown"} the moment the pointer
+     * rested on its row. From inside the submenu ticker, a frame later, with nothing in the stack a user
+     * could connect back to the right-click that caused it.</p>
+     *
+     * <p>Asserted by <b>opening</b> the submenu rather than by checking it has a parent, because "has a
+     * parent" is the implementation and "can be shown" is the contract.</p>
+     */
+    @Test
+    public void aSubmenuIsAttachedAndCanBeOpened() {
+        RefusingRoot root = new RefusingRoot();
+        UIElement panel = new UIElement().layout(l -> l.widthPercent(100f).height(0).flexGrow(1f));
+        root.content.addChild(panel);
+
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(800, 600);
+
+        CommandRegistry registry = new CommandRegistry();
+        registry.register(com.crystalgui.core.command.Command.of("test.thing", "Thing"));
+        ContextMenu.attach(panel, registry, element -> ContextMenu.builder()
+                .submenu("New", sub -> sub.item("test.thing"))
+                .item("test.thing"));
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(40, 40, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        rightClickAt(window, 40, 40, 1L);
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+
+        Menu menu = findMenu(root);
+        assertNotNull("nothing opened", menu);
+        MenuItem submenuRow = null;
+        for (MenuItem item : menu.getItems()) {
+            if (item.hasSubmenu()) submenuRow = item;
+        }
+        assertNotNull("the New row has no submenu", submenuRow);
+
+        // What the hover ticker does. This threw before the fix.
+        submenuRow.onPressed.emit();
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+
+        assertTrue("the submenu did not open", submenuRow.getSubmenu().isOpen());
+        assertTrue("the parent must survive its own submenu", menu.isOpen());
     }
 
     private static void rightClickAt(UIWindow window, int x, int y, long serial) {

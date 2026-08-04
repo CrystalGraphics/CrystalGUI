@@ -182,7 +182,12 @@ public final class ContextMenu {
         // emptied underneath it. Every extra menu widened the gap.
         //
         // Discarding the previous one is also simply what a second right-click means.
-        Menu[] live = { null };
+        // EVERY menu in the chain, root first. Menu.addSubmenu deliberately does not parent its child --
+        // PopoverTest adds both to the tree by hand -- so a submenu built here and never attached threw
+        // "A Popover must be attached to a window before it can be shown" the moment the pointer rested
+        // on its row, from inside the submenu ticker rather than from anything the user could connect to
+        // a right-click.
+        List<Menu> live = new ArrayList<>();
 
         on.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
             if (event.getButtonId() != com.crystalgraphics.platform.input.CgMouseCodes.RIGHT_BUTTON) return;
@@ -193,7 +198,7 @@ public final class ContextMenu {
             // the second right-click resolved its target inside the popup that discard() was about to
             // detach -- so both the command context and the host were computed from an element no longer
             // in the tree, and Popover.show refused it as unattached.
-            if (live[0] != null && isInside(target, live[0])) target = on;
+            if (!live.isEmpty() && isInsideAny(target, live)) target = on;
 
             discard(live);
 
@@ -206,10 +211,12 @@ public final class ContextMenu {
             // out of the mouse-down dispatch. See Popover.hostFor.
             // Resolved from the ATTACHMENT SITE, not the clicked element: `on` is always in the tree,
             // while a target can be anything the pointer happened to be over.
-            Popover.hostFor(window, on).addChild(menu);
-            live[0] = menu;
-            // Dropped from the tree when it closes by any route -- light dismiss, Escape, or choosing an
-            // item. Left in place it is an invisible display:none element that accumulates one per press.
+            UIElement host = Popover.hostFor(window, on);
+            collect(menu, live);
+            for (Menu open : live) host.addChild(open);
+            // Dropped from the tree when the ROOT closes by any route -- light dismiss, Escape, or
+            // choosing an item. Left in place they are invisible display:none elements accumulating one
+            // set per press.
             menu.onClosed.connect(() -> discard(live));
 
             // CONVERTED, and this is the whole reason the framework does it rather than each caller.
@@ -242,19 +249,30 @@ public final class ContextMenu {
      * Taffy node to its DOM parent — removing it while still promoted leaves the engine reconciling a node
      * that has been parented to the root against a DOM parent that no longer lists it.</p>
      */
-    /** Whether {@code element} is {@code ancestor} or sits beneath it. */
-    private static boolean isInside(@Nullable UIElement element, UIElement ancestor) {
+    /** Every menu in a chain, root first — a submenu needs attaching exactly as its parent does. */
+    private static void collect(Menu menu, List<Menu> out) {
+        out.add(menu);
+        for (MenuItem item : menu.getItems()) {
+            Menu sub = item.getSubmenu();
+            if (sub != null) collect(sub, out);
+        }
+    }
+
+    /** Whether {@code element} is any of {@code menus} or sits beneath one. */
+    private static boolean isInsideAny(@Nullable UIElement element, List<Menu> menus) {
         for (UIElement walk = element; walk != null; walk = walk.getParent()) {
-            if (walk == ancestor) return true;
+            if (menus.contains(walk)) return true;
         }
         return false;
     }
 
-    private static void discard(Menu[] live) {
-        Menu menu = live[0];
-        if (menu == null) return;
-        live[0] = null;                       // FIRST, so the onClosed hook below does not recurse
-        if (menu.isOpen()) menu.hide();
-        if (menu.getParent() != null) menu.getParent().removeChild(menu);
+    private static void discard(List<Menu> live) {
+        if (live.isEmpty()) return;
+        List<Menu> going = new ArrayList<>(live);
+        live.clear();                         // FIRST, so the onClosed hook below does not recurse
+        for (Menu menu : going) {
+            if (menu.isOpen()) menu.hide();
+            if (menu.getParent() != null) menu.getParent().removeChild(menu);
+        }
     }
 }
