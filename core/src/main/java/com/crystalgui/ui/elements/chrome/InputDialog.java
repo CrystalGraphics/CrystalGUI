@@ -2,8 +2,7 @@ package com.crystalgui.ui.elements.chrome;
 
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Dialog;
+import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.UIText;
 
@@ -12,26 +11,28 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 /**
- * The two modal prompts a file explorer needs: ask for a name, and confirm a destruction.
+ * The two prompts a file explorer needs: ask for a name, and confirm a destruction.
  *
- * <h3>Modal, and that is the point</h3>
+ * <h3>A popup, not a dialog — IntelliJ's shape</h3>
  *
- * <p>Both are questions with no meaningful "later". {@link Dialog#showModal} already gives the focus trap,
- * the Escape handling and the inertness of everything behind — see {@code UIElement.isInert}'s note on why
- * a modal is not simply an inherited flag — so what is left here is two small compositions rather than a
- * dialog framework.</p>
+ * <p>A caption and a field, centred in the window, and nothing else. No title bar, no close button, no OK
+ * and no Cancel. <b>Enter commits and Escape cancels</b>, which are the only two things anybody does to a
+ * name prompt and both keys the user already reaches for. Buttons that duplicate keys the popup already
+ * answers are two more things to read and one more row to lay out.</p>
  *
- * <h3>Enter commits and Escape cancels, in both</h3>
+ * <p>{@link Popover} is the base, so light dismiss, Escape and top-layer promotion all come from there —
+ * pressing anywhere outside cancels, which is a third way out that costs nothing to have.</p>
  *
- * <p>Which is worth stating because it is the half that gets forgotten: a name prompt you have to reach for
- * the mouse to accept is a name prompt that is slower than the menu that opened it. Escape is
- * {@code Dialog}'s already — it is a close watcher — so only Enter is wired here.</p>
+ * <h3>Centred, and re-centred once it has a size</h3>
+ *
+ * <p>A popup is out of flow, so its size is unknown until it has been laid out — and a prompt positioned
+ * before that lands in the top-left corner, which is exactly where the first version of this appeared. So
+ * it opens, measures, and moves itself once.</p>
  */
 public final class InputDialog {
 
     public static final String PROMPT_CLASS = "__prompt__";
-    public static final String MESSAGE_CLASS = "__prompt-message__";
-    public static final String BUTTONS_CLASS = "__prompt-buttons__";
+    public static final String CAPTION_CLASS = "__prompt-caption__";
 
     private InputDialog() {
     }
@@ -39,86 +40,93 @@ public final class InputDialog {
     /**
      * Asks for a line of text.
      *
-     * <p>{@code onAccept} runs only for a non-blank value that the user actually confirmed — a cancelled
-     * or emptied prompt reports nothing at all rather than an empty string, because every caller here
-     * would otherwise have to re-check it and one of them would forget.</p>
+     * <p>{@code onAccept} runs only for a non-blank value the user confirmed with Enter — a cancelled or
+     * emptied prompt reports nothing rather than an empty string, because every caller would otherwise
+     * have to re-check it and one of them would forget.</p>
      */
     public static void ask(@Nullable UIElement from, String title, String label, String initial,
                            Consumer<String> onAccept) {
         UIWindow window = from == null ? null : from.getAttachedWindow();
         if (window == null) return;
 
-        Dialog dialog = new Dialog(title);
-        dialog.addClass(PROMPT_CLASS);
-
-        UIText caption = new UIText(label);
-        caption.addClass(MESSAGE_CLASS);
+        Popover popup = prompt(window, from, title);
         TextField field = new TextField();
+        field.setPlaceholder(label);
         field.setText(initial);
+        popup.addChild(field);
 
-        dialog.getContent().addChild(caption);
-        dialog.getContent().addChild(field);
+        field.onSubmit.connect(value -> {
+            String name = value.trim();
+            popup.hide();
+            if (!name.isEmpty()) onAccept.accept(name);
+        });
 
-        Runnable accept = () -> {
-            String value = field.getText().trim();
-            dialog.close();
-            if (!value.isEmpty()) onAccept.accept(value);
-        };
-
-        dialog.getContent().addChild(buttons(dialog, "OK", accept));
-        field.onSubmit.connect(value -> accept.run());
-
-        // addOverlay, never rootElement.addChild: the root may refuse public children. See
-        // UIWindow.overlayHost -- this exact line threw on right-click > New > File.
-        window.addOverlay(dialog, from);
-        dialog.showModal();
-        // FOCUSED and SELECTED, so typing replaces the old name. A rename prompt that opens with the
-        // caret at one end makes the commonest case -- replace the whole name -- start with a select-all
-        // the user has to think about.
+        centre(window, popup);
+        // FOCUSED and SELECTED, so typing replaces the old name. A rename prompt that opens with the caret
+        // at one end makes the commonest case -- replace the whole name -- start with a select-all the
+        // user has to think about.
         window.getInputHandler().requestFocus(field);
         field.selectAll();
     }
 
-    /** Asks a yes/no question. {@code onConfirm} runs only on the affirmative. */
+    /**
+     * Asks a yes/no question.
+     *
+     * <p>Enter confirms and Escape cancels, same as the name prompt — so the destructive answer sits
+     * behind a deliberate key rather than a button that happens to be under the pointer.</p>
+     */
     public static void confirm(@Nullable UIElement from, String title, String message,
                                Runnable onConfirm) {
         UIWindow window = from == null ? null : from.getAttachedWindow();
         if (window == null) return;
 
-        Dialog dialog = new Dialog(title);
-        dialog.addClass(PROMPT_CLASS);
+        Popover popup = prompt(window, from, title);
 
-        UIText caption = new UIText(message);
-        caption.addClass(MESSAGE_CLASS);
-        dialog.getContent().addChild(caption);
-        dialog.getContent().addChild(buttons(dialog, "Delete", () -> {
-            dialog.close();
+        // A field carries Enter, rather than a key handler on the popover: a popup with nothing focusable
+        // in it cannot receive a key at all, and a second mechanism for what TextField already does is a
+        // second mechanism to keep in step.
+        TextField confirmKey = new TextField();
+        confirmKey.setPlaceholder(message + "  —  Enter to confirm, Escape to cancel");
+        popup.addChild(confirmKey);
+        confirmKey.onSubmit.connect(value -> {
+            popup.hide();
             onConfirm.run();
-        }));
+        });
 
-        window.addOverlay(dialog, from);
-        dialog.showModal();
+        centre(window, popup);
+        window.getInputHandler().requestFocus(confirmKey);
+    }
+
+    /** The shared shell: one caption, promoted and light-dismissable. */
+    private static Popover prompt(UIWindow window, @Nullable UIElement from, String title) {
+        Popover popup = new Popover();
+        popup.addClass(PROMPT_CLASS);
+
+        UIText caption = new UIText(title);
+        caption.addClass(CAPTION_CLASS);
+        popup.addChild(caption);
+
+        window.addOverlay(popup, from);
+        popup.showAt(0f, 0f, null);
+        return popup;
     }
 
     /**
-     * The confirm/cancel row.
+     * Puts the popup in the middle of the window, once it knows how big it is.
      *
-     * <p>Cancel is built first and the affirmative second, so the affirmative sits on the <b>right</b> —
-     * the Windows and web convention, and the one this engine's Dialog title bar already implies by
-     * putting its close button there. Consistency within one application matters more than which platform
-     * convention is chosen.</p>
+     * <p>A ticker rather than a computation at show time: {@code showAt} runs before the promoted node has
+     * ever been laid out, so width and height are both zero at that moment and centring against them puts
+     * it in the corner. This drops itself the first frame the size is real.</p>
      */
-    private static UIElement buttons(Dialog dialog, String affirmative, Runnable onAffirmative) {
-        UIElement row = new UIElement();
-        row.addClass(BUTTONS_CLASS);
-
-        Button cancel = new Button("Cancel");
-        cancel.attachListener(dialog::close);
-        Button ok = new Button(affirmative);
-        ok.attachListener(onAffirmative);
-
-        row.addChild(cancel);
-        row.addChild(ok);
-        return row;
+    private static void centre(UIWindow window, Popover popup) {
+        window.registerTicker(delta -> {
+            if (!popup.isOpen()) return false;
+            float width = popup.getRuntimeCache().getWidth();
+            float height = popup.getRuntimeCache().getHeight();
+            if (width <= 0f || height <= 0f) return true;   // not laid out yet; look again next frame
+            popup.moveTo(Math.max(0f, (window.getScreenWidth() - width) / 2f),
+                    Math.max(0f, (window.getScreenHeight() - height) / 2f));
+            return false;
+        });
     }
 }

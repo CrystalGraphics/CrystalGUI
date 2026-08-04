@@ -3180,6 +3180,163 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * `resize: both` rather than a fixed size: the whole reason to have a panel rather than a fixed
  * thumbnail is to be able to make it big enough to judge a material on. The min-* pair stops a drag
  * collapsing it to nothing, which is unrecoverable from the user's side — there is no handle left. */
+/* ── THE BLACKBOARD ──
+ * Unity reference: docs/research/unity-blackboard/. The graph's declared properties, as a floating panel
+ * over the canvas -- the SECOND consumer of the same overlay seam the Main Preview uses, which is what
+ * makes that a seam rather than a one-off.
+ *
+ * TOP-LEFT, where Unity puts it, against the Main Preview's bottom-right. Anchored by left/top here
+ * rather than right/bottom, so a viewport resize leaves it where it is; CanvasOverlayMove takes over
+ * both insets the first time it is dragged. */
+.__blackboard__ {
+    flex-direction: column;
+    width: 200px;
+    height: 240px;
+    min-width: 140px;
+    min-height: 120px;
+    resize: both;
+    left: 16px;
+    top: 16px;
+    background: #333333;
+    border-radius-all: 3px;
+    outline: 1px #1F1F1F;
+}
+
+/* The header. A two-line block, unlike the Main Preview's single strip: title over subtitle on the
+ * left, the + on the right. So it is a ROW whose first child is a COLUMN -- the text cannot be the
+ * strip itself, for the reason the Main Preview's header records at length. */
+.__blackboard__ > .__head__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: var(--cfg-gap);
+    /* Long-hands, never `padding-all` with a var() in it -- the shorthand silently substitutes to zero.
+     * Measured on this exact rule set once already. */
+    padding-left: var(--cfg-pad-x);
+    padding-right: var(--cfg-pad-x);
+    padding-top: var(--cfg-pad-y);
+    padding-bottom: var(--cfg-pad-y);
+    flex-grow: 0;
+    flex-shrink: 0;
+    background: #3A3A3A;
+    cursor: move;
+}
+.__blackboard__ > .__head__ > .__title__ {
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    font-size: var(--cfg-font);
+    color: #E4E4E4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* The asset path. Dim and secondary, and it must never push the title out of the way -- so it does not
+ * grow, and it clips first. */
+.__blackboard__ > .__head__ > .__subtitle__ {
+    flex-grow: 0;
+    flex-shrink: 1;
+    font-size: 8px;
+    color: #8C8C8C;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* The + button. A fixed square so the head's height does not depend on it. */
+.__blackboard__ > .__head__ > .__add__ {
+    width: 12px;
+    height: 12px;
+    min-width: 12px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    background: #4A4A4A;
+    border-radius-all: 2px;
+    overlay: shape("plus");
+    cursor: pointer;
+}
+.__blackboard__ > .__head__ > .__add__:hover {
+    background: #5A5A5A;
+}
+
+/* `height: 0; flex-grow: 1` -- this engine's flex-shrink defaults to 0, so without the zero basis the
+ * list keeps its content height and overhangs the panel. Same trap FlexShrinkOverflowTest pins. */
+.__blackboard__ > .__body__ {
+    height: 0;
+    flex-grow: 1;
+    flex-direction: column;
+    overflow: scroll;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+.__blackboard__ .__empty__ {
+    font-size: var(--cfg-font);
+    color: #7A7A7A;
+    padding-left: var(--cfg-pad-x);
+    padding-top: 4px;
+}
+
+/* A ROW holding a capsule and a dim type. The row takes the press -- every part inside it is scenery --
+ * so a click anywhere along it selects, and the gap beside a short name is not dead. */
+.__property-pill__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: var(--cfg-gap);
+    min-height: 14px;
+    padding-left: 6px;
+    padding-right: 6px;
+    cursor: pointer;
+}
+.__property-pill__:hover {
+    background: #3E3E3E;
+}
+.__property-pill__.__selected__ {
+    background: #4A5A6A;
+}
+/* The capsule is sized to its TEXT, not to the row -- that is what makes the board read as a list of
+ * things rather than a table of values, and it is what gives a drag something to grab. */
+.__property-pill__ > .__capsule__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 4px;
+    flex-grow: 0;
+    flex-shrink: 1;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    background: #4E4E4E;
+    border-radius-all: 6px;
+}
+/* Exposed. The ONLY place that state is visible -- a declared-but-hidden property is otherwise
+ * indistinguishable from an exposed one, and the difference does not show in the graph at all. */
+.__property-pill__ .__dot__ {
+    width: 4px;
+    height: 4px;
+    min-width: 4px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    background: #7BD64B;
+    border-radius-all: 2px;
+}
+.__property-pill__ .__name__ {
+    font-size: var(--cfg-font);
+    color: #E4E4E4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Right-aligned by taking the slack: the capsule does not grow, so this does. */
+.__property-pill__ > .__type__ {
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    font-size: 8px;
+    color: #8C8C8C;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .__main-preview__ {
     flex-direction: column;
     width: 220px;
@@ -3627,6 +3784,18 @@ projectfiletree .__project-row__ {
     padding-left: 2px;
 }
 
+/* SELECTION IS THE PROMINENT STATE, hover is the faint one -- IntelliJ's weighting, and the right way
+ * round. Selection is what every command in the panel acts on, so it has to be readable at a glance and
+ * has to survive the pointer moving away; a hover that outshines it means the row you are about to act on
+ * is the one that looks unselected.
+ *
+ * Listed BEFORE the hover rule so that, at equal specificity, a hovered selected row keeps the hover
+ * tint -- the two read as "selected, and the pointer is here" rather than fighting. */
+projectfiletree .__project-row__.__selected__ {
+    background-color: #2F5F9E;
+    color: #FFFFFF;
+}
+
 projectfiletree .__project-row__:hover {
     background-color: #2A2D2E;
 }
@@ -3662,29 +3831,44 @@ menuitem .__accelerator__ {
     white-space: nowrap;
 }
 
-/* ── Modal prompts ──
- *
- * The name prompt and the delete confirmation. Both are Dialogs, so the frame, the title bar, the focus
- * trap and Escape all come from there -- what is left is the content's rhythm.
- *
- * A width, because a Dialog is out of flow and sizes to its content: without one the box is exactly as
- * wide as the longest word in the message, which for "Delete 'x'?" is unreadably narrow. */
-dialog.__prompt__ {
-    width: 260px;
-    padding-all: 8px;
-    gap-all: 8px;
-}
 
-dialog.__prompt__ .__prompt-message__ {
-    width: 100%;
-    color: #DDDDDD;
-}
 
-/* Right-aligned, affirmative last -- the Windows and web convention, and the one the title bar's own
- * close button on the right already implies. Consistency inside one application beats picking a side. */
-dialog.__prompt__ .__prompt-buttons__ {
-    flex-direction: row;
-    justify-content: flex-end;
+
+/* ── Name prompts ──
+ *
+ * IntelliJ's New File popup: a caption over a field, centred, and nothing else. No frame, no buttons, no
+ * separators -- Enter commits and Escape cancels, and a button that duplicates a key the popup already
+ * answers is another row to lay out and another thing to read.
+ *
+ * ONE surface colour for the whole popup, deliberately. The reference has the field and the box at the
+ * same fill with no rule between them, which is what makes it read as a single object rather than a form.
+ * left/top are written from Java at IMPORTANT origin by InputDialog's centring, per the popup rule. */
+popover.__prompt__ {
+    width: 280px;
+    flex-direction: column;
+    background: #2E2E2E;
+    outline-width: 1px;
+    outline-color: #4A4A4A;
+    padding-all: 10px;
     gap-all: 6px;
+}
+
+/* Centred, because it is a caption rather than a label for the field beside it. */
+popover.__prompt__ .__prompt-caption__ {
     width: 100%;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    color: #C8C8C8;
+}
+
+/* NO border and NO background of its own: it takes the popup's. A field that draws its own box puts a
+ * rule through the middle of a surface the reference deliberately keeps unbroken. */
+popover.__prompt__ textfield {
+    width: 100%;
+    height: 16px;
+    background: #2E2E2E;
+    border-width: 0px;
+    color: #DDDDDD;
+    padding-left: 2px;
 }
