@@ -3234,15 +3234,12 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     padding-top: 2px;
     padding-bottom: 2px;
 }
-/* NO SCROLLBARS. A ScrollerView is still what holds the list, because a bare `overflow` box scrolls by
- * API and ignores the wheel -- so the bars are hidden rather than the scroller replaced, and the wheel
- * keeps working. Unity's board has no visible bars either; the panel is small and the list is short, and
- * two bars around a four-row list is more furniture than content. */
-.__blackboard__ .__v-scroller__,
-.__blackboard__ .__h-scroller__,
-.__blackboard__ .__corner__ {
-    display: none;
-}
+/* NO SCROLLBARS, and the list is a PLAIN box rather than a ScrollerView to get that.
+ *
+ * Hiding them from CSS is impossible by design: ScrollerView writes its bars' `display` from Java at
+ * IMPORTANT origin and says so in its own javadoc. A rule here was a guaranteed no-op, which is what
+ * shipped once -- the bars stayed and nothing explained why. The cost of a plain box is that `overflow`
+ * alone ignores the wheel, so BlackboardPanel wires that by hand. */
 .__blackboard__ .__empty__ {
     font-size: var(--cfg-font);
     color: #7A7A7A;
@@ -3767,9 +3764,20 @@ projectfiletree .__project-tree__ {
     font-size: 7px;
 }
 
+/* NO height here, deliberately. A virtualised list positions its rows from its own size strategy, so the
+ * row height is the strategy's to decide -- setItemHeight, not CSS. Declaring one here used to win the
+ * cascade and paint a 12px row inside a 16px slot, leaving a dead band between every pair that quietly
+ * swallowed clicks. Padding is what belongs here: it sits inside the row rather than shrinking it. */
 projectfiletree .__project-row__ {
-    height: 12px;
+    /* JUSTIFY-CONTENT for the vertical centring, not align-items.
+     *
+     * A row is a COLUMN container -- this engine's flex-direction default -- so its MAIN axis is vertical
+     * and its cross axis is horizontal. align-items: center therefore centres the label across the row's
+     * WIDTH, which is what it did: every file name lined up down the middle of the panel. The same trap
+     * `tabview .__strip__` already records about its rail. */
+    justify-content: center;
     padding-left: 2px;
+    padding-right: 2px;
 }
 
 /* SELECTION IS THE ONLY HIGHLIGHT, and there is deliberately no :hover rule beside it.
