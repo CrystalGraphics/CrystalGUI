@@ -27,10 +27,25 @@ public final class WorkspaceService {
     private final CgFileSystem files;
     private final WorkspacePermission permission;
 
+    /**
+     * Where deletions go. {@link WorkspaceTrash#NONE} means they do not come back.
+     *
+     * <p>Server-side <b>policy</b>, deliberately invisible to the protocol: a client asks for a deletion
+     * either way, and does not get to choose whether it is recoverable. That is what let {@code fs.delete}
+     * gain a trash without changing shape.</p>
+     */
+    private final WorkspaceTrash trash;
+
     public WorkspaceService(ProjectRegistry projects, CgFileSystem files, WorkspacePermission permission) {
+        this(projects, files, permission, new WorkspaceTrash.InMemory());
+    }
+
+    public WorkspaceService(ProjectRegistry projects, CgFileSystem files, WorkspacePermission permission,
+                            WorkspaceTrash trash) {
         if (projects == null || files == null) throw new IllegalArgumentException();
         this.projects = projects;
         this.files = files;
+        this.trash = trash == null ? WorkspaceTrash.NONE : trash;
         // A host that registers projects and forgets the callback gets a workspace nobody can open,
         // rather than one everybody can.
         this.permission = permission == null ? WorkspacePermission.DENY_ALL : permission;
@@ -152,9 +167,68 @@ public final class WorkspaceService {
      * @param expectedEtag the etag the caller last saw, or {@code null} to delete unconditionally
      */
     public void delete(WorkspaceActor actor, CgPath path, boolean recursive, String expectedEtag) {
+        deleteToTrash(actor, path, recursive, expectedEtag);
+    }
+
+    /**
+     * Deletes, keeping a copy, and reports where the copy went.
+     *
+     * <p>The captured id is what makes undo possible: the bytes have to be taken <b>before</b> the delete,
+     * and only the server is in a position to do that. A client-side "read it first, then delete" would be
+     * two round trips with a window in between where another actor can change what it is about to
+     * destroy.</p>
+     *
+     * @return the trash id, or {@code null} when nothing was kept
+     */
+    @javax.annotation.Nullable
+    public String deleteToTrash(WorkspaceActor actor, CgPath path, boolean recursive,
+                                String expectedEtag) {
         authorise(actor, path, WorkspaceOperation.WRITE);
         requireUnchanged(path, expectedEtag);
+        // CAPTURE FIRST, and only then delete. The reverse order is a delete that loses the file whenever
+        // the capture throws -- and the capture is the half that reads every byte, so it is the half that
+        // can fail.
+        String id = trash.capture(files, path, actor.id());
         files.delete(path, recursive);
+        return id;
+    }
+
+    /** Puts a trashed entry back where it came from. Refuses if something has taken its place. */
+    public CgPath restore(WorkspaceActor actor, String trashId) {
+        CgPath target = trashPathOf(trashId);
+        authorise(actor, target, WorkspaceOperation.WRITE);
+        return trash.restore(files, trashId);
+    }
+
+    /** Destroys a trashed entry for good. */
+    public boolean purge(WorkspaceActor actor, String trashId) {
+        authorise(actor, trashPathOf(trashId), WorkspaceOperation.WRITE);
+        return trash.purge(trashId);
+    }
+
+    /** What is recoverable in a project, newest first. */
+    public java.util.List<WorkspaceTrash.Entry> trashList(WorkspaceActor actor, String project) {
+        authorise(actor, CgPath.ofProject(project), WorkspaceOperation.READ);
+        return trash.list(project);
+    }
+
+    /**
+     * The original path behind a trash id, so a restore can be authorised against the place it will land.
+     *
+     * <p>Authorising the <em>destination</em> rather than the id is the point: an id says nothing about
+     * permissions, and a restore is a write to wherever the file used to live.</p>
+     */
+    private CgPath trashPathOf(String trashId) {
+        for (WorkspaceTrash.Entry entry : trash.list("")) {
+            if (entry.id().equals(trashId)) return entry.originalPath();
+        }
+        // list("") matches no project, so scan across everything the trash holds instead.
+        for (WorkspaceProject project : projects.all()) {
+            for (WorkspaceTrash.Entry entry : trash.list(project.id())) {
+                if (entry.id().equals(trashId)) return entry.originalPath();
+            }
+        }
+        throw new CgFileSystemException(CgFileError.FILE_NOT_FOUND, "no such trash entry: " + trashId);
     }
 
     /** Both ends are authorised — a move is a write in two places. */

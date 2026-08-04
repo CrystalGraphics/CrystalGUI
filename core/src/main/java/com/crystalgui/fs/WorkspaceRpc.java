@@ -119,13 +119,40 @@ public final class WorkspaceRpc<T> {
 
         registry.register(WorkspaceProtocol.DELETE, (args, respond) -> guard(respond, () -> {
             CgPath target = path(args);
-            service.delete(actor, target, args.getBool(WorkspaceProtocol.RECURSIVE, false),
-                    expectedEtag(args));
+            String trashId = service.deleteToTrash(actor, target,
+                    args.getBool(WorkspaceProtocol.RECURSIVE, false), expectedEtag(args));
             // The path is gone, so there is nothing left to poll and no etag to remember. Without this the
             // watcher keeps stat-ing a file that no longer exists and reports its own caller's deletion
             // back to it as an external change.
             watcher.unwatch(target);
+            // The trash id rides back on the DELETE response so an undo needs no second call -- and so a
+            // client that never undoes simply ignores a field.
+            StateMap<T> result = new StateMap<>(args.ops());
+            if (trashId != null) result.putString(WorkspaceProtocol.TRASH_ID, trashId);
+            respond.ok(result);
+        }));
+
+        registry.register(WorkspaceProtocol.RESTORE, (args, respond) -> guard(respond, () -> {
+            CgPath restored = service.restore(actor, args.getString(WorkspaceProtocol.TRASH_ID, ""));
+            respond.ok(new StateMap<T>(args.ops())
+                    .putString(WorkspaceProtocol.PATH, restored.toString()));
+        }));
+
+        registry.register(WorkspaceProtocol.PURGE, (args, respond) -> guard(respond, () -> {
+            service.purge(actor, args.getString(WorkspaceProtocol.TRASH_ID, ""));
             respond.ok(null);
+        }));
+
+        registry.register(WorkspaceProtocol.TRASH_LIST, (args, respond) -> guard(respond, () -> {
+            var entries = service.trashList(actor,
+                    CgPath.parse(args.getString(WorkspaceProtocol.PATH, "")).project());
+            respond.ok(new StateMap<T>(args.ops()).putList(WorkspaceProtocol.ENTRIES, entries,
+                    (out, entry) -> out
+                            .putString(WorkspaceProtocol.TRASH_ID, entry.id())
+                            .putString(WorkspaceProtocol.PATH, entry.originalPath().toString())
+                            .putString(WorkspaceProtocol.ACTOR, entry.actor())
+                            .putBool(WorkspaceProtocol.DIRECTORY, entry.directory())
+                            .putInt(WorkspaceProtocol.SIZE, (int) entry.size())));
         }));
 
         registry.register(WorkspaceProtocol.RENAME, (args, respond) -> guard(respond, () -> {

@@ -65,6 +65,21 @@ public final class WorkspaceProtocol {
     public static final String RENAME = "fs.rename";
 
     /**
+     * Put a deleted file back.
+     *
+     * <p>Takes an opaque {@link #TRASH_ID}, never a path into the trash — where deleted bytes live is the
+     * server's business, and a client that knew the location could write into it, list it as an ordinary
+     * directory, and race the sweep.</p>
+     */
+    public static final String RESTORE = "fs.restore";
+
+    /** Destroy a trashed entry for good — what Shift+Delete does, behind a harder confirmation. */
+    public static final String PURGE = "fs.purge";
+
+    /** What is recoverable in a project, newest first. */
+    public static final String TRASH_LIST = "fs.trashList";
+
+    /**
      * Start watching a path, so the server will report changes to it.
      *
      * <p>The server can only poll what it knows somebody is looking at. Watching everything in a project
@@ -104,6 +119,14 @@ public final class WorkspaceProtocol {
     /** On {@link #RENAME}: where it is moving from and to. {@link #PATH} is unused there. */
     public static final String FROM = "from";
     public static final String TO = "to";
+
+    /** Identifies one trashed deletion. Opaque by design — see {@link #RESTORE}. */
+    public static final String TRASH_ID = "trashId";
+
+    /** On {@link #DELETE}'s response: where the copy went, so an undo can put it back. Absent when the
+     * server keeps nothing. */
+    public static final String DELETED_AT = "deletedAt";
+    public static final String ACTOR = "actor";
 
     /** On {@link #DELETE}: whether a non-empty directory may go. Absent means false. */
     public static final String RECURSIVE = "recursive";

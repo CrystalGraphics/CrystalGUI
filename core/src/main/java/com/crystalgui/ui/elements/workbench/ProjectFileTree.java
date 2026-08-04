@@ -33,7 +33,7 @@ import javax.annotation.Nullable;
  * <p>{@link #onFileChosen} fires and that is all. What "open" means belongs to whatever owns the editors —
  * see {@link Workbench} — and a tree that held one could only ever serve a single host.</p>
  */
-public class ProjectFileTree extends UIElement {
+public class ProjectFileTree extends UIElement implements com.crystalgui.core.undo.UndoScope {
 
     /** UNIQUE, never the shared "__content__". CanvasView uses that name for its transformed world
      * plane, so any descendant rule naming it also styles every graph plane below -- and a flex rule on
@@ -63,6 +63,28 @@ public class ProjectFileTree extends UIElement {
 
     private boolean ticking;
     private boolean projectsRequested;
+
+    /**
+     * The workspace's history, so {@code UndoScope.nearest} finds it from anything inside the panel.
+     *
+     * <p>This is the whole of what makes Ctrl+Z work in the explorer without weakening the rule that an
+     * {@code UndoStack} belongs to a document: file operations go on the <em>workspace's</em> stack, text
+     * edits stay on their document's, and the resolver picks whichever scope encloses the focused element.
+     * Set by {@link Workbench}, which owns the file service.</p>
+     */
+    @Nullable
+    private com.crystalgui.core.undo.UndoStack workspaceHistory;
+
+    @Override
+    public com.crystalgui.core.undo.UndoStack undoStack() {
+        if (workspaceHistory == null) workspaceHistory = new com.crystalgui.core.undo.UndoStack();
+        return workspaceHistory;
+    }
+
+    ProjectFileTree setUndoStack(com.crystalgui.core.undo.UndoStack stack) {
+        this.workspaceHistory = stack;
+        return this;
+    }
 
     public ProjectFileTree(WorkspaceClient<?> client) {
         this.source = new WorkspaceTreeSource(client);

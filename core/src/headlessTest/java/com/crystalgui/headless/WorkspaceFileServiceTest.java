@@ -11,6 +11,7 @@ import com.crystalgui.fs.WorkspacePermission;
 import com.crystalgui.fs.WorkspaceProject;
 import com.crystalgui.fs.WorkspaceRpc;
 import com.crystalgui.fs.WorkspaceService;
+import com.crystalgui.fs.WorkspaceTrash;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
@@ -69,6 +70,8 @@ public class WorkspaceFileServiceTest {
         }
     }
 
+    private static final String README = "# hello";
+
     private InMemoryFileSystem files;
     private ClientUiSession<Object> session;
     private ServerUiSession<Object> server;
@@ -82,7 +85,7 @@ public class WorkspaceFileServiceTest {
         files = new InMemoryFileSystem()
                 .seed("mymod.proj:src/Main.java", "class Main {}")
                 .seed("mymod.proj:src/Util.java", "class Util {}")
-                .seed("mymod.proj:README.md", "# hello");
+                .seed("mymod.proj:README.md", README);
 
         ProjectRegistry registry = new ProjectRegistry().register(() -> List.of(
                 new WorkspaceProject("mymod.proj", "My Project", Paths.get("/srv/proj"))));
@@ -113,6 +116,26 @@ public class WorkspaceFileServiceTest {
 
     private static CgPath p(String path) {
         return CgPath.parse(path);
+    }
+
+    /** A second, independent stack over the same filesystem but a chosen trash policy. */
+    private WorkspaceFileService serviceOver(WorkspaceTrash trash) {
+        ProjectRegistry registry = new ProjectRegistry().register(() -> List.of(
+                new WorkspaceProject("mymod.proj", "My Project", Paths.get("/srv/proj"))));
+        WorkspaceService backend =
+                new WorkspaceService(registry, files, WorkspacePermission.ALLOW_ALL, trash);
+
+        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
+        a = pair[0];
+        b = pair[1];
+        server = new ServerUiSession<>(2, new UIElement(), a, PlainOps.INSTANCE);
+        new WorkspaceRpc<Object>(backend, WorkspaceActor.LOCAL).installOn(server::onCall);
+        server.open();
+        session = new ClientUiSession<>(b, PlainOps.INSTANCE);
+        WorkspaceFileService built =
+                new WorkspaceFileService(new WorkspaceClient<>(session, PlainOps.INSTANCE), copies);
+        pump();
+        return built;
     }
 
     // ── Move ────────────────────────────────────────────────────────────────────────────────────
@@ -267,6 +290,96 @@ public class WorkspaceFileServiceTest {
     }
 
     // ── Naming ──────────────────────────────────────────────────────────────────────────────────
+
+    // ── Trash and undo ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A delete can be taken back.</b>
+     *
+     * <p>The whole point of E5. With no version control underneath and no OS trash, a delete would
+     * otherwise be final — so the server keeps a copy, hands back an opaque id on the delete's own
+     * response, and undo restores from it.</p>
+     */
+    @Test
+    public void deleteIsUndoable() {
+        service.delete(p("mymod.proj:README.md"), false, () -> { }, f -> fail(f.code()));
+        pump();
+        assertFalse(files.exists(p("mymod.proj:README.md")));
+        assertTrue("the delete pushed no undo step", service.undoStack().canUndo());
+
+        service.undoStack().undo();
+        pump();
+        assertTrue("undo did not bring the file back", files.exists(p("mymod.proj:README.md")));
+        assertEquals(README, new String(files.read(p("mymod.proj:README.md")),
+                java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /** A whole folder comes back, with everything that was in it. */
+    @Test
+    public void deletingADirectoryIsUndoableWithItsContents() {
+        service.delete(p("mymod.proj:src"), true, () -> { }, f -> fail(f.code()));
+        pump();
+        assertFalse(files.exists(p("mymod.proj:src/Main.java")));
+
+        service.undoStack().undo();
+        pump();
+        assertTrue("Main.java did not come back", files.exists(p("mymod.proj:src/Main.java")));
+        assertTrue("Util.java did not come back", files.exists(p("mymod.proj:src/Util.java")));
+    }
+
+    /** Redo re-deletes, so the step is repeatable rather than one-shot. */
+    @Test
+    public void anUndoneDeleteCanBeRedone() {
+        service.delete(p("mymod.proj:README.md"), false, () -> { }, f -> fail(f.code()));
+        pump();
+        service.undoStack().undo();
+        pump();
+        assertTrue(files.exists(p("mymod.proj:README.md")));
+
+        service.undoStack().redo();
+        pump();
+        assertFalse("redo did not re-delete", files.exists(p("mymod.proj:README.md")));
+    }
+
+    @Test
+    public void createIsUndoable() {
+        service.create(p("mymod.proj:New.java"), "class New {}", () -> { }, f -> fail(f.code()));
+        pump();
+        assertTrue(files.exists(p("mymod.proj:New.java")));
+
+        service.undoStack().undo();
+        pump();
+        assertFalse("undoing a create left the file behind", files.exists(p("mymod.proj:New.java")));
+    }
+
+    /** Undoing a move puts it back, and never overwrites: anything now at the source arrived later. */
+    @Test
+    public void moveIsUndoable() {
+        service.move(p("mymod.proj:README.md"), p("mymod.proj:docs.md"), false,
+                () -> { }, f -> fail(f.code()));
+        pump();
+        assertTrue(files.exists(p("mymod.proj:docs.md")));
+
+        service.undoStack().undo();
+        pump();
+        assertTrue("the file did not move back", files.exists(p("mymod.proj:README.md")));
+        assertFalse(files.exists(p("mymod.proj:docs.md")));
+    }
+
+    /**
+     * <b>A trash-less workspace reports no undo rather than offering one that does nothing.</b>
+     *
+     * <p>Discovered by pressing Ctrl+Z and watching nothing happen is the worse failure of the two.</p>
+     */
+    @Test
+    public void withoutATrashADeleteIsNotOfferedAsUndoable() {
+        WorkspaceFileService noTrash = serviceOver(WorkspaceTrash.NONE);
+        noTrash.delete(p("mymod.proj:README.md"), false, () -> { }, f -> fail(f.code()));
+        pump();
+
+        assertFalse(files.exists(p("mymod.proj:README.md")));
+        assertFalse("an undo step was offered for bytes nobody kept", noTrash.undoStack().canUndo());
+    }
 
     /** VS Code's {@code explorer.incrementalNaming} in its {@code simple} default. */
     @Test

@@ -109,6 +109,9 @@ public class Workbench extends UIElement {
         this.client = client;
         this.fileService = new WorkspaceFileService(client, new Copies());
         this.fileTree = new ProjectFileTree(client);
+        // The explorer IS the workspace's undo scope. UndoScope.nearest walks outward from focus, so
+        // Ctrl+Z in the tree reaches file operations and Ctrl+Z in an editor still reaches its own text.
+        this.fileTree.setUndoStack(fileService.undoStack());
         fileTree.onFileChosen.connect(this::openFile);
         // RENDERED FROM THE RESULT, never from the call site. One update path serves this client's own
         // operations and another client's alike -- see Q11 in the chrome plan, and WorkspaceFileService's
@@ -469,6 +472,9 @@ public class Workbench extends UIElement {
         if (commandsInstalled) return;
         commandsInstalled = true;
         ExplorerCommands.install(window, this);
+        // edit.undo/edit.redo bound on the TREE, against the workspace stack the tree scopes. Same ids the
+        // editor uses -- one Undo in the palette, not one per widget.
+        com.crystalgui.core.undo.UndoCommands.install(window.getCommands(), fileTree);
         fileTree.setContextMenu(window.getCommands(), ExplorerCommands::menu);
     }
 

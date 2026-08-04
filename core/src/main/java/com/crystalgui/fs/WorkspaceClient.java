@@ -231,6 +231,18 @@ public final class WorkspaceClient<T> {
      * takes a subtree with it.</p>
      */
     public void delete(CgPath path, boolean recursive, Runnable onDone, Consumer<Failure> onError) {
+        delete(path, recursive, trashId -> onDone.run(), onError);
+    }
+
+    /**
+     * As {@link #delete}, reporting where the copy went so an undo can put it back.
+     *
+     * <p>The id arrives on the delete's own response rather than needing a second call — and is
+     * {@code null} when the server keeps nothing, which is a legitimate configuration rather than a
+     * failure. A caller that never undoes uses the {@link Runnable} overload and ignores it.</p>
+     */
+    public void delete(CgPath path, boolean recursive, Consumer<String> onDeleted,
+                       Consumer<Failure> onError) {
         StateMap<T> args = args()
                 .putString(WorkspaceProtocol.PATH, path.toString())
                 .putBool(WorkspaceProtocol.RECURSIVE, recursive);
@@ -240,7 +252,8 @@ public final class WorkspaceClient<T> {
             // FORGET, not merely remove: the path is gone, so its etag describes nothing and its watch
             // would report a deletion this client performed as an external change.
             forget(path);
-            onDone.run();
+            onDeleted.accept(result.has(WorkspaceProtocol.TRASH_ID)
+                    ? result.getString(WorkspaceProtocol.TRASH_ID, null) : null);
         }, onError);
     }
 
@@ -269,6 +282,19 @@ public final class WorkspaceClient<T> {
             if (carried != null) etags.put(to, carried);
             onDone.run();
         }, onError);
+    }
+
+    /** Puts a deleted file back where it came from, reporting where that was. */
+    public void restore(String trashId, Consumer<CgPath> onRestored, Consumer<Failure> onError) {
+        call(WorkspaceProtocol.RESTORE, args().putString(WorkspaceProtocol.TRASH_ID, trashId),
+                result -> onRestored.accept(
+                        CgPath.parse(result.getString(WorkspaceProtocol.PATH, ""))), onError);
+    }
+
+    /** Destroys a trashed entry for good. */
+    public void purge(String trashId, Runnable onDone, Consumer<Failure> onError) {
+        call(WorkspaceProtocol.PURGE, args().putString(WorkspaceProtocol.TRASH_ID, trashId),
+                result -> onDone.run(), onError);
     }
 
     // ── Etag bookkeeping ────────────────────────────────────────────────────────────────────────
