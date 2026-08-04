@@ -5,6 +5,7 @@ import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.Ui;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.config.ConfiguratorGroup;
 import com.crystalgui.ui.elements.graph.GraphNode;
 import org.junit.Test;
 
@@ -138,6 +139,53 @@ public class ShaderGraphInspectorLayoutTest extends UiTestBase {
         float tallest = 0f;
         for (UIElement row : panel.getChildren()) tallest = Math.max(tallest, height(row));
         assertTrue("every row laid out at zero height", tallest > 4f);
+    }
+
+    /**
+     * <b>A fact too long for its column grows taller instead of being cut off.</b>
+     *
+     * <p>The master's {@code In} row lists four ports with their types and is genuinely wider than any
+     * inspector column will ever be. It was ellipsized, which hides the one thing the row exists to say.
+     * Making the panel scroll <em>horizontally</em> was considered and rejected — no inspector does that,
+     * so the hidden text reads as absent rather than as off-screen — and a column of rows already has one
+     * direction it can grow in.</p>
+     *
+     * <p>Compared against a short fact in the same group rather than an absolute number, so the test says
+     * "this one wrapped" rather than encoding a font size.</p>
+     */
+    @Test
+    public void aLongFactWrapsRatherThanBeingCutOff() {
+        mount();
+        GraphNode output = editor.graph().nodes().stream()
+                .filter(node -> node.getNodeId() != null
+                        && ShaderGraphBridge.MASTER_TYPE.equals(
+                                editor.graph().getDocument().node(node.getNodeId()).typeId()))
+                .findFirst().orElse(null);
+        assertNotNull("the starter graph must contain the Output node", output);
+
+        editor.graph().getSelection().selectOnly(output);
+        // The About group is collapsed by default, and a collapsed group is display:none — every box
+        // inside one measures 0, so this would assert against 0 <= 0 and pass for the wrong reason.
+        ConfiguratorGroup about = aboutGroup();
+        assertNotNull(about);
+        about.setCollapsed(false);
+        settle();
+
+        UIElement portList = inspector.nodeInspector().control("In");
+        UIElement category = inspector.nodeInspector().control("Category");
+        assertNotNull("the master lists its inputs", portList);
+        assertNotNull(category);
+
+        assertTrue("the long port list must have grown taller than a one-line fact — it was "
+                        + height(portList) + " against " + height(category),
+                height(portList) > height(category));
+    }
+
+    private ConfiguratorGroup aboutGroup() {
+        for (UIElement child : inspector.nodeInspector().getChildren()) {
+            if (child instanceof ConfiguratorGroup group && "About".equals(group.title())) return group;
+        }
+        return null;
     }
 
     /** The graph tab's generated setting rows likewise. */

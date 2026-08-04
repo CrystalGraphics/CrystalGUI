@@ -157,7 +157,7 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
 
         if (type != null) {
             for (NodeField field : type.fields()) {
-                addFieldRow(this, data, field);
+                addFieldRow(this, widget, data, field);
             }
         }
         addAbout(data, type);
@@ -170,7 +170,7 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
      * node — see the class note. A port field whose port is connected is shown disabled with the source
      * named, rather than hidden.</p>
      */
-    private void addFieldRow(UIElement parent, NodeData data, NodeField field) {
+    private void addFieldRow(UIElement parent, GraphNode widget, NodeData data, NodeField field) {
         EdgeData incoming = field.isPortField()
                 ? document().edgeInto(new com.crystalgui.graph.PortRef(data.id(), field.portId()))
                 : null;
@@ -178,7 +178,17 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
             addConnectedRow(parent, field, incoming);
             return;
         }
-        UIElement control = NodeFieldBinder.buildControl(field, document(), data.id(), undo(), onChange);
+        // A DYNAMIC port has no width until the graph gives it one, so the declaration cannot say how
+        // many boxes to draw — the resolved answer lives on the port widget. Asking ShaderPortArity is
+        // what keeps this row identical to the node's own inline editor; building from the declaration
+        // instead showed a single box holding `1` beside a node already drawing `X Y`.
+        NodeField shaped = field.isPortField()
+                ? ShaderPortArity.fieldFor(field, widget.portNamed(field.portId()),
+                        data.properties().get(field.id()))
+                : field;
+
+        UIElement control = NodeFieldBinder.buildControl(shaped, document(), data.id(), undo(), onChange,
+                shaped == field ? null : shaped.defaultValue());
         if (control instanceof ConfigControl typed) addRow(parent, field.label(), field.id(), typed);
     }
 

@@ -184,19 +184,48 @@ public final class ShaderPortArity {
 
         NodeData data = view.getDocument().node(nodeId);
         String stored = data == null ? null : data.properties().get(port.getPortId());
-        String literal = literalAtArity(stored, arity);
-
-        NodeField field = arity <= 1
-                ? new NodeField(port.getPortId(), port.getPortId(), NodeField.Kind.NUMBER,
-                        List.of(), literal, port.getPortId())
-                : new NodeField(port.getPortId(), port.getPortId(), NodeField.Kind.VECTOR,
-                        List.of(), literal, port.getPortId());
+        NodeField field = fieldAtArity(port.getPortId(), stored, arity);
 
         // The literal is passed as the PRESET rather than left to the document: a widget infers its
         // shape from the value it is handed, so a stored scalar would build two boxes for a vec3.
         UIElement rebuilt = NodeFieldBinder.buildControl(field, view.getDocument(), nodeId,
-                view.undoStack(), onChange, literal);
+                view.undoStack(), onChange, field.defaultValue());
         if (rebuilt != null) port.setDefaultEditor(rebuilt);
+    }
+
+    /**
+     * The field a dynamic port <b>actually edits right now</b>, at a given resolved width.
+     *
+     * <p>Extracted so the node's inline editor and the inspector's row cannot disagree about it. They
+     * did: the node rebuilt {@code B} into {@code X Y} when a vec2 arrived, and the inspector went on
+     * showing one box holding {@code 1}, because it built from the <em>declared</em> field and the
+     * declaration says nothing about width — that is what {@code dynamic} means. Two places deciding the
+     * same thing from different inputs is a disagreement waiting to be noticed by a user rather than a
+     * compiler.</p>
+     *
+     * <p>The returned field carries the re-shaped literal as its default, so a caller passes
+     * {@code field.defaultValue()} straight back as the preset.</p>
+     */
+    public static NodeField fieldAtArity(String portId, @Nullable String stored, int arity) {
+        String literal = literalAtArity(stored, arity);
+        return arity <= 1
+                ? new NodeField(portId, portId, NodeField.Kind.NUMBER, List.of(), literal, portId)
+                : new NodeField(portId, portId, NodeField.Kind.VECTOR, List.of(), literal, portId);
+    }
+
+    /**
+     * As {@link #fieldAtArity}, reading the width off the port itself and keeping {@code declared}'s
+     * label — what an inspector wants, since a row is labelled and an inline editor is not.
+     *
+     * <p>Returns {@code declared} unchanged for anything that is not a dynamic port, so a concretely
+     * typed {@code vec3} input is never second-guessed.</p>
+     */
+    public static NodeField fieldFor(NodeField declared, NodePort port, @Nullable String stored) {
+        if (port == null || !port.getDirection().isInput()) return declared;
+        if (!ShaderGraphBridge.DYNAMIC_TYPE.equals(port.getType().id())) return declared;
+        NodeField reshaped = fieldAtArity(declared.id(), stored, port.displayedArity());
+        return new NodeField(declared.id(), declared.label(), reshaped.kind(), reshaped.options(),
+                reshaped.defaultValue(), declared.portId());
     }
 
     /**

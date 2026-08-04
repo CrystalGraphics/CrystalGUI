@@ -10,6 +10,8 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.config.ConfigControl;
 import com.crystalgui.ui.elements.config.ConfiguratorGroup;
 import com.crystalgui.ui.elements.config.control.InfoControl;
+import com.crystalgui.ui.elements.config.control.VectorControl;
+import com.crystalgui.ui.elements.graph.NodePort;
 import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.ui.elements.graph.GraphView;
 import com.crystalgui.ui.elements.graph.NodeWidgetFactory;
@@ -295,6 +297,51 @@ public class ShaderNodeInspectorTest extends UiTestBase {
             if (consumesText(child)) return true;
         }
         return false;
+    }
+
+    /**
+     * <b>A dynamic port's row is the same shape as the node's own editor.</b>
+     *
+     * <p>{@code dynamic} has no width until the graph gives it one, so the <em>declaration</em> cannot say
+     * how many boxes to draw — that is what dynamic means. The inspector built from the declaration and
+     * showed one box holding {@code 1} beside a node already drawing {@code X Y}, because the resolved
+     * answer lives on the port widget and only the node was asking it.</p>
+     *
+     * <p>Both now go through {@code ShaderPortArity}, which is the point: two places deciding the same
+     * thing from different inputs is a disagreement that surfaces to a user rather than to a compiler.</p>
+     */
+    @Test
+    public void aDynamicPortRowMatchesTheNodesOwnEditor() {
+        mount();
+        GraphNode vector = add("cg:Input/Basic/vector2", 0f, 0f);
+        GraphNode multiply = add("cg:Math/Basic/multiply", 240f, 0f);
+        graph.connect(vector.getOutputPorts().get(0), multiply.getInputPorts().get(0));
+        ShaderPortArity.resolve(graph);
+        window.updateWithoutPainting();
+
+        NodePort b = multiply.getInputPorts().get(1);
+        assertEquals("the fixture needs B to have widened to a vec2", 2, b.displayedArity());
+
+        graph.getSelection().selectOnly(multiply);
+        ConfigControl row = inspector.control(b.getPortId());
+        assertNotNull(row);
+        assertTrue("B resolved to 2 components, so its row must be a vector editor",
+                row instanceof VectorControl);
+        assertEquals("and with the same number of boxes the node draws",
+                2, row.descriptor().arity());
+    }
+
+    /** A concretely typed port is never second-guessed — only {@code dynamic} is re-shaped. */
+    @Test
+    public void aConcretelyTypedPortIsLeftAlone() {
+        mount();
+        GraphNode output = add(ShaderGraphBridge.MASTER_TYPE, 0f, 0f);
+        graph.getSelection().selectOnly(output);
+
+        ConfigControl alpha = inspector.control("Alpha");
+        assertNotNull("the master's Alpha is a declared float", alpha);
+        assertFalse("so it must stay a scalar, whatever is wired elsewhere",
+                alpha instanceof VectorControl);
     }
 
     /** A genuinely different selection does rebuild. */
