@@ -41,6 +41,10 @@ public class ExplorerInteractionTest extends UiTestBase {
 
         RefusingRoot() {
             layout(l -> l.widthPercent(100f).heightPercent(100f).flexDirection(FlexDirection.COLUMN));
+            // A DEFINITE size on the wrapper. Without it a percent-sized child resolves against an auto
+            // parent and lays out zero -- the trap that cost a session on the shader graph, reproduced
+            // here in three lines of test fixture.
+            content.layout(l -> l.widthPercent(100f).height(0).flexGrow(1f));
             addInternalChild(content);
         }
 
@@ -127,6 +131,88 @@ public class ExplorerInteractionTest extends UiTestBase {
         for (int i = 0; i < 3; i++) window.updateWithoutPainting();
 
         assertEquals("a second right-click left the first menu in the tree", 1, countMenus(root));
+    }
+
+    /**
+     * <b>The menu opens under the pointer, not at twice its distance from the corner.</b>
+     *
+     * <p>{@code showAt} takes ROOT-SPACE coordinates — its parameters say {@code rootX}/{@code rootY} —
+     * while {@code MouseEvent.getPosition()} reports physical pointer pixels. At {@code uiScale} 2 the two
+     * differ by exactly a factor of two, which reads as a placement bug in the popover and is a units
+     * mismatch two layers up. {@code UiTestBase} runs at scale 2, so this fails without the conversion.</p>
+     */
+    @Test
+    public void theMenuOpensUnderThePointer() {
+        RefusingRoot root = new RefusingRoot();
+        UIElement panel = new UIElement().layout(l -> l.widthPercent(100f).height(0).flexGrow(1f));
+        root.content.addChild(panel);
+
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(800, 600);
+
+        CommandRegistry registry = new CommandRegistry();
+        registry.register(com.crystalgui.core.command.Command.of("test.thing", "Thing"));
+        ContextMenu.attach(panel, registry, element -> ContextMenu.builder().item("test.thing"));
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(120, 80, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        rightClickAt(window, 120, 80, 1L);
+        for (int i = 0; i < 4; i++) window.updateWithoutPainting();
+
+        Menu menu = findMenu(root);
+        assertNotNull(menu);
+        // Physical (120,80) at uiScale 2 is root-space (60,40). Without the conversion the menu lands at
+        // (120,80) -- exactly double, and off the pointer by its own distance from the corner.
+        var expected = window.ui.rootElement.screenToLocal(120, 80);
+        assertEquals("the menu did not open under the pointer",
+                expected.x(), menu.getRuntimeCache().getX(), 2f);
+        assertEquals(expected.y(), menu.getRuntimeCache().getY(), 2f);
+    }
+
+    /**
+     * <b>Pressing elsewhere closes it.</b>
+     *
+     * <p>Light dismiss spares the popover's <em>invoker</em> so a toggle button is not closed by the very
+     * press about to reopen it. Passing the right-clicked element as the invoker extended that carve-out
+     * over its whole subtree — so clicking the tree's empty space could never dismiss the tree's own menu.
+     * A right-click toggles nothing, so it has no invoker.</p>
+     */
+    @Test
+    public void pressingElsewhereClosesTheMenu() {
+        RefusingRoot root = new RefusingRoot();
+        UIElement panel = new UIElement().layout(l -> l.widthPercent(100f).height(0).flexGrow(1f));
+        root.content.addChild(panel);
+
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(800, 600);
+
+        CommandRegistry registry = new CommandRegistry();
+        registry.register(com.crystalgui.core.command.Command.of("test.thing", "Thing"));
+        ContextMenu.attach(panel, registry, element -> ContextMenu.builder().item("test.thing"));
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(40, 40, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        rightClickAt(window, 40, 40, 1L);
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+        assertNotNull("nothing opened", findMenu(root));
+
+        // A LEFT press on the same panel -- inside what used to be treated as the invoker.
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                600, 500, 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 2L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+
+        Menu after = findMenu(root);
+        assertTrue("pressing the panel did not dismiss the menu", after == null || !after.isOpen());
     }
 
     private static void rightClickAt(UIWindow window, int x, int y, long serial) {

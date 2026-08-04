@@ -189,6 +189,11 @@ public final class ContextMenu {
             UIWindow window = on.getAttachedWindow();
             if (window == null) return;
             UIElement target = event.getTarget() == null ? on : event.getTarget();
+            // A press landing ON THE OPEN MENU is not a request for a menu about the menu. Without this,
+            // the second right-click resolved its target inside the popup that discard() was about to
+            // detach -- so both the command context and the host were computed from an element no longer
+            // in the tree, and Popover.show refused it as unattached.
+            if (live[0] != null && isInside(target, live[0])) target = on;
 
             discard(live);
 
@@ -199,13 +204,30 @@ public final class ContextMenu {
             // The nearest ancestor that ACCEPTS children, not the root -- the root may itself be a
             // composite that refuses them, which is exactly how right-clicking the Project panel threw
             // out of the mouse-down dispatch. See Popover.hostFor.
-            Popover.hostFor(window, target).addChild(menu);
+            // Resolved from the ATTACHMENT SITE, not the clicked element: `on` is always in the tree,
+            // while a target can be anything the pointer happened to be over.
+            Popover.hostFor(window, on).addChild(menu);
             live[0] = menu;
             // Dropped from the tree when it closes by any route -- light dismiss, Escape, or choosing an
             // item. Left in place it is an invisible display:none element that accumulates one per press.
             menu.onClosed.connect(() -> discard(live));
 
-            menu.showAt(event.getPosition().x(), event.getPosition().y(), target);
+            // CONVERTED, and this is the whole reason the framework does it rather than each caller.
+            //
+            // showAt takes ROOT-SPACE coordinates -- its parameters are named rootX/rootY -- while
+            // MouseEvent.getPosition() reports PHYSICAL pointer pixels. At uiScale 2 that puts the menu at
+            // twice its distance from the top-left corner, which looks like a placement bug in the popover
+            // and is really a units mismatch two layers up. screenToLocal on the root is the one
+            // conversion that stays correct under uiScale and any ancestor transform.
+            //
+            // NULL INVOKER, deliberately. The invoker carve-out exists so pressing a toggle BUTTON does
+            // not have light dismiss close the menu underneath the click that is about to reopen it. A
+            // right-click toggles nothing -- and passing the clicked element made light dismiss treat
+            // every press anywhere inside it as a press on the invoker, so clicking the tree's empty space
+            // could never close the tree's own menu.
+            var local = window.ui.rootElement.screenToLocal(
+                    event.getPosition().x(), event.getPosition().y());
+            menu.showAt(local.x(), local.y(), null);
             // CONSUMED, so a right-click does not also fall through to whatever the left button does --
             // selecting a row, starting a marquee, panning a canvas.
             event.stopPropagation();
@@ -220,6 +242,14 @@ public final class ContextMenu {
      * Taffy node to its DOM parent — removing it while still promoted leaves the engine reconciling a node
      * that has been parented to the root against a DOM parent that no longer lists it.</p>
      */
+    /** Whether {@code element} is {@code ancestor} or sits beneath it. */
+    private static boolean isInside(@Nullable UIElement element, UIElement ancestor) {
+        for (UIElement walk = element; walk != null; walk = walk.getParent()) {
+            if (walk == ancestor) return true;
+        }
+        return false;
+    }
+
     private static void discard(Menu[] live) {
         Menu menu = live[0];
         if (menu == null) return;
