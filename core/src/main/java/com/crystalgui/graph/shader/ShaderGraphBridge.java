@@ -356,8 +356,15 @@ public final class ShaderGraphBridge {
         Map<String, Boolean> present = new LinkedHashMap<>();
         String masterId = null;
 
+        // Every DECLARED property becomes a uniform, whether or not a node reads it. Declaring only what
+        // is referenced would make the generated shader's interface change as the graph is wired, so a
+        // material's bindings would come and go while the user was still building the thing.
+        declarePropertiesOn(document, master);
+
         for (NodeData data : document.nodes()) {
-            CgShaderNode type = MASTER_TYPE.equals(data.typeId()) ? master : shaderNodes.get(data.typeId());
+            CgShaderNode type = ShaderPropertyNodes.isPropertyNode(data)
+                    ? compilerNodeForProperty(document, data)
+                    : MASTER_TYPE.equals(data.typeId()) ? master : shaderNodes.get(data.typeId());
             if (type == null) {
                 present.put(data.id(), false);
                 continue;
@@ -376,6 +383,33 @@ public final class ShaderGraphBridge {
                     edge.to().nodeId(), edge.to().portId());
         }
         return graph.output(masterId);
+    }
+
+    /**
+     * Copies the document's declarations onto the master, replacing whatever was there.
+     *
+     * <p>Cleared first, for the reason {@link ShaderGraphSettings#applyTo} exists at all: the master is
+     * the compiler's object rather than storage, so two documents compiled through one master must not
+     * leave each other's uniforms behind.</p>
+     */
+    private static void declarePropertiesOn(GraphDocument document, CgMasterNode master) {
+        master.clearShaderProperties();
+        for (com.crystalgui.graph.GraphProperty property : document.properties()) {
+            CgShaderType type = CgShaderType.parse(property.typeId());
+            // A type with no property form — a matrix today — is SKIPPED rather than fatal. The editor
+            // should not offer one, and if it somehow does, the shader that comes out is missing a
+            // uniform rather than failing to compile at all.
+            if (type == null || type.propertyTypeName() == null) continue;
+            master.property(property.reference(), type, property.defaultValue());
+        }
+    }
+
+    /** The compiler node for a property node — the real one, or a stand-in when its property is gone. */
+    private static CgShaderNode compilerNodeForProperty(GraphDocument document, NodeData data) {
+        com.crystalgui.graph.GraphProperty property = ShaderPropertyNodes.resolve(document, data);
+        return property == null
+                ? ShaderPropertyNodes.missingNodeFor(data.id())
+                : ShaderPropertyNodes.compilerNodeFor(property);
     }
 
     /**
