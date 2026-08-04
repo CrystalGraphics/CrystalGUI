@@ -1161,10 +1161,25 @@ normals, sane vertex/index counts, and UVs in range. Then: the mesh choice does 
 document and leaves `UndoStack` empty; the panel requests a re-render on a graph change and *not* on an
 idle frame.
 
-### 6.3.13 The Graph Inspector · `PLANNED` (2026-08-04)
+### 6.3.13 The Graph Inspector · `IN PROGRESS` (2026-08-04) — Node and Graph tabs shipped, Properties not
 
 The last big missing surface. Unity calls it the **Graph Inspector** and it is the panel marked **F** in
 `docs/research/unity-inspector/07-full-window.png`.
+
+> **Shipped**: `ShaderGraphInspector` (the `TabView` frame), `ShaderNodeInspector` rewritten from
+> placeholder to five live selection states, `ShaderGraphSettingsPanel` (shader settings generated from
+> declarations, preview view-state shared with `MainPreviewPanel`, compile stats), `ShaderGraphSettings`
+> (the three `Setting<T>` declarations), `SettingsConfigurator`, `ConfiguratorPanel.addRow`/`clearRows`,
+> `NodeFieldBinder.buildMultiControl`. `CrystalEditor` re-pointed. Tests:
+> `ShaderGraphSettingsTest` (9), `ShaderNodeInspectorTest` (7).
+>
+> **Not shipped**: the Properties tab (step 7) and the styling pass (step 9). Multi-select editing is
+> wired through `buildMultiControl` but has no test of its own yet.
+>
+> **What contact with the code changed:** the model gap was answered by the general gear (P6's 6.1.13)
+> rather than a map on `GraphDocument`, which is what the user's redirect asked for and is plainly
+> better — the settings are now saveable, undoable, content-hashed AND enumerable, and the Graph tab is
+> generated from the declarations instead of hand-written.
 
 #### What exists today, honestly
 
