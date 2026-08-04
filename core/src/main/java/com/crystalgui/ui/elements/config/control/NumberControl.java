@@ -132,6 +132,22 @@ public class NumberControl extends ValueControl<Double> {
             UIWindow window = getAttachedWindow();
             if (window == null) return;
 
+            // Focus on PRESS, not only on a sub-threshold click.
+            //
+            // Pressing a control is what focuses it everywhere else, and here it is load-bearing rather
+            // than cosmetic: commands resolve outward from the focused element, so a gesture that changes
+            // a value while leaving focus untouched produces an edit that Ctrl+Z cannot reach — the
+            // command has no scope to walk up from. `UndoScope.nearest(null)` is null, and the undo entry
+            // sits on a stack nothing can find.
+            //
+            // It presented as "undo does not work on scrub", but the edit was always recorded correctly;
+            // whether Ctrl+Z found it depended entirely on what had been clicked BEFORE the drag. Select a
+            // node first and it worked, which is why deleting-then-undoing looked fine.
+            //
+            // requestPointerFocus, never requestFocus: the latter rings :focus-visible, and a focus ring
+            // appearing because you dragged a number is the exact noise that pseudo-class exists to remove.
+            focusField(window);
+
             scrubbing = false;
             scrubAnchor = currentValue();
             scrubPixelsPerUnit = measurePixelsPerUnit(handle);
@@ -146,7 +162,8 @@ public class NumberControl extends ValueControl<Double> {
 
                         @Override
                         public void onDragEnd(float mouseX, float mouseY) {
-                            if (!scrubbing) focusField(window);
+                            // Focus already happened on press, for both outcomes — so a click and a drag
+                            // leave the control in the same state rather than only the click focusing it.
                             endScrub();
                         }
 

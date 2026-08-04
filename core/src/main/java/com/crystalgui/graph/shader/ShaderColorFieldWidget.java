@@ -49,6 +49,11 @@ public final class ShaderColorFieldWidget {
      */
     public static void install() {
         NodeFieldWidgets.register(NodeField.Kind.COLOR, ShaderColorFieldWidget::build);
+        // The inverse, so an edit made anywhere other than through this swatch reaches it — undo being
+        // the case that matters. setValueObject is silent, so this cannot echo back out as a new edit.
+        NodeFieldWidgets.registerApplier(NodeField.Kind.COLOR, (control, field, value) -> {
+            if (control instanceof ColorControl swatch) swatch.setValue(parseVec4(field.resolve(value)));
+        });
     }
 
     private static UIElement build(NodeField field, String value, java.util.function.Consumer<String> onChange) {

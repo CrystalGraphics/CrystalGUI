@@ -57,12 +57,24 @@ public final class NodeFieldWidgets {
 
     private static final Map<NodeField.Kind, Factory> FACTORIES = new EnumMap<>(NodeField.Kind.class);
 
+    /**
+     * The inverse of {@link #FACTORIES}. @see Applier
+     *
+     * <p>Declared HERE, above the {@code static} block, and not beside {@link #registerApplier} where it
+     * would read more naturally. Static field initialisers and static blocks run in <b>textual order</b>,
+     * so a map declared after the block that fills it is still null when the block runs — which fails as
+     * a {@code NullPointerException} inside {@code ExceptionInInitializerError}, naming neither the field
+     * nor the ordering. Same family as the JLS 8.3.3 forward-reference trap {@code CgShaderPort} documents.</p>
+     */
+    private static final Map<NodeField.Kind, Applier> APPLIERS = new EnumMap<>(NodeField.Kind.class);
+
     static {
         FACTORIES.put(NodeField.Kind.ENUM, NodeFieldWidgets::select);
         FACTORIES.put(NodeField.Kind.BOOLEAN, NodeFieldWidgets::bool);
         FACTORIES.put(NodeField.Kind.TEXT, NodeFieldWidgets::text);
         FACTORIES.put(NodeField.Kind.NUMBER, NodeFieldWidgets::number);
         // COLOR and VECTOR: no default here — see the class javadoc.
+        registerBuiltinAppliers();
     }
 
     private NodeFieldWidgets() {
@@ -73,6 +85,34 @@ public final class NodeFieldWidgets {
         FACTORIES.put(kind, factory);
     }
 
+    /**
+     * Pushes a stored value back INTO an already-built control — the direction {@link Factory} does not
+     * cover.
+     *
+     * <p>A factory turns a stored string into a control once, at build time. Nothing turned a <em>changed</em>
+     * string back into the control it was built for, so an edit made anywhere other than through the
+     * widget left the widget stale. Undo is exactly that case: it mutates the document directly, and the
+     * number box went on displaying the value that had just been undone.</p>
+     */
+    public interface Applier {
+        /** @param value the current stored value, already resolved against the field's default */
+        void apply(UIElement control, NodeField field, String value);
+    }
+
+    /**
+     * Registers the inverse of a {@link Factory}. Optional — a kind without one simply does not follow
+     * external changes, which is the behaviour every kind had before this existed.
+     */
+    public static void registerApplier(NodeField.Kind kind, Applier applier) {
+        APPLIERS.put(kind, applier);
+    }
+
+    /** Writes {@code value} into {@code control}, if its kind knows how. Silent — never emits a change. */
+    public static void applyValue(NodeField field, UIElement control, String value) {
+        Applier applier = APPLIERS.get(field.kind());
+        if (applier != null) applier.apply(control, field, value);
+    }
+
     /** The control for a field, or null when its kind has no registered widget. */
     @Nullable
     public static UIElement create(NodeField field, String value, Consumer<String> onChange) {
@@ -81,6 +121,21 @@ public final class NodeFieldWidgets {
     }
 
     // ── The built-in widgets ────────────────────────────────────────────────
+
+    /** The built-in inverses. @see #registerApplier */
+    private static void registerBuiltinAppliers() {
+        registerApplier(NodeField.Kind.ENUM, (control, field, value) -> set(control, field.resolve(value)));
+        registerApplier(NodeField.Kind.TEXT, (control, field, value) -> set(control, field.resolve(value)));
+        registerApplier(NodeField.Kind.BOOLEAN,
+                (control, field, value) -> set(control, Boolean.parseBoolean(field.resolve(value))));
+        registerApplier(NodeField.Kind.NUMBER,
+                (control, field, value) -> set(control, parseDouble(field.resolve(value))));
+    }
+
+    /** {@code setValueObject} is silent by contract, which is what keeps this from echoing back out. */
+    private static void set(UIElement control, Object value) {
+        if (control instanceof ConfigControl config) config.setValueObject(value);
+    }
 
     private static UIElement select(NodeField field, String value, Consumer<String> onChange) {
         ConfigDescriptor descriptor = ConfigDescriptor.select(field.id(), field.label(), field.options());

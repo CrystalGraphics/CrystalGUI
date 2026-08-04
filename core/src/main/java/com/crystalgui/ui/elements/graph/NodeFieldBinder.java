@@ -101,10 +101,48 @@ public final class NodeFieldBinder {
                                          @Nullable UndoStack undo, @Nullable Runnable onChange,
                                          @Nullable String presetValue) {
         String current = presetValue != null ? presetValue : currentValue(document, nodeId, field);
-        UIElement control = NodeFieldWidgets.create(field, current,
-                value -> write(document, undo, nodeId, field, value, onChange));
+        // What this binding last put INTO the document, so a change arriving from anywhere else can be
+        // told apart from the echo of its own write.
+        String[] lastWritten = { current };
+
+        UIElement control = NodeFieldWidgets.create(field, current, value -> {
+            lastWritten[0] = value;
+            write(document, undo, nodeId, field, value, onChange);
+        });
         bracketGestures(control, undo);
+        followDocument(control, document, nodeId, field, lastWritten, onChange);
         return control;
+    }
+
+    /**
+     * Makes the widget follow the document, not only drive it.
+     *
+     * <h3>This is what made undo look broken</h3>
+     * <p>An {@code Edit} mutates the document directly — that is the whole point of the pattern. Nothing
+     * carried the result back to the control that had been displaying the old value, and nothing re-ran
+     * {@code onChange}, so undoing a field edit changed the document and <b>nothing visible happened</b>:
+     * the number box kept showing the value that had just been undone, and the shader never recompiled.
+     * Press Ctrl+Z, see nothing, press again, and watch some earlier action disappear instead — which is
+     * exactly how it was reported, and why every investigation went looking at the undo stack. The stack
+     * was correct the whole time.</p>
+     *
+     * <p>Only fires for a change this binding did not make: an edit written from here already left the
+     * control holding that value, and re-applying it would fight a caret mid-type. Skipped entirely while
+     * a gesture is live, so a scrub is not interrupted by its own per-frame writes.</p>
+     */
+    private static void followDocument(@Nullable UIElement control, GraphDocument document, String nodeId,
+                                       NodeField field, String[] lastWritten, @Nullable Runnable onChange) {
+        if (control == null) return;
+        document.onChanged.connect(() -> {
+            if (control instanceof ConfigControl config && config.isInteracting()) return;
+            String live = currentValue(document, nodeId, field);
+            if (java.util.Objects.equals(live, lastWritten[0])) return;
+            lastWritten[0] = live;
+            NodeFieldWidgets.applyValue(field, control, live);
+            // The other half: whatever recompiles or re-renders has to hear about it too, or the picture
+            // stays as stale as the widget did.
+            if (onChange != null) onChange.run();
+        });
     }
 
     /**
