@@ -175,6 +175,22 @@ public class DockArea extends UIElement implements UIFrameTicker {
         rebuildPending = true;
     }
 
+    /**
+     * Brings every strip into line with its leaf, <b>without</b> rebuilding the tree.
+     *
+     * <p>For the case where only the <em>selection</em> changed — activating a panel that is already open.
+     * {@link #requestRebuild()} would work, but it discards and recreates every {@link SplitView} and
+     * re-parents every group to do it, which is a structural change made for a state change.</p>
+     *
+     * <p>It also breaks a rule this engine states plainly: <b>a widget must never rebuild the elements it
+     * is being clicked on.</b> Activating an open file is normally a click — on a tab, or on a row in a
+     * file tree — and tearing the tree down underneath that click is the shape of bug the table header
+     * already cost a session to.</p>
+     */
+    public void syncGroups() {
+        for (DockGroup group : groups.values()) group.sync();
+    }
+
     @Override
     public boolean tickFrame(float deltaSeconds) {
         if (rebuildPending) {

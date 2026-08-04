@@ -163,6 +163,19 @@ public final class EditorCommands {
         registry.register(Command.of(PREFIX + "findWordUnderCaret", "Find Word Under Caret")
                 .run(on(TextEditor::findWordUnderCaret)));
 
+        // ── Problems ────────────────────────────────────────────────────────────────────────────
+        //
+        // Navigation is a CYCLE, not a walk to the end: repeatedly pressing next visits every problem and
+        // returns to the first. IntelliJ's F2 and VS Code's F8 both work this way, and the alternative --
+        // stopping at the last one -- makes the most common gesture (keep pressing until the file is
+        // clean) end at a dead key that gives no feedback.
+        registry.register(Command.of(PREFIX + "nextProblem", "Next Problem")
+                .run(on(TextEditor::goToNextProblem))
+                .enabledWhen(when(editor -> !editor.diagnostics().isEmpty())));
+        registry.register(Command.of(PREFIX + "previousProblem", "Previous Problem")
+                .run(on(TextEditor::goToPreviousProblem))
+                .enabledWhen(when(editor -> !editor.diagnostics().isEmpty())));
+
         // ── View ────────────────────────────────────────────────────────────────────────────────
         registry.register(Command.of(PREFIX + "zoomIn", "Zoom In")
                 .run(on(editor -> editor.zoomBy(1)))
@@ -233,6 +246,22 @@ public final class EditorCommands {
         keymap.bind("F3", PREFIX + "findNext").allowWhileTyping();
         keymap.bind("Shift+F3", PREFIX + "findPrevious").allowWhileTyping();
         keymap.bind("Mod+F3", PREFIX + "findWordUnderCaret");
+
+        // BOTH vendors' keys, because the muscle memory people arrive with is genuinely split and each
+        // costs one line. IntelliJ's F2/Shift+F2 and VS Code's F8/Shift+F8. F2 is Rename in VS Code, which
+        // is not a conflict here because there is nothing to rename -- if a rename ever lands, F2 belongs
+        // to it and this keeps F8.
+        //
+        // allowWhileTyping, like find: jumping between errors is exactly what you do WHILE editing, and a
+        // bare function key carries no character so it cannot be swallowed as text.
+        // Four binds rather than two bindAll calls: bindAll returns the Keymap for chaining more bindings,
+        // so there is no single KeyBinding to mark. A bare function key has no non-shift modifier, which
+        // is exactly what the typing guard blocks -- without allowWhileTyping these are dead in the one
+        // widget they exist for.
+        keymap.bind("F2", PREFIX + "nextProblem").allowWhileTyping();
+        keymap.bind("F8", PREFIX + "nextProblem").allowWhileTyping();
+        keymap.bind("Shift+F2", PREFIX + "previousProblem").allowWhileTyping();
+        keymap.bind("Shift+F8", PREFIX + "previousProblem").allowWhileTyping();
 
         keymap.bind("Alt+Z", PREFIX + "toggleSoftWrap");
 

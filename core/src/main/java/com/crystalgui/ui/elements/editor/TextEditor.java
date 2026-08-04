@@ -11,6 +11,8 @@ import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.diagnostic.DiagnosticSet;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
@@ -41,6 +43,7 @@ import com.crystalgui.text.fold.FoldingModel;
 import com.crystalgui.text.fold.FoldingRangeProvider;
 import com.crystalgui.text.fold.FoldingRegions;
 import com.crystalgui.text.fold.IndentRangeProvider;
+import javax.annotation.Nullable;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.text.wrap.ShapedLineBreaks;
 import com.crystalgui.text.wrap.WrapIndent;
@@ -373,10 +376,87 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private final CurrentLinePart currentLinePart = new CurrentLinePart(this, currentLine, currentLineGutter);
 
     private final LineNumbersPart lineNumbersPart = new LineNumbersPart(this, gutter);
+    private final SquigglesPart squigglesPart = new SquigglesPart(this);
+    private final ErrorStripePart errorStripePart = new ErrorStripePart(this);
+    private final InspectionWidgetPart inspectionWidgetPart = new InspectionWidgetPart(this);
     /** Every part, in paint order, so the frame drives one list rather than a dozen named calls. */
     private final java.util.List<EditorViewPart> viewParts = java.util.List.of(
             gutterEdgePart, indentGuidesPart, whitespacePart, rulersPart, foldingDecorationsPart,
-            zoomIndicatorPart, lineNumbersPart, currentLinePart, selectionsPart, viewCursorsPart);
+            zoomIndicatorPart, lineNumbersPart, currentLinePart, selectionsPart, squigglesPart, errorStripePart, inspectionWidgetPart,
+            viewCursorsPart);
+
+    /**
+     * The problems reported about this document.
+     *
+     * <p>Owned by the editor for now, which is a <b>known compromise</b> and worth stating so it is not
+     * mistaken for the intended shape. Diagnostics describe a <em>document</em>, exactly as an undo stack
+     * does, so two views onto one file should share a set and a file with no view open should still have
+     * one — that is what a Problems panel listing errors in unopened files requires. Moving it out is a
+     * pure relocation once there is a document type to move it to; keeping it here in the meantime is what
+     * lets the rendering half exist at all.</p>
+     */
+    private final DiagnosticSet diagnostics = new DiagnosticSet();
+
+    public DiagnosticSet diagnostics() {
+        return diagnostics;
+    }
+
+    /** Moves the caret to the next problem after it, wrapping. False when there are none. */
+    public boolean goToNextProblem() {
+        return goToProblem(diagnostics.nextFrom(caretPoint()));
+    }
+
+    /** The mirror of {@link #goToNextProblem}, wrapping to the last. */
+    public boolean goToPreviousProblem() {
+        return goToProblem(diagnostics.previousFrom(caretPoint()));
+    }
+
+    /**
+     * Puts the caret on a diagnostic, revealing it first.
+     *
+     * <p><b>The unfold is not a convenience.</b> A row inside a collapsed region has no view line, so a
+     * caret placed on it cannot be painted, scrolled to or typed at — the same reason folding a block the
+     * caret is in has to move the caret to the block's header. Jumping to a problem hidden inside a fold
+     * without opening it leaves the editor looking focused and doing nothing, which is the worst possible
+     * answer to "take me to the error".</p>
+     *
+     * <p>The row is clamped to the live document because diagnostics are inherently stale: the set on
+     * screen describes whatever was last compiled, and the buffer may since have shrunk.</p>
+     */
+    private boolean goToProblem(@Nullable Diagnostic target) {
+        if (target == null) return false;
+        int row = Math.max(0, Math.min(target.start().row(), buffer.lineCount() - 1));
+        revealRow(row);
+        int rowStart = buffer.document().lineStartOffset(row);
+        int rowEnd = buffer.document().lineEndOffset(row);
+        setCaret(Math.min(rowEnd, rowStart + Math.max(0, target.start().column())));
+        return true;
+    }
+
+    /**
+     * The rows currently hidden by collapsed folds.
+     *
+     * <p>Public because "can this row be shown at all?" is a question anything navigating to a row has to
+     * be able to ask — {@link #goToProblem} does, and an error stripe deciding where to draw a mark for a
+     * folded-away problem will too. Deriving it from the folding model each time rather than caching it:
+     * the set changes on every fold, and a stale answer here places a caret somewhere unpaintable.</p>
+     */
+    public java.util.List<FoldingModel.RowRange> hiddenRowRanges() {
+        return folding.hiddenRows();
+    }
+
+    /** Opens every collapsed region hiding {@code row}. A no-op when the row is already visible, so this
+     * does not disturb the fold state of a file whose problems are all in the open. */
+    private void revealRow(int row) {
+        for (FoldingModel.RowRange range : folding.hiddenRows()) {
+            if (!range.contains(row)) continue;
+            StableViewport anchor = captureFoldAnchor();
+            ensureFoldingCurrent();
+            folding.setCollapseStateUp(false, row);
+            afterFoldChange(anchor);
+            return;
+        }
+    }
 
 
     private final FoldingModel folding = new FoldingModel();

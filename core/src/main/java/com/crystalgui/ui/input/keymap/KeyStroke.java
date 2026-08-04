@@ -180,6 +180,65 @@ public record KeyStroke(int key, int modifiers) {
         BY_NAME.put("PGDN", BY_NAME.get("NEXT"));
         BY_NAME.put("PLUS", BY_NAME.get("ADD"));
         BY_NAME.values().removeIf(value -> value == null);
+
+        // ── Display names ───────────────────────────────────────────────────────────────────────
+        //
+        // The SAME leak as the aliases above, in the other direction. Parsing was fixed twice by adding
+        // an alias, but toString() still reads BY_CODE, which reflection filled with whatever LWJGL2
+        // called the key -- so a command palette rendered its accelerators as "Ctrl+NEXT", "Ctrl+PRIOR"
+        // and "Ctrl+Shift+BACKSLASH". Every one of those is a real binding shown under a name that is on
+        // nobody's keyboard, which makes the palette's most useful column unreadable.
+        //
+        // Overwrites rather than putIfAbsent: reflection has already claimed these codes, and here the
+        // hand-written name is the one that should win.
+        displayName("PRIOR", "PageUp");
+        displayName("NEXT", "PageDown");
+        displayName("BACK", "Backspace");
+        displayName("RETURN", "Enter");
+        displayName("ESCAPE", "Esc");
+        displayName("DELETE", "Delete");
+        displayName("BACKSLASH", "\\");
+        displayName("SLASH", "/");
+        displayName("GRAVE", "`");
+        displayName("MINUS", "-");
+        displayName("EQUALS", "=");
+        displayName("LBRACKET", "[");
+        displayName("RBRACKET", "]");
+        displayName("SEMICOLON", ";");
+        displayName("APOSTROPHE", "'");
+        displayName("COMMA", ",");
+        displayName("PERIOD", ".");
+        displayName("SPACE", "Space");
+        displayName("TAB", "Tab");
+        displayName("ADD", "+");
+        displayName("SUBTRACT", "-");
+        displayName("MULTIPLY", "*");
+        displayName("DIVIDE", "/");
+        displayName("UP", "Up");
+        displayName("DOWN", "Down");
+        displayName("LEFT", "Left");
+        displayName("RIGHT", "Right");
+        displayName("HOME", "Home");
+        displayName("END", "End");
+        displayName("INSERT", "Insert");
+    }
+
+    /**
+     * Sets what {@link #toString()} prints for the key currently reflected under {@code reflectedName},
+     * and makes that spelling parseable so {@code parse(stroke.toString())} round-trips.
+     *
+     * <p>The reverse alias is {@code putIfAbsent} because several display names are genuinely ambiguous —
+     * {@code -} is both {@code MINUS} and {@code SUBTRACT}, {@code /} is both {@code SLASH} and
+     * {@code DIVIDE}. First registration wins, which puts the main row ahead of the numpad; overwriting
+     * would silently move an existing binding onto the other key.</p>
+     *
+     * <p>Silent when the constant does not exist, so a {@code CgKeyCodes} rename cannot break class init.</p>
+     */
+    private static void displayName(String reflectedName, String display) {
+        Integer code = BY_NAME.get(reflectedName);
+        if (code == null) return;
+        BY_CODE.put(code, display);
+        BY_NAME.putIfAbsent(display.toUpperCase(Locale.ROOT), code);
     }
 
     /**

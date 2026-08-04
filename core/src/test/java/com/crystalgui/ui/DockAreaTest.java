@@ -675,4 +675,57 @@ public class DockAreaTest extends UiTestBase {
         assertTrue("and the split view is gone with it",
                 !(area.builtRoot() instanceof SplitView));
     }
+
+    // ── Opening panels at runtime ───────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Opening a panel selects it — and exactly one tab is selected afterwards.</b>
+     *
+     * <p>This failed with a one-step lag: opening a third document left the <em>second</em> looking
+     * selected. The cause was a feedback loop between the two directions of the same binding.
+     * {@code DockGroup} writes {@code onTabSelected} back into the leaf so a user's click moves the model —
+     * but {@code rebuildStrip} changes the strip's selection repeatedly for its own reasons
+     * ({@code clearTabs} promotes a survivor per removal; the first {@code addTab} selects itself), and
+     * every one of those was written back. The model's selection was destroyed by the act of displaying
+     * it, and {@code sync()} then faithfully showed the corrupted value.</p>
+     *
+     * <p>Every piece was individually correct — {@code DockLeaf.add} activates what it inserts,
+     * {@code TabView.selectTab} is exclusive, computed styles tracked the model exactly — which is why
+     * nothing here caught it. <b>Nothing exercised both directions at once.</b> Asserting the count of
+     * selected tabs as well as which one is what makes that reachable.</p>
+     */
+    @Test
+    public void openingAPanelSelectsItAndLeavesExactlyOneTabSelected() {
+        setUpTwoGroups();
+        DockLeaf target = layout.leaves().get(0);
+
+        for (String id : new String[]{"gamma", "delta", "console"}) {
+            DockPanelRef opened = new DockPanelRef(id);
+            target.add(opened);
+            target.activate(opened);
+            area.requestRebuild();
+            frame();
+            frame();
+
+            assertEquals("the leaf forgot what was just opened", opened, target.activePanel());
+
+            List<Tab> selected = new ArrayList<>();
+            List<Tab> all = new ArrayList<>();
+            collectTabs(area, all, selected);
+            assertEquals("more than one tab is selected after opening " + id,
+                    layout.leaves().size(), selected.size());
+
+            Tab shown = area.groupFor(target).tabView().getSelectedTab();
+            assertSame("the strip is showing a different tab than the model says",
+                    area.groupFor(target).tabFor(opened), shown);
+        }
+    }
+
+    private static void collectTabs(UIElement element, List<Tab> all, List<Tab> selected) {
+        if (element instanceof Tab tab) {
+            all.add(tab);
+            if (tab.isChecked()) selected.add(tab);
+        }
+        for (UIElement child : element.getChildren()) collectTabs(child, all, selected);
+    }
 }
