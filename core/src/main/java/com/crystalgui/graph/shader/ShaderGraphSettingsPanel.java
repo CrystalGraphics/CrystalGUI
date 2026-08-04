@@ -137,9 +137,11 @@ public class ShaderGraphSettingsPanel extends ConfiguratorPanel {
 
     @Nullable
     private Configurator stat(ConfiguratorGroup group, String label) {
-        Configurator row = addTo(group.content(), ConfigDescriptor.text("compile." + label, label), "");
-        if (row != null) row.control().setEnabled(false);
-        return row;
+        // INFO, not a disabled TEXT row: a compile count is a fact, and a text field drew it as something
+        // to type into -- which it also genuinely was, since disabling the wrapper never reached the
+        // field inside it. Still writable programmatically, which is the whole point here: these change
+        // on every emit.
+        return addTo(group.content(), ConfigDescriptor.info("compile." + label, label), "");
     }
 
     /** Updates the numbers in place. Never rebuilds — see the constructor. */

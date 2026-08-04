@@ -206,9 +206,8 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
         String from = (sourceType == null ? incoming.from().nodeId() : sourceType.label())
                 + "." + incoming.from().portId();
 
-        Configurator row = addTo(parent, ConfigDescriptor.text(field.id(), field.label())
+        addTo(parent, ConfigDescriptor.info(field.id(), field.label())
                 .tooltip("Driven by " + from + ", so this port's own value is unused."), "from " + from);
-        if (row != null) row.control().setEnabled(false);
     }
 
     /**
@@ -236,10 +235,17 @@ public class ShaderNodeInspector extends ConfiguratorPanel {
         if (outputs.length() > 0) readOnly(about, "Out", outputs.toString());
     }
 
-    /** A fact, shown as a disabled text row — the kit has no read-only kind, and one row type is enough. */
+    /**
+     * A fact, shown as read-only text.
+     *
+     * <p>{@link ConfigDescriptor.Kind#INFO}, never a disabled {@code TEXT} row. These were text fields,
+     * which meant a node's id and its resolved port types drew as editable boxes AND genuinely accepted
+     * typing — {@code setEnabled(false)} on the wrapper never reached the field inside it. An inspector
+     * inviting the user to edit a fact and then discarding what they typed is worse than one that simply
+     * does not offer.</p>
+     */
     private void readOnly(ConfiguratorGroup group, String label, String value) {
-        Configurator row = addTo(group.content(), ConfigDescriptor.text(label, label), value);
-        if (row != null) row.control().setEnabled(false);
+        addTo(group.content(), ConfigDescriptor.info(label, label), value);
     }
 
     // ── A wire ──────────────────────────────────────────────────────────────

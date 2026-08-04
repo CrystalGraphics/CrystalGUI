@@ -49,6 +49,8 @@ public final class ConfigControls {
         });
 
         FACTORIES.put(ConfigDescriptor.Kind.HEADER, (d, v) -> new HeaderControl(d));
+        FACTORIES.put(ConfigDescriptor.Kind.INFO,
+                (d, v) -> new InfoControl(d, v == null ? "" : String.valueOf(v)));
         FACTORIES.put(ConfigDescriptor.Kind.COLOR, (d, v) -> new ColorControl(d, v instanceof Integer i ? i : null));
         FACTORIES.put(ConfigDescriptor.Kind.MATRIX, (d, v) -> new MatrixControl(d, v instanceof double[] a ? a : null));
         FACTORIES.put(ConfigDescriptor.Kind.ASSET, (d, v) -> new AssetControl(d, v == null ? null : String.valueOf(v)));
