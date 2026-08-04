@@ -6,6 +6,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Menu;
+import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.MenuItem;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.keymap.KeyChord;
@@ -171,23 +172,59 @@ public final class ContextMenu {
      */
     public static UIElement attach(UIElement on, CommandRegistry registry,
                                    java.util.function.Function<UIElement, ContextMenu> builder) {
+        // ONE LIVE MENU PER ATTACHMENT SITE, and this is a correctness requirement rather than tidiness.
+        //
+        // Building a fresh Menu per press and leaving the last one in the tree crashed Taffy outright:
+        //   Index (is 2) should be < child_count (1)
+        // Promotion REPARENTS a popover's Taffy node to the root, so a promoted sibling is still a DOM
+        // child of the host but no longer one of its Taffy children. registerElement inserts the new menu
+        // at its DOM sibling index, which by then is past the end of a child list that has been quietly
+        // emptied underneath it. Every extra menu widened the gap.
+        //
+        // Discarding the previous one is also simply what a second right-click means.
+        Menu[] live = { null };
+
         on.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
             if (event.getButtonId() != com.crystalgraphics.platform.input.CgMouseCodes.RIGHT_BUTTON) return;
             UIWindow window = on.getAttachedWindow();
             if (window == null) return;
             UIElement target = event.getTarget() == null ? on : event.getTarget();
+
+            discard(live);
+
             ContextMenu spec = builder.apply(target);
             if (spec == null) return;
 
             Menu menu = spec.build(registry, target);
-            // Attached to the ROOT, not to `on`: a Popover promotes itself to the top layer, and a menu
-            // parented inside a scrolling tree would otherwise be clipped by it before promotion happens.
-            window.ui.rootElement.addChild(menu);
+            // The nearest ancestor that ACCEPTS children, not the root -- the root may itself be a
+            // composite that refuses them, which is exactly how right-clicking the Project panel threw
+            // out of the mouse-down dispatch. See Popover.hostFor.
+            Popover.hostFor(window, target).addChild(menu);
+            live[0] = menu;
+            // Dropped from the tree when it closes by any route -- light dismiss, Escape, or choosing an
+            // item. Left in place it is an invisible display:none element that accumulates one per press.
+            menu.onClosed.connect(() -> discard(live));
+
             menu.showAt(event.getPosition().x(), event.getPosition().y(), target);
             // CONSUMED, so a right-click does not also fall through to whatever the left button does --
             // selecting a row, starting a marquee, panning a canvas.
             event.stopPropagation();
         }, false, true);
         return on;
+    }
+
+    /**
+     * Closes and detaches the live menu, if there is one.
+     *
+     * <p><b>Close before remove, never the other way round.</b> Closing demotes it, which restores its
+     * Taffy node to its DOM parent — removing it while still promoted leaves the engine reconciling a node
+     * that has been parented to the root against a DOM parent that no longer lists it.</p>
+     */
+    private static void discard(Menu[] live) {
+        Menu menu = live[0];
+        if (menu == null) return;
+        live[0] = null;                       // FIRST, so the onClosed hook below does not recurse
+        if (menu.isOpen()) menu.hide();
+        if (menu.getParent() != null) menu.getParent().removeChild(menu);
     }
 }

@@ -206,14 +206,22 @@ public class ProjectFileTree extends UIElement {
             // in this engine does this.
             label.setHitTest(false);
             row.addChild(label);
-            // DOUBLE CLICK OPENS; a single click only selects, which ListView does for itself through the
-            // row's focus. IntelliJ's rule, and taking it is what makes preview tabs unnecessary: they
-            // exist to stop single-click-to-open burying you in tabs as you walk a tree with the arrow
-            // keys, and a tree that does not open on a single click never has that problem.
+            // A FOLDER TOGGLES ON ONE CLICK; A FILE OPENS ON TWO. Not one rule for both, and the
+            // difference is not a compromise -- the two rows mean different things.
+            //
+            // Opening a file is destructive of attention: it takes a tab and the focus, which is exactly
+            // what double-click protects against and why preview tabs exist in editors that do not have
+            // it. Expanding a folder costs nothing and is undone by clicking again, so making it wait for
+            // a second click just makes the tree feel broken -- which is precisely how it was reported,
+            // after a first pass put the double-click gate in front of both.
+            //
+            // VS Code's explorer draws the line in the same place. IntelliJ wants the chevron for a single
+            // click, which is only better once the chevron is its own hit target; ours is still part of
+            // the label's text.
             row.onMouseDown.attachListener((element, event) -> {
-                if (event.getDetail() < 2) return;
                 CgPath item = rowItems.get(row);
-                if (item != null) activate(item);
+                if (item == null) return;
+                if (source.isDirectory(item) || event.getDetail() >= 2) activate(item);
             }, false, false);
             return row;
         }
