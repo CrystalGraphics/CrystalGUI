@@ -5,6 +5,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
@@ -351,6 +352,19 @@ public class ListView<T> extends ScrollerView {
             // The view learns the focused INDEX from the row itself, so focus arriving any way at all —
             // a click, Tab, a renderer calling requestFocus — is tracked. Requiring the renderer to
             // report it would be a rule to remember, and the failure when forgotten is silent.
+            // FOCUSABLE ON CLICK, or the listener below can never fire for a pointer.
+            //
+            // Selection here is driven entirely by focus -- deliberately, so that a click, Tab and a
+            // renderer's own requestFocus all take one path. But FocusPolicy defaults to NONE, so a row
+            // that nobody made focusable is a row a click cannot focus, and therefore cannot select. The
+            // list still worked by keyboard, because moveFocusTo focuses the row itself, which made the
+            // gap look like a styling problem: rows highlighted on hover and never on click.
+            //
+            // CLICK_NOT_TABBABLE is the ARIA roving-tabindex pattern this engine already uses for
+            // composites: the LIST is the tab stop, the arrows move inside it, and a fifty-row list is
+            // one Tab press to skip rather than fifty.
+            row.setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
+
             final UIElement tracked = row;
             tracked.onFocus.attachListener((el, event) -> {
                 int index2 = indexOf(tracked);

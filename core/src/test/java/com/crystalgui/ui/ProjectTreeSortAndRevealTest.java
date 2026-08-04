@@ -1,5 +1,7 @@
 package com.crystalgui.ui;
 
+import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.InMemoryFileSystem;
 import com.crystalgui.fs.ProjectRegistry;
@@ -28,6 +30,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -233,6 +236,82 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
         assertEquals(1, reported.size());
         assertEquals(CgPath.parse("mymod.proj:src"), reported.get(0).destination());
         assertFalse("a plain drag must move, not copy", reported.get(0).copy());
+    }
+
+    /**
+     * <b>Clicking a row selects it.</b>
+     *
+     * <p>The one that shipped broken, and it was never a styling problem. {@code ListView} drives selection
+     * entirely from the row's <em>focus</em> event — one path for a click, for Tab and for a renderer's own
+     * {@code requestFocus} — but {@code FocusPolicy} defaults to {@code NONE}, so a row nobody made
+     * focusable is a row a click cannot focus and therefore cannot select. The list worked by keyboard the
+     * whole time, because {@code moveFocusTo} focuses the row itself, which is exactly what made it look
+     * like a missing CSS rule: highlighted on hover, never on click.</p>
+     *
+     * <p>Driven through the real dispatch, because the defect lived between the pointer and the focus
+     * event — asserting {@code select(0)} would have passed throughout.</p>
+     */
+    @Test
+    public void clickingARowSelectsIt() {
+        assertTrue("fixture wrong -- nothing to click", !visibleNames().isEmpty());
+        assertEquals("something was already selected", null, tree.selectedPath());
+
+        UIElement row = rowElementFor("Apple.md");
+        assertNotNull("no realised row for Apple.md", row);
+        clickCentreOf(row);
+
+        assertNotNull("clicking a row selected nothing", tree.selectedPath());
+        assertEquals("Apple.md", tree.selectedPath().name());
+        assertTrue("the row carries no selection class, so nothing can style it",
+                row.hasClass(com.crystalgui.ui.elements.list.ListView.SELECTED_CLASS));
+    }
+
+    /** And clicking another row moves the selection rather than adding to it. */
+    @Test
+    public void clickingAnotherRowMovesTheSelection() {
+        clickCentreOf(rowElementFor("Apple.md"));
+        assertEquals("Apple.md", tree.selectedPath().name());
+
+        clickCentreOf(rowElementFor("zebra.txt"));
+        assertEquals("zebra.txt", tree.selectedPath().name());
+        assertEquals("a plain click extended the selection instead of replacing it",
+                1, tree.selectedPaths().size());
+    }
+
+    /** The realised row element showing a given file name, or null. */
+    private UIElement rowElementFor(String name) {
+        for (UIElement row : tree.treeView().getChildren()) {
+            if (!row.hasClass(ProjectFileTree.ROW_CLASS)) continue;
+            for (UIElement child : row.getChildren()) {
+                if (child instanceof com.crystalgui.ui.elements.UIText text
+                        && text.getText().contains(name)) {
+                    return row;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** A real press and release at the row's centre, through the input handler. */
+    private void clickCentreOf(UIElement row) {
+        var cache = row.getRuntimeCache();
+        // Through the engine's own matrix, so this stays correct under uiScale and any ancestor
+        // transform -- the same conversion GraphViewTest uses to aim at a port.
+        var centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
+        int x = Math.round(centre.x());
+        int y = Math.round(centre.y());
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                x, y, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                x, y, 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 1L));
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                x, y, 0, 0, CgMouseCodes.LEFT_BUTTON, false, 0f, 2L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        settle();
     }
 
     /** A reveal of something that does not exist gives up rather than retrying forever. */
