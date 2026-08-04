@@ -454,11 +454,30 @@ public class Workbench extends UIElement {
     @Nullable
     private TextEditor boundTo;
 
+    private boolean commandsInstalled;
+
+    /**
+     * Installs the explorer's commands and its right-click menu, once there is a window.
+     *
+     * <p>Self-installed for the reason {@code GraphView} records: a widget's own verbs belong to the
+     * widget, and a requirement every host has to remember is one that gets forgotten — which it was,
+     * twice, for {@code GraphCommands} and again for undo. Bound on the <b>file tree</b>, so bare
+     * {@code Delete} and {@code F2} exist only while focus is in the panel rather than firing while
+     * typing into any editor sharing the window.</p>
+     */
+    private void installExplorerCommands(UIWindow window) {
+        if (commandsInstalled) return;
+        commandsInstalled = true;
+        ExplorerCommands.install(window, this);
+        fileTree.setContextMenu(window.getCommands(), ExplorerCommands::menu);
+    }
+
     private boolean tick(float deltaSeconds) {
         if (getAttachedWindow() == null) {
             ticking = false;
             return false;
         }
+        installExplorerCommands(getAttachedWindow());
         fileTree.loadProjects();
         // Follows the active tab. Only on a CHANGE -- rebinding every frame would rebuild the table's
         // rows sixty times a second for a set that has not moved.
