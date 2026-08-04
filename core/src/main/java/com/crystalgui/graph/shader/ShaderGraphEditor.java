@@ -327,6 +327,7 @@ public class ShaderGraphEditor extends UIElement {
             previewsAttached = true;
         }
         if (!mainPreviewAttached) mainPreviewAttached = mainPreview.attach();
+        blackboard.installCommands();
         blackboard.reclamp();
         return !(previewsAttached && mainPreviewAttached);
     }

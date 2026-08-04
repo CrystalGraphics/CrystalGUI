@@ -650,9 +650,10 @@ colorselector .__channel-row__ slider .__thumb__ {
     color: var(--node-text-bright);
 }
 /* DARKER than the title. The two lines are a heading and its caption; equal weight makes them read as
- * two competing labels, which is exactly how the side-by-side against Unity showed up. */
+ * two competing labels, which is exactly how the side-by-side against Unity showed up. Same grey as
+ * a pill's type column, so every caption on this panel is one colour. */
 .__blackboard__ .__titles__ > .__subtitle__ {
-    color: #8A8A8A;
+    color: #676767;
 }
 .__blackboard__ > .__head__ > .__add__ {
     color: var(--node-text-bright);
@@ -660,20 +661,30 @@ colorselector .__channel-row__ slider .__thumb__ {
 .__blackboard__ .__empty__ {
     color: var(--node-text);
 }
-.__property-pill__:hover {
-    background: var(--node-header);
-}
-/* Selection is an OUTLINE in the graph's own accent, not a fill -- a selected NODE is outlined #44C0FF
- * and a selected pill reading differently would be two vocabularies for one idea. On the CAPSULE, since
- * that is the thing being selected; the row is merely the width of the panel. */
-.__property-pill__.__selected__ > .__capsule__ {
-    outline-color: #44C0FF;
-}
+/* NO row-level fill. The row is the full width of the panel, so filling it on hover reads as a table
+ * row highlighting while the thing under the pointer is the chip. Both states ring the capsule instead.
+ *
+ * An OUTLINE rather than a fill, in the graph's own accent: a selected NODE is outlined #44C0FF, and a
+ * selected pill reading differently would be two vocabularies for one idea. */
 .__property-pill__ > .__capsule__ {
     background: var(--node-header);
 }
-.__property-pill__:hover > .__capsule__ {
-    background: var(--node-panel);
+/* THE NODE'S OWN THREE STATES, values and all: hover 1px #327090, selected 2px #44C0FF, both 3px
+ * #44C0FF. A pill and a node are the same idea -- a thing you hover, select and act on -- so they say it
+ * the same way; a second vocabulary for one concept is what makes an editor feel assembled rather than
+ * designed.
+ *
+ * ORDER IS LOAD-BEARING, exactly as it is for graphnode above. `> .__capsule__:hover` and
+ * `.__selected__ > .__capsule__` weigh the same (30 each), so source order alone decides between them
+ * and selected has to come second. The combined rule outweighs both at 40 and wins outright. */
+.__property-pill__ > .__capsule__:hover {
+    outline: 1px #327090;
+}
+.__property-pill__.__selected__ > .__capsule__ {
+    outline: 2px #44C0FF;
+}
+.__property-pill__.__selected__ > .__capsule__:hover {
+    outline: 3px #44C0FF;
 }
 .__property-pill__ .__dot__ {
     background: #7BD64B;
@@ -681,8 +692,10 @@ colorselector .__channel-row__ slider .__thumb__ {
 .__property-pill__ .__name__ {
     color: var(--node-text-bright);
 }
+/* Greyer than the name on purpose -- it is a caption, not a second label. Measured against Unity's own
+ * board rather than picked. */
 .__property-pill__ > .__type__ {
-    color: var(--node-text);
+    color: #676767;
 }
 
 /* Solid, not a checkerboard — yet. With `Alpha` now a real master port, a transparent material over a
