@@ -204,10 +204,21 @@ public final class UIDragController {
         CURSOR
     }
 
-    /** Where the CURSOR-anchored ghost sits relative to the pointer, in logical units. Below and right,
-     * so it never covers the drop target the pointer is aiming at. */
-    private static final float CURSOR_NUDGE_X = 10f;
-    private static final float CURSOR_NUDGE_Y = 14f;
+    /**
+     * Where the CURSOR-anchored ghost's top-left sits relative to the pointer, in logical units.
+     *
+     * <p>Below and to the right, so the ghost never covers the drop target the pointer is aiming at.
+     * Sized to clear the CURSOR ITSELF rather than merely to be non-zero: an arrow is around sixteen
+     * physical pixels tall, so a ten-unit nudge at {@code uiScale} 1 puts the pointer on the ghost's
+     * first character — which reads as the ghost being stuck to the cursor at the wrong point rather
+     * than as a small offset.</p>
+     *
+     * <p>Logical rather than physical, so the gap stays proportionate as the whole UI scales; the
+     * cursor does not scale with it, which is why the value is generous at scale 1 rather than tight.
+     * These two numbers are the whole of the placement and are meant to be tuned by eye.</p>
+     */
+    private static final float CURSOR_NUDGE_X = 14f;
+    private static final float CURSOR_NUDGE_Y = 9f;
 
     private GhostAnchor ghostAnchor = GhostAnchor.GRAB;
 

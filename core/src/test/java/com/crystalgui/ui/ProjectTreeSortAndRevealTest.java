@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.fs.CgPath;
@@ -80,6 +81,19 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
         window = new UIWindow(Ui.of(root));
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
         window.init(1200, 800);
+        // The widget reads modifier state from the platform, not from the event, so the stub has to
+        // answer for it -- Ctrl-click and Shift-click are otherwise indistinguishable from a plain one.
+        com.crystalgui.testsupport.TestPlatformService.get().input(
+                new com.crystalgraphics.platform.service.CgInputService() {
+                    @Override public int getCurrentModifiers() { return heldModifiers; }
+                    @Override public int translateKeyboardCodes(int c) { return c; }
+                    @Override public boolean isKeyDown(int c) { return false; }
+                    @Override public int translateMouseCodes(int c) { return c; }
+                    @Override public boolean isMouseDown(int c) { return false; }
+                    @Override public int howManyMouseButtons() { return 3; }
+                    @Override public String getClipboard() { return ""; }
+                    @Override public void setClipboard(String text) { }
+                });
         settle();
         tree.loadProjects();
         settle();
@@ -282,7 +296,7 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
      * header: a widget must never rebuild the elements it is being clicked on.</p>
      */
     @Test
-    public void clickingAFolderSelectsItAndExpandsIt() {
+    public void clickingAFolderSelectsItAndDoubleClickingExpandsIt() {
         UIElement row = rowElementFor("src");
         assertNotNull("no realised row for src", row);
         assertTrue("fixture wrong -- src is already expanded",
@@ -292,7 +306,16 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
 
         assertNotNull("clicking a folder selected nothing", tree.selectedPath());
         assertEquals("src", tree.selectedPath().name());
-        assertTrue("the folder did not expand", tree.treeView().isExpanded(CgPath.parse("mymod.proj:src")));
+        // ONE CLICK SELECTS AND DOES NOT FOLD, which changed deliberately: a press is how you aim
+        // Delete, Rename, a drag or a Shift-range, so folding on it means a folder cannot be selected
+        // without also being opened, and a range across one re-flattens the model mid-gesture.
+        // IntelliJ folds the row on a DOUBLE click, which is what this panel is modelled on.
+        assertFalse("a single click folded the row -- it should only select",
+                tree.treeView().isExpanded(CgPath.parse("mymod.proj:src")));
+
+        clickCentreOf(rowElementFor("src"));
+        assertTrue("a double click did not expand the folder",
+                tree.treeView().isExpanded(CgPath.parse("mymod.proj:src")));
     }
 
     /**
@@ -421,6 +444,38 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
         assertEquals("zebra.txt", tree.selectedPath().name());
         assertEquals("a plain click extended the selection instead of replacing it",
                 1, tree.selectedPaths().size());
+    }
+
+
+    /** Modifier state the widget reads through {@code CgPlatform.input()}. */
+    private int heldModifiers;
+
+    /** A press and release at the row's centre with {@code modifiers} held for the whole gesture. */
+    private void clickWithModifier(UIElement row, int modifiers) {
+        heldModifiers = modifiers;
+        try {
+            pressAndRelease(row);
+            settle();
+        } finally {
+            heldModifiers = 0;
+        }
+    }
+
+    /** The press half only — for asserting what a drag would carry, before any release decides. */
+    private void pressOnly(UIElement row) {
+        var cache = row.getRuntimeCache();
+        var centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
+        int x = Math.round(centre.x());
+        int y = Math.round(centre.y());
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                x, y, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                x, y, 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
     }
 
     /** The realised row element showing a given file name, or null. */
@@ -585,5 +640,155 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
         // The assertion is that we got here: a reveal that never cleared its target would keep asking for
         // a listing every frame, and the settle loops above would never terminate the retry.
         assertTrue(true);
+    }
+
+    // ── Mouse selection ─────────────────────────────────────────────────────
+    //
+    // Ported from the behaviour every file manager shares and VS Code's listWidget implements. None of it
+    // existed: selection was driven entirely by the FOCUS event, which has no modifiers and no press/release
+    // pair to hang them on, so every click could only ever mean "replace the selection with this one row".
+
+    /** Ctrl-click adds to the selection instead of replacing it. */
+    @Test
+    public void ctrlClickTogglesARowIntoTheSelection() {
+        clickCentreOf(rowElementFor("Apple.md"));
+        assertEquals(1, tree.selectedPaths().size());
+
+        clickWithModifier(rowElementFor("zebra.txt"), CgModifiers.CTRL);
+
+        assertEquals("Ctrl-click replaced the selection instead of extending it",
+                2, tree.selectedPaths().size());
+        assertTrue(namesOf(tree.selectedPaths()).contains("Apple.md"));
+        assertTrue(namesOf(tree.selectedPaths()).contains("zebra.txt"));
+    }
+
+    /** And Ctrl-clicking a selected row takes it back out again. */
+    @Test
+    public void ctrlClickRemovesARowThatWasAlreadySelected() {
+        clickCentreOf(rowElementFor("Apple.md"));
+        clickWithModifier(rowElementFor("zebra.txt"), CgModifiers.CTRL);
+        clickWithModifier(rowElementFor("zebra.txt"), CgModifiers.CTRL);
+
+        assertEquals(List.of("Apple.md"), namesOf(tree.selectedPaths()));
+    }
+
+    /** Shift-click takes everything between the anchor and the clicked row. */
+    @Test
+    public void shiftClickSelectsTheRangeFromTheAnchor() {
+        tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), false);
+        settle();
+        List<String> rows = visibleNames();
+        assertTrue("fixture wrong -- need at least three rows to have a range", rows.size() >= 3);
+
+        clickCentreOf(rowElementFor(rows.get(0)));
+        clickWithModifier(rowElementFor(rows.get(2)), CgModifiers.SHIFT);
+
+        assertEquals("Shift-click did not extend a range from the anchor",
+                3, tree.selectedPaths().size());
+    }
+
+    /**
+     * <b>A plain press on an already-selected row does not collapse the selection.</b>
+     *
+     * <p>This is the one that makes dragging several files work, and its absence is what "randomly
+     * multi-selects" looks like from the outside: selecting on press throws away the other four rows
+     * <em>before</em> the drag starts, so picking up five files moves one — and a Delete afterwards acts on
+     * whatever survived. The decision is deferred to release, where a plain click still collapses.</p>
+     */
+    @Test
+    public void pressingAnAlreadySelectedRowKeepsTheWholeSelection() {
+        clickCentreOf(rowElementFor("Apple.md"));
+        clickWithModifier(rowElementFor("zebra.txt"), CgModifiers.CTRL);
+        assertEquals(2, tree.selectedPaths().size());
+
+        pressOnly(rowElementFor("Apple.md"));
+
+        assertEquals("the press collapsed a multi-selection before the drag could carry it",
+                2, tree.selectedPaths().size());
+    }
+
+    /** ...and releasing without dragging still collapses to the row that was clicked. */
+    @Test
+    public void releasingThatPressWithoutDraggingCollapsesToTheClickedRow() {
+        clickCentreOf(rowElementFor("Apple.md"));
+        clickWithModifier(rowElementFor("zebra.txt"), CgModifiers.CTRL);
+
+        clickCentreOf(rowElementFor("Apple.md"));
+
+        assertEquals("a plain click on a selected row left the rest selected",
+                List.of("Apple.md"), namesOf(tree.selectedPaths()));
+    }
+
+    private static List<String> namesOf(List<CgPath> paths) {
+        List<String> names = new ArrayList<>();
+        for (CgPath path : paths) names.add(path.name());
+        return names;
+    }
+
+    /**
+     * <b>The drag ghost is a box that fits its own text, placed at the cursor.</b>
+     *
+     * <p>Two failures in one, both visible and neither caught by anything that only checked the ghost
+     * existed.</p>
+     *
+     * <p><b>Size.</b> {@code UIText} latches on its first measurement whether it sizes its own width. The
+     * ghost's first layout happens inside {@code UIWindow.init}, which lays out before any style pass has
+     * run — so the label measured while the ghost was still an ordinary in-flow child at the panel's full
+     * width, concluded "my parent sizes me", and never asked again. Once the ghost became absolutely
+     * positioned with auto width there was no parent width to have, so the box collapsed to its padding and
+     * the glyphs painted straight out of it: a small blue rectangle with the name spilling past it.</p>
+     *
+     * <p><b>Place.</b> The ghost was anchored by the grab offset, which is right when the ghost <em>is</em>
+     * the thing being dragged at the same size, and wrong for a small stand-in: pressing halfway along a
+     * full-width row put the label half a row-width to the left of the cursor.</p>
+     */
+    @Test
+    public void theDragGhostFitsItsTextAndFollowsTheCursor() {
+        UIElement row = rowElementFor("zebra.txt");
+        assertNotNull("no realised row to drag", row);
+        var cache = row.getRuntimeCache();
+        var centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
+        int x = Math.round(centre.x());
+        int y = Math.round(centre.y());
+
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        // Past the activation threshold -- a plain MOVE, which is what the controller counts.
+        int toX = x + 40, toY = y + 40;
+        for (int i = 0; i < 2; i++) {
+            window.getInputHandler().consumeMouseEvent(
+                    new CgSystemInput.Mouse.Event(toX, toY, 0, 0, -1, false, 0f, -1L));
+            window.getInputHandler().beginFrame();
+            window.getInputHandler().endFrame();
+            window.updateWithoutPainting();
+        }
+
+        UIElement ghost = tree.querySelector("." + ProjectFileTree.DRAG_GHOST_CLASS);
+        assertNotNull("no drag ghost in the tree", ghost);
+        assertTrue("the ghost never appeared -- it is still hidden mid-drag",
+                ghost.getRuntimeCache().getWidth() > 0f);
+
+        UIElement label = ghost.getChildren().get(0);
+        float labelWidth = label.getRuntimeCache().getWidth();
+        assertTrue("the ghost's label measured zero, so the box is padding only and the text spills out "
+                        + "of it", labelWidth > 0f);
+        assertTrue("the ghost box (" + ghost.getRuntimeCache().getWidth() + ") is narrower than the text "
+                        + "inside it (" + labelWidth + ")",
+                ghost.getRuntimeCache().getWidth() >= labelWidth);
+
+        // Down and to the right of the pointer, in logical units -- never offset by where in the row the
+        // press landed, which is what GhostAnchor.CURSOR means.
+        float pointerLogicalX = toX / window.getUiScale();
+        float pointerLogicalY = toY / window.getUiScale();
+        assertTrue("the ghost is left of the cursor -- it is still anchored by the grab offset",
+                ghost.getRuntimeCache().getX() > pointerLogicalX);
+        assertTrue("the ghost is above the cursor", ghost.getRuntimeCache().getY() > pointerLogicalY);
     }
 }

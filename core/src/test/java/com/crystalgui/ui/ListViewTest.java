@@ -392,11 +392,40 @@ public class ListViewTest extends UiTestBase {
         settle();
     }
 
+    /** A real press and release at a row's centre, through the input handler. */
+    private void clickRow(int index) {
+        UIElement row = list.realisedRows().get(index);
+        var cache = row.getRuntimeCache();
+        var centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
+        int x = Math.round(centre.x()), y = Math.round(centre.y());
+        window.getInputHandler().consumeMouseEvent(new com.crystalgraphics.platform.input
+                .CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(new com.crystalgraphics.platform.input
+                .CgSystemInput.Mouse.Event(x, y, 0, 0,
+                com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON, true, 0f, 1L));
+        window.getInputHandler().consumeMouseEvent(new com.crystalgraphics.platform.input
+                .CgSystemInput.Mouse.Event(x, y, 0, 0,
+                com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON, false, 0f, 2L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        settle();
+    }
+
+    /**
+     * A real press, not {@code requestFocus}.
+     *
+     * <p>This used to focus a row and assert it became selected, which passed while selection was
+     * driven entirely by the focus event — and that design is exactly what made Ctrl-click and
+     * Shift-click impossible, since focus carries no modifiers. Selection is now a press concern, so
+     * the test does what its name always said.</p>
+     */
     @Test
     public void clickingARowSelectsIt() {
         build(1_000);
-        window.getInputHandler().requestFocus(list.realisedRows().get(4));
-        settle();
+        clickRow(4);
         assertEquals(java.util.Set.of(4), list.getSelectedIndices());
     }
 
@@ -597,6 +626,9 @@ public class ListViewTest extends UiTestBase {
     public void restoringFocusAfterRecyclingDoesNotDisturbTheSelection() {
         build(10_000);
         list.setSelectionMode(SelectionMode.MULTIPLE);
+        // SELECTED explicitly, then focused. Focus no longer implies selection -- a press does -- so
+        // seeding through requestFocus would leave 2 unselected and quietly weaken what follows.
+        list.select(2);
         window.getInputHandler().requestFocus(list.realisedRows().get(2));
         settle();
         list.toggle(3);

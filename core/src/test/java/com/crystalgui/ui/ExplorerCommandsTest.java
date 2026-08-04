@@ -25,6 +25,12 @@ import com.crystalgui.ui.elements.workbench.ExplorerCommands;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.ui.elements.TextField;
+import com.crystalgui.ui.elements.chrome.InputDialog;
+import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgui.ui.elements.workbench.ProjectFileTree;
 import org.junit.Test;
 
 import java.nio.file.Paths;
@@ -291,5 +297,127 @@ public class ExplorerCommandsTest extends UiTestBase {
         // what it pins is that isRenameable is consulted at all rather than the command being open season.
         assertFalse(registry().get(ExplorerCommands.RENAME).isEnabled(context));
         assertFalse(registry().get(ExplorerCommands.DELETE).isEnabled(context));
+    }
+
+    /** Answers the open name prompt, the way a user does: type, then Enter. */
+    private void answerPrompt(String name) {
+        UIElement popup = window.ui.rootElement.querySelector("." + InputDialog.PROMPT_CLASS);
+        assertNotNull("no name prompt is open", popup);
+        TextField field = (TextField) popup.querySelector("textfield");
+        assertNotNull("the prompt has no field to type into", field);
+        field.setText(name);
+        window.getInputHandler().consumeKeyboardEvent(
+                new CgSystemInput.Keyboard.Event(' ', CgKeyCodes.KEY_RETURN, true, false, 1L));
+        settle();
+    }
+
+    /**
+     * <b>New File lands inside the folder you asked from, not at the project root.</b>
+     *
+     * <p>The destination is resolved from the tree's <em>selection</em>, and right-clicking a row selects
+     * it first for exactly this reason — every command resolves its target the same way, so a right-click
+     * that did not select would make each of them act on whatever was selected before it.</p>
+     */
+    @Test
+    public void newFileLandsInsideTheSelectedFolder() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src"));
+        settle();
+        assertEquals("fixture wrong -- src is not the selected row",
+                CgPath.parse("mymod.proj:src"), workbench.fileTree().selectedPath());
+
+        registry().get(ExplorerCommands.NEW_FILE).execute(CommandContext.of(workbench.fileTree()));
+        answerPrompt("Made.java");
+
+        // Asserted by REVEALING it, not by reading a cached listing: reveal walks down from the project
+        // root and only lands if the file is genuinely there, so a file created at the wrong level fails
+        // here rather than passing against a listing that was never refetched.
+        CgPath made = CgPath.parse("mymod.proj:src/Made.java");
+        workbench.fileTree().reveal(made);
+        settle();
+        assertEquals("the new file is not inside src", made, workbench.fileTree().selectedPath());
+    }
+
+    /** A new file opens in the editor, because creating one is a statement of intent to edit it. */
+    @Test
+    public void creatingAFileOpensIt() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src"));
+        settle();
+
+        registry().get(ExplorerCommands.NEW_FILE).execute(CommandContext.of(workbench.fileTree()));
+        answerPrompt("Made.java");
+
+        assertEquals("the file was created and left unopened", CgPath.parse("mymod.proj:src/Made.java"),
+                workbench.activeFilePath());
+        // And it shows in the tree, which is the other half of "nothing happened": the folder it landed in
+        // is usually collapsed, so a create that opens nothing and reveals nothing is indistinguishable
+        // from one that failed. autoReveal follows the active tab, so opening it should be enough.
+        settle();
+        assertEquals("the new file was opened but never shown in the tree",
+                CgPath.parse("mymod.proj:src/Made.java"), workbench.fileTree().selectedPath());
+    }
+
+    /** The realised row element showing a given name, or null. */
+    private UIElement rowElementFor(String name) {
+        for (UIElement row : workbench.fileTree().treeView().getChildren()) {
+            if (!row.hasClass(ProjectFileTree.ROW_CLASS)) continue;
+            for (UIElement child : row.getChildren()) {
+                if (child instanceof com.crystalgui.ui.elements.UIText text
+                        && text.getText().contains(name)) return row;
+            }
+        }
+        return null;
+    }
+
+    /** A real press of a given button at the row's centre, through the input handler. */
+    private void pressButton(UIElement row, int button) {
+        var cache = row.getRuntimeCache();
+        var centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+                cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
+        int x = Math.round(centre.x());
+        int y = Math.round(centre.y());
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, button, true, 0f, 1L));
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(x, y, 0, 0, button, false, 0f, 2L));
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        settle();
+    }
+
+    /**
+     * <b>A right-click selects what it landed on</b> — the whole reason New lands where you asked.
+     *
+     * <p>Every command resolves its target through the selection, so a right-click that left the previous
+     * selection standing would make each of them act on a file the user never pointed at. Asserted from a
+     * real press rather than by calling select(), because the gap being guarded is between the gesture and
+     * the state.</p>
+     */
+    @Test
+    public void aRightClickSelectsTheRowUnderIt() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().treeView().setExpanded(CgPath.ofProject("mymod.proj"), true);
+        settle();
+
+        UIElement readme = rowElementFor("README.md");
+        UIElement src = rowElementFor("src");
+        assertNotNull("no realised row for README.md", readme);
+        assertNotNull("no realised row for src", src);
+
+        pressButton(readme, CgMouseCodes.LEFT_BUTTON);
+        assertEquals("README.md", workbench.fileTree().selectedPath().name());
+
+        // Right-clicking the OTHER row must move the selection onto it, not leave README.md selected.
+        pressButton(src, CgMouseCodes.RIGHT_BUTTON);
+        assertEquals("a right-click did not move the selection -- New would land beside the wrong file",
+                CgPath.parse("mymod.proj:src"), workbench.fileTree().selectedPath());
     }
 }

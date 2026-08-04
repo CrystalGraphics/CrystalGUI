@@ -77,14 +77,30 @@ public class ExplorerInteractionTest extends UiTestBase {
                 root.content, Popover.hostFor(window, leaf));
     }
 
-    /** With nothing to be near — a window-level popup like the palette — the root is still the answer. */
+    /**
+     * With nothing to be near — a window-level popup like the palette — the host is one that
+     * <b>accepts children</b>, which the root is not required to be.
+     *
+     * <p>This asserted {@code assertSame(root, ...)} and that is what let the composite-root crash come
+     * back a fourth time. The rule is about what the host can DO, and pinning it to a specific element
+     * instead pinned the one answer that throws whenever the root refuses children — which is every
+     * workbench, since CrystalEditor is a composite. A plain root still satisfies this, so the case
+     * this was written for is still covered.</p>
+     */
     @Test
-    public void aWindowLevelPopupFallsBackToTheRoot() {
+    public void aWindowLevelPopupGetsAHostThatAcceptsIt() {
         UIElement root = new UIElement().layout(l -> l.width(400).height(300));
         UIWindow window = new UIWindow(Ui.of(root));
         window.init(800, 600);
 
-        assertSame(root, Popover.hostFor(window, null));
+        assertSame("a plain root accepts children, so it is still the natural host",
+                root, Popover.hostFor(window, null));
+
+        RefusingRoot composite = new RefusingRoot();
+        UIWindow refusing = new UIWindow(Ui.of(composite));
+        refusing.init(800, 600);
+        assertTrue("a window-level popup under a composite root had nowhere legal to go",
+                Popover.hostFor(refusing, null).acceptsPublicChildren());
     }
 
     /**

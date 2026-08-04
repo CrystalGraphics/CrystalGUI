@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -103,10 +105,69 @@ public class OverlayHostTest extends UiTestBase {
 
         assertTrue(window.overlayHost(panel).acceptsPublicChildren());
         assertTrue(window.overlayHost(root.content).acceptsPublicChildren());
-        // Even asked about the refusing root itself, or about nothing at all, it must not hand back
-        // something that throws -- those are the two cases a caller is most likely to pass by accident.
-        assertTrue(window.overlayHost(root).acceptsPublicChildren()
-                || window.overlayHost(root) == root);
+        // NO ESCAPE HATCH HERE, and there used to be one: this line read
+        //     assertTrue(host.acceptsPublicChildren() || host == root)
+        // which passes in exactly the case that crashes. The alternative was written to accommodate the
+        // implementation rather than to state the rule, so the rule went untested and the crash came back.
+        assertTrue("asked about the refusing root, the host was something that throws",
+                window.overlayHost(root).acceptsPublicChildren());
+    }
+
+    /**
+     * <b>A window-level overlay has a host too</b> — {@code near == null}.
+     *
+     * <p>This is the case that crashed a fourth time after the walk-up was added, and it was never
+     * asserted: {@code overlayHost} searched upward from {@code near}, so a null one never entered the loop
+     * and fell through to the fallback, which was the refusing root. A command palette and a New File
+     * prompt both belong to the window rather than to anything clicked, so both took that path.</p>
+     */
+    @Test
+    public void aWindowLevelOverlayHasAHostThatAcceptsIt() {
+        RefusingRoot root = new RefusingRoot();
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.init(800, 600);
+
+        assertTrue("a window-level overlay had nowhere legal to go",
+                window.overlayHost(null).acceptsPublicChildren());
+    }
+
+    /**
+     * And end to end, which is the form the harness reported every single time: {@code addOverlay} must
+     * place a window-level overlay under a root that accepts nothing, rather than throwing.
+     */
+    @Test
+    public void addOverlayPlacesAWindowLevelOverlayUnderARefusingRoot() {
+        RefusingRoot root = new RefusingRoot();
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.init(800, 600);
+
+        UIElement overlay = window.addOverlay(new UIElement(), null);
+
+        assertNotNull("the overlay was never parented, so it can never be promoted", overlay.getParent());
+        assertSame("an overlay must stay reachable from the window it was added to",
+                window, overlay.getAttachedWindow());
+    }
+
+    /**
+     * The layer the window falls back to is <b>internal</b>, but what goes in it is not — so an overlay
+     * still leaves under its own power.
+     *
+     * <p>Worth pinning because {@code removeChild} refuses internal children, and marking the overlays
+     * internal too (the shorter way to write this) would leave every menu and dialog unable to close
+     * itself. The layer is internal so it can be attached to a root that refuses; its contents are public
+     * so they behave exactly as they did when parented anywhere else.</p>
+     */
+    @Test
+    public void anOverlayInTheFallbackLayerCanStillRemoveItself() {
+        RefusingRoot root = new RefusingRoot();
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.init(800, 600);
+
+        UIElement overlay = window.addOverlay(new UIElement(), null);
+        overlay.removeSelf();
+
+        assertNull("the overlay could not detach -- it was marked internal along with its host layer",
+                overlay.getParent());
     }
 
     /** It lands beside what it belongs to, not at the top of the window. */

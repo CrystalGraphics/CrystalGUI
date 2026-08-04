@@ -8,6 +8,9 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.style.StyleGroup;
+import dev.vfyjxf.taffy.style.TaffyPosition;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.UIText;
@@ -30,12 +33,18 @@ import javax.annotation.Nullable;
 /**
  * The project's files, as a tree — click a directory to expand, click a file to open it.
  *
- * <h3>One click, not two</h3>
+ * <h3>One click selects, two act</h3>
  *
- * <p>A single click opens. Desktop file managers use double-click because a single click has to mean
- * "select" — there is a whole window of operations that act on the selection. Here there is one thing to
- * do with a file, and a selection that opened nothing would be a state with no purpose. VS Code's explorer
- * makes the same call.</p>
+ * <p>This started as VS Code's rule — a single click opens, because a selection that opened nothing would
+ * be a state with no purpose — and that stopped being true the moment the panel grew commands. A press is
+ * now how you aim Delete, Rename, a drag, a Ctrl-toggle or a Shift-range, so it has to mean "this is the
+ * row I am talking about" and nothing else. Folding on it made a folder impossible to select without also
+ * opening it, and re-flattened the model in the middle of any range that crossed one.</p>
+ *
+ * <p>So: <b>one click selects, a double click acts</b> — opening a file, folding a directory. That is
+ * IntelliJ's Project view, which is what this panel is modelled on. IntelliJ also folds on a single click
+ * of the chevron; ours has no separate chevron hit target yet, since the {@code +}/{@code -} is part of the
+ * label's text.</p>
  *
  * <h3>It reports; it does not open</h3>
  *
@@ -117,6 +126,7 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         content.addChild(tree);
+        buildDragGhost();
         installTypeToFilter();
         installDropTarget();
     }
@@ -296,6 +306,15 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             // selected" is the common gesture, and a press that collapsed the selection breaks it.
             List<CgPath> dragged = selectedPaths().contains(item) ? selectedPaths() : List.of(item);
 
+            // RE-REGISTERED PER DRAG, which is what the controller expects: it drops its reference when
+            // the drag ends, so a ghost handed over once appears for the first drag and never again.
+            // The label is rebuilt here too, because what is being dragged changes every time.
+            ghostLabel.setText(dragged.size() == 1
+                    ? dragged.get(0).name()
+                    : dragged.size() + " items");
+            window.getInputHandler().getDragController().setGhost(dragGhost,
+                    UIDragController.GhostAnchor.CURSOR);
+
             window.getInputHandler().getDragController().startDrag(row,
                     event.getPosition().x(), event.getPosition().y(), new DragPayload(dragged),
                     new UIDragController.DragListener() {
@@ -437,6 +456,44 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
         return this;
     }
 
+    /** On the floating copy that follows the cursor during a drag. */
+    public static final String DRAG_GHOST_CLASS = "__drag-ghost__";
+
+    private final UIElement dragGhost = new UIElement();
+    private final UIText ghostLabel = new UIText("");
+
+    /**
+     * Builds the floating copy that follows the cursor, <b>once</b>, at construction.
+     *
+     * <p>It has to be IN THE TREE before a drag can show it: the controller promotes the ghost into the
+     * top layer, and promotion needs a window to promote from, so an unparented element handed to
+     * {@code setGhost} is silently never shown — no error, just no ghost. Same lesson the row menu learned
+     * about popovers, and {@code PropertyPill} records it too.</p>
+     *
+     * <p>One element reused for every drag, with only its text rewritten. The controller hides it at rest
+     * and on drag end, so nothing here has to manage its visibility.</p>
+     */
+    private void buildDragGhost() {
+        dragGhost.addClass(DRAG_GHOST_CLASS);
+        dragGhost.addChild(ghostLabel);
+        // OUT OF FLOW AND HIDDEN FROM JAVA, not from the stylesheet, and this is not a style choice.
+        //
+        // UIWindow.init() calls calculateLayout() with no style pass before it, so the FIRST layout of any
+        // tree runs before a single rule has matched. UIText latches once, on its first measurement,
+        // whether it sizes its own width -- and in that unstyled first pass the ghost is an ordinary
+        // in-flow child at the panel's full width, so the label concludes "my parent sizes me" and never
+        // asks again. The ghost then becomes absolutely positioned with auto width, the label asks a parent
+        // that is itself sizing to content, and the answer is zero: a box of pure padding with the glyphs
+        // painting straight out of it. That is the stray blue rectangle beside the name, and no stylesheet
+        // rule can prevent it because the damage is done before any stylesheet is consulted.
+        //
+        // IMPORTANT is the origin the controller itself writes display at, so showGhost/hideGhost still
+        // take over cleanly at each end of a drag.
+        StyleGroup.importantPipeline(dragGhost.getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE).display(TaffyDisplay.NONE));
+        addInternalChild(dragGhost);
+    }
+
     /** Walks up from whatever was hit to the row element the tree knows about. */
     @Nullable
     private UIElement rowElementFor(@Nullable UIElement hit) {
@@ -495,7 +552,18 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             row.onMouseDown.attachListener((element, event) -> {
                 CgPath item = rowItems.get(row);
                 if (item == null) return;
-                if (source.isDirectory(item) || event.getDetail() >= 2) activate(item);
+                // DOUBLE CLICK FOR BOTH, folders included. A folder used to toggle on a single click,
+                // which is VS Code's rule and reads well until the tree also has to support selecting --
+                // there, one click has to mean "this is the row I am talking about", because a press is
+                // how you aim Delete, Rename, a drag, or a Shift-range. Folding on that same press means
+                // you cannot select a folder without also opening it, and every attempt to Shift-click a
+                // range across one re-flattens the model mid-gesture.
+                //
+                // IntelliJ, whose Project view this panel is modelled on, resolves it exactly this way:
+                // the chevron folds on one click, the ROW folds on two. Ours has no separate chevron hit
+                // target yet -- the +/- is part of the label's text -- so the row's double click is the
+                // whole affordance for now.
+                if (event.getDetail() >= 2) activate(item);
             }, false, false);
             return row;
         }
