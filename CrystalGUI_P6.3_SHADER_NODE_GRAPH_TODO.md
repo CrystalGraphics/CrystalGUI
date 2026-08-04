@@ -1161,6 +1161,227 @@ normals, sane vertex/index counts, and UVs in range. Then: the mesh choice does 
 document and leaves `UndoStack` empty; the panel requests a re-render on a graph change and *not* on an
 idle frame.
 
+### 6.3.13 The Graph Inspector · `PLANNED` (2026-08-04)
+
+The last big missing surface. Unity calls it the **Graph Inspector** and it is the panel marked **F** in
+`docs/research/unity-inspector/07-full-window.png`.
+
+#### What exists today, honestly
+
+`ShaderNodeInspector` is a **placeholder and says so in its own javadoc**: fifteen rows of fixed sample
+values ported from the gallery's configurator page, bound to nothing. Selecting a node does not change
+them and editing one changes no node. It is docked in `CrystalEditor` as a tab beside
+`compiled_graph.shader`.
+
+What it bought was real — it is how the control kit got looked at in the frame it will actually be used
+in — but it is now the thing standing between a working graph and a usable one.
+
+#### What Unity ships, read off the eight reference shots
+
+| Shot | What it establishes |
+|---|---|
+| `07-full-window.png` **F** | The frame: a title, **two tabs** (`Node Settings` / `Graph Settings`), a label column left, a control column right, a scrollbar |
+| `07` under `Graph Settings` | `Precision` dropdown · a `Target Settings` **header** · an `Active Targets` **list** with `+`/`−` · a **foldout** per target holding `Material`, `Allow Material Override`, `Workflow Mode`, `Surface Type` |
+| `01-inspector-property.png` | `Node Settings` with something selected: a **bold caption naming the target** (`Property: Vector3`), then `Exposed` / `Reference` / `Default` / `Precision` |
+| `06-inspector-precision.png` | The smallest legal panel is **one row**. There is no minimum |
+| `03-inspector-keyword-enum.png` | The list editor: reorder handles, two columns, `+`/`−` footer |
+| `07` **E**, `08-blackboard-categories.png` | The **Blackboard** is a SEPARATE panel, not a tab — property pills with a dim right-aligned type, a `+`, and foldout categories |
+
+#### The one insight that decides the architecture
+
+From `docs/research/unity-inspector/README.md`, and it is the most useful sentence in the whole
+research set:
+
+> the port-attached editors are *the same controls* as the inspector's, only anchored and sized
+> differently. A dropdown left of a port and a dropdown in an inspector row are one widget in two hosts.
+
+We are already built for this and did not notice. `NodeFieldWidgets` produces `ConfigControl`s — the
+same `NumberControl`, `SelectControl`, `ColorControl`, `VectorControl` the configurator kit registers —
+and `NodeFieldBinder` is already the *single writer* that turns a change into a `SetNodeFieldEdit`.
+
+**So the inspector is not a new control layer. It is a THIRD PLACEMENT for `NodeField`**, alongside the
+node body and the port editor:
+
+```
+NodeField (declaration)
+   |
+   +-- node body      -> GraphNode.addControl(label, control)      6.3.8
+   +-- port editor    -> NodePort.setDefaultEditor(control)        6.3.8
+   +-- inspector row  -> Configurator(descriptor, control)         6.3.13  <- new
+                              ^ all three build through NodeFieldWidgets
+                              ^ all three write through NodeFieldBinder
+```
+
+Anything else — a `ConfigDescriptor` mirror of every `NodeField`, an inspector-only widget set — is a
+second copy of "what does a partly-typed number mean", which is precisely the duplication
+`NodeFieldWidgets`' own javadoc records having already removed once.
+
+**Consequence, and it is the whole reason this is cheap:** undo, gesture bracketing, live recompile and
+the document-follows-widget wiring from the scrub-undo fix all come for free, because they live in
+`NodeFieldBinder` and the inspector reuses it verbatim. Edit a value in the inspector and the on-node
+editor updates; edit it on the node and the inspector updates; Ctrl+Z moves both. **No new code is
+needed for any of that** — it is what `followDocument` already does for every binding of the same field.
+
+#### Scope — what of Unity's inspector fits us
+
+| Unity feature | Verdict | Reasoning |
+|---|---|---|
+| **Two tabs, Node / Graph** | **IN** | The split is real: one is contextual, one is global. Collapsing them means a global setting scrolls off under whatever node is selected |
+| **Bold caption naming the target** | **IN** | `ConfigDescriptor.header` exists and was built for exactly this (`Target Settings` in the shot) |
+| **Node's own settings** | **IN** | The node's non-port `NodeField`s. Already declared, already rendered on the node — the inspector is a second view of them |
+| **Port defaults in the inspector** | **IN**, and **better than Unity's** | On the node a port editor *vanishes* when the port is connected (`nodeport:blank`). In the inspector it stays, **disabled**, with the connection named. A vanished control is indistinguishable from one that never existed |
+| **Read-only identity** (type id, node id, category) | **IN** | The line map already reports `line 12 emitted by cg:Math/Basic/multiply` and there is nowhere to look that up. One foldout, free |
+| **Port list with resolved types** | **IN** | Dynamic ports resolve their type from what is wired (6.3.8). The resolved answer is currently only visible as a dot colour |
+| **Multi-select editing** | **IN**, same-type only | One `CompositeEdit` across the selection. Unity does it; the alternative is that selecting two nodes makes the panel useless |
+| **`Precision` (Single/Half)** | **OUT** | `mediump`/`highp` are not emitted, not parsed by `CgShaderParser`, and mean nothing on desktop GL. Exactly the "port whose only consumer does not exist" trap 6.3.11 rejected six ports for |
+| **Targets / Active Targets list** | **OUT** | We have one target. A list widget for a set of size one |
+| **`Material` / `Workflow Mode`** (Lit/Unlit, Metallic/Specular) | **OUT** | Both are lighting-model selectors. No lighting model — see 6.3.11 |
+| **`Surface Type` / `Blend` / `Render Face` / `Depth Write`** | **IN**, as our own vocabulary | These are NOT lighting. They are `.shader` `RenderState` and `Queue`, which `CgShaderParser` genuinely reads and `CgTransparentRenderer` genuinely runs. Spelled in our tokens, not Unity's |
+| **Blackboard as a separate panel** | **DEFERRED**, tab for now | See below |
+| **Keyword / enum list editor** | **OUT** | `#pragma cg_feature` variants are not reachable from a graph yet |
+
+#### The model gap this exposes: graph settings have nowhere to live
+
+`CgMasterNode` holds `vertexFormat`, `renderType`, `queue` and the shader `Properties` map — and it is
+**not a document**. It is a compile-time object `ShaderGraphEditor` constructs once and never
+serialises. So today those settings are:
+
+- not saved (`GraphCodecs.DOCUMENT` has never heard of them),
+- not undoable (no `Edit` touches them),
+- not content-hashed, so two graphs differing only in `Queue` hash identically.
+
+Editing them from an inspector without fixing that would ship a panel whose changes silently evaporate
+on reload — a worse outcome than the placeholder.
+
+**The fix, and it is the load-bearing invariant applied literally:**
+
+> *Document state goes through `Edit`s; view state is mutated directly.*
+
+| Setting | Verdict | Because |
+|---|---|---|
+| `#type` (vertex format) | **document** | A reload must give it back |
+| `RenderType`, `Queue` | **document** | Same |
+| Shader `Properties` entries | **document** | Same |
+| Preview **mesh** | **view** | Which shape you are looking at. Already settled in 6.3.12 and pinned by a test asserting it stays out of the encoded document |
+| Preview **lighting** on/off | **view** | Same — it is viewport shading, which `CgShaderEmitter.Shading`'s javadoc is explicit about |
+
+So: **`GraphDocument` gains a `settings()` map** — `Map<String, String>`, the same string-valued shape
+`NodeData.properties()` already uses and for the same serialisability reason — plus a
+`SetGraphSettingEdit` mirroring `SetNodeFieldEdit` exactly, merge behaviour included.
+`ShaderGraphBridge` applies the map onto `CgMasterNode` at compile time, so the master stays the
+compiler's object and stops pretending to be storage. `GraphCodecs` picks the map up, which also moves
+the **persistence** gap forward for free.
+
+#### Properties (the Blackboard) — a tab now, a panel later
+
+Unity's Blackboard is a separate panel because you drag properties *out of it* onto the canvas. That
+drag is what makes it worth a permanent pane — and it needs a `Property` node type that references a
+declaration, which does not exist.
+
+Until it does, a Properties **tab** is the honest shape: you can declare, rename, retype and delete a
+property and watch the generated `Properties { }` block change in `compiled_graph.shader`. The model —
+the document map, the edits, the codec — is identical either way, so promoting it to a panel later is a
+re-host and not a rewrite. **Say so in the class javadoc**, the way `ShaderNodeInspector` currently says
+it is a placeholder, so nobody has to guess whether the tab is the intended end state.
+
+#### The three tabs, in detail
+
+**Tab 1 — `Node`.** Rebuilt on `GraphSelection.onChanged`. Five states, and each needs to be legible:
+
+| Selection | Shows |
+|---|---|
+| nothing | `Nothing selected` — a plain message, not an empty panel. An empty panel reads as broken |
+| one node | header `<label>` · body fields · port defaults (disabled when connected) · `About` foldout: type id, category, node id, ports with types |
+| the master | header `Output` · its `Vertex` and `Fragment` blocks as read-only port lists · a line pointing at the `Graph` tab, because that is where its settings actually are |
+| one wire | header `Connection` · from `node.port(type)` to `node.port(type)`, read-only |
+| N nodes | header `N nodes selected` · if all one type, the shared fields, writing to every one through a `CompositeEdit`; otherwise a per-type count |
+
+**Tab 2 — `Graph`.** Rebuilt on `document.onChanged`.
+
+- header `Shader`
+  - `Vertex Format` — SELECT (`spatial`, `pos3_uv2_col4ub`, `pos2_uv2_col4ub`)
+  - `Render Type` — SELECT `Opaque` / `Transparent`
+  - `Queue` — SELECT `Background` / `Geometry` / `AlphaTest` / `Transparent` / `Overlay`
+- foldout `Preview` — **view state, written directly, no undo**
+  - `Mesh` — SELECT over `CgPreviewMesh`
+  - `Lighting` — BOOLEAN
+  - both already exist behind the Main Preview's context menu; this is a **second host for the same
+    state**, so they must read from and write to `MainPreviewPanel` rather than keeping a copy
+- foldout `Compile` — read-only: nodes, edges, varyings, characters, errors. From
+  `ShaderGraphEditor.lastCompile()`, which already carries every number
+
+**Tab 3 — `Properties`.**
+
+- header `Properties`, an `Add` button, and one row per declaration: name (TEXT), type (SELECT over the
+  `CgShaderType`s whose `propertyTypeName()` is non-null), default (TEXT), and a remove button
+- every write is a `SetGraphSettingEdit` against the document's settings map
+- empty state: `No properties. A property becomes a uniform the material can set at runtime.`
+
+#### Wiring, A to Z
+
+```
+CrystalEditor
+  +-- inspector()  ->  ShaderGraphInspector(shaderGraph())         NEW  -- the tabbed frame
+                         +-- TabView
+                         +-- Tab "Node"        -> ShaderNodeInspector    REWRITTEN, no longer a placeholder
+                         +-- Tab "Graph"       -> ShaderGraphSettings    NEW
+                         +-- Tab "Properties"  -> ShaderGraphProperties  NEW
+
+ShaderGraphEditor  gains  master() / selection() / document()         (accessors only)
+GraphDocument      gains  settings() / setting(k) / setSetting(k,v)   NEW
+SetGraphSettingEdit                                                   NEW  -- mirrors SetNodeFieldEdit
+GraphCodecs        gains  the settings map                            CHANGED
+ShaderGraphBridge  applies settings onto CgMasterNode at compile      CHANGED
+ConfiguratorPanel  gains  addRow(descriptor, prebuiltControl)         NEW  -- the seam that lets the
+                                                                            inspector host a widget
+                                                                            NodeFieldWidgets built
+```
+
+**Two traps to write down before they are hit:**
+
+1. **Rebuild-on-selection collides with the "never rebuild what is being dragged" invariant.** The
+   inspector rebuilds its rows when the selection changes — and a *press* changes the selection. If a
+   rebuild ran while a scrub was live inside the panel, `screenToLocal` would go stale exactly the way
+   the table header froze. It cannot happen for the inspector's own controls today (selection changes
+   come from the canvas, not the panel) but the rebuild must still be **guarded on
+   `ConfigControl.isInteracting()`** rather than assumed safe, because the multi-select path is
+   reachable from a Shift+click while a value is being dragged.
+
+2. **The panel must not rebuild on its own writes.** Every field write emits `document.onChanged`, and
+   the `Graph` tab listens to it. Rebuilding there would destroy the control mid-edit. Same fix
+   `followDocument` already uses: track what this panel last wrote and ignore the echo.
+
+#### Tests
+
+Headless where possible — the whole model half is (`headlessTest`), the panel half needs `test`.
+
+- `GraphSettingsEditTest` (headless): a setting round-trips through the document; the edit undoes; two
+  writes to the same key inside a merge window collapse; the settings map survives `GraphCodecs`
+  encode/decode; a graph differing only in `Queue` **hashes differently**
+- `GraphInspectorSelectionTest`: each of the five selection states produces the right header; selecting
+  a node then another rebuilds; deselecting shows the empty state
+- `GraphInspectorBindingTest`: editing a row writes through to the document · the on-node editor for the
+  same field updates · Ctrl+Z reverts **both** · a connected port's row is present but disabled
+- `GraphInspectorMultiEditTest`: three same-type nodes, one write, one undo step, all three changed
+- `GraphSettingsCompileTest`: changing `Queue` in the panel changes the emitted `.shader` text, and the
+  result still parses through the real `CgShaderParser`
+- the existing 6.3.12 test asserting the preview mesh stays **out** of the encoded document must keep
+  passing, which is what proves the view/document line was drawn in the right place
+
+#### Steps
+
+1. `GraphDocument.settings()` + `SetGraphSettingEdit` + codec + hash — model only, headless tests
+2. `ShaderGraphBridge` applies settings to `CgMasterNode`; `ShaderGraphEditor` accessors
+3. `ConfiguratorPanel.addRow(descriptor, control)` — the pre-built-control seam
+4. `ShaderNodeInspector` rewritten: the five selection states, real bindings
+5. `ShaderGraphInspector` — the `TabView` frame; `CrystalEditor` re-pointed
+6. `ShaderGraphSettings` — shader settings, preview settings shared with `MainPreviewPanel`, compile stats
+7. `ShaderGraphProperties` — declare/edit/remove
+8. Multi-select editing
+9. Styling pass in `default.css` / `graph.css`
+
+---
+
 ---
 
 ## Ordering, and what blocks what
@@ -1169,7 +1390,8 @@ idle frame.
 63/64 done, Channel 3/4, UV 6/10, Utility Logic 6/12, Procedural 6/9, Input 8/54, Artistic untouched)
 · 6.3.8 `IN PROGRESS` (dropdowns, inline value editors, implicit-UV port defaults and dynamic port
 arity/colour-by-resolved-type all done; error mapping and debounce remain) · 6.3.9 `DONE` ·
-6.3.11 `MOSTLY DONE` (ports shipped; the two-box visual is not) · 6.3.12 `DONE`.
+6.3.11 `MOSTLY DONE` (ports shipped; the two-box visual is not) · 6.3.12 `DONE` ·
+6.3.13 `PLANNED` (the Graph Inspector — the last big missing surface).
 The whole stack runs end to end in the gallery's **shadergraph** page.
 
 **6.3.9 blocks nothing and is blocked by nothing** — it is a general search facility the create menu
