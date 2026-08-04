@@ -1150,6 +1150,32 @@ dropdown .__menu__ menuitem .__mark__ {
 dropdown .__menu__ menuitem:checked .__mark__ {
     overlay: shape("checkmark");
 }
+
+/* A menu containing a toggle — a context menu's "Lighting", say. Same gutter and same mark as a
+ * dropdown's rows, granted to the WHOLE menu rather than to the checkable row alone.
+ *
+ * Menu-level is the only alignment that works. Reserving the gutter on just the checkable item indents
+ * that one row against its neighbours, which reads as broken alignment rather than as a checkmark — and
+ * reserving it on every menu would carry a dead column through ordinary context menus whose rows can
+ * never show a mark. Windows does exactly this: its context menu reserves one icon column, so `Refresh`
+ * and `Paste` line up with the rows that have icons.
+ *
+ * The gutter is reserved whether or not a row is currently checked, so ticking one does not shift its
+ * label sideways. */
+menu.__has-checkable__ menuitem .__mark__ {
+    width: 12px;
+    height: 12px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    align-self: center;
+    margin-right: 1px;
+    color: #DDDDDD;
+}
+/* The mark itself is still the ITEM's business: only a checkable row ever shows one, even though every
+ * row in the menu reserves the space for it. */
+menu.__has-checkable__ menuitem.__checkable__:checked .__mark__ {
+    overlay: shape("checkmark");
+}
 /* The base `menuitem` rule's 6px left padding was sized for a bare label with no mark before it — once
  * the 12px gutter above sits in front of it, the checkmark reads as floating well clear of the row's
  * edge rather than beside it. Tightened for every row in a dropdown's menu (checked or not), so the
@@ -3081,8 +3107,8 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * collapsing it to nothing, which is unrecoverable from the user's side — there is no handle left. */
 .__main-preview__ {
     flex-direction: column;
-    width: 160px;
-    height: 176px;
+    width: 220px;
+    height: 236px;
     min-width: 140px;
     min-height: 160px;
     resize: both;

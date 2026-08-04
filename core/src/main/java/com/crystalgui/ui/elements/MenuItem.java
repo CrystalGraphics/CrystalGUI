@@ -38,6 +38,16 @@ public class MenuItem extends Button {
     public static final String MARK_CLASS = "__mark__";
 
     /**
+     * On a row whose {@code :checked} state is meant to be <b>visible</b> — a toggle in a context menu.
+     *
+     * <p>Opt-in rather than automatic, because the base sheet gives {@link #MARK_CLASS} zero width
+     * outside a selectable context on purpose: reserving a checkmark gutter on every context-menu row
+     * would indent labels for a mark that row can never show. A {@link Dropdown}'s menu is selectable
+     * wholesale and gets the gutter for free; a lone toggle sitting among ordinary rows has to say so.</p>
+     */
+    public static final String CHECKABLE_CLASS = "__checkable__";
+
+    /**
      * The menu this item opens, or {@code null} for an ordinary item — ARIA's {@code aria-haspopup}.
      *
      * <p>Package-private setter because the relationship is the parent menu's to establish
@@ -74,6 +84,19 @@ public class MenuItem extends Button {
      * above. Ignored/unused outside {@link Dropdown}. */
     public boolean isSelected() {
         return selected;
+    }
+
+    /**
+     * Makes this row's checked state visible. @see #CHECKABLE_CLASS
+     *
+     * <p>Independent of {@link #setSelected}: one says the mark <em>can</em> show, the other whether it
+     * currently does. Separating them is what lets a toggle reserve its gutter while switched off, so the
+     * label does not shift sideways the first time it is checked.</p>
+     */
+    public MenuItem setCheckable(boolean value) {
+        if (value) addClass(CHECKABLE_CLASS);
+        else removeClass(CHECKABLE_CLASS);
+        return this;
     }
 
     public MenuItem setSelected(boolean value) {
