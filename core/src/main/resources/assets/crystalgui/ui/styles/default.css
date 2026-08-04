@@ -3596,3 +3596,17 @@ crystaleditor > .__editor-content__ {
     flex-grow: 1;
     flex-basis: 0;
 }
+
+/* ── Menu accelerators ──
+ *
+ * The keystroke, in the item's trailing slot. THE MENU IS WHERE A SHORTCUT IS LEARNED -- nobody reads a
+ * keymap file -- so this is the one piece of a menu row that exists purely to teach.
+ *
+ * Dimmer than the label and deliberately so: it is a footnote to the item, not a second thing to read.
+ * IntelliJ, VS Code and every native menu do exactly this. `margin-left: auto` is what pushes it to the
+ * right edge, which is what makes a column of chords scannable rather than ragged against the labels. */
+menuitem .__accelerator__ {
+    color: #8A8A8A;
+    margin-left: 24px;
+    white-space: nowrap;
+}

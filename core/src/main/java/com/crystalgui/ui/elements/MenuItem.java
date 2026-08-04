@@ -71,6 +71,45 @@ public class MenuItem extends Button {
         setPreIcon(mark);
     }
 
+    /** On the trailing label showing this item's keystroke, so a theme can dim it. */
+    public static final String ACCELERATOR_CLASS = "__accelerator__";
+
+    @Nullable
+    private UIText accelerator;
+
+    /**
+     * Shows the keystroke that runs this item, in the trailing slot.
+     *
+     * <p><b>The menu is where a keyboard shortcut is learned.</b> Every IDE puts the accelerator here for
+     * that reason and no other — nobody reads a keymap file. Passing {@code null} clears it, so an item
+     * whose command loses its binding stops advertising one.</p>
+     *
+     * <p>Rendered from {@code Keymap.acceleratorFor}, which resolves outward from the element the menu was
+     * opened on. That is what makes it correct for a scoped binding: the graph's Delete and an
+     * application-wide Delete are different chords and each item shows the one that would actually
+     * fire.</p>
+     */
+    public MenuItem setAccelerator(@Nullable String text) {
+        if (text == null || text.isEmpty()) {
+            if (accelerator != null) {
+                accelerator.setText("");
+                // NOT removed from the tree: an item's accelerator comes and goes with its binding, and
+                // removing a POST-ICON re-runs Button's slot bookkeeping for a label that is about to come
+                // back. An empty UIText measures zero.
+            }
+            return this;
+        }
+        if (accelerator == null) {
+            accelerator = new UIText(text);
+            accelerator.addClass(ACCELERATOR_CLASS);
+            accelerator.setHitTest(false);
+            setPostIcon(accelerator);
+        } else {
+            accelerator.setText(text);
+        }
+        return this;
+    }
+
     void setSubmenu(@Nullable Menu submenu) {
         this.submenu = submenu;
     }
