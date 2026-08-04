@@ -190,11 +190,26 @@ public final class ShaderPropertyNodes {
      */
     public static CgShaderNode compilerNodeFor(GraphProperty property) {
         CgShaderType type = CgShaderType.parse(property.typeId());
-        return CgTemplateShaderNode.of(TYPE_ID + ":" + property.id())
+        CgTemplateShaderNode.Builder builder = CgTemplateShaderNode.of(TYPE_ID + ":" + property.id())
                 .label(property.name())
                 .out(OUT_PORT, type)
-                .body("{" + OUT_PORT + "} = " + property.reference() + type.propertyAccessSuffix() + ";")
-                .build();
+                .body("{" + OUT_PORT + "} = " + property.reference() + type.propertyAccessSuffix() + ";");
+
+        // A PREVIEW SUBSTITUTES THE DEFAULT rather than reading the uniform, and it has to.
+        //
+        // CgPreviewEmitter writes no Properties block -- a node preview is a tiny standalone shader, not
+        // the material -- so `_Float` was an undeclared identifier, the GLSL failed to compile, and every
+        // preview downstream of a property node fell back to white. A Float set to 0 multiplied by
+        // anything showed a white square.
+        //
+        // Declaring the block in the preview would not help either: a preview has no material to SET the
+        // uniform, so the only value it could ever show is the default. Substituting it directly is both
+        // simpler and what Unity's previews do.
+        String literal = ShaderPropertyForm.glslLiteral(property);
+        // Null for a sampler, which cannot be written as a literal at all -- that preview stays broken,
+        // and honestly so: there is no texture to show until a material binds one.
+        if (literal != null) builder.previewBody("{" + OUT_PORT + "} = " + literal + ";");
+        return builder.build();
     }
 
     /**
