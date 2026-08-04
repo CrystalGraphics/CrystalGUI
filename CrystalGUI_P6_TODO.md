@@ -1870,11 +1870,23 @@ last.
 Toolbar, status bar, breadcrumbs, command palette. All composition over finished parts (the palette is a
 `Dialog` + `TextField` + 6.1.3). Grouped as one item because none of them is individually interesting.
 
-### 6.1.13 Settings — VS Code's configuration service, ported · `PLANNED` (2026-08-04)
+### 6.1.13 Settings — VS Code's configuration service, ported · `DONE` (2026-08-04)
 
 **An engine-wide gear, not a shader-graph feature.** It is written up here rather than in P6.3 because
 the graph is merely its first consumer: editor preferences, panel state, workspace options and a
 document's own options are all the same problem, and the project currently has *no* answer to it.
+
+> **Shipped.** `com.crystalgui.core.settings` — `Setting`, `SettingsRegistry`, `SettingsLayer`,
+> `SettingsModel`, `Settings` (with `inspect`), `SettingsScope`, `SettingsChange`, `SetSettingEdit`,
+> `SettingsCodec`. `UIElement implements SettingsScope` with `settingsParent() = getParent()`, so every
+> element in the engine has settings that resolve up the tree. `SettingsConfigurator` (ui side) generates
+> bound inspector rows straight from declarations. 20 headless tests + 5 element-scope tests.
+>
+> **One thing contact with the code added:** `SettingsScope.settingsOrNull()`. The outward walk visits
+> every ancestor on every read, so resolving through `settings()` would allocate and permanently keep an
+> empty store on each element it passed — turning a read into a write, across the whole chain.
+> `UIElement.keymapOrNull()` exists for exactly this and was the precedent; a test asserts the element in
+> the middle of a resolve is still bare afterwards.
 
 #### What forced the question
 
