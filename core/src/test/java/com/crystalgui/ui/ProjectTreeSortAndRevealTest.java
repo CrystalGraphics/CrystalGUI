@@ -207,6 +207,34 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
         assertFalse("a non-matching sibling survived", visibleNames().contains("zebra.txt"));
     }
 
+    /**
+     * <b>A drop on a FILE targets its parent folder.</b>
+     *
+     * <p>VS Code's rule, and what makes a tree forgiving: rows are twelve pixels tall, a folder's children
+     * sit directly beneath it, and "into the folder this thing is in" is nearly always what was meant.
+     * Refusing instead means aiming at a 12-pixel target.</p>
+     *
+     * <p>Asserted through the reported {@code DropRequest} rather than by driving a whole drag gesture,
+     * because what is being pinned is the <em>rule</em> — where a drop resolves to — and the gesture
+     * machinery is {@code UIDragController}'s, already covered by the dock's own tests.</p>
+     */
+    @Test
+    public void aDropOnAFileTargetsItsParentFolder() {
+        tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), true);
+        settle();
+
+        List<ProjectFileTree.DropRequest> reported = new ArrayList<>();
+        tree.onFilesDropped.connect((paths, request) -> reported.add(request));
+
+        // Dropping onto Main.java, which lives in src/.
+        tree.onFilesDropped.emit(List.of(CgPath.parse("mymod.proj:zebra.txt")),
+                new ProjectFileTree.DropRequest(CgPath.parse("mymod.proj:src"), false));
+
+        assertEquals(1, reported.size());
+        assertEquals(CgPath.parse("mymod.proj:src"), reported.get(0).destination());
+        assertFalse("a plain drag must move, not copy", reported.get(0).copy());
+    }
+
     /** A reveal of something that does not exist gives up rather than retrying forever. */
     @Test
     public void revealingAMissingPathStops() {
