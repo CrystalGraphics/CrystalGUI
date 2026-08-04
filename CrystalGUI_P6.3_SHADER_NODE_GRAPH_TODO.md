@@ -1407,6 +1407,163 @@ Headless where possible — the whole model half is (`headlessTest`), the panel 
 
 ---
 
+### 6.3.14 Properties and the Blackboard · `PLANNED` (2026-08-04)
+
+Research: `docs/research/unity-blackboard/` — 12 images and a README, pulled and captured 2026-08-04.
+**Read that README first**; this section is the decisions, not the observations.
+
+#### Why this is one item and not two
+
+The Properties *tab* 6.3.13 deferred cannot be built on its own, because a property is not a panel
+feature — it is a **document entity** that a node references, a uniform the emitter declares, and a
+value a material sets. The panel is the last of the four, not the first. Building the tab alone would
+mean a list of things that exist nowhere else.
+
+#### What a property IS here
+
+```java
+record GraphProperty(String id, String name, String reference, String typeId,
+                     String defaultValue, boolean exposed, String category,
+                     Map<String, String> options)
+```
+
+- **`id`** — generated and stable. What a node stores, so renaming a property cannot orphan its nodes.
+  Unity keys on its own object id for the same reason.
+- **`reference`** — the uniform's name in the generated shader. Derived from `name` on first entry
+  (`Vec prop` → `_Vec_prop`) and independently editable after, exactly as Unity does.
+- **`defaultValue`** — text, like every other value in this document layer. `NodeData.properties()` and
+  `Settings` both already make that trade and for the same reason: the storage layer stays free of value
+  types, so a server can author a graph it cannot render.
+- **`options`** — per-type extras (`mode`, `min`, `max`, `hdr`, `fallback`). A map rather than fields
+  because the set differs per type and a schema change would break stored documents.
+
+**Not in `Settings`.** The general gear is right for scalar options keyed by a stable name; a property is
+an *ordered list of records that other entities reference by id*. Encoding that into a flat key space
+(`property.0.name`) is possible and is the wrong shape — properties are peers of nodes and edges, and
+belong beside them on `GraphDocument`.
+
+#### Categories — a field, not a tree
+
+Unity's `+` menu offers `Category` as its first entry, so a category is created like a property rather
+than being a container filled afterwards. Ours is a **string on the property** (`""` = uncategorised),
+which is how `NodeType.category()` already works in this codebase. That buys grouping and ordering with
+no second entity, no tree to serialise, and no "deleting a category deletes its properties" rule to get
+wrong. Collapse state is view state and lives on the panel, like every other foldout (6.3.13).
+
+#### Type scope — and one landmine found while scoping it
+
+**`CgPropertiesParser` hard-bans `vec3` as a material property type** ("STD140 pads vec3 to 16 bytes but
+the GLSL compiler places the next field 12 bytes later"). And `CgShaderType.propertyTypeName()` returns
+`"vec3"` for `VEC3`. So **declaring a Vector 3 property emits a `.shader` that fails to parse** — for one
+of the three most common property types there is. Nothing hits it today only because no code path can
+reach `CgMasterNode.property()` yet; this item is the path.
+
+> **Fix in CrystalGraphics, where the constraint lives.** `CgShaderType` gains
+> `propertyDeclarationType()` (the token to *write* — `vec4` for `VEC3`, itself otherwise) and
+> `propertyAccessSuffix()` (`.xyz` for `VEC3`, empty otherwise). The emitter declares one and reads the
+> other. Putting the mapping in CrystalGUI would be the second place that knows about an alignment rule
+> belonging to the parser.
+
+| Unity type | Verdict | Reasoning |
+|---|---|---|
+| **Float** | **IN** — `float` | Plus `Mode`: `Default`, `Slider` (the parser already understands `Range(min,max)`), `Integer` (`int`) |
+| **Vector 2** | **IN** — `vec2` | |
+| **Vector 3** | **IN** — declared `vec4`, read `.xyz` | See the landmine above |
+| **Vector 4** | **IN** — `vec4` | |
+| **Color** | **IN** — `color` | The parser has a real `color` type. `Mode: Default/HDR` maps to nothing yet — HDR is recorded and unused, so it stays **OUT** until something consumes it |
+| **Boolean** | **IN** — `boolean` | The spelling trap `propertyTypeName()` already documents: GLSL says `bool`, the Properties block says `boolean` |
+| **Texture 2D** | **IN** — `sampler2D` | Default is a fallback name (`"white"`), which is what the parser's quoted-string sampler default already is |
+| **Texture 2D Array** | **IN** — `sampler2DArray` | |
+| **Texture 3D** | **IN** — `sampler3D` | |
+| **Cubemap** | **IN** — `samplerCube` | |
+| **Matrix 2 / 3 / 4** | **OUT** | `propertyTypeName()` returns null for matrices and the parser has no matrix property type. Adding one is a CrystalGraphics change with a real STD140 question in it, not a rider on this item |
+| **Gradient** | **OUT** | Unity bakes a gradient into a struct plus a sampling function; it is not a uniform type. A genuine feature, and a large one |
+| **Virtual Texture** | **OUT** | Streaming virtual texturing does not exist here |
+| **Sampler State** | **OUT** | The material system has no notion of a sampler object separable from a texture |
+| **Keyword** | **OUT this pass, and the most portable of the five** | `#pragma cg_feature` and `CgMaterial.enableKeyword` are *already real*. A Boolean keyword is a genuinely small follow-up; Enum and Material Quality are not |
+
+**Result: Float (3 modes) · Vector 2/3/4 · Color · Boolean · Texture 2D / 2D Array / 3D / Cubemap.**
+Ten of Unity's sixteen, every rejection tied to something that does not exist rather than to taste.
+
+#### The property node
+
+Dragged from the board onto the canvas, per `14-drag-property-to-node.png`. It is a pill with **one
+output, no inputs and no settings** — the node *is* a reference.
+
+- Type id `cg:property`, with the property's `id` stored in `NodeData.properties()`.
+- Its label and its port type are **read from the document at build time**, not copied — so renaming or
+  retyping a property updates every node referencing it, which is the whole point of referencing by id.
+- It emits `{Out} = <reference><accessSuffix>;` and nothing else.
+- A node whose property has been deleted becomes an **error node**, not a silent one: the same choice
+  `GraphDocument` makes for an unknown node type, for the same reason.
+
+`ShaderGraphBridge` synthesises a `CgShaderNode` per referenced property at compile time (via
+`CgTemplateShaderNode`), and declares each *exposed* property on `CgMasterNode` before emitting. An
+unexposed property is still a uniform — `exposed` controls the material inspector, not existence.
+
+#### The Blackboard panel
+
+**A floating overlay on the canvas, exactly like the Main Preview** — same `graph.addOverlay` seam, same
+anchored placement, same resize grip. 6.3.12 already built that machinery; this is its second consumer,
+which is the test of whether it was built as a widget or as a one-off.
+
+| Part | Detail |
+|---|---|
+| Title | The graph's **file name**, not "Blackboard" |
+| Subtitle | Its asset path, dim |
+| `+` | Opens the type menu — with a separator under `Category`, which `Menu` gained in 6.3.12 |
+| Body | A `ScrollerView` of pills, grouped by category |
+| Pill | Rounded capsule: exposed dot, name; type right-aligned, dim, **outside** the capsule |
+
+Behaviour taken from the docs: rename by double-click, reorder by drag, `Delete` to remove, and it
+**cannot be dragged off the graph** — which our `placeAt` clamp already enforces for the Main Preview.
+
+#### Selection, and where the form lives
+
+Unity puts the property form in the **Node Settings tab**, not in a panel of its own — selecting a pill
+fills the same surface selecting a node does. So the Blackboard needs to be able to *own* the
+inspector's subject.
+
+`GraphSelection` holds nodes and one wire. Rather than teach it about properties — it is a **graph**
+selection, and a property is not in the graph — the panel exposes `onPropertySelected`, the inspector
+listens, and each clears the other. Two sources, one subject, and neither has to know what the other can
+hold.
+
+The form itself is `Property: <name>` plus Name, Reference, Default, Exposed. **`Default` is a typed
+editor**, which is why the form cannot be a fixed row list: Vector 2 draws two boxes, Color a swatch,
+Texture a path field. That mapping is one method, and it is the same `ConfigDescriptor` selection
+`SettingsConfigurator.describe` already makes for settings.
+
+`Precision` and `Override Property Declaration` are **OUT**, on the 6.3.11 test: no precision modes are
+emitted and nothing would read either.
+
+#### Tests
+
+- **model** (headless): a property round-trips through `GraphCodecs`; add/remove/rename/reorder each
+  undo; a reference is sanitised (leading underscore, illegal characters replaced); two graphs differing
+  only in a property hash differently
+- **compile**: each of the ten types emits a `Properties` block that **parses through the real
+  `CgShaderParser`** — the assertion that would have caught the `vec3` landmine before a user did
+- **vec3 specifically**: declared as `vec4`, read as `.xyz`, and the emitted shader parses
+- **node binding**: renaming a property relabels its nodes; retyping changes the port type; deleting it
+  leaves an error node rather than a crash
+- **panel**: `+` adds; `Delete` removes; a drag onto the canvas creates a node referencing the right
+  property; the panel cannot be dragged out of the viewport
+- **inspector**: selecting a pill shows the property form; selecting a node clears it and vice versa
+
+#### Steps
+
+1. `GraphProperty` + document list + edits + codec — model only, headless
+2. `CgShaderType.propertyDeclarationType()`/`propertyAccessSuffix()` in CrystalGraphics, with the vec3 test
+3. The property node type + bridge: declare on the master, synthesise the node, emit the reference
+4. `BlackboardPanel` — the floating panel, pills, `+` menu, add/remove
+5. Drag a pill onto the canvas
+6. The property form in the Node Settings tab
+7. Rename, reorder, categories
+8. Styling pass
+
+---
+
 ---
 
 ## Ordering, and what blocks what
