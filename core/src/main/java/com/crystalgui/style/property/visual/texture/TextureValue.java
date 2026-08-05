@@ -5,7 +5,9 @@ import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiRepeat;
 import com.crystalgui.render.texture.CgUiShape;
 import com.crystalgui.render.texture.CgUiSprite;
+import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
+import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.CssParsingUtil;
 import com.crystalgui.style.property.StyleValue;
 import com.crystalgui.style.property.visual.color.ColorValue;
@@ -34,7 +36,16 @@ import java.util.Locale;
  *   <li>{@code shape("name")} — a vector mark drawn directly ({@link CgUiShape}), no texture: e.g.
  *       {@code "chevron-down"}, {@code "checkmark"}, {@code "triangle-right"}. See {@link
  *       CgUiShape#parseKind} for the full catalog.</li>
+ *   <li>{@code icon("namespace:name")} — an {@code .svg} drawn as vectors ({@link CgUiSvg}), from
+ *       {@code assets/{namespace}/ui/icons/{name}.svg}. Optional trailing args are type-sniffed the same
+ *       way {@code image(...)}'s are: a colour literal is what {@code currentColor} resolves to, and the
+ *       keyword {@code monochrome} forces the file's own palette to that colour as well.</li>
  * </ul>
+ *
+ * <p><b>{@code icon()} and {@code image()} are not two spellings of one thing.</b> An icon is resolution-
+ * independent geometry with no texture, no atlas and no bake — the whole point is that it is crisp at any
+ * {@code uiScale}, where {@code image()} is a bitmap authored at one size. Reach for {@code image()} when
+ * the artwork is genuinely raster.</p>
  *
  * <p>Rounding/border is a separate, universal wrapping layer ({@code border-radius}/
  * {@code border-width}/{@code border-color}), not a {@code background:} value type — it applies on
@@ -82,7 +93,42 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         if (lower.startsWith("shape(") && value.endsWith(")")) {
             return parseShape(value.substring("shape(".length(), value.length() - 1));
         }
+        if (lower.startsWith("icon(") && value.endsWith(")")) {
+            return parseIcon(value.substring("icon(".length(), value.length() - 1));
+        }
         return null;
+    }
+
+    /**
+     * {@code icon("ns:name")}, plus {@code image(...)}-style type-sniffed trailing args.
+     *
+     * <p>Returns null — a parse failure — when the file is missing, rather than an empty drawable. A
+     * typo'd icon name and a deliberately absent one are different statements, and {@code none} already
+     * spells the second.</p>
+     */
+    private static @Nullable CgUiDrawable parseIcon(String args) {
+        List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
+        if (parts.isEmpty()) return null;
+        String name = unquote(parts.get(0).trim());
+        if (name.isEmpty()) return null;
+
+        CgUiSvg icon = CgUiSvg.of(FileIconTheme.toResourcePath(name));
+        if (icon == null) return null;
+
+        for (int i = 1; i < parts.size(); i++) {
+            String arg = unquote(parts.get(i).trim());
+            if (arg.equalsIgnoreCase("monochrome")) {
+                icon.setMonochrome(true);
+                continue;
+            }
+            Integer tint = ColorValue.parseColor(arg);
+            if (tint != null) {
+                icon.setTint(tint);
+                continue;
+            }
+            return null; // unrecognized trailing arg
+        }
+        return icon;
     }
 
     private static @Nullable CgUiDrawable parseShape(String args) {

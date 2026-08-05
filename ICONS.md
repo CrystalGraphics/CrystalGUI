@@ -470,6 +470,11 @@ Two triggers to actually do it, either of which makes the geometry half CrystalG
 
 Until one of those lands, moving buys nothing and costs a cross-project split.
 
-What is left for E7: measure the segment throughput, wrap a document in a `CgUiDrawable`, add an
-`icon(...)` keyword to `TextureValue`, and port VS Code's `IDecorationsProvider` so that dirty, read-only
-and errors are three independent contributors rather than three special cases in a row renderer.
+**Done since:** throughput measured (§3), `CgUiSvg` wraps a document as a `CgUiDrawable`, `icon("ns:name")`
+is a `TextureValue` form, and `FileIconTheme` ports VS Code's file-icon-theme JSON — extension and exact
+name to icon, longest-extension-first, with the colour deliberately left to the `.filetype-*` class it hands
+back so a dozen languages can share one `code` glyph and still differ.
+
+What is left for E7: port VS Code's `IDecorationsProvider`, so that dirty, read-only, errors and git status
+are independent contributors composing onto a row rather than four special cases in a row renderer — the
+point of the port being that the fifth one is then free.
