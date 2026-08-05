@@ -89,6 +89,19 @@ public class ExplorerCommandsTest extends UiTestBase {
         window = new UIWindow(Ui.of(root));
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
         window.init(1200, 800);
+        // The keymap reads modifier state from the PLATFORM, not from the event, so a chord like
+        // Mod+Z never matches unless the stub says the key is held.
+        com.crystalgui.testsupport.TestPlatformService.get().input(
+                new com.crystalgraphics.platform.service.CgInputService() {
+                    @Override public int getCurrentModifiers() { return heldModifiers; }
+                    @Override public int translateKeyboardCodes(int c) { return c; }
+                    @Override public boolean isKeyDown(int c) { return false; }
+                    @Override public int translateMouseCodes(int c) { return c; }
+                    @Override public boolean isMouseDown(int c) { return false; }
+                    @Override public int howManyMouseButtons() { return 3; }
+                    @Override public String getClipboard() { return ""; }
+                    @Override public void setClipboard(String text) { }
+                });
         settle();
     }
 
@@ -109,6 +122,21 @@ public class ExplorerCommandsTest extends UiTestBase {
             window.getInputHandler().beginFrame();
             window.getInputHandler().endFrame();
         }
+    }
+
+    /** Modifier state the keymap reads through the platform. */
+    private int heldModifiers;
+
+    /** Sends a chord with {@code modifiers} held for its duration. */
+    private void chord(int keyCode, int modifiers) {
+        heldModifiers = modifiers;
+        try {
+            window.getInputHandler().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
+                    (char) 0, keyCode, true, false, 20L));
+        } finally {
+            heldModifiers = 0;
+        }
+        settle();
     }
 
     private CommandRegistry registry() {
@@ -620,5 +648,98 @@ public class ExplorerCommandsTest extends UiTestBase {
         for (CgPath child : workbench.fileTree().source().children(src)) inSrc.add(child.name());
         assertTrue("F5 only reloaded the selected row's folder -- src still shows " + inSrc,
                 inSrc.contains("Sneaky.java"));
+    }
+
+    @Test
+    public void ctrlZBringsBackADeletedFile() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().treeView().setExpanded(CgPath.ofProject("mymod.proj"), true);
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:README.md"));
+        settle();
+
+        registry().get(ExplorerCommands.DELETE).execute(CommandContext.of(workbench.fileTree()));
+        answerPrompt("y");
+        assertFalse("fixture wrong -- the delete did not happen",
+                rootChildNames().contains("README.md"));
+
+        chord(CgKeyCodes.KEY_Z, com.crystalgraphics.platform.input.CgModifiers.CTRL);
+
+        assertTrue("Ctrl+Z did not bring the file back. Saw " + rootChildNames(),
+                rootChildNames().contains("README.md"));
+    }
+
+    /**
+     * <b>Moving several files is one undo step, not one per file.</b>
+     *
+     * <p>Each file is still its own operation — they succeed and fail separately — but the user made a
+     * single gesture, and a history that costs five Ctrl+Z presses to put five files back is describing
+     * the implementation rather than the action.</p>
+     *
+     * <p>The grouping has to survive the round trips: an operation pushes its edit from its response
+     * handler, frames later, so a transaction closed at the end of the issuing loop wraps nothing at all
+     * and every edit still lands separately.</p>
+     */
+    @Test
+    public void movingSeveralFilesIsASingleUndoStep() {
+        workbench.fileTree().loadProjects();
+        settle();
+        backingStore.seed("mymod.proj:one.txt", "1");
+        backingStore.seed("mymod.proj:two.txt", "2");
+        workbench.fileTree().source().invalidateAll();
+        workbench.fileTree().treeView().setExpanded(CgPath.ofProject("mymod.proj"), true);
+        settle();
+        assertTrue("fixture wrong -- the files are not at the root", rootChildNames().contains("one.txt"));
+
+        workbench.fileTree().onFilesDropped.emit(
+                List.of(CgPath.parse("mymod.proj:one.txt"), CgPath.parse("mymod.proj:two.txt")),
+                new ProjectFileTree.DropRequest(CgPath.parse("mymod.proj:src"), false));
+        settle();
+        assertFalse("fixture wrong -- the move did not happen", rootChildNames().contains("one.txt"));
+        assertFalse(rootChildNames().contains("two.txt"));
+
+        // FOCUS IN THE PANEL, which is where it is after a drag inside it -- Ctrl+Z resolves its
+        // UndoScope outward from the focused element, so with nothing focused there is no stack to
+        // reach and this would assert against a keystroke that never ran.
+        window.getInputHandler().requestPointerFocus(workbench.fileTree());
+        chord(CgKeyCodes.KEY_Z, com.crystalgraphics.platform.input.CgModifiers.CTRL);
+
+        assertTrue("one Ctrl+Z did not bring BOTH files back -- the drop was recorded per file. Saw "
+                        + rootChildNames(),
+                rootChildNames().contains("one.txt") && rootChildNames().contains("two.txt"));
+    }
+
+    /**
+     * <b>Cut then Paste of several files is one undo step.</b>
+     *
+     * <p>Same rule as the drop, and it was missing for the same reason — paste issues one operation per
+     * file, correctly, and recorded one history step per file with it.</p>
+     */
+    @Test
+    public void cuttingAndPastingSeveralFilesIsASingleUndoStep() {
+        workbench.fileTree().loadProjects();
+        settle();
+        backingStore.seed("mymod.proj:one.txt", "1");
+        backingStore.seed("mymod.proj:two.txt", "2");
+        workbench.fileTree().source().invalidateAll();
+        workbench.fileTree().treeView().setExpanded(CgPath.ofProject("mymod.proj"), true);
+        settle();
+
+        ExplorerCommands.clipboard().cut(List.of(
+                CgPath.parse("mymod.proj:one.txt"), CgPath.parse("mymod.proj:two.txt")));
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src"));
+        settle();
+        registry().get(ExplorerCommands.PASTE).execute(CommandContext.of(workbench.fileTree()));
+        settle();
+        assertFalse("fixture wrong -- the paste did not move anything",
+                rootChildNames().contains("one.txt"));
+
+        window.getInputHandler().requestPointerFocus(workbench.fileTree());
+        chord(CgKeyCodes.KEY_Z, com.crystalgraphics.platform.input.CgModifiers.CTRL);
+
+        assertTrue("one Ctrl+Z did not bring BOTH files back -- the paste was recorded per file. Saw "
+                        + rootChildNames(),
+                rootChildNames().contains("one.txt") && rootChildNames().contains("two.txt"));
     }
 }

@@ -111,7 +111,36 @@ public final class InputDialog {
 
         window.addOverlay(popup, from);
         popup.showAt(0f, 0f, null);
+        restoreFocusOnClose(window, popup, from);
         return popup;
+    }
+
+    /**
+     * Hands focus back to whatever the prompt was opened from.
+     *
+     * <p>The prompt takes focus for its field, and until now nothing gave it back — so after confirming a
+     * delete, focus was left on a text field inside a popup that had already closed. Everything that
+     * resolves outward from the focused element then found nothing: <b>Ctrl+Z did not undo the delete</b>,
+     * and neither did Delete, F2 or any other panel-scoped key, because a keymap and an
+     * {@code UndoScope} both walk up from focus and there was no longer a path from there to the panel.</p>
+     *
+     * <p>{@code showAt} is deliberately given a <b>null invoker</b> — a prompt is not a toggle, and naming
+     * its trigger as the invoker would exempt that element from light dismiss — so {@code Popover}'s own
+     * restore has nothing to aim at and this has to be explicit.</p>
+     *
+     * <p>Only if {@code from} is still in the tree and can actually hold focus: the element a delete was
+     * invoked from is quite often the row that the delete just removed. Focus then stays where it is
+     * rather than being pushed onto something detached, which is worse than useless — hit testing and
+     * hover both go looking for it.</p>
+     */
+    private static void restoreFocusOnClose(UIWindow window, Popover popup, @Nullable UIElement from) {
+        if (from == null) return;
+        popup.onClosed.connect(() -> {
+            if (from.getAttachedWindow() != window || !from.focusable()) return;
+            // POINTER-sourced, so closing a prompt does not leave a focus ring on the panel behind it --
+            // the user did not tab here, they finished a dialog.
+            window.getInputHandler().requestPointerFocus(from);
+        });
     }
 
     /**

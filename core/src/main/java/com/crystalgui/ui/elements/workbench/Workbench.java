@@ -504,6 +504,10 @@ public class Workbench extends UIElement {
      * the user guessing which ones landed.</p>
      */
     private void dropFiles(List<CgPath> sources, ProjectFileTree.DropRequest request) {
+        // ONE UNDO STEP FOR THE WHOLE DROP -- see WorkspaceFileService.batch for why the group cannot
+        // simply be opened and closed around this loop.
+        WorkspaceFileService.Batch batch = fileService.batch(
+                request.copy() ? "copy files" : "move files");
         for (CgPath source : sources) {
             // A folder dropped into itself or its own descendant would move a directory under itself,
             // which the filesystem refuses with a message about paths rather than about the gesture.
@@ -513,18 +517,30 @@ public class Workbench extends UIElement {
             }
             CgPath target = request.destination().resolve(source.name());
             if (target.equals(source)) continue;   // dropped back where it already is
+            Runnable done = batch.track();
             if (request.copy()) {
                 fileService.copyFile(source, target,
-                        () -> onStatus.emit("copied " + source.name()),
-                        failure -> onStatus.emit("copy failed: " + source.name()
-                                + " -- " + failure.code()));
+                        () -> {
+                            onStatus.emit("copied " + source.name());
+                            done.run();
+                        },
+                        failure -> {
+                            onStatus.emit("copy failed: " + source.name() + " -- " + failure.code());
+                            done.run();
+                        });
             } else {
                 fileService.move(source, target, false,
-                        () -> onStatus.emit("moved " + source.name()),
-                        failure -> onStatus.emit("move failed: " + source.name()
-                                + " -- " + failure.code()));
+                        () -> {
+                            onStatus.emit("moved " + source.name());
+                            done.run();
+                        },
+                        failure -> {
+                            onStatus.emit("move failed: " + source.name() + " -- " + failure.code());
+                            done.run();
+                        });
             }
         }
+        batch.sealed();
     }
 
     private boolean commandsInstalled;

@@ -217,7 +217,24 @@ public final class ContextMenu {
             // Dropped from the tree when the ROOT closes by any route -- light dismiss, Escape, or
             // choosing an item. Left in place they are invisible display:none elements accumulating one
             // set per press.
-            menu.onClosed.connect(() -> discard(live));
+            menu.onClosed.connect(() -> {
+                discard(live);
+                // FOCUS GOES BACK TO WHAT WAS RIGHT-CLICKED, and this is not cosmetic.
+                //
+                // A menu takes focus for its rows, and a right-click is often the ONLY thing that happened
+                // before the command runs — so without this, focus is left on a row of a menu that has
+                // already been detached. Everything that resolves outward from the focused element then
+                // finds nothing: Ctrl+Z did not undo a paste, and the panel's own Delete and F2 were dead
+                // too, because a keymap and an UndoScope both walk up from focus and there was no longer a
+                // path from there back to the panel.
+                //
+                // `on` rather than the clicked element: it is the attachment site, so it is always still
+                // in the tree, while the row under the pointer is quite often the thing the command just
+                // deleted or moved. Pointer-sourced, so dismissing a menu does not leave a focus ring.
+                if (on.getAttachedWindow() != null && on.focusable()) {
+                    on.getAttachedWindow().getInputHandler().requestPointerFocus(on);
+                }
+            });
 
             // CONVERTED, and this is the whole reason the framework does it rather than each caller.
             //

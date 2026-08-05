@@ -218,6 +218,9 @@ public final class ExplorerCommands {
         if (destination == null || CLIPBOARD.isEmpty()) return;
         boolean moving = CLIPBOARD.mode() == ExplorerClipboard.Mode.CUT;
 
+        // ONE UNDO STEP FOR THE WHOLE PASTE, the same rule the drop follows -- see
+        // WorkspaceFileService.batch for why the group cannot be closed at the end of this loop.
+        WorkspaceFileService.Batch batch = workbench.files().batch(moving ? "move files" : "paste files");
         for (CgPath source : CLIPBOARD.consumeIfCut()) {
             // A folder pasted into itself, or into its own descendant, would move a directory under
             // itself -- which the filesystem refuses with a message about paths rather than about the
@@ -234,18 +237,20 @@ public final class ExplorerCommands {
                         source.name(), namesIn(workbench, destination)));
             }
             CgPath finalTarget = into;
+            Runnable done = batch.track();
             if (moving) {
                 workbench.files().move(source, finalTarget, false,
-                        () -> workbench.onStatus.emit("moved " + finalTarget.name()),
-                        failure -> workbench.onStatus.emit(
-                                "move failed: " + source.name() + " -- " + failure.code()));
+                        () -> { workbench.onStatus.emit("moved " + finalTarget.name()); done.run(); },
+                        failure -> { workbench.onStatus.emit(
+                                "move failed: " + source.name() + " -- " + failure.code()); done.run(); });
             } else {
                 workbench.files().copyFile(source, finalTarget,
-                        () -> workbench.onStatus.emit("copied " + finalTarget.name()),
-                        failure -> workbench.onStatus.emit(
-                                "copy failed: " + source.name() + " -- " + failure.code()));
+                        () -> { workbench.onStatus.emit("copied " + finalTarget.name()); done.run(); },
+                        failure -> { workbench.onStatus.emit(
+                                "copy failed: " + source.name() + " -- " + failure.code()); done.run(); });
             }
         }
+        batch.sealed();
     }
 
     /** The names already in a folder, as far as the tree has listed it — for incremental naming. */

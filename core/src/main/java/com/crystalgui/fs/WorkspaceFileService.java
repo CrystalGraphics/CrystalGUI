@@ -104,6 +104,65 @@ public class WorkspaceFileService {
         return undoStack;
     }
 
+    /**
+     * Groups every operation issued by <b>one gesture</b> into a single undo step.
+     *
+     * <p>A drop of five files, or a paste of five, is five operations — they succeed and fail separately,
+     * which is why the callers issue them one at a time — but it is one action. A history that made the
+     * user press Ctrl+Z five times to put them back would be describing the implementation.</p>
+     *
+     * <p><b>The group cannot close when the issuing loop ends.</b> An operation pushes its edit from its
+     * response handler, some frames later, so a transaction opened and closed around the loop wraps
+     * nothing at all and every edit still lands separately — the bug, with a transaction around it. It
+     * closes on whichever completion is last instead.</p>
+     *
+     * <p>And not on the last completion alone: with a fast transport an operation can finish while the
+     * loop is still issuing, so a count that reached zero mid-loop would close the group early and leave
+     * the rest outside it. {@link Batch#sealed()} is what says "that is all of them", and the group ends
+     * on whichever of the two comes second.</p>
+     */
+    public Batch batch(String label) {
+        return new Batch(undoStack, label);
+    }
+
+    /** @see #batch(String) */
+    public static final class Batch {
+        private final UndoStack history;
+        private int outstanding;
+        private boolean sealed;
+        private boolean ended;
+
+        private Batch(UndoStack history, String label) {
+            this.history = history;
+            history.beginTransaction(label);
+        }
+
+        /** Call once per issued operation; run the returned callback when it finishes, either way. */
+        public Runnable track() {
+            outstanding++;
+            return this::completed;
+        }
+
+        /** Call once, after the last operation has been issued — including when none were. */
+        public void sealed() {
+            sealed = true;
+            endIfDone();
+        }
+
+        private void completed() {
+            outstanding--;
+            endIfDone();
+        }
+
+        private void endIfDone() {
+            if (ended || !sealed || outstanding > 0) return;
+            ended = true;
+            // An empty group pushes nothing, which is the case worth having: a drop that was refused
+            // outright should not cost a Ctrl+Z that appears to do nothing.
+            history.endTransaction();
+        }
+    }
+
     // ── Operations ──────────────────────────────────────────────────────────────────────────────
 
     /** Creates a file that is not there. Refuses rather than clobbering — see {@code fs.create}. */
