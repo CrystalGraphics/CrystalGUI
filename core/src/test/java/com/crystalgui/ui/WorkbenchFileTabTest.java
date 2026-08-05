@@ -17,6 +17,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.dock.DockCommands;
 import com.crystalgui.ui.elements.editor.TextEditor;
+import com.crystalgui.ui.elements.workbench.FileDocument;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;
@@ -26,6 +27,7 @@ import java.nio.file.Paths;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -93,7 +95,7 @@ public class WorkbenchFileTabTest extends UiTestBase {
     private TextEditor openWithContent(CgPath path) {
         TextEditor editor = workbench.editorFor(path);
         editor.setText(README);
-        workbench.openPanel(Workbench.refFor(path));
+        workbench.openPanel(workbench.refFor(path));
         settle();
         return editor;
     }
@@ -149,5 +151,128 @@ public class WorkbenchFileTabTest extends UiTestBase {
                         + "every dock command acts on the wrong pane",
                 path.toString(),
                 workbench.dock().activeGroup().leaf().activePanel().state(Workbench.PATH_STATE, ""));
+    }
+
+    // ── Which editor opens which file (E24b) ────────────────────────────────
+
+    /**
+     * <b>A bound extension opens its own editor, not the text editor.</b>
+     *
+     * <p>{@code refFor} returned {@code FILE_TYPE} unconditionally, so every file opened in a text editor
+     * however little sense that made — a PNG arrived as mojibake and a {@code .shadergraph} as raw JSON.
+     * Binding is the mechanism VS Code calls an editor association and IntelliJ a {@code FileEditorProvider};
+     * the text editor becomes the fallback rather than the rule.</p>
+     */
+    @Test
+    public void aBoundExtensionOpensItsOwnEditor() {
+        workbench.registerPanel(
+                com.crystalgui.ui.elements.dock.DockPanelDescriptor.document("image", "Image"),
+                ref -> new UIElement());
+        workbench.bindEditorExtensions("image", "png", "jpg");
+
+        assertEquals("image", workbench.refFor(CgPath.parse("mymod.proj:logo.png")).typeId());
+        assertEquals("image", workbench.refFor(CgPath.parse("mymod.proj:LOGO.PNG")).typeId());
+        assertEquals("an unbound file must still open in the text editor",
+                Workbench.FILE_TYPE, workbench.refFor(CgPath.parse("mymod.proj:README.md")).typeId());
+    }
+
+    /** A bound panel is handed the same path state, so its factory reads the file exactly as the editor does. */
+    @Test
+    public void aBoundPanelStillCarriesThePath() {
+        workbench.registerPanel(
+                com.crystalgui.ui.elements.dock.DockPanelDescriptor.document("image", "Image"),
+                ref -> new UIElement());
+        workbench.bindEditorExtensions("image", "png");
+
+        CgPath path = CgPath.parse("mymod.proj:art/logo.png");
+        assertEquals(path.toString(), workbench.refFor(path).state(Workbench.PATH_STATE, ""));
+        assertEquals("logo.png",
+                workbench.refFor(path).state(com.crystalgui.ui.elements.dock.DockPanelRef.TITLE, ""));
+    }
+
+    /**
+     * An exact name beats an extension, so a file whose suffix lies about it can still be claimed.
+     *
+     * <p>The precedence is {@link com.crystalgui.fs.FilePatternMap}'s, shared with the language registry —
+     * which is the point of sharing it. Two matchers would be two chances to disagree about which of these
+     * two rules wins.</p>
+     */
+    @Test
+    public void anExactNameBeatsABoundExtension() {
+        workbench.registerPanel(
+                com.crystalgui.ui.elements.dock.DockPanelDescriptor.document("image", "Image"),
+                ref -> new UIElement());
+        workbench.registerPanel(
+                com.crystalgui.ui.elements.dock.DockPanelDescriptor.document("licence", "Licence"),
+                ref -> new UIElement());
+        workbench.bindEditorExtensions("image", "png");
+        workbench.bindEditorNames("licence", "NOTICE.png");
+
+        assertEquals("licence", workbench.refFor(CgPath.parse("mymod.proj:NOTICE.png")).typeId());
+        assertEquals("image", workbench.refFor(CgPath.parse("mymod.proj:other.png")).typeId());
+    }
+
+    /**
+     * <b>Renaming across a binding swaps the editor.</b>
+     *
+     * <p>Worth pinning because {@code refFor} is also the identity used to FIND an open tab again, for
+     * closing and for renaming. Its answer changing with the extension is correct — {@code a.txt} renamed
+     * to {@code a.png} should stop being a text editor — but it is only correct because the rename path
+     * replaces one ref with the other rather than looking the old one up afterwards.</p>
+     */
+    @Test
+    public void renamingAcrossABindingChangesTheEditorType() {
+        workbench.registerPanel(
+                com.crystalgui.ui.elements.dock.DockPanelDescriptor.document("image", "Image"),
+                ref -> new UIElement());
+        workbench.bindEditorExtensions("image", "png");
+
+        assertEquals(Workbench.FILE_TYPE, workbench.refFor(CgPath.parse("mymod.proj:a.txt")).typeId());
+        assertEquals("image", workbench.refFor(CgPath.parse("mymod.proj:a.png")).typeId());
+    }
+
+    // ── The document seam and unsaved changes (E16) ─────────────────────────
+
+    /**
+     * <b>A non-text document is what save encodes.</b>
+     *
+     * <p>Save used to be {@code editor.getText()} against a {@code Map<CgPath, TextEditor>}, so anything
+     * that was not text could be opened once bindings existed and then could not be saved at all.</p>
+     *
+     * <p>The dirty and save-refusal behaviour around this lives in {@code ExplorerCommandsTest}: both need
+     * a completed read to have a baseline to compare against, and this fixture deliberately pumps no
+     * transport — see the class note.</p>
+     */
+    @Test
+    public void aBoundDocumentSuppliesTheBytesToSave() {
+        StringBuilder encoded = new StringBuilder();
+        workbench.registerDocumentType("fake", "Fake", path -> new FileDocument() {
+            private final UIElement view = new UIElement();
+            @Override public UIElement view() { return view; }
+            @Override public byte[] encode() {
+                encoded.append("encoded:").append(path.name());
+                return new byte[0];
+            }
+            @Override public void adopt(byte[] bytes) { }
+        });
+        workbench.bindEditorExtensions("fake", "shadergraph");
+
+        CgPath path = CgPath.parse("mymod.proj:thing.shadergraph");
+        workbench.documentFor(path).encode();
+
+        assertEquals("save must reach the document rather than a text editor",
+                "encoded:thing.shadergraph", encoded.toString());
+    }
+
+    /** Binding an extension with no document factory fails loudly rather than opening an empty editor. */
+    @Test
+    public void aBindingWithoutADocumentFactoryIsReported() {
+        workbench.bindEditorExtensions("nosuchtype", "weird");
+        try {
+            workbench.documentFor(CgPath.parse("mymod.proj:a.weird"));
+            org.junit.Assert.fail("expected the missing factory to be reported");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("nosuchtype"));
+        }
     }
 }
