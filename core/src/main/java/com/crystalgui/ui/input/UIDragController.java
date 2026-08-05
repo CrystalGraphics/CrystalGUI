@@ -466,13 +466,28 @@ public final class UIDragController {
         //
         // Only payload drags are affected: a positional drag (resize, marquee, node move) dispatches no
         // Drop at all, so its onDragEnd is still the first thing to run.
+        DragListener ending = listener;
         if (droppedPayload != null && droppedOn != null && window != null) {
             window.getInputHandler().sendInputEvent(droppedOn,
                     new DragEvent.Drop(droppedOn, window.getInputHandler().pointerPosition(),
                             dragSource, droppedPayload));
         }
 
-        listener.onDragEnd(local.x(), local.y());
+        // THE DROP MAY HAVE ENDED THIS DRAG ALREADY, and the field cannot be read again.
+        //
+        // A drop handler is entitled to change the tree -- the comment above says so -- and if the change
+        // detaches the drag SOURCE, UIInputHandler.forgetElement cancels this very drag on the spot:
+        // onDragCancel runs and clear() nulls every field. The next line then dereferenced null. It took
+        // a drop target that rebuilds its own list to expose it (reordering a property on the Blackboard,
+        // where the list being dropped on is made of the pill being dragged), but nothing about that is
+        // special -- any handler that restructures the subtree its source lives in reaches it.
+        //
+        // RETURNING is the right half rather than a null check. The source has already been told the drag
+        // was cancelled; also telling it the drag completed would be two contradictory endings for one
+        // gesture, and a listener that acts on both would act twice.
+        if (listener != ending) return;
+
+        ending.onDragEnd(local.x(), local.y());
         clear();
     }
 
