@@ -1,6 +1,10 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.editor.CrystalEditor;
+import com.crystalgui.ui.elements.workbench.Workbench;
+import com.crystalgui.ui.elements.workbench.FileDocument;
+import com.crystalgui.graph.shader.ShaderGraphEditor;
+import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.InMemoryFileSystem;
 import com.crystalgui.fs.ProjectRegistry;
 import com.crystalgui.fs.WorkspaceActor;
@@ -23,6 +27,9 @@ import java.nio.file.Paths;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
@@ -157,5 +164,64 @@ public class CrystalEditorPanelsTest extends UiTestBase {
         assertEquals("a second open split the work area again",
                 before, editor.workbench().dock().layout().leaves().size());
         editor.workbench().dock().layout().checkInvariants();
+    }
+
+    // ── .shadergraph opens as a graph (E24b + the FileDocument seam) ─────────
+
+    /**
+     * <b>A {@code .shadergraph} file opens in the graph editor, not in a text editor.</b>
+     *
+     * <p>Every file used to resolve to {@code FILE_TYPE}, so opening one showed its JSON. The binding is
+     * the editor association; the document seam is what then lets it be saved, since save was
+     * {@code editor.getText()} against a map of text editors.</p>
+     */
+    @Test
+    public void aShaderGraphFileOpensInTheGraphEditor() {
+        CrystalEditor editor = new CrystalEditor(client());
+
+        assertEquals(CrystalEditor.SHADER_GRAPH_FILE_TYPE,
+                editor.workbench().refFor(CgPath.parse("mymod.proj:fancy.shadergraph")).typeId());
+        assertEquals("an ordinary file must still open in the text editor",
+                Workbench.FILE_TYPE,
+                editor.workbench().refFor(CgPath.parse("mymod.proj:README.md")).typeId());
+    }
+
+    /** And it is a real document: one instance per path, and it is a {@link FileDocument}. */
+    @Test
+    public void eachGraphFileGetsItsOwnEditor() {
+        CrystalEditor editor = new CrystalEditor(client());
+        CgPath one = CgPath.parse("mymod.proj:one.shadergraph");
+        CgPath two = CgPath.parse("mymod.proj:two.shadergraph");
+
+        FileDocument first = editor.workbench().documentFor(one);
+        FileDocument second = editor.workbench().documentFor(two);
+
+        assertTrue("the graph editor is not a FileDocument", first instanceof ShaderGraphEditor);
+        assertNotSame("two graph files share one editor -- editing either would edit both", first, second);
+        assertSame("asking twice for the same file must give the same document",
+                first, editor.workbench().documentFor(one));
+    }
+
+    /**
+     * <b>A graph file that cannot be loaded is refused, not silently emptied.</b>
+     *
+     * <p>{@code GraphView} cannot yet adopt a whole document, so {@code adopt} throws — and that refusal
+     * is the safety property. A document that accepted the bytes and showed an empty canvas would then
+     * differ from the file it failed to read, report itself modified, and let the first Save All write
+     * that emptiness over the user's graph.</p>
+     */
+    @Test
+    public void aGraphFileThatCannotLoadIsRefusedRatherThanEmptied() {
+        CrystalEditor editor = new CrystalEditor(client());
+        CgPath path = CgPath.parse("mymod.proj:fancy.shadergraph");
+        FileDocument document = editor.workbench().documentFor(path);
+
+        try {
+            document.adopt("{}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            org.junit.Assert.fail("expected the graph to refuse a load it cannot perform");
+        } catch (RuntimeException expected) {
+            assertTrue(String.valueOf(expected.getMessage()),
+                    String.valueOf(expected.getMessage()).contains("whole-document adopt"));
+        }
     }
 }
