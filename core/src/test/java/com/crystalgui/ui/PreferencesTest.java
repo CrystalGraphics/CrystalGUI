@@ -280,7 +280,18 @@ public class PreferencesTest extends UiTestBase {
         assertTrue("shrinking the window past its content left nothing to scroll, so the rows are being "
                         + "clipped by the dialog rather than scrolled inside the panel",
                 preferences.panel().getMaxScrollTop() > 0f);
-        assertTrue("the bar is hidden, so there is no way to discover the rows below the fold",
+        assertTrue("the bar is switched off, so there is no way to discover the rows below the fold",
                 preferences.panel().isScrollbarsVisible());
+
+        // The FLAG being true is not the bar being visible, and asserting only the flag is how an
+        // invisible scrollbar shipped: the sizing rule was a list of tags naming every ScrollerView
+        // subclass, ConfiguratorPanel was not among them, and its bars laid out at zero width while the
+        // wheel scrolled perfectly.
+        UIElement bar = preferences.panel().querySelectorAll(".__v-scroller__").stream()
+                .findFirst().orElse(null);
+        org.junit.Assert.assertNotNull("the panel built no vertical scrollbar at all", bar);
+        assertTrue("the scrollbar has zero width, so it cannot be seen or grabbed",
+                bar.getRuntimeCache().getWidth() > 0f);
+        assertTrue("the scrollbar has zero height", bar.getRuntimeCache().getHeight() > 0f);
     }
 }
