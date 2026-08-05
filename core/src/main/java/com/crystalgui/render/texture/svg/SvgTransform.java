@@ -1,0 +1,134 @@
+package com.crystalgui.render.texture.svg;
+
+/**
+ * A 2D affine transform, in SVG's own {@code matrix(a b c d e f)} order.
+ *
+ * <p>Six floats rather than a {@code Matrix4f}: SVG states every transform in exactly this form —
+ * {@code translate}, {@code scale}, {@code rotate}, {@code skewX} and {@code skewY} are all defined as
+ * matrices of it — so working in the same terms means the parser transcribes rather than converts, and a
+ * mistake is visible as a wrong letter instead of a wrong basis.</p>
+ *
+ * <pre>
+ *   x' = a·x + c·y + e
+ *   y' = b·x + d·y + f
+ * </pre>
+ */
+public record SvgTransform(float a, float b, float c, float d, float e, float f) {
+
+    public static final SvgTransform IDENTITY = new SvgTransform(1, 0, 0, 1, 0, 0);
+
+    /** {@code this} then {@code next} — the order a nested {@code <g>} composes in. */
+    public SvgTransform then(SvgTransform next) {
+        return new SvgTransform(
+                a * next.a + b * next.c,
+                a * next.b + b * next.d,
+                c * next.a + d * next.c,
+                c * next.b + d * next.d,
+                e * next.a + f * next.c + next.e,
+                e * next.b + f * next.d + next.f);
+    }
+
+    public float applyX(float x, float y) {
+        return a * x + c * y + e;
+    }
+
+    public float applyY(float x, float y) {
+        return b * x + d * y + f;
+    }
+
+    /**
+     * How much this scales lengths, for scaling a stroke width with its shape.
+     *
+     * <p>The geometric mean of the two axis scales — {@code sqrt(|ad - bc|)}, the square root of the
+     * determinant. A non-uniform scale genuinely makes a stroke elliptical, which a single width cannot
+     * express; SVG itself approximates here, and so does every renderer that does not build the stroke as
+     * a filled outline.</p>
+     */
+    public float lengthScale() {
+        return (float) Math.sqrt(Math.abs(a * d - b * c));
+    }
+
+    /**
+     * Parses a {@code transform} attribute — a whitespace-separated list, applied left to right.
+     *
+     * <p>{@code translate}, {@code scale}, {@code rotate} (with and without a centre), {@code matrix},
+     * {@code skewX} and {@code skewY}. That is the whole of SVG's transform vocabulary.</p>
+     */
+    public static SvgTransform parse(String raw) {
+        SvgTransform result = IDENTITY;
+        if (raw == null || raw.isBlank()) return result;
+
+        int at = 0;
+        while (at < raw.length()) {
+            int open = raw.indexOf('(', at);
+            if (open < 0) break;
+            int close = raw.indexOf(')', open);
+            if (close < 0) break;
+
+            String name = raw.substring(at, open).trim();
+            // A leading comma or whitespace from the previous function is part of the separator, not the
+            // name -- `translate(1 2) scale(3)` would otherwise read the second name as " scale".
+            int nameStart = 0;
+            while (nameStart < name.length() && !Character.isLetter(name.charAt(nameStart))) nameStart++;
+            name = name.substring(nameStart);
+
+            float[] args = numbers(raw.substring(open + 1, close));
+            result = result.then(build(name, args));
+            at = close + 1;
+        }
+        return result;
+    }
+
+    private static SvgTransform build(String name, float[] v) {
+        switch (name) {
+            case "translate":
+                return new SvgTransform(1, 0, 0, 1, at(v, 0), at(v, 1));
+            case "scale": {
+                float sx = v.length > 0 ? v[0] : 1f;
+                // scale(2) means both axes, not "x only" -- a one-argument scale that only scaled x would
+                // squash every icon using the shorthand.
+                float sy = v.length > 1 ? v[1] : sx;
+                return new SvgTransform(sx, 0, 0, sy, 0, 0);
+            }
+            case "rotate": {
+                double angle = Math.toRadians(at(v, 0));
+                float cos = (float) Math.cos(angle), sin = (float) Math.sin(angle);
+                SvgTransform rotation = new SvgTransform(cos, sin, -sin, cos, 0, 0);
+                if (v.length < 3) return rotation;
+                // rotate(a cx cy) is a rotation ABOUT a point: translate there, rotate, translate back.
+                SvgTransform toOrigin = new SvgTransform(1, 0, 0, 1, -v[1], -v[2]);
+                SvgTransform back = new SvgTransform(1, 0, 0, 1, v[1], v[2]);
+                return toOrigin.then(rotation).then(back);
+            }
+            case "matrix":
+                return v.length >= 6 ? new SvgTransform(v[0], v[1], v[2], v[3], v[4], v[5]) : IDENTITY;
+            case "skewX":
+                return new SvgTransform(1, 0, (float) Math.tan(Math.toRadians(at(v, 0))), 1, 0, 0);
+            case "skewY":
+                return new SvgTransform(1, (float) Math.tan(Math.toRadians(at(v, 0))), 0, 1, 0, 0);
+            default:
+                return IDENTITY;
+        }
+    }
+
+    private static float at(float[] values, int index) {
+        return index < values.length ? values[index] : 0f;
+    }
+
+    private static float[] numbers(String raw) {
+        String[] parts = raw.trim().split("[\\s,]+");
+        float[] out = new float[parts.length];
+        int count = 0;
+        for (String part : parts) {
+            if (part.isEmpty()) continue;
+            try {
+                out[count++] = Float.parseFloat(part);
+            } catch (NumberFormatException skip) {
+                // A malformed argument loses one number, not the whole transform.
+            }
+        }
+        float[] trimmed = new float[count];
+        System.arraycopy(out, 0, trimmed, 0, count);
+        return trimmed;
+    }
+}
