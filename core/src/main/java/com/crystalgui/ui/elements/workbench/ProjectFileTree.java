@@ -123,6 +123,15 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
         //
         // Same fix as QuickPick, ProblemsPanel and ShaderGraphEditor. Four widgets now; the wrapper is
         // the pattern, not a workaround.
+        // FOCUSABLE, because this panel's keys are COMMANDS. Delete, F2 and Ctrl+Z all resolve outward
+        // from the focused element -- a keymap and an UndoScope both walk that path -- so a panel that
+        // cannot hold focus is a panel whose whole command set silently disables the moment focus is not
+        // on one of its rows. That is the invariant GraphView already shipped the wrong side of, and it is
+        // how Ctrl+Z stopped undoing a delete: the row it was invoked from no longer existed.
+        //
+        // CLICK rather than FOCUSABLE: the tree is reached by pointing at it, and rows carry their own
+        // roving tab stop, so the panel does not want a second one in the Tab sequence.
+        setFocusPolicy(com.crystalgui.ui.input.FocusPolicy.CLICK);
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         content.addChild(tree);
