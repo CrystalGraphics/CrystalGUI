@@ -199,6 +199,22 @@ public final class ShaderGraphPreviews implements UIFrameTicker {
         }
         if (graph == null) return true;
 
+        // NOT WHILE THE GRAPH IS OFF SCREEN, and this stopped being free the moment graphs became files.
+        //
+        // There used to be exactly one shader graph in the whole editor, so this cost was fixed. Now
+        // there is one per open .shadergraph, every one of them lives in the tree — DockGroup builds
+        // EVERY panel in a group, not just the visible one — and an inactive tab is hidden with
+        // `display: none` rather than by being detached. So each background graph went on rendering an
+        // FBO per node, every frame, for something nobody can see.
+        //
+        // Asked of the LAYOUT BOX rather than of the host: `display: none` resolves to zero size, so a
+        // hidden tab, a collapsed pane and a graph that has not been laid out yet all answer the same
+        // way, and none of them needs this class to know what a dock or a tab is. The debounce above
+        // deliberately keeps running — a graph switched back to must show its current source, not
+        // resume a recompile it was in the middle of.
+        var box = view.getRuntimeCache();
+        if (box.getWidth() <= 0f || box.getHeight() <= 0f) return true;
+
         // Newly added nodes get their slot here rather than through a second signal: the set is small,
         // the check is an identity scan over one child, and it cannot go stale.
         Set<String> visible = new HashSet<>();
