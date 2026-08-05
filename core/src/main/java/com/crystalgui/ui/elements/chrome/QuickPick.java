@@ -16,7 +16,9 @@ import com.crystalgui.ui.elements.list.SelectionMode;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.TextRange;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -65,6 +67,9 @@ public class QuickPick extends Popover {
 
     /** The {@code +} between two keys. Not a key, so it gets no box. */
     public static final String KEY_SEPARATOR_CLASS = "__qp-key-sep__";
+
+    /** Slots per row. Four covers every chord the engine can express; a longer one is truncated. */
+    private static final int MAX_KEYS_PER_CHORD = 4;
     public static final String EMPTY_CLASS = "__qp-empty__";
 
     /** A row that is listed but cannot be chosen — see {@link QuickPickItem#enabled()}. */
@@ -358,6 +363,20 @@ public class QuickPick extends Popover {
         final UIElement accelerator = new UIElement();
 
         /**
+         * A FIXED set of key boxes, built once with the template and hidden when unused.
+         *
+         * <p>Built during {@code createTemplate} rather than per bind, which is the pooling idiom the
+         * editor's gutter decorations already use. Creating them in {@code bind} put brand-new elements
+         * into the tree after the layout pass that would have measured them, so on the frame a row first
+         * appeared every box collapsed to its minimum and its label hung out — and came right only once
+         * the row was recycled and bound a second time. That is exactly the "scroll it away and back and
+         * it fixes itself" report.</p>
+         */
+        final List<UIElement> keyBoxes = new ArrayList<>();
+        final List<UIText> keyLabels = new ArrayList<>();
+        final List<UIText> keySeparators = new ArrayList<>();
+
+        /**
          * <b>Read per event, never captured.</b> Rows are pooled and recycled as the list scrolls, so a
          * listener that closed over the index would keep acting on whatever row its slot first showed —
          * which keeps working for exactly as long as nobody scrolls. Same trap the editor's pooled gutter
@@ -379,6 +398,24 @@ public class QuickPick extends Popover {
             row.addChild(row.label);
             row.addChild(row.spacer);
             row.addChild(row.accelerator);
+            for (int i = 0; i < MAX_KEYS_PER_CHORD; i++) {
+                if (i > 0) {
+                    UIText plus = new UIText("+");
+                    plus.addClass(KEY_SEPARATOR_CLASS);
+                    plus.setHitTest(false);
+                    row.keySeparators.add(plus);
+                    row.accelerator.addChild(plus);
+                }
+                UIElement box = new UIElement();
+                box.addClass(KEY_CLASS);
+                box.setHitTest(false);
+                UIText label = new UIText("");
+                label.setHitTest(false);
+                box.addChild(label);
+                row.keyBoxes.add(box);
+                row.keyLabels.add(label);
+                row.accelerator.addChild(box);
+            }
 
             // A single click accepts. VS Code's palette does the same -- there is nothing else a click on
             // a palette row could mean, and requiring a double-click would be a second gesture for the
@@ -406,7 +443,7 @@ public class QuickPick extends Popover {
             String category = item.category();
             row.category.setText(category == null || category.isEmpty() ? "" : category + ": ");
             row.label.setText(item.label());
-            setAccelerator(row.accelerator, item.accelerator());
+            setAccelerator(row, item.accelerator());
 
             // Set AND cleared, because rows are recycled -- a row that showed a disabled command and is
             // reused for an enabled one would otherwise stay dimmed and unclickable-looking forever.
@@ -418,30 +455,28 @@ public class QuickPick extends Popover {
         }
 
         /**
-         * Rebuilds the key boxes for one row.
+         * Fills the fixed key slots for one row, hiding the rest. @see Row#keyBoxes
          *
-         * <p>Rebuilt rather than pooled because a chord has one to four keys and rows are already
-         * recycled by the list — a pool inside a pool for four tiny elements earns nothing. Every box is
-         * {@code setHitTest(false)}, so the row stays the hit target for the click that accepts it and
-         * nothing here can be detached out from under a live event.</p>
+         * <p>{@code display} rather than detaching, so nothing enters or leaves the tree during a bind —
+         * the same reason {@code Tab} hides its panes instead of removing them.</p>
          */
-        private void setAccelerator(UIElement host, @Nullable String chord) {
-            host.clearAllChildren();
-            if (chord == null || chord.isEmpty()) return;
-            for (String raw : chord.split("[+]")) {
+        private void setAccelerator(Row row, @Nullable String chord) {
+            String[] keys = chord == null || chord.isEmpty() ? new String[0] : chord.split("[+]");
+            int shown = 0;
+            for (String raw : keys) {
+                if (shown >= MAX_KEYS_PER_CHORD) break;
                 String key = raw.trim();
                 if (key.isEmpty()) continue;
-                if (!host.getChildren().isEmpty()) {
-                    UIText plus = new UIText("+");
-                    plus.addClass(KEY_SEPARATOR_CLASS);
-                    plus.setHitTest(false);
-                    host.addChild(plus);
-                }
-                UIText box = new UIText(key);
-                box.addClass(KEY_CLASS);
-                box.setHitTest(false);
-                host.addChild(box);
+                row.keyLabels.get(shown).setText(key);
+                shown++;
             }
+            for (int i = 0; i < MAX_KEYS_PER_CHORD; i++) show(row.keyBoxes.get(i), i < shown);
+            for (int i = 0; i < row.keySeparators.size(); i++) show(row.keySeparators.get(i), i + 1 < shown);
+        }
+
+        private void show(UIElement element, boolean visible) {
+            StyleGroup.importantPipeline(element.getStyle().getLayoutGroup(),
+                    l -> l.display(visible ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
         }
 
         /** Replaces the highlight set every bind — including with nothing, which is the half a recycled
