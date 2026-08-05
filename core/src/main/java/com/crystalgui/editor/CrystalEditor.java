@@ -104,8 +104,24 @@ public class CrystalEditor extends UIElement {
      * active editor's own {@code source()} would hand back a different element each time the active tab
      * changed, which the dock has no way to notice. A stable host whose child is swapped does.</p>
      */
-    private final UIElement sourceHost = new UIElement();
-    private final UIElement inspectorHost = new UIElement();
+    private final UIElement sourceHost = fillingHost();
+    private final UIElement inspectorHost = fillingHost();
+
+    /**
+     * A host that fills its panel and lets its one child fill it in turn.
+     *
+     * <p>Not decoration. The dock sizes the element the registry hands it, and it used to hand over the
+     * editor's own {@code source()} — which therefore got the panel's box directly. A bare wrapper in
+     * between takes that box and then gives its child <b>content height</b>, because Taffy's default
+     * {@code flex-shrink} is 0 and a column child with no basis keeps its own size: the panel looks
+     * empty, and nothing about the widget inside is wrong.</p>
+     */
+    private static UIElement fillingHost() {
+        return new UIElement().addClass(PANEL_HOST_CLASS);
+    }
+
+    /** @see #fillingHost() */
+    public static final String PANEL_HOST_CLASS = "__panel-host__";
 
     /**
      * One inspector per graph, kept because building it is not free and because it holds view state — the
@@ -151,6 +167,11 @@ public class CrystalEditor extends UIElement {
             editor.onStatusChanged.connect(onStatus::emit);
             editor.onLineOwnerChanged.connect(onStatus::emit);
             graphs.add(editor);
+            // FOLLOW THE SELECTION, not only the active tab. Clicking a node is the gesture that means
+            // "inspect this", and it is a truer signal than which panel the dock considers focused --
+            // pressing a node in a graph that is not the active tab must still fill the inspector, and
+            // the Inspector panel itself becoming focused must not count as a graph coming forward.
+            editor.graph().getSelection().onChanged.connect(() -> show(editor));
             return editor;
         });
         workbench.bindEditorExtensions(SHADER_GRAPH_FILE_TYPE, "shadergraph");
@@ -247,14 +268,18 @@ public class CrystalEditor extends UIElement {
     private boolean ticking;
 
     private void followActiveGraph() {
-        ShaderGraphEditor active = activeGraph();
-        if (active == null || active == shownGraph) return;
-        shownGraph = active;
+        show(activeGraph());
+    }
+
+    /** Points both panels at {@code graph}. Null and unchanged are both no-ops. @see #followActiveGraph */
+    private void show(@Nullable ShaderGraphEditor graph) {
+        if (graph == null || graph == shownGraph) return;
+        shownGraph = graph;
 
         sourceHost.clearAllChildren();
-        sourceHost.addChild(active.source());
+        sourceHost.addChild(graph.source());
         inspectorHost.clearAllChildren();
-        inspectorHost.addChild(inspectorFor(active));
+        inspectorHost.addChild(inspectorFor(graph));
     }
 
     /**

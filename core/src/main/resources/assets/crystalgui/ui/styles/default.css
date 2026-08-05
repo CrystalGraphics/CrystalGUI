@@ -3891,6 +3891,28 @@ texteditor.__file-editor__ {
     flex-grow: 1;
 }
 
+/* A PANEL THAT FOLLOWS SOMETHING, rather than being it — the compiled source and the Inspector, each of
+ * which shows whichever shader graph is in front.
+ *
+ * The dock sizes whatever the registry hands it, and it used to be handed the editor's own source()
+ * directly, which therefore got the panel's box. A wrapper in between takes that box and then hands its
+ * child CONTENT height, because Taffy's flex-shrink defaults to 0 and a column child with no basis keeps
+ * its own size — so the panel measures right and paints empty. Same trap `__file-editor__` above records,
+ * one level further out.
+ *
+ * The child rule is the half that is easy to forget: sizing the host alone leaves it correct and its
+ * contents collapsed inside it. */
+.__panel-host__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+.__panel-host__ > * {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
 projectfiletree {
     flex-grow: 1;
     background: #252526;
