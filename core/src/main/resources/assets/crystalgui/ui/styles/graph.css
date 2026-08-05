@@ -809,6 +809,18 @@ graphnode.__property-node__ .__exposed-dot__ {
 .__blackboard__ .__drop-line__ {
     background-color: #44C0FF;
 }
+/* A heading is BRIGHTER than the pills under it, and the arrow dimmer than the heading. Unity's own
+ * ordering, and it is what makes the list read as sections rather than as rows of two kinds. */
+.__blackboard__ .__category__ > .__name__ {
+    color: var(--node-text-bright);
+}
+.__blackboard__ .__category__ > .__arrow__ {
+    color: #676767;
+}
+.__blackboard__ .__category__:hover > .__name__,
+.__blackboard__ .__category__:hover > .__arrow__ {
+    color: #FFFFFF;
+}
 /* NO row-level fill. The row is the full width of the panel, so filling it on hover reads as a table
  * row highlighting while the thing under the pointer is the chip. Both states ring the capsule instead.
  *

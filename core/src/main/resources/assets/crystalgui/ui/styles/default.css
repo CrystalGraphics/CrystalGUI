@@ -3295,6 +3295,34 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     padding-top: 4px;
 }
 
+/* A CATEGORY HEADING. Drawn whenever the category field changes as the list is scanned -- there is no
+ * category entity, so there is nothing else for a rule to hang off.
+ *
+ * The whole row is the fold target, which is why the arrow and the label are both scenery: an arrow that
+ * alone toggled would be a 7px target sitting beside a 200px row that looks equally clickable. */
+.__blackboard__ .__category__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 4px;
+    min-height: 16px;
+    padding-left: 2px;
+    padding-right: 6px;
+    padding-top: 2px;
+    /* Above its group and clear of the one before it, so a heading reads as opening a section rather
+     * than as another row in the previous one. */
+    margin-top: 4px;
+}
+.__blackboard__ .__category__ > .__arrow__ {
+    font-size: 7px;
+    /* FIXED WIDTH, so the label does not shift sideways as the arrow swaps between two glyphs of
+     * different advance -- a heading that jitters on every fold reads as a layout bug. */
+    width: 10px;
+    text-align: center;
+}
+.__blackboard__ .__category__ > .__name__ {
+    font-size: var(--cfg-font);
+}
+
 /* Where a dragged pill would land. ABSOLUTE, so drawing it cannot move the rows whose boundaries decide
  * where it goes -- an in-flow indicator pushes everything below it down by its own height and makes the
  * index oscillate at a boundary. `display: none` until a drag is over the list, toggled by a CLASS
