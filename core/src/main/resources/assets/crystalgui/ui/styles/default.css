@@ -837,21 +837,24 @@ texteditor .__corner__ {
     z-index: 7;
 }
 
-scrollerview .__v-scroller__,
-listview .__v-scroller__,
-treeview .__v-scroller__,
-texteditor .__v-scroller__,
-tableview .__v-scroller__ {
+/* BY CLASS, not by a list of tags. This was `scrollerview, listview, treeview, texteditor,
+ * tableview` -- one entry per ScrollerView subclass -- and a widget's cascade identity is its TAG, so
+ * `ConfiguratorPanel extends ScrollerView` reported `configuratorpanel` and matched none of them. Its
+ * bars were laid out at zero width: invisible, while the wheel still scrolled perfectly, which reads as
+ * a widget that forgot its scrollbars rather than a sheet that never sized them.
+ *
+ * A list of tags that has to name every subclass is a maintenance trap of the kind AGENTS.md already
+ * records for the registered-property table: adding a subclass is one line somewhere else, nothing links
+ * the two, and the omission is silent. Only ScrollerView creates these classes, so keying on the class
+ * is both narrower in intent and wider in reach. Per-widget rules that genuinely differ -- texteditor's
+ * z-index above -- stay tag-scoped. */
+.__v-scroller__ {
     width: 8px;
     top: 0;
     right: 0;
     bottom: 0;
 }
-scrollerview .__h-scroller__,
-listview .__h-scroller__,
-treeview .__h-scroller__,
-texteditor .__h-scroller__,
-tableview .__h-scroller__ {
+.__h-scroller__ {
     height: 8px;
     left: 0;
     right: 0;

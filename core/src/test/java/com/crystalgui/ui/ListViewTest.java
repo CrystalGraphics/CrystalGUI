@@ -693,21 +693,36 @@ public class ListViewTest extends UiTestBase {
     }
 
     /**
-     * <b>Every scrolling subclass must be named in {@code default.css}.</b>
+     * <b>The scrollbar sizing rule must be keyed by CLASS, not by a list of tags.</b>
      *
-     * <p>A widget's cascade identity is its TAG, never its Java supertype — so {@code ListView},
-     * {@code TreeView} and {@code TableView} are three different tags, and each matches none of the
-     * {@code scrollerview} rules its superclass depends on. Naming {@code listview} alone was not enough:
-     * the tree and the table both shipped with scrollbars that existed as elements, got no width from
-     * anywhere, and simply did not draw.</p>
+     * <p>A widget's cascade identity is its TAG, never its Java supertype, so every {@code ScrollerView}
+     * subclass is a tag that matches none of the {@code scrollerview} rules its superclass depends on.
+     * The sheet used to answer that with a list — {@code scrollerview, listview, treeview, texteditor,
+     * tableview} — and <b>this test used to assert that same list was complete.</b></p>
+     *
+     * <p>Both went stale together. {@code ConfiguratorPanel} was added to neither, so its bars existed as
+     * elements, got no width from anywhere and did not draw, while the wheel scrolled perfectly — which
+     * reads as a widget that forgot its scrollbars rather than a sheet that never sized them. A guard
+     * built from a hand-written list of subclasses fails in exactly the way the thing it guards does,
+     * because it is a second copy of it.</p>
+     *
+     * <p>So the rule is class-scoped now and there is no list to keep. Only {@code ScrollerView} creates
+     * these classes, so this is narrower in intent and wider in reach at once. Per-widget rules that
+     * genuinely differ — {@code texteditor}'s z-index — stay tag-scoped and are unaffected.</p>
      */
     @Test
-    public void everyScrollingSubclassIsNamedInTheUserAgentSheet() {
+    public void theScrollbarSizingRuleIsKeyedByClassNotByTag() {
         String sheet = com.crystalgraphics.util.io.CgIO.loadSource("crystalgui:ui/styles/default.css");
         assertNotNull("default.css must be readable", sheet);
-        for (String tag : new String[] { "listview", "treeview", "tableview", "texteditor" }) {
-            assertTrue(tag + " has no scrollbar rule, so its bars will be invisible",
-                    sheet.contains(tag + " .__v-scroller__"));
+        assertTrue("the vertical scrollbar has no class-scoped sizing rule, so any ScrollerView subclass "
+                + "not named by a tag rule draws no bar at all", sheet.contains(".__v-scroller__ {"));
+        assertTrue("the horizontal scrollbar has no class-scoped sizing rule",
+                sheet.contains(".__h-scroller__ {"));
+        for (String tag : new String[] { "scrollerview", "listview", "treeview", "tableview" }) {
+            assertFalse("'" + tag + " .__v-scroller__' is back. A per-subclass list is the thing that "
+                            + "went stale: ConfiguratorPanel was in neither the sheet nor the test that "
+                            + "checked the sheet, and its bars silently had no width",
+                    sheet.contains(tag + " .__v-scroller__ {"));
         }
     }
 
