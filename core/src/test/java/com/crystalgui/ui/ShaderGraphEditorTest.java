@@ -1,6 +1,8 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.graph.shader.ShaderGraphEditor;
+import com.crystalgui.graph.shader.ShaderPropertyNodes;
+import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
@@ -234,6 +236,75 @@ public class ShaderGraphEditorTest extends UiTestBase {
                 detached.graph().getDocument().nodeCount() > 0);
         assertEquals("and every node got a widget, without a layout pass to trigger it",
                 detached.graph().getDocument().nodeCount(), detached.graph().nodes().size());
+    }
+
+    /**
+     * <b>Where the canvas was looking survives the file.</b>
+     *
+     * <p>In the file rather than the layout, which is Unity's choice for a {@code .shadergraph}: a graph
+     * is an asset you arrange, and reopening one at the origin loses real work because where things sit
+     * relative to the viewport is part of how it reads.</p>
+     */
+    @Test(timeout = 15_000)
+    public void theCanvasViewSurvivesASaveAndReopen() {
+        build();
+        editor.adopt(new byte[0]);
+        editor.graph().setZoom(2.5f);
+        editor.graph().setPan(-120f, 64f);
+
+        byte[] saved = editor.encode();
+
+        ShaderGraphEditor reopened = new ShaderGraphEditor();
+        UIElement host = new UIElement().layout(l -> l.width(800).height(500));
+        host.addChild(reopened);
+        UIWindow second = new UIWindow(Ui.of(host));
+        second.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        second.init(1600, 1000);
+        reopened.adopt(saved);
+
+        assertEquals(2.5f, reopened.graph().getZoom(), 0.001f);
+        assertEquals(-120f, reopened.graph().getPanX(), 0.001f);
+        assertEquals(64f, reopened.graph().getPanY(), 0.001f);
+    }
+
+    /**
+     * <b>A property node comes back as a property node, not an ordinary box.</b>
+     *
+     * <p>Its type is synthesised per property and deliberately never registered — a type per declared
+     * property would put the Blackboard's contents in the create menu. So {@code GraphView} cannot look
+     * one up, and built a plain two-row node from the stored ports with the capsule styling gone.</p>
+     */
+    @Test(timeout = 15_000)
+    public void aPropertyNodeReloadsAsAPropertyNode() {
+        build();
+        editor.adopt(new byte[0]);
+        com.crystalgui.graph.GraphProperty property = editor.blackboard().addProperty("Color");
+        assertNotNull("this fixture needs a property to reference", property);
+        editor.blackboard().pillFor(property.id()).endRename();
+
+        editor.graph().getDocument().addNode(
+                ShaderPropertyNodes.create(property, 40f, 40f));
+        editor.graph().syncFromDocument();
+        byte[] saved = editor.encode();
+
+        ShaderGraphEditor reopened = new ShaderGraphEditor();
+        UIElement host = new UIElement().layout(l -> l.width(800).height(500));
+        host.addChild(reopened);
+        UIWindow second = new UIWindow(Ui.of(host));
+        second.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        second.init(1600, 1000);
+        reopened.adopt(saved);
+
+        GraphNode loaded = null;
+        for (GraphNode node : reopened.graph().nodes()) {
+            if (ShaderPropertyNodes.isPropertyNode(
+                    reopened.graph().getDocument().node(node.getNodeId()))) loaded = node;
+        }
+        assertNotNull("the property node is not in the reloaded graph at all", loaded);
+        assertTrue("it came back as an ordinary node -- the capsule class is what styles it as a property",
+                loaded.hasClass(ShaderPropertyNodes.NODE_CLASS));
+        assertEquals("and it must be titled from its property, not from a stored type id",
+                ShaderPropertyNodes.titleFor(property), loaded.getTitle());
     }
 
     /** Whitespace is blank too — a file someone opened, touched and left is still a new file. */
