@@ -3468,8 +3468,8 @@ projectfiletree .__project-row__.__drop-target__ {
 .__main-preview__,
 .__blackboard__ {
     flex-direction: column;
-    width: 220px;
-    height: 236px;
+    width: 180px;
+    height: 196px;
     min-width: 140px;
     min-height: 160px;
     resize: both;
