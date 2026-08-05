@@ -81,10 +81,29 @@ public final class StateMap<T> {
         return value == omitWhen ? this : putBool(key, value);
     }
 
+    /**
+     * Stores an already-encoded value untouched — another codec's whole output, nested under a key.
+     *
+     * <p>The escape hatch for composition, and the only one: a session record carries a dock layout that
+     * {@code DockLayoutCodec} produced, and re-describing that tree here would be a second encoder for the
+     * same thing. Everything else should use a typed put, because a raw value is opaque to this map and
+     * cannot be read back as anything but itself.</p>
+     */
+    public StateMap<T> putRaw(String key, T value) {
+        entries.put(key, value);
+        return this;
+    }
+
     // ── Read ────────────────────────────────────────────────────────────────
 
     public boolean has(String key) {
         return entries.containsKey(key);
+    }
+
+    /** The encoded value under {@code key}, untouched — the inverse of {@link #putRaw}. */
+    @javax.annotation.Nullable
+    public T getRaw(String key) {
+        return entries.get(key);
     }
 
     public String getString(String key, String fallback) {

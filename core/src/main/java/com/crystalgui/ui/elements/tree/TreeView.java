@@ -119,6 +119,18 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         return expanded.contains(item);
     }
 
+    /**
+     * Every expanded item, in the order they were opened.
+     *
+     * <p>A copy: the live set is what {@link #refresh} reads, and handing it out would let a caller
+     * collapse a node without the view ever hearing about it. Insertion-ordered so a saved session
+     * restores parents before their children, which a lazily-listed tree needs — a folder cannot be
+     * expanded before the listing that reveals it has arrived.</p>
+     */
+    public java.util.List<T> expandedItems() {
+        return new java.util.ArrayList<>(expanded);
+    }
+
     public TreeView<T> setExpanded(T item, boolean open) {
         if (item == null) return this;
         if (open && !source.hasChildren(item)) return this;

@@ -4,7 +4,14 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.graph.shader.ShaderGraphEditor;
 import com.crystalgui.graph.shader.ShaderGraphInspector;
+import com.crystalgui.core.settings.Settings;
+import com.crystalgui.core.settings.SettingsCodec;
+import com.crystalgui.core.settings.SettingsLayer;
+import com.crystalgui.core.settings.SettingsModel;
+import com.crystalgui.fs.ConfigStorage;
 import com.crystalgui.serialization.DynamicOps;
+import com.crystalgui.ui.elements.workbench.WorkbenchSession;
+import com.crystalgui.ui.elements.workbench.WorkbenchSettings;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.ChromeCommands;
@@ -261,6 +268,10 @@ public class CrystalEditor extends UIElement {
         ticking = true;
         getAttachedWindow().registerTicker(delta -> {
             followActiveGraph();
+            // A restore waits on listings that arrive over several frames -- a folder cannot be expanded
+            // before the listing revealing it lands. WorkbenchSession.tick is a no-op once nothing is
+            // pending, and gives up on its own rather than retrying for the rest of the session.
+            if (session != null) session.tick();
             return true;
         });
     }
@@ -294,6 +305,82 @@ public class CrystalEditor extends UIElement {
         ChromeCommands.install(window);
         CrystalEditorCommands.install(window, this);
         return this;
+    }
+
+    // ── Persistence ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Where preferences and session records go. Null until {@link #useConfig} is called, and everything
+     * below is then a no-op — an editor with nowhere to save is a valid one, and is what a test is.
+     */
+    @Nullable
+    private ConfigStorage storage;
+
+    @Nullable
+    private WorkbenchSession session;
+
+    /**
+     * Gives the editor somewhere to keep the user's preferences and its session records, and loads the
+     * preferences immediately.
+     *
+     * <p>Loading here rather than at first paint because the values decide how things are built:
+     * {@code editor.tabSize} is read when a document is created, so arriving late would apply it to every
+     * file except the ones already open.</p>
+     */
+    public CrystalEditor useConfig(ConfigStorage storage) {
+        this.storage = storage;
+        this.session = new WorkbenchSession(workbench, storage);
+        loadPreferences();
+        return this;
+    }
+
+    @Nullable
+    public WorkbenchSession session() {
+        return session;
+    }
+
+    /** The user layer, read into the ROOT scope so it applies to every panel. @see WorkbenchSettings */
+    public void loadPreferences() {
+        if (storage == null) return;
+        SettingsModel loaded = SettingsCodec.fromJson(storage.read(USER_SETTINGS_FILE));
+        settingsHost().replaceLayer(SettingsLayer.USER, loaded.asMap());
+        WorkbenchSettings.install(workbench, settingsHost());
+        // Written on change rather than only at shutdown. A preferences window that applies immediately
+        // and saves only on a clean exit loses everything to a crash -- and the file is a few hundred
+        // bytes, so there is nothing to batch. VS Code writes settings.json the same way.
+        settingsHost().onChanged.connect(change -> {
+            if (change.layer() == SettingsLayer.USER) savePreferences();
+        });
+    }
+
+    public void savePreferences() {
+        if (storage == null || !storage.isWritable()) return;
+        storage.write(USER_SETTINGS_FILE,
+                SettingsCodec.toJson(settingsHost().layer(SettingsLayer.USER)));
+    }
+
+    /**
+     * The scope preferences live in: this element, which is the outermost thing every panel resolves
+     * through.
+     *
+     * <p>Not the workbench's own store. Settings resolve <em>outward</em>, so a value written on the
+     * workbench would be invisible to anything outside it, and a value written here reaches everything —
+     * which is what "a preference" means.</p>
+     */
+    public Settings settingsHost() {
+        return settings();
+    }
+
+    public static final String USER_SETTINGS_FILE = "settings.json";
+
+    /** Restores the last session for {@code projectId}, unless the user has turned that off. */
+    public boolean restoreSession(String projectId) {
+        if (session == null || !workbench.resolve(WorkbenchSettings.RESTORE_SESSION)) return false;
+        return session.restore(projectId);
+    }
+
+    public void saveSession(String projectId, int screenWidth, int screenHeight) {
+        if (session != null) session.save(projectId, screenWidth, screenHeight);
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────────────────────────

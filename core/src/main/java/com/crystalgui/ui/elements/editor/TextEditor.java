@@ -3160,6 +3160,62 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return folding;
     }
 
+    /**
+     * The first row of every collapsed region — the whole fold state, as something storable.
+     *
+     * <p>Rows rather than region indexes, because an index means nothing once the document changes: the
+     * regions are recomputed from the text, so index 3 is a different block after an edit while row 42 is
+     * still row 42 or is simply not foldable any more. IntelliJ and VS Code both persist folds by
+     * position for the same reason.</p>
+     *
+     * <p>A pure read, deliberately — it does <b>not</b> recompute stale regions. A getter that quietly
+     * runs a document-wide scan is the trap {@code getScrollWidth} already documents here; anything that
+     * has been painting has current regions, and anything that has not has no folds to report.</p>
+     */
+    public int[] collapsedRows() {
+        FoldingRegions regions = folding.regions();
+        int[] found = new int[regions.length()];
+        int count = 0;
+        for (int i = 0; i < regions.length(); i++) {
+            if (regions.isCollapsed(i)) found[count++] = regions.getStartLineNumber(i);
+        }
+        return java.util.Arrays.copyOf(found, count);
+    }
+
+    /**
+     * Sets the fold state outright: every region starting on one of {@code startRows} is collapsed and
+     * every other region is opened.
+     *
+     * <p><b>Recomputes the regions first</b>, which is the entire reason this is a method rather than
+     * something a caller does through {@link #foldingModel()}. Regions are rebuilt from the text one frame
+     * <em>after</em> the text arrives, so a restore running straight after the content lands would collapse
+     * against an empty region set and silently do nothing — the failure would look like folds never having
+     * been saved.</p>
+     *
+     * <p>Goes through the same anchor-and-lift path every interactive fold does, so a caret left inside a
+     * region being closed is moved onto its header rather than becoming unpaintable. Restore the caret
+     * <em>before</em> calling this and that lift does the right thing for free.</p>
+     */
+    public TextEditor setCollapsedRows(int... startRows) {
+        if (!foldingEnabled) return this;
+        StableViewport anchor = captureFoldAnchor();
+        ensureFoldingCurrent();
+        FoldingRegions regions = folding.regions();
+        for (int i = 0; i < regions.length(); i++) {
+            int start = regions.getStartLineNumber(i);
+            boolean wanted = false;
+            for (int row : startRows) {
+                if (row == start) {
+                    wanted = true;
+                    break;
+                }
+            }
+            regions.setCollapsed(i, wanted);
+        }
+        afterFoldChange(anchor);
+        return this;
+    }
+
     /** Swaps the region source — a syntax-aware provider layers over the indent one this way. */
     public TextEditor setFoldingProvider(FoldingRangeProvider provider) {
         this.foldingProvider = provider == null ? FoldingRangeProvider.none() : provider;

@@ -54,6 +54,9 @@ public final class ExplorerCommands {
 
     /** Open a file by name — VS Code's Ctrl+P, IntelliJ's Go to File. */
     public static final String GO_TO_FILE = "explorer.goToFile";
+
+    /** The preferences window. VS Code's Ctrl+, — IntelliJ uses Ctrl+Alt+S, which is less universal. */
+    public static final String PREFERENCES = "workbench.preferences";
     public static final String CUT = "explorer.cut";
     public static final String COPY = "explorer.copy";
     public static final String PASTE = "explorer.paste";
@@ -125,6 +128,18 @@ public final class ExplorerCommands {
         //
         // Cost is bounded by what is already on screen: only directories that have been listed are
         // re-listed, so a collapsed tree is one call.
+        // Registered here rather than in a chrome-only place because the settings it shows are the
+        // workbench's, and because this is where the global keymap is already being written.
+        registry.register(Command.of(PREFERENCES, "Preferences…")
+                .run(context -> {
+                    UIWindow window = workbench.getAttachedWindow();
+                    if (window == null) return;
+                    // The WINDOW's store, not the workbench's: settings resolve outward, so writing at the
+                    // root is what makes a preference apply to every panel rather than to one subtree.
+                    com.crystalgui.ui.elements.chrome.Preferences.open(window,
+                            window.ui.rootElement.settings());
+                }));
+
         registry.register(Command.of(GO_TO_FILE, "Go to File…")
                 .run(context -> {
                     UIWindow window = workbench.getAttachedWindow();
@@ -180,6 +195,7 @@ public final class ExplorerCommands {
      */
     public static void bindGlobalDefaults(Keymap keymap) {
         keymap.bind("Mod+N", NEW_FILE);
+        keymap.bind("Mod+,", PREFERENCES);
         // Mod+P from VS Code. An application verb rather than a panel one, and for the same reason F5 is:
         // a keymap resolves outward from the FOCUSED element, so a binding on the tree is unreachable
         // while you are typing in an editor -- which is exactly when you reach for it.
@@ -364,6 +380,15 @@ public final class ExplorerCommands {
         CgPath path = target(context);
         if (!isRenameable(path)) return;
         boolean directory = workbench.fileTree().isDirectory(path);
+
+        if (!workbench.resolve(WorkbenchSettings.CONFIRM_DELETE)) {
+            // Turned off deliberately, so it deletes. Still routed through the same file service, so undo
+            // and the trash behave identically -- the setting removes the question, not the safety net.
+            workbench.files().delete(path, directory,
+                    () -> workbench.onStatus.emit("deleted " + path.name()),
+                    failure -> workbench.onStatus.emit("delete failed: " + failure.code()));
+            return;
+        }
 
         InputDialog.confirm(context.source(), "Delete",
                 directory ? "Delete '" + path.name() + "' and everything in it?"

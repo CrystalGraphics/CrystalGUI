@@ -151,6 +151,11 @@ public class Workbench extends UIElement {
             created.setTokenizer(entry.newTokenizer());
             UIWindow window = getAttachedWindow();
             if (window != null) EditorCommands.install(window, created);
+            // Here rather than only from WorkbenchSettings.apply: a document opened after the settings
+            // were installed would otherwise get the widget's own defaults, so folding and tab size would
+            // apply to the files that happened to be open when a preference was last changed and to no
+            // others -- which reads as the setting working intermittently.
+            WorkbenchSettings.applyTo(this, created);
             return new TextFileDocument(created);
         });
 
@@ -695,7 +700,21 @@ public class Workbench extends UIElement {
         documentFor(path);
         String refused = open.adopt(path, bytes);
         if (refused != null) onStatus.emit("cannot open " + path.name() + ": " + refused);
+        // AFTER the bytes are in, which is the whole reason this signal exists rather than the panel
+        // factory announcing the open. A document restoring a caret at line 400 into text that has not
+        // landed yet clamps it to 0, and the failure looks like the caret never having been saved.
+        onDocumentLoaded.emit(path);
     }
+
+    /**
+     * Fires when a file's content has been applied to its document.
+     *
+     * <p>The one moment at which anything derived from the content -- a restored caret, a fold set, a
+     * diagnostic pass -- can act. There is deliberately no signal for "a panel was created": that happens
+     * while the read is still in flight.</p>
+     */
+    public final com.crystalgui.core.signal.Signal.Value<CgPath> onDocumentLoaded =
+            new com.crystalgui.core.signal.Signal.Value<>();
 
     /** The document for a path, created on first use from whichever type its name binds to. */
     public FileDocument documentFor(CgPath path) {
@@ -710,6 +729,16 @@ public class Workbench extends UIElement {
             }
             return factory.apply(key);
         });
+    }
+
+    /**
+     * Every file with an open document, in no particular order.
+     *
+     * <p>Open in the sense of "has a document", which is not the same as "has a tab": a file whose tab was
+     * closed while a save was in flight still has one, and a session record wants both.</p>
+     */
+    public java.util.List<CgPath> openPaths() {
+        return open.paths();
     }
 
     /** The text editor for a path, or null when that file is not opened by a text editor. */

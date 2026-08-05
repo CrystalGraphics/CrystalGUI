@@ -54,4 +54,38 @@ public final class SettingsCodec {
     public static boolean isWorthWriting(@Nullable SettingsModel model) {
         return model != null && !model.isEmpty();
     }
+
+    // ── As a file ───────────────────────────────────────────────────────────
+
+    /**
+     * One layer as pretty-printed JSON — a preferences file somebody is expected to open.
+     *
+     * <p>Values are quoted, because a {@link SettingsModel} is text throughout and this codec does not
+     * know a boolean from a string. That is the cost of the trade the class note above describes, and it
+     * is paid here rather than by making the storage layer learn every value type.</p>
+     */
+    public static String toJson(SettingsModel model) {
+        return new com.google.gson.GsonBuilder().setPrettyPrinting().create()
+                .toJson(MODEL.encode(com.crystalgui.serialization.JsonOps.INSTANCE, model)) + "\n";
+    }
+
+    /**
+     * Reads a preferences file. Unparseable text yields an <b>empty</b> model, never an exception.
+     *
+     * <p>Empty rather than a throw for the same reason {@link Setting#read} degrades: a settings file is
+     * hand-edited, and refusing to start because one is malformed is a support burden with no upside. The
+     * caller decides whether to overwrite it — see {@code CrystalEditor}, which does not, so a file
+     * somebody is halfway through editing is not destroyed by having been read.</p>
+     */
+    public static SettingsModel fromJson(@Nullable String json) {
+        if (json == null || json.trim().isEmpty()) return new SettingsModel();
+        try {
+            return MODEL.decode(com.crystalgui.serialization.JsonOps.INSTANCE,
+                    com.google.gson.JsonParser.parseString(json));
+        } catch (RuntimeException malformed) {
+            com.crystalgui.core.CrystalGuiCore.LOGGER.warn(
+                    "Preferences file could not be read; continuing with the defaults", malformed);
+            return new SettingsModel();
+        }
+    }
 }
