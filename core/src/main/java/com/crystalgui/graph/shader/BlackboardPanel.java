@@ -17,7 +17,9 @@ import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.elements.canvas.CanvasOverlayMove;
+import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.style.StyleGroup;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -63,6 +65,10 @@ public class BlackboardPanel extends UIElement {
 
     /** What the {@code +} menu's first entry says. A category is created like a property, not around one. */
     public static final String CATEGORY_LABEL = "Category";
+
+    /** The drop indicator, and the class that reveals it. @see #dropLine */
+    public static final String DROP_LINE_CLASS = "__drop-line__";
+    public static final String DROP_ACTIVE_CLASS = "__active__";
 
     /** The row context menu, in Unity's order and grouping. */
     public static final String RENAME_LABEL = "Rename";
@@ -176,6 +182,20 @@ public class BlackboardPanel extends UIElement {
 
     private final List<PropertyPill> pills = new ArrayList<>();
 
+    /**
+     * The line showing where a dragged pill would land. Hidden until a drag is over the list.
+     *
+     * <p>Absolutely positioned, so it does not take a row's worth of space. An in-flow indicator was the
+     * obvious first shape and is wrong for a reason worth recording: inserting it <b>moves every pill
+     * below it down by its own height</b>, which moves the boundaries the drop index is computed from —
+     * so a pointer resting near a boundary alternates between two indices and the line flickers between
+     * two gaps. An overlay cannot move what it is measuring.</p>
+     */
+    private final UIElement dropLine = new UIElement();
+
+    /** Where {@link #dropLine} currently says the drop lands, or -1 while it is hidden. */
+    private int dropIndex = -1;
+
     private final CanvasOverlayMove move;
 
     /** The placeholder, held so a rebuild can take it away again. @see #refresh */
@@ -267,6 +287,15 @@ public class BlackboardPanel extends UIElement {
             if (target != null && target.consumesTextInput()) return;
             focusSelf();
         }, false, true);
+
+        // Built once and parked, not per drag: it is hidden by the stylesheet rather than by being
+        // absent, so there is nothing to attach at the moment a drag starts.
+        dropLine.addClass(DROP_LINE_CLASS);
+        // Nothing in an indicator may take the pointer -- it sits directly under the cursor for the whole
+        // hover, so a hittable one becomes the drop target it is drawn to describe.
+        dropLine.setHitTest(false);
+        body.addInternalChild(dropLine);
+        installReorderDrop();
 
         document.onChanged.connect(this::refresh);
         refresh();
@@ -478,6 +507,128 @@ public class BlackboardPanel extends UIElement {
             if (pill.propertyId().equals(propertyId)) return pill;
         }
         return null;
+    }
+
+    // ── Reorder ─────────────────────────────────────────────────────────────
+
+    /**
+     * Lets a pill be dropped back on the list to move it, rather than out on the canvas to make a node.
+     *
+     * <p>The <b>same drag</b> serves both, which is Unity's gesture and the reason this is a drop target
+     * rather than a second kind of press: what the user is doing is not decided until they let go, so
+     * arming one behaviour at the start would force them to know in advance.</p>
+     *
+     * <h3>The drop MUST be stopped from bubbling</h3>
+     * <p>This panel is an overlay <em>inside</em> the {@code GraphView}, and {@code ShaderGraphEditor}
+     * accepts the very same payload on the graph to create a node. {@code DragEvent.Drop} bubbles — so
+     * without {@code stopPropagation} a reorder would also drop a node on the canvas underneath, and the
+     * board would sprout a node every time a property was moved.</p>
+     *
+     * <p>The same applies to {@code Over}: leaving it to bubble lets the graph {@code preventDefault} as
+     * well, which is harmless on its own but means the canvas is advertising a drop the pointer is not
+     * over. Stopping both keeps exactly one target live at a time.</p>
+     */
+    private void installReorderDrop() {
+        body.events.getGroup(DragEvent.Over.class).attachListener((element, event) -> {
+            if (!(event.getPayload() instanceof PropertyPill.Payload)) return;
+            // REJECTION IS THE DEFAULT: accepting is this call, re-read every frame and never latched.
+            event.preventDefault();
+            showDropLine(dropIndexAt(event.getPosition().x(), event.getPosition().y()));
+            event.stopPropagation();
+        }, false, true);
+
+        // Leave does not bubble -- it is chain-dispatched -- so this fires on the body itself as the
+        // pointer goes out to the canvas, which is exactly when the line should stop claiming the drop.
+        //
+        // AND it is the whole of the Escape path too, which is why there is no Cancel listener here.
+        // DragEvent.Cancel goes only to the drag SOURCE, so a board watching for it would never hear an
+        // abort -- but UIDragController.fireCancelLeave walks a Leave from the stale target all the way
+        // to the root first, and this body is on that chain. Escape mid-hover therefore arrives here as
+        // an ordinary Leave. Without that the line would simply stay, pointing at a drop that was called
+        // off, until the next drag happened to redraw it.
+        body.events.getGroup(DragEvent.Leave.class).attachListener(
+                (element, event) -> hideDropLine(), false, true);
+
+        body.events.getGroup(DragEvent.Drop.class).attachListener((element, event) -> {
+            hideDropLine();
+            if (!(event.getPayload() instanceof PropertyPill.Payload dropped)) return;
+            event.stopPropagation();
+            moveProperty(dropped.propertyId(),
+                    dropIndexAt(event.getPosition().x(), event.getPosition().y()));
+        }, false, true);
+    }
+
+    /**
+     * Which slot a drop at this point lands in — {@code 0} above the first pill, {@code pills.size()}
+     * below the last.
+     *
+     * <p>Measured by asking each pill to convert the point into <b>its own</b> space, rather than by
+     * comparing against layout coordinates. The list scrolls, and a scrolled child's painted position is
+     * its layout position minus the parent's scroll — so the arithmetic version is correct only until
+     * someone scrolls, which is precisely when a long list needs reordering. The transform chain already
+     * knows, and asking it cannot drift.</p>
+     */
+    private int dropIndexAt(float screenX, float screenY) {
+        for (int i = 0; i < pills.size(); i++) {
+            PropertyPill pill = pills.get(i);
+            // Above this pill's midpoint means "before it". Pills entirely above the pointer report a
+            // large positive y and fail this; pills entirely below report a negative one and pass, so
+            // the FIRST pass is the slot.
+            if (pill.screenToLocal(screenX, screenY).y
+                    < pill.getRuntimeCache().getHeight() * 0.5f) return i;
+        }
+        return pills.size();
+    }
+
+    /** Draws the indicator in slot {@code index}. Idempotent — safe to call every frame of a hover. */
+    private void showDropLine(int index) {
+        if (index == dropIndex) return;
+        dropIndex = index;
+        dropLine.addClass(DROP_ACTIVE_CLASS);
+        // Half the list's 4px gap above the pill it lands before, so the line sits IN the gap rather
+        // than on a capsule's edge, where it would read as that capsule being outlined.
+        //
+        // The DIFFERENCE of two cached origins, which is how MainPreviewPanel already reads a child's
+        // offset within its container: the cached value is absolute, so subtracting the body's own gives
+        // a body-relative y -- the space an absolutely positioned sibling's `top` is measured in. Scroll
+        // is deliberately absent from both, and stays correct because the drop line is scrolled by the
+        // body exactly as the pills are.
+        float origin = body.getRuntimeCache().getY();
+        float top;
+        if (pills.isEmpty()) {
+            top = 0f;
+        } else if (index < pills.size()) {
+            top = pills.get(index).getRuntimeCache().getY() - origin - 2f;
+        } else {
+            PropertyPill last = pills.get(pills.size() - 1);
+            top = last.getRuntimeCache().getY() - origin + last.getRuntimeCache().getHeight() + 2f;
+        }
+        StyleGroup.inlinePipeline(dropLine.getStyle().getLayoutGroup(), l -> l.top(top));
+    }
+
+    private void hideDropLine() {
+        dropIndex = -1;
+        dropLine.removeClass(DROP_ACTIVE_CLASS);
+    }
+
+    /**
+     * Moves a property into slot {@code insertAt}, counted against the list <b>as it stands now</b>.
+     *
+     * <p>{@code GraphDocument.moveProperty} takes the index the property should end up at <em>after</em>
+     * being lifted out, which is one less than the slot the user pointed at whenever they pointed below
+     * where it already was. Converting here rather than at the model keeps the off-by-one in the one
+     * place that knows a pointer was involved — the model's index means what it says.</p>
+     */
+    public boolean moveProperty(String propertyId, int insertAt) {
+        int from = document.indexOfProperty(propertyId);
+        if (from < 0) return false;
+        int to = insertAt > from ? insertAt - 1 : insertAt;
+        PropertyEdits.Move edit = PropertyEdits.Move.of(document, propertyId, to);
+        // Null when nothing would move -- dropped back in its own slot, which is the common miss and
+        // must not push an undo step for an operation that did nothing.
+        if (edit == null) return false;
+        if (undo != null) undo.execute(edit); else edit.apply();
+        return true;
     }
 
     // ── Selection ───────────────────────────────────────────────────────────
