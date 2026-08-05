@@ -44,8 +44,19 @@ public class PreferencesTest extends UiTestBase {
         window.init(1200, 800);
     }
 
+    /**
+     * A frame, INCLUDING the input half.
+     *
+     * <p>{@code updateWithoutPainting} alone is not a frame as far as the input handler is concerned:
+     * {@code firstFrameOver} is set in {@code endFrame()}, and until it is, every keyboard event is
+     * dropped on the floor. A fixture that skips it silently proves nothing about any key.</p>
+     */
     private void settle() {
-        for (int i = 0; i < 4; i++) window.updateWithoutPainting();
+        for (int i = 0; i < 4; i++) {
+            window.updateWithoutPainting();
+            window.getInputHandler().beginFrame();
+            window.getInputHandler().endFrame();
+        }
     }
 
     /**
@@ -322,4 +333,79 @@ public class PreferencesTest extends UiTestBase {
                     0f, bar.getRuntimeCache().getWidth(), 0.01f);
         }
     }
+
+    // ── Escape, and the fade ────────────────────────────────────────────────────────────────────
+
+    private void escape() {
+        window.getInputHandler().consumeKeyboardEvent(new com.crystalgraphics.platform.input
+                .CgSystemInput.Keyboard.Event((char) 0,
+                com.crystalgraphics.platform.input.CgKeyCodes.KEY_ESCAPE, true, false, 20L));
+        settle();
+    }
+
+    /** Escape closes it while focus is inside. */
+    @Test
+    public void escapeClosesItWhileFocused() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+        window.getInputHandler().requestFocus(preferences.dialog());
+        settle();
+
+        escape();
+        assertFalse("Escape did not close the window", preferences.dialog().isOpen());
+    }
+
+    /**
+     * <b>Escape outside it does nothing.</b>
+     *
+     * <p>The reason this is a bubbling listener and not a close watcher. A close watcher is a window-wide
+     * stack whose topmost entry wins wherever focus is, which is right for a modal and wrong here: this
+     * window is modeless by design, so it would eat Escape from the editor behind it, where Escape
+     * already means something.</p>
+     */
+    @Test
+    public void escapeElsewhereLeavesItOpen() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+        UIElement outside = new UIElement();
+        outside.setFocusPolicy(com.crystalgui.ui.input.FocusPolicy.FOCUSABLE);
+        window.addOverlay(outside, null);
+        settle();
+        window.getInputHandler().requestFocus(outside);
+        settle();
+
+        escape();
+        assertTrue("a modeless window must not eat Escape from whatever has focus elsewhere",
+                preferences.dialog().isOpen());
+    }
+
+    /**
+     * <b>The fade has both halves of its pair.</b>
+     *
+     * <p>Asserting the <em>inputs</em>, not an intermediate opacity: {@code TransitionEngine} advances on
+     * {@code System.nanoTime()} and ignores the delta it is handed, so a test loop cannot step animation
+     * time. What can be checked is that the resting value is in the sheet and that the open state is
+     * visible to CSS — a box coming out of {@code display: none} has no previous opacity to interpolate
+     * from, so without both halves the fade silently does nothing.</p>
+     */
+    @Test
+    public void theOpenStateIsVisibleToTheStylesheet() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+        assertTrue("a dialog with no open class cannot be animated at all -- there is nothing for a "
+                        + "transition to run between", preferences.dialog().hasClass(
+                com.crystalgui.ui.elements.Dialog.OPEN_CLASS));
+
+        preferences.dialog().close();
+        settle();
+        assertFalse("the open class outlived the open state",
+                preferences.dialog().hasClass(com.crystalgui.ui.elements.Dialog.OPEN_CLASS));
+
+        String sheet = com.crystalgraphics.util.io.CgIO.loadSource("crystalgui:ui/styles/default.css");
+        assertTrue("no transition is declared, so the pair below fades nothing",
+                sheet.contains("dialog.__preferences__ {") && sheet.contains("transition: opacity"));
+        assertTrue("no open-state rule, so the base opacity: 0 would simply hide the window",
+                sheet.contains("dialog.__preferences__.__open__ {"));
+    }
+
 }

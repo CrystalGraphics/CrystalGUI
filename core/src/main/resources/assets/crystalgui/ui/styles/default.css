@@ -3625,6 +3625,25 @@ quickpick .__search__ {
     margin-bottom: 4px;
 }
 
+/* Taller, rounded, and ringed on focus -- VS Code's quick input. The height is the palette's most-read
+ * control and 16px left the text sitting tight against both edges; 22px gives the caret room without
+ * making the box the loudest thing in the popup. The ring is a focus affordance rather than decoration:
+ * this field holds focus for the whole life of the palette, so "where do my keystrokes go" has to be
+ * answerable at a glance. */
+quickpick .__search__ textfield {
+    height: 22px;
+    border-radius: 3px;
+    padding-left: 6px;
+    padding-right: 6px;
+    outline-width: 1px;
+    outline-color: #3C3C3C;
+    background: #1E1E1E;
+}
+
+quickpick .__search__ textfield:focus {
+    outline-color: #0078D4;
+}
+
 /* AUTO, not SCROLL: SCROLL draws both bars unconditionally, which put a horizontal scrollbar across a
  * one-row palette that had nothing to scroll. Height is written from Java -- min(rows, 12) * row
  * height -- and deliberately NOT flex-grow. A popover
@@ -3640,11 +3659,28 @@ quickpick .__row__ {
     flex-direction: row;
     align-items: center;
     height: 22px;
-    padding-left: 6px;
-    padding-right: 6px;
+    padding-left: 8px;
+    /* CLEAR OF THE SCROLLBAR. The bar is 8px and absolutely positioned over the right edge, so a row
+     * padded to 6px ran its accelerator underneath it -- the keys were sliced in half by a bar that has
+     * no idea they are there. 14 is the bar plus the padding the left side already has. */
+    padding-right: 14px;
+    gap-all: 6px;
 }
 
+/* ARROW-KEY selection is BLUE and hover is GREEN, which is a real distinction rather than two skins of
+ * one state: the blue row is what Enter will run, the green one is merely what the pointer is over. A
+ * palette that painted both the same would make the mouse look like it had moved the selection. */
 quickpick .__row__.__selected__ {
+    background-color: #04395E;
+}
+
+quickpick .__row__:hover {
+    background-color: #2A3B2A;
+}
+
+/* Selection wins where both apply -- the pointer resting over the selected row must not repaint it as
+ * merely hovered, or the row Enter would run stops being identifiable. */
+quickpick .__row__.__selected__:hover {
     background-color: #04395E;
 }
 
@@ -3668,7 +3704,39 @@ quickpick .__qp-spacer__ {
     flex-grow: 1;
 }
 
+/* A ROW of key boxes. Java splits the chord (see QuickPick.setAccelerator); this draws it. */
 quickpick .__qp-accelerator__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 3px;
+    flex-shrink: 0;
+}
+
+/* Each key in its own box, VS Code's quick input. Filled by default. */
+quickpick .__qp-key__ {
+    color: #CCCCCC;
+    background-color: #3C3C3C;
+    outline-width: 1px;
+    outline-color: #4A4A4A;
+    border-radius: 3px;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+}
+
+/* On a highlighted row the fill goes and only the OUTLINE stays -- which is what VS Code does, and it
+ * is not decoration: a filled grey box on a coloured row reads as a second, competing background. The
+ * outline keeps the key legible as a key while letting the row's own colour through. */
+quickpick .__row__.__selected__ .__qp-key__,
+quickpick .__row__:hover .__qp-key__ {
+    background-color: #00000000;
+    outline-color: #9BB8CC;
+    color: #FFFFFF;
+}
+
+/* The `+` is punctuation between keys, not a key. No box, and dimmer than one. */
+quickpick .__qp-key-sep__ {
     color: #8A8A8A;
 }
 
@@ -4092,6 +4160,21 @@ popover.__prompt__ textfield {
 dialog.__preferences__ {
     width: 420px;
     height: 320px;
+    /* Transparent while closed, opaque once `__open__` lands. THE PAIR is what gives the transition a
+     * value to start from: a box coming out of `display: none` has no previous opacity to interpolate
+     * from, which is the problem `@starting-style` exists to solve on the web. `menu .__items__` uses the
+     * same arrangement for the same reason.
+     *
+     * 120ms, matching the menus. The window is placed one frame after it opens (see Preferences.centre),
+     * and it is held at opacity 0 through that frame at IMPORTANT origin -- so the fade begins from where
+     * the window actually is, rather than showing it in the corner and sliding. The two compose: the hold
+     * outranks this rule, and dropping the hold hands the property back here.
+     *
+     * FADE IN ONLY. Closing is instant, because `display: none` lands on the same frame and is not
+     * animatable -- fading out means holding a closed window on screen and deferring the close behind a
+     * timer. IntelliJ and VS Code both close instantly too. */
+    opacity: 0;
+    transition: opacity 240ms ease;
     /* Resizable, because the label column is the thing people run out of and no default width is right
      * for every language. `resize` is a real CSS property here and Dialog already routes its handles
      * through its own position, so this is the whole of it. */
@@ -4103,6 +4186,10 @@ dialog.__preferences__ {
 /* 0, not auto: flex-shrink is 0 in this engine, so a growing child keeps its content size and overflows
  * the dialog instead of scrolling inside it -- which is exactly what happened, and read as a missing
  * scrollbar rather than as a panel that had never been given a height to overflow. See AGENTS.md. */
+dialog.__preferences__.__open__ {
+    opacity: 1;
+}
+
 dialog.__preferences__ .__configurator-panel__ {
     width: 100%;
     height: 0px;

@@ -847,7 +847,21 @@ public class ListView<T> extends ScrollerView {
         UIElement row = realised.get(focusedIndex);
         var window = getAttachedWindow();
         if (row == null || window == null) return;
-        if (window.getInputHandler().getFocusedElement() != row && row.focusable()) {
+
+        // RESTORE, never TAKE. This exists to reattach focus to a row that scrolled back into view, which
+        // presupposes focus was in this list already -- so when it is somewhere else, leaving it there is
+        // the whole contract, not a special case.
+        //
+        // Without the guard a list steals focus from whatever is driving it. QuickPick is exactly that
+        // shape: the search field owns the caret and the arrow keys, and the list is a VIEW of the
+        // selection -- the ARIA combobox pattern, where focus stays in the textbox and the listbox is
+        // pointed at by aria-activedescendant. Every keystroke re-queried the source, which called
+        // setFocusedIndex, which landed focus on a row: the palette opened unfocused and then unfocused
+        // itself again on every letter typed.
+        UIElement focused = window.getInputHandler().getFocusedElement();
+        if (focused != null && !containsInSubtree(focused)) return;
+
+        if (focused != row && row.focusable()) {
             // Restoring focus to a row that scrolled back into view is the view's own doing, not the
             // user's — without the guard it would re-select that row and quietly discard whatever
             // multi-selection had been built since.
@@ -866,6 +880,14 @@ public class ListView<T> extends ScrollerView {
                 suppressFocusSelection = false;
             }
         }
+    }
+
+    /** Whether {@code element} is this list or sits underneath it. */
+    private boolean containsInSubtree(UIElement element) {
+        for (UIElement scope = element; scope != null; scope = scope.getParent()) {
+            if (scope == this) return true;
+        }
+        return false;
     }
 
     /** Detaching from the model matters: an {@code ObservableList} outlives the views onto it, and a
