@@ -178,6 +178,58 @@ public class ShaderGraphEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>A brand-new file opens as an empty graph, and can then be saved.</b>
+     *
+     * <p>{@code New File…} creates every file with {@code ""}, so this is the very first thing anyone
+     * does with the type: make {@code thing.shadergraph}, open it, wire something up, {@code Ctrl+S}.
+     * Before this it failed on step two — {@code CodecException: Not a JSON object: null} — and the
+     * workbench then refused the save because the document "never loaded", which is the correct
+     * response to a file it could not read and the wrong one for a file with nothing in it.</p>
+     *
+     * <p>The second half is the one that matters: a blank file must be <em>saveable</em> afterwards, not
+     * merely openable. Accepting the bytes and then refusing to write would be the worse of both.</p>
+     */
+    @Test(timeout = 15_000)
+    public void aBrandNewEmptyFileOpensAsAnEmptyGraph() {
+        build();
+        editor.adopt("".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals("an empty file is an empty graph, not a failure",
+                0, editor.graph().getDocument().nodeCount());
+
+        // And what it would write is a real graph file, which reading back gives the same empty graph.
+        byte[] saved = editor.encode();
+        assertTrue("a blank file must become a valid one on the first save", saved.length > 0);
+        editor.adopt(saved);
+        assertEquals(0, editor.graph().getDocument().nodeCount());
+    }
+
+    /** Whitespace is blank too — a file someone opened, touched and left is still a new file. */
+    @Test(timeout = 15_000)
+    public void whitespaceCountsAsBlank() {
+        build();
+        editor.adopt(" \n\t ".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals(0, editor.graph().getDocument().nodeCount());
+    }
+
+    /**
+     * <b>Content that will not parse still throws</b> — the protection stays where it was aimed.
+     *
+     * <p>The blank carve-out above must not become "accept anything and show an empty canvas", which is
+     * exactly the failure the refusal exists to prevent: the editor would differ from the file, report
+     * itself modified, and the first Save All would write that emptiness over the user's work.</p>
+     */
+    @Test(timeout = 15_000)
+    public void amalformedFileIsStillRefused() {
+        build();
+        try {
+            editor.adopt("{ this is not a graph".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            org.junit.Assert.fail("a corrupt file must be refused, not silently emptied");
+        } catch (RuntimeException expected) {
+            // The workbench turns this into "refusing to save -- it never loaded".
+        }
+    }
+
+    /**
      * Opening a file leaves nothing to undo.
      *
      * <p>The first {@code Ctrl+Z} in a freshly opened graph must not start unpicking it a node at a time.

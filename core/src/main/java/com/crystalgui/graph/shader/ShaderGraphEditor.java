@@ -532,11 +532,28 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
      * would be far worse than refusing: the editor would then differ from the file it failed to read,
      * report itself modified, and the first Save All would write that emptiness over the user's work.
      * The workbench catches this, says so, and refuses to save the file at all.</p>
+     *
+     * <h3>A BLANK file is not a malformed one</h3>
+     * <p>{@code New File…} creates every file with {@code ""}, so the first thing anyone does with this
+     * type — make {@code thing.shadergraph}, open it, wire something up, save — hit that refusal on the
+     * very first step: {@code CodecException: Not a JSON object: null}, and then a {@code Ctrl+S} that
+     * declined to write because the file "never loaded". A zero-byte file is the universal spelling of an
+     * empty document and has nothing to lose, which is the entire premise of the refusal.</p>
+     *
+     * <p>Only truly blank content takes this path. Anything else that will not parse still throws, so the
+     * protection stays exactly where it was aimed — at a file with content in it that this build cannot
+     * read.</p>
+     *
+     * <p>The tab shows modified as soon as it opens, and that is honest rather than a wart: what is on
+     * disk is not a graph, {@code encode()} says what one would be, and they genuinely differ until saved
+     * once.</p>
      */
     @Override
     public void adopt(byte[] bytes) {
-        GraphDocument loaded = GraphCodecs.DOCUMENT.decode(JsonOps.INSTANCE,
-                JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)));
+        String text = new String(bytes, StandardCharsets.UTF_8);
+        GraphDocument loaded = text.trim().isEmpty()
+                ? new GraphDocument()
+                : GraphCodecs.DOCUMENT.decode(JsonOps.INSTANCE, JsonParser.parseString(text));
         graph.load(loaded);
         // The property nodes carry a title and an exposed dot read back out of the properties they
         // reference, and nothing re-derives those for a load: syncPropertyNodes runs on document change,
