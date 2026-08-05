@@ -730,9 +730,27 @@ until generated materials exist.
 > `NodePort.typeColor()` every tick alongside the reposition, not hard-coded per type in CSS — one number,
 > three consumers (the port's own dot, the wire, this dot) rather than a fourth copy of the palette.
 >
+> **Update 2026-08-05 — the master type-checks its ports.** `CgShaderEmitter` gave up silently on any
+> conversion it could not write, so a texture wired into `Base Color` emitted
+> `vec4(node_t_Out, cg_alpha)`: a `.shader` that **parses**, fails in the driver, and reaches the user as
+> a white material with the real complaint in a GL log nothing shows. The hole was structural —
+> `CgGraphCompiler` validates a link while resolving the *consuming* node's inputs, and the master emits
+> no code, so it has no inputs to resolve and never reached that path. The type resolution now lives in
+> one place (`feedInto`/`MasterFeed`) shared by the emitter and `checkMasterPorts`, rather than being
+> asked twice by two things that could drift.
+>
 > **Still to do:**
 > - **Mapping a driver error back to a node.** `Result.ownerOfLine` exists and is populated; nothing
 >   consumes it yet. This is the item that decides whether the editor is usable on a real failure.
+>   **Blocked on a backend capability, found 2026-08-05:** `CgMaterialShader` writes its compile log to
+>   `LOGGER` and retains nothing, so there is no log for CrystalGUI to parse. Retaining the last log and
+>   exposing it is a small additive change in CrystalGraphics, and it is where this has to start.
+> - **Compiler errors should carry a node id as DATA.** They are formatted `Node '<id>' input '<port>'
+>   wants …` today, so the id exists but only inside the sentence. Regexing it back out is the "second
+>   statement of the same fact" trap this file keeps recording; the fix is a small carrier
+>   (`nodeId?` + `message`) on `Result.errors()`. It is a wide but shallow change — every consumer and
+>   test currently treats an error as a `String` — and it is what lets BOTH halves (compiler errors and,
+>   later, mapped driver errors) light up the same node marking.
 > - **Debounced recompile.** Currently on connection change and property change, both discrete. A
 >   per-keystroke trigger needs real debouncing.
 > - **Dynamic ports resolve to a static grey, not their resolved colour** — `graph.css`'s
