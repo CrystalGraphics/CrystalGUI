@@ -489,4 +489,42 @@ public class DragPayloadTest extends UiTestBase {
 
         assertEquals(List.of("cancel"), outcome);
     }
+
+    /**
+     * <b>A drop handler may detach the drag source, and the drag must end rather than crash.</b>
+     *
+     * <p>Detaching the source cancels the drag on the spot — {@code UIInputHandler.forgetElement} has to,
+     * since every coordinate a drag reports is converted through that element's transform. But the drop
+     * is dispatched from <em>inside</em> {@code endDrag}, so the cancel runs underneath it, clears every
+     * field, and the code that follows read one of them back. A {@code NullPointerException} out of a
+     * <em>successful</em> drop.</p>
+     *
+     * <p>The trigger sounds exotic and is not: any target that rebuilds the list its source lives in
+     * reaches it. The Blackboard did, the first time a property was dragged within it to reorder — the
+     * rows are made of the pill being dragged.</p>
+     */
+    @Test
+    public void aDropThatDetachesTheSourceEndsTheDragInsteadOfCrashing() {
+        List<String> outcome = new ArrayList<>();
+        // The target reacts by destroying the source, which is what "rebuild the list" amounts to.
+        targetA.onDrop.attachListener((el, e) -> source.removeSelf(), false, false);
+
+        press(50f, 50f);
+        drag.startDrag(source, 100f, 100f, PAYLOAD, new UIDragController.DragListener() {
+            @Override public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) { }
+            @Override public void onDragEnd(float mx, float my) { outcome.add("end"); }
+            @Override public void onDragCancel() { outcome.add("cancel"); }
+        });
+        move(150f, 50f);
+
+        release(150f, 50f);
+
+        assertTrue("the drop still reached the target; log=" + log,
+                log.stream().anyMatch(s -> s.startsWith("drop:A")));
+        // ONE ending, not two. The source was already told the drag was cancelled by the detach, so also
+        // reporting a completed drag would be two contradictory endings for one gesture -- and a listener
+        // acting on both would act twice.
+        assertEquals("exactly one ending; got " + outcome, List.of("cancel"), outcome);
+        assertFalse("and the controller is not left holding a dead drag", drag.isDragging());
+    }
 }

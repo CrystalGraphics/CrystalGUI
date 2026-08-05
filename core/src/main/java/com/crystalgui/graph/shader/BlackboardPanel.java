@@ -271,6 +271,9 @@ public class BlackboardPanel extends UIElement {
     private boolean refreshing;
     private boolean refreshPending;
 
+    /** Whether a ticker is already waiting for the live drag to end. @see #deferUntilDragEnds */
+    private boolean deferredRefreshArmed;
+
     /** What the list currently shows. @see #refresh */
     private String shownSignature = "never built";
 
@@ -406,6 +409,23 @@ public class BlackboardPanel extends UIElement {
             refreshPending = true;
             return;
         }
+        // NOT WHILE A DRAG IS LIVE. A rebuild destroys every pill, and during a drop the pill being
+        // dragged IS the drag source -- so reordering a property detached the source from inside the
+        // drop dispatch, which cancels the drag mid-flight and leaves endDrag with nothing to end.
+        //
+        // This is the engine's own rule, stated in AGENTS.md: a widget must never rebuild the elements it
+        // is being clicked or dragged on. The canvas drop never hit it because adding a NODE leaves the
+        // property list untouched, so the signature check below skipped the rebuild for free; a reorder
+        // changes the very thing the signature is made of and cannot.
+        //
+        // UIDragController now survives this too, but that is a backstop for other consumers, not a
+        // licence to do it: the source would still be told its drag was CANCELLED after a drop that
+        // plainly succeeded.
+        if (dragInFlight()) {
+            refreshPending = true;
+            deferUntilDragEnds();
+            return;
+        }
         // NOTHING TO DO when the property list is unchanged, and this is not merely an optimisation.
         //
         // document.onChanged fires for ANY change -- every node added, moved or wired -- and this panel
@@ -433,6 +453,34 @@ public class BlackboardPanel extends UIElement {
             refreshPending = false;
             refresh();
         }
+    }
+
+    /** Whether a drag is in flight anywhere — a rebuild now could detach its source. @see #refresh */
+    private boolean dragInFlight() {
+        UIWindow window = getAttachedWindow();
+        return window != null && window.getInputHandler().getDragController().isDragging();
+    }
+
+    /**
+     * Runs the deferred rebuild once the drag is over.
+     *
+     * <p>A {@link com.crystalgui.ui.UIFrameTicker}, because there is no "drag ended" signal to listen to
+     * and polling one flag per frame for the length of a drag costs nothing. It drops itself the moment
+     * it fires — registration is {@code HashSet}-backed, so asking twice during one drag is harmless.</p>
+     */
+    private void deferUntilDragEnds() {
+        UIWindow window = getAttachedWindow();
+        if (window == null || deferredRefreshArmed) return;
+        deferredRefreshArmed = true;
+        window.registerTicker(delta -> {
+            if (dragInFlight()) return true;
+            deferredRefreshArmed = false;
+            if (refreshPending) {
+                refreshPending = false;
+                refresh();
+            }
+            return false;
+        });
     }
 
     private void rebuild() {
