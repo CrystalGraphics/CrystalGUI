@@ -804,6 +804,11 @@ graphnode.__property-node__ .__exposed-dot__ {
 .__blackboard__ .__empty__ {
     color: var(--node-text);
 }
+/* The graph's own accent, the same one a selected node is outlined in -- a drop target in a second
+ * colour would be a second vocabulary for "this is what you are about to act on". */
+.__blackboard__ .__drop-line__ {
+    background-color: #44C0FF;
+}
 /* NO row-level fill. The row is the full width of the panel, so filling it on hover reads as a table
  * row highlighting while the thing under the pointer is the chip. Both states ring the capsule instead.
  *

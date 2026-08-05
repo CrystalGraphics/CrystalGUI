@@ -320,4 +320,73 @@ public class BlackboardPanelTest extends UiTestBase {
         document.removeProperty(tint.id());
         assertNull(board.selectedPropertyId());
     }
+
+    // ── Reorder ─────────────────────────────────────────────────────────────
+
+    private List<String> names() {
+        List<String> out = new ArrayList<>();
+        for (GraphProperty property : document.properties()) out.add(property.name());
+        return out;
+    }
+
+    /**
+     * <b>A drop slot is not a destination index, and the difference is a real off-by-one.</b>
+     *
+     * <p>{@code moveProperty} takes a slot counted against the list <em>as the user sees it</em>, while
+     * {@code GraphDocument.moveProperty} takes the index the property ends at <em>after</em> being lifted
+     * out. Dragging downward crosses its own vacated slot, so the two differ by one in that direction and
+     * agree in the other — and the failure is quiet: the property lands one place short, which looks like
+     * an imprecise drag rather than a bug.</p>
+     */
+    @Test
+    public void aSlotBelowIsOneLessOnceTheRowIsLiftedOut() {
+        mount();
+        GraphProperty a = board.addProperty("Float");
+        GraphProperty b = board.addProperty("Vector 2");
+        GraphProperty c = board.addProperty("Color");
+        assertEquals(List.of(a.name(), b.name(), c.name()), names());
+
+        // The first row dropped in the LAST slot -- three pills, so the slot below all of them is 3.
+        board.moveProperty(a.id(), 3);
+        assertEquals(List.of(b.name(), c.name(), a.name()), names());
+
+        // And back to the top, where slot and index agree because nothing was crossed.
+        board.moveProperty(a.id(), 0);
+        assertEquals(List.of(a.name(), b.name(), c.name()), names());
+    }
+
+    /** Dropping a row back where it already was is not an edit, and must not push an undo step. */
+    @Test
+    public void droppingARowInItsOwnSlotDoesNothing() {
+        mount();
+        board.addProperty("Float");
+        GraphProperty b = board.addProperty("Vector 2");
+        board.addProperty("Color");
+        int depth = undo.undoDepth();
+
+        assertFalse("its own slot", board.moveProperty(b.id(), 1));
+        // The slot BELOW itself is the same position -- lifting it out closes the gap it would fill.
+        assertFalse("the slot below itself", board.moveProperty(b.id(), 2));
+        assertEquals("and neither is undoable", depth, undo.undoDepth());
+    }
+
+    /** Reorder undoes, like every other document change. */
+    @Test
+    public void reorderingUndoes() {
+        mount();
+        GraphProperty a = board.addProperty("Float");
+        GraphProperty b = board.addProperty("Vector 2");
+
+        board.moveProperty(b.id(), 0);
+        assertEquals(List.of(b.name(), a.name()), names());
+        undo.undo();
+        assertEquals(List.of(a.name(), b.name()), names());
+    }
+
+    /** A property dragged after being deleted mid-drag moves nothing rather than throwing. */
+    @Test
+    public void movingAPropertyThatIsGoneIsHarmless() {
+        mount();
+        assertFalse(board.moveProperty("no-such-property", 0));
+    }
 }

@@ -3295,6 +3295,22 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     padding-top: 4px;
 }
 
+/* Where a dragged pill would land. ABSOLUTE, so drawing it cannot move the rows whose boundaries decide
+ * where it goes -- an in-flow indicator pushes everything below it down by its own height and makes the
+ * index oscillate at a boundary. `display: none` until a drag is over the list, toggled by a CLASS
+ * rather than written from Java: the one thing the ScrollerView bars proved cannot be undone from a
+ * stylesheet is a `display` an element writes about itself at IMPORTANT. */
+.__blackboard__ .__drop-line__ {
+    display: none;
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    height: 2px;
+}
+.__blackboard__ .__drop-line__.__active__ {
+    display: flex;
+}
+
 /* A ROW holding a capsule and a dim type. The row takes the press -- every part inside it is scenery --
  * so a click anywhere along it selects, and the gap beside a short name is not dead. */
 .__property-pill__ {
