@@ -776,9 +776,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 event.stopPropagation();
                 return;
             }
-            // Anything the control keys did not claim is a typed character. Ctrl-combos are left alone so
-            // an unhandled accelerator still reaches the keymap rather than being typed into the document.
-            if (CgModifiers.hasCtrl(event.getModifiers()) || CgModifiers.hasSuper(event.getModifiers())) {
+            // Anything the control keys did not claim is a typed character. Accelerator combos are left
+            // alone so an unhandled one still reaches the keymap rather than being typed into the
+            // document.
+            //
+            // ALT COUNTS, and its absence here was a real bug: Alt+Shift+S typed a capital S into the
+            // file and called stopPropagation(), so the keymap never ran and the binding looked dead.
+            // Ctrl+letter escapes that by accident rather than by this check -- a control character is
+            // ISOControl and fails the test below -- which is why Ctrl+N worked while Alt+Shift+S did
+            // not, and why the difference looked like the binding rather than the editor.
+            //
+            // KNOWN GAP: AltGr is Ctrl+Alt, and on European layouts it genuinely produces characters that
+            // SHOULD be typed. They are refused here, as they already were before Alt was added -- the
+            // Ctrl branch caught them. Fixing it means letting Ctrl+Alt through, which would make every
+            // Ctrl+Alt binding type instead of firing, so it wants its own change and its own test.
+            int mods = event.getModifiers();
+            if (CgModifiers.hasCtrl(mods) || CgModifiers.hasSuper(mods) || CgModifiers.hasAlt(mods)) {
                 return;
             }
             char typed = event.getCharacter();

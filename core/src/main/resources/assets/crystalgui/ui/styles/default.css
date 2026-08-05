@@ -2736,7 +2736,11 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     padding-right: var(--cfg-pad-x);
     padding-top: var(--cfg-pad-y);
     padding-bottom: var(--cfg-pad-y);
-    overflow: scroll;
+    /* auto, not scroll. CSS `overflow: scroll` means ALWAYS SHOW, and that is what this said -- both
+     * bars sat there permanently, including a horizontal one for content that never overflows
+     * sideways. Nobody saw it until the bars were given a width, because until then they drew nothing
+     * at all. */
+    overflow: auto;
 }
 
 /* The row. `align-items: center` is what puts a 14px control in the middle of an 18px row rather than

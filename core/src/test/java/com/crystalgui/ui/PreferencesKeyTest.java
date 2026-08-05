@@ -30,6 +30,10 @@ import org.junit.Test;
 import java.nio.file.Paths;
 import java.util.List;
 
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.ui.elements.editor.TextEditor;
+
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -150,5 +154,45 @@ public class PreferencesKeyTest extends UiTestBase {
         chord(CgKeyCodes.KEY_S, CgModifiers.ALT | CgModifiers.SHIFT);
         assertTrue("Alt+Shift+S did not open the preferences window from the application root",
                 preferencesOpen());
+    }
+
+    /**
+     * <b>Alt+Shift+S works while a text editor has focus, and does not type an S into it.</b>
+     *
+     * <p>The case every other test here missed. Focus was on the dock group, so nothing consuming text
+     * input was ever in the path — and {@code TextEditor}'s key listener excluded Ctrl and Super from
+     * being typed but not <b>Alt</b>, so Alt+Shift+S inserted a capital S and called
+     * {@code stopPropagation()}. The keymap then never ran, and the binding looked dead.</p>
+     *
+     * <p>Ctrl+letter escaped that by accident rather than by the check: Ctrl+N's character is a control
+     * character and fails the printable test regardless. That is the whole reason Ctrl+N worked and
+     * Alt+Shift+S did not, and why the difference read as a problem with the binding.</p>
+     */
+    @Test
+    public void altShiftSWorksWithAnEditorFocusedAndTypesNothing() {
+        CgPath file = CgPath.parse("mymod.proj:README.md");
+        editor.workbench().openFile(file);
+        settle();
+        TextEditor text = editor.workbench().editorFor(file);
+        org.junit.Assert.assertNotNull("the file did not open, so this proves nothing", text);
+        window.getInputHandler().requestFocus(text);
+        settle();
+        org.junit.Assert.assertSame("the editor did not take focus, so nothing consuming text input is "
+                        + "in the path and this test is the one it already passes",
+                text, window.getInputHandler().getFocusedElement());
+
+        String before = text.getText();
+        heldModifiers = CgModifiers.ALT | CgModifiers.SHIFT;
+        try {
+            window.getInputHandler().consumeKeyboardEvent(
+                    new CgSystemInput.Keyboard.Event('S', CgKeyCodes.KEY_S, true, false, 20L));
+        } finally {
+            heldModifiers = 0;
+        }
+        settle();
+
+        assertEquals("Alt+Shift+S was typed into the document instead of reaching the keymap",
+                before, text.getText());
+        assertTrue("Alt+Shift+S did not open Preferences from a focused editor", preferencesOpen());
     }
 }
