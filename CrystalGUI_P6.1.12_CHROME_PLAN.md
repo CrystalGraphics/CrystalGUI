@@ -646,7 +646,7 @@ Same scale as the tiers above. Cost is judged against what the repo already has.
 | E12 | **Find in Files** (G6) | ★★★★★ | **High** — new streaming RPC, server-side matcher, results panel |
 | E13 | Replace in Files | ★★★★☆ | Medium *on top of* E12, and must not ship before undo |
 | E14 | **Local History** (G4b) | ★★★★☆ | High — but it is the only real safety net, and it unlocks Compare With… |
-| E15 | Preferences store (G8) | ★★★☆☆ | Low, and it unblocks far more than this panel |
+| E15 | ~~Preferences store (G8)~~ **DONE** | ★★★☆☆ | Shipped with session persistence — see *Persistence* below |
 
 ### Tier 4 — noted, not now
 
@@ -889,3 +889,101 @@ second tab. That is a debugging affordance the serializer work will want almost 
 | E24b | **Editor binding** — pattern to dock panel type, with priority and a text fallback | ★★★★★ | Low — `refFor` is the only call site |
 | E24c | Per-file user override ("Open With…"), persisted | ★★★☆☆ | Low, but **needs E15** |
 | E24d | Two views of one document (graph + raw), IntelliJ-style | ★★★☆☆ | Medium |
+
+
+---
+
+## Persistence — settings and session state (E15, done)
+
+Two things get written to disk, and conflating them is the mistake every editor avoids in the same way.
+
+### The two axes
+
+VS Code, IntelliJ, Visual Studio and Eclipse all split persisted data by two questions — *did a human
+choose it*, and *should a second person see it*:
+
+| | Settings (chosen) | State (recorded) |
+|---|---|---|
+| **Private** | user settings | session state |
+| **Shared** | project settings | *deliberately empty* |
+
+Nobody shares "which tabs I had open". That empty cell is why `workspace.xml` is in IntelliJ's default
+`.gitignore`, and why VS Code keeps UI state in its own storage rather than in `.vscode/`.
+
+### Where each one lives, and why it is not one answer
+
+| Layer | Home | Travels with the project |
+|---|---|---|
+| `DEFAULT` | the declaration | — |
+| `USER` | `ConfigStorage` — client-local | no; it is mine, per machine |
+| `WORKSPACE` | *(a project layer exists in `SettingsLayer`; nothing loads it from the project yet)* | yes, once wired |
+| `DOCUMENT` | inside the document | with the document |
+| session state | `ConfigStorage`, keyed by **project id** | no, by design |
+
+**Session state cannot live in the project.** Q8's four arguments against a `.trash/` apply almost
+unchanged, and the fourth is decisive in a way it is not for either editor: a project may be `READONLY`,
+and you still want to reopen it where you left off. IntelliJ cannot open a read-only project without
+complaining about `.idea/`; this must.
+
+**Shared settings, in contrast, must live in the project** — copy, zip or commit it and they have to come
+too, which nothing outside the project can do. Q8's other three arguments invert for them: other actors
+*should* see them, and shipping them *is* the point, exactly as `.vscode/settings.json` ships.
+
+**Keying session state by project id** comes free from `CgPath`'s own rule — *"the project id is explicit
+rather than derived from a directory: moving a project's folder must not invalidate every reference to
+it."* So moving a project keeps its session, which VS Code cannot manage: it keys workspace storage by
+folder path and loses your open editors when a folder moves.
+
+### `ConfigStorage`, and why it is not a `CgFileSystem` or a platform service
+
+Configuration is the one thing that must live outside every project, and a `CgPath` is structurally
+confined to one — reaching a config directory through a project path needs either a fake project or a hole
+in the confinement that makes `CgPath` worth having. It is not a `CgPlatform` service either: `AGENTS.md`
+is explicit that a second registry beside CrystalGraphics' is how a loader wires one and not the other, so
+this is a dependency handed to whoever needs it, as `WorkspaceClient` already is.
+
+`LocalConfigStorage` writes atomically (temp file *in the same directory*, then rename) for the reason
+`LocalFileSystem` does; `InMemoryConfigStorage` is what every test and the harness run on.
+
+### The one call worth arguing about: view state is keyed by file, not by panel
+
+Caret, scroll and folds are tempting to put in `DockPanelRef.state`, which is already serialised with the
+layout and already carries the path. It is wrong, observably: close a file and reopen it and the caret
+should still be where you left it, even though the panel is gone. `DockPanelRef`'s own doc already says its
+payload is *identity*. VS Code keys an `IEditorMemento` by resource URI; IntelliJ writes per-file `<state>`
+under `FileEditorManager`. Neither hangs it off the tab.
+
+Documents opt in through `DocumentViewState`, a second interface — `FileDocument` stays three methods, and
+"this document has no caret" is a real answer rather than a missing implementation. IntelliJ splits it the
+same way.
+
+### Two races, both parked and retried rather than applied once
+
+- **View state** is applied from `Workbench.onDocumentLoaded`, never at panel construction. A caret
+  restored into a document whose read is still in flight clamps to zero, and the symptom is
+  indistinguishable from view state never being saved.
+- **Tree expansion** waits for listings — a folder cannot be expanded before its parent's listing reveals
+  it. `WorkbenchSession.tick()` re-attempts and gives up on a bounded count rather than never.
+
+Both are pinned by mutation-checked tests that restore into a **second, cold workbench**; restoring into
+the one that saved would pass with a restore that did nothing.
+
+### Version handling is deliberately opposite between the two
+
+| | Rule | Why |
+|---|---|---|
+| Session record | unknown version → **discard** for the defaults | `DockLayoutCodec`'s rule: a layout that changed meaning puts panels where nobody asked |
+| Settings file | **no version at all** | discarding it would silently reset every preference somebody has; the format is forward/backward compatible one key at a time, as `settings.json` is |
+
+### Still open
+
+- **The project settings layer has no loader.** `SettingsLayer.WORKSPACE` exists and resolves; nothing
+  reads `.crystal/settings.json` out of a project into it yet. That is the piece that makes settings
+  travel with a copied project.
+- **`Setting.writableAt` is unenforced by the store.** `Settings.setRaw` takes a key rather than a
+  declaration, so it cannot check. The preferences window filters on it and is currently the only thing
+  that does — worth knowing before adding a second way to write settings.
+- **Session records are never pruned.** `ConfigStorage.list()` exists for exactly that; nothing calls it.
+- Values are stored as **text**, so the preferences file reads `"editor.tabSize": "4"`. That is the price
+  of `SettingsModel` being string-throughout, which is a decision the settings port made deliberately and
+  documents; changing it means teaching the storage layer every value type.

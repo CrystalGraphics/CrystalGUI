@@ -1,0 +1,170 @@
+package com.crystalgui.ui;
+
+import com.crystalgui.core.settings.Setting;
+import com.crystalgui.core.settings.SettingsCodec;
+import com.crystalgui.core.settings.SettingsLayer;
+import com.crystalgui.core.settings.SettingsModel;
+import com.crystalgui.core.settings.SettingsRegistry;
+import com.crystalgui.fs.InMemoryConfigStorage;
+import com.crystalgui.graph.shader.ShaderGraphSettings;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.ui.elements.chrome.Preferences;
+import com.crystalgui.ui.elements.workbench.WorkbenchSettings;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+/**
+ * {@link Preferences} — the generated settings window, and the preferences file behind it.
+ */
+public class PreferencesTest extends UiTestBase {
+
+    private UIWindow window;
+
+    @Before
+    public void setUp() {
+        WorkbenchSettings.declare();
+        ShaderGraphSettings.register();
+        UIElement root = new UIElement().layout(l -> l.widthPercent(100f).heightPercent(100f));
+        window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(1200, 800);
+    }
+
+    private void settle() {
+        for (int i = 0; i < 4; i++) window.updateWithoutPainting();
+    }
+
+    /**
+     * <b>A setting that is not writable at the user layer never appears.</b>
+     *
+     * <p>The filter is the point of the window, not a detail. {@code ShaderGraphSettings} declares its
+     * render queue {@code writableAt(DOCUMENT, MEMORY)} exactly so it cannot become a global preference,
+     * and a window listing every registered declaration would put it there — which is the failure
+     * {@code Setting.writableAt}'s own documentation describes: a user sets it once and every graph they
+     * open silently inherits it.</p>
+     */
+    @Test
+    public void aDocumentOnlySettingIsNotOfferedAsAPreference() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+
+        boolean sawWorkbenchSetting = false;
+        for (Setting<?> shown : preferences.shownSettings()) {
+            assertTrue("'" + shown.getId() + "' is not writable at the user layer and must not be shown "
+                            + "as a preference", shown.isWritableAt(SettingsLayer.USER));
+            if (shown == WorkbenchSettings.SORT_ORDER) sawWorkbenchSetting = true;
+        }
+        assertTrue("the window showed nothing at all, so the assertion above proves nothing",
+                sawWorkbenchSetting);
+        assertFalse("a document-scoped setting was offered as a global preference",
+                preferences.shownSettings().contains(ShaderGraphSettings.QUEUE));
+    }
+
+    /** Grouped by the first segment of the id, which is the grouping the registry already keys on. */
+    @Test
+    public void settingsAreGroupedByTheirIdPrefix() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+        assertTrue("nothing was built", preferences.shownSettings().size() >= 5);
+        assertTrue(Preferences.sectionNames().contains("explorer"));
+        assertTrue(Preferences.sectionNames().contains("editor"));
+        assertEquals("Explorer", Preferences.labelOf("explorer"));
+    }
+
+    /**
+     * <b>Preferences survive a reload.</b>
+     *
+     * <p>Through the real storage interface and the real codec, so what is exercised is what production
+     * runs — only the destination of the bytes differs.</p>
+     */
+    @Test
+    public void preferencesSurviveAReload() {
+        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        com.crystalgui.core.settings.Settings settings = window.ui.rootElement.settings();
+        settings.set(SettingsLayer.USER, WorkbenchSettings.TAB_SIZE, 8);
+        settings.set(SettingsLayer.USER, WorkbenchSettings.SORT_ORDER, "FILES_FIRST");
+
+        storage.write("settings.json", SettingsCodec.toJson(settings.layer(SettingsLayer.USER)));
+
+        com.crystalgui.core.settings.Settings reloaded = new com.crystalgui.core.settings.Settings();
+        SettingsModel model = SettingsCodec.fromJson(storage.read("settings.json"));
+        reloaded.replaceLayer(SettingsLayer.USER, model.asMap());
+
+        assertEquals(Integer.valueOf(8), reloaded.get(WorkbenchSettings.TAB_SIZE));
+        assertEquals("FILES_FIRST", reloaded.get(WorkbenchSettings.SORT_ORDER));
+    }
+
+    /**
+     * <b>A malformed preferences file degrades to the defaults rather than refusing to start.</b>
+     *
+     * <p>Settings files are hand-edited. Refusing to open the editor because one line is wrong is a
+     * support burden with no upside, and is the same call {@code Setting.read} makes for one bad value.</p>
+     */
+    @Test
+    public void aMalformedPreferencesFileDoesNotStopAnythingStarting() {
+        SettingsModel model = SettingsCodec.fromJson("{ this is not json");
+        assertTrue("an unreadable file must yield nothing, not throw", model.isEmpty());
+
+        com.crystalgui.core.settings.Settings settings = new com.crystalgui.core.settings.Settings();
+        settings.replaceLayer(SettingsLayer.USER, model.asMap());
+        assertEquals("the declared default must stand", Integer.valueOf(4),
+                settings.get(WorkbenchSettings.TAB_SIZE));
+    }
+
+    /** Absent is not the same as empty, and neither is an error. */
+    @Test
+    public void anAbsentPreferencesFileIsNormal() {
+        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        assertTrue(SettingsCodec.fromJson(storage.read("settings.json")).isEmpty());
+    }
+
+    /** A read-only store refuses writes loudly rather than pretending to save. */
+    @Test
+    public void aReadOnlyStoreIsKnownToBeReadOnly() {
+        InMemoryConfigStorage storage = new InMemoryConfigStorage().setWritable(false);
+        assertFalse(storage.isWritable());
+        try {
+            storage.write("settings.json", "{}");
+            org.junit.Assert.fail("expected a read-only store to refuse");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("read-only"));
+        }
+    }
+
+    /** Every declaration the workbench makes is registered, or the window cannot show it. */
+    @Test
+    public void everyWorkbenchSettingIsDeclared() {
+        SettingsRegistry registry = SettingsRegistry.get();
+        for (Setting<?> setting : new Setting<?>[]{
+                WorkbenchSettings.AUTO_REVEAL, WorkbenchSettings.CONFIRM_DELETE,
+                WorkbenchSettings.SORT_ORDER, WorkbenchSettings.FOLDING,
+                WorkbenchSettings.SCROLL_BEYOND_LAST_LINE, WorkbenchSettings.TAB_SIZE,
+                WorkbenchSettings.CARET_BLINK, WorkbenchSettings.RESTORE_SESSION,
+                WorkbenchSettings.RESTORE_VIEW_STATE}) {
+            assertEquals("'" + setting.getId() + "' is declared but not registered, so it can never be "
+                    + "shown", setting, registry.get(setting.getId()));
+        }
+    }
+
+    /**
+     * <b>The sort-order options are the enum's own constant names.</b>
+     *
+     * <p>{@code Setting.select} takes strings so an option list can come from a registry, which means
+     * nothing stops the two drifting — a renamed constant would leave a dropdown offering a value that
+     * silently falls back. This is the check that keeps them together.</p>
+     */
+    @Test
+    public void everySortOrderOptionNamesARealConstant() {
+        for (String option : WorkbenchSettings.SORT_ORDER.getOptions()) {
+            com.crystalgui.ui.elements.workbench.WorkspaceTreeSource.SortOrder.valueOf(option);
+        }
+        assertEquals(com.crystalgui.ui.elements.workbench.WorkspaceTreeSource.SortOrder.values().length,
+                WorkbenchSettings.SORT_ORDER.getOptions().size());
+    }
+}

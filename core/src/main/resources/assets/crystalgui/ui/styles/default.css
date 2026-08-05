@@ -4075,3 +4075,27 @@ popover.__prompt__ textfield {
     color: #DDDDDD;
     padding-left: 2px;
 }
+
+/* ── Preferences ───────────────────────────────────────────────────────────────────────
+ *
+ * One scrolling list of groups, which is VS Code's settings editor rather than IntelliJ's category tree.
+ * Sizes here and not in Java, per the widget rule: `Preferences` chooses which declarations to show and
+ * nothing else. */
+preferences {
+    width: 360px;
+    height: 280px;
+}
+
+/* 0, not auto: flex-shrink is 0 in this engine, so a growing child keeps its content size and overflows
+ * the dialog instead of fitting inside it. See AGENTS.md's flex-shrink note. */
+preferences > .__content__ {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+    padding-all: 4px;
+}
+
+preferences .__preferences-panel__ {
+    width: 100%;
+    height: 100%;
+}
