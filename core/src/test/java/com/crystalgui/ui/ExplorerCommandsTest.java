@@ -1082,18 +1082,4 @@ public class ExplorerCommandsTest extends UiTestBase {
         assertTrue("a step with everything in flight reported the crawl finished", source.indexStep(1));
     }
 
-    /**
-     * <b>Ctrl+, opens Preferences.</b>
-     *
-     * <p>VS Code's binding. Worth a test of its own because a chord whose key is punctuation goes through
-     * a different half of {@code KeyStroke}'s name table than a letter does — the symbol spellings are
-     * aliases added by hand, not names reflection produced.</p>
-     */
-    @Test
-    public void modCommaOpensPreferences() {
-        chord(CgKeyCodes.KEY_COMMA, com.crystalgraphics.platform.input.CgModifiers.CTRL);
-        assertFalse("Ctrl+, did not open the preferences window",
-                window.ui.rootElement.querySelectorAll("." + com.crystalgui.ui.elements.chrome.Preferences
-                        .DIALOG_CLASS).isEmpty());
-    }
 }

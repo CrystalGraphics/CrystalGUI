@@ -195,16 +195,18 @@ public final class ExplorerCommands {
      */
     public static void bindGlobalDefaults(Keymap keymap) {
         keymap.bind("Mod+N", NEW_FILE);
-        // TWO chords, and the second is not redundant. A key code here is a PHYSICAL key -- LWJGL2
-        // reports DirectInput scancodes -- and punctuation moves between keyboard layouts while letters
-        // largely do not. So Mod+Comma is the right binding on a US layout and can be unreachable on
-        // another, with Mod+N on the line above still working perfectly, which is what makes it look
-        // like the binding rather than the keyboard. Mod+Alt+S is IntelliJ's own Settings chord and is
-        // letter-based, so it survives the layout.
+        // Alt+Shift+S, NOT VS Code's Ctrl+comma, and this is a deliberate retreat rather than a
+        // preference. Ctrl+comma is bound correctly and fires in every test -- including one built in the
+        // application's real shape, and one carrying the printable character a real keyboard sends with
+        // it -- and it does nothing in the running harness. The obvious explanation was wrong: on all
+        // four of this machine's keyboard layouts `,` maps to scancode 0x33, exactly CgKeyCodes.KEY_COMMA,
+        // so the right code is arriving.
         //
-        // Spelled "Comma" rather than "," because bindAll separates its alternatives WITH a comma; the
-        // symbol form parses fine in bind(), and only there.
-        keymap.bindAll("Mod+Comma, Mod+Alt+S", PREFERENCES);
+        // Whatever eats it lives somewhere no test has reproduced. A shortcut that works on the bench and
+        // not in the product is worse than one spelled differently, so the letter chord is the binding
+        // rather than a fallback beside it. -Dcrystalgui.keymap.trace=true is what will name the cause if
+        // anyone wants Ctrl+comma back.
+        keymap.bind("Alt+Shift+S", PREFERENCES);
         // Mod+P from VS Code. An application verb rather than a panel one, and for the same reason F5 is:
         // a keymap resolves outward from the FOCUSED element, so a binding on the tree is unreachable
         // while you are typing in an editor -- which is exactly when you reach for it.
