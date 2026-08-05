@@ -93,7 +93,10 @@ public class PageStack<K> extends UIElement {
         UIElement shown = key == null ? null : pageFor(key);
 
         for (Map.Entry<K, UIElement> entry : pages.entrySet()) {
-            entry.getValue().setDisplayed(entry.getValue() == shown);
+            // NULL IS A CACHED ANSWER, not a missing one -- a key whose factory said "no page of my own"
+            // is remembered so it is not asked again, and there is nothing to show or hide for it.
+            UIElement page = entry.getValue();
+            if (page != null) page.setDisplayed(page == shown);
         }
         if (placeholder != null) placeholder.setDisplayed(shown == null && key != null);
         return shown;

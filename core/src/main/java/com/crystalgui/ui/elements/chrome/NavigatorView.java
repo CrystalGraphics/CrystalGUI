@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 
 import com.crystalgui.core.nav.NavigationHistory;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
@@ -11,6 +12,8 @@ import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.tree.FilteredTreeSource;
 import com.crystalgui.ui.elements.tree.TreeDataSource;
+import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.elements.tree.TreeRenderer;
 import com.crystalgui.ui.elements.tree.TreeRow;
 import com.crystalgui.ui.elements.tree.TreeView;
 import com.crystalgui.ui.event.KeyboardEvent;
@@ -55,6 +58,15 @@ public class NavigatorView<T> extends UIElement {
     public static final String HEADER_CLASS = "__nav-header__";
     public static final String BACK_CLASS = "__nav-back__";
     public static final String FORWARD_CLASS = "__nav-forward__";
+
+    /** On a tree node drawn by the default renderer. */
+    public static final String NODE_CLASS = "__nav-node__";
+
+    /** The expander on a node that has children. Empty on a leaf — the sheet draws the glyph. */
+    public static final String ARROW_CLASS = "__nav-arrow__";
+
+    /** The node's text. */
+    public static final String LABEL_CLASS = "__nav-label__";
 
     /** Emits whenever the shown item changes, however it was reached. */
     public final Signal.Value<T> onNavigated = new Signal.Value<>();
@@ -106,6 +118,14 @@ public class NavigatorView<T> extends UIElement {
 
         split.first().addChild(sidebar);
         split.second().addChild(detail);
+        // Narrow, like every settings window: the tree holds short names and the page holds the work, so
+        // an even split gives half the dialog to a column of one-word labels. A share rather than a fixed
+        // width because the dialog is resizable, and it is the DEFAULT -- the divider is still draggable.
+        // A drag is the user taking ownership of the width. After one, the sidebar stops following its
+        // content: somebody who widened it to read a long name must not have it snapped back the next
+        // time a branch folds.
+        split.divider().onMouseDown.attachListener((element, event) -> userSizedSidebar = true,
+                false, true);
         addInternalChild(split);
 
         // Arrow keys reach the tree while the caret stays in the field. CAPTURE phase, so they are taken
@@ -121,6 +141,75 @@ public class NavigatorView<T> extends UIElement {
         updateHistoryButtons();
     }
 
+    /**
+     * Grows the sidebar's <b>minimum</b> width to fit the widest row on screen.
+     *
+     * <p>A share alone cannot do this: unfolding a branch reveals deeper, longer labels, and a pane sized
+     * to a fraction of the dialog clips them — which is what a tree is least able to survive, since a
+     * truncated label is often the only thing distinguishing two siblings.</p>
+     *
+     * <p>A MINIMUM rather than a width, so the divider stays draggable and a user who wants it wider keeps
+     * that. It only ever grows within a session: shrinking it as a branch collapses would make the whole
+     * page jump sideways every time somebody folded something.</p>
+     *
+     * <p>Measured from the realised rows rather than computed from the text, because only layout knows
+     * what a string is worth in the current font. It settles for the reason every measure-and-push-back
+     * loop here settles — {@code replaceOrPutCandidate} no-ops when the value has not moved.</p>
+     */
+    private boolean fitSidebarToRows() {
+        if (tree == null || getAttachedWindow() == null) return true;
+        float widest = 0f;
+        for (UIElement label : tree.querySelectorAll("." + LABEL_CLASS)) {
+            // The label's own X relative to the sidebar already carries the indent and the arrow, so
+            // there is nothing to add back -- and no need to reach for the Taffy box to find it.
+            float left = label.getRuntimeCache().getX() - sidebar.getRuntimeCache().getX();
+            // Its own box is the right measure now that the label self-sizes -- see the renderer.
+            widest = Math.max(widest, left + label.getRuntimeCache().getWidth());
+        }
+        if (widest <= 0f) return true;   // nothing laid out yet
+        float wanted = Math.min(MAX_SIDEBAR_WIDTH, widest + SIDEBAR_PADDING);
+        if (wanted <= sidebarMinimum) return true;
+        sidebarMinimum = wanted;
+        // THROUGH SplitView'S OWN API, not a CSS min-width on the pane. SplitView already clamps a drag
+        // against a per-pane minimum (see boundsFor), and it has no idea about a `min-width` written
+        // behind its back -- so with one the WEIGHT walks below what the pane actually renders at, Taffy
+        // clamps the drawn width back up, and the two silently disagree. Dragging away from the minimum
+        // then moves nothing until the weight climbs back to it, which is a dead zone exactly as wide as
+        // the gap. Telling the split is what keeps them the same number.
+        split.setPaneSizeLimits(0, sidebarMinimum, Float.MAX_VALUE);
+
+        // OPENS AT ITS CONTENT rather than at a fraction somebody picked: a settings tree holds short
+        // names, so any hardcoded share is wasteful on a narrow one and clipping on a wide one -- and the
+        // width that fits is already being computed right here.
+        float total = split.getRuntimeCache().getWidth();
+        if (total > 0f && !userSizedSidebar) {
+            split.setPercentage(Math.min(90f, sidebarMinimum / total * 100f));
+        }
+        return true;
+    }
+
+    /** Room for the arrow, the gap and the pane's own padding, plus a little air. */
+    private static final float SIDEBAR_PADDING = 28f;
+
+    /** However long a label gets, the tree must not take the whole window. */
+    private static final float MAX_SIDEBAR_WIDTH = 320f;
+
+    private float sidebarMinimum;
+
+    private boolean userSizedSidebar;
+
+    @Override
+    protected void onLayoutChanged() {
+        super.onLayoutChanged();
+        if (fitting || getAttachedWindow() == null) return;
+        fitting = true;
+        // From a TICKER, not from here: this writes a style, and a structural write inside the layout pass
+        // is the one thing onLayoutChanged must not do.
+        getAttachedWindow().registerTicker(delta -> fitSidebarToRows());
+    }
+
+    private boolean fitting;
+
     @Override
     public boolean acceptsPublicChildren() {
         return false;
@@ -132,6 +221,11 @@ public class NavigatorView<T> extends UIElement {
     public NavigatorView<T> setSource(TreeDataSource<T> source) {
         filtered = new FilteredTreeSource<>(source);
         tree = new TreeView<>(filtered);
+        // A DEFAULT RENDERER, because a TreeView without one draws nothing at all -- an empty sidebar
+        // beside a working page, which reads as the tree having no items rather than no way to paint
+        // them. A caller wanting icons or badges replaces it; a caller wanting a list of names should not
+        // have to write one to see anything.
+        tree.setRenderer(new TitleRenderer());
         tree.onSelectionChanged.connect(selected -> onTreeSelection());
         sidebar.addChild(tree);
         return this;
@@ -303,6 +397,59 @@ public class NavigatorView<T> extends UIElement {
     public void giveFocus() {
         UIWindow window = getAttachedWindow();
         if (window != null) window.getInputHandler().requestFocus(search);
+    }
+
+    /**
+     * An expander and a title.
+     *
+     * <p>Indentation is {@code TreeView}'s own — it writes {@code padding-left} from {@code TreeRow.depth}
+     * at DEFAULT origin, so <b>a sheet rule setting padding on this element silently flattens the whole
+     * tree</b>. It also adds {@code __expanded__} / {@code __collapsed__} / {@code __leaf__} to the
+     * template, which is what lets the arrow be a stylesheet's business rather than a string chosen
+     * here.</p>
+     *
+     * <p>The arrow's row index is read <b>per event</b> from the element the press landed on. Rows are
+     * pooled and recycled as the tree scrolls, so a listener that captured its index would keep toggling
+     * whatever row its slot was first used for — which works right up until somebody scrolls.</p>
+     */
+    private final class TitleRenderer implements TreeRenderer<T> {
+        @Override
+        public UIElement createTemplate() {
+            UIElement row = new UIElement();
+            row.addClass(NODE_CLASS);
+
+            UIElement arrow = new UIElement();
+            arrow.addClass(ARROW_CLASS);
+            arrow.onMouseDown.attachListener((element, event) -> {
+                if (tree == null) return;
+                int at = tree.indexOfRowElement(element.getParent());
+                if (at < 0) return;
+                event.stopPropagation();
+                tree.toggleExpandedAt(at);
+            }, false, true);
+            row.addChild(arrow);
+
+            UIText label = new UIText("");
+            label.addClass(LABEL_CLASS);
+            label.setHitTest(false);
+            // FORCED, not left to the auto-detect. UIText decides whether it sizes itself ONCE, from
+            // whether its content box is empty on the first post-attachment recompute -- and a tree row
+            // already has a width by then, so the label latches "take what I am given" and truncates for
+            // the rest of its life. Its own javadoc names this: the only recovery was destroying and
+            // rebuilding the element, which is why nudging the divider (re-realising the rows) appeared to
+            // fix it while unfolding a long name never did. This label must drive the sidebar's width by
+            // construction, so it should not gamble on the race at all.
+            label.forceSelfSizeWidth();
+            row.addChild(label);
+            return row;
+        }
+
+        @Override
+        public void bind(T item, TreeRow<T> row, int index, UIElement template) {
+            for (UIElement child : template.getChildren()) {
+                if (child instanceof UIText label) label.setText(titleOf.apply(item));
+            }
+        }
     }
 
     // ── Parts ───────────────────────────────────────────────────────────────────────────────────
