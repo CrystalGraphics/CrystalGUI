@@ -78,12 +78,14 @@ public class CrystalEditorPanelsTest extends UiTestBase {
     public void theEmittedSourceGetsAPaneOfItsOwn() {
         CrystalEditor editor = new CrystalEditor(client());
 
-        DockLeaf graph = leafOf(editor, CrystalEditor.SHADER_GRAPH_TYPE);
         DockLeaf source = leafOf(editor, CrystalEditor.SHADER_SOURCE_TYPE);
-        assertNotNull("the shader graph did not open", graph);
         assertNotNull("the emitted source did not open", source);
-        assertNotSame("the source is a TAB beside the graph, so only one of them is ever visible",
-                graph, source);
+        // The WORK AREA is a leaf of its own and starts empty -- graphs are files now, so there is
+        // nothing in it until one is opened. The source must not have landed in it: watching the GLSL
+        // change as you wire is the whole reason it is on screen, and a tab in the graph's own strip
+        // would mean exactly one of the two is ever visible.
+        assertNotSame("the source took the work area instead of a pane beside it",
+                editor.workbench().dock().layout().leaves().get(0), source);
         editor.workbench().dock().layout().checkInvariants();
     }
 
@@ -103,12 +105,11 @@ public class CrystalEditorPanelsTest extends UiTestBase {
      * would go on landing in an editor nobody is looking at.</p>
      */
     @Test
-    public void theSourcePanelIsTheGraphsOwnEditor() {
+    public void theSourcePanelIsAStableHostThatFollowsTheActiveGraph() {
         CrystalEditor editor = new CrystalEditor(client());
         UIElement built = editor.workbench().panels()
                 .create(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE));
-        assertSame(editor.shaderGraph().source(), built);
-        assertSame("a second build must not produce a second editor",
+        assertSame("a second build must not produce a second panel",
                 built, editor.workbench().panels()
                         .create(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE)));
     }
@@ -129,8 +130,6 @@ public class CrystalEditorPanelsTest extends UiTestBase {
         assertNotNull("the inspector did not open at all", inspector);
         assertSame("the inspector took a pane of its own instead of joining the source's strip",
                 source, inspector);
-        assertNotSame("the inspector landed in the graph's pane",
-                leafOf(editor, CrystalEditor.SHADER_GRAPH_TYPE), inspector);
         editor.workbench().dock().layout().checkInvariants();
     }
 
@@ -217,7 +216,12 @@ public class CrystalEditorPanelsTest extends UiTestBase {
     @Test
     public void aGraphFileRoundTripsThroughTheDocumentSeam() {
         CrystalEditor source = new CrystalEditor(client());
-        byte[] encoded = source.shaderGraph().encode();
+        FileDocument seed = source.workbench()
+                .documentFor(CgPath.parse("mymod.proj:seed.shadergraph"));
+        // A blank file opens WITH the starter graph, so this is a populated one -- see
+        // ShaderGraphEditor.adopt. Asserted below rather than assumed.
+        seed.adopt(new byte[0]);
+        byte[] encoded = seed.encode();
         assertTrue("the starter graph encoded to nothing -- this would round-trip vacuously",
                 encoded.length > 2);
 
