@@ -376,7 +376,43 @@ public class DockArea extends UIElement implements UIFrameTicker {
         return new DockLeaf(panel);
     }
 
+    /**
+     * Asked before a panel closes; returning false stops it.
+     *
+     * <p>The dock cannot know that a panel has anything worth keeping — it holds refs and layout, not
+     * content — so the veto belongs to whoever owns the documents. {@code Workbench} installs one that
+     * asks before discarding an edited file.</p>
+     *
+     * <p>A guard that wants to close <em>after</em> asking the user calls {@link #closePanelDiscarding}
+     * from its own callback: the prompt is asynchronous, so the honest answer at the moment of the veto is
+     * "not now", not "yes eventually".</p>
+     */
+    private java.util.function.Predicate<DockPanelRef> closeGuard = panel -> true;
+
+    /** @see #closeGuard */
+    public DockArea setCloseGuard(@Nullable java.util.function.Predicate<DockPanelRef> guard) {
+        this.closeGuard = guard == null ? panel -> true : guard;
+        return this;
+    }
+
+    /**
+     * Closes a panel, unless the guard refuses.
+     *
+     * <p>Every route a user can take goes through here — the Ctrl+W command and anything else that asks
+     * the area to close something — which is what makes one guard enough.</p>
+     */
     public void closePanel(DockPanelRef panel) {
+        if (!closeGuard.test(panel)) return;
+        closePanelDiscarding(panel);
+    }
+
+    /**
+     * Closes a panel <b>without</b> asking the guard — for the guard's own "yes, close it" callback.
+     *
+     * <p>Named for what it does rather than for who calls it: anything reaching for this is discarding
+     * whatever the guard was protecting, and that should be uncomfortable to type by accident.</p>
+     */
+    public void closePanelDiscarding(DockPanelRef panel) {
         captureDividerPositions();
         if (layout.closePanel(panel)) requestRebuild();
     }
