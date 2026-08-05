@@ -30,7 +30,15 @@ public class PreferencesTest extends UiTestBase {
     public void setUp() {
         WorkbenchSettings.declare();
         ShaderGraphSettings.register();
-        UIElement root = new UIElement().layout(l -> l.widthPercent(100f).heightPercent(100f));
+        // A root that REFUSES public children, which is what every composite is -- CrystalEditor
+        // included. addOverlay then falls back to the window's own zero-sized overlay layer, and a
+        // dialog parented there clamps every position write to zero. A permissive root hides that
+        // entirely: the dialog lands on a full-size parent and centres, drags and resizes correctly for
+        // a reason production does not have.
+        UIElement root = new UIElement() {
+            @Override public boolean acceptsPublicChildren() { return false; }
+        };
+        root.layout(l -> l.widthPercent(100f).heightPercent(100f));
         window = new UIWindow(Ui.of(root));
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
         window.init(1200, 800);
@@ -239,6 +247,10 @@ public class PreferencesTest extends UiTestBase {
                         + "that is too narrow for somebody's language",
                 com.crystalgui.style.property.visual.Resize.BOTH,
                 preferences.dialog().getStyle().getGeneralGroup().resize());
+        assertTrue("an unpromoted dialog is clamped against whatever addOverlay parented it to -- a "
+                        + "zero-sized layer under any root that refuses public children -- so it cannot "
+                        + "leave the corner by centring, by dragging or by resizing",
+                preferences.dialog().isInTopLayer());
     }
 
     /**

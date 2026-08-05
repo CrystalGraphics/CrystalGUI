@@ -135,6 +135,8 @@ public final class KeymapResolver {
         // into something, not which ancestor happens to own the binding.
         boolean typing = focused.consumesTextInput();
 
+        if (TRACE) trace(focused, stroke, typing);
+
         boolean prefixMatched = false;
         for (UIElement scope = focused; scope != null; scope = scope.getParent()) {
             Keymap keymap = scope.keymapOrNull();
@@ -175,6 +177,31 @@ public final class KeymapResolver {
         // continues, and silently keeping it would swallow their next keystroke too.
         cancelPending();
         return false;
+    }
+
+    /**
+     * Set {@code -Dcrystalgui.keymap.trace=true} to log every keystroke and every binding it was offered.
+     *
+     * <p>"My shortcut does nothing" has four indistinguishable causes from outside — the key arrived as a
+     * different code, no scope in the chain holds the binding, the binding is there but disabled, or the
+     * typing guard suppressed it — and no amount of reading the source separates them. This prints all
+     * four in one line each.</p>
+     */
+    private static final boolean TRACE = Boolean.getBoolean("crystalgui.keymap.trace");
+
+    private static void trace(UIElement focused, KeyStroke stroke, boolean typing) {
+        StringBuilder offered = new StringBuilder();
+        for (UIElement scope = focused; scope != null; scope = scope.getParent()) {
+            Keymap keymap = scope.keymapOrNull();
+            if (keymap == null) continue;
+            for (KeyBinding binding : keymap.bindings()) {
+                if (offered.length() > 0) offered.append(", ");
+                offered.append(scope.tagName()).append(':').append(binding.getChord())
+                        .append("->").append(binding.getCommandId());
+            }
+        }
+        CrystalGuiCore.LOGGER.info("[keymap] stroke={} key={} mods={} focused={} typing={} | visible: {}",
+                stroke, stroke.key(), stroke.modifiers(), focused.tagName(), typing, offered);
     }
 
     /**
