@@ -740,14 +740,27 @@ public class BlackboardPanel extends UIElement {
      * someone scrolls, which is precisely when a long list needs reordering. The transform chain already
      * knows, and asking it cannot drift.</p>
      */
-    private int dropIndexAt(float screenX, float screenY) {
+    int dropIndexAt(float screenX, float screenY) {
         for (int i = 0; i < rows.size(); i++) {
             UIElement row = rows.get(i).element();
-            // Above this row's midpoint means "before it". Rows entirely above the pointer report a
-            // large positive y and fail this; rows entirely below report a negative one and pass, so
-            // the FIRST pass is the slot.
-            if (row.screenToLocal(screenX, screenY).y
-                    < row.getRuntimeCache().getHeight() * 0.5f) return i;
+            // ABOVE THIS ROW'S MIDPOINT MEANS "BEFORE IT", so the first row that passes is the slot.
+            //
+            // screenToLocal does NOT return a position relative to the row's own top-left, and reading
+            // it that way is what broke this. UIElement.localToWorld composes the parent chain, scroll
+            // and the element's own `transform` -- but never its layout offset -- so "local" here is
+            // ABSOLUTE LOGICAL SPACE: the same space getRuntimeCache().getY() is in, which is exactly
+            // why isMouseOverElement compares against getX()/getY() rather than against zero. The only
+            // work it does for us is undoing uiScale and any transform, and that is the whole point of
+            // using it rather than dividing by the scale by hand.
+            //
+            // Comparing it against a bare half-height instead read every row as being at the origin, so
+            // no row ever matched and this returned rows.size() for every position on the panel. Which
+            // is why dragging a pill DOWN appeared to work perfectly -- "the end of the list" is where a
+            // downward drag was going anyway -- and dragging one back up did nothing at all.
+            var cache = row.getRuntimeCache();
+            if (row.screenToLocal(screenX, screenY).y < cache.getY() + cache.getHeight() * 0.5f) {
+                return i;
+            }
         }
         return rows.size();
     }
