@@ -408,4 +408,33 @@ public class PreferencesTest extends UiTestBase {
                 sheet.contains("dialog.__preferences__.__open__ {"));
     }
 
+
+    /**
+     * <b>Closing keeps the box laid out, so there is something to see fading.</b>
+     *
+     * <p>{@code display} is discrete: without a transition naming it, the box snaps to {@code none} on
+     * the frame the close happens and takes the opacity transition with it — the window faded in and
+     * vanished. The sheet names it and the style engine holds the visible value for the duration, which
+     * is CSS {@code transition-behavior: allow-discrete}.</p>
+     *
+     * <p>Asserting the frame after the close rather than an intermediate opacity, because
+     * {@code TransitionEngine} runs on {@code System.nanoTime()} and ignores the delta a test hands it.
+     * What is checkable is that the box is still laid out while {@code isOpen()} already reports false —
+     * the two coming apart is the whole mechanism, and nothing in Java is holding them apart.</p>
+     */
+    @Test
+    public void closingKeepsTheBoxLaidOutWhileItFades() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+
+        preferences.dialog().close();
+        window.updateWithoutPainting();
+
+        assertFalse("the dialog must report itself closed at once -- only the pixels linger",
+                preferences.dialog().isOpen());
+        assertEquals("display snapped to none on the closing frame, so nothing can be seen fading out",
+                dev.vfyjxf.taffy.style.TaffyDisplay.FLEX,
+                preferences.dialog().getStyle().getComputed(
+                        com.crystalgui.style.property.layout.LayoutProperties.DISPLAY));
+    }
 }

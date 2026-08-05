@@ -2,6 +2,7 @@ package com.crystalgui.style.property.layout;
 
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.IValueInterpolator;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.general.floats.AutoFloatProperty;
 import com.crystalgui.style.property.layout.dimension.DimensionProperty;
@@ -24,7 +25,32 @@ public class LayoutProperties {
             AlignItems.STRETCH
     );
 
-    public static final StyleProperty<TaffyDisplay> DISPLAY = StylePropertyRegistry.create("display", TaffyDisplay.class, TaffyDisplay.FLEX);
+    /** @see #DISPLAY */
+    public static final IValueInterpolator<TaffyDisplay> DISPLAY_ALLOW_DISCRETE =
+            (from, to, progress) -> {
+                if (progress >= 1f) return to;
+                // Whichever end is not `none`: the element stays laid out for the whole transition, so
+                // there is something on screen to animate.
+                if (from != TaffyDisplay.NONE) return from;
+                return to != TaffyDisplay.NONE ? to : from;
+            };
+
+    /**
+     * {@code display}, and it is <b>transitionable</b> — CSS's {@code transition-behavior: allow-discrete}.
+     *
+     * <p>{@code display} cannot be interpolated, so on its own it snaps — and a box that snaps to
+     * {@code none} takes every other transition on that element with it. A fade-out is the case: the
+     * opacity transition starts, {@code display: none} lands on the same frame, and nothing is ever seen
+     * fading. The web's answer is to make {@code display} part of the transition, and
+     * {@link #DISPLAY_ALLOW_DISCRETE} is that rule — the visible end wins until the very end, so showing
+     * flips immediately and hiding flips last.</p>
+     *
+     * <p>Inert unless a sheet names {@code display} or {@code all}, so nothing that does not ask changes.</p>
+     */
+    public static final StyleProperty<TaffyDisplay> DISPLAY = StylePropertyRegistry
+            .create("display", TaffyDisplay.class, TaffyDisplay.FLEX)
+            .setAllowTransition(true)
+            .setInterpolator(DISPLAY_ALLOW_DISCRETE);
     public static final StyleProperty<TaffyDirection> LAYOUT_DIRECTION = StylePropertyRegistry.create("layout-direction", TaffyDirection.class, TaffyDirection.INHERIT);
     public static final StyleProperty<TaffyDimension> FLEX_BASIS = create("flex-basis", TaffyDimension.auto());
     public static final StyleProperty<Float> FLEX = StylePropertyRegistry.create(new AutoFloatProperty("flex", Float.NaN));
