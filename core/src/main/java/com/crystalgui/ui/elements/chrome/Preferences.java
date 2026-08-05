@@ -2,66 +2,64 @@ package com.crystalgui.ui.elements.chrome;
 
 import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.Settings;
+import com.crystalgui.core.settings.SettingsCategory;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsRegistry;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Dialog;
+import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.config.ConfiguratorGroup;
 import com.crystalgui.ui.elements.config.ConfiguratorPanel;
 import com.crystalgui.ui.elements.config.SettingsConfigurator;
+import com.crystalgui.ui.elements.tree.PathTreeSource;
+import com.crystalgui.core.search.SearchMatcher;
+import com.crystalgui.core.search.SearchQuery;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
+
+import javax.annotation.Nullable;
 
 /**
- * The preferences window — every user-editable declaration, grouped by section.
+ * The preferences window — a category tree on the left, that category's settings on the right.
+ *
+ * <h3>It owns almost nothing</h3>
+ *
+ * <p>{@link NavigatorView} is the shell, {@link PathTreeSource} builds the tree from setting ids,
+ * {@link SettingsConfigurator} turns a declaration into a bound row and {@link ConfiguratorPanel} does the
+ * groups. What is left here is the four questions only settings can answer: which ids to show, what a
+ * query means, what a page contains, and how a section is titled.</p>
  *
  * <h3>A plain {@link Dialog} with a class, not a subclass of one</h3>
  *
- * <p>It was a subclass, briefly, and every {@code dialog …} rule in the sheet stopped applying to it: a
- * widget's cascade identity is its <b>tag</b>, and {@code tagName()} reports the registered name for its
- * own class, so {@code Preferences extends Dialog} is a {@code preferences}, not a {@code dialog}. The
+ * <p>It was a subclass, briefly, and every {@code dialog …} rule in the sheet stopped applying: a widget's
+ * cascade identity is its <b>tag</b>, so {@code Preferences extends Dialog} is a {@code preferences}. The
  * symptom was a title bar with no height and a close button stretched across it — the same failure
- * {@code AGENTS.md} records for {@code Dropdown extends Button}.</p>
- *
- * <p>So this is a controller holding a dialog, and the variant is spelled with a class exactly as
- * {@code dialog.__picker__} already is. A dialog variant should not cost a tag.</p>
- *
- * <h3>It builds nothing of its own</h3>
- *
- * <p>{@link SettingsConfigurator} already turns a {@link Setting} into a bound, two-way row, and
- * {@link ConfiguratorPanel} already does collapsible groups. So this class chooses <em>which</em>
- * declarations to show and in what grouping, and that is the whole of it. Anything more would be a second
- * idea of what a settings row looks like, differing from the shader graph's inspector in ways nobody
- * chose.</p>
+ * {@code AGENTS.md} records for {@code Dropdown extends Button}, and the reason {@link NavigatorView}
+ * composes a {@code SplitView} rather than extending one.</p>
  *
  * <h3>Only what is writable at {@link SettingsLayer#USER}</h3>
  *
- * <p>The filter is the point, not a detail. {@code ShaderGraphSettings} declares its render queue
- * {@code writableAt(DOCUMENT, MEMORY)} precisely so it cannot become a global preference — and a window
- * that listed every registered declaration would put it there, which is the exact failure
- * {@code Setting.writableAt}'s own documentation describes: <i>"a user sets it once and every graph they
- * open silently inherits it"</i>.</p>
+ * <p>{@code ShaderGraphSettings} declares its render queue {@code writableAt(DOCUMENT, MEMORY)} precisely
+ * so it cannot become a global preference, and a window listing every registered declaration would put it
+ * there — the exact failure {@code Setting.writableAt}'s own documentation describes.</p>
  *
- * <p><b>Nothing else enforces this today.</b> {@code Settings.setRaw} takes a key rather than a
- * declaration and so cannot check, which means {@code writableAt} is a rule this window keeps and the
- * store does not. Worth knowing before adding a second way to write settings.</p>
+ * <p><b>Nothing else enforces this.</b> {@code Settings.setRaw} takes a key rather than a declaration and
+ * so cannot check, which means {@code writableAt} is a rule this window keeps and the store does not.</p>
  *
- * <h3>Changes apply immediately, and are not undoable</h3>
+ * <h3>Changes apply immediately</h3>
  *
- * <p>VS Code's model rather than IntelliJ's OK/Apply/Cancel: a buffered dialog needs a second copy of
- * every value plus a revert path, and settings here are already observable, so a checkbox takes effect as
- * you watch. No {@code UndoStack} is passed, which is not an omission — {@link SettingsLayer#USER} is not
- * an undoable layer, and Ctrl+Z changing your font size instead of undoing your work is the failure that
- * boundary exists to prevent.</p>
+ * <p>VS Code's model rather than IntelliJ's OK/Apply/Cancel, and the second reason is the real one: a
+ * buffered dialog needs a second copy of every value plus a revert path, and settings here are already
+ * observable, so a checkbox re-sorts the tree as you watch. No {@code UndoStack} is passed, which is not
+ * an omission — {@link SettingsLayer#USER} is not an undoable layer, and Ctrl+Z changing your font size
+ * instead of undoing your work is the failure that boundary exists to prevent.</p>
  */
 public final class Preferences {
 
@@ -70,74 +68,59 @@ public final class Preferences {
     /** The variant class on the dialog. @see Preferences the class note on why this is not a tag */
     public static final String DIALOG_CLASS = "__preferences__";
 
+    /** On each page, so the sheet can size it without reaching through the navigator. */
+    public static final String PANEL_CLASS = "__preferences-panel__";
+
+    /** Shown for a category that holds no settings of its own. */
+    public static final String EMPTY_PAGE_TEXT = "Select a category";
+
     private final Dialog dialog = new Dialog(TITLE);
-    private final ConfiguratorPanel panel = new ConfiguratorPanel();
+    private final NavigatorView<String> navigator = new NavigatorView<>();
     private final Settings settings;
     private final List<Setting<?>> shown = new ArrayList<>();
+    private final PathTreeSource paths;
 
     public Preferences(Settings settings) {
         this.settings = settings;
         dialog.addClass(DIALOG_CLASS);
-        dialog.getContent().addChild(panel);
+        dialog.getContent().addChild(navigator);
 
-        for (Map.Entry<String, List<Setting<?>>> section : sections().entrySet()) {
-            ConfiguratorGroup group = panel.group(labelOf(section.getKey()));
-            // ADDED, not merely built. `group()` deliberately does not attach -- a group may belong inside
-            // another group, and only the caller knows -- and forgetting it leaves every row parented to a
-            // detached element. It looks fine from `panel.controls()`, which is keyed by id and populated
-            // whether or not anything is on screen, so the window comes up entirely empty.
-            panel.addChild(group);
-            for (Setting<?> setting : section.getValue()) {
-                if (SettingsConfigurator.addRow(panel, group.content(), settings, SettingsLayer.USER,
-                        setting, null) != null) {
-                    shown.add(setting);
-                }
-            }
-        }
+        paths = new PathTreeSource(editableIds(), SettingsCategory::isPage, SettingsCategory::titleOf);
+
+        navigator.setSource(paths);
+        navigator.setTitleFunction(paths::title);
+        navigator.setTrailFunction(this::trailFor);
+        navigator.setMatcher(this::matches);
+        navigator.setPageFactory(this::buildPage);
+        navigator.setPlaceholder(new UIText(EMPTY_PAGE_TEXT));
+
+        List<String> roots = paths.roots();
+        if (!roots.isEmpty()) navigator.navigateTo(roots.get(0));
     }
 
-    /**
-     * Opens it centred, and <b>not</b> modal.
-     *
-     * <p>IntelliJ's settings dialog is modal; VS Code's is a tab you can leave open while you work, and
-     * that is the better model for a window whose whole point is watching a change take effect. Modality
-     * here would make the tree it re-sorts <em>inert</em> — you could see the sort order change and not
-     * touch the result until you closed the window that changed it.</p>
-     *
-     * <p>Escape closes it while focus is inside it, which every {@link Dialog} now does — see
-     * {@code Dialog.installEscapeToClose} for why that is a bubbling listener and not a close watcher.</p>
-     */
+    /** Opens it centred and <b>not</b> modal. Escape closes it while focus is inside — see {@link Dialog}. */
     public static Preferences open(UIWindow window, Settings settings) {
         Preferences preferences = new Preferences(settings);
         Dialog dialog = preferences.dialog;
         window.addOverlay(dialog, null);
         dialog.show();
-        // PROMOTED, though not modal. `showModal` promotes and `show` deliberately does not -- a modeless
-        // dialog stays in normal flow -- and without promotion this dialog's containing block is whatever
-        // addOverlay parented it to. Against a root that refuses public children (every composite, this
-        // editor included) that is a zero-sized internal layer, so applyPosition clamps every write to
-        // max(0, 0 - width) = 0: it opens in the corner, cannot be dragged out of it, and cannot be
-        // resized, while a plain click on the close button still works because a click is not geometry.
-        // A promoted element's containing block is the root, which is what all three of those need.
+        // PROMOTED though not modal: `show` leaves a dialog in normal flow, and against a root that
+        // refuses public children that means a zero-sized overlay layer -- every position write then
+        // clamps to the corner and it can be neither centred, dragged nor resized.
         dialog.addToTopLayer();
-        // Dialog only unpromotes on the modal path, so a promotion it did not perform is one it will not
-        // undo -- the element would stay in the top layer after closing.
         dialog.onClosed.connect(dialog::removeFromTopLayer);
         centre(window, dialog);
+        preferences.navigator.giveFocus();
         return preferences;
     }
 
     /**
-     * Puts the dialog in the middle of the window, once it has a size to be the middle of.
+     * Puts the dialog in the middle, once it has a size to be the middle of.
      *
-     * <p>It cannot be done at open time: nothing has laid out yet, so the width and height are both zero
-     * and the "centre" is the top-left corner — which is where it opened. So the same ticker idiom
-     * {@code InputDialog} uses, held invisible for the frame in between rather than allowed to appear in
-     * the corner and jump.</p>
-     *
-     * <p>Hidden with {@code opacity} at IMPORTANT and then <b>removed</b> rather than set back to 1:
-     * dropping the candidate hands the property back to the stylesheet, so the sheet keeps ownership of
-     * how a dialog appears.</p>
+     * <p>It cannot be done at open time: nothing has laid out, so the width is zero and the "centre" is
+     * the top-left corner. Held invisible for the frame in between rather than allowed to appear in the
+     * corner and jump — and the {@code opacity} candidate is <b>removed</b> rather than set back to 1, so
+     * the sheet keeps ownership of how a dialog appears.</p>
      */
     private static void centre(UIWindow window, Dialog dialog) {
         StyleGroup.importantPipeline(dialog.getStyle().getGeneralGroup(), g -> g.opacity(0f));
@@ -154,6 +137,101 @@ public final class Preferences {
         });
     }
 
+    // ── The four settings-shaped questions ──────────────────────────────────────────────────────
+
+    /** Which ids the tree is built from. @see Preferences the note on {@code writableAt} */
+    private static List<String> editableIds() {
+        List<String> ids = new ArrayList<>();
+        for (Setting<?> setting : SettingsRegistry.get().all()) {
+            if (setting.isWritableAt(SettingsLayer.USER)) ids.add(setting.getId());
+        }
+        return ids;
+    }
+
+    /** Titles from the root down to {@code path} — what the breadcrumb draws. */
+    private List<String> trailFor(String path) {
+        List<String> trail = new ArrayList<>();
+        StringBuilder walked = new StringBuilder();
+        for (String segment : path.split("[.]")) {
+            if (walked.length() > 0) walked.append('.');
+            walked.append(segment);
+            trail.add(paths.title(walked.toString()));
+        }
+        return trail;
+    }
+
+    /**
+     * Whether anything at or under {@code path} matches the query.
+     *
+     * <p>Matching the tree's own titles alone would make the search decorative — typing a setting's name
+     * would find nothing, which is the one thing somebody opening a search box is trying to do. So labels
+     * and descriptions are searched too, and the node <em>containing</em> a hit is what survives; keeping
+     * the path to a deep match reachable is {@code FilteredTreeSource}'s job.</p>
+     */
+    private boolean matches(String path) {
+        String raw = navigator.query();
+        if (raw.isEmpty()) return true;
+        SearchQuery query = SearchQuery.of(raw);
+        if (SearchMatcher.match(query, paths.title(path), 0) != null) return true;
+        for (String id : idsUnder(path)) {
+            Setting<?> setting = SettingsRegistry.get().get(id);
+            if (setting == null) continue;
+            if (SearchMatcher.match(query, setting.getLabel(), 0) != null) return true;
+            if (SearchMatcher.match(query, setting.getDescription(), 0) != null) return true;
+        }
+        return false;
+    }
+
+    /** Every id on this page or on a page beneath it. */
+    private List<String> idsUnder(String path) {
+        List<String> ids = new ArrayList<>(paths.idsDirectlyUnder(path));
+        for (String child : paths.children(path)) ids.addAll(idsUnder(child));
+        return ids;
+    }
+
+    /**
+     * One page: the settings declared directly on this node, under a heading per section.
+     *
+     * <p>Null when the node holds nothing of its own — a parent category whose settings all live in its
+     * children. {@link PageStack} shows the placeholder for those rather than an empty box.</p>
+     */
+    @Nullable
+    private UIElement buildPage(String path) {
+        List<String> ids = paths.idsDirectlyUnder(path);
+        if (ids.isEmpty()) return null;
+
+        ConfiguratorPanel panel = new ConfiguratorPanel();
+        panel.addClass(PANEL_CLASS);
+        Map<String, UIElement> hostsBySection = new LinkedHashMap<>();
+        for (String id : ids) {
+            Setting<?> setting = SettingsRegistry.get().get(id);
+            if (setting == null) continue;
+            UIElement host = hostsBySection.computeIfAbsent(paths.sectionOf(id), section -> {
+                if (section.isEmpty()) return panel;
+                ConfiguratorGroup group = panel.group(sectionTitle(path, section));
+                // ADDED, not merely built: `group()` deliberately does not attach, and forgetting it
+                // leaves every row parented to a detached element -- a page that reports a full set of
+                // controls and renders nothing.
+                panel.addChild(group);
+                return group.content();
+            });
+            if (SettingsConfigurator.addRow(panel, host, settings, SettingsLayer.USER, setting, null)
+                    != null) {
+                shown.add(setting);
+            }
+        }
+        return panel;
+    }
+
+    /** A declared title if the section has one, else the segment made legible. */
+    private static String sectionTitle(String path, String section) {
+        String declared = SettingsCategory.titleOf(path + "." + section);
+        return declared != null ? declared
+                : PathTreeSource.prettify(PathTreeSource.lastSegment(section));
+    }
+
+    // ── Parts ───────────────────────────────────────────────────────────────────────────────────
+
     public Dialog dialog() {
         return dialog;
     }
@@ -162,51 +240,28 @@ public final class Preferences {
         return settings;
     }
 
-    public ConfiguratorPanel panel() {
-        return panel;
+    public NavigatorView<String> navigator() {
+        return navigator;
+    }
+
+    public PathTreeSource paths() {
+        return paths;
+    }
+
+    /** The page on screen, or null when the category holds nothing of its own. */
+    @Nullable
+    public UIElement page() {
+        return navigator.pages().built(navigator.pages().current());
     }
 
     /**
-     * Every declaration this window actually put a row in for.
+     * Every declaration a page has actually put a row in for.
      *
-     * <p>A setting whose kind has no registered control is <b>not</b> in here — recording it anyway made
-     * this list a restatement of the filter rather than evidence of what was built, which is precisely how
-     * an entirely empty window passed its own test.</p>
+     * <p>Pages are built lazily, so this grows as categories are visited. Recording a setting the filter
+     * merely <em>passed</em> would make it a restatement of the filter rather than evidence of what was
+     * built — which is how an entirely empty window once passed its own test.</p>
      */
     public List<Setting<?>> shownSettings() {
         return new ArrayList<>(shown);
-    }
-
-    /**
-     * The user-editable declarations, grouped by the first segment of their id and in declaration order.
-     *
-     * <p>Grouping by id prefix rather than by a category field on {@link Setting}: the prefix is already
-     * the convention every declaration follows ({@code editor.}, {@code explorer.}), it is what
-     * {@link SettingsRegistry#section} already keys on, and a separate category would be a second name
-     * for the same grouping that could disagree with it.</p>
-     */
-    public static Map<String, List<Setting<?>>> sections() {
-        Map<String, List<Setting<?>>> grouped = new LinkedHashMap<>();
-        for (Setting<?> setting : SettingsRegistry.get().all()) {
-            if (!setting.isWritableAt(SettingsLayer.USER)) continue;
-            grouped.computeIfAbsent(sectionOf(setting.getId()), key -> new ArrayList<>()).add(setting);
-        }
-        return grouped;
-    }
-
-    /** Distinct section names, for a caller that wants them without the settings. */
-    public static Set<String> sectionNames() {
-        return new LinkedHashSet<>(sections().keySet());
-    }
-
-    private static String sectionOf(String id) {
-        int dot = id.indexOf('.');
-        return dot <= 0 ? id : id.substring(0, dot);
-    }
-
-    /** {@code explorer} reads as "Explorer" — an id segment is a key, not a heading. */
-    public static String labelOf(String section) {
-        if (section.isEmpty()) return section;
-        return Character.toUpperCase(section.charAt(0)) + section.substring(1).toLowerCase(Locale.ROOT);
     }
 }

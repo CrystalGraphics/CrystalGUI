@@ -1,0 +1,338 @@
+package com.crystalgui.ui.elements.chrome;
+
+import com.crystalgraphics.platform.input.CgKeyCodes;
+
+import com.crystalgui.core.nav.NavigationHistory;
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.SplitView;
+import com.crystalgui.ui.elements.TextField;
+import com.crystalgui.ui.elements.tree.FilteredTreeSource;
+import com.crystalgui.ui.elements.tree.TreeDataSource;
+import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.ui.elements.tree.TreeView;
+import com.crystalgui.ui.event.KeyboardEvent;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Function;
+import java.util.function.Predicate;
+
+import javax.annotation.Nullable;
+
+/**
+ * Search and a tree on the left, a breadcrumb and a page on the right — the master/detail window.
+ *
+ * <p>IntelliJ uses this same shell for Settings, Keymap and Inspections; VS Code for its settings editor.
+ * It is a shape, not a feature, which is why it is a widget rather than something Preferences owns: a
+ * node library, an inspection browser and a keymap editor all want it, and none of them should have to
+ * reimplement the tree-filtering or the history to get it.</p>
+ *
+ * <h3>It composes a {@link SplitView}; it does not extend one</h3>
+ *
+ * <p>A widget's cascade identity is its <b>tag</b>, so subclassing {@code SplitView} would report
+ * {@code navigatorview} and silently lose every {@code splitview} rule in the sheet. That has cost this
+ * codebase real time twice already ({@code Preferences extends Dialog},
+ * {@code ConfiguratorPanel extends ScrollerView}), so composition here is a rule rather than a
+ * preference.</p>
+ *
+ * <h3>Focus stays in the search field; the arrows are forwarded</h3>
+ *
+ * <p>The ARIA combobox pattern, and the same arrangement {@code QuickPick} uses: you type into the field
+ * and steer the tree with the arrow keys without ever leaving it. That works only because {@code ListView}
+ * restores focus rather than taking it — a tree that grabbed focus on selection would unfocus the field on
+ * every keystroke, which is exactly the bug the palette had.</p>
+ *
+ * @param <T> the item type of the tree — a path, an id, a node
+ */
+public class NavigatorView<T> extends UIElement {
+
+    public static final String SEARCH_CLASS = "__nav-search__";
+    public static final String SIDEBAR_CLASS = "__nav-sidebar__";
+    public static final String DETAIL_CLASS = "__nav-detail__";
+    public static final String HEADER_CLASS = "__nav-header__";
+    public static final String BACK_CLASS = "__nav-back__";
+    public static final String FORWARD_CLASS = "__nav-forward__";
+
+    /** Emits whenever the shown item changes, however it was reached. */
+    public final Signal.Value<T> onNavigated = new Signal.Value<>();
+
+    private final SplitView split = new SplitView();
+    private final UIElement sidebar = new UIElement();
+    private final UIElement detail = new UIElement();
+    private final UIElement header = new UIElement();
+    private final TextField search = new TextField();
+    private final Breadcrumbs breadcrumbs = new Breadcrumbs();
+    private final Button back = new Button("<");
+    private final Button forward = new Button(">");
+    private final PageStack<T> pages = new PageStack<>();
+    private final NavigationHistory<T> history = new NavigationHistory<>();
+
+    private TreeView<T> tree;
+
+    @Nullable
+    private FilteredTreeSource<T> filtered;
+
+    private Function<T, String> titleOf = String::valueOf;
+    private Function<T, List<String>> trailOf = item -> List.of(String.valueOf(item));
+
+    /** True while a history move is driving the selection, so it is not recorded as a new visit. */
+    private boolean navigatingHistory;
+
+    public NavigatorView() {
+        markAsInternal();
+
+        sidebar.addClass(SIDEBAR_CLASS);
+        search.addClass(SEARCH_CLASS);
+        search.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
+        search.attachListener(query -> applyFilter(query));
+        sidebar.addChild(search);
+
+        header.addClass(HEADER_CLASS);
+        back.addClass(BACK_CLASS);
+        forward.addClass(FORWARD_CLASS);
+        back.attachListener(this::goBack);
+        forward.attachListener(this::goForward);
+        header.addChild(back);
+        header.addChild(forward);
+        header.addChild(breadcrumbs);
+        breadcrumbs.onSegmentChosen.connect(this::onBreadcrumb);
+
+        detail.addClass(DETAIL_CLASS);
+        detail.addChild(header);
+        detail.addChild(pages);
+
+        split.first().addChild(sidebar);
+        split.second().addChild(detail);
+        addInternalChild(split);
+
+        // Arrow keys reach the tree while the caret stays in the field. CAPTURE phase, so they are taken
+        // before the field can treat them as caret movement.
+        search.events.getGroup(KeyboardEvent.Down.class).attachListener((element, event) -> {
+            if (tree == null) return;
+            int key = event.getKeyCode();
+            if (key != CgKeyCodes.KEY_UP && key != CgKeyCodes.KEY_DOWN) return;
+            event.stopPropagation();
+            step(key == CgKeyCodes.KEY_DOWN ? 1 : -1);
+        }, true, false);
+
+        updateHistoryButtons();
+    }
+
+    @Override
+    public boolean acceptsPublicChildren() {
+        return false;
+    }
+
+    // ── Wiring ──────────────────────────────────────────────────────────────────────────────────
+
+    /** Installs the tree. The source is wrapped so searching can filter it without the caller helping. */
+    public NavigatorView<T> setSource(TreeDataSource<T> source) {
+        filtered = new FilteredTreeSource<>(source);
+        tree = new TreeView<>(filtered);
+        tree.onSelectionChanged.connect(selected -> onTreeSelection());
+        sidebar.addChild(tree);
+        return this;
+    }
+
+    /** How a page is built for an item. Returning null gives the placeholder — see {@link PageStack}. */
+    public NavigatorView<T> setPageFactory(Function<T, UIElement> factory) {
+        pages.setPageFactory(factory);
+        return this;
+    }
+
+    /** What an item is called, for the breadcrumb's last segment and for a default trail. */
+    public NavigatorView<T> setTitleFunction(Function<T, String> titleOf) {
+        this.titleOf = titleOf == null ? String::valueOf : titleOf;
+        return this;
+    }
+
+    /** The full trail to an item, outermost first. Defaults to just the item's own title. */
+    public NavigatorView<T> setTrailFunction(Function<T, List<String>> trailOf) {
+        this.trailOf = trailOf;
+        return this;
+    }
+
+    /**
+     * What a search query means for one item.
+     *
+     * <p>Domain knowledge, so it belongs to the caller: for a settings tree it means "does any setting at
+     * or under this path match", which involves labels and descriptions this widget has never heard of.
+     * A filter that only matched the tree's own titles would be decorative — typing a setting's name
+     * would find nothing.</p>
+     */
+    public NavigatorView<T> setMatcher(Predicate<T> matcher) {
+        this.matcher = matcher;
+        return this;
+    }
+
+    private Predicate<T> matcher = item -> true;
+
+    private String query = "";
+
+    /** Shown on a node with no page of its own. @see PageStack#setPlaceholder */
+    public NavigatorView<T> setPlaceholder(@Nullable UIElement placeholder) {
+        pages.setPlaceholder(placeholder);
+        return this;
+    }
+
+    // ── Navigating ──────────────────────────────────────────────────────────────────────────────
+
+    /** Selects an item, shows its page and records the visit. */
+    public NavigatorView<T> navigateTo(@Nullable T item) {
+        if (item == null) return this;
+        selectInTree(item);
+        apply(item);
+        return this;
+    }
+
+    /** The tree selects by ROW INDEX, so an item has to be found among the rows currently shown. */
+    private void selectInTree(T item) {
+        int index = indexOf(item);
+        if (index >= 0 && tree != null) tree.select(index);
+    }
+
+    private int indexOf(T item) {
+        if (tree == null) return -1;
+        List<TreeRow<T>> rows = tree.visibleRows();
+        for (int i = 0; i < rows.size(); i++) {
+            if (item.equals(rows.get(i).item())) return i;
+        }
+        return -1;
+    }
+
+    private void onTreeSelection() {
+        if (tree == null) return;
+        List<TreeRow<T>> rows = tree.visibleRows();
+        int index = tree.getFocusedIndex();
+        if (index < 0 || index >= rows.size()) return;
+        T item = rows.get(index).item();
+        if (!item.equals(pages.current())) apply(item);
+    }
+
+    private void apply(T item) {
+        pages.show(item);
+        breadcrumbs.setTrail(trailFor(item));
+        if (!navigatingHistory) history.visit(item);
+        updateHistoryButtons();
+        onNavigated.emit(item);
+    }
+
+    private List<String> trailFor(T item) {
+        if (trailOf == null) return List.of(titleOf.apply(item));
+        List<String> trail = trailOf.apply(item);
+        return trail == null || trail.isEmpty() ? List.of(titleOf.apply(item)) : trail;
+    }
+
+    private void goBack() {
+        move(history.back());
+    }
+
+    private void goForward() {
+        move(history.forward());
+    }
+
+    /**
+     * Shows a place the history moved to, <b>without</b> recording it.
+     *
+     * <p>Re-recording would truncate the forward tail the move just created, so Forward would never be
+     * available and a second Back press would appear to do nothing.</p>
+     */
+    private void move(@Nullable T item) {
+        if (item == null) return;
+        navigatingHistory = true;
+        try {
+            selectInTree(item);
+            apply(item);
+        } finally {
+            navigatingHistory = false;
+        }
+    }
+
+    private void onBreadcrumb(int index) {
+        T current = pages.current();
+        if (current == null || tree == null) return;
+        List<T> path = ancestorsOf(current);
+        if (index >= 0 && index < path.size()) navigateTo(path.get(index));
+    }
+
+    /**
+     * Outermost first, ending at {@code item} — the same order the breadcrumb draws.
+     *
+     * <p>Walks {@code TreeRow.parentIndex()} rather than re-searching the source, so it costs a step per
+     * level and uses the structure the view already computed. It follows that a breadcrumb segment for a
+     * collapsed ancestor is still reachable: the rows are the tree's own flattening, and an ancestor of a
+     * visible row is visible by construction.</p>
+     */
+    private List<T> ancestorsOf(T item) {
+        List<T> path = new ArrayList<>();
+        List<TreeRow<T>> rows = tree.visibleRows();
+        int at = indexOf(item);
+        while (at >= 0 && at < rows.size()) {
+            path.add(0, rows.get(at).item());
+            at = rows.get(at).parentIndex();
+        }
+        return path;
+    }
+
+    private void step(int delta) {
+        if (tree == null) return;
+        List<TreeRow<T>> rows = tree.visibleRows();
+        if (rows.isEmpty()) return;
+        T current = pages.current();
+        int at = current == null ? -1 : indexOf(current);
+        int next = Math.max(0, Math.min(rows.size() - 1, at + delta));
+        navigateTo(rows.get(next).item());
+    }
+
+    private void applyFilter(String text) {
+        query = text == null ? "" : text.trim();
+        if (filtered == null) return;
+        filtered.setFilter(query.isEmpty() ? null : matcher);
+        if (tree != null) tree.refresh();
+    }
+
+    private void updateHistoryButtons() {
+        back.setEnabled(history.canGoBack());
+        forward.setEnabled(history.canGoForward());
+    }
+
+    /** Focus belongs in the search field, which is where the keys are steered from. */
+    public void giveFocus() {
+        UIWindow window = getAttachedWindow();
+        if (window != null) window.getInputHandler().requestFocus(search);
+    }
+
+    // ── Parts ───────────────────────────────────────────────────────────────────────────────────
+
+    public SplitView split() {
+        return split;
+    }
+
+    public TextField search() {
+        return search;
+    }
+
+    @Nullable
+    public TreeView<T> tree() {
+        return tree;
+    }
+
+    public Breadcrumbs breadcrumbs() {
+        return breadcrumbs;
+    }
+
+    public PageStack<T> pages() {
+        return pages;
+    }
+
+    public NavigationHistory<T> history() {
+        return history;
+    }
+
+    public String query() {
+        return query;
+    }
+}

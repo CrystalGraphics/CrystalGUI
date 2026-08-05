@@ -212,6 +212,26 @@ public class UIElement implements SettingsScope {
     }
 
 
+    /**
+     * Shows or hides this element by {@code display}, keeping it in the tree.
+     *
+     * <p>The idiom four widgets already spell out by hand — {@code Tab} hides its panes rather than
+     * detaching them, the palette hides unused key boxes, {@code ScrollerView} hides a bar that has
+     * nothing to scroll. Detaching instead churns the Taffy tree on every update and, worse, destroys
+     * whatever state the subtree was holding; hiding keeps the box's identity and its children.</p>
+     *
+     * <p>{@code IMPORTANT} origin, because this is runtime state rather than an authored value: a
+     * stylesheet cannot know whether a slot is in use this frame, and an author's {@code !important}
+     * should still be able to overrule the widget. Same origin every other widget-driven geometry write
+     * uses.</p>
+     */
+    public UIElement setDisplayed(boolean displayed) {
+        com.crystalgui.style.StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
+                l -> l.display(displayed ? dev.vfyjxf.taffy.style.TaffyDisplay.FLEX
+                        : dev.vfyjxf.taffy.style.TaffyDisplay.NONE));
+        return this;
+    }
+
     // ── State ────────────────────────────────────────────────────────────────
     public void setEnabled(boolean enabled) {
         if (this.isEnabled == enabled) return;
