@@ -462,6 +462,24 @@ public final class ShaderGraphBridge {
             return new CgShaderEmitter.Result("", java.util.List.of(),
                     java.util.List.of("The graph has no Output node, so there is nothing to compile"));
         }
-        return CgShaderEmitter.emit(graph, master);
+        try {
+            return CgShaderEmitter.emit(graph, master);
+        } catch (RuntimeException refused) {
+            // A GRAPH THAT WILL NOT COMPILE IS THE NORMAL STATE while one is being built, so this reports
+            // rather than propagates. It used to propagate, and the editor died: recompile runs from
+            // onConnectionsChanged, so one illegal edge threw all the way out through the click that made
+            // it and took the window with it.
+            //
+            // The case that found it is worth recording, because it is not a bug in the emitter. A
+            // DYNAMIC port resolves its type from whatever is wired to it, so an edge that was legal when
+            // it was made can stop being legal later: Multiply.Out → BaseColor(vec3) is fine while Out is
+            // a float, and becomes vec2 → vec3 the moment a Vector 2 lands on Multiply.A. Nothing
+            // revalidates the downstream edge, so the emitter is the first thing to notice — and it is
+            // right to refuse. Reporting puts the message in the status line, which is where a compile
+            // error belongs.
+            String message = refused.getMessage();
+            return new CgShaderEmitter.Result("", java.util.List.of(),
+                    java.util.List.of(message == null ? refused.toString() : message));
+        }
     }
 }
