@@ -22,6 +22,10 @@ public class ShaderPropertyCompileTest {
 
     private GraphDocument withMaster() {
         GraphDocument document = new GraphDocument();
+        // The SAME rule the editor installs. A bare document defaults to EXACT, so an edge the real
+        // editor permits was silently refused here and the graph compiled as though it had never been
+        // drawn -- a fixture that quietly tests a different product.
+        document.setTypeCompatibility(ShaderGraphBridge.GLSL_PROMOTION);
         document.addNode(library.get(ShaderGraphBridge.MASTER_TYPE).create(0f, 0f));
         return document;
     }
@@ -124,6 +128,28 @@ public class ShaderPropertyCompileTest {
         assertTrue(result.source(), result.source().contains("_Tint"));
         assertEquals("the node must record which property it reads",
                 tint.id(), ShaderPropertyNodes.propertyIdOf(document.node(node.id())));
+    }
+
+    /**
+     * <b>The edge that crashed the editor now simply works.</b>
+     *
+     * <p>A Vector 2 into the master's {@code BaseColor(vec3)} — refused before, and refused mid-recompile
+     * from the click that drew it, which killed the window. It adapts now, padding the missing channel
+     * with zero.</p>
+     */
+    @Test
+    public void aNarrowerVectorWidensIntoAWiderPort() {
+        GraphDocument document = withMaster();
+        String masterId = document.nodes().iterator().next().id();
+
+        GraphProperty uv = document.addProperty(GraphProperty.of("Uv", "vec2", "(1,1)"));
+        NodeData node = document.addNode(ShaderPropertyNodes.create(uv, 20f, 20f));
+        document.link(node.id(), ShaderPropertyNodes.OUT_PORT, masterId, "BaseColor");
+
+        CgShaderEmitter.Result result = compile(document);
+        assertTrue(result.errors().toString(), result.ok());
+        assertTrue("the padding must be in the emitted GLSL: " + result.source(),
+                result.source().contains("vec3(") && result.source().contains("0.0"));
     }
 
     /**
