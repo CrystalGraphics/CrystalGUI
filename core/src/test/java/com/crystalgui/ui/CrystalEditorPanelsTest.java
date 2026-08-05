@@ -203,25 +203,51 @@ public class CrystalEditorPanelsTest extends UiTestBase {
     }
 
     /**
-     * <b>A graph file that cannot be loaded is refused, not silently emptied.</b>
+     * <b>A graph file round-trips through the document seam.</b>
      *
-     * <p>{@code GraphView} cannot yet adopt a whole document, so {@code adopt} throws — and that refusal
-     * is the safety property. A document that accepted the bytes and showed an empty canvas would then
-     * differ from the file it failed to read, report itself modified, and let the first Save All write
-     * that emptiness over the user's graph.</p>
+     * <p>Encode one editor's graph, adopt it into another, and the second must encode identically. That is
+     * the whole contract the workbench relies on: {@code encode} is compared against the bytes last read
+     * to decide whether a file is modified, so a graph that re-encoded differently after loading would
+     * report itself dirty the instant it opened and never stop.</p>
+     *
+     * <p>Round-tripped through the editors rather than against hand-written JSON deliberately — authoring
+     * the serial form here would pin this test to the codec's current spelling rather than to the property
+     * that matters.</p>
      */
     @Test
-    public void aGraphFileThatCannotLoadIsRefusedRatherThanEmptied() {
+    public void aGraphFileRoundTripsThroughTheDocumentSeam() {
+        CrystalEditor source = new CrystalEditor(client());
+        byte[] encoded = source.shaderGraph().encode();
+        assertTrue("the starter graph encoded to nothing -- this would round-trip vacuously",
+                encoded.length > 2);
+
+        CrystalEditor target = new CrystalEditor(client());
+        FileDocument document = target.workbench()
+                .documentFor(CgPath.parse("mymod.proj:fancy.shadergraph"));
+        document.adopt(encoded);
+
+        assertArrayEquals("a loaded graph does not re-encode to what it was given, so it would report "
+                + "itself modified the moment it opened", encoded, document.encode());
+    }
+
+    /**
+     * <b>A malformed graph file is refused, not silently emptied.</b>
+     *
+     * <p>The safety property the workbench leans on: a document that accepted bytes it could not read
+     * would show an empty canvas, differ from the file, report itself modified, and let the first Save All
+     * write that emptiness over the user's graph.</p>
+     */
+    @Test
+    public void aMalformedGraphFileIsRefused() {
         CrystalEditor editor = new CrystalEditor(client());
-        CgPath path = CgPath.parse("mymod.proj:fancy.shadergraph");
-        FileDocument document = editor.workbench().documentFor(path);
+        FileDocument document = editor.workbench()
+                .documentFor(CgPath.parse("mymod.proj:broken.shadergraph"));
 
         try {
-            document.adopt("{}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            org.junit.Assert.fail("expected the graph to refuse a load it cannot perform");
+            document.adopt("not json at all".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            org.junit.Assert.fail("expected a malformed graph file to be refused");
         } catch (RuntimeException expected) {
-            assertTrue(String.valueOf(expected.getMessage()),
-                    String.valueOf(expected.getMessage()).contains("whole-document adopt"));
+            // The message is the codec's or the parser's; what matters is that it did not quietly succeed.
         }
     }
 }

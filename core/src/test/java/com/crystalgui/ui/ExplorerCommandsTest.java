@@ -40,6 +40,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -741,5 +742,151 @@ public class ExplorerCommandsTest extends UiTestBase {
         assertTrue("one Ctrl+Z did not bring BOTH files back -- the paste was recorded per file. Saw "
                         + rootChildNames(),
                 rootChildNames().contains("one.txt") && rootChildNames().contains("two.txt"));
+    }
+
+    /**
+     * <b>Saving clears the modified flag, and Save All clears every one of them.</b>
+     *
+     * <p>Here rather than beside the other document tests because it needs a real round trip: the client
+     * refuses a save with no prior read — the write is etag-guarded — so this is only meaningful against a
+     * fixture that actually pumps the transport.</p>
+     */
+    @Test
+    public void saveAllWritesEveryModifiedFile() {
+        workbench.fileTree().loadProjects();
+        settle();
+        CgPath one = CgPath.parse("mymod.proj:README.md");
+        CgPath two = CgPath.parse("mymod.proj:src/Main.java");
+        workbench.openFile(one);
+        settle();
+        workbench.openFile(two);
+        settle();
+        assertTrue("fixture wrong -- files opened dirty", workbench.unsavedFiles().isEmpty());
+
+        workbench.editorFor(one).setText("one changed");
+        workbench.editorFor(two).setText("two changed");
+        assertEquals(2, workbench.unsavedFiles().size());
+
+        assertEquals("both files should have been written", 2, workbench.saveAll());
+        settle();
+
+        assertTrue("Save All left modified files behind: " + workbench.unsavedFiles(),
+                workbench.unsavedFiles().isEmpty());
+    }
+
+    /** And one save clears exactly one file. */
+    @Test
+    public void savingTheActiveFileClearsOnlyItsOwnFlag() {
+        workbench.fileTree().loadProjects();
+        settle();
+        CgPath one = CgPath.parse("mymod.proj:README.md");
+        CgPath two = CgPath.parse("mymod.proj:src/Main.java");
+        workbench.openFile(one);
+        settle();
+        workbench.editorFor(one).setText("one changed");
+        workbench.openFile(two);
+        settle();
+        workbench.editorFor(two).setText("two changed");
+
+        assertTrue(workbench.saveActiveFile());
+        settle();
+
+        assertFalse("the active file is still modified after a save", workbench.isDirty(two));
+        assertTrue("saving one file cleared another one too", workbench.isDirty(one));
+    }
+
+    /**
+     * <b>A file is modified only while it differs from disk.</b>
+     *
+     * <p>Compared against the bytes last read or written rather than counted from edit events: a counter
+     * says "modified" after a change AND its undo, which is exactly the state somebody is in when they
+     * close a tab and get asked to save a file identical to the one already there.</p>
+     *
+     * <p>Needs a real round trip — a file with no completed read has no baseline to differ from, and is
+     * correctly reported clean.</p>
+     */
+    @Test
+    public void aFileIsModifiedOnlyWhileItDiffersFromDisk() {
+        workbench.fileTree().loadProjects();
+        settle();
+        CgPath path = CgPath.parse("mymod.proj:README.md");
+        workbench.openFile(path);
+        settle();
+        assertFalse("a freshly opened file is not modified", workbench.isDirty(path));
+
+        String original = workbench.editorFor(path).getText();
+        workbench.editorFor(path).setText(original + "more");
+        assertTrue("an edited file is not reported as modified", workbench.isDirty(path));
+
+        workbench.editorFor(path).setText(original);
+        assertFalse("an edit and its undo still reported modified -- this counts edits rather than "
+                + "comparing against disk", workbench.isDirty(path));
+        assertTrue(workbench.unsavedFiles().isEmpty());
+    }
+
+    /**
+     * <b>A document that refuses its bytes is never modified and never written.</b>
+     *
+     * <p>The dangerous case, and the reason {@code adopt} throws rather than shrugging: a document that
+     * silently ignored the file would show empty, differ from the file it failed to read, report itself
+     * modified, and let the first Save All write that emptiness over the user's work. A shader graph is in
+     * exactly this state until {@code GraphView} can adopt a whole document.</p>
+     */
+    @Test
+    public void aDocumentThatCannotLoadIsNeitherModifiedNorSaveable() {
+        workbench.registerDocumentType("refuses", "Refuses", path ->
+                new com.crystalgui.ui.elements.workbench.FileDocument() {
+                    private final UIElement view = new UIElement();
+                    @Override public UIElement view() { return view; }
+                    @Override public byte[] encode() { return "EMPTY".getBytes(); }
+                    @Override public void adopt(byte[] bytes) {
+                        throw new UnsupportedOperationException("cannot load this yet");
+                    }
+                });
+        workbench.bindEditorExtensions("refuses", "weirdgraph");
+        backingStore.seed("mymod.proj:thing.weirdgraph", "REAL CONTENT");
+        workbench.fileTree().loadProjects();
+        settle();
+
+        CgPath path = CgPath.parse("mymod.proj:thing.weirdgraph");
+        workbench.openFile(path);
+        settle();
+
+        assertFalse("a document that never loaded must not claim to be modified", workbench.isDirty(path));
+        assertFalse("saving a file that never loaded would overwrite it with an empty document",
+                workbench.saveActiveFile());
+    }
+
+    /**
+     * <b>Renaming an open file carries everything about it to the new path.</b>
+     *
+     * <p>The document, the bytes it was read from, and whether it loaded at all now live in one entry per
+     * path — because they used to be four separate maps that a rename had to update together. Moving three
+     * of the four leaves a renamed file reporting itself modified against a baseline still filed under its
+     * old name, and the next Save All writes it back for no reason.</p>
+     *
+     * <p>Asserted on the editor being the SAME instance, which is also the property the tab relies on: a
+     * rename that rebuilt the document would drop the caret, the selection and any unsaved work with it.</p>
+     */
+    @Test
+    public void renamingAnOpenFileCarriesItsDocumentAndBaseline() {
+        workbench.fileTree().loadProjects();
+        settle();
+        CgPath from = CgPath.parse("mymod.proj:README.md");
+        CgPath to = CgPath.parse("mymod.proj:RENAMED.md");
+        workbench.openFile(from);
+        settle();
+        Object before = workbench.editorFor(from);
+        assertNotNull(before);
+        assertFalse(workbench.isDirty(from));
+
+        workbench.files().move(from, to, false, () -> { }, failure -> { });
+        settle();
+
+        assertSame("the rename rebuilt the document -- unsaved work and the caret go with it",
+                before, workbench.editorFor(to));
+        assertFalse("the renamed file reports itself modified -- its baseline was left behind",
+                workbench.isDirty(to));
+        assertTrue("the old path is still open", workbench.unsavedFiles().isEmpty());
     }
 }

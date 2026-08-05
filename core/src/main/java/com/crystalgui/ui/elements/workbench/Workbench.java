@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.FilePatternMap;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.fs.WorkingCopies;
 import com.crystalgui.fs.WorkspaceFileService;
@@ -19,8 +20,8 @@ import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockPanelRegistry;
 import com.crystalgui.ui.elements.editor.EditorCommands;
 import com.crystalgui.ui.elements.editor.TextEditor;
+import com.crystalgui.ui.elements.workbench.document.TextFileDocument;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -87,8 +88,18 @@ public class Workbench extends UIElement {
     private final ProblemsPanel problems = new ProblemsPanel();
     private final DockArea dock;
 
-    /** One editor per open file. See the class note on why this is cached. */
-    private final Map<CgPath, TextEditor> editors = new HashMap<>();
+    /**
+     * Every open file, and what is known about each one.
+     *
+     * <p>This was four maps keyed by {@code CgPath} — the documents, their on-disk bytes, which had been
+     * requested and which had refused to load — and every close and rename had to update all four. That is
+     * one object pulled apart, and the drift it produces is the failure this codebase keeps paying for.</p>
+     */
+    private final OpenDocuments open = new OpenDocuments();
+
+    /** How to build a document for a given panel type. Keyed by type id, so a bound editor supplies its
+     * own and the text editor is simply the one registered for {@link #FILE_TYPE}. */
+    private final Map<String, Function<CgPath, FileDocument>> documentFactories = new HashMap<>();
 
     /**
      * Every file operation goes through this, never straight to the client.
@@ -129,7 +140,18 @@ public class Workbench extends UIElement {
 
         registry.register(DockPanelDescriptor.singleton(PROJECT_TYPE, "Project"), ref -> fileTree);
         registry.register(DockPanelDescriptor.singleton(PROBLEMS_TYPE, "Problems"), ref -> problems);
-        registry.register(DockPanelDescriptor.document(FILE_TYPE, "File"), this::fileEditorPanel);
+        registerDocumentType(FILE_TYPE, "File", path -> {
+            TextEditor created = new TextEditor("");
+            created.addClass(FILE_EDITOR_CLASS);
+            LanguageRegistry.Entry entry = LanguageRegistry.forFileName(path.name());
+            created.setLanguage(entry.language());
+            // A FRESH tokenizer per document -- the interface exists for implementations holding a parse
+            // tree per file, and sharing one would cross-contaminate them.
+            created.setTokenizer(entry.newTokenizer());
+            UIWindow window = getAttachedWindow();
+            if (window != null) EditorCommands.install(window, created);
+            return new TextFileDocument(created);
+        });
 
         dock = new DockArea(registry, defaultLayout());
         content.addClass(CONTENT_CLASS);
@@ -278,9 +300,63 @@ public class Workbench extends UIElement {
 
     // ── Files ───────────────────────────────────────────────────────────────────────────────────
 
-    /** The panel reference identifying one open file — {@code path} is what makes two of them distinct. */
-    public static DockPanelRef refFor(CgPath path) {
-        return new DockPanelRef(FILE_TYPE)
+    /**
+     * Which editor opens which file — pattern to dock panel type.
+     *
+     * <p>Per workbench rather than static, and that is not caution: a panel type id only means anything
+     * against the {@code DockPanelDescriptor} registry that defined it, and that registry belongs to this
+     * workbench. A global map would let one window bind a type the other cannot build.</p>
+     */
+    private final FilePatternMap<String> editorBindings = new FilePatternMap<>();
+
+    /**
+     * Opens files matching these extensions with the panel type {@code typeId} instead of the text editor.
+     *
+     * <p>The host registers the panel itself with {@link #registerPanel} and then says which files it is
+     * for. The two are separate calls because they are separate facts — a panel type can exist without
+     * claiming any file (the graph, the Problems list), and a binding is meaningless without a panel to
+     * build.</p>
+     *
+     * <p>A bound panel is handed the same {@code PATH_STATE} and title as a text editor would be, so its
+     * factory reads the path exactly the same way and nothing else in the dock needs to know a binding
+     * happened.</p>
+     */
+    public Workbench bindEditorExtensions(String typeId, String... extensions) {
+        editorBindings.putExtensions(typeId, extensions);
+        return this;
+    }
+
+    /** As {@link #bindEditorExtensions}, for files identified by their whole name — {@code Dockerfile}. */
+    public Workbench bindEditorNames(String typeId, String... fileNames) {
+        editorBindings.putNames(typeId, fileNames);
+        return this;
+    }
+
+    /** As {@link #bindEditorExtensions}, for a glob over the whole name — {@code *.g.dart}. */
+    public Workbench bindEditorGlobs(String typeId, String... globs) {
+        editorBindings.putGlobs(typeId, globs);
+        return this;
+    }
+
+    /**
+     * The panel reference identifying one open file — {@code path} is what makes two of them distinct.
+     *
+     * <p><b>The type comes from the binding, not from a constant.</b> This returned {@link #FILE_TYPE}
+     * unconditionally, which is why every file opened in a text editor however little sense that made: a
+     * PNG arrived as mojibake and a {@code .shadergraph} as JSON. Resolution is
+     * {@link FilePatternMap}'s — exact name, then extension, then glob — and the text editor is the
+     * fallback rather than the rule.</p>
+     *
+     * <p>An instance method now, because bindings belong to a workbench. It is also the identity used to
+     * <em>find</em> an open tab again, for closing and for renaming, so it must be a pure function of the
+     * path and the bindings — which it is, since bindings are registered at startup. A rename that changes
+     * the extension therefore legitimately produces a different ref, and the rename path already replaces
+     * one ref with the other: renaming {@code a.txt} to {@code a.png} swaps the editor with it, which is
+     * the correct answer rather than an accident.</p>
+     */
+    public DockPanelRef refFor(CgPath path) {
+        String bound = editorBindings.get(path.name());
+        return new DockPanelRef(bound == null ? FILE_TYPE : bound)
                 .withState(PATH_STATE, path.toString())
                 .withState(DockPanelRef.TITLE, path.name());
     }
@@ -304,8 +380,9 @@ public class Workbench extends UIElement {
             onStatus.emit("focused " + path.name());
             return;
         }
-        client.read(path, document -> {
-            editorFor(path).setText(document.text());
+        client.read(path, read -> {
+            adoptInto(path, read.content());
+            open.requestRead(path);
             openPanel(ref);
             onStatus.emit("opened " + path.name());
         }, failure -> onStatus.emit("open failed: " + failure.code()));
@@ -317,14 +394,30 @@ public class Workbench extends UIElement {
         DockGroup group = dock.activeGroup();
         if (group == null) return null;
         DockPanelRef panel = group.leaf().activePanel();
-        if (panel == null || !FILE_TYPE.equals(panel.typeId())) return null;
-        return CgPath.parse(panel.state(PATH_STATE, ""));
+        // A PANEL WITH A PATH, not a panel of one particular type. Binding an extension to its own editor
+        // gives that tab a different type id, so testing for FILE_TYPE made every bound document report
+        // "no file tab active" -- unsaveable by the very mechanism that opened it.
+        if (panel == null) return null;
+        String path = panel.state(PATH_STATE, "");
+        return path.isEmpty() ? null : CgPath.parse(path);
     }
 
+    /** The active document, whatever kind it is. */
+    @Nullable
+    public FileDocument activeDocument() {
+        CgPath path = activeFilePath();
+        return path == null ? null : open.get(path);
+    }
+
+    /**
+     * The active document's editor when it is a TEXT document, else null.
+     *
+     * <p>Null for a graph or an image rather than throwing: the callers that want a text editor - jumping
+     * to a diagnostic's line - have nothing to do with a document that has no lines.</p>
+     */
     @Nullable
     public TextEditor activeEditor() {
-        CgPath path = activeFilePath();
-        return path == null ? null : editors.get(path);
+        return activeDocument() instanceof TextFileDocument text ? text.editor() : null;
     }
 
     /** Writes the active tab back. A stale write is reported distinctly — it has a recovery path. */
@@ -334,10 +427,22 @@ public class Workbench extends UIElement {
             onStatus.emit("no file tab active");
             return false;
         }
-        TextEditor editor = editors.get(target);
-        if (editor == null) return false;
-        client.save(target, editor.getText().getBytes(StandardCharsets.UTF_8),
-                etag -> onStatus.emit("saved " + target.name()),
+        FileDocument document = open.get(target);
+        if (document == null) return false;
+        if (!open.isSaveable(target)) {
+            onStatus.emit("refusing to save " + target.name() + " -- it never loaded");
+            return false;
+        }
+        byte[] written = document.encode();
+        client.save(target, written,
+                etag -> {
+                    // THE BYTES THAT WERE WRITTEN become the new baseline, not the document's current
+                    // state: a document edited again while the write was in flight is still modified
+                    // afterwards, and recording what it looks like NOW would call it clean.
+                    open.markSaved(target, written);
+                    refreshTabTitles();
+                    onStatus.emit("saved " + target.name());
+                },
                 failure -> onStatus.emit(failure.isConflict()
                         ? "CONFLICT: " + target.name() + " changed on disk — reopen to take theirs"
                         : "save failed: " + failure.code()));
@@ -375,18 +480,18 @@ public class Workbench extends UIElement {
         @Override
         public List<CgPath> openUnder(CgPath path) {
             List<CgPath> found = new ArrayList<>();
-            for (CgPath open : editors.keySet()) {
+            for (CgPath candidate : open.paths()) {
                 // contains() covers "the path itself" as well as "beneath it", so a file delete and a
                 // directory delete are one question. Deleting a folder with six files open in it is
                 // exactly the case a per-path lookup misses.
-                if (open.equals(path) || path.contains(open)) found.add(open);
+                if (candidate.equals(path) || path.contains(candidate)) found.add(candidate);
             }
             return found;
         }
 
         @Override
         public void close(CgPath path) {
-            editors.remove(path);
+            open.close(path);
             // The TAB goes too, and this is the half that is easy to forget: an editor dropped from the
             // map with its tab left behind leaves the dock asking the registry to rebuild a panel for a
             // file that no longer exists, which comes back as the "__missing__" placeholder.
@@ -396,9 +501,9 @@ public class Workbench extends UIElement {
 
         @Override
         public void retarget(CgPath from, CgPath to) {
-            TextEditor editor = editors.remove(from);
-            if (editor == null) return;
-            editors.put(to, editor);
+            if (!open.isOpen(from)) return;
+            // ONE CALL, because one entry holds the document, its baseline and its load state together.
+            open.retarget(from, to);
             // In place, so the tab keeps its position and its selection. A remove-then-add would send the
             // renamed file to the end of the strip and, if it was active, hand the selection to a
             // neighbour on the way -- the file you just renamed vanishing from where you were looking.
@@ -417,32 +522,172 @@ public class Workbench extends UIElement {
         return dock.layout().leaves().get(0);
     }
 
-    /** The editor for a path, created on first use and given the language its name implies. */
-    public TextEditor editorFor(CgPath path) {
-        return editors.computeIfAbsent(path, key -> {
-            TextEditor created = new TextEditor("");
-            created.addClass(FILE_EDITOR_CLASS);
-            LanguageRegistry.Entry entry = LanguageRegistry.forFileName(key.name());
-            created.setLanguage(entry.language());
-            // A FRESH tokenizer per document -- the interface exists for implementations holding a parse
-            // tree per file, and sharing one would cross-contaminate them.
-            created.setTokenizer(entry.newTokenizer());
-            UIWindow window = getAttachedWindow();
-            if (window != null) EditorCommands.install(window, created);
-            return created;
+    /**
+     * Registers a document kind: how to build it, and the dock panel that shows it.
+     *
+     * <p>One call rather than two, because the panel content simply <em>is</em> the document view.
+     * Separating them would let a host register a panel type it has no document for, which builds a tab
+     * that cannot be saved and reports nothing wrong.</p>
+     *
+     * <p>Bind it to files with {@link #bindEditorExtensions} and friends. A type with no binding is
+     * reachable only by opening its ref directly, which is what a panel that is not file-backed does.</p>
+     */
+    public Workbench registerDocumentType(String typeId, String title,
+                                          Function<CgPath, FileDocument> factory) {
+        documentFactories.put(typeId, factory);
+        registry.register(DockPanelDescriptor.document(typeId, title), ref -> {
+            CgPath path = CgPath.parse(ref.state(PATH_STATE, ""));
+            FileDocument document = documentFor(path);
+            // Read here as well as in openFile, because the dock also builds panels after a layout
+            // RESTORE, where nothing has read the file yet. Guarded, or every split and drag would
+            // re-read the file over whatever is unsaved in it.
+            if (open.requestRead(path)) {
+                client.read(path, read -> adoptInto(path, read.content()),
+                        failure -> onStatus.emit("open failed: " + failure.code()));
+            }
+            return document.view();
+        });
+        return this;
+    }
+
+    // ── Unsaved changes (E16) ───────────────────────────────────────────────────────────────────
+
+    /**
+     * The marker a modified tab carries, appended to its name.
+     *
+     * <p>An asterisk rather than a bullet or a dot, deliberately. The bundled Minecraft fonts are missing
+     * codepoints that read as obvious choices here — {@code MinecraftRegular.otf} has no U+2026, which is
+     * why {@code text-overflow} falls back to three periods — and a marker that renders as a blank advance
+     * is worse than none, because the tab then looks clean while the file is not. An asterisk is ASCII and
+     * cannot go missing. It is also what a good half of editors use.</p>
+     */
+    public static final String DIRTY_MARKER = " *";
+
+    /**
+     * Whether this open file has changes that are not on disk.
+     *
+     * <p>Compared against the bytes last read or written rather than counted from edit events: a counter
+     * says "modified" after a change <em>and its undo</em>, which is exactly the state somebody is in when
+     * they close a tab and get asked to save a file identical to the one already there.</p>
+     *
+     * <p>False for a file that is not open, and false for one whose document refused to load it. Encoding
+     * on each call is what makes the comparison exact; it runs once a frame per open file, from the tick
+     * that keeps the tab markers current. See {@link OpenDocuments#isDirty}.</p>
+     */
+    public boolean isDirty(CgPath path) {
+        return open.isDirty(path);
+    }
+
+    /** Every open file with unsaved changes, in no particular order. */
+    public List<CgPath> unsavedFiles() {
+        return open.dirtyPaths();
+    }
+
+    /**
+     * Writes every modified file.
+     *
+     * <p>Issued per file rather than as one call, because they succeed and fail separately — the same
+     * reasoning the drop and the paste follow. No undo grouping, though: saving is not an edit, and it is
+     * not on the undo stack at all.</p>
+     *
+     * @return how many writes were issued
+     */
+    public int saveAll() {
+        int issued = 0;
+        for (CgPath path : unsavedFiles()) {
+            FileDocument document = open.get(path);
+            if (document == null) continue;
+            issued++;
+            byte[] written = document.encode();
+            client.save(path, written, etag -> {
+                open.markSaved(path, written);
+                refreshTabTitles();
+                onStatus.emit("saved " + path.name());
+            }, failure -> onStatus.emit("save failed: " + path.name() + " -- " + failure.code()));
+        }
+        if (issued == 0) onStatus.emit("nothing to save");
+        return issued;
+    }
+
+    /** What each tab's label should say right now — the file name, plus a marker when it is modified. */
+    private String tabTitleFor(DockPanelRef panel) {
+        String title = registry.titleOf(panel);
+        String path = panel.state(PATH_STATE, "");
+        if (path.isEmpty()) return title;
+        return isDirty(CgPath.parse(path)) ? title + DIRTY_MARKER : title;
+    }
+
+    /**
+     * Brings every visible tab label into line with its document.
+     *
+     * <p>The labels are otherwise only computed when the strip is <b>rebuilt</b>, and a rebuild is exactly
+     * what must not happen for this: it detaches and recreates the tab elements, so doing it on every
+     * keystroke would tear down the tab the user is typing under — the rule the table header and the file
+     * tree both paid for. Setting the text on the tabs that already exist changes nothing structural.</p>
+     */
+    private void refreshTabTitles() {
+        for (DockLeaf leaf : dock.layout().leaves()) {
+            DockGroup group = dock.groupFor(leaf);
+            if (group == null) continue;
+            for (DockPanelRef panel : group.panels()) {
+                com.crystalgui.ui.elements.Tab tab = group.tabFor(panel);
+                // setText suppresses an equal write, so the common case -- nothing changed -- costs one
+                // string comparison per visible tab and touches no element.
+                if (tab != null) tab.setText(tabTitleFor(panel));
+            }
+        }
+    }
+
+    /**
+     * Keeps the dirty markers current.
+     *
+     * <p>Polled rather than pushed, because a document goes dirty by being <em>typed into</em> and there is
+     * no edit event to hang this on that would not also mean routing every keystroke through the workbench.
+     * The cost is one string comparison per open document per frame, and it is only when the answer changes
+     * that any element is touched.</p>
+     */
+    private void refreshDirtyMarkers() {
+        List<CgPath> dirty = unsavedFiles();
+        if (!dirty.equals(lastDirty)) {
+            lastDirty = dirty;
+            refreshTabTitles();
+        }
+    }
+
+    private List<CgPath> lastDirty = new ArrayList<>();
+
+    /**
+     * Hands {@code bytes} to a document and records them as what is on disk.
+     *
+     * <p>The single place a read lands, so the baseline cannot drift from what was actually applied. A
+     * document that refuses the bytes is remembered as unreadable rather than left looking modified
+     * against a file it never managed to load.</p>
+     */
+    private void adoptInto(CgPath path, byte[] bytes) {
+        documentFor(path);
+        String refused = open.adopt(path, bytes);
+        if (refused != null) onStatus.emit("cannot open " + path.name() + ": " + refused);
+    }
+
+    /** The document for a path, created on first use from whichever type its name binds to. */
+    public FileDocument documentFor(CgPath path) {
+        return open.documentFor(path, key -> {
+            String typeId = refFor(key).typeId();
+            Function<CgPath, FileDocument> factory = documentFactories.get(typeId);
+            // A binding with no document factory is a host bug, and falling back to an empty text editor
+            // would hide it: the file would open, show nothing, and save that nothing back over itself.
+            if (factory == null) {
+                throw new IllegalStateException("No document factory for panel type " + typeId
+                        + " -- a bindEditor call named it, registerDocumentType did not");
+            }
+            return factory.apply(key);
         });
     }
 
-    /** Built by the dock when it needs a file panel — including after a layout restore, where the read
-     * has not happened yet and the content arrives late into an editor that already exists. */
-    private UIElement fileEditorPanel(DockPanelRef ref) {
-        CgPath path = CgPath.parse(ref.state(PATH_STATE, ""));
-        TextEditor target = editorFor(path);
-        if (target.getText().isEmpty()) {
-            client.read(path, document -> target.setText(document.text()),
-                    failure -> onStatus.emit("open failed: " + failure.code()));
-        }
-        return target;
+    /** The text editor for a path, or null when that file is not opened by a text editor. */
+    @Nullable
+    public TextEditor editorFor(CgPath path) {
+        return documentFor(path) instanceof TextFileDocument text ? text.editor() : null;
     }
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────────────────────
@@ -570,6 +815,7 @@ public class Workbench extends UIElement {
             return false;
         }
         installExplorerCommands(getAttachedWindow());
+        refreshDirtyMarkers();
         revealActiveFile();
         fileTree.loadProjects();
         // Follows the active tab. Only on a CHANGE -- rebinding every frame would rebuild the table's
