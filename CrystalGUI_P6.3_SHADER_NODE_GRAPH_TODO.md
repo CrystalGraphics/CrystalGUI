@@ -1161,7 +1161,7 @@ normals, sane vertex/index counts, and UVs in range. Then: the mesh choice does 
 document and leaves `UndoStack` empty; the panel requests a re-render on a graph change and *not* on an
 idle frame.
 
-### 6.3.13 The Graph Inspector · `IN PROGRESS` (2026-08-04) — Node and Graph tabs shipped, Properties not
+### 6.3.13 The Graph Inspector · `DONE` (2026-08-05) — all three tabs shipped
 
 The last big missing surface. Unity calls it the **Graph Inspector** and it is the panel marked **F** in
 `docs/research/unity-inspector/07-full-window.png`.
@@ -1173,8 +1173,9 @@ The last big missing surface. Unity calls it the **Graph Inspector** and it is t
 > `NodeFieldBinder.buildMultiControl`. `CrystalEditor` re-pointed. Tests:
 > `ShaderGraphSettingsTest` (9), `ShaderNodeInspectorTest` (7).
 >
-> **Not shipped**: the Properties tab (step 7) and the styling pass (step 9). Multi-select editing is
-> wired through `buildMultiControl` but has no test of its own yet.
+> **Since**: the Properties form shipped with 6.3.14 — selecting a pill fills the same surface a node
+> does, through `ShaderPropertyForm`'s typed `Default` editor. Multi-select editing is wired through
+> `buildMultiControl` but still has no test of its own.
 >
 > **What contact with the code changed:** the model gap was answered by the general gear (P6's 6.1.13)
 > rather than a map on `GraphDocument`, which is what the user's redirect asked for and is plainly
@@ -1407,7 +1408,29 @@ Headless where possible — the whole model half is (`headlessTest`), the panel 
 
 ---
 
-### 6.3.14 Properties and the Blackboard · `PLANNED` (2026-08-04)
+### 6.3.14 Properties and the Blackboard · `IN PROGRESS` (2026-08-05) — steps 1–7 shipped, styling remains
+
+> **Shipped**: `GraphProperty` + `PropertyEdits` (Add/Remove/Change/Move) + codec; `CgShaderType`'s
+> `propertyDeclarationType()`/`propertyAccessSuffix()` with the vec3 landmine pinned;
+> `ShaderPropertyNodes` + `ShaderGraphBridge` declaration and preview-literal path; `BlackboardPanel`
+> with pills, the `+` menu, add/remove/duplicate/rename, panel-scoped commands; drag onto the canvas;
+> the property form in the Node Settings tab; **drag back onto the list to reorder**; **categories**,
+> folding, and category rename/remove. `PropertyPill` and `CategoryHeader` share `InlineRename`.
+> Tests: `BlackboardPanelTest` (32), `ShaderPropertyCompileTest`, `CgPropertyDeclarationTest`.
+>
+> **Not shipped**: step 8, the styling pass.
+>
+> **What contact with the code changed, worth recording:**
+> - A drop slot is **not** a document index. `GraphDocument.moveProperty` takes the position the row
+>   ends at *after* being lifted out, which is one less than the slot pointed at whenever the drag went
+>   downward. Quiet when wrong — the row lands one place short and reads as an imprecise drag.
+> - The drop indicator has to be **absolutely positioned**. An in-flow one moves the rows whose
+>   boundaries decide where it goes, so a pointer near a boundary oscillates between two slots.
+> - **An empty category cannot be stored.** A category is a field, so nothing carries the name of a group
+>   with no members. Unity's `+` creates one anyway, so the panel holds it as view state and it does not
+>   survive a reload — the honest consequence of "a field, not a tree", recorded rather than papered over.
+> - Vector adaptation was forced by this item: a Vector 2 into a dynamic port widened it and made an
+>   already-drawn edge illegal mid-recompile. `CgShaderType.canFeed`/`promote` now pad and truncate.
 
 Research: `docs/research/unity-blackboard/` — 12 images and a README, pulled and captured 2026-08-04.
 **Read that README first**; this section is the decisions, not the observations.
@@ -1559,7 +1582,7 @@ emitted and nothing would read either.
 4. `BlackboardPanel` — the floating panel, pills, `+` menu, add/remove
 5. Drag a pill onto the canvas
 6. The property form in the Node Settings tab
-7. Rename, reorder, categories
+7. Rename, reorder, categories — **DONE** (2026-08-05)
 8. Styling pass
 
 ---
