@@ -120,9 +120,15 @@ public class BlackboardPanelTest extends UiTestBase {
         assertEquals("Float (1)", second.name());
     }
 
-    /** The Category entry has nothing to create yet — see 6.3.14 on categories being a field. */
+    /**
+     * {@code Category} is not a property type, and {@code addProperty} must keep refusing it.
+     *
+     * <p>The {@code +} menu routes that label to {@link BlackboardPanel#addCategory()} instead. This is
+     * the guard on the other path: a label reaching {@code addProperty} that {@code TYPES} does not know
+     * declares nothing rather than declaring something typeless.</p>
+     */
     @Test
-    public void theCategoryEntryAddsNothing() {
+    public void theCategoryEntryIsNotAPropertyType() {
         mount();
         assertNull(board.addProperty(BlackboardPanel.CATEGORY_LABEL));
         assertNull(board.addProperty(null));
@@ -388,5 +394,162 @@ public class BlackboardPanelTest extends UiTestBase {
     public void movingAPropertyThatIsGoneIsHarmless() {
         mount();
         assertFalse(board.moveProperty("no-such-property", 0));
+    }
+
+    // ── Categories ──────────────────────────────────────────────────────────
+
+    private GraphProperty filed(String menuLabel, String category) {
+        GraphProperty added = board.addProperty(menuLabel);
+        board.dropProperty(added.id(), document.indexOfProperty(added.id()), category);
+        return document.property(added.id());
+    }
+
+    /**
+     * <b>A heading appears wherever the category field changes, and nowhere else.</b>
+     *
+     * <p>There is no category entity to enumerate — the grouping is read off the list order. Which also
+     * means uncategorised properties get no heading at all, rather than one called "Uncategorised": the
+     * empty string is the absence of a category, not a category named nothing.</p>
+     */
+    @Test
+    public void headingsComeFromTheFieldAndOnlyWhereItChanges() {
+        mount();
+        board.addProperty("Float");                 // uncategorised -- no heading
+        filed("Vector 2", "Surface");
+        filed("Color", "Surface");                  // same run -- still one heading
+
+        assertEquals(List.of("Surface"), board.categories());
+        assertEquals("every property still has a row", 3, board.pills().size());
+    }
+
+    /** Folding hides a group's rows, keeps its heading, and changes nothing in the document. */
+    @Test
+    public void foldingHidesTheRowsAndNotTheProperties() {
+        mount();
+        filed("Float", "Surface");
+        filed("Vector 2", "Surface");
+        assertEquals(2, board.pills().size());
+
+        board.setCategoryCollapsed("Surface", true);
+        assertEquals("the rows are gone", 0, board.pills().size());
+        assertEquals("the heading is not", List.of("Surface"), board.categories());
+        assertEquals("and neither are the properties", 2, document.propertyCount());
+    }
+
+    /**
+     * <b>Folding is view state — it must never reach the undo stack.</b>
+     *
+     * <p>The same boundary the editor's own folding draws, and the reason {@code Ctrl+Z} does not unfold.
+     * Get it wrong and the first undo after collapsing a group re-opens it instead of undoing the edit
+     * the user actually wants back.</p>
+     */
+    @Test
+    public void foldingIsNotUndoable() {
+        mount();
+        filed("Float", "Surface");
+        int depth = undo.undoDepth();
+
+        board.setCategoryCollapsed("Surface", true);
+        board.setCategoryCollapsed("Surface", false);
+        assertEquals(depth, undo.undoDepth());
+    }
+
+    /**
+     * An empty category exists on the panel, because a field has nowhere to record one.
+     *
+     * <p>The documented cost of "a field, not a tree": it is view state until something joins it, so it
+     * does not survive a reload. Asserted so the behaviour is a decision rather than a surprise.</p>
+     */
+    @Test
+    public void anEmptyCategoryIsAHeadingWithNoDocumentTrace() {
+        mount();
+        String created = board.addCategory();
+
+        assertEquals(List.of(created), board.categories());
+        assertEquals("nothing was declared", 0, document.propertyCount());
+    }
+
+    /** Two categories created in a row do not collide, the same way two properties do not. */
+    @Test
+    public void aSecondCategoryIsNamedApart() {
+        mount();
+        assertNotEquals(board.addCategory(), board.addCategory());
+        assertEquals(2, board.categories().size());
+    }
+
+    /**
+     * Renaming a category rewrites the field on every member — as <b>one</b> undo step.
+     *
+     * <p>The user performed one rename. Undoing it one property at a time would walk back through
+     * half-renamed states that were never a thing anybody chose.</p>
+     */
+    @Test
+    public void renamingACategoryMovesEveryMemberInOneStep() {
+        mount();
+        GraphProperty a = filed("Float", "Surface");
+        GraphProperty b = filed("Color", "Surface");
+        int depth = undo.undoDepth();
+
+        assertTrue(board.renameCategory("Surface", "Albedo"));
+        assertEquals("Albedo", document.property(a.id()).category());
+        assertEquals("Albedo", document.property(b.id()).category());
+        assertEquals("one step for one gesture", depth + 1, undo.undoDepth());
+
+        undo.undo();
+        assertEquals("Surface", document.property(a.id()).category());
+        assertEquals("Surface", document.property(b.id()).category());
+    }
+
+    /** A folded category stays folded when renamed, rather than springing open. */
+    @Test
+    public void renamingKeepsTheFoldState() {
+        mount();
+        filed("Float", "Surface");
+        board.setCategoryCollapsed("Surface", true);
+
+        board.renameCategory("Surface", "Albedo");
+        assertTrue(board.isCategoryCollapsed("Albedo"));
+        assertFalse(board.isCategoryCollapsed("Surface"));
+    }
+
+    /**
+     * <b>Deleting a category cannot delete its properties</b> — it clears a field.
+     *
+     * <p>The whole payoff of "a field, not a tree": there is no containment, so there is no "deleting a
+     * category deletes its contents" rule to get wrong. The rows move up into the ungrouped region.</p>
+     */
+    @Test
+    public void removingACategoryKeepsItsProperties() {
+        mount();
+        GraphProperty a = filed("Float", "Surface");
+
+        assertTrue(board.removeCategory("Surface"));
+        assertEquals("the property is untouched", 1, document.propertyCount());
+        assertEquals("and simply ungrouped", "", document.property(a.id()).category());
+        assertTrue(board.categories().isEmpty());
+    }
+
+    /**
+     * <b>A drop that crosses a heading moves AND re-files, in one undo step.</b>
+     *
+     * <p>One gesture, so one step: splitting it would make the first {@code Ctrl+Z} leave the property
+     * somewhere the user never put it — the new group at the old position, or the reverse.</p>
+     */
+    @Test
+    public void dropCrossingAHeadingIsOneStep() {
+        mount();
+        GraphProperty loose = board.addProperty("Float");
+        GraphProperty filed = filed("Color", "Surface");
+        int depth = undo.undoDepth();
+
+        // Into Surface, after the property already there.
+        board.dropProperty(loose.id(), document.indexOfProperty(filed.id()) + 1, "Surface");
+        assertEquals("Surface", document.property(loose.id()).category());
+        assertEquals("it moved too", 1, document.indexOfProperty(loose.id()));
+        assertEquals("one step", depth + 1, undo.undoDepth());
+
+        undo.undo();
+        assertEquals("", document.property(loose.id()).category());
+        assertEquals(0, document.indexOfProperty(loose.id()));
     }
 }

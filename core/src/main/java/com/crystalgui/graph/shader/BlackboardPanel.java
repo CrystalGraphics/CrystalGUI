@@ -4,6 +4,8 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.undo.CompositeEdit;
+import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -183,6 +185,47 @@ public class BlackboardPanel extends UIElement {
     private final List<PropertyPill> pills = new ArrayList<>();
 
     /**
+     * Every row the list shows, headers included, in visual order — what a drop is measured against.
+     *
+     * <p>A separate list from {@link #pills} because a slot between two rows is not the same thing as a
+     * slot between two properties once headers are in the way: dropping under a heading files the
+     * property <em>into</em> that category, and a collapsed group contributes a row while contributing no
+     * pills at all.</p>
+     */
+    private final List<Row> rows = new ArrayList<>();
+
+    private final List<CategoryHeader> headers = new ArrayList<>();
+
+    /**
+     * Folded categories. <b>View state</b>, deliberately — folding is not a change to the graph, the same
+     * boundary the editor's own folding draws and the reason {@code Ctrl+Z} does not unfold.
+     */
+    private final java.util.Set<String> collapsed = new java.util.LinkedHashSet<>();
+
+    /**
+     * Categories that exist but hold nothing yet, kept here rather than in the document.
+     *
+     * <p>A category is a <b>field on a property</b> (6.3.14: "a field, not a tree"), so an <em>empty</em>
+     * one has nowhere in the document to live — there is no property carrying its name. Unity's {@code +}
+     * menu nonetheless creates a category before it has members, so the heading is held here until
+     * something joins it and becomes real.</p>
+     *
+     * <p><b>The cost, stated rather than hidden:</b> an empty category does not survive a reload. That
+     * follows from the model decision and is the honest behaviour for it — the alternative is a second
+     * entity in the document whose only job is to name a group with no members, which is exactly the
+     * tree the plan chose against.</p>
+     */
+    private final List<String> pendingCategories = new ArrayList<>();
+
+    /** One row of the list — a pill for a property, or a category heading. @see #rows */
+    private record Row(UIElement element, @Nullable String propertyId, String category) {
+    }
+
+    /** Where a drop lands: a position in the <b>document</b>, and the category it joins. */
+    private record Slot(int index, String category) {
+    }
+
+    /**
      * The line showing where a dragged pill would land. Hidden until a drag is over the list.
      *
      * <p>Absolutely positioned, so it does not take a row's worth of space. An in-flow indicator was the
@@ -210,6 +253,13 @@ public class BlackboardPanel extends UIElement {
 
     @Nullable
     private Menu rowMenu;
+
+    @Nullable
+    private Menu categoryMenu;
+
+    /** Which heading {@link #categoryMenu} was opened for. @see #openCategoryMenu */
+    @Nullable
+    private String menuCategory;
 
     /** A property whose rename should be re-opened after the next rebuild. @see #refresh */
     @Nullable
@@ -416,14 +466,95 @@ public class BlackboardPanel extends UIElement {
             pill.endRename();
             body.removeInternalChild(pill);
         }
+        for (CategoryHeader header : new ArrayList<>(headers)) {
+            header.endRename();
+            body.removeInternalChild(header);
+        }
         pills.clear();
+        headers.clear();
+        rows.clear();
         if (emptyMessage != null) {
             body.removeInternalChild(emptyMessage);
             emptyMessage = null;
         }
 
+        // A HEADING WHENEVER THE CATEGORY CHANGES as the list is scanned -- there is no category entity
+        // to enumerate, only a field, so the grouping is read off the order rather than imposed on it.
+        //
+        // A list whose categories are not contiguous therefore shows the same heading twice, and that is
+        // deliberate: every gesture here keeps a group together, so the only way to reach that state is a
+        // document written elsewhere -- and showing it plainly beats silently reordering someone's list
+        // to fit an assumption this panel made.
+        String heading = null;
         for (GraphProperty property : document.properties()) {
-            PropertyPill pill = new PropertyPill(property);
+            if (!property.category().equals(heading)) {
+                heading = property.category();
+                if (!heading.isEmpty()) addHeader(heading);
+            }
+            // A folded group contributes its heading and none of its rows. The properties are untouched:
+            // folding is view state, so nothing about the document changes when a group closes.
+            if (collapsed.contains(property.category())) continue;
+            addPill(property);
+        }
+        // Categories with nothing in them yet, which the document cannot hold. @see #pendingCategories
+        for (String pending : pendingCategories) {
+            if (!liveCategories().contains(pending)) addHeader(pending);
+        }
+
+        if (pills.isEmpty() && headers.isEmpty()) {
+            emptyMessage = new UIText(EMPTY_MESSAGE);
+            emptyMessage.addClass("__empty__");
+            emptyMessage.setHitTest(false);
+            // addInternalChild/removeInternalChild, never the public pair -- see the note on refresh().
+            body.addInternalChild(emptyMessage);
+        }
+        if (renaming != null) {
+            PropertyPill pill = pillFor(renaming);
+            // A rename survives the rebuild its own document change caused. Without this, committing a
+            // name destroys the editor mid-commit and typing the FIRST character of a live-updating
+            // field would end the rename.
+            if (pill != null) pill.beginRename();
+            else {
+                CategoryHeader header = headerFor(renaming);
+                if (header != null) header.beginRename();
+            }
+            renaming = null;
+        }
+        // The selected property may have been deleted by whatever triggered this.
+        if (selectedId != null && document.property(selectedId) == null) select(null);
+        else applySelectionClasses();
+    }
+
+    /** Every category the document actually holds, which is every distinct non-empty field value. */
+    private java.util.Set<String> liveCategories() {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        for (GraphProperty property : document.properties()) {
+            if (property.isCategorised()) out.add(property.category());
+        }
+        return out;
+    }
+
+    private void addHeader(String category) {
+        CategoryHeader header = new CategoryHeader(category, collapsed.contains(category));
+        header.onPressed.connect(event -> {
+            focusSelf();
+            if (event.getButtonId() == CgMouseCodes.RIGHT_BUTTON) {
+                openCategoryMenu(header.category(), event.getPosition().x(), event.getPosition().y());
+            } else if (event.getDetail() >= 2) {
+                header.beginRename();
+            } else {
+                setCategoryCollapsed(header.category(), !header.isCollapsed());
+            }
+        });
+        header.onRenamed.connect(newName -> renameCategory(header.category(), newName));
+        header.onRenameEnded.connect(this::focusSelf);
+        headers.add(header);
+        rows.add(new Row(header, null, category));
+        body.addChild(header);
+    }
+
+    private void addPill(GraphProperty property) {
+        PropertyPill pill = new PropertyPill(property);
             // Through the pill's own signal, NOT a second listener on the same group: the pill has to
             // stopPropagation to keep the press off the panel, and that stops the rest of the group --
             // so a listener attached here afterwards would silently never run. See PropertyPill.onPressed.
@@ -448,33 +579,15 @@ public class BlackboardPanel extends UIElement {
                     pill.beginRename();
                 }
             });
-            pill.onRenamed.connect(newName -> renameProperty(property.id(), newName));
-            // Focus comes back to the BOARD when a rename ends. Detaching the editor leaves focus null,
-            // and commands resolve outward from the focused element -- so without this, Delete, F2 and
-            // Mod+D were all dead after an Enter until the user clicked the row again, which reads as
-            // the selection not being real.
-            pill.onRenameEnded.connect(this::focusSelf);
-            pills.add(pill);
-            body.addChild(pill);
-        }
-        if (pills.isEmpty()) {
-            emptyMessage = new UIText(EMPTY_MESSAGE);
-            emptyMessage.addClass("__empty__");
-            emptyMessage.setHitTest(false);
-            // addInternalChild/removeInternalChild, never the public pair -- see the note on refresh().
-            body.addInternalChild(emptyMessage);
-        }
-        if (renaming != null) {
-            PropertyPill pill = pillFor(renaming);
-            // A rename survives the rebuild its own document change caused. Without this, committing a
-            // name destroys the editor mid-commit and typing the FIRST character of a live-updating
-            // field would end the rename.
-            if (pill != null) pill.beginRename();
-            renaming = null;
-        }
-        // The selected property may have been deleted by whatever triggered this.
-        if (selectedId != null && document.property(selectedId) == null) select(null);
-        else applySelectionClasses();
+        pill.onRenamed.connect(newName -> renameProperty(property.id(), newName));
+        // Focus comes back to the BOARD when a rename ends. Detaching the editor leaves focus null,
+        // and commands resolve outward from the focused element -- so without this, Delete, F2 and
+        // Mod+D were all dead after an Enter until the user clicked the row again, which reads as
+        // the selection not being real.
+        pill.onRenameEnded.connect(this::focusSelf);
+        pills.add(pill);
+        rows.add(new Row(pill, property.id(), property.category()));
+        body.addChild(pill);
     }
 
     /**
@@ -491,7 +604,18 @@ public class BlackboardPanel extends UIElement {
                     .append(property.name()).append('')
                     .append(property.typeId()).append('')
                     .append(property.exposed()).append('')
+                    // Category and fold state BOTH change what is drawn -- one moves a row under a
+                    // different heading, the other takes it off screen entirely. A signature blind to
+                    // either would skip the rebuild and leave the list showing the previous grouping.
+                    .append(property.category()).append('')
+                    .append(collapsed.contains(property.category())).append('')
                     .append(BlackboardPanel.displayTypeOf(property)).append('');
+        }
+        // An empty category is a row too, and lives nowhere in the document -- without this, creating
+        // one changes nothing the signature can see and the heading never appears.
+        for (String pending : pendingCategories) {
+            out.append("cat").append('').append(pending).append('')
+                    .append(collapsed.contains(pending)).append('');
         }
         return out.toString();
     }
@@ -553,8 +677,8 @@ public class BlackboardPanel extends UIElement {
             hideDropLine();
             if (!(event.getPayload() instanceof PropertyPill.Payload dropped)) return;
             event.stopPropagation();
-            moveProperty(dropped.propertyId(),
-                    dropIndexAt(event.getPosition().x(), event.getPosition().y()));
+            Slot slot = slotFor(dropIndexAt(event.getPosition().x(), event.getPosition().y()));
+            dropProperty(dropped.propertyId(), slot.index(), slot.category());
         }, false, true);
     }
 
@@ -569,15 +693,48 @@ public class BlackboardPanel extends UIElement {
      * knows, and asking it cannot drift.</p>
      */
     private int dropIndexAt(float screenX, float screenY) {
-        for (int i = 0; i < pills.size(); i++) {
-            PropertyPill pill = pills.get(i);
-            // Above this pill's midpoint means "before it". Pills entirely above the pointer report a
-            // large positive y and fail this; pills entirely below report a negative one and pass, so
+        for (int i = 0; i < rows.size(); i++) {
+            UIElement row = rows.get(i).element();
+            // Above this row's midpoint means "before it". Rows entirely above the pointer report a
+            // large positive y and fail this; rows entirely below report a negative one and pass, so
             // the FIRST pass is the slot.
-            if (pill.screenToLocal(screenX, screenY).y
-                    < pill.getRuntimeCache().getHeight() * 0.5f) return i;
+            if (row.screenToLocal(screenX, screenY).y
+                    < row.getRuntimeCache().getHeight() * 0.5f) return i;
         }
-        return pills.size();
+        return rows.size();
+    }
+
+    /**
+     * Where a drop in slot {@code rowIndex} actually lands — a document position <b>and</b> a category.
+     *
+     * <p><b>The row above the slot decides both</b>, which is the rule that makes one gesture do two
+     * jobs. Under a pill: straight after it, in that pill's category. Under a heading: the top of that
+     * group, whether or not the group is folded — so a collapsed category is still a drop target, which
+     * it has to be, or filing something into one would mean unfolding it first.</p>
+     *
+     * <p>Above everything: position zero, uncategorised — the ungrouped region the board opens with.</p>
+     */
+    private Slot slotFor(int rowIndex) {
+        if (rowIndex <= 0 || rows.isEmpty()) return new Slot(0, "");
+        Row above = rows.get(Math.min(rowIndex, rows.size()) - 1);
+        if (above.propertyId() != null) {
+            return new Slot(document.indexOfProperty(above.propertyId()) + 1, above.category());
+        }
+        return new Slot(firstIndexOfCategory(above.category()), above.category());
+    }
+
+    /**
+     * Where a category's run begins in the document, or the end of the list for one with no members.
+     *
+     * <p>An empty category has no position of its own — nothing carries its name — so a property filed
+     * into one lands at the end, which is where its heading is drawn. @see #pendingCategories</p>
+     */
+    private int firstIndexOfCategory(String category) {
+        List<GraphProperty> properties = document.properties();
+        for (int i = 0; i < properties.size(); i++) {
+            if (properties.get(i).category().equals(category)) return i;
+        }
+        return properties.size();
     }
 
     /** Draws the indicator in slot {@code index}. Idempotent — safe to call every frame of a hover. */
@@ -595,12 +752,12 @@ public class BlackboardPanel extends UIElement {
         // body exactly as the pills are.
         float origin = body.getRuntimeCache().getY();
         float top;
-        if (pills.isEmpty()) {
+        if (rows.isEmpty()) {
             top = 0f;
-        } else if (index < pills.size()) {
-            top = pills.get(index).getRuntimeCache().getY() - origin - 2f;
+        } else if (index < rows.size()) {
+            top = rows.get(index).element().getRuntimeCache().getY() - origin - 2f;
         } else {
-            PropertyPill last = pills.get(pills.size() - 1);
+            UIElement last = rows.get(rows.size() - 1).element();
             top = last.getRuntimeCache().getY() - origin + last.getRuntimeCache().getHeight() + 2f;
         }
         StyleGroup.inlinePipeline(dropLine.getStyle().getLayoutGroup(), l -> l.top(top));
@@ -620,15 +777,195 @@ public class BlackboardPanel extends UIElement {
      * place that knows a pointer was involved — the model's index means what it says.</p>
      */
     public boolean moveProperty(String propertyId, int insertAt) {
+        GraphProperty held = document.property(propertyId);
+        return held != null && dropProperty(propertyId, insertAt, held.category());
+    }
+
+    /**
+     * Moves a property to {@code insertAt} and files it under {@code category} — <b>one undo step</b>.
+     *
+     * <p>One step because it is one gesture. A drag that crosses a heading both moves and re-files, and
+     * splitting that into two entries would make the first {@code Ctrl+Z} leave the property in a place
+     * the user never put it: the new group at the old position, or the reverse.</p>
+     *
+     * <p>Both edits are built <b>before</b> either applies. {@code Move.of} captures the property's
+     * current index at construction, and re-filing does not reorder anything, so that index is still
+     * right when the move runs second — and a {@code CompositeEdit} undoes in reverse, which puts the
+     * position back before the category it was read against.</p>
+     */
+    public boolean dropProperty(String propertyId, int insertAt, String category) {
+        GraphProperty held = document.property(propertyId);
+        if (held == null) return false;
         int from = document.indexOfProperty(propertyId);
-        if (from < 0) return false;
+        // A slot below where it already sits is one index less once it is lifted out. @see #moveProperty
         int to = insertAt > from ? insertAt - 1 : insertAt;
-        PropertyEdits.Move edit = PropertyEdits.Move.of(document, propertyId, to);
-        // Null when nothing would move -- dropped back in its own slot, which is the common miss and
-        // must not push an undo step for an operation that did nothing.
-        if (edit == null) return false;
+
+        PropertyEdits.Change refile = held.category().equals(category)
+                ? null : PropertyEdits.Change.of(document, held.withCategory(category));
+        PropertyEdits.Move move = PropertyEdits.Move.of(document, propertyId, to);
+        // Both null when the drop changed nothing -- back in its own slot, in its own group, which is the
+        // common miss and must not push an undo step for an operation that did nothing.
+        if (refile == null && move == null) return false;
+
+        Edit edit;
+        if (refile == null) edit = move;
+        else if (move == null) edit = refile;
+        else edit = CompositeEdit.of("move property " + held.name(), refile, move);
         if (undo != null) undo.execute(edit); else edit.apply();
         return true;
+    }
+
+    // ── Categories ──────────────────────────────────────────────────────────
+
+    /** Every category with a heading on screen, in the order they are drawn. */
+    public List<String> categories() {
+        List<String> out = new ArrayList<>();
+        for (CategoryHeader header : headers) out.add(header.category());
+        return out;
+    }
+
+    @Nullable
+    public CategoryHeader headerFor(String category) {
+        for (CategoryHeader header : headers) {
+            if (header.category().equals(category)) return header;
+        }
+        return null;
+    }
+
+    public boolean isCategoryCollapsed(String category) {
+        return collapsed.contains(category);
+    }
+
+    /**
+     * Folds or unfolds a category.
+     *
+     * <p><b>Not undoable</b>, and that is the same boundary the whole engine draws: folding is how you
+     * are looking at the document, not a change to it. {@code Ctrl+Z} unfolding instead of undoing is
+     * exactly the failure the document/view rule exists to prevent, and it is where VS Code and IntelliJ
+     * both put it.</p>
+     */
+    public void setCategoryCollapsed(String category, boolean value) {
+        boolean changed = value ? collapsed.add(category) : collapsed.remove(category);
+        if (changed) refresh();
+    }
+
+    /**
+     * Declares a new, empty category and opens a rename on it.
+     *
+     * <p>Unity's {@code +} menu creates a category before it has members, so this does too — held in
+     * {@link #pendingCategories} until a property joins it, because a category is a field and an empty
+     * one has nothing in the document to be written on.</p>
+     */
+    public String addCategory() {
+        String name = uniqueCategoryName("New Category");
+        pendingCategories.add(name);
+        refresh();
+        CategoryHeader header = headerFor(name);
+        // Straight into a rename, the same gesture adding a property uses: the generated name is a
+        // placeholder, so "add, type, Enter" is one motion rather than an add followed by a hunt.
+        if (header != null) header.beginRename();
+        return name;
+    }
+
+    private String uniqueCategoryName(String desired) {
+        java.util.Set<String> taken = liveCategories();
+        taken.addAll(pendingCategories);
+        if (!taken.contains(desired)) return desired;
+        for (int n = 1; ; n++) {
+            String candidate = desired + " " + n;
+            if (!taken.contains(candidate)) return candidate;
+        }
+    }
+
+    /**
+     * Renames a category — which means rewriting the field on <b>every</b> property carrying it.
+     *
+     * <p>One undo step for the lot, because the user performed one rename. Without the grouping, undoing
+     * would walk the properties back one at a time through a half-renamed category that never existed as
+     * a state anyone chose.</p>
+     */
+    public boolean renameCategory(String from, String to) {
+        String trimmed = to == null ? "" : to.trim();
+        if (trimmed.isEmpty() || trimmed.equals(from)) return false;
+        // Merging into an existing category is allowed and is what the name says happened -- refusing it
+        // would leave the header showing a name the document does not have.
+        List<Edit> edits = new ArrayList<>();
+        for (GraphProperty property : document.properties()) {
+            if (!property.category().equals(from)) continue;
+            PropertyEdits.Change change = PropertyEdits.Change.of(document,
+                    property.withCategory(trimmed));
+            if (change != null) edits.add(change);
+        }
+        // The pending entry moves with it, so renaming a category that is still empty keeps its heading
+        // rather than dropping it and drawing a second one under the old name.
+        int pending = pendingCategories.indexOf(from);
+        if (pending >= 0) {
+            pendingCategories.set(pending, trimmed);
+            if (edits.isEmpty()) refresh();
+        }
+        // Fold state follows the name too, or a folded category springs open when renamed.
+        if (collapsed.remove(from)) collapsed.add(trimmed);
+        if (edits.isEmpty()) return pending >= 0;
+
+        Edit edit = edits.size() == 1 ? edits.get(0)
+                : CompositeEdit.of("rename category " + from, edits.toArray(new Edit[0]));
+        if (undo != null) undo.execute(edit); else edit.apply();
+        return true;
+    }
+
+    /**
+     * Removes a category, leaving its properties uncategorised.
+     *
+     * <p><b>It cannot take them with it.</b> A category owns nothing — it is a string each property
+     * carries — so deleting one clears a field and the rows move up into the ungrouped region. That is
+     * the whole payoff of "a field, not a tree": there is no "deleting a category deletes its contents"
+     * rule to get wrong, because there is no containment to begin with.</p>
+     */
+    public boolean removeCategory(String category) {
+        List<Edit> edits = new ArrayList<>();
+        for (GraphProperty property : document.properties()) {
+            if (!property.category().equals(category)) continue;
+            PropertyEdits.Change change = PropertyEdits.Change.of(document, property.withCategory(""));
+            if (change != null) edits.add(change);
+        }
+        boolean wasPending = pendingCategories.remove(category);
+        collapsed.remove(category);
+        if (edits.isEmpty()) {
+            if (wasPending) refresh();
+            return wasPending;
+        }
+        Edit edit = edits.size() == 1 ? edits.get(0)
+                : CompositeEdit.of("remove category " + category, edits.toArray(new Edit[0]));
+        if (undo != null) undo.execute(edit); else edit.apply();
+        return true;
+    }
+
+    /** The heading's context menu: rename or remove. Built once and reopened, like every menu here. */
+    private void openCategoryMenu(String category, float screenX, float screenY) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        if (categoryMenu == null) {
+            categoryMenu = new Menu();
+            categoryMenu.addItem(RENAME_LABEL);
+            categoryMenu.addItem(DELETE_LABEL);
+            categoryMenu.onItemActivated.connect(item -> {
+                String target = menuCategory;
+                if (target == null) return;
+                if (RENAME_LABEL.equals(item.getText())) {
+                    CategoryHeader header = headerFor(target);
+                    if (header != null) header.beginRename();
+                } else if (DELETE_LABEL.equals(item.getText())) {
+                    removeCategory(target);
+                }
+            });
+            addInternalChild(categoryMenu);
+        }
+        // WHICH heading was pressed, held rather than captured: the menu is built once and reused, so a
+        // closure over the first category it opened for would act on that one forever.
+        menuCategory = category;
+        // ROOT space, not physical pixels -- the same requirement openRowMenu records.
+        var at = AnchoredPlacement.pointerToRoot(window, screenX, screenY);
+        categoryMenu.showAt(at.x(), at.y(), null);
     }
 
     // ── Selection ───────────────────────────────────────────────────────────
@@ -675,7 +1012,10 @@ public class BlackboardPanel extends UIElement {
             for (String label : TYPES.keySet()) typeMenu.addItem(label);
             // One listener dispatching on the label, which is the idiom the Main Preview's mesh menu
             // already uses -- a closure per item captures state that a rebuilt menu would invalidate.
-            typeMenu.onItemActivated.connect(item -> addProperty(item.getText()));
+            typeMenu.onItemActivated.connect(item -> {
+                if (CATEGORY_LABEL.equals(item.getText())) addCategory();
+                else addProperty(item.getText());
+            });
             // In the tree for the same reason as the row menu below, even though showFor could attach it
             // through its anchor -- relying on that would make the two menus behave differently for no
             // reason a reader could see.

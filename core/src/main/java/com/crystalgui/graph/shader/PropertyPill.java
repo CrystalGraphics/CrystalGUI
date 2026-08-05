@@ -61,9 +61,8 @@ public class PropertyPill extends UIElement {
 
     private boolean selected;
 
-    /** Built on demand — almost no pill is ever renamed, and a TextField per row is not free. */
-    @Nullable
-    private TextField editor;
+    /** The rename gesture, shared with {@link CategoryHeader} — see {@link InlineRename} for why. */
+    private final InlineRename rename;
 
     /** Fires with the committed name. The pill does not write the document; its host does. */
     public final Signal.Value<String> onRenamed = new Signal.Value<>();
@@ -121,6 +120,14 @@ public class PropertyPill extends UIElement {
         addInternalChild(type);
         buildGhost();
         installPress();
+
+        rename = new InlineRename(this, EDITOR_CLASS, RENAMING_CLASS, property.name(), name::setText,
+                this::invalidateStyleMatch);
+        // Forwarded rather than exposed: onRenamed and onRenameEnded are this row's published surface and
+        // its host is already connected to them. Handing out the helper's signals instead would make the
+        // pill's API depend on how the gesture happens to be implemented.
+        rename.onCommitted.connect(onRenamed::emit);
+        rename.onEnded.connect(onRenameEnded::emit);
     }
 
     @Override
@@ -201,7 +208,7 @@ public class PropertyPill extends UIElement {
         UIWindow window = getAttachedWindow();
         // Never while renaming: the field is a text control, and a drag from inside it is a text
         // selection rather than a move.
-        if (window == null || editor != null) return;
+        if (window == null || rename.isRunning()) return;
 
         float rawX = event.getPosition().x(), rawY = event.getPosition().y();
         UIDragController drag = window.getInputHandler().getDragController();
@@ -254,93 +261,17 @@ public class PropertyPill extends UIElement {
     }
 
     public void beginRename() {
-        if (editor != null) return;
-        UIWindow window = getAttachedWindow();
-        if (window == null) return;
-
-        editor = new TextField();
-        editor.addClass(EDITOR_CLASS);
-        editor.setText(name.getText());
-
-        // ENTER AND BLUR END THE RENAME, and that is separate from the value listener on purpose.
-        //
-        // TextField publishes through a Signal.Value, which is EQUALITY-SUPPRESSING -- so committing a
-        // name unchanged from the one already there emits nothing at all. Relying on that listener alone
-        // meant pressing Enter on the pre-filled name did literally nothing: no write (correct, there is
-        // nothing to write) and no close (wrong), so the field sat open and the rename looked broken. It
-        // only appeared to work if you typed something different, which is a maddening thing to have to
-        // discover.
-        //
-        // So the value listener writes, and these end the gesture regardless of whether anything changed.
-        editor.attachListener(this::applyRename);
-        editor.events.getGroup(KeyboardEvent.Down.class).attachListener((element, event) -> {
-            if (event.getKeyCode() == CgKeyCodes.KEY_RETURN) {
-                applyRename(editor == null ? null : editor.getText());
-                endRename();
-                event.stopPropagation();
-            } else if (event.getKeyCode() == CgKeyCodes.KEY_ESCAPE) {
-                // Escape abandons, which is the convention everywhere a rename is inline. Ended without
-                // applying, and the press is consumed so it does not also reach whatever else is
-                // listening for Escape -- a popover, a modal, the graph.
-                endRename();
-                event.stopPropagation();
-            }
-        }, false, true);
-        editor.events.getGroup(FocusEvent.Blur.class).attachListener((element, event) -> {
-            applyRename(editor == null ? null : editor.getText());
-            endRename();
-        }, false, true);
-
-        addClass(RENAMING_CLASS);
-        addInternalChild(editor);
-        invalidateStyleMatch();
-
-        // requestFocus, not requestPointerFocus: this IS keyboard focus and the ring is wanted -- the
-        // field appeared in order to be typed into, which is the case :focus-visible exists for.
-        window.getInputHandler().requestFocus(editor);
-        editor.selectAll();
+        rename.begin();
     }
 
     /** Whether a rename is in flight — a caller must not rebuild the row under one. */
     public boolean isRenaming() {
-        return editor != null;
-    }
-
-    /**
-     * Reports a new name, if there is one. Does <b>not</b> end the rename — see {@link #beginRename}.
-     *
-     * <p>Idempotent, because it is reached from three places that can overlap: the value listener, Enter,
-     * and the blur Enter itself causes. A name equal to the current one is not a change and is dropped
-     * here rather than by the document, so the panel is never handed a rename it would only discard.</p>
-     */
-    private void applyRename(@Nullable String value) {
-        // No editor means the rename is already over, and this is a blur or a late listener arriving
-        // during teardown. See endRename.
-        if (editor == null) return;
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty() || trimmed.equals(name.getText())) return;
-        // The name is updated locally FIRST, so the blur that follows Enter sees the new value and does
-        // not report the same rename a second time.
-        name.setText(trimmed);
-        onRenamed.emit(trimmed);
+        return rename.isRunning();
     }
 
     /** Takes the editor away and puts the capsule back. Safe to call when no rename is running. */
     public void endRename() {
-        if (editor == null) return;
-        // CLEARED FIRST, then removed. Detaching a focused field fires a blur, and the blur handler
-        // reports a rename -- which rewrites the document, which rebuilds the panel, WHILE refresh() is
-        // still walking its pill list. That surfaced as a ConcurrentModificationException from a plain
-        // add. Nulling the field before the removal makes both the blur handler and a second endRename
-        // no-ops, which is the whole of the guard.
-        TextField going = editor;
-        editor = null;
-        removeInternalChild(going);
-        removeClass(RENAMING_CLASS);
-        invalidateStyleMatch();
-        // AFTER the removal, because that is what cleared the focus -- emitting first would have the
-        // host take focus and then lose it again a line later.
-        onRenameEnded.emit();
+        rename.end();
     }
 
     public PropertyPill setSelected(boolean value) {
