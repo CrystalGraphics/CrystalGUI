@@ -807,11 +807,24 @@ issue exactly one GPU draw call, or zero for a fully transparent tint.
 | `CgUiLayerBox` | Composites a stack; resolves `overlay-fit` via `intrinsicWidth()` |
 | `CgUiRepeat` | Tiling modes |
 | `ArgbMath` | Shared colour maths |
+| `CgUiSvg` | Draws an `SvgDocument` into a rect — fitted and centred, never stretched. See below |
 | `CgUiTransformDrawable` | Empty marker class — not implemented |
 
 `render/texture/asset/CgUiSpriteRegistry` resolves `"namespace:name"` → sprite lazily from
 `assets/{ns}/ui/sprites/{file}.json`. **A resource pack ships a theme by shipping JSON + PNG** — no
 registration call. This is what `background: asset("crystalgui:ore", "button")` goes through.
+
+`render/texture/svg/` is a **full SVG renderer** — scanner, path grammar, transforms, colour, inheritance,
+scanline fills with holes cut, and real linear/radial gradients — parsing an `.svg` once into a cached list
+of draw ops and submitting them through `ctx.curve()`/`ctx.triangle()`. **No atlas, no bake, no texture, one
+instanced draw call for every icon on screen.** Full account in `ICONS.md`, including the nine things it
+deliberately does not implement and why none of them matters for icons.
+
+> **Two seams here are easy to get backwards, and both exist for the same reason: a document is shared.**
+> `currentColor` is left unresolved in the cached ops and bound at draw time, so one parsed icon backs a
+> selected row and an unselected one in the same frame. And `CgUiSvg` is a separate class rather than
+> `SvgDocument implements CgUiDrawable`, because `draw()` has no tint parameter — a document implementing
+> it would need a mutable tint field, and the two rows above would be writing to the same one.
 
 `render/texture/geometry/` holds `Position` and `Size`, small Lombok `@Data(staticConstructor="of")`
 int value types.
@@ -1184,8 +1197,11 @@ com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener Cry
 com.crystalgui.render          CgUiPaintContext (singleton), CgUiRenderer, ScissorStack
   .text                        FontFamilyCache — (font stack, px) -> CgFontFamily
   .texture                     CgUiDrawable (SPI), CgUiQuad, CgUiSprite (9-slice), CgUiRoundedRect (SDF),
-                               CgUiCrossFade, CgUiLayerBox, CgUiRepeat, ArgbMath,
+                               CgUiCrossFade, CgUiLayerBox, CgUiRepeat, ArgbMath, CgUiSvg,
                                CgUiTransformDrawable (stub)
+    .svg                       A full SVG renderer, parse to cached draw ops: SvgScanner (nested tags),
+                               SvgPath (the d grammar), SvgTransform, SvgColor, SvgStyle (inheritance),
+                               SvgGradient, SvgTriangulator (scanline fills, holes cut), SvgDocument
     .asset                     CgUiSpriteRegistry — lazy "ns:name" -> sprite from ui/sprites/*.json
     .geometry                  Position, Size
 
