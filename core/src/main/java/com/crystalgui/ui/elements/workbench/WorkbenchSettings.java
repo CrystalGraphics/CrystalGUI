@@ -109,6 +109,8 @@ public final class WorkbenchSettings {
         SettingsCategory.page("editor", "Editor");
         SettingsCategory.page("workbench", "Workbench");
 
+        declareDemo();
+
         SettingsRegistry registry = SettingsRegistry.get();
         registry.register(AUTO_REVEAL);
         registry.register(CONFIRM_DELETE);
@@ -119,6 +121,69 @@ public final class WorkbenchSettings {
         registry.register(CARET_BLINK);
         registry.register(RESTORE_SESSION);
         registry.register(RESTORE_VIEW_STATE);
+    }
+
+    /**
+     * SCAFFOLDING — a spread of categories, sub-pages, sections and control kinds, so the window can be
+     * exercised at a size it will actually see.
+     *
+     * <p>Every one of these is real: declared, rendered and written to the {@code USER} layer like any
+     * other. None is wired to anything, which is exactly the thing this file otherwise forbids — so this
+     * is temporary, and the point of keeping it in one method is that deleting it is one call.</p>
+     */
+    private static void declareDemo() {
+        SettingsCategory.page("editor.general", "General");
+        SettingsCategory.page("editor.appearance", "Appearance");
+        SettingsCategory.section("editor.appearance.a11y", "Accessibility");
+        SettingsCategory.page("editor.codeStyle", "Code Style");
+        SettingsCategory.page("editor.codeStyle.java", "Java But This One Is Really Look like goddamn");
+        SettingsCategory.page("editor.codeStyle.glsl", "GLSL");
+        SettingsCategory.page("appearance", "Appearance & Behavior");
+        SettingsCategory.page("appearance.theme", "Theme");
+        SettingsCategory.section("appearance.theme.colors", "Colours");
+        SettingsCategory.page("appearance.notifications", "Notifications");
+        SettingsCategory.page("build", "Build & Deployment");
+        SettingsCategory.page("build.shaders", "Shaders");
+        SettingsCategory.page("tools", "Tools");
+
+        SettingsRegistry registry = SettingsRegistry.get();
+        for (Setting<?> setting : new Setting<?>[]{
+                Setting.bool("editor.general.smartHome", "Smart Home key", true)
+                        .description("Home moves to the first non-whitespace character first."),
+                Setting.bool("editor.general.stripTrailing", "Strip trailing whitespace", false),
+                Setting.integer("editor.general.undoLimit", "Undo history size", 100),
+                Setting.select("editor.general.lineEndings", "Line endings",
+                        java.util.List.of("LF", "CRLF", "System"), "LF"),
+                Setting.bool("editor.appearance.showIndentGuides", "Show indent guides", true),
+                Setting.bool("editor.appearance.showWhitespace", "Show whitespace", false),
+                Setting.number("editor.appearance.lineHeight", "Line height", 1.2),
+                Setting.integer("editor.appearance.a11y.zoom", "Zoom", 100)
+                        .description("Percentage. Alt+Shift+= and Alt+Shift+- change it."),
+                Setting.bool("editor.appearance.a11y.highContrastCaret", "High contrast caret", false),
+                Setting.integer("editor.codeStyle.java.indent", "Indent", 4),
+                Setting.integer("editor.codeStyle.java.continuationIndent", "Continuation indent", 8),
+                Setting.bool("editor.codeStyle.java.braceOnNewLine", "Brace on new line", false),
+                Setting.integer("editor.codeStyle.glsl.indent", "Indent", 4),
+                Setting.select("editor.codeStyle.glsl.precision", "Default precision",
+                        java.util.List.of("lowp", "mediump", "highp"), "highp"),
+                Setting.select("appearance.theme.name", "Theme",
+                        java.util.List.of("Dark", "Light", "Ore", "High Contrast"), "Dark"),
+                Setting.bool("appearance.theme.syncWithOs", "Sync with OS", false),
+                Setting.string("appearance.theme.colors.accent", "Accent", "#0078D4"),
+                Setting.string("appearance.theme.colors.selection", "Selection", "#04395E"),
+                Setting.bool("appearance.notifications.onBuildFinished", "Build finished", true),
+                Setting.bool("appearance.notifications.onError", "Error", true),
+                Setting.integer("appearance.notifications.dismissAfter", "Dismiss after (seconds)", 8),
+                Setting.bool("build.shaders.compileOnSave", "Compile on save", true),
+                Setting.bool("build.shaders.warningsAsErrors", "Warnings as errors", false),
+                Setting.select("build.shaders.target", "Target profile",
+                        java.util.List.of("GL 3.3", "GL 4.3", "GL 4.6"), "GL 3.3"),
+                Setting.string("build.outputDirectory", "Output directory", "build/shaders"),
+                Setting.bool("tools.autoSave", "Auto-save", true),
+                Setting.integer("tools.autoSaveDelay", "Auto-save delay (seconds)", 15),
+                Setting.bool("workbench.confirmExit", "Confirm before closing", false)}) {
+            registry.register(setting);
+        }
     }
 
     /** The declared sort order as the constant it names, falling back when a record names a dead one. */

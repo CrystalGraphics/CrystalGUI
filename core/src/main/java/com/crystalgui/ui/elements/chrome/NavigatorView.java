@@ -1,29 +1,22 @@
 package com.crystalgui.ui.elements.chrome;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
-
 import com.crystalgui.core.nav.NavigationHistory;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.TextField;
-import com.crystalgui.ui.elements.tree.FilteredTreeSource;
-import com.crystalgui.ui.elements.tree.TreeDataSource;
 import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.tree.TreeRenderer;
-import com.crystalgui.ui.elements.tree.TreeRow;
-import com.crystalgui.ui.elements.tree.TreeView;
+import com.crystalgui.ui.elements.tree.*;
 import com.crystalgui.ui.event.KeyboardEvent;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.Predicate;
-
-import javax.annotation.Nullable;
 
 /**
  * Search and a tree on the left, a breadcrumb and a page on the right — the master/detail window.
