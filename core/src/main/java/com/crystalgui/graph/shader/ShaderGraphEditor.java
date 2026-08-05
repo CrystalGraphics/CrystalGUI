@@ -322,6 +322,21 @@ public class ShaderGraphEditor extends UIElement {
      * while one is being built, so this is a status message and not an error path.</p>
      */
     public void recompile() {
+        // THE THUMBNAILS TOO. A property node bakes its default into the preview shader as a literal --
+        // it has to, since a preview has no Properties block and no material to set a uniform -- so
+        // editing a property's Default leaves every thumbnail downstream showing the OLD value until the
+        // preview graph is rebuilt. The previews rebuild themselves for a node field and for a resolved
+        // port width, but a property is edited through a different path and told them nothing: a Float
+        // changed from 0 to 1 left its Multiply thumbnail black while the Main Preview went white.
+        //
+        // Cheap: requestRecompile is debounced, and this already runs only on real changes.
+        // Null-guarded because `graph.onConnectionsChanged` is wired BEFORE the previews are built, so a
+        // connection change raised during their construction would reach this with the field still unset.
+        if (previews != null) {
+            previews.invalidate();
+            previews.requestRecompile();
+        }
+
         CgShaderEmitter.Result result =
                 ShaderGraphBridge.compile(graph.getDocument(), shaderNodes, master);
         lastCompile = result;
