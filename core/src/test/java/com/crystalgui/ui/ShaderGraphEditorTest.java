@@ -210,6 +210,32 @@ public class ShaderGraphEditorTest extends UiTestBase {
         assertEquals(seeded, editor.graph().getDocument().nodeCount());
     }
 
+    /**
+     * <b>A file is adopted before its panel exists, so adopt must work on a DETACHED editor.</b>
+     *
+     * <p>{@code Workbench.openFile} reads, calls {@code adoptInto(...)}, and only then
+     * {@code openPanel(ref)} — so on the create-then-open path the editor has no window at the moment it
+     * is handed its bytes. Restoring a layout takes the other order, where the panel is built first.</p>
+     *
+     * <p>Worth pinning because the two paths are easy to conflate and only one of them is exercised by
+     * every other test here: seeding the starter graph goes through the ordinary widget mutators, and
+     * anything in that chain that quietly needed a window would leave a brand-new file empty while a
+     * reopened one came back correct — which is exactly how it was reported, and was in fact a stale
+     * build rather than this.</p>
+     */
+    @Test(timeout = 15_000)
+    public void aDetachedEditorCanStillAdopt() {
+        ShaderGraphEditor detached = new ShaderGraphEditor();
+        assertNull("this fixture is only meaningful while detached", detached.getParent());
+
+        detached.adopt(new byte[0]);
+
+        assertTrue("the document did not get the starter graph",
+                detached.graph().getDocument().nodeCount() > 0);
+        assertEquals("and every node got a widget, without a layout pass to trigger it",
+                detached.graph().getDocument().nodeCount(), detached.graph().nodes().size());
+    }
+
     /** Whitespace is blank too — a file someone opened, touched and left is still a new file. */
     @Test(timeout = 15_000)
     public void whitespaceCountsAsBlank() {
