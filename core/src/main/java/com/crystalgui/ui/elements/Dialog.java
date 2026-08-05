@@ -386,88 +386,10 @@ public class Dialog extends UIElement {
         if (open) addClass(OPEN_CLASS);
         else removeClass(OPEN_CLASS);
 
-        if (open) {
-            // Cancels a hide still running, so reopening during a fade-out shows the dialog rather than
-            // letting the pending timer hide it a moment later.
-            cancelPendingHide();
-            StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.FLEX));
-            return;
-        }
-
-        long fadeNanos = declaredFadeNanos();
-        if (fadeNanos <= 0L) {
-            StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
-            return;
-        }
-        startPendingHide(fadeNanos / 1_000_000_000f);
+        StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
+                l -> l.display(open ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
     }
 
-    /**
-     * How long {@code opacity} is declared to take, in nanoseconds. Zero when nothing declares it.
-     *
-     * <p>Read from the cascade rather than held as a constant, so the stylesheet stays the single owner
-     * of timings — change the CSS and the delay follows, with nothing in Java to keep in step.</p>
-     */
-    private long declaredFadeNanos() {
-        java.util.List<com.crystalgui.style.transition.TransitionSpec> specs =
-                getStyle().getComputed(StylePropertyRegistry.TRANSITION);
-        if (specs == null) return 0L;
-        long longest = 0L;
-        for (com.crystalgui.style.transition.TransitionSpec spec : specs) {
-            String name = spec.propertyNameOrAll();
-            if (!com.crystalgui.style.transition.TransitionSpec.ALL.equals(name)
-                    && !StylePropertyRegistry.OPACITY.name.equals(name)) {
-                continue;
-            }
-            longest = Math.max(longest, spec.durationNanos() + spec.delayNanos());
-        }
-        return longest;
-    }
-
-    /** True while the box is still laid out purely so its fade-out can be seen. */
-    private boolean hiding;
-
-    private boolean hitTestBeforeHiding = true;
-
-    private void startPendingHide(float seconds) {
-        UIWindow window = getAttachedWindow();
-        if (window == null) {
-            StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
-            return;
-        }
-        if (!hiding) hitTestBeforeHiding = isHitTest();
-        hiding = true;
-        // Unhittable for the whole linger: a window visibly on its way out must not still be clickable,
-        // and setHitTest applies to the subtree, so one call covers every control in it.
-        setHitTest(false);
-
-        float[] elapsed = { 0f };
-        window.registerTicker(delta -> {
-            if (!hiding) return false;              // reopened; applyOpenState has taken over
-            elapsed[0] += delta;
-            if (elapsed[0] < seconds) return true;
-            finishPendingHide();
-            return false;
-        });
-    }
-
-    private void finishPendingHide() {
-        hiding = false;
-        setHitTest(hitTestBeforeHiding);
-        StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
-    }
-
-    private void cancelPendingHide() {
-        if (!hiding) return;
-        hiding = false;
-        setHitTest(hitTestBeforeHiding);
-    }
-
-    /** Hides a fading dialog at once. For a caller that cannot spare the frames — a test, a teardown. */
-    public Dialog finishClosing() {
-        if (hiding) finishPendingHide();
-        return this;
-    }
 
     // ── Position ────────────────────────────────────────────────────────────
 

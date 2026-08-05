@@ -4170,11 +4170,17 @@ dialog.__preferences__ {
      * the window actually is, rather than showing it in the corner and sliding. The two compose: the hold
      * outranks this rule, and dropping the hold hands the property back here.
      *
-     * FADE IN ONLY. Closing is instant, because `display: none` lands on the same frame and is not
-     * animatable -- fading out means holding a closed window on screen and deferring the close behind a
-     * timer. IntelliJ and VS Code both close instantly too. */
+     * `display` IS IN THE LIST, and that is what makes the fade OUT exist. display is discrete, so
+     * without naming it the box snaps to `none` on the frame the close happens and takes the opacity
+     * transition with it -- the window faded in and vanished. Naming it keeps the element laid out for
+     * the same duration and hides it at the end: CSS `transition-behavior: allow-discrete`, implemented
+     * in the style engine (LayoutProperties.DISPLAY) rather than in Dialog, so anything can fade out by
+     * saying so.
+     *
+     * ONE LIST, not two declarations: `transition` is a single property whose value is the whole list, so
+     * a second declaration REPLACES this one rather than adding to it. */
     opacity: 0;
-    transition: opacity 240ms ease;
+    transition: opacity 240ms ease, display 240ms ease;
     /* Resizable, because the label column is the thing people run out of and no default width is right
      * for every language. `resize` is a real CSS property here and Dialog already routes its handles
      * through its own position, so this is the whole of it. */
