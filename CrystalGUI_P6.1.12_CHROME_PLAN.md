@@ -796,3 +796,96 @@ Two things this needs that do not exist yet:
 > **Why not optimistic.** It is the right answer for a single-user local editor and the wrong one here.
 > Rolling back an optimistic tree change means rebuilding rows the user may be mid-click on — the trap
 > `DockArea.syncGroups` already exists to avoid, and the one that cost a session on the table header.
+
+
+---
+
+## Tier 1.5 — the workbench, not the explorer
+
+Added after the explorer reached parity. Everything below is about the *shell around* the panels, and the
+ranking is judged for **this** application — a shader-graph workbench — rather than for a general IDE.
+
+Costs are judged against machinery that already exists and was verified present when this was written.
+
+| # | Item | Value | Cost | Notes |
+|---|---|---|---|---|
+| E16 | **Dirty state + save guard** — tab dot, close confirm, Save All, guard on delete and reload | ★★★★★ | Low | **The only data-loss gap on this list.** Nothing tracks modification anywhere today; `WorkingCopies` already owns the open-document map, so this is a flag plus three consult points |
+| E17 | **Go to File** (`Mod+P`) | ★★★★★ | Very low | `QuickPick` and `SearchMatcher` are already wired together for the palette; this is a different item source into the same widget |
+| E18 | **Find in the current file** (`Mod+F`) | ★★★★★ | Low–Medium | `HighlightRegistry` and `::highlight()` were built for exactly this and **nothing consumes them**. The restriction to non-layout properties exists so find-as-you-type cannot reflow the text being searched |
+| E19 | **Tab affordances** — MRU `Mod+Tab`, middle-click close, reopen closed tab, overflow | ★★★★☆ | Low | `DockLeaf`/`Tab` already model the strip; ordering plus two listeners |
+| E20 | **External-change reconciliation** — "changed on disk, reload?" for an OPEN file | ★★★★☆ | Medium | `onFileChanged` already arrives and the save path already detects etag conflicts; nothing consults either for a file that is open |
+| E21 | **Status bar** — caret position, active file, last message | ★★★☆☆ | Low | `onStatus` is emitted by the workbench *and* by the graph, and nothing displays it |
+| E22 | **Go to Line** (`Mod+G`) | ★★★☆☆ | Very low | `QuickPick` again |
+| E23 | Breadcrumbs above the editor | ★★☆☆☆ | Low | Genuinely optional at this tree size |
+
+Recommended order: **E16, E17, E18.** E16 because it is the only one whose failure mode is losing work;
+E17 and E18 because they are reached for constantly and are unusually cheap here, the machinery having
+been built and then never consumed.
+
+---
+
+## E24 — Binding a file to an editor
+
+> Asked directly: is "extension maps to an editor widget" what the industry does?
+
+Yes — but **not at that granularity**, and the difference is what stops it turning into a lookup table
+nobody can extend. Every mature editor splits this into *two* registries, and ours already has half of
+one without knowing it.
+
+### What the titans actually do
+
+**VS Code** keeps language identification and editor selection completely separate.
+
+- *Language* comes from `contributes.languages`, which associates by `extensions`, exact `filenames`,
+  `filenamePatterns` (globs), and a `firstLine` regex — plus a user-facing `files.associations` override.
+  The result is a **language id**, which is what the text editor uses to pick a grammar.
+- *Editor* comes from `contributes.customEditors`, whose selector is a **glob**, with a `priority` of
+  `default` or `option`, and a user override in `workbench.editorAssociations` (`"*.png":
+  "imagePreview.previewEditor"`). "Reopen Editor With…" writes into that same setting.
+- Custom editors come in two kinds, and the split matters to us: `CustomTextEditorProvider` is backed by
+  an ordinary text document, while `CustomEditorProvider` is backed by an arbitrary `CustomDocument` —
+  which is what a binary or graph format needs.
+
+**IntelliJ** uses `FileType` (associated by extension, exact name, or pattern) and, separately,
+`FileEditorProvider.accept(project, file)` with a `getPolicy()` saying whether it replaces the default
+text editor or sits beside it. **Several providers may accept the same file**, which is why a `.form`
+opens with *Design* and *Text* tabs at the bottom of one editor — the same document, two views.
+
+**Eclipse** binds editors through `org.eclipse.ui.editors` (extension patterns, one marked default) on
+top of *content types*, which can sniff the file's bytes rather than trusting its name.
+
+### The four properties they all share
+
+1. **Match on patterns, not bare extensions.** `Dockerfile`, `CMakeLists.txt`, `.gitignore` have no
+   useful extension, and `.shader` means something different to Unity than to us.
+2. **Content type and editor binding are different questions.** `.java`, `.glsl`, `.shader` and `.css`
+   all want the *same* editor with a *different language*. Only `.png` and `.shadergraph` want a
+   different editor. Collapsing the two makes every new language a new editor registration.
+3. **Priority plus a user override.** Something has to answer "which wins", and the user must be able to
+   say "open this one with that instead" — and have it stick.
+4. **A guaranteed fallback**, in order: bound editor, then plain text, then a binary viewer. A file with
+   no binding must still open as *something*.
+
+### What that means here
+
+Both halves land on choke points that already exist, which is why this is worth doing properly rather
+than with an `if` ladder:
+
+- **Editor binding.** `Workbench.refFor(path)` hard-codes `FILE_TYPE` for every file, and the dock
+  already has a registry of panel types keyed by id. So the binding is exactly *pattern to panel type id*
+  — `LanguageRegistry`-style lookup, then `new DockPanelRef(boundTypeId)`. No new concept in the dock.
+- **Language.** Already done, and it was already done when this was first written: `Workbench.editorFor`
+  consults `LanguageRegistry.forFileName` and sets both the language and a fresh tokenizer per document.
+  What was missing was *breadth* — the registry matched extensions only, so nothing without a useful
+  extension could ever be classified. It now matches an exact name, then an extension, then a glob.
+
+Worth stealing from IntelliJ specifically: letting **more than one** provider accept a file, so
+`.shadergraph` can open as the graph editor *and* offer a raw-document view of the same document in a
+second tab. That is a debugging affordance the serializer work will want almost immediately.
+
+| # | Item | Value | Cost |
+|---|---|---|---|
+| E24a | ~~Language association~~ — **already wired**; widened from extension-only to name/extension/glob matching | ★★★★★ | Done |
+| E24b | **Editor binding** — pattern to dock panel type, with priority and a text fallback | ★★★★★ | Low — `refFor` is the only call site |
+| E24c | Per-file user override ("Open With…"), persisted | ★★★☆☆ | Low, but **needs E15** |
+| E24d | Two views of one document (graph + raw), IntelliJ-style | ★★★☆☆ | Medium |
