@@ -4181,8 +4181,8 @@ popover.__prompt__ textfield {
  * window would come up with an unstyled title bar. One scrolling list of groups, which is VS Code's
  * settings editor rather than IntelliJ's category tree. */
 dialog.__preferences__ {
-    width: 420px;
-    height: 320px;
+    width: 720px;
+    height: 480px;
     /* Transparent while closed, opaque once `__open__` lands. THE PAIR is what gives the transition a
      * value to start from: a box coming out of `display: none` has no previous opacity to interpolate
      * from, which is the problem `@starting-style` exists to solve on the web. `menu .__items__` uses the
@@ -4208,8 +4208,8 @@ dialog.__preferences__ {
      * for every language. `resize` is a real CSS property here and Dialog already routes its handles
      * through its own position, so this is the whole of it. */
     resize: both;
-    min-width: 260px;
-    min-height: 160px;
+    min-width: 480px;
+    min-height: 320px;
 }
 
 /* 0, not auto: flex-shrink is 0 in this engine, so a growing child keeps its content size and overflows
@@ -4233,4 +4233,116 @@ dialog.__preferences__ .__configurator-panel__ {
 dialog.__preferences__ .__configurator__ > .__label__ {
     width: 170px;
     min-width: 170px;
+}
+
+/* ── NavigatorView ─────────────────────────────────────────────────────────────
+ *
+ * Search + tree on the left, breadcrumb + page on the right. A general shell, so these rules key on the
+ * tag and its parts rather than on Preferences -- a keymap editor or a node library gets the same window
+ * for free by using the widget. */
+navigatorview {
+    width: 100%;
+    height: 100%;
+}
+
+navigatorview > splitview {
+    width: 100%;
+    height: 100%;
+}
+
+/* 0 basis with flex-grow, not auto: flex-shrink is 0 in this engine, so a content-sized column keeps
+ * whatever its widest row needs and pushes the divider out of the dialog. */
+navigatorview .__nav-sidebar__ {
+    width: 100%;
+    height: 100%;
+    padding-all: 4px;
+    gap-all: 4px;
+    background: #252526;
+}
+
+navigatorview .__nav-search__ {
+    width: 100%;
+    height: 20px;
+    border-radius: 3px;
+    padding-left: 6px;
+    padding-right: 6px;
+    outline-width: 1px;
+    outline-color: #3C3C3C;
+    background: #1E1E1E;
+}
+
+navigatorview .__nav-search__:focus {
+    outline-color: #0078D4;
+}
+
+navigatorview .__nav-sidebar__ treeview {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+navigatorview .__nav-detail__ {
+    width: 100%;
+    height: 100%;
+    padding-all: 6px;
+    gap-all: 4px;
+}
+
+navigatorview .__nav-header__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 18px;
+    gap-all: 4px;
+    flex-shrink: 0;
+}
+
+navigatorview .__nav-back__,
+navigatorview .__nav-forward__ {
+    width: 18px;
+    height: 16px;
+    flex-shrink: 0;
+    padding-all: 0px;
+}
+
+/* The trail. `flex-grow` so it takes the rest of the header rather than the buttons doing so. */
+navigatorview .__nav-header__ breadcrumbs {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 3px;
+    width: 0px;
+    flex-grow: 1;
+}
+
+breadcrumbs .__crumb__ {
+    color: #7CB7E8;
+    flex-shrink: 0;
+}
+
+/* Where you ARE, so not a link: plain, and not coloured as one. A last segment that looked clickable
+ * would be a control that does nothing. */
+breadcrumbs .__crumb__.__crumb-current__ {
+    color: #DDDDDD;
+}
+
+breadcrumbs .__crumb-sep__ {
+    color: #7A7A7A;
+    flex-shrink: 0;
+}
+
+navigatorview pagestack {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+pagestack .__page__ {
+    width: 100%;
+    height: 100%;
+}
+
+pagestack .__page-placeholder__ {
+    width: 100%;
+    padding-all: 8px;
+    color: #8A8A8A;
 }
