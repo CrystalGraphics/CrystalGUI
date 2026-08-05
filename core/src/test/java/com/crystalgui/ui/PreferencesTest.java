@@ -294,4 +294,32 @@ public class PreferencesTest extends UiTestBase {
                 bar.getRuntimeCache().getWidth() > 0f);
         assertTrue("the scrollbar has zero height", bar.getRuntimeCache().getHeight() > 0f);
     }
+
+    /**
+     * <b>No bars when nothing overflows.</b>
+     *
+     * <p>{@code overflow: scroll} means ALWAYS SHOW in CSS, and the panel said exactly that — so both
+     * bars sat there permanently, a horizontal one included for content that never overflows sideways.
+     * It went unseen for as long as the bars had no width to draw with, and became obvious the moment
+     * they did.</p>
+     */
+    @Test
+    public void theBarsAreHiddenWhenNothingOverflows() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+        // Tall enough that every row fits, which is the state the window opens in.
+        preferences.dialog().layout(l -> l.height(700f));
+        settle();
+
+        assertEquals("nothing overflows vertically, so there is nothing to scroll",
+                0f, preferences.panel().getMaxScrollTop(), 0.01f);
+        for (UIElement bar : preferences.panel().querySelectorAll(".__h-scroller__")) {
+            assertEquals("a horizontal bar is drawn for content that never overflows sideways",
+                    0f, bar.getRuntimeCache().getHeight(), 0.01f);
+        }
+        for (UIElement bar : preferences.panel().querySelectorAll(".__v-scroller__")) {
+            assertEquals("a vertical bar is drawn although everything fits",
+                    0f, bar.getRuntimeCache().getWidth(), 0.01f);
+        }
+    }
 }
