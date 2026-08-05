@@ -111,13 +111,25 @@ public final class ExplorerCommands {
                 .enabledWhen(context -> !CLIPBOARD.isEmpty()
                         && destinationFor(workbench, context) != null));
 
+        // EVERYTHING LISTED, not the selected row's folder.
+        //
+        // Scoping it to the selection is what a file operation does, because an operation knows which
+        // folder it touched. A user pressing F5 knows the opposite: they are asking precisely because
+        // something changed that the tree cannot know about, and they have no way to tell it where. So a
+        // per-folder reload did nothing whenever the change was anywhere else -- which is most of the
+        // time -- and read first as "F5 does not work" and then as "F5 needs two presses", since a second
+        // press after clicking elsewhere would sometimes land on the right folder.
+        //
+        // Cost is bounded by what is already on screen: only directories that have been listed are
+        // re-listed, so a collapsed tree is one call.
         registry.register(Command.of(REFRESH, "Reload from Disk")
                 .run(context -> {
-                    workbench.fileTree().source().invalidate(destinationFor(workbench, context));
+                    workbench.fileTree().source().invalidateAll();
                     workbench.fileTree().treeView().refresh();
                 })
-                // Reloading the project root with nothing selected is what F5 should mean.
-                .enabledWhen(context -> destinationFor(workbench, context) != null));
+                // No target needed any more -- it reloads the whole tree, so the only thing that could make
+                // it meaningless is having no project open at all.
+                .enabledWhen(context -> !workbench.fileTree().source().roots().isEmpty()));
     }
 
     /**
@@ -134,7 +146,6 @@ public final class ExplorerCommands {
         keymap.bind("Mod+V", PASTE);
         keymap.bind("F2", RENAME);
         keymap.bind("Delete", DELETE);
-        keymap.bind("F5", REFRESH);
     }
 
     /**
@@ -144,9 +155,20 @@ public final class ExplorerCommands {
      * the editor, the tool windows and the menu alike, and a New File that worked only while the Project
      * panel held focus is one nobody would find. It is a chord rather than a bare letter, so binding it at
      * the root is safe in a way {@code Delete} is not: a chord cannot fire while typing.</p>
+     *
+     * <p>{@code F5} is here for a related but distinct reason, and it was on the panel until somebody found
+     * that it did nothing until they had clicked a row. A keymap resolves outward from the <b>focused</b>
+     * element, so a binding on the tree is unreachable while nothing inside the tree has focus — which is
+     * how the panel looks the moment it opens. Reload is exactly the verb you reach for before touching
+     * anything, so a scope that requires a click first is the one scope it cannot have.</p>
+     *
+     * <p>Safe at the root on both counts that keep {@code Delete} and {@code F2} off it: a function key
+     * cannot fire while typing, and reload has a sensible meaning with nothing selected — its own
+     * enablement already says so, falling back to the project root.</p>
      */
     public static void bindGlobalDefaults(Keymap keymap) {
         keymap.bind("Mod+N", NEW_FILE);
+        keymap.bind("F5", REFRESH);
     }
 
     /** Registers on the window and binds on the file tree, which is what scopes the bare keys. */

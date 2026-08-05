@@ -159,20 +159,60 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
     }
 
     /**
-     * Forgets a directory's contents so the next read re-fetches them.
+     * Re-fetches a directory's contents, <b>keeping the ones it already has until the new list arrives</b>.
      *
-     * <p>What a file operation invalidates. <b>Both {@code children} and {@code requested} have to go</b>
-     * — the second is the in-flight guard, and leaving it behind means {@code request} declines to ask
-     * again and the folder stays permanently empty. That is a one-line omission with no symptom until
-     * somebody creates a file and it never appears.</p>
+     * <p>What a file operation invalidates. The in-flight guard has to be dropped, or {@code request}
+     * declines to ask again and the folder stays frozen on its old contents forever — a one-line omission
+     * with no symptom until somebody creates a file and it never appears.</p>
+     *
+     * <p><b>The listing itself is deliberately NOT dropped.</b> It used to be, and that is a visible bug
+     * rather than a tidy one: a listing arrives over the network some frames later, and in between
+     * {@code children()} answered "empty" for a folder that is still expanded. So every create and every
+     * delete collapsed the whole folder and repopulated it two frames later — six rows vanished and came
+     * back, which reads as the entire tree being rebuilt under you. Traced in the harness as
+     * {@code model=15 -> 9 -> 14} across three consecutive frames.</p>
+     *
+     * <p>Serving the stale list for those two frames is not a compromise, it is what every file tree does:
+     * the deleted row lingers for a frame instead of its five siblings disappearing with it. The refresh
+     * is then a swap rather than a clear-and-refill, and nothing on screen moves except what changed.</p>
      *
      * <p>Directory-scoped rather than a full clear: a rename touches one folder, or two, and dropping the
      * whole tree would collapse every expanded node the user had opened.</p>
      */
     public void invalidate(CgPath directory) {
         if (directory == null) return;
-        children.remove(directory);
         requested.remove(directory);
+        // ASKED EAGERLY, because children() only re-requests when it has nothing — and it now has
+        // something. Without this the stale list would be served indefinitely and the create would never
+        // show up at all, which is the failure the old comment above was written about.
+        request(directory);
+        dirty = true;
+    }
+
+    /**
+     * Re-fetches <b>every</b> directory this tree has listed — what "Reload from Disk" means.
+     *
+     * <p>Distinct from {@link #invalidate} on purpose, and the distinction is the whole bug it was
+     * written for. A file <em>operation</em> knows which folder it touched, so it invalidates that one and
+     * nothing else. A user pressing F5 knows the opposite: they are asking because something changed that
+     * the tree has no way to know about, and they cannot tell it where.</p>
+     *
+     * <p>Reloading only the selected row's folder therefore did nothing at all whenever the change was
+     * anywhere else — which is most of the time. It read as "F5 is broken", and then as "F5 needs two
+     * presses", because a second press after clicking elsewhere would sometimes happen to land on the right
+     * folder. Traced in the harness: every press fetched correctly and returned an identical listing.</p>
+     *
+     * <p>Bounded by what is already on screen rather than by the project: only directories that have been
+     * listed are re-listed, so a collapsed tree costs one call and nothing walks the disk. Expanded state
+     * and selection are untouched, because the listings are replaced rather than dropped.</p>
+     */
+    public void invalidateAll() {
+        // COPIED before iterating: request() completes synchronously against an in-memory transport, and
+        // its handler writes straight back into `children`.
+        for (CgPath directory : new ArrayList<>(children.keySet())) {
+            requested.remove(directory);
+            request(directory);
+        }
         dirty = true;
     }
 
