@@ -5,6 +5,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -132,5 +133,64 @@ public class ShaderGraphEditorTest extends UiTestBase {
         editor.addStarterGraph();
         assertNotEquals("a recompile does not reach a source pane the host parented",
                 before, editor.source().getText());
+    }
+
+    // ── As a file ───────────────────────────────────────────────────────────
+
+    /**
+     * <b>A graph survives a round trip through the file it writes.</b>
+     *
+     * <p>End to end through the two halves the workbench actually calls — {@code encode()} to save and
+     * {@code adopt()} to open — rather than through {@code GraphCodecs} directly, because the codec has
+     * had round-trip tests since 6.2.5 and was never the missing part. What was missing is that the
+     * decoded document reaches the <em>view</em>: {@code GraphView.syncFromDocument} is changeset-driven
+     * and a freshly decoded document has none, so "it decodes" and "it opens" are different claims.</p>
+     */
+    @Test(timeout = 15_000)
+    public void aGraphRoundTripsThroughItsOwnFile() {
+        build();
+        // NO FRAMES after seeding, for the reason theStarterGraphIsOptInAndCompiles records: attaching
+        // the previews starts CgPreviewRenderer, which needs a real GL context. Nothing here wants one --
+        // load builds its widgets immediately, so the counts below are readable without a frame.
+        editor.addStarterGraph();
+
+        int nodes = editor.graph().getDocument().nodeCount();
+        int edges = editor.graph().getDocument().edges().size();
+        assertTrue("this fixture needs a graph to be worth round-tripping", nodes > 1);
+        byte[] saved = editor.encode();
+
+        // A DIFFERENT editor, which is what opening the file in a new tab is.
+        ShaderGraphEditor reopened = new ShaderGraphEditor();
+        UIElement host = new UIElement().layout(l -> l.width(800).height(500));
+        host.addChild(reopened);
+        UIWindow second = new UIWindow(Ui.of(host));
+        second.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        second.init(1600, 1000);
+        reopened.adopt(saved);
+
+        assertEquals("every node came back", nodes, reopened.graph().getDocument().nodeCount());
+        assertEquals("and every wire", edges, reopened.graph().getDocument().edges().size());
+        assertEquals("as widgets on the canvas, not just rows in a document",
+                nodes, reopened.graph().nodes().size());
+        assertEquals("and the file it would write next is the same file",
+                new String(saved, java.nio.charset.StandardCharsets.UTF_8),
+                new String(reopened.encode(), java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Opening a file leaves nothing to undo.
+     *
+     * <p>The first {@code Ctrl+Z} in a freshly opened graph must not start unpicking it a node at a time.
+     * A load is the starting state, not something the user did.</p>
+     */
+    @Test(timeout = 15_000)
+    public void openingAGraphIsNotUndoable() {
+        build();
+        editor.addStarterGraph();
+        byte[] saved = editor.encode();
+
+        editor.adopt(saved);
+
+        assertEquals(0, editor.graph().undoStack().undoDepth());
     }
 }
