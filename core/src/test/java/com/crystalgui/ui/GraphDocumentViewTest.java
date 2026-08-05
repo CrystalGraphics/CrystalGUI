@@ -303,6 +303,116 @@ public class GraphDocumentViewTest extends UiTestBase {
                 "some.mod.Missing", graph.nodes().get(0).getTitle());
     }
 
+    /**
+     * <b>Loading keeps the view's document instance, so anything bound to it stays bound.</b>
+     *
+     * <p>This is the property per-file editors rest on, and it was the one line that made them
+     * impossible: {@code load} used to end in {@code this.document = source}. A host wires its panels to
+     * {@code getDocument()} once, at construction — {@code ShaderGraphEditor} hands the same instance to
+     * its Main Preview, its Blackboard and its own change listener — so a swap left every one of them
+     * driving an <b>orphan</b>. Both halves keep working individually, which is why nothing would have
+     * reported it: the board lists a graph that is not on screen and writes edits nobody can see.</p>
+     */
+    @Test
+    public void loadingKeepsTheDocumentAnythingElseIsBoundTo() {
+        NodeTypeRegistry library = new NodeTypeRegistry();
+        library.register(NodeType.of("shader.Position").label("Position").out("Out", "vec3"));
+        graph.setNodeLibrary(library, NodeWidgetFactory.of(library).build(), (f, t) -> true);
+
+        // What a panel does at construction: take the document once and listen to it.
+        GraphDocument bound = graph.getDocument();
+        int[] notified = {0};
+        bound.onChanged.connect(() -> notified[0]++);
+
+        GraphDocument file = new GraphDocument();
+        file.addNode(library.get("shader.Position").create(7f, 8f));
+        graph.load(file);
+        frame();
+
+        assertSame("the view must still be showing the instance the panel holds",
+                bound, graph.getDocument());
+        assertEquals("which therefore has the loaded graph in it", 1, bound.nodeCount());
+        assertTrue("and the panel was told, or it would still be drawing the old graph",
+                notified[0] > 0);
+    }
+
+    /** Everything a file carries comes back — positions, node settings, properties and graph settings. */
+    @Test
+    public void loadingRestoresPositionsPropertiesAndSettings() {
+        NodeTypeRegistry library = new NodeTypeRegistry();
+        library.register(NodeType.of("shader.Position").label("Position").out("Out", "vec3"));
+        graph.setNodeLibrary(library, NodeWidgetFactory.of(library).build(), (f, t) -> true);
+
+        GraphDocument file = new GraphDocument();
+        NodeData node = file.addNode(library.get("shader.Position").create(120f, 34f));
+        file.addProperty(com.crystalgui.graph.GraphProperty.of("Tint", "vec4", "(1,0,0,1)"));
+        file.settings().setRaw(com.crystalgui.core.settings.SettingsLayer.DOCUMENT, "graph.probe", "on");
+
+        graph.load(file);
+        frame();
+
+        GraphDocument live = graph.getDocument();
+        assertEquals("the node landed where the file said", 120f, live.node(node.id()).x(), 0.01f);
+        assertEquals("the Blackboard's properties came across", 1, live.propertyCount());
+        assertEquals("Tint", live.properties().get(0).name());
+        assertEquals("and the graph's own settings", "on",
+                live.settings().raw("graph.probe"));
+    }
+
+    /**
+     * <b>A load is not an edit — the undo stack is empty afterwards.</b>
+     *
+     * <p>Ctrl+Z straight after opening a file must not begin unpicking it a node at a time. Leaving the
+     * <em>previous</em> file's history would be worse still: those entries describe a graph that is no
+     * longer in this document, so undoing one edits nodes that never existed in it.</p>
+     */
+    @Test
+    public void loadingIsNotUndoable() {
+        NodeTypeRegistry library = new NodeTypeRegistry();
+        library.register(NodeType.of("shader.Position").label("Position").out("Out", "vec3"));
+        graph.setNodeLibrary(library, NodeWidgetFactory.of(library).build(), (f, t) -> true);
+
+        // Some real history first, so "empty" cannot pass by never having had anything.
+        graph.addNode(graph.getNodeFactory().create(library.get("shader.Position"),
+                library.get("shader.Position").create(0f, 0f)), 0f, 0f);
+        graph.removeNode(graph.nodes().get(0));
+        frame();
+        assertTrue("this fixture needs history to clear", graph.undoStack().undoDepth() > 0);
+
+        GraphDocument file = new GraphDocument();
+        file.addNode(library.get("shader.Position").create(5f, 5f));
+        graph.load(file);
+        frame();
+
+        assertEquals("opening a file is the starting state, not an action",
+                0, graph.undoStack().undoDepth());
+    }
+
+    /** A file whose graph is empty still tells the panels, or they keep drawing the previous one. */
+    @Test
+    public void loadingAnEmptyGraphStillNotifies() {
+        NodeTypeRegistry library = new NodeTypeRegistry();
+        library.register(NodeType.of("shader.Position").label("Position").out("Out", "vec3"));
+        graph.setNodeLibrary(library, NodeWidgetFactory.of(library).build(), (f, t) -> true);
+
+        GraphDocument first = new GraphDocument();
+        first.addProperty(com.crystalgui.graph.GraphProperty.of("Tint", "vec4", "(1,0,0,1)"));
+        graph.load(first);
+        frame();
+
+        int[] notified = {0};
+        graph.getDocument().onChanged.connect(() -> notified[0]++);
+
+        // NOTHING in it. GraphDocument.clear() empties the property list after its last removeNode, and
+        // restoreEdge never emits at all -- so without load's own emit this is silent and the Blackboard
+        // goes on listing Tint.
+        graph.load(new GraphDocument());
+        frame();
+
+        assertEquals("the properties went with the old file", 0, graph.getDocument().propertyCount());
+        assertTrue("and something said so", notified[0] > 0);
+    }
+
     // ── The other direction: document → view ────────────────────────────────
 
     /**
@@ -329,9 +439,15 @@ public class GraphDocumentViewTest extends UiTestBase {
         assertNotNull(untouched);
 
         // What a server would do: mutate the document, not the view.
-        NodeData add = doc.addNode(library.get("shader.Add").create(220f, 30f));
-        doc.link(position, "Out", add, "A");
-        doc.moveNode(position.id(), 12f, 34f);
+        //
+        // THE VIEW'S document, which is not `doc`. `load` copies contents in rather than adopting the
+        // object, so that a host's panels — bound to getDocument() at construction — cannot be left
+        // driving an orphan. The consequence lands here: `doc` is a spent template once it has been
+        // loaded, and editing it reaches nothing.
+        GraphDocument live = graph.getDocument();
+        NodeData add = live.addNode(library.get("shader.Add").create(220f, 30f));
+        live.link(position, "Out", add, "A");
+        live.moveNode(position.id(), 12f, 34f);
 
         int applied = graph.syncFromDocument();
         frame();

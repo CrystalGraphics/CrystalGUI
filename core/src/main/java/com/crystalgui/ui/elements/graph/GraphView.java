@@ -4,7 +4,9 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.graph.EdgeData;
+import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.GraphChangeset;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphIds;
@@ -580,38 +582,59 @@ public class GraphView extends CanvasView implements UndoScope {
     }
 
     /**
-     * Rebuilds the whole view from {@code document} — opening a file, or receiving a graph.
+     * Replaces everything this view is showing with {@code source} — opening a file, or receiving a graph.
      *
-     * <p>The one place a wholesale rebuild is correct, because there is no interaction in flight: every
-     * <em>incremental</em> change goes through the ordinary mutators instead, since rebuilding detaches
-     * the element under the pointer.</p>
+     * <h3>It copies the CONTENTS in; it does not adopt the object</h3>
+     * <p>This used to end in {@code this.document = source}, and that is the one line that made a
+     * per-file editor impossible. A host wires its panels to {@code getDocument()} once, at construction
+     * — {@code ShaderGraphEditor} hands the same instance to its Main Preview, its Blackboard and its own
+     * {@code onChanged} listener. Swapping the field left every one of them bound to an <b>orphan</b>:
+     * the board would go on listing the previous graph's properties and write its edits into a document
+     * nobody was showing, with both halves individually working and no error anywhere.</p>
      *
-     * <p>Nodes whose type is not in the library still appear — {@link NodeWidgetFactory} builds them
-     * from the ports the document stored, which is why the document stores them.</p>
+     * <p>So a view owns one document for its whole life, and loading changes what is in it. The cost is
+     * the mirror-image trap, which is the lesser one and at least has an obvious right answer: a caller
+     * that holds {@code source} afterwards is holding a spent template, and further edits to it reach
+     * nothing. Mutate {@code getDocument()}.</p>
+     *
+     * <h3>Through the changeset, not a second rebuild routine</h3>
+     * <p>Clearing and repopulating produces exactly the changeset {@link #syncFromDocument()} already
+     * consumes, so the widget work is the same path a paste or a server sync takes — retiring floating
+     * port editors, pruning the selection, emitting {@code onConnectionsChanged} once. The hand-rolled
+     * rebuild this replaced had to remember each of those separately, and a fourth thing added to the
+     * view later would have had to be remembered in both places.</p>
+     *
+     * <h3>Loading is not an edit, so the undo stack is CLEARED</h3>
+     * <p>Not appended to, and not left alone. Appending would make the first {@code Ctrl+Z} after an open
+     * unpick the file a node at a time — the file is the starting state, not something the user did.
+     * Leaving the old history is worse: those entries describe a graph that is no longer here, so undoing
+     * one applies an edit to nodes that never existed in this document.</p>
+     *
+     * <p>Edges are <b>restored</b> rather than reconnected, for the reason {@code GraphCodecs} gives:
+     * re-validating on load silently drops every wire whose types this build has no rule for — the
+     * "opened without the plugin" case the whole model is arranged to survive. And nodes whose type is
+     * not in the library still appear, because {@link NodeWidgetFactory} builds them from the ports the
+     * document stored, which is why the document stores them.</p>
      */
     public GraphView load(GraphDocument source) {
-        for (GraphNode widget : List.copyOf(widgetsById.values())) content().removeChild(widget);
-        // Same reason detachNode forgets them: a floating default editor is not a descendant of its
-        // node, so the loop above never touches it.
-        for (PortDefaultEditor editor : portEditors.values()) editor.setMounted(false);
-        portEditors.clear();
-        watchedPorts.clear();
-        widgetsById.clear();
-        connections.clear();
-        selection.clear();
-        undoStack.clear();
-        this.document = source;
+        document.clear();
+        // The DOCUMENT layer alone, mirroring what the codec writes — the user and workspace layers come
+        // from other files entirely and are not this graph's to carry.
+        document.settings().replaceLayer(SettingsLayer.DOCUMENT,
+                source.settings().layer(SettingsLayer.DOCUMENT).asMap());
+        for (GraphProperty property : source.properties()) document.addProperty(property);
+        for (NodeData node : source.nodes()) document.addNode(node);
+        for (EdgeData edge : source.edges()) document.restoreEdge(edge);
 
-        NodeWidgetFactory factory = nodeFactory != null ? nodeFactory : NodeWidgetFactory.of(nodeLibrary).build();
-        for (NodeData data : source.nodes()) {
-            NodeType type = nodeLibrary != null ? nodeLibrary.get(data.typeId()) : null;
-            GraphNode widget = factory.create(type, data);
-            widget.bindToDocument(data.id(), data.typeId());
-            widgetsById.put(data.id(), widget);
-            super.addNode(widget, data.x(), data.y());
-        }
-        for (EdgeData edge : source.edges()) linkWidgets(edge);
-        onConnectionsChanged.emit();
+        syncFromDocument();
+        undoStack.clear();
+        // ONE emit at the end, and it is not belt and braces. `restoreEdge` deliberately only records in
+        // the changeset, and `GraphDocument.clear()` empties the property list AFTER its last removeNode
+        // — so loading a graph with no nodes, or one whose last act is an edge, would tell nothing
+        // downstream that anything had happened and the Blackboard would still be listing the previous
+        // file's properties. Listeners re-read the document rather than taking a payload, so a spare emit
+        // is a no-op and a missing one is a stale panel.
+        document.onChanged.emit();
         return this;
     }
 
