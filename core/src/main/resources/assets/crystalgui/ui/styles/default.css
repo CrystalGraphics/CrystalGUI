@@ -3714,15 +3714,25 @@ quickpick .__qp-accelerator__ {
 
 /* Each key in its own box, VS Code's quick input. Filled by default. */
 quickpick .__qp-key__ {
-    color: #CCCCCC;
+    /* A ROW that sizes to its own text. `flex-shrink: 0` is explicit rather than inherited from this
+     * engine's default, because the row it sits in has a flex-grow spacer beside it and a key that gives
+     * way to that spacer is a key with its label hanging out of it. */
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
     background-color: #3C3C3C;
     outline-width: 1px;
     outline-color: #4A4A4A;
     border-radius: 3px;
-    padding-left: 4px;
-    padding-right: 4px;
-    padding-top: 1px;
-    padding-bottom: 1px;
+    padding-left: 5px;
+    padding-right: 5px;
+    height: 16px;
+    min-width: 16px;
+}
+
+quickpick .__qp-key__ text {
+    color: #CCCCCC;
 }
 
 /* On a highlighted row the fill goes and only the OUTLINE stays -- which is what VS Code does, and it
@@ -3732,12 +3742,25 @@ quickpick .__row__.__selected__ .__qp-key__,
 quickpick .__row__:hover .__qp-key__ {
     background-color: #00000000;
     outline-color: #9BB8CC;
+}
+
+quickpick .__row__.__selected__ .__qp-key__ text,
+quickpick .__row__:hover .__qp-key__ text {
     color: #FFFFFF;
 }
 
 /* The `+` is punctuation between keys, not a key. No box, and dimmer than one. */
+/* The `+` between two keys. Punctuation, not a key -- no box, and dimmer than one.
+ *
+ * EXPLICIT WIDTH, deliberately. UIText self-sizes and latches that width on its FIRST measurement, so a
+ * separator that was ever measured while hidden keeps a near-zero width for good -- which is what left
+ * the plus signs as slivers between correctly-sized boxes. A glyph this small and this fixed does not
+ * need measuring at all, and stating the width means there is no first pass to get wrong. */
 quickpick .__qp-key-sep__ {
     color: #8A8A8A;
+    width: 8px;
+    flex-shrink: 0;
+    text-align: center;
 }
 
 /* Which characters the query matched. Java says WHERE (QuickPickEntry's ranges); this says how it
