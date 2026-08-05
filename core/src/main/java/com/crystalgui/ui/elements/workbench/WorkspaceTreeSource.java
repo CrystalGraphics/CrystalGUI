@@ -216,6 +216,108 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
         dirty = true;
     }
 
+    // ── Indexing the whole workspace (E17) ──────────────────────────────────────────────────────
+
+    /**
+     * How many directories one {@link #indexStep} may ask for.
+     *
+     * <p>Small on purpose. The crawl runs from a per-frame tick, and a listing is a round trip, so the
+     * cost of being greedy is paid by the frame the user is looking at rather than by the index. A few
+     * per frame reaches a few hundred directories within a second or two, which is faster than anyone
+     * types the first letter of a file name.</p>
+     */
+    public static final int DEFAULT_INDEX_BUDGET = 4;
+
+    /**
+     * A ceiling on how much of the workspace is walked, so a pathological tree cannot crawl forever.
+     *
+     * <p>Chosen to be far above any project this is meant for and far below "the whole disk". Reaching it
+     * is not an error — the index simply stops growing, and everything already found stays searchable.</p>
+     */
+    public static final int MAX_INDEXED_DIRECTORIES = 4_000;
+
+    private int indexed;
+
+    /**
+     * Directories discovered but not yet asked for.
+     *
+     * <p>A queue fed by arriving listings, rather than a frontier recomputed from the whole cache on every
+     * call. Recomputing was both O(everything known) per frame and <b>wrong</b>: "nothing to ask for right
+     * now" is indistinguishable from "nothing left", so the crawl latched itself off the first time every
+     * known directory happened to be in flight — and never resumed when a folder appeared later, whether
+     * from a deeper listing or from someone creating one.</p>
+     */
+    private final java.util.ArrayDeque<CgPath> indexFrontier = new java.util.ArrayDeque<>();
+
+    /** Enqueued at least once, so a directory is not walked twice. */
+    private final Set<CgPath> indexSeen = new HashSet<>();
+
+    /**
+     * Listings asked for and not yet answered.
+     *
+     * <p>Tracked explicitly rather than inferred from "is it in {@code children} yet", which is the shape
+     * this had and which is wrong for the case that matters: invalidation deliberately KEEPS the stale
+     * listing while the replacement is fetched, so a re-requested directory is in {@code children} and in
+     * flight at the same time. Inferring reported the crawl finished the instant everything outstanding
+     * happened to be a refresh.</p>
+     */
+    private final Set<CgPath> inFlight = new HashSet<>();
+
+    /**
+     * Requests listings for directories not yet fetched — one step of a breadth-first crawl.
+     *
+     * <p><b>It warms the same cache the tree reads.</b> There is no second index to keep in step: a
+     * directory the crawl listed is a directory the tree expands instantly, and a file the user creates
+     * shows up in both because both are the one listing. That is the whole reason this lives here rather
+     * than beside the thing that searches it.</p>
+     *
+     * <p>Listings arrive asynchronously, so a step only <em>asks</em>; what it asked for becomes visible on
+     * some later frame and is crawled further on the frame after that. Call it until it returns false.</p>
+     *
+     * @return whether there is more to ask for
+     */
+    public boolean indexStep(int budget) {
+        // The roots are the only thing not discovered by a listing, so they seed the queue -- and they
+        // arrive asynchronously, which is why this is here rather than in loadProjects.
+        for (CgPath root : roots) enqueueForIndex(root);
+
+        int asked = 0;
+        while (asked < budget && !indexFrontier.isEmpty() && indexed < MAX_INDEXED_DIRECTORIES) {
+            CgPath next = indexFrontier.poll();
+            if (children.containsKey(next)) continue;   // already listed, by the tree or by an earlier step
+            request(next);
+            asked++;
+            indexed++;
+        }
+        // NOTHING QUEUED IS NOT THE SAME AS NOTHING LEFT: everything asked for may still be in flight, and
+        // its children cannot be queued until the listing lands. Reporting "done" here walked exactly two
+        // levels and stopped, which looks like a crawl that works on small projects.
+        return !indexFrontier.isEmpty() || !inFlight.isEmpty();
+    }
+
+    /** Queues a directory for the crawl, once. */
+    private void enqueueForIndex(CgPath directory) {
+        if (children.containsKey(directory) || !indexSeen.add(directory)) return;
+        indexFrontier.add(directory);
+    }
+
+    /**
+     * Every file the index has reached — directories excluded.
+     *
+     * <p>What Go to File searches. Incomplete while the crawl is still running, which is honest: a picker
+     * that showed nothing until a whole workspace had been walked would be unusable on the first press,
+     * and every editor with this feature shows a growing list.</p>
+     */
+    public List<CgPath> knownFiles() {
+        List<CgPath> files = new ArrayList<>();
+        for (List<CgPath> listing : children.values()) {
+            for (CgPath child : listing) {
+                if (!directories.contains(child)) files.add(child);
+            }
+        }
+        return files;
+    }
+
     /** Whether this directory's listing has been fetched — what a reveal needs, to know when to wait. */
     public boolean isListed(CgPath directory) {
         return children.containsKey(directory);
@@ -306,7 +408,9 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
 
     private void request(CgPath directory) {
         if (!requested.add(directory)) return;
+        inFlight.add(directory);
         client.list(directory, entries -> {
+            inFlight.remove(directory);
             List<CgPath> paths = new ArrayList<>(entries.size());
             for (CgFileEntry entry : entries) {
                 CgPath child = directory.resolve(entry.name());
@@ -317,8 +421,15 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
             // `directories`, so sorting inside the loop above would order against a set still being built.
             paths.sort(this::compare);
             children.put(directory, paths);
+            // Whatever this listing revealed becomes the next thing to walk. Feeding the queue HERE is what
+            // makes the crawl resume for a folder that appears later -- a deeper listing, or one somebody
+            // just created -- rather than depending on a step happening to look in the right place.
+            for (CgPath child : paths) {
+                if (directories.contains(child)) enqueueForIndex(child);
+            }
             dirty = true;
         }, failed -> {
+            inFlight.remove(directory);
             // Retryable rather than latched -- the listing may have failed because the directory was
             // being written to.
             requested.remove(directory);
