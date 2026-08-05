@@ -178,7 +178,7 @@ public class ShaderGraphEditorTest extends UiTestBase {
     }
 
     /**
-     * <b>A brand-new file opens as an empty graph, and can then be saved.</b>
+     * <b>A brand-new file opens with the starter graph, and can then be saved.</b>
      *
      * <p>{@code New File…} creates every file with {@code ""}, so this is the very first thing anyone
      * does with the type: make {@code thing.shadergraph}, open it, wire something up, {@code Ctrl+S}.
@@ -188,19 +188,26 @@ public class ShaderGraphEditorTest extends UiTestBase {
      *
      * <p>The second half is the one that matters: a blank file must be <em>saveable</em> afterwards, not
      * merely openable. Accepting the bytes and then refusing to write would be the worse of both.</p>
+     *
+     * <p>And being handed a starter graph is not an edit — the undo stack is empty, or the first
+     * {@code Ctrl+Z} in a new file unpicks the graph it was just given.</p>
      */
     @Test(timeout = 15_000)
-    public void aBrandNewEmptyFileOpensAsAnEmptyGraph() {
+    public void aBrandNewEmptyFileOpensWithTheStarterGraph() {
         build();
         editor.adopt("".getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        assertEquals("an empty file is an empty graph, not a failure",
-                0, editor.graph().getDocument().nodeCount());
+        assertTrue("a new file opens with the starter graph, not an empty canvas",
+                editor.graph().getDocument().nodeCount() > 0);
+        assertEquals("and being handed one is not something to undo",
+                0, editor.graph().undoStack().undoDepth());
 
-        // And what it would write is a real graph file, which reading back gives the same empty graph.
+        // What it would write is a real graph file, and reading it back gives the same graph -- through
+        // the SAVED path this time, not the blank one.
+        int seeded = editor.graph().getDocument().nodeCount();
         byte[] saved = editor.encode();
         assertTrue("a blank file must become a valid one on the first save", saved.length > 0);
         editor.adopt(saved);
-        assertEquals(0, editor.graph().getDocument().nodeCount());
+        assertEquals(seeded, editor.graph().getDocument().nodeCount());
     }
 
     /** Whitespace is blank too — a file someone opened, touched and left is still a new file. */
@@ -208,7 +215,7 @@ public class ShaderGraphEditorTest extends UiTestBase {
     public void whitespaceCountsAsBlank() {
         build();
         editor.adopt(" \n\t ".getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        assertEquals(0, editor.graph().getDocument().nodeCount());
+        assertTrue(editor.graph().getDocument().nodeCount() > 0);
     }
 
     /**

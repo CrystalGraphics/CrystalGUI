@@ -547,14 +547,32 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
      * <p>The tab shows modified as soon as it opens, and that is honest rather than a wart: what is on
      * disk is not a graph, {@code encode()} says what one would be, and they genuinely differ until saved
      * once.</p>
+     *
+     * <h3>And a blank file opens with the STARTER graph</h3>
+     * <p>Which is a product decision, not a consequence: an empty canvas is a worse first thing to be
+     * handed than a small working graph you can take apart. Unity, Godot and Blender all seed a new
+     * shader with a working output for the same reason.</p>
+     *
+     * <p>It applies to a <b>blank</b> file only. A saved graph that genuinely has no nodes must come back
+     * empty — seeding that would silently re-add nodes the user deleted on purpose, every time they
+     * reopened it, which is the one behaviour worse than an empty canvas.</p>
      */
     @Override
     public void adopt(byte[] bytes) {
         String text = new String(bytes, StandardCharsets.UTF_8);
-        GraphDocument loaded = text.trim().isEmpty()
+        boolean blank = text.trim().isEmpty();
+        GraphDocument loaded = blank
                 ? new GraphDocument()
                 : GraphCodecs.DOCUMENT.decode(JsonOps.INSTANCE, JsonParser.parseString(text));
         graph.load(loaded);
+        if (blank) {
+            addStarterGraph();
+            // AFTER seeding, and load's own clear is not enough: addStarterGraph goes through the ordinary
+            // mutators, so every node and wire it adds is an undoable step. Without this the first Ctrl+Z
+            // in a brand-new file unpicks the graph it was just handed, one node at a time -- the same
+            // rule load already follows, for the same reason. Nobody performed these edits.
+            graph.undoStack().clear();
+        }
         // The property nodes carry a title and an exposed dot read back out of the properties they
         // reference, and nothing re-derives those for a load: syncPropertyNodes runs on document change,
         // and the emit that load ends with arrives before these widgets have been rebuilt.

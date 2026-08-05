@@ -20,6 +20,11 @@ import com.crystalgui.ui.input.FocusPolicy;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * The editor — the whole application, as one element.
  *
@@ -46,16 +51,14 @@ import javax.annotation.Nullable;
  */
 public class CrystalEditor extends UIElement {
 
-    /** The node graph, as a document panel — several may be open at once. */
-    public static final String SHADER_GRAPH_TYPE = "shadergraph";
-
     /**
-     * A shader graph opened <b>from a file</b>, one instance per path.
+     * A shader graph, one editor per path. <b>Every</b> shader graph — there is no other kind.
      *
-     * <p>Separate from {@link #SHADER_GRAPH_TYPE}, which is the scratch graph the editor opens with and
-     * which has no path at all. The same split VS Code draws between an untitled editor and a file
-     * editor, and it is what lets the two coexist while the starter graph is still pathless — a single
-     * type would have to build a document for the empty path.</p>
+     * <p>There was, briefly: a pathless {@code "shadergraph"} scratch panel that the editor opened with,
+     * left over from before graphs were files. It has been removed rather than kept alongside, because it
+     * was indistinguishable from a file tab and could not be saved — {@code Ctrl+S} found no path and said
+     * so to a status line nobody watches — so it silently swallowed whatever was built in it. A new file
+     * is two keystrokes and is a real document.</p>
      */
     public static final String SHADER_GRAPH_FILE_TYPE = "shadergraph.file";
 
@@ -92,11 +95,36 @@ public class CrystalEditor extends UIElement {
      * populated subtree makes {@code removeChild} silently refuse everything below it. */
     private final UIElement content = new UIElement();
 
-    @Nullable
-    private ShaderGraphEditor shaderGraph;
+    /**
+     * The panels that follow whichever shader graph is in front.
+     *
+     * <p>Containers rather than the editors' own parts, because there is no longer <em>one</em> graph to
+     * bind them to — every graph is a file now, and several can be open. {@code DockArea} asks the
+     * registry for a panel's content on every rebuild and caches nothing, so a factory returning the
+     * active editor's own {@code source()} would hand back a different element each time the active tab
+     * changed, which the dock has no way to notice. A stable host whose child is swapped does.</p>
+     */
+    private final UIElement sourceHost = new UIElement();
+    private final UIElement inspectorHost = new UIElement();
 
+    /**
+     * One inspector per graph, kept because building it is not free and because it holds view state — the
+     * open tab, the fold states — that a user expects to still be there when they switch back.
+     */
+    private final Map<ShaderGraphEditor, ShaderGraphInspector> inspectors = new HashMap<>();
+
+    /**
+     * Every graph editor this editor has built, so {@link #delete()} can free all of their preview
+     * renderers rather than only the one in front — each holds an FBO per node.
+     *
+     * <p>Recorded where they are created rather than read back from the workbench: it exposes no list of
+     * open documents, and adding one to it would widen a class another agent is actively editing.</p>
+     */
+    private final List<ShaderGraphEditor> graphs = new ArrayList<>();
+
+    /** What {@link #followActiveGraph} last put in the hosts, so it can tell when nothing has changed. */
     @Nullable
-    private ShaderGraphInspector inspector;
+    private ShaderGraphEditor shownGraph;
 
     /** The last {@link #saveLayout} result, so {@link #restoreLayout()} has something to restore. */
     @Nullable
@@ -109,30 +137,33 @@ public class CrystalEditor extends UIElement {
         workbench = new Workbench(client);
         workbench.onStatus.connect(onStatus::emit);
 
-        workbench.registerPanel(DockPanelDescriptor.document(SHADER_GRAPH_TYPE, "Shader Graph"),
-                ref -> shaderGraph());
         // A .shadergraph FILE opens as a graph rather than as its own JSON. One editor per path, built by
-        // the workbench and cached with the document, so two open graphs are two graphs -- the scratch
-        // panel above is a lazily-created singleton and could never be that.
+        // the workbench and cached with the document, so two open graphs are two graphs.
         //
-        // No starter graph here: a file-backed document is whatever the file says, and seeding it would
-        // put nodes on the canvas that are not in the file and mark it modified before it was touched.
+        // THIS IS THE ONLY KIND OF SHADER GRAPH. There used to be a pathless "Shader Graph" scratch panel
+        // in the default layout as well, from before files existed, and it was a trap: it looked exactly
+        // like a file tab, could not be saved -- Ctrl+S found no path and said so to a status line nobody
+        // watches -- and so quietly swallowed whatever was built in it. Someone lost a graph to it within
+        // an hour of files working. A new file is two keystrokes and is a real document; that is the
+        // scratch pad now.
         workbench.registerDocumentType(SHADER_GRAPH_FILE_TYPE, "Shader Graph", path -> {
             ShaderGraphEditor editor = new ShaderGraphEditor();
             editor.onStatusChanged.connect(onStatus::emit);
             editor.onLineOwnerChanged.connect(onStatus::emit);
+            graphs.add(editor);
             return editor;
         });
         workbench.bindEditorExtensions(SHADER_GRAPH_FILE_TYPE, "shadergraph");
+        // HOSTS, not the editors' own parts. There is no longer one graph to bind these to, so each is a
+        // container that follows whichever shader graph is in front -- see followActiveGraph().
         workbench.registerPanel(
                 DockPanelDescriptor.singleton(SHADER_SOURCE_TYPE, SHADER_SOURCE_TITLE),
-                ref -> shaderGraph().source());
-        workbench.openPanel(new DockPanelRef(SHADER_GRAPH_TYPE));
+                ref -> sourceHost);
         // BESIDE the canvas, not in its strip. A tab in the same group would hide the graph, and the whole
         // point of the emitted source is watching it change as you wire -- a panel you have to switch away
         // from the graph to read is a panel that is never read.
         workbench.registerPanel(DockPanelDescriptor.singleton(INSPECTOR_TYPE, "Inspector"),
-                ref -> inspector());
+                ref -> inspectorHost);
         DockPanelRef source = new DockPanelRef(SHADER_SOURCE_TYPE);
         workbench.openPanelBeside(source, DockDropZone.SPLIT_RIGHT, SOURCE_SHARE);
         workbench.openPanelWith(source, new DockPanelRef(INSPECTOR_TYPE));
@@ -167,18 +198,63 @@ public class CrystalEditor extends UIElement {
      * one field.</p>
      */
     public ShaderGraphInspector inspector() {
-        if (inspector == null) inspector = new ShaderGraphInspector(shaderGraph());
-        return inspector;
+        ShaderGraphEditor active = activeGraph();
+        return active == null ? null : inspectorFor(active);
     }
 
-    /** Built on first use, so an editor that never opens the graph never pays for its previews. */
-    public ShaderGraphEditor shaderGraph() {
-        if (shaderGraph == null) {
-            shaderGraph = new ShaderGraphEditor().addStarterGraph();
-            shaderGraph.onStatusChanged.connect(onStatus::emit);
-            shaderGraph.onLineOwnerChanged.connect(onStatus::emit);
-        }
-        return shaderGraph;
+    /** The shader graph in front, or null when the active tab is not one (or nothing is open). */
+    @Nullable
+    public ShaderGraphEditor activeGraph() {
+        return workbench.activeDocument() instanceof ShaderGraphEditor graph ? graph : null;
+    }
+
+    private ShaderGraphInspector inspectorFor(ShaderGraphEditor graph) {
+        return inspectors.computeIfAbsent(graph, ShaderGraphInspector::new);
+    }
+
+    /**
+     * Points the source and inspector panels at whichever shader graph is in front. Cheap and idempotent;
+     * call once a frame.
+     *
+     * <p>Polled rather than driven by a signal because the workbench has no "the active tab changed" event
+     * and inventing one would mean a second thing to keep in step — the dock changes the active panel from
+     * a click, a close, a drag, a split and a layout restore, and a signal that missed any of those would
+     * leave these panels showing a graph that is no longer in front, which is precisely the confusion this
+     * whole change is removing.</p>
+     *
+     * <p><b>A non-graph tab leaves them alone.</b> Clicking a README must not blank the inspector — there
+     * is still a shader graph open and it is still what these panels are about. They follow the last graph
+     * until a different one comes forward.</p>
+     */
+    /**
+     * Starts the per-frame follow, once a window exists to tick from.
+     *
+     * <p>The same shape {@code ShaderGraphEditor} uses for its previews, and for the same reason: this is
+     * the widget's own business rather than something a host must remember to call, and there is no
+     * earlier moment — a constructor has no window.</p>
+     */
+    @Override
+    protected void onLayoutChanged() {
+        super.onLayoutChanged();
+        if (ticking || getAttachedWindow() == null) return;
+        ticking = true;
+        getAttachedWindow().registerTicker(delta -> {
+            followActiveGraph();
+            return true;
+        });
+    }
+
+    private boolean ticking;
+
+    private void followActiveGraph() {
+        ShaderGraphEditor active = activeGraph();
+        if (active == null || active == shownGraph) return;
+        shownGraph = active;
+
+        sourceHost.clearAllChildren();
+        sourceHost.addChild(active.source());
+        inspectorHost.clearAllChildren();
+        inspectorHost.addChild(inspectorFor(active));
     }
 
     /**
@@ -253,8 +329,14 @@ public class CrystalEditor extends UIElement {
         focusGiven = true;
     }
 
-    /** Releases the shader graph's preview renderers. Safe to call more than once. */
+    /**
+     * Releases every open shader graph's preview renderers. Safe to call more than once.
+     *
+     * <p>Every one of them, not "the graph": each open file has its own editor and its own
+     * {@code CgPreviewRenderer} holding an FBO per node, so freeing only the one in front would leak the
+     * rest — which the single scratch graph this replaced could never do.</p>
+     */
     public void delete() {
-        if (shaderGraph != null) shaderGraph.delete();
+        for (ShaderGraphEditor graph : graphs) graph.delete();
     }
 }
