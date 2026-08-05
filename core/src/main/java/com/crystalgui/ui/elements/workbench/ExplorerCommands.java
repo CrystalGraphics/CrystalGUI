@@ -195,7 +195,16 @@ public final class ExplorerCommands {
      */
     public static void bindGlobalDefaults(Keymap keymap) {
         keymap.bind("Mod+N", NEW_FILE);
-        keymap.bind("Mod+,", PREFERENCES);
+        // TWO chords, and the second is not redundant. A key code here is a PHYSICAL key -- LWJGL2
+        // reports DirectInput scancodes -- and punctuation moves between keyboard layouts while letters
+        // largely do not. So Mod+Comma is the right binding on a US layout and can be unreachable on
+        // another, with Mod+N on the line above still working perfectly, which is what makes it look
+        // like the binding rather than the keyboard. Mod+Alt+S is IntelliJ's own Settings chord and is
+        // letter-based, so it survives the layout.
+        //
+        // Spelled "Comma" rather than "," because bindAll separates its alternatives WITH a comma; the
+        // symbol form parses fine in bind(), and only there.
+        keymap.bindAll("Mod+Comma, Mod+Alt+S", PREFERENCES);
         // Mod+P from VS Code. An application verb rather than a panel one, and for the same reason F5 is:
         // a keymap resolves outward from the FOCUSED element, so a binding on the tree is unreachable
         // while you are typing in an editor -- which is exactly when you reach for it.
