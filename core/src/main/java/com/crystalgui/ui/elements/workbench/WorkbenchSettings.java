@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.core.settings.Setting;
+import com.crystalgui.core.settings.SettingsCategory;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsRegistry;
 import com.crystalgui.fs.CgPath;
@@ -104,9 +105,9 @@ public final class WorkbenchSettings {
     public static void declare() {
         // The NAVIGATION, declared rather than derived from the ids: adding a setting must never grow a
         // node in somebody menu by accident. @see SettingsCategory
-        com.crystalgui.core.settings.SettingsCategory.page("explorer", "Explorer");
-        com.crystalgui.core.settings.SettingsCategory.page("editor", "Editor");
-        com.crystalgui.core.settings.SettingsCategory.page("workbench", "Workbench");
+        SettingsCategory.page("explorer", "Explorer");
+        SettingsCategory.page("editor", "Editor");
+        SettingsCategory.page("workbench", "Workbench");
 
         SettingsRegistry registry = SettingsRegistry.get();
         registry.register(AUTO_REVEAL);

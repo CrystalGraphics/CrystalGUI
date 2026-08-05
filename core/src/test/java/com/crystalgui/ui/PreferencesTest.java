@@ -105,10 +105,12 @@ public class PreferencesTest extends UiTestBase {
                 List.of(first), preferences.navigator().pages().builtKeys());
 
         UIElement firstPage = preferences.page();
+        assertNotNull("the landing category built no page, so reuse cannot be observed", firstPage);
+
         preferences.navigator().navigateTo(second);
         settle();
-        assertEquals(2, preferences.navigator().pages().builtKeys().size());
-
+        // NOT a count of built pages: a parent category with no settings of its own legitimately builds
+        // none, so counting would be asserting which categories happen to be leaves.
         preferences.navigator().navigateTo(first);
         settle();
         assertTrue("the page was rebuilt instead of reused, so its scroll and groups were lost",
@@ -155,9 +157,21 @@ public class PreferencesTest extends UiTestBase {
     @Test
     public void theBreadcrumbFollowsTheSelection() {
         Preferences preferences = open();
-        preferences.navigator().navigateTo("editor");
+        String root = preferences.paths().roots().get(0);
+        preferences.navigator().navigateTo(root);
         settle();
-        assertEquals(List.of("Editor"), preferences.navigator().breadcrumbs().trail());
+        assertEquals(List.of(preferences.paths().title(root)),
+                preferences.navigator().breadcrumbs().trail());
+
+        // And a nested page shows its ancestors, which is the half a single-level trail cannot prove.
+        List<String> children = preferences.paths().children(root);
+        if (!children.isEmpty()) {
+            preferences.navigator().navigateTo(children.get(0));
+            settle();
+            assertEquals(List.of(preferences.paths().title(root),
+                            preferences.paths().title(children.get(0))),
+                    preferences.navigator().breadcrumbs().trail());
+        }
     }
 
     /** Back walks the places visited. */
@@ -165,7 +179,11 @@ public class PreferencesTest extends UiTestBase {
     public void historyWalksTheVisitedCategories() {
         Preferences preferences = open();
         String first = preferences.navigator().pages().current();
-        preferences.navigator().navigateTo("editor");
+        // Somewhere OTHER than where it landed, whatever that happens to be -- naming a category here
+        // makes the test depend on declaration order, which is not what it is about.
+        String second = preferences.paths().roots().stream()
+                .filter(root -> !root.equals(first)).findFirst().orElseThrow();
+        preferences.navigator().navigateTo(second);
         settle();
 
         assertTrue(preferences.navigator().history().canGoBack());

@@ -4346,3 +4346,55 @@ pagestack .__page-placeholder__ {
     padding-all: 8px;
     color: #8A8A8A;
 }
+
+/* A tree node. Height matches the palette's rows so the two windows read as one product, and the row is
+ * full width so the whole strip is a hit target rather than only the glyphs. */
+/* NO padding-left here. TreeView writes the indent as padding-left from TreeRow.depth at DEFAULT
+ * origin, so a rule setting padding on this element outranks it and flattens the whole tree -- every
+ * level drawn at the same inset, with no sign anything is nested. */
+navigatorview .__nav-node__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 18px;
+    gap-all: 2px;
+}
+
+/* Sized to its TEXT, not stretched: NavigatorView measures these to decide how wide the sidebar has to
+ * be, and a label that fills the pane would only ever measure the pane. */
+navigatorview .__nav-label__ {
+    color: #CCCCCC;
+    flex-shrink: 0;
+}
+
+/* The expander. Its glyph comes from the state class TreeView puts on the row, so what is drawn is the
+ * sheet's business and the renderer never picks a character. A leaf keeps the box so its label lines up
+ * with a sibling that has one. */
+navigatorview .__nav-arrow__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+}
+
+/* `overlay: shape(...)`, which is how every other arrow in this sheet is drawn -- the configurator
+ * group's head uses the same pair. A leaf gets neither, and keeps its empty box so its label lines up
+ * with a sibling that has one. */
+navigatorview .__nav-node__.__collapsed__ > .__nav-arrow__ {
+    overlay: shape("chevron-right");
+    color: #B0B0B0;
+}
+
+navigatorview .__nav-node__.__expanded__ > .__nav-arrow__ {
+    overlay: shape("chevron-down");
+    color: #B0B0B0;
+}
+
+navigatorview treeview .__row__:hover {
+    background-color: #2A2D2E;
+}
+
+navigatorview treeview .__row__.__selected__ {
+    background-color: #04395E;
+}
