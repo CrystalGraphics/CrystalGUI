@@ -467,6 +467,25 @@ public final class UIWindow {
 
         styleEngine.calculateStyle(deltaSeconds);
         tickAnimations(deltaSeconds);
+        // A TICKER MAY HAVE BUILT A SUBTREE, not merely set a class on one — and an element that has
+        // never matched a selector must not reach Taffy at all, because the FIRST layout pass is where
+        // irreversible decisions are taken from it. Re-matching afterwards, as the loop below does, is
+        // too late for those.
+        //
+        // UIText.selfSizesWidth is the one that bites, and it is deliberate rather than a bug: it is
+        // decided EXACTLY ONCE, on the first recompute after attachment, because re-deriving it every
+        // pass oscillates forever (its own javadoc has the proof). Give that one pass an unstyled
+        // parent and it concludes the wrong thing permanently — Taffy's default flex-direction is
+        // COLUMN, whose cross axis stretches children to the parent's width, so the text is handed a
+        // real width, decides it is not self-sizing, and then contributes ZERO width for the rest of
+        // its life once the real `flex-direction: row` arrives.
+        //
+        // What that looked like: the Blackboard rebuilds its list from a ticker (it must — rebuilding
+        // mid-drag detaches the drag source), and every pill came back with its capsule shrunk to just
+        // padding and its label spilling out the side onto the panel behind it. Nothing was wrong with
+        // the CSS, the widget or the text; the rows had simply been measured once before they had a
+        // style, and one bit of that measurement was permanent.
+        if (styleEngine.hasPendingMatches()) styleEngine.calculateStyle(0f);
         calculateLayout();
 
         // STYLE AND LAYOUT INTERLEAVE UNTIL CLEAN — they are not one pass each in a fixed order.
