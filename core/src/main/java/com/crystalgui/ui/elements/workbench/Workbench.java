@@ -9,6 +9,7 @@ import com.crystalgui.fs.WorkspaceFileService;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.chrome.InputDialog;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
 import com.crystalgui.ui.elements.dock.DockArea;
 import com.crystalgui.ui.elements.dock.DockDropZone;
@@ -154,6 +155,9 @@ public class Workbench extends UIElement {
         });
 
         dock = new DockArea(registry, defaultLayout());
+        // ASKED BEFORE ANYTHING IS DISCARDED. Ctrl+W on an edited file used to throw the work away with no
+        // warning at all -- the tab marker said it was modified and nothing acted on that.
+        dock.setCloseGuard(this::confirmClose);
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         content.addChild(dock);
@@ -607,6 +611,29 @@ public class Workbench extends UIElement {
         }
         if (issued == 0) onStatus.emit("nothing to save");
         return issued;
+    }
+
+    /**
+     * Whether {@code panel} may close now, asking the user first when it would discard unsaved work.
+     *
+     * <p>Returns <b>false</b> for a modified file and puts up a prompt, rather than trying to answer
+     * "yes, eventually": the prompt is asynchronous, so there is no answer to give at the moment the dock
+     * asks. Confirming closes through {@link DockArea#closePanelDiscarding}, which skips this guard —
+     * without that it would ask again, forever.</p>
+     *
+     * <p>Only files are guarded. A tool panel — the tree, Problems — holds nothing that is not on disk, and
+     * asking about it would train the answer out of the user by the time it matters.</p>
+     */
+    private boolean confirmClose(DockPanelRef panel) {
+        String state = panel.state(PATH_STATE, "");
+        if (state.isEmpty()) return true;
+        CgPath path = CgPath.parse(state);
+        if (!isDirty(path)) return true;
+
+        InputDialog.confirm(this, "Unsaved changes",
+                path.name() + " has unsaved changes — Enter to discard, Escape to keep editing",
+                () -> dock.closePanelDiscarding(panel));
+        return false;
     }
 
     /** What each tab's label should say right now — the file name, plus a marker when it is modified. */

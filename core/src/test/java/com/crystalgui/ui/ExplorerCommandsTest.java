@@ -22,6 +22,7 @@ import com.crystalgui.ui.elements.Menu;
 import com.crystalgui.ui.elements.MenuItem;
 import com.crystalgui.ui.elements.workbench.ExplorerClipboard;
 import com.crystalgui.ui.elements.workbench.ExplorerCommands;
+import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;
@@ -888,5 +889,95 @@ public class ExplorerCommandsTest extends UiTestBase {
         assertFalse("the renamed file reports itself modified -- its baseline was left behind",
                 workbench.isDirty(to));
         assertTrue("the old path is still open", workbench.unsavedFiles().isEmpty());
+    }
+
+    // ── Closing a modified tab (E16) ────────────────────────────────────────
+
+    private boolean isOpenInDock(CgPath path) {
+        return workbench.dock().layout().leafContaining(workbench.refFor(path)) != null;
+    }
+
+    private void closeActivePanel() {
+        workbench.dock().closePanel(workbench.dock().activeGroup().leaf().activePanel());
+        settle();
+    }
+
+    /**
+     * <b>Closing a modified file asks before discarding it.</b>
+     *
+     * <p>The half of E16 that actually prevents data loss. The tab marker said a file was modified and
+     * nothing acted on it, so {@code Ctrl+W} threw the work away silently — the worst possible combination,
+     * since the marker implies something is watching.</p>
+     */
+    @Test
+    public void closingAModifiedFileAsksFirst() {
+        workbench.fileTree().loadProjects();
+        settle();
+        CgPath path = CgPath.parse("mymod.proj:README.md");
+        workbench.openFile(path);
+        settle();
+        workbench.editorFor(path).setText("unsaved work");
+        assertTrue(workbench.isDirty(path));
+
+        closeActivePanel();
+
+        assertTrue("the tab closed without asking -- the edit is gone", isOpenInDock(path));
+        assertNotNull("no prompt was shown",
+                window.ui.rootElement.querySelector("." + InputDialog.PROMPT_CLASS));
+    }
+
+    /** Confirming discards it, and does not ask a second time. */
+    @Test
+    public void confirmingTheCloseDiscardsTheFile() {
+        workbench.fileTree().loadProjects();
+        settle();
+        CgPath path = CgPath.parse("mymod.proj:README.md");
+        workbench.openFile(path);
+        settle();
+        workbench.editorFor(path).setText("unsaved work");
+
+        closeActivePanel();
+        answerPrompt("y");
+
+        assertFalse("confirming did not close the tab -- the guard asked again", isOpenInDock(path));
+    }
+
+    /** An unmodified file closes straight away, with nothing in the way. */
+    @Test
+    public void closingAnUnmodifiedFileDoesNotAsk() {
+        workbench.fileTree().loadProjects();
+        settle();
+        CgPath path = CgPath.parse("mymod.proj:README.md");
+        workbench.openFile(path);
+        settle();
+        assertFalse(workbench.isDirty(path));
+
+        closeActivePanel();
+
+        assertFalse("an unmodified file should close immediately", isOpenInDock(path));
+        assertEquals("a prompt was shown for a file with nothing to lose", null,
+                window.ui.rootElement.querySelector("." + InputDialog.PROMPT_CLASS));
+    }
+
+    /**
+     * A tool panel closes without a prompt — it holds nothing that is not on disk.
+     *
+     * <p>Worth pinning because a guard that asked about everything would train the answer out of the user
+     * long before it mattered.</p>
+     */
+    @Test
+    public void closingAToolPanelIsNeverGuarded() {
+        workbench.fileTree().loadProjects();
+        settle();
+        DockPanelRef problems = new DockPanelRef(Workbench.PROBLEMS_TYPE);
+        assertNotNull("fixture wrong -- no Problems panel is open",
+                workbench.dock().layout().leafContaining(problems));
+
+        workbench.dock().closePanel(problems);
+        settle();
+
+        assertEquals("a tool panel should close with no prompt", null,
+                window.ui.rootElement.querySelector("." + InputDialog.PROMPT_CLASS));
+        assertEquals(null, workbench.dock().layout().leafContaining(problems));
     }
 }
