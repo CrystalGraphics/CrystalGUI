@@ -1,6 +1,9 @@
 package com.crystalgui.ui.elements.chrome;
 
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.TextField;
@@ -112,13 +115,25 @@ public final class InputDialog {
     }
 
     /**
-     * Puts the popup in the middle of the window, once it knows how big it is.
+     * Puts the popup in the middle of the window, once it knows how big it is — <b>and keeps it invisible
+     * until it is there</b>.
      *
      * <p>A ticker rather than a computation at show time: {@code showAt} runs before the promoted node has
      * ever been laid out, so width and height are both zero at that moment and centring against them puts
      * it in the corner. This drops itself the first frame the size is real.</p>
+     *
+     * <p>Measuring first is unavoidable, so the flicker had to be removed at the other end: the popup used
+     * to be <em>painted</em> in the corner while it waited, and the sheet's open transition faded it in
+     * there before it jumped to the middle. Every New File and every Delete opened with a visible hop
+     * across the window.</p>
+     *
+     * <p>Held down at {@code IMPORTANT} so it outranks the {@code popover.__open__} rule that would
+     * otherwise fade it in immediately, and <b>removed</b> rather than set to 1 once placed — dropping the
+     * candidate hands the property back to the stylesheet, so the popup fades in exactly as every other
+     * popover does, in the right place, with the timing still owned by the sheet.</p>
      */
     private static void centre(UIWindow window, Popover popup) {
+        StyleGroup.importantPipeline(popup.getStyle().getGeneralGroup(), g -> g.opacity(0f));
         window.registerTicker(delta -> {
             if (!popup.isOpen()) return false;
             float width = popup.getRuntimeCache().getWidth();
@@ -126,6 +141,8 @@ public final class InputDialog {
             if (width <= 0f || height <= 0f) return true;   // not laid out yet; look again next frame
             popup.moveTo(Math.max(0f, (window.getScreenWidth() - width) / 2f),
                     Math.max(0f, (window.getScreenHeight() - height) / 2f));
+            popup.getStyle().removeCandidates(StylePropertyRegistry.OPACITY,
+                    slot -> slot.origin() == StyleOrigin.IMPORTANT);
             return false;
         });
     }

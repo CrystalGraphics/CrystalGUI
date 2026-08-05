@@ -7,6 +7,7 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.input.UIInputHandler;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
@@ -420,11 +421,20 @@ public class ListView<T> extends ScrollerView {
             // explicitly -- which is why it looked like a broken modifier rather than a missing feature.
             //
             // The keyboard is unaffected: it never went through the focus listener either.
+            //
+            // POINTER PRESSES ONLY. Space and Enter on a focused element arrive here as a synthesized
+            // MouseEvent.Down, which is what gives every widget keyboard activation for free — but these
+            // two handlers are the POINTER half of selection, and the keyboard already has its own,
+            // explicit half in handleNavigationKey. Letting a synthesized press through means Enter runs
+            // the modifier logic against whatever keys happen to be held and re-decides a selection the
+            // arrow keys just made.
             tracked.onMouseDown.attachListener((el, event) -> {
+                if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
                 int index2 = indexOf(tracked);
                 if (index2 >= 0) pressRow(index2);
             }, false, true);
             tracked.onMouseUp.attachListener((el, event) -> {
+                if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
                 int index2 = indexOf(tracked);
                 if (index2 >= 0) releaseRow(index2);
             }, false, true);

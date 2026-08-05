@@ -599,7 +599,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     public TextEditor setText(String text) {
-        buffer.replace(0, buffer.length(), text == null ? "" : text);
+        String next = text == null ? "" : text;
+        // UNCHANGED TEXT IS NOT AN EDIT, and this engine suppresses equal writes everywhere else for the
+        // same reason -- Property.set, ObservableList.set and replaceOrPutCandidate all no-op on an equal
+        // value, and each of them documents a feedback loop that stops settling without it.
+        //
+        // Here the cost is visible rather than merely wasted. A generated document is re-pushed by whatever
+        // produces it, often every frame and usually identical; replacing the buffer resets the caret,
+        // breaks undo coalescing, re-projects, and forgets the widest line measured so far. That last one
+        // is what shows: the horizontal scrollbar is decided from the widest line, so it vanished and came
+        // back as the measurement was thrown away and rebuilt, and the text under it blinked with it. The
+        // shader graph's emitted-source panel is fed exactly this way.
+        //
+        // Compared BEFORE touching the buffer, so nothing above has already happened by the time the
+        // comparison says there was nothing to do.
+        if (buffer.length() == next.length() && next.contentEquals(getText())) return this;
+        buffer.replace(0, buffer.length(), next);
         buffer.breakUndoCoalescing();
         setSelection(0, 0);
         return this;

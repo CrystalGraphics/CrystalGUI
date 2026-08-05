@@ -297,6 +297,21 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
     private void installRowDrag(UIElement row) {
         row.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
+            // NEVER FROM THE KEYBOARD. Space and Enter on a focused element are delivered as a synthesized
+            // MouseEvent.Down -- that is how Button and Checkbox get keyboard activation with no keyboard
+            // code -- and the synthesized press carries the PHYSICAL CURSOR POSITION. A drag is the one
+            // press that means "the pointer went down here" rather than "activate me", so confirming a New
+            // File prompt with Enter started a drag anchored at wherever the mouse happened to be resting.
+            //
+            // And it could never end: pointer capture is released by a real button-up, which is not coming,
+            // so the drag stayed armed. That is the second half of the same report -- with a live drag,
+            // ListView's release handler correctly declines to collapse the selection, so every later click
+            // added a row instead of replacing one, and the panel looked like it had lost multi-select
+            // semantics entirely.
+            //
+            // KEYBOARD_DETAIL is the opt-out the input handler already provides for exactly this, and
+            // GraphView is the widget that found it: Enter synthesized a press and started a marquee.
+            if (event.getDetail() == com.crystalgui.ui.input.UIInputHandler.KEYBOARD_DETAIL) return;
             UIWindow window = getAttachedWindow();
             CgPath item = rowItems.get(row);
             if (window == null || item == null || item.isProjectRoot()) return;

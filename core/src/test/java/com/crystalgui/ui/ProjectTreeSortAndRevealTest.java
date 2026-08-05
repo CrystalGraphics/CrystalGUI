@@ -923,4 +923,32 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
                     isOutlined(row));
         }
     }
+
+    /**
+     * <b>Enter never starts a drag.</b>
+     *
+     * <p>Space and Enter on a focused element are delivered as a <em>synthesized</em>
+     * {@code MouseEvent.Down} — that is how every button in this engine gets keyboard activation with no
+     * keyboard code of its own — and the synthesized press carries the <b>physical cursor position</b>. A
+     * drag is the one press that means "the pointer went down here" rather than "activate me", so
+     * confirming a New File prompt with Enter armed a drag anchored wherever the mouse happened to rest,
+     * complete with a ghost for a file nobody touched.</p>
+     *
+     * <p>Worse, it could not end: pointer capture is released by a real button-up, which is never coming.
+     * The drag stayed live, and {@code ListView}'s release handler then correctly declined to collapse the
+     * selection on every subsequent click — so the panel appeared to have lost single-select entirely. One
+     * cause, two unrelated-looking reports.</p>
+     */
+    @Test
+    public void pressingEnterOnARowDoesNotStartADrag() {
+        clickCentreOf(rowElementFor("Apple.md"));
+        assertEquals(1, tree.selectedPaths().size());
+
+        window.getInputHandler().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
+                ' ', com.crystalgraphics.platform.input.CgKeyCodes.KEY_RETURN, true, false, 5L));
+        settle();
+
+        assertFalse("Enter armed a drag that no mouse-up will ever end",
+                window.getInputHandler().getDragController().isDragging());
+    }
 }

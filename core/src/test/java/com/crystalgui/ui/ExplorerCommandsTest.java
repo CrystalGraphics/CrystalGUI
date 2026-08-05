@@ -55,13 +55,15 @@ public class ExplorerCommandsTest extends UiTestBase {
     private UIWindow window;
     private Workbench workbench;
 
+    /** The backing store, so a test can change it BEHIND the tree -- which is what F5 is for. */
+    private static InMemoryFileSystem backingStore;
     private static InMemoryTransport<Object> serverSide;
     private static InMemoryTransport<Object> clientSide;
     private static ClientUiSession<Object> clientSession;
     private static ServerUiSession<Object> serverSession;
 
     private static WorkspaceClient<Object> client() {
-        InMemoryFileSystem files = new InMemoryFileSystem()
+        InMemoryFileSystem files = backingStore = new InMemoryFileSystem()
                 .seed("mymod.proj:README.md", "# hello")
                 .seed("mymod.proj:src/Main.java", "class Main {}");
         ProjectRegistry projects = new ProjectRegistry().register(() -> List.of(
@@ -299,16 +301,27 @@ public class ExplorerCommandsTest extends UiTestBase {
         assertFalse(registry().get(ExplorerCommands.DELETE).isEnabled(context));
     }
 
-    /** Answers the open name prompt, the way a user does: type, then Enter. */
+    /** Answers the open name prompt, the way a user does: type, then Enter, then lets it settle. */
     private void answerPrompt(String name) {
+        answerPromptWithoutSettling(name);
+        settle();
+    }
+
+    /**
+     * The keystroke alone, with no frames run after it.
+     *
+     * <p>For anything asserting on the frames an operation passes <em>through</em> rather than where it
+     * ends up. Settling here is what made the folder-emptying test below pass against the defect it was
+     * written for: the replacement listing had already arrived before the first assertion ran.</p>
+     */
+    private void answerPromptWithoutSettling(String name) {
         UIElement popup = window.ui.rootElement.querySelector("." + InputDialog.PROMPT_CLASS);
         assertNotNull("no name prompt is open", popup);
         TextField field = (TextField) popup.querySelector("textfield");
         assertNotNull("the prompt has no field to type into", field);
         field.setText(name);
         window.getInputHandler().consumeKeyboardEvent(
-                new CgSystemInput.Keyboard.Event(' ', CgKeyCodes.KEY_RETURN, true, false, 1L));
-        settle();
+                new CgSystemInput.Keyboard.Event('\0', CgKeyCodes.KEY_RETURN, true, false, 1L));
     }
 
     /**
@@ -419,5 +432,193 @@ public class ExplorerCommandsTest extends UiTestBase {
         pressButton(src, CgMouseCodes.RIGHT_BUTTON);
         assertEquals("a right-click did not move the selection -- New would land beside the wrong file",
                 CgPath.parse("mymod.proj:src"), workbench.fileTree().selectedPath());
+    }
+
+    /**
+     * <b>The prompt is never visible anywhere but the middle.</b>
+     *
+     * <p>A popup is out of flow, so it has no size until it has been laid out — and a prompt positioned
+     * before that lands at 0,0. The centring pass is therefore unavoidable; what was wrong is that the
+     * popup was <em>painted</em> in the corner while it waited, and the sheet's open transition faded it in
+     * there before it hopped to the middle. Every New File and every Delete opened with a visible jump
+     * across the window.</p>
+     *
+     * <p>Asserted as "on every frame, it is either invisible or centred" rather than "it ends up centred",
+     * because the end state was already correct — the whole defect lived in the frames in between, which an
+     * assertion made after settling steps straight past.</p>
+     */
+    @Test
+    public void theNamePromptIsNeverPaintedInTheCorner() {
+        workbench.fileTree().loadProjects();
+        settle();
+        registry().get(ExplorerCommands.NEW_FILE).execute(CommandContext.of(workbench.fileTree()));
+
+        boolean everCentred = false;
+        for (int frame = 0; frame < 12; frame++) {
+            serverSide.deliver();
+            clientSide.deliver();
+            clientSession.tick();
+            serverSession.tick();
+            window.updateWithoutPainting();
+
+            UIElement popup = window.ui.rootElement.querySelector("." + InputDialog.PROMPT_CLASS);
+            if (popup == null) continue;
+            float opacity = popup.getStyle().getGeneralGroup().opacity();
+            float width = popup.getRuntimeCache().getWidth();
+            if (opacity <= 0f || width <= 0f) continue;          // not shown yet -- nothing to see
+
+            float x = popup.getRuntimeCache().getX();
+            float expected = (window.getScreenWidth() - width) / 2f;
+            assertEquals("frame " + frame + ": the prompt is visible at x=" + x
+                            + " while the centre is " + expected,
+                    expected, x, 1f);
+            everCentred = true;
+        }
+        assertTrue("the prompt never became visible at all, so this asserted nothing", everCentred);
+    }
+
+    /**
+     * <b>A folder never momentarily loses its children.</b>
+     *
+     * <p>Invalidating a listing used to <em>drop</em> it, and a replacement arrives over the network some
+     * frames later — so in between, an expanded folder answered "no children". Every create and every
+     * delete therefore collapsed the whole folder and repopulated it two frames on. Traced in the harness
+     * as {@code model=15 -> 9 -> 14} across three consecutive frames, which is exactly what it looks like:
+     * six rows vanish and come back, and the tree appears to rebuild itself under you.</p>
+     *
+     * <p>Asserted on <b>every frame</b> of the operation, because the end state was always right — the
+     * defect lived entirely in the frames in between, and a check made after settling steps past it.</p>
+     */
+    @Test
+    public void creatingAFileNeverEmptiesTheFolderItLandsIn() {
+        workbench.fileTree().loadProjects();
+        settle();
+        CgPath src = CgPath.parse("mymod.proj:src");
+        workbench.fileTree().treeView().setExpanded(CgPath.ofProject("mymod.proj"), true);
+        workbench.fileTree().treeView().setExpanded(src, true);
+        settle();
+        workbench.fileTree().source().ensureListed(src);
+        settle();
+        // SELECTED, or New File resolves to the project root and this measures the wrong folder.
+        workbench.fileTree().reveal(src);
+        settle();
+
+        int before = workbench.fileTree().source().children(src).size();
+        assertTrue("fixture wrong -- src has no children to lose", before > 0);
+
+        registry().get(ExplorerCommands.NEW_FILE).execute(CommandContext.of(workbench.fileTree()));
+        answerPromptWithoutSettling("Fresh.java");
+
+        for (int frame = 0; frame < 12; frame++) {
+            serverSide.deliver();
+            clientSide.deliver();
+            clientSession.tick();
+            serverSession.tick();
+            window.updateWithoutPainting();
+
+            assertTrue("frame " + frame + ": src reports "
+                            + workbench.fileTree().source().children(src).size()
+                            + " children -- it emptied while waiting for the new listing",
+                    workbench.fileTree().source().children(src).size() >= before);
+        }
+        assertTrue("the new file never appeared in the folder",
+                workbench.fileTree().source().children(src).size() > before);
+    }
+
+    /**
+     * <b>F5 works before anything has been clicked.</b>
+     *
+     * <p>It did not: the binding lived on the tree, and a keymap resolves outward from the FOCUSED element
+     * — so with nothing inside the panel focused, which is how it looks the moment it opens, the tree's
+     * keymap was never on the path. Reload is precisely the verb you reach for before touching anything, so
+     * needing a click first defeats it.</p>
+     *
+     * <p>Driven as a real key through the resolver with nothing focused, rather than by asserting which
+     * keymap holds the binding: the binding was always present, and where it resolves FROM is the entire
+     * defect.</p>
+     */
+    @Test
+    public void reloadFromDiskWorksBeforeAnyRowHasBeenClicked() {
+        workbench.fileTree().loadProjects();
+        settle();
+        assertEquals("fixture wrong -- something is already focused",
+                null, window.getInputHandler().getFocusedElement());
+
+        boolean consumed = window.getInputHandler().consumeKeyboardEvent(
+                new CgSystemInput.Keyboard.Event((char) 0, CgKeyCodes.KEY_F5, true, false, 9L));
+
+        assertTrue("F5 reached nothing -- the binding is scoped to a panel that has no focus yet",
+                consumed);
+    }
+
+    /**
+     * <b>One F5 is enough.</b>
+     *
+     * <p>Reload exists for exactly one situation: something changed on disk that the tree has no way to
+     * know about. So the test changes the backing store directly — no client call, no event — and presses
+     * the key once.</p>
+     */
+    @Test
+    public void oneF5PicksUpAChangeMadeBehindTheTree() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().treeView().setExpanded(CgPath.ofProject("mymod.proj"), true);
+        settle();
+        assertFalse("fixture wrong -- the file is already there",
+                rootChildNames().contains("Appeared.md"));
+
+        backingStore.seed("mymod.proj:Appeared.md", "x");
+
+        window.getInputHandler().consumeKeyboardEvent(
+                new CgSystemInput.Keyboard.Event((char) 0, CgKeyCodes.KEY_F5, true, false, 11L));
+        settle();
+
+        assertTrue("one F5 did not pick the file up -- it needs a second press. Saw " + rootChildNames(),
+                rootChildNames().contains("Appeared.md"));
+    }
+
+    private List<String> rootChildNames() {
+        List<String> names = new ArrayList<>();
+        for (CgPath child : workbench.fileTree().source().children(CgPath.ofProject("mymod.proj"))) {
+            names.add(child.name());
+        }
+        return names;
+    }
+
+    /**
+     * <b>F5 reloads the whole tree, not the selected row's folder.</b>
+     *
+     * <p>The reason it looked broken. Scoping reload to the selection is what a file <em>operation</em>
+     * does, because an operation knows which folder it touched — but somebody pressing F5 is asking
+     * precisely because something changed that the tree cannot know about, and they have no way to say
+     * where. So the change is made deep in {@code src} while the selection sits on a file at the ROOT: the
+     * old behaviour reloaded the root, found nothing new, and appeared to do nothing at all.</p>
+     */
+    @Test
+    public void f5ReloadsFoldersOtherThanTheSelectedOne() {
+        workbench.fileTree().loadProjects();
+        settle();
+        CgPath src = CgPath.parse("mymod.proj:src");
+        workbench.fileTree().treeView().setExpanded(CgPath.ofProject("mymod.proj"), true);
+        workbench.fileTree().treeView().setExpanded(src, true);
+        settle();
+        workbench.fileTree().source().ensureListed(src);
+        settle();
+
+        // Selection is at the ROOT, deliberately far from where the change lands.
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:README.md"));
+        settle();
+        assertEquals("README.md", workbench.fileTree().selectedPath().name());
+
+        backingStore.seed("mymod.proj:src/Sneaky.java", "x");
+
+        window.getInputHandler().consumeKeyboardEvent(
+                new CgSystemInput.Keyboard.Event((char) 0, CgKeyCodes.KEY_F5, true, false, 12L));
+        settle();
+
+        List<String> inSrc = new ArrayList<>();
+        for (CgPath child : workbench.fileTree().source().children(src)) inSrc.add(child.name());
+        assertTrue("F5 only reloaded the selected row's folder -- src still shows " + inSrc,
+                inSrc.contains("Sneaky.java"));
     }
 }
