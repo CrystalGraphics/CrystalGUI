@@ -94,9 +94,91 @@ public class LanguageRegistryTest {
         assertNotSame(entry.newTokenizer(), entry.newTokenizer());
     }
 
+    /** Registered patterns are reported in registration ORDER -- {@code Set.copyOf} used to be
+     * returned from a method whose javadoc promised order, and it does not preserve any. */
     @Test
     public void aRegisteredEntryIsFoundUnderEveryExtensionItClaimed() {
-        assertTrue(LanguageRegistry.extensions().contains("java"));
-        assertTrue(LanguageRegistry.extensions().contains("shader"));
+        assertTrue(LanguageRegistry.rules().contains("EXTENSION:java"));
+        assertTrue(LanguageRegistry.rules().contains("EXTENSION:shader"));
+        assertTrue("java was registered before glsl and must still be reported first",
+                LanguageRegistry.rules().indexOf("EXTENSION:java")
+                        < LanguageRegistry.rules().indexOf("EXTENSION:shader"));
+    }
+
+    /**
+     * <b>An exact file name beats an extension.</b>
+     *
+     * <p>The registry matched extensions and nothing else, which cannot express most of what a real
+     * project contains: {@code Dockerfile}, {@code Makefile} and {@code CMakeLists.txt} have no useful
+     * extension, and {@code .gitignore}'s whole name looks like one. Every editor that does this properly
+     * matches on a pattern — VS Code takes {@code extensions}, {@code filenames} and
+     * {@code filenamePatterns} together.</p>
+     *
+     * <p>Order is the load-bearing part: name, then extension, then glob. Reversed, {@code CMakeLists.txt}
+     * would be whatever claimed {@code .txt}.</p>
+     */
+    @Test
+    public void anExactNameWinsOverTheExtension() {
+        LanguageRegistry.Entry cmake = new LanguageRegistry.Entry(
+                Language.cFamily("cmake"), () -> SyntaxTokenizer.NONE);
+        LanguageRegistry.Entry text = new LanguageRegistry.Entry(
+                Language.cFamily("plaintext"), () -> SyntaxTokenizer.NONE);
+        LanguageRegistry.registerExtensions(text, "zzz");
+        LanguageRegistry.registerNames(cmake, "CMakeLists.zzz");
+
+        assertEquals("cmake", LanguageRegistry.forFileName("CMakeLists.zzz").language().name());
+        assertEquals("plaintext", LanguageRegistry.forFileName("notes.zzz").language().name());
+        assertEquals("the match must not care about case", "cmake",
+                LanguageRegistry.forFileName("cmakelists.ZZZ").language().name());
+    }
+
+    /** A dotfile is a NAME, not an extension — {@code .gitignore} is not a "gitignore file". */
+    @Test
+    public void aLeadingDotIsPartOfTheNameRatherThanAnExtension() {
+        LanguageRegistry.Entry ignore = new LanguageRegistry.Entry(
+                Language.cFamily("ignore"), () -> SyntaxTokenizer.NONE);
+        LanguageRegistry.registerNames(ignore, ".gitignore");
+
+        assertEquals("ignore", LanguageRegistry.forFileName(".gitignore").language().name());
+        // And nothing claimed an extension called "gitignore", so a file that really had one is plain.
+        assertSame(LanguageRegistry.PLAIN, LanguageRegistry.forFileName("rules.gitignore"));
+    }
+
+    /**
+     * Globs match the whole name, and {@code .} is a literal.
+     *
+     * <p>Written as a loop rather than a regex for exactly this: one unescaped dot would make
+     * {@code *.js} also claim {@code axjs}, which is the classic way a pattern matcher backed by a regex
+     * surprises whoever wrote the pattern.</p>
+     */
+    @Test
+    public void globsMatchTheWholeNameAndTreatDotsLiterally() {
+        LanguageRegistry.Entry spec = new LanguageRegistry.Entry(
+                Language.cFamily("spec"), () -> SyntaxTokenizer.NONE);
+        LanguageRegistry.registerGlobs(spec, "*.test.js");
+
+        assertEquals("spec", LanguageRegistry.forFileName("thing.test.js").language().name());
+        assertEquals("spec", LanguageRegistry.forFileName("src/deep/thing.test.js").language().name());
+        assertSame("a dot must not behave as 'any character'",
+                LanguageRegistry.PLAIN, LanguageRegistry.forFileName("thingXtestXjs"));
+        assertSame(LanguageRegistry.PLAIN, LanguageRegistry.forFileName("thing.test.json"));
+    }
+
+    /**
+     * An extension still beats a glob, so a broad pattern cannot shadow a rule that named a suffix.
+     *
+     * <p>Deliberately NOT registered as a bare {@code *}. The registry is static, so a catch-all written
+     * here is a catch-all for every other test in the JVM — which is exactly what happened when this was
+     * first written, and it broke two unrelated assertions about unknown names being plain. The narrow
+     * pattern proves the same precedence without the collateral.</p>
+     */
+    @Test
+    public void anExtensionWinsOverAGlob() {
+        LanguageRegistry.Entry shadow = new LanguageRegistry.Entry(
+                Language.cFamily("shadow"), () -> SyntaxTokenizer.NONE);
+        LanguageRegistry.registerGlobs(shadow, "*.java");
+
+        assertEquals("the glob shadowed a registered extension", "java",
+                LanguageRegistry.forFileName("Main.java").language().name());
     }
 }

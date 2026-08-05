@@ -3,7 +3,6 @@ package com.crystalgui.text.syntax;
 import com.crystalgui.text.Rope;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -32,14 +31,10 @@ public final class KeywordTokenizer implements SyntaxTokenizer {
 
     private final Set<String> keywords;
     private final Set<String> types;
-    private final boolean lineComments;
-    private final boolean blockComments;
 
     public KeywordTokenizer(Set<String> keywords, Set<String> types) {
         this.keywords = new HashSet<>(keywords);
         this.types = new HashSet<>(types);
-        this.lineComments = true;
-        this.blockComments = true;
     }
 
     /** Java's reserved words, plus the primitives as types. */
@@ -67,7 +62,15 @@ public final class KeywordTokenizer implements SyntaxTokenizer {
     }
 
     private static Set<String> setOf(String spaceSeparated) {
-        return new HashSet<>(Arrays.asList(spaceSeparated.split(" ")));
+        // SPLIT ON ANY RUN OF WHITESPACE, and drop what is left over. These lists are written as
+        // concatenated string fragments, so a missing space at a seam silently fuses two keywords
+        // into one that matches nothing, and a doubled space puts the EMPTY STRING in the set --
+        // which then matches every zero-length identifier the lexer considers.
+        Set<String> words = new HashSet<>();
+        for (String word : spaceSeparated.trim().split("[ \\t\\r\\n]+")) {
+            if (!word.isEmpty()) words.add(word);
+        }
+        return words;
     }
 
     @Override
@@ -91,14 +94,14 @@ public final class KeywordTokenizer implements SyntaxTokenizer {
         while (i < text.length()) {
             char c = text.charAt(i);
 
-            if (blockComments && c == '/' && i + 1 < text.length() && text.charAt(i + 1) == '*') {
+            if (c == '/' && i + 1 < text.length() && text.charAt(i + 1) == '*') {
                 int close = text.indexOf("*/", i + 2);
                 int stop = close < 0 ? text.length() : close + 2;
                 tokens.add(new SyntaxToken(scanFrom + i, scanFrom + stop, "comment"));
                 i = stop;
                 continue;
             }
-            if (lineComments && c == '/' && i + 1 < text.length() && text.charAt(i + 1) == '/') {
+            if (c == '/' && i + 1 < text.length() && text.charAt(i + 1) == '/') {
                 int stop = text.indexOf('\n', i);
                 if (stop < 0) stop = text.length();
                 tokens.add(new SyntaxToken(scanFrom + i, scanFrom + stop, "comment"));
@@ -147,7 +150,6 @@ public final class KeywordTokenizer implements SyntaxTokenizer {
     private static final int MAX_BACKSCAN = 16 * 1024;
 
     private int backUpOverBlockComment(Rope document, int lineStart) {
-        if (!blockComments) return lineStart;
         int windowStart = Math.max(0, lineStart - MAX_BACKSCAN);
         if (windowStart >= lineStart) return lineStart;
         String before = document.slice(windowStart, lineStart).toString();
