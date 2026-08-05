@@ -72,6 +72,14 @@ public class PreferencesTest extends UiTestBase {
         Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
         settle();
         assertTrue("nothing was built", preferences.shownSettings().size() >= 5);
+        assertEquals("every shown declaration must have produced a real control -- shownSettings() is a "
+                        + "list this class appends to, so asserting on it alone passes even when every "
+                        + "row came back null",
+                preferences.shownSettings().size(), preferences.panel().controls().size());
+        for (Setting<?> shown : preferences.shownSettings()) {
+            org.junit.Assert.assertNotNull("no control was built for " + shown.getId(),
+                    preferences.panel().control(shown.getId()));
+        }
         assertTrue(Preferences.sectionNames().contains("explorer"));
         assertTrue(Preferences.sectionNames().contains("editor"));
         assertEquals("Explorer", Preferences.labelOf("explorer"));
@@ -166,5 +174,101 @@ public class PreferencesTest extends UiTestBase {
         }
         assertEquals(com.crystalgui.ui.elements.workbench.WorkspaceTreeSource.SortOrder.values().length,
                 WorkbenchSettings.SORT_ORDER.getOptions().size());
+    }
+
+    /**
+     * <b>Every row is actually in the window.</b>
+     *
+     * <p>The test the empty window got past. {@code ConfiguratorPanel.controls()} is keyed by id and
+     * populated by {@code addTo} whether or not the row's parent is attached to anything, so a window
+     * whose groups were built and never added still reported a full set of controls — and rendered
+     * nothing at all. This asks the <em>tree</em>, which is the only thing that can tell the difference.</p>
+     */
+    @Test
+    public void everyRowIsReallyInTheWindow() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+
+        java.util.List<UIElement> rows = preferences.dialog()
+                .querySelectorAll(".__configurator__");
+        assertEquals("a row was built but never attached, so the window renders empty",
+                preferences.shownSettings().size(), rows.size());
+        assertTrue("the window showed nothing, so the count above proves nothing", rows.size() >= 5);
+        for (UIElement row : rows) {
+            assertTrue("a row laid out at zero height is invisible", row.getRuntimeCache().getHeight() > 0f);
+        }
+    }
+
+    /**
+     * <b>It is a dialog with a class, not a dialog subclass.</b>
+     *
+     * <p>A widget's cascade identity is its tag, so a subclass reports {@code preferences} and every
+     * {@code dialog …} rule in the sheet stops applying — which showed up as a title bar with no height
+     * and a close button stretched across it. The same failure {@code AGENTS.md} records for
+     * {@code Dropdown extends Button}.</p>
+     */
+    @Test
+    public void theWindowIsStyledAsADialog() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+        assertEquals("the sheet's dialog rules only reach something whose tag IS dialog",
+                "dialog", preferences.dialog().tagName());
+        assertTrue(preferences.dialog().hasClass(Preferences.DIALOG_CLASS));
+        assertTrue("the title bar has no height, so dialog styling did not reach it",
+                preferences.dialog().getTitleBar().getRuntimeCache().getHeight() > 0f);
+    }
+
+    /**
+     * <b>It opens in the middle, and it can be resized.</b>
+     *
+     * <p>Centring cannot happen at open time — nothing has laid out, so the width is zero and "centred"
+     * is the top-left corner, which is exactly where it appeared. The dialog is therefore held invisible
+     * for the frame in between rather than allowed to show up in the corner and jump.</p>
+     */
+    @Test
+    public void itOpensCentredAndResizable() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+
+        float width = preferences.dialog().getRuntimeCache().getWidth();
+        float left = preferences.dialog().getRuntimeCache().getX();
+        float expected = (window.getScreenWidth() - width) / 2f;
+        assertTrue("opened at x=" + left + ", expected about " + expected,
+                Math.abs(left - expected) < 2f);
+        assertEquals("a preferences window with no resize handles cannot recover from a label column "
+                        + "that is too narrow for somebody's language",
+                com.crystalgui.style.property.visual.Resize.BOTH,
+                preferences.dialog().getStyle().getGeneralGroup().resize());
+    }
+
+    /**
+     * <b>The list scrolls rather than being clipped by the dialog.</b>
+     *
+     * <p>The panel is the thing that must overflow. Given no height of its own it grows to fit its
+     * content, overflows the dialog's own {@code overflow: hidden} content box instead, and the result
+     * reads as a missing scrollbar when it is really a panel that was never given a box to scroll
+     * inside.</p>
+     */
+    @Test
+    public void theListScrollsInsteadOfBeingClipped() {
+        Preferences preferences = Preferences.open(window, window.ui.rootElement.settings());
+        settle();
+
+        float panelHeight = preferences.panel().getRuntimeCache().getHeight();
+        float dialogHeight = preferences.dialog().getRuntimeCache().getHeight();
+        assertTrue("the panel (" + panelHeight + ") grew past the dialog (" + dialogHeight + ") instead "
+                        + "of scrolling inside it", panelHeight <= dialogHeight);
+        assertTrue("the panel has no height at all", panelHeight > 0f);
+
+        // Shrunk until the content cannot fit, which is the only state the question is about. At its
+        // natural size the list fits, and asserting on that would pass with a panel that can never
+        // scroll at all.
+        preferences.dialog().layout(l -> l.height(120f));
+        settle();
+        assertTrue("shrinking the window past its content left nothing to scroll, so the rows are being "
+                        + "clipped by the dialog rather than scrolled inside the panel",
+                preferences.panel().getMaxScrollTop() > 0f);
+        assertTrue("the bar is hidden, so there is no way to discover the rows below the fold",
+                preferences.panel().isScrollbarsVisible());
     }
 }

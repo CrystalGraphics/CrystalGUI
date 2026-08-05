@@ -4,6 +4,9 @@ import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsRegistry;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Dialog;
 import com.crystalgui.ui.elements.config.ConfiguratorGroup;
@@ -20,6 +23,17 @@ import java.util.Set;
 
 /**
  * The preferences window — every user-editable declaration, grouped by section.
+ *
+ * <h3>A plain {@link Dialog} with a class, not a subclass of one</h3>
+ *
+ * <p>It was a subclass, briefly, and every {@code dialog …} rule in the sheet stopped applying to it: a
+ * widget's cascade identity is its <b>tag</b>, and {@code tagName()} reports the registered name for its
+ * own class, so {@code Preferences extends Dialog} is a {@code preferences}, not a {@code dialog}. The
+ * symptom was a title bar with no height and a close button stretched across it — the same failure
+ * {@code AGENTS.md} records for {@code Dropdown extends Button}.</p>
+ *
+ * <p>So this is a controller holding a dialog, and the variant is spelled with a class exactly as
+ * {@code dialog.__picker__} already is. A dialog variant should not cost a tag.</p>
  *
  * <h3>It builds nothing of its own</h3>
  *
@@ -49,40 +63,87 @@ import java.util.Set;
  * an undoable layer, and Ctrl+Z changing your font size instead of undoing your work is the failure that
  * boundary exists to prevent.</p>
  */
-public final class Preferences extends Dialog {
+public final class Preferences {
 
     public static final String TITLE = "Preferences";
 
-    /** On the panel, so the sheet can size it without reaching through the dialog's own content box. */
-    public static final String PANEL_CLASS = "__preferences-panel__";
+    /** The variant class on the dialog. @see Preferences the class note on why this is not a tag */
+    public static final String DIALOG_CLASS = "__preferences__";
 
+    private final Dialog dialog = new Dialog(TITLE);
     private final ConfiguratorPanel panel = new ConfiguratorPanel();
     private final Settings settings;
     private final List<Setting<?>> shown = new ArrayList<>();
 
     public Preferences(Settings settings) {
-        super(TITLE);
         this.settings = settings;
-
-        panel.addClass(PANEL_CLASS);
-        getContent().addChild(panel);
+        dialog.addClass(DIALOG_CLASS);
+        dialog.getContent().addChild(panel);
 
         for (Map.Entry<String, List<Setting<?>>> section : sections().entrySet()) {
             ConfiguratorGroup group = panel.group(labelOf(section.getKey()));
+            // ADDED, not merely built. `group()` deliberately does not attach -- a group may belong inside
+            // another group, and only the caller knows -- and forgetting it leaves every row parented to a
+            // detached element. It looks fine from `panel.controls()`, which is keyed by id and populated
+            // whether or not anything is on screen, so the window comes up entirely empty.
+            panel.addChild(group);
             for (Setting<?> setting : section.getValue()) {
-                SettingsConfigurator.addRow(panel, group.content(), settings, SettingsLayer.USER,
-                        setting, null);
-                shown.add(setting);
+                if (SettingsConfigurator.addRow(panel, group.content(), settings, SettingsLayer.USER,
+                        setting, null) != null) {
+                    shown.add(setting);
+                }
             }
         }
     }
 
-    /** Opens it centred and modal, as every editor's settings window is. */
+    /**
+     * Opens it centred, and <b>not</b> modal.
+     *
+     * <p>IntelliJ's settings dialog is modal; VS Code's is a tab you can leave open while you work, and
+     * that is the better model for a window whose whole point is watching a change take effect. Modality
+     * here would make the tree it re-sorts <em>inert</em> — you could see the sort order change and not
+     * touch the result until you closed the window that changed it.</p>
+     *
+     * <p>Escape still closes it: a close watcher is what Escape consults, and that is a separate thing
+     * from modality — see {@code UIWindow}'s two stacks.</p>
+     */
     public static Preferences open(UIWindow window, Settings settings) {
         Preferences preferences = new Preferences(settings);
-        window.addOverlay(preferences, null);
-        preferences.showModal();
+        window.addOverlay(preferences.dialog, null);
+        preferences.dialog.show();
+        centre(window, preferences.dialog);
         return preferences;
+    }
+
+    /**
+     * Puts the dialog in the middle of the window, once it has a size to be the middle of.
+     *
+     * <p>It cannot be done at open time: nothing has laid out yet, so the width and height are both zero
+     * and the "centre" is the top-left corner — which is where it opened. So the same ticker idiom
+     * {@code InputDialog} uses, held invisible for the frame in between rather than allowed to appear in
+     * the corner and jump.</p>
+     *
+     * <p>Hidden with {@code opacity} at IMPORTANT and then <b>removed</b> rather than set back to 1:
+     * dropping the candidate hands the property back to the stylesheet, so the sheet keeps ownership of
+     * how a dialog appears.</p>
+     */
+    private static void centre(UIWindow window, Dialog dialog) {
+        StyleGroup.importantPipeline(dialog.getStyle().getGeneralGroup(), g -> g.opacity(0f));
+        window.registerTicker(delta -> {
+            if (dialog.getAttachedWindow() == null) return false;
+            float width = dialog.getRuntimeCache().getWidth();
+            float height = dialog.getRuntimeCache().getHeight();
+            if (width <= 0f || height <= 0f) return true;   // not laid out yet; look again next frame
+            dialog.moveTo(Math.max(0f, (window.getScreenWidth() - width) / 2f),
+                    Math.max(0f, (window.getScreenHeight() - height) / 2f));
+            dialog.getStyle().removeCandidates(StylePropertyRegistry.OPACITY,
+                    slot -> slot.origin() == StyleOrigin.IMPORTANT);
+            return false;
+        });
+    }
+
+    public Dialog dialog() {
+        return dialog;
     }
 
     public Settings settings() {
@@ -93,7 +154,13 @@ public final class Preferences extends Dialog {
         return panel;
     }
 
-    /** Every declaration this window put a row in for, in the order the rows appear. */
+    /**
+     * Every declaration this window actually put a row in for.
+     *
+     * <p>A setting whose kind has no registered control is <b>not</b> in here — recording it anyway made
+     * this list a restatement of the filter rather than evidence of what was built, which is precisely how
+     * an entirely empty window passed its own test.</p>
+     */
     public List<Setting<?>> shownSettings() {
         return new ArrayList<>(shown);
     }
@@ -115,7 +182,7 @@ public final class Preferences extends Dialog {
         return grouped;
     }
 
-    /** Distinct section names, for a test that wants them without the settings. */
+    /** Distinct section names, for a caller that wants them without the settings. */
     public static Set<String> sectionNames() {
         return new LinkedHashSet<>(sections().keySet());
     }

@@ -4076,26 +4076,38 @@ popover.__prompt__ textfield {
     padding-left: 2px;
 }
 
-/* ── Preferences ───────────────────────────────────────────────────────────────────────
+/* ── Preferences ───────────────────────────────────────────────────────────────
  *
- * One scrolling list of groups, which is VS Code's settings editor rather than IntelliJ's category tree.
- * Sizes here and not in Java, per the widget rule: `Preferences` chooses which declarations to show and
- * nothing else. */
-preferences {
-    width: 360px;
-    height: 280px;
+ * A dialog VARIANT, spelled as a class on a real `dialog` -- like `dialog.__picker__` above. Not a tag:
+ * a subclass reports its own tag name, so every `dialog ...` rule in this sheet would miss it and the
+ * window would come up with an unstyled title bar. One scrolling list of groups, which is VS Code's
+ * settings editor rather than IntelliJ's category tree. */
+dialog.__preferences__ {
+    width: 420px;
+    height: 320px;
+    /* Resizable, because the label column is the thing people run out of and no default width is right
+     * for every language. `resize` is a real CSS property here and Dialog already routes its handles
+     * through its own position, so this is the whole of it. */
+    resize: both;
+    min-width: 260px;
+    min-height: 160px;
 }
 
 /* 0, not auto: flex-shrink is 0 in this engine, so a growing child keeps its content size and overflows
- * the dialog instead of fitting inside it. See AGENTS.md's flex-shrink note. */
-preferences > .__content__ {
+ * the dialog instead of scrolling inside it -- which is exactly what happened, and read as a missing
+ * scrollbar rather than as a panel that had never been given a height to overflow. See AGENTS.md. */
+dialog.__preferences__ .__configurator-panel__ {
     width: 100%;
     height: 0px;
     flex-grow: 1;
-    padding-all: 4px;
+    min-height: 0px;
 }
 
-preferences .__preferences-panel__ {
-    width: 100%;
-    height: 100%;
+/* Wider than the inspector's column, and the reason is the width of the panel each lives in: an
+ * inspector is a few hundred pixels of a side dock, this is a window sized for its own content. The
+ * shared token cannot serve both, which is the same argument the configurator's own comment makes for
+ * not sharing one scale with the graph. */
+dialog.__preferences__ .__configurator__ > .__label__ {
+    width: 170px;
+    min-width: 170px;
 }
