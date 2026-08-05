@@ -109,9 +109,21 @@ public final class Preferences {
      */
     public static Preferences open(UIWindow window, Settings settings) {
         Preferences preferences = new Preferences(settings);
-        window.addOverlay(preferences.dialog, null);
-        preferences.dialog.show();
-        centre(window, preferences.dialog);
+        Dialog dialog = preferences.dialog;
+        window.addOverlay(dialog, null);
+        dialog.show();
+        // PROMOTED, though not modal. `showModal` promotes and `show` deliberately does not -- a modeless
+        // dialog stays in normal flow -- and without promotion this dialog's containing block is whatever
+        // addOverlay parented it to. Against a root that refuses public children (every composite, this
+        // editor included) that is a zero-sized internal layer, so applyPosition clamps every write to
+        // max(0, 0 - width) = 0: it opens in the corner, cannot be dragged out of it, and cannot be
+        // resized, while a plain click on the close button still works because a click is not geometry.
+        // A promoted element's containing block is the root, which is what all three of those need.
+        dialog.addToTopLayer();
+        // Dialog only unpromotes on the modal path, so a promotion it did not perform is one it will not
+        // undo -- the element would stay in the top layer after closing.
+        dialog.onClosed.connect(dialog::removeFromTopLayer);
+        centre(window, dialog);
         return preferences;
     }
 
