@@ -1,4 +1,12 @@
 package com.crystalgui.graph.shader;
+import java.util.Arrays;
+import java.nio.charset.StandardCharsets;
+
+import com.crystalgui.ui.elements.workbench.FileDocument;
+import com.google.gson.JsonParser;
+import com.crystalgui.serialization.JsonOps;
+import com.crystalgui.graph.GraphDocument;
+import com.crystalgui.graph.GraphCodecs;
 
 import com.crystalgraphics.shadergraph.CgMasterNode;
 import com.crystalgraphics.shadergraph.CgShaderEmitter;
@@ -57,7 +65,7 @@ import javax.annotation.Nullable;
  * that. Doing it from {@link #onLayoutChanged()} makes it the widget's own business, the same way
  * {@code ListView} starts its ticker: by the time layout has run, the element is attached by definition.</p>
  */
-public class ShaderGraphEditor extends UIElement {
+public class ShaderGraphEditor extends UIElement implements FileDocument {
 
     /** UNIQUE, never the shared "__content__" -- see ProjectFileTree.CONTENT_CLASS for why. */
     public static final String CONTENT_CLASS = "__shader-content__";
@@ -482,5 +490,62 @@ public class ShaderGraphEditor extends UIElement {
             previewsAttached = false;
         }
         mainPreviewAttached = false;
+    }
+
+    // ── As a FileDocument ───────────────────────────────────────────────────────────────────────
+
+    /**
+     * This widget IS the panel, so there is nothing to wrap.
+     *
+     * <p>{@code TextEditor} got a wrapper instead, and the difference is worth stating: that widget is
+     * general-purpose and is used where no file exists at all — the emitted-source pane below, harness
+     * scenes — so making it a document would give every one of those an {@code encode()} nobody calls. A
+     * shader graph editor is one graph file, so implementing this directly is the honest shape.</p>
+     */
+    @Override
+    public UIElement view() {
+        return this;
+    }
+
+    /** The graph as it stands, in the serialized form {@link GraphCodecs#DOCUMENT} defines. */
+    @Override
+    public byte[] encode() {
+        return GraphCodecs.DOCUMENT.encode(JsonOps.INSTANCE, graph.getDocument())
+                .toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Loads a graph file.
+     *
+     * <p>Decode, then {@link GraphView#load} — which copies the contents into the view's own document
+     * rather than adopting the decoded object. That distinction is the whole reason this could not be
+     * written before: the Main Preview, the Blackboard and this class's own {@code onChanged} listener
+     * are all bound to {@code graph.getDocument()} at construction, so a load that swapped the instance
+     * would leave every one of them driving a document nobody was showing.</p>
+     *
+     * <p>Not undoable, and the view clears the stack: a file is the starting state, not something the
+     * user did. The previews are invalidated and the source pane recompiled, because nothing else fires
+     * for a wholesale replacement — {@code onConnectionsChanged} covers the wires, but a graph loaded
+     * with no edges at all would otherwise show the previous file's generated GLSL.</p>
+     *
+     * <p><b>A malformed file throws, and is meant to.</b> Accepting the bytes and showing an empty canvas
+     * would be far worse than refusing: the editor would then differ from the file it failed to read,
+     * report itself modified, and the first Save All would write that emptiness over the user's work.
+     * The workbench catches this, says so, and refuses to save the file at all.</p>
+     */
+    @Override
+    public void adopt(byte[] bytes) {
+        GraphDocument loaded = GraphCodecs.DOCUMENT.decode(JsonOps.INSTANCE,
+                JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)));
+        graph.load(loaded);
+        // The property nodes carry a title and an exposed dot read back out of the properties they
+        // reference, and nothing re-derives those for a load: syncPropertyNodes runs on document change,
+        // and the emit that load ends with arrives before these widgets have been rebuilt.
+        syncPropertyNodes();
+        if (previews != null) {
+            previews.invalidate();
+            previews.requestRecompile();
+        }
+        recompile();
     }
 }

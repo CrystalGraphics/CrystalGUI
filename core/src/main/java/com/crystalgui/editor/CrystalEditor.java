@@ -50,6 +50,16 @@ public class CrystalEditor extends UIElement {
     public static final String SHADER_GRAPH_TYPE = "shadergraph";
 
     /**
+     * A shader graph opened <b>from a file</b>, one instance per path.
+     *
+     * <p>Separate from {@link #SHADER_GRAPH_TYPE}, which is the scratch graph the editor opens with and
+     * which has no path at all. The same split VS Code draws between an untitled editor and a file
+     * editor, and it is what lets the two coexist while the starter graph is still pathless — a single
+     * type would have to build a document for the empty path.</p>
+     */
+    public static final String SHADER_GRAPH_FILE_TYPE = "shadergraph.file";
+
+    /**
      * The GLSL the graph emits, as a panel of its own.
      *
      * <p><b>Singleton, not a document.</b> There is one emit and it is a <em>view of</em> the graph rather
@@ -101,6 +111,19 @@ public class CrystalEditor extends UIElement {
 
         workbench.registerPanel(DockPanelDescriptor.document(SHADER_GRAPH_TYPE, "Shader Graph"),
                 ref -> shaderGraph());
+        // A .shadergraph FILE opens as a graph rather than as its own JSON. One editor per path, built by
+        // the workbench and cached with the document, so two open graphs are two graphs -- the scratch
+        // panel above is a lazily-created singleton and could never be that.
+        //
+        // No starter graph here: a file-backed document is whatever the file says, and seeding it would
+        // put nodes on the canvas that are not in the file and mark it modified before it was touched.
+        workbench.registerDocumentType(SHADER_GRAPH_FILE_TYPE, "Shader Graph", path -> {
+            ShaderGraphEditor editor = new ShaderGraphEditor();
+            editor.onStatusChanged.connect(onStatus::emit);
+            editor.onLineOwnerChanged.connect(onStatus::emit);
+            return editor;
+        });
+        workbench.bindEditorExtensions(SHADER_GRAPH_FILE_TYPE, "shadergraph");
         workbench.registerPanel(
                 DockPanelDescriptor.singleton(SHADER_SOURCE_TYPE, SHADER_SOURCE_TITLE),
                 ref -> shaderGraph().source());
