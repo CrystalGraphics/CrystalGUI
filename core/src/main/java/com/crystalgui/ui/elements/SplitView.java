@@ -3,6 +3,8 @@ package com.crystalgui.ui.elements;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.UIDragController;
@@ -10,6 +12,7 @@ import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
+import dev.vfyjxf.taffy.style.TaffyDimension;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -537,11 +540,20 @@ public class SplitView extends UIElement {
         float min = minPercentage;
         float max = maxPercentage;
         if (pairPx > 0f) {
+            // Both sources of a limit, folded together: the ones set through setPaneSizeLimits and the
+            // pane's OWN CSS min/max on the split axis. See effectiveMin/effectiveMax for why the second
+            // is not optional.
+            boolean vertical = isVertical();
+            float beforeMin = effectiveMin(before, pairPx, vertical);
+            float beforeMax = effectiveMax(before, pairPx, vertical);
+            float afterMin = effectiveMin(after, pairPx, vertical);
+            float afterMax = effectiveMax(after, pairPx, vertical);
+
             // The pane before the divider is bounded directly; the one after is bounded by its complement.
-            min = Math.max(min, before.minPx / pairPx * 100f);
-            max = Math.min(max, before.maxPx / pairPx * 100f);
-            min = Math.max(min, 100f - after.maxPx / pairPx * 100f);
-            max = Math.min(max, 100f - after.minPx / pairPx * 100f);
+            min = Math.max(min, beforeMin / pairPx * 100f);
+            max = Math.min(max, beforeMax / pairPx * 100f);
+            min = Math.max(min, 100f - afterMax / pairPx * 100f);
+            max = Math.min(max, 100f - afterMin / pairPx * 100f);
         }
         if (min > max) {
             // Over-constrained — two minimums that cannot both be met. Meeting the leading one is the
@@ -549,6 +561,48 @@ public class SplitView extends UIElement {
             max = min;
         }
         return new float[]{min, max};
+    }
+
+    /**
+     * A pane's smallest honoured size in pixels — {@link #setPaneSizeLimits} and its CSS {@code min-width}
+     * / {@code min-height}, whichever is larger.
+     *
+     * <h3>Reading the CSS limit is what removes the divider's dead zone</h3>
+     *
+     * <p>Taffy refuses to shrink a pane past its own {@code min-width}, but the divider's weight is a
+     * number this class keeps and nothing was stopping it going lower. Drag left past the CSS minimum and
+     * the pane stops moving while the weight keeps falling; release, and the stored split now says 10%
+     * where the layout is showing 20%. The next drag rightward has to spend all of that difference before
+     * anything moves — <b>the divider ignores the first fifty pixels of the gesture and then jumps.</b></p>
+     *
+     * <p>It is not fixable inside a drag, either: {@code applyDividerDelta} already measures from the
+     * drag's own start precisely so clamping cannot accumulate <em>within</em> one gesture, and that is a
+     * different bug with the same symptom. This one accumulates <em>between</em> gestures, and the only
+     * cure is for the clamp to know the limit layout is actually enforcing.</p>
+     *
+     * <p>Percentages resolve against the pair's own extent, which is the containing block a pane's
+     * percentage width would resolve against anyway. Intrinsic keywords ({@code min-content},
+     * {@code fit-content}) are not resolvable here without asking Taffy to measure, so they are treated as
+     * no limit — the old behaviour, and honest: a wrong number would be worse than none.</p>
+     */
+    private static float effectiveMin(Pane pane, float pairPx, boolean vertical) {
+        return Math.max(pane.minPx, cssLimitPx(pane, pairPx, vertical, true, 0f));
+    }
+
+    private static float effectiveMax(Pane pane, float pairPx, boolean vertical) {
+        return Math.min(pane.maxPx, cssLimitPx(pane, pairPx, vertical, false, Float.MAX_VALUE));
+    }
+
+    private static float cssLimitPx(Pane pane, float pairPx, boolean vertical,
+                                    boolean minimum, float absent) {
+        StyleProperty<TaffyDimension> property = minimum
+                ? (vertical ? LayoutProperties.MIN_HEIGHT : LayoutProperties.MIN_WIDTH)
+                : (vertical ? LayoutProperties.MAX_HEIGHT : LayoutProperties.MAX_WIDTH);
+        TaffyDimension dimension = pane.element.getStyle().getLayoutGroup().getValueSave(property);
+        if (dimension == null) return absent;
+        if (dimension.isLength()) return dimension.getValue();
+        if (dimension.isPercent()) return dimension.getValue() * pairPx;
+        return absent;
     }
 
     private float clampPercentage(int index, float value) {

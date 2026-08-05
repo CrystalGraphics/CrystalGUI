@@ -203,6 +203,43 @@ public class SplitViewDragTest extends UiTestBase {
     }
 
     /**
+     * <b>A pane's own CSS {@code min-width} bounds the divider, so dragging back has no dead zone.</b>
+     *
+     * <p>Taffy refuses to shrink a pane past its {@code min-width}, but the divider's weight is a number
+     * SplitView keeps and nothing stopped it going lower. Drag left past the minimum and the pane stops
+     * while the weight keeps falling; release, and the stored split says one thing where the layout shows
+     * another. The next rightward drag spends all of that difference before anything moves — the divider
+     * ignores the first stretch of the gesture and then jumps.</p>
+     *
+     * <p>Asserted on the stored percentage <em>after release</em>, which is where the discrepancy lives.
+     * Asserting the pane's rendered width instead passes either way: Taffy clamps it to 150 regardless,
+     * which is exactly what makes this bug invisible from the picture.</p>
+     */
+    @Test
+    public void aPanesCssMinWidthBoundsTheDivider() {
+        setUp(2f, SplitView.Orientation.HORIZONTAL);
+        split.first().layout(l -> l.minWidth(150));
+        frame();
+
+        int[] c = dividerCentrePhys(2f);
+        mouseTo(c[0], c[1]);
+        frame();
+        press(c[0], c[1]);
+        // Hard left, well past the minimum and past SplitView's own 5% floor.
+        mouseTo(0, c[1]);
+        frame();
+        release(0, c[1]);
+        frame();
+
+        float total = split.getRuntimeCache().getWidth();
+        float dividerWidth = split.divider().getRuntimeCache().getWidth();
+        float storedPx = split.getPercentage() / 100f * (total - dividerWidth);
+        assertTrue("the stored split fell to " + storedPx + "px, below the pane's 150px CSS minimum"
+                        + " -- dragging back will have a dead zone that wide",
+                storedPx >= 150f - 1f);
+    }
+
+    /**
      * The flexbox trap this widget would otherwise ship with: items default to {@code min-size: auto},
      * which refuses to shrink one below its own content. A pane holding something large would jam the
      * split — and an empty-pane demo would look perfect. SplitView sets {@code min-width}/
