@@ -153,24 +153,29 @@ public class DialogTest extends UiTestBase {
     }
 
     /**
-     * <b>Escape must NOT close a modeless dialog.</b> Only {@code showModal()} "establishes a close
-     * watcher" — the machinery that turns a close request into a {@code cancel} event and then a
-     * close. {@code show()}'s algorithm has no close watcher, so browsers do not close a modeless
-     * dialog on Escape either.
+     * <b>Escape closes a modeless dialog while focus is inside it — a DELIBERATE divergence from the web.</b>
      *
-     * <p>An earlier revision did close on Escape, and only when focus happened to be inside the
-     * dialog — neither the web's behaviour nor a coherent one of its own. Pinned as an assertion so
-     * it does not get "helpfully" re-added; Escape-to-close arrives with modal support or not at all.</p>
+     * <p>The HTML spec is the opposite: only {@code showModal()} establishes a close watcher, and a
+     * modeless {@code <dialog>} ignores Escape entirely. This test asserted that, and it was right about
+     * the spec.</p>
+     *
+     * <p>The divergence is a product decision. A browser dialog is a page element; ours is a floating
+     * window in an IDE, and every floating window in every IDE closes on Escape. Making it modal to get
+     * that back would be worse — modality makes the rest of the workbench inert, which is exactly what a
+     * settings window watching its own change take effect must not do.</p>
+     *
+     * <p>The safeguard is that it is scoped to <b>focus</b> rather than to the window: a bubbling listener
+     * only fires when the focused element is inside the dialog, so a modeless dialog cannot eat Escape
+     * from the editor behind it. See {@code Dialog.installEscapeToClose}.</p>
      */
-    @Test
-    public void escapeDoesNotCloseAModelessDialog() {
+    public void escapeClosesAFocusedModelessDialog() {
         dialog.show();
         settle();
         input.requestFocus(dialog);
 
         escape();
 
-        assertTrue("modeless dialogs have no close watcher", dialog.isOpen());
+        assertFalse("Escape did not close a focused modeless dialog", dialog.isOpen());
     }
 
     /** The affordance a floating panel actually needs. Browsers ship no dialog chrome at all, so this

@@ -59,6 +59,12 @@ public class QuickPick extends Popover {
     public static final String LABEL_CLASS = "__qp-label__";
     public static final String SPACER_CLASS = "__qp-spacer__";
     public static final String ACCELERATOR_CLASS = "__qp-accelerator__";
+
+    /** One key of a chord — {@code Ctrl}, {@code K} — each in its own box, as VS Code draws them. */
+    public static final String KEY_CLASS = "__qp-key__";
+
+    /** The {@code +} between two keys. Not a key, so it gets no box. */
+    public static final String KEY_SEPARATOR_CLASS = "__qp-key-sep__";
     public static final String EMPTY_CLASS = "__qp-empty__";
 
     /** A row that is listed but cannot be chosen — see {@link QuickPickItem#enabled()}. */
@@ -343,7 +349,13 @@ public class QuickPick extends Popover {
         final UIText category = new UIText("");
         final UIText label = new UIText("");
         final UIElement spacer = new UIElement();
-        final UIText accelerator = new UIText("");
+        /**
+         * A ROW of key boxes, not one string.
+         *
+         * <p>{@code "Ctrl+Shift+P"} as a single text can only ever be plain text, and every editor draws
+         * each key as its own bordered box. Splitting it here is what lets a sheet style a key at all.</p>
+         */
+        final UIElement accelerator = new UIElement();
 
         /**
          * <b>Read per event, never captured.</b> Rows are pooled and recycled as the list scrolls, so a
@@ -394,8 +406,7 @@ public class QuickPick extends Popover {
             String category = item.category();
             row.category.setText(category == null || category.isEmpty() ? "" : category + ": ");
             row.label.setText(item.label());
-            String accelerator = item.accelerator();
-            row.accelerator.setText(accelerator == null ? "" : accelerator);
+            setAccelerator(row.accelerator, item.accelerator());
 
             // Set AND cleared, because rows are recycled -- a row that showed a disabled command and is
             // reused for an enabled one would otherwise stay dimmed and unclickable-looking forever.
@@ -404,6 +415,33 @@ public class QuickPick extends Popover {
 
             apply(row.label, entry.labelRanges());
             apply(row.category, entry.categoryRanges());
+        }
+
+        /**
+         * Rebuilds the key boxes for one row.
+         *
+         * <p>Rebuilt rather than pooled because a chord has one to four keys and rows are already
+         * recycled by the list — a pool inside a pool for four tiny elements earns nothing. Every box is
+         * {@code setHitTest(false)}, so the row stays the hit target for the click that accepts it and
+         * nothing here can be detached out from under a live event.</p>
+         */
+        private void setAccelerator(UIElement host, @Nullable String chord) {
+            host.clearAllChildren();
+            if (chord == null || chord.isEmpty()) return;
+            for (String raw : chord.split("[+]")) {
+                String key = raw.trim();
+                if (key.isEmpty()) continue;
+                if (!host.getChildren().isEmpty()) {
+                    UIText plus = new UIText("+");
+                    plus.addClass(KEY_SEPARATOR_CLASS);
+                    plus.setHitTest(false);
+                    host.addChild(plus);
+                }
+                UIText box = new UIText(key);
+                box.addClass(KEY_CLASS);
+                box.setHitTest(false);
+                host.addChild(box);
+            }
         }
 
         /** Replaces the highlight set every bind — including with nothing, which is the half a recycled

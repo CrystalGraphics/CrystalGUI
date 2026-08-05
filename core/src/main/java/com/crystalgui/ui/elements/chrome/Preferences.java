@@ -104,8 +104,8 @@ public final class Preferences {
      * here would make the tree it re-sorts <em>inert</em> — you could see the sort order change and not
      * touch the result until you closed the window that changed it.</p>
      *
-     * <p>Escape still closes it: a close watcher is what Escape consults, and that is a separate thing
-     * from modality — see {@code UIWindow}'s two stacks.</p>
+     * <p>Escape closes it while focus is inside it, which every {@link Dialog} now does — see
+     * {@code Dialog.installEscapeToClose} for why that is a bubbling listener and not a close watcher.</p>
      */
     public static Preferences open(UIWindow window, Settings settings) {
         Preferences preferences = new Preferences(settings);

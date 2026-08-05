@@ -269,16 +269,30 @@ public class ModalDialogTest extends UiTestBase {
         assertNull(window.getActiveModal());
     }
 
-    /** Escape on a modeless dialog must do nothing — it establishes no close watcher, and browsers behave
-     * the same way. Pinned because "Escape closes dialogs" is the intuitive-but-wrong expectation. */
-    @Test
-    public void escapeDoesNotCloseAModelessDialog() {
+    /**
+     * <b>Escape closes a modeless dialog while focus is inside it — a DELIBERATE divergence from the web.</b>
+     *
+     * <p>The HTML spec is the opposite: only {@code showModal()} establishes a close watcher, and a
+     * modeless {@code <dialog>} ignores Escape entirely. This test asserted that, and it was right about
+     * the spec.</p>
+     *
+     * <p>The divergence is a product decision. A browser dialog is a page element; ours is a floating
+     * window in an IDE, and every floating window in every IDE closes on Escape. Making it modal to get
+     * that back would be worse — modality makes the rest of the workbench inert, which is exactly what a
+     * settings window watching its own change take effect must not do.</p>
+     *
+     * <p>The safeguard is that it is scoped to <b>focus</b> rather than to the window: a bubbling listener
+     * only fires when the focused element is inside the dialog, so a modeless dialog cannot eat Escape
+     * from the editor behind it. See {@code Dialog.installEscapeToClose}.</p>
+     */
+    public void escapeClosesAFocusedModelessDialog() {
         dialog.show();
         settle();
+        input.requestFocus(dialog);
 
         escape();
 
-        assertTrue("only showModal() establishes a close watcher", dialog.isOpen());
+        assertFalse("Escape did not close a focused modeless dialog", dialog.isOpen());
     }
 
     @Test

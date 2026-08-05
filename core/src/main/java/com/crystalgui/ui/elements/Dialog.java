@@ -1,7 +1,9 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.signal.Signal;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.EventListenerGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
@@ -59,6 +61,17 @@ public class Dialog extends UIElement {
     public static final String CLOSE_CLASS = "__close__";
     /** The modal scrim. Our stand-in for {@code ::backdrop} — see {@link #showModal()}. */
     public static final String BACKDROP_CLASS = "__backdrop__";
+
+    /**
+     * On the dialog while it is open — the same name and the same job as {@code Popover.OPEN_CLASS}.
+     *
+     * <p>Without it a dialog has no CSS-visible open state, and so cannot be <b>animated at all</b>: a box
+     * coming out of {@code display: none} has no previous opacity to interpolate from, which is the exact
+     * problem {@code @starting-style} exists to solve on the web. The pair — a resting value in the base
+     * rule and the open value on this class — is what gives a transition something to run between, and it
+     * is the arrangement {@code menu .__items__} already uses.</p>
+     */
+    public static final String OPEN_CLASS = "__open__";
 
     /** Emitted after the dialog closes, however it was closed. */
     public final Signal.Action onClosed = new Signal.Action();
@@ -123,6 +136,32 @@ public class Dialog extends UIElement {
 
         setFocusPolicy(FocusPolicy.FOCUSABLE);
         applyOpenState();
+        installEscapeToClose();
+    }
+
+    /**
+     * Escape closes it — but only while focus is inside it.
+     *
+     * <h3>A bubbling listener, deliberately not a close watcher</h3>
+     *
+     * <p>The close-watcher stack is the engine's usual Escape route, and it is a <b>window-wide</b> stack
+     * whose topmost entry wins wherever focus happens to be. That is right for a modal, which already
+     * establishes one in {@link #showModal()}, and wrong for a modeless dialog: it would eat Escape from
+     * the editor behind it, where Escape already means something. Bubbling gets "while focused" for free,
+     * since an event only reaches this dialog when the focused element is inside it.</p>
+     *
+     * <p>Goes through {@link #requestClose()} rather than {@link #close()}, so a cancelable
+     * {@link #onCancel} can veto it — the same courtesy the modal path already gets, rather than a second
+     * way out that skips the hook.</p>
+     *
+     * <p>A modal never reaches this: its close watcher consumes Escape before dispatch runs at all, so the
+     * two cannot both fire.</p>
+     */
+    private void installEscapeToClose() {
+        onKeyDown.attachListener((element, event) -> {
+            if (!open || event.getKeyCode() != CgKeyCodes.KEY_ESCAPE) return;
+            if (requestClose()) event.stopPropagation();
+        }, false, true);
     }
 
     /** A dialog owns its structure; put content in {@link #getContent()}. */
@@ -249,7 +288,13 @@ public class Dialog extends UIElement {
      */
     @Override
     public boolean requestClose() {
-        if (!open || !modal) return false;
+        // OPEN is the whole condition. This used to require `modal` as well, on the reasoning that only a
+        // modal establishes a close watcher -- true, but it conflates "who calls this" with "what it
+        // means". UIElement.requestClose is the general "ask this element to close" hook, and a modeless
+        // dialog that answers false to it cannot be closed by anything that politely asks, including its
+        // own Escape handler. Modals are unaffected: their close watcher is still the only thing that
+        // reaches them, because Escape is consumed before dispatch ever runs.
+        if (!open) return false;
 
         UIWindow window = getAttachedWindow();
         if (window != null) {
@@ -324,11 +369,104 @@ public class Dialog extends UIElement {
         return this;
     }
 
-    /** Closed dialogs are {@code display: none} — out of layout, unpainted and unhittable in one
-     * property, exactly as a closed popover is on the web. */
+    /**
+     * Closed dialogs are {@code display: none} — out of layout, unpainted and unhittable in one property,
+     * exactly as a closed popover is on the web.
+     *
+     * <p>A fade-out is <b>not</b> arranged here. {@code display} is a transitionable property
+     * ({@link com.crystalgui.style.property.layout.LayoutProperties#DISPLAY}, CSS's
+     * {@code allow-discrete}), so a sheet that says {@code transition: display 120ms} keeps the box laid
+     * out for that long and this write lands at the end of it — with no Java involved and nothing here
+     * that could disagree with the sheet about the duration. A dialog whose sheet says nothing hides on
+     * this frame, as it always did.</p>
+     */
     private void applyOpenState() {
-        StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
-                l -> l.display(open ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        // A CLASS as well as the display write, because a stylesheet cannot see an IMPORTANT-origin
+        // layout value. @see #OPEN_CLASS
+        if (open) addClass(OPEN_CLASS);
+        else removeClass(OPEN_CLASS);
+
+        if (open) {
+            // Cancels a hide still running, so reopening during a fade-out shows the dialog rather than
+            // letting the pending timer hide it a moment later.
+            cancelPendingHide();
+            StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.FLEX));
+            return;
+        }
+
+        long fadeNanos = declaredFadeNanos();
+        if (fadeNanos <= 0L) {
+            StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
+            return;
+        }
+        startPendingHide(fadeNanos / 1_000_000_000f);
+    }
+
+    /**
+     * How long {@code opacity} is declared to take, in nanoseconds. Zero when nothing declares it.
+     *
+     * <p>Read from the cascade rather than held as a constant, so the stylesheet stays the single owner
+     * of timings — change the CSS and the delay follows, with nothing in Java to keep in step.</p>
+     */
+    private long declaredFadeNanos() {
+        java.util.List<com.crystalgui.style.transition.TransitionSpec> specs =
+                getStyle().getComputed(StylePropertyRegistry.TRANSITION);
+        if (specs == null) return 0L;
+        long longest = 0L;
+        for (com.crystalgui.style.transition.TransitionSpec spec : specs) {
+            String name = spec.propertyNameOrAll();
+            if (!com.crystalgui.style.transition.TransitionSpec.ALL.equals(name)
+                    && !StylePropertyRegistry.OPACITY.name.equals(name)) {
+                continue;
+            }
+            longest = Math.max(longest, spec.durationNanos() + spec.delayNanos());
+        }
+        return longest;
+    }
+
+    /** True while the box is still laid out purely so its fade-out can be seen. */
+    private boolean hiding;
+
+    private boolean hitTestBeforeHiding = true;
+
+    private void startPendingHide(float seconds) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) {
+            StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
+            return;
+        }
+        if (!hiding) hitTestBeforeHiding = isHitTest();
+        hiding = true;
+        // Unhittable for the whole linger: a window visibly on its way out must not still be clickable,
+        // and setHitTest applies to the subtree, so one call covers every control in it.
+        setHitTest(false);
+
+        float[] elapsed = { 0f };
+        window.registerTicker(delta -> {
+            if (!hiding) return false;              // reopened; applyOpenState has taken over
+            elapsed[0] += delta;
+            if (elapsed[0] < seconds) return true;
+            finishPendingHide();
+            return false;
+        });
+    }
+
+    private void finishPendingHide() {
+        hiding = false;
+        setHitTest(hitTestBeforeHiding);
+        StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
+    }
+
+    private void cancelPendingHide() {
+        if (!hiding) return;
+        hiding = false;
+        setHitTest(hitTestBeforeHiding);
+    }
+
+    /** Hides a fading dialog at once. For a caller that cannot spare the frames — a test, a teardown. */
+    public Dialog finishClosing() {
+        if (hiding) finishPendingHide();
+        return this;
     }
 
     // ── Position ────────────────────────────────────────────────────────────
