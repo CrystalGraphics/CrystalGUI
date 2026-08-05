@@ -51,6 +51,9 @@ public final class ExplorerCommands {
     public static final String COPY_PATH = "explorer.copyPath";
     public static final String COPY_RELATIVE_PATH = "explorer.copyRelativePath";
     public static final String REFRESH = "explorer.refresh";
+
+    /** Open a file by name — VS Code's Ctrl+P, IntelliJ's Go to File. */
+    public static final String GO_TO_FILE = "explorer.goToFile";
     public static final String CUT = "explorer.cut";
     public static final String COPY = "explorer.copy";
     public static final String PASTE = "explorer.paste";
@@ -122,6 +125,15 @@ public final class ExplorerCommands {
         //
         // Cost is bounded by what is already on screen: only directories that have been listed are
         // re-listed, so a collapsed tree is one call.
+        registry.register(Command.of(GO_TO_FILE, "Go to File…")
+                .run(context -> {
+                    UIWindow window = workbench.getAttachedWindow();
+                    if (window != null) GoToFile.open(window, workbench);
+                })
+                // Enabled whenever there is a project, not whenever something is selected: it is how you
+                // reach a file you have NOT got selected, which is the whole point of it.
+                .enabledWhen(context -> !workbench.fileTree().source().roots().isEmpty()));
+
         registry.register(Command.of(REFRESH, "Reload from Disk")
                 .run(context -> {
                     workbench.fileTree().source().invalidateAll();
@@ -168,6 +180,10 @@ public final class ExplorerCommands {
      */
     public static void bindGlobalDefaults(Keymap keymap) {
         keymap.bind("Mod+N", NEW_FILE);
+        // Mod+P from VS Code. An application verb rather than a panel one, and for the same reason F5 is:
+        // a keymap resolves outward from the FOCUSED element, so a binding on the tree is unreachable
+        // while you are typing in an editor -- which is exactly when you reach for it.
+        keymap.bind("Mod+P", GO_TO_FILE);
         keymap.bind("F5", REFRESH);
     }
 
@@ -374,6 +390,7 @@ public final class ExplorerCommands {
     /** Every command id this set owns, for a host building its own menus. */
     public static List<String> ids() {
         return List.of(NEW_FILE, NEW_FOLDER, RENAME, DELETE, COPY_PATH, COPY_RELATIVE_PATH, REFRESH,
+                GO_TO_FILE,
                 CUT, COPY, PASTE);
     }
 }

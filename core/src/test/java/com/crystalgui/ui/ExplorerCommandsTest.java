@@ -23,6 +23,9 @@ import com.crystalgui.ui.elements.MenuItem;
 import com.crystalgui.ui.elements.workbench.ExplorerClipboard;
 import com.crystalgui.ui.elements.workbench.ExplorerCommands;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.ui.elements.chrome.QuickPickItem;
+import com.crystalgui.ui.elements.workbench.GoToFile;
+import com.crystalgui.ui.elements.workbench.WorkspaceTreeSource;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;
@@ -979,5 +982,103 @@ public class ExplorerCommandsTest extends UiTestBase {
         assertEquals("a tool panel should close with no prompt", null,
                 window.ui.rootElement.querySelector("." + InputDialog.PROMPT_CLASS));
         assertEquals(null, workbench.dock().layout().leafContaining(problems));
+    }
+
+    // ── Go to File (E17) ────────────────────────────────────────────────────
+
+    /**
+     * <b>The index reaches files nobody expanded a folder to see.</b>
+     *
+     * <p>This is what makes the feature honest. The tree lists lazily, so searching only what has been
+     * expanded would mean typing a file name and not finding it — the failure being indistinguishable
+     * from the file not existing. The crawl warms the tree's own listing cache from the workbench tick,
+     * so there is no second index to keep in step and an expanded folder is instant afterwards.</p>
+     */
+    @Test
+    public void theIndexReachesFilesInFoldersNobodyOpened() {
+        backingStore.seed("mymod.proj:src/deep/buried/Needle.java", "x");
+        // INVALIDATED after seeding: the workbench ticks from the moment it is attached, so its own
+        // crawl has already listed src by the time this test body runs and would never see the file
+        // added behind it. Nothing to do with the crawl -- a fixture that seeds after setUp has to say so.
+        workbench.fileTree().source().invalidateAll();
+        workbench.fileTree().loadProjects();
+        settle();
+        assertFalse("fixture wrong -- src was already expanded",
+                workbench.fileTree().treeView().isExpanded(CgPath.parse("mymod.proj:src")));
+
+        for (int i = 0; i < 40; i++) settle();
+
+        List<String> names = new ArrayList<>();
+        for (QuickPickItem item : GoToFile.itemsFor(workbench)) names.add(item.label());
+        assertTrue("the crawl never reached a file three folders down: " + names,
+                names.contains("Needle.java"));
+    }
+
+    /**
+     * A row is the file NAME with its folder as the category, which is how both VS Code and IntelliJ
+     * present it — you search for the name and disambiguate by folder, rather than searching one long
+     * string that happens to contain a path.
+     */
+    @Test
+    public void aRowIsTheNameAndItsFolder() {
+        workbench.fileTree().loadProjects();
+        settle();
+        for (int i = 0; i < 40; i++) settle();
+
+        QuickPickItem main = null;
+        for (QuickPickItem item : GoToFile.itemsFor(workbench)) {
+            if ("Main.java".equals(item.label())) main = item;
+        }
+        assertNotNull("Main.java was never indexed", main);
+        assertEquals("the folder belongs in the category, not glued onto the label",
+                "mymod.proj:src", main.category());
+        assertEquals("the id must be the path, so accepting a row needs no lookup",
+                "mymod.proj:src/Main.java", main.id());
+    }
+
+    /** Mod+P reaches it from anywhere, for the same reason F5 does — a panel binding needs focus first. */
+    @Test
+    public void goToFileIsReachableWithNothingFocused() {
+        workbench.fileTree().loadProjects();
+        settle();
+        assertEquals("fixture wrong -- something is focused", null,
+                window.getInputHandler().getFocusedElement());
+
+        boolean consumed = window.getInputHandler().consumeKeyboardEvent(
+                new CgSystemInput.Keyboard.Event('p', CgKeyCodes.KEY_P, true, false, 30L));
+        assertFalse("a bare Mod+P must not fire without the modifier held", consumed);
+
+        heldModifiers = com.crystalgraphics.platform.input.CgModifiers.CTRL;
+        try {
+            assertTrue("Ctrl+P reached nothing -- the binding is scoped to a panel with no focus",
+                    window.getInputHandler().consumeKeyboardEvent(
+                            new CgSystemInput.Keyboard.Event('p', CgKeyCodes.KEY_P, true, false, 31L)));
+        } finally {
+            heldModifiers = 0;
+        }
+    }
+
+    /**
+     * <b>A step reports work remaining while its requests are still in flight.</b>
+     *
+     * <p>The queue is fed by listings that have <em>arrived</em>, so between asking for a directory and its
+     * answer coming back there is nothing queued and nothing to do — which is indistinguishable from being
+     * finished unless the outstanding requests are counted. Getting this wrong is what walked exactly two
+     * levels and called it done, and it only shows on a workspace deeper than the number of frames
+     * something happened to run for.</p>
+     *
+     * <p>Driven against the source directly, with no frames between the two calls, because that gap is the
+     * whole condition being tested.</p>
+     */
+    @Test
+    public void anIndexStepReportsMoreWhileRequestsAreOutstanding() {
+        workbench.fileTree().loadProjects();
+        settle();
+        WorkspaceTreeSource source = workbench.fileTree().source();
+        source.invalidateAll();
+
+        // Ask for something, then ask again before anything can have come back.
+        source.indexStep(1);
+        assertTrue("a step with everything in flight reported the crawl finished", source.indexStep(1));
     }
 }

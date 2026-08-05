@@ -683,6 +683,7 @@ public class Workbench extends UIElement {
 
     private List<CgPath> lastDirty = new ArrayList<>();
 
+
     /**
      * Hands {@code bytes} to a document and records them as what is on disk.
      *
@@ -842,6 +843,14 @@ public class Workbench extends UIElement {
             return false;
         }
         installExplorerCommands(getAttachedWindow());
+        // A few directories a frame, until the workspace is walked. Go to File searches what this has
+        // reached, so warming it in the background is what makes the first Ctrl+P useful rather than
+        // empty -- and it warms the tree's own listing cache, so there is no second index to keep in step.
+        // NOT LATCHED. "Nothing to ask for right now" and "nothing left to walk" are the same answer from
+        // outside, and a latch on that turned the crawl off the first time every known directory happened
+        // to be in flight -- and left it off when a folder appeared later. The step is O(budget) against a
+        // queue, so asking every frame costs nothing once the queue is empty.
+        fileTree.source().indexStep(WorkspaceTreeSource.DEFAULT_INDEX_BUDGET);
         refreshDirtyMarkers();
         revealActiveFile();
         fileTree.loadProjects();
