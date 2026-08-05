@@ -7,6 +7,7 @@ import com.google.gson.JsonParser;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphCodecs;
+import com.crystalgui.core.settings.SettingsLayer;
 
 import com.crystalgraphics.shadergraph.CgMasterNode;
 import com.crystalgraphics.shadergraph.CgShaderEmitter;
@@ -121,7 +122,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
         // The library IS the shader node set -- the create menu, its search and the widget factory all
         // come from one bridge call, so there is no shader-specific UI code anywhere below this line.
         library = ShaderGraphBridge.asNodeLibrary(shaderNodes);
-        graph.setNodeLibrary(library, NodeWidgetFactory.of(library).build(),
+        graph.setNodeLibrary(library, propertyAwareFactory(NodeWidgetFactory.of(library).build()),
                 ShaderGraphBridge.GLSL_PROMOTION);
 
         source.setReadOnly(true);
@@ -182,6 +183,34 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
         installPropertyDrop();
 
         recompile();
+    }
+
+    /**
+     * The widget factory, taught about property nodes.
+     *
+     * <p><b>A property node's type is synthesised per property and never registered</b>, which is
+     * deliberate — a type per declared property would put the Blackboard's contents in the create menu.
+     * The consequence is that {@code GraphView} cannot look one up: {@code nodeLibrary.get("cg:property")}
+     * is null, so it built a plain node from the ports the document stored and a property came back from a
+     * file as an ordinary two-row box with the capsule styling gone.</p>
+     *
+     * <p>Fixed at the factory rather than after the fact, because every path that makes a widget goes
+     * through it — loading a file, undoing a delete, a server sync, the create menu — and patching them up
+     * afterwards would mean finding all of them, and finding each new one.</p>
+     */
+    private NodeWidgetFactory propertyAwareFactory(NodeWidgetFactory base) {
+        return (type, data) -> {
+            if (!ShaderPropertyNodes.isPropertyNode(data)) return base.create(type, data);
+            // Resolved from the DOCUMENT, not from the stored type: the node holds a property id, and what
+            // that property currently is -- its name, its type, whether it is exposed -- lives on the
+            // Blackboard. A property deleted while the file was closed resolves to null, which typeFor
+            // turns into the "Missing Property" node rather than a crash.
+            GraphProperty property = ShaderPropertyNodes.resolve(graph.getDocument(), data);
+            GraphNode node = base.create(ShaderPropertyNodes.typeFor(property), data);
+            node.addClass(ShaderPropertyNodes.NODE_CLASS);
+            ShaderPropertyNodes.sync(node, property);
+            return node;
+        };
     }
 
     @Override
@@ -302,6 +331,41 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
             NodeData data = graph.getDocument().node(node.getNodeId());
             if (!ShaderPropertyNodes.isPropertyNode(data)) continue;
             ShaderPropertyNodes.sync(node, ShaderPropertyNodes.resolve(graph.getDocument(), data));
+        }
+    }
+
+    /**
+     * Writes the canvas's pan and zoom onto the document, so {@link #encode()} carries them.
+     *
+     * <p>Written RAW rather than through {@code SetSettingEdit}: looking around a graph is not an edit and
+     * must not land on the undo stack, or Ctrl+Z would move the camera instead of undoing. @see #VIEW_ZOOM</p>
+     */
+    private void captureView() {
+        var settings = graph.getDocument().settings();
+        settings.setRaw(SettingsLayer.DOCUMENT, VIEW_ZOOM, String.valueOf(graph.getZoom()));
+        settings.setRaw(SettingsLayer.DOCUMENT, VIEW_PAN_X, String.valueOf(graph.getPanX()));
+        settings.setRaw(SettingsLayer.DOCUMENT, VIEW_PAN_Y, String.valueOf(graph.getPanY()));
+    }
+
+    /** Puts the canvas back where the file says it was. A file without them is left at the default. */
+    private void restoreView() {
+        var settings = graph.getDocument().settings();
+        Float zoom = readFloat(settings.raw(VIEW_ZOOM));
+        Float panX = readFloat(settings.raw(VIEW_PAN_X));
+        Float panY = readFloat(settings.raw(VIEW_PAN_Y));
+        if (zoom != null) graph.setZoom(zoom);
+        if (panX != null && panY != null) graph.setPan(panX, panY);
+    }
+
+    @Nullable
+    private static Float readFloat(@Nullable String raw) {
+        if (raw == null) return null;
+        try {
+            return Float.parseFloat(raw.trim());
+        } catch (NumberFormatException malformed) {
+            // A hand-edited or later-format file degrades to the default view rather than refusing to
+            // open -- the graph is the file's content, and where a camera sat is not worth losing it over.
+            return null;
         }
     }
 
@@ -507,9 +571,30 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
         return this;
     }
 
+    /**
+     * Where the canvas is looking, as three settings on the document.
+     *
+     * <p><b>In the file, which is Unity's choice for a {@code .shadergraph} and not the obvious one.</b>
+     * Pan and zoom are view state by this project's own rule — they are not undoable, and Ctrl+Z after a
+     * pan must not move the camera. But "not undoable" and "not saved" are different questions, and a
+     * shader graph is an asset you arrange: reopening one to find it back at the origin loses real work,
+     * because where things sit relative to the viewport is part of how a graph is read.</p>
+     *
+     * <p>The cost is accepted rather than hidden: panning makes the file <b>modified</b>, because the
+     * bytes genuinely changed. Unity behaves the same way for the same reason.</p>
+     *
+     * <p>Carried in the DOCUMENT settings layer rather than as new codec fields, so there is nothing to
+     * version — that layer already round-trips, is already excluded from the user and workspace layers,
+     * and is already content-hashed with the rest of the graph.</p>
+     */
+    public static final String VIEW_ZOOM = "graph.view.zoom";
+    public static final String VIEW_PAN_X = "graph.view.panX";
+    public static final String VIEW_PAN_Y = "graph.view.panY";
+
     /** The graph as it stands, in the serialized form {@link GraphCodecs#DOCUMENT} defines. */
     @Override
     public byte[] encode() {
+        captureView();
         return GraphCodecs.DOCUMENT.encode(JsonOps.INSTANCE, graph.getDocument())
                 .toString().getBytes(StandardCharsets.UTF_8);
     }
@@ -565,6 +650,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
                 ? new GraphDocument()
                 : GraphCodecs.DOCUMENT.decode(JsonOps.INSTANCE, JsonParser.parseString(text));
         graph.load(loaded);
+        restoreView();
         if (blank) {
             addStarterGraph();
             // AFTER seeding, and load's own clear is not enough: addStarterGraph goes through the ordinary
