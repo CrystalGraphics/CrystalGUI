@@ -7,8 +7,19 @@
  *
  * The model, ported from VS Code and matching what graph.css already does for port types: the icon a file
  * gets is decided by ui/icons/default.json, and the COLOUR is decided here. Keeping them apart is what lets
- * a dozen languages share one `code` glyph and still each have their own colour -- which is exactly what
- * every editor does, and what keying colour to the icon could not express.
+ * a dozen languages share one glyph and still each have their own colour -- which is exactly what every
+ * editor does, and what keying colour to the icon could not express.
+ *
+ * WHAT THIS ACTUALLY TINTS, NOW THAT THE SHIPPED ICONS ARE INTELLIJ'S. `color` reaches an icon through
+ * `currentColor`, and the IntelliJ Platform set does not use it -- every shape carries its own fill. So
+ * these rules colour the row's TEXT and any monochrome mark beside it, and leave the file icon alone.
+ * That is the correct outcome for a set that was drawn with a palette, and it is not a dead end either:
+ * a theme that wants the icons flattened to these colours says icon("...", monochrome) in its own rules,
+ * which forces every fill to the tint. Both are supported; the class is the hook for both.
+ *
+ * It still earns its place for the twelve languages with no Platform icon -- Kotlin, Python, TypeScript,
+ * Rust, Go, C/C++, Ruby, PHP, shell, SQL, Markdown, GLSL. They share the plain text document, and this is
+ * the only thing telling a Kotlin file from a Rust one on screen.
  *
  * The class comes from FileIconTheme.classFor(), keyed on what MATCHED rather than on what it resolved to.
  * `filetype-file` is the fallback and is a real hook, not an absence: a theme wanting one colour for

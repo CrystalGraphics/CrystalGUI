@@ -284,15 +284,42 @@ public final class SvgPath {
             return text.charAt(at++);
         }
 
+        /**
+         * One number, stopping where the next one begins.
+         *
+         * <h3>A SECOND DECIMAL POINT STARTS A NEW NUMBER</h3>
+         *
+         * <p>{@code 2.128.194} is two numbers — {@code 2.128} and {@code .194} — not one malformed one.
+         * SVG's grammar allows it precisely so a separator can be dropped, and every minifier emits it:
+         * {@code c.739 0 2.128.194 2.471.875} is six numbers in a real shipped icon.</p>
+         *
+         * <p>Consuming dots greedily instead made {@code Float.parseFloat} throw, and the {@code catch}
+         * below turned that into {@code 0} — <b>silently</b>. The path did not fail to load; it loaded
+         * with control points at the origin, so a glyph came out mostly right with one terminal collapsed
+         * into a spike. That is the worst available failure mode, and the reason this reads as a
+         * rendering bug rather than a parsing one.</p>
+         *
+         * <p>Same rule for the exponent: one {@code e} per number, so {@code 1e3e4} would end the first
+         * number rather than run the two together.</p>
+         */
         float number() {
             skipSeparators();
             int start = at;
             if (at < text.length() && (text.charAt(at) == '-' || text.charAt(at) == '+')) at++;
+
+            boolean seenDot = false;
+            boolean seenExponent = false;
             while (at < text.length()) {
                 char c = text.charAt(at);
-                if (Character.isDigit(c) || c == '.') {
+                if (Character.isDigit(c)) {
                     at++;
-                } else if ((c == 'e' || c == 'E')) {
+                } else if (c == '.') {
+                    // The dot after an exponent belongs to no number at all -- `1e2.5` is `1e2` then `.5`.
+                    if (seenDot || seenExponent) break;
+                    seenDot = true;
+                    at++;
+                } else if ((c == 'e' || c == 'E') && !seenExponent && at > start) {
+                    seenExponent = true;
                     at++;
                     if (at < text.length() && (text.charAt(at) == '-' || text.charAt(at) == '+')) at++;
                 } else {

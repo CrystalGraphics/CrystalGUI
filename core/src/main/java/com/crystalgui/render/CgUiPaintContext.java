@@ -228,7 +228,15 @@ public final class CgUiPaintContext {
      * <p>Because every switch flushes the outgoing path, <b>at most one path ever holds pending
      * work</b>, which is what makes {@link CgUiRenderer#flush()} safe to run over both in any order.</p>
      */
-    private enum InstancePath { QUAD, CURVE }
+    /**
+     * Which renderer last bound a GL program.
+     *
+     * <p>{@code TEXT} is the one that is not this class's own renderer. {@code CgTextRenderer} owns a
+     * separate {@code CgQuadRenderer} and binds {@code text.shader} itself, so without a state for it
+     * this field would claim {@code CURVE} while GL actually had the text program bound — and
+     * {@link #beginCurvePath()}'s early-return would then submit curve instances against it.</p>
+     */
+    private enum InstancePath { QUAD, CURVE, TEXT }
 
     private InstancePath activePath = InstancePath.QUAD;
 
@@ -386,6 +394,9 @@ public final class CgUiPaintContext {
         // a few strokes and letting the frame end is using the API exactly as described. Drawing them
         // is the only defensible reading; the pose stack is still intact here and flush() reads none
         // of it anyway, since the pose was baked at submit() time.
+        // Text first: it owns a separate renderer whose batch, if a caller left one open, would otherwise
+        // flush after the frame's GL scope is torn down. Lenient when no batch is active.
+        textRenderer.endBatch();
         renderer.flush();
 
         // Resolve the MSAA redirect (see beginFrame/msaaFbo) and composite it back onto whatever the
@@ -472,7 +483,33 @@ public final class CgUiPaintContext {
      * }</pre>
      */
     public CgTextRenderer text() {
+        beginTextPath();
         return textRenderer;
+    }
+
+    /**
+     * Hands the GL program over to {@link CgTextRenderer}, flushing whatever this context had queued.
+     *
+     * <p><b>Text is a third instance path, not a variant of the quad one.</b> It has its own renderer,
+     * its own material and its own instance buffer; this class simply does not own the bind. What it does
+     * own is {@link #activePath}, whose entire purpose is that it "cannot drift out of step with what GL
+     * actually has bound" — and {@code text()} was the one door out of this class that let it drift.</p>
+     *
+     * <p>The failure was invisible for as long as nothing interleaved. Draw every curve and then all the
+     * text and it never bites; alternate them — an icon and a label, per row, down a file tree — and from
+     * the second row on, {@code beginCurvePath()} early-returns because {@code activePath} still says
+     * {@code CURVE}, so the icons submit against {@code text.shader} and the labels against
+     * {@code gui_curve.shader}. Glyph quads evaluated by a stroke SDF come out as solid boxes, which is
+     * exactly how it was reported.</p>
+     *
+     * <p>Flushing on the way out is the same painter's-order requirement the quad/curve switch already
+     * documents: text submitted after an icon must not be drawn before it.</p>
+     */
+    private void beginTextPath() {
+        if (activePath == InstancePath.TEXT) return;
+        renderer.flush();
+        activePath = InstancePath.TEXT;
+        currentTexture = null;
     }
 
     public void bindTexture(CgTexture2D texture) {
@@ -567,6 +604,7 @@ public final class CgUiPaintContext {
      */
     private void beginQuadPath() {
         if (activePath == InstancePath.QUAD) return;
+        endTextPath();
         renderer.flushCurves();
         // bindQuadPath sets activePath itself — the one place it is assigned for this path.
         bindQuadPath(currentMaterial != null ? currentMaterial : boxModelMaterial);
@@ -576,6 +614,7 @@ public final class CgUiPaintContext {
     /** Makes the curve path current, flushing and unbinding the quad path if it was. */
     private void beginCurvePath() {
         if (activePath == InstancePath.CURVE) return;
+        endTextPath();
         renderer.flushQuads();
         activePath = InstancePath.CURVE;
         // Layer opacity is a material property, so it has to be re-applied on the material actually
@@ -583,6 +622,18 @@ public final class CgUiPaintContext {
         curveMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
         renderer.useCurveMaterial(curveMaterial);
         currentTexture = null;
+    }
+
+    /**
+     * Closes any open text batch before another path binds over it.
+     *
+     * <p>{@code endBatch()} is documented as lenient — a no-op when no batch is open — so this costs a
+     * field read in the overwhelmingly common case where a caller let the text renderer auto-wrap each
+     * draw. It matters for the caller that opened one explicitly and then drew a quad: those glyphs would
+     * otherwise flush later, against whatever material had been bound since, and out of order.</p>
+     */
+    private void endTextPath() {
+        if (activePath == InstancePath.TEXT) textRenderer.endBatch();
     }
 
     /**

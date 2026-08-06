@@ -100,4 +100,41 @@ public class SvgPathTest {
             }
         }
     }
+
+    /**
+     * <b>A second decimal point starts a new number.</b>
+     *
+     * <p>{@code 2.128.194} is two numbers — {@code 2.128} and {@code .194} — not one malformed one. SVG's
+     * grammar allows the separator to be dropped exactly there, and every minifier takes it: the shipped
+     * {@code Csharp.svg} contains {@code c.739 0 2.128.194 2.471.875}, which is six numbers.</p>
+     *
+     * <p>Consuming dots greedily made {@code Float.parseFloat} throw, and the parser's {@code catch}
+     * turned that into {@code 0} — <b>silently</b>. Nothing failed to load; control points landed on the
+     * origin and one terminal of the glyph collapsed into a spike, so it read as a rendering artefact
+     * rather than a parse error. Which is why this asserts the coordinates and not merely that a path
+     * came back.</p>
+     */
+    @Test
+    public void aSecondDecimalPointStartsANewNumber() {
+        List<SvgPath.Polyline> lines = SvgPath.parse("M0 0 l1.5.5 2.5.5");
+        assertEquals(1, lines.size());
+        List<float[]> points = lines.get(0).points();
+        assertEquals("start", 0f, points.get(0)[0], 1e-4f);
+        assertEquals("1.5 then .5, not the single token 1.5.5", 1.5f, points.get(1)[0], 1e-4f);
+        assertEquals(0.5f, points.get(1)[1], 1e-4f);
+        assertEquals(4f, points.get(2)[0], 1e-4f);
+        assertEquals(1f, points.get(2)[1], 1e-4f);
+    }
+
+    /** One exponent per number, so {@code 1e2.5} is {@code 1e2} then {@code .5}. */
+    @Test
+    public void anExponentEndsAtTheNextNumber() {
+        List<float[]> points = SvgPath.parse("M0 0 L1e1 2").get(0).points();
+        assertEquals("a plain exponent still parses", 10f, points.get(1)[0], 1e-4f);
+        assertEquals(2f, points.get(1)[1], 1e-4f);
+
+        List<float[]> split = SvgPath.parse("M0 0 L1e2.5 3").get(0).points();
+        assertEquals(100f, split.get(1)[0], 1e-4f);
+        assertEquals(0.5f, split.get(1)[1], 1e-4f);
+    }
 }

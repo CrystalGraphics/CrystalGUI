@@ -171,6 +171,49 @@ turns a ring into a disc. The scanline version cuts holes correctly under both `
 because the bands are cut at every vertex it is **exact rather than stair-stepped** — no vertex can fall
 inside a band, so each trapezoid's slanted sides lie exactly on the edges they came from.
 
+### Gradients: cut ALONG the ramp, not across it
+
+The first three attempts all failed the same way, and the failure is worth recording because it looks like
+banding and is not.
+
+The scanline cuts in `y`. A gradient running any other direction therefore has each band spanning a *range*
+of ramp positions, so one flat colour per band is right only down the band's middle and wrong at both edges
+— and the error reverses at the next band. On screen that is a smooth fade inside each strip with a visible
+seam between them. **Making the cells smaller never fixes it**; it only shrinks the jump. Chasing it that
+way cost two rounds: adaptive density (which ran to 30,406 triangles for one 16px icon) and a cell budget
+(which traded one region's smoothness for another's).
+
+The fix is to **rotate the shape so the ramp points along `+y`**, triangulate there, and rotate the triangles
+back. Every band is then an iso-line strip — constant ramp position end to end — so a flat colour per band
+is not an approximation at all. It is also strictly cheaper: chasing a diagonal ramp with axis-aligned cuts
+costs N² cells for N bands of quality and only O(N) carry new colour.
+
+Radial gradients keep the old path. Their iso-lines are circles, and no rotation makes a circle straight.
+
+### The overdraw that came with it
+
+Rotated back, a band is a long thin **diagonal** strip — and an instance rasterises the *axis-aligned*
+bounding quad of its triangle, which for a diagonal strip is nearly the whole icon. Measured as fragment
+work against icon area: the JetBrains mark asked for **55.7×** while covering 1.44×. That is a GPU at 90%
+and audible fans on a zoomed harness grid.
+
+Cells are now capped at **2:1** length-to-depth. A band is one ramp position end to end, so cutting it
+changes nothing visible — it only makes each triangle compact enough that its box hugs it. Logo 55.7× → 4.2×,
+htaccess 11.7× → 2.3×, and the GPU went back to idle.
+
+> **The optimisation deliberately NOT taken, and why it is written down.** Both the aspect slicing and the
+> rotated frame exist to work around two properties of the shared curve instance record: a fill's colour is
+> flat, and its bounding quad is axis-aligned. Fixing either at source would collapse the workarounds —
+> a per-pixel gradient (a `vec4` axis in the record, `t` computed in `stroke.glsl`'s fill branch instead of
+> forced to `0`, `mix(color0, color1, t)` already present) removes all smoothness subdivision, and mapping
+> the unit-quad mesh onto the triangle's own corners in `CG_CURVE_WORLD_POS` removes the overdraw entirely.
+> Together they would take htaccess from 22,531 triangles to roughly 600 with ~1× overdraw and exact colour.
+>
+> It is not built because **the problem it would solve is already solved**: quality is good and the GPU is
+> idle. The cost is a wider record for every stroke in the engine and a branch in a macro that every shader
+> in both projects includes. Build it when something needs the triangles back — a large gradient-heavy
+> canvas, or icons drawn per-frame in bulk — not on the strength of the numbers alone.
+
 ### Gradients come for free out of the same subdivision
 
 A `Triangle` takes one flat colour, so the obvious move is to flatten each gradient to one — and that is
@@ -473,8 +516,57 @@ Until one of those lands, moving buys nothing and costs a cross-project split.
 **Done since:** throughput measured (§3), `CgUiSvg` wraps a document as a `CgUiDrawable`, `icon("ns:name")`
 is a `TextureValue` form, and `FileIconTheme` ports VS Code's file-icon-theme JSON — extension and exact
 name to icon, longest-extension-first, with the colour deliberately left to the `.filetype-*` class it hands
-back so a dozen languages can share one `code` glyph and still differ.
+back so a dozen languages can share one glyph and still differ.
 
-What is left for E7: port VS Code's `IDecorationsProvider`, so that dirty, read-only, errors and git status
-are independent contributors composing onto a row rather than four special cases in a row renderer — the
-point of the port being that the fifth one is then free.
+### The icon set: IntelliJ Platform, not Feather, and not Material
+
+Fifty **IntelliJ Platform** icons (Apache 2.0, JetBrains) now back the file tree — 47 from
+`platform/icons/src/fileTypes/` plus `folder`, `package` and `moduleGroup` from `nodes/`. Verbatim; see
+`ui/icons/ATTRIBUTION.md` and `THIRD-PARTY.md`.
+
+Chosen over Material Icon Theme (MIT, ~1000 types) for three reasons that are not taste:
+
+1. **This workbench is an IntelliJ port.** The Preferences window is a direct port of theirs. Coherence with
+   the thing being imitated is a design argument.
+2. **16px-native**, which is exactly a tree row. Material's are 32 designed to be *seen* at 16.
+3. **Muted palette** that sits inside IDE chrome rather than competing with it.
+
+Worth recording: **VS Code's own default file icon theme (Seti) is a font, not SVG**, so "the VS Code
+equivalent" in SVG means Material or vscode-icons, not anything VS Code ships.
+
+**Every one of the 47 was scanned before adoption and none uses a feature we lack** — no `<style>`, no
+`class=`, no `clipPath`, no `<use>`, no strokes at all. What they do use, we implement: 36 nest `<g>`, 43
+carry `fill-rule`, 40 `fill-opacity`, 19 a per-shape `transform`, and one has a gradient.
+
+**Both light and dark variants are checked in and neither is wired.** The Platform ships one icon per type
+in the general case; only four have a `_dark` twin (`Csharp`, `binaryData`, `json`, `jsonSchema`). Wiring
+them means a `darkSuffix` key in the theme plus a way to ask which chrome is current — a small change,
+better done once than discovered per icon.
+
+**The gap, stated rather than hidden:** Kotlin, Python, TypeScript, Rust, Go, C/C++, Ruby, PHP, shell, SQL,
+Markdown and GLSL have no icon in the *Platform* set — theirs live in per-language plugin modules, several
+product-specific. They resolve to the plain text document, and are still listed individually in
+`default.json` so each keeps its own `.filetype-*` class. Closing it means hunting plugin paths or filling
+in from Material, which is licence-compatible and a visibly different drawing style.
+
+> **Consequence worth knowing before writing a theme:** `filetypes.css` no longer tints the file icon.
+> `color` reaches an icon through `currentColor`, and the IntelliJ set carries its own fills. Those rules
+> now colour the row label and any monochrome mark. A theme wanting the icons flattened to one colour says
+> `icon("...", monochrome)`, which forces every fill to the tint — both paths are supported, and the class
+> is the hook for both.
+
+**E7 is done.** The Project panel row is now four slots — twisty, icon, label, badge — built in
+`createTemplate` and written in `bind`. `TreeView` already supplied the indent and the
+`__expanded__`/`__collapsed__`/`__leaf__` classes, so the old row was indenting twice and spelling its
+twisty in text; both are gone.
+
+`workbench/decoration/` ports VS Code's `IDecorationsProvider`: dirty, read-only, errors and version
+control as independent contributors, merged **per field** rather than winner-takes-all — a modified file
+that also has an error is red *and* keeps its `M`, where taking the heaviest wholesale drops one of the two
+facts the row was asked to show. Decorations bubble to ancestor folders, which is what makes a collapsed
+tree useful, and a bubbled one keeps the colour and drops the badge.
+
+Nothing registers a provider yet, so the feature costs nothing until something does. **E16 (dirty state)
+is the first real consumer** — it is a `FileDecorationProvider` returning `decoration-dirty` for whatever
+`WorkingCopies` reports modified, which is now a class rather than a change to the row renderer. That is
+the whole point of the port.

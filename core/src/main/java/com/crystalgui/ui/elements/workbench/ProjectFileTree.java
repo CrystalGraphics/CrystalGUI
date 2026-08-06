@@ -13,7 +13,11 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
+import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.elements.tree.TreeRow;
@@ -59,6 +63,35 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
     public static final String CONTENT_CLASS = "__tree-content__";
     public static final String TREE_CLASS = "__project-tree__";
     public static final String ROW_CLASS = "__project-row__";
+    /** The fold marker. Drawn by CSS from the row's own {@code __expanded__}/{@code __collapsed__}. */
+    public static final String TWISTY_CLASS = "__twisty__";
+    /** The file-type icon slot. {@code __pre-icon__} is the engine's established name for this. */
+    public static final String ICON_CLASS = "__pre-icon__";
+    /** The decoration letter at the row's trailing edge. */
+    public static final String BADGE_CLASS = "__badge__";
+
+    /** Class prefixes the row swaps per bind; see {@link #swapPrefixedClass}. */
+    private static final String FILETYPE_PREFIX = "filetype-";
+    private static final String DECORATION_PREFIX = "decoration-";
+
+    /**
+     * The decorations shown on rows. Empty until something registers a provider, which is why a tree with
+     * no version control and no diagnostics costs nothing for the feature.
+     */
+    private final FileDecorations decorations = new FileDecorations();
+
+    {
+        // A provider changing state has to reach the rows, and nothing else would carry it: decorations
+        // are read during bind(), so a tree that is already bound shows the state from whenever it last
+        // was. Routed through pendingRefresh rather than calling tree.refresh() straight away, for the
+        // reason activate() spells out -- a provider may well fire from inside a click handler on a row,
+        // and a widget must never rebuild the elements it is being clicked on.
+        decorations.onChanged.connect(() -> pendingRefresh = true);
+    }
+
+    public FileDecorations getDecorations() {
+        return decorations;
+    }
 
     /** A file the user asked to open. Never fires for a directory — those expand instead. */
     public final Signal.Value<CgPath> onFileChosen = new Signal.Value<>();
@@ -589,18 +622,64 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
     /** Set by a fold, drained by the ticker — see {@link #activate}. */
     private boolean pendingRefresh;
 
+    /**
+     * A recycled row's writable parts.
+     *
+     * <p>Held in a map rather than reached through {@code getChildren().get(n)}: four slots addressed by
+     * index is one insertion away from silently writing the badge into the label, and the indices would
+     * live at the call site where nothing explains them.</p>
+     */
+    private record RowParts(UIElement icon, UIText label, UIText badge) {
+    }
+
+    private final java.util.Map<UIElement, RowParts> rowParts = new java.util.HashMap<>();
+
+    /**
+     * Replaces whichever {@code prefix}-ed class this element currently carries with {@code next}.
+     *
+     * <p>A recycled row arrives wearing the previous file's classes. Adding without removing accumulates
+     * every file type the slot has ever shown, and the cascade then resolves whichever rule happens to win
+     * — which looks like a random colour rather than a stale class, because nothing is obviously wrong.</p>
+     */
+    private static void swapPrefixedClass(UIElement element, String prefix, String next) {
+        for (String existing : List.copyOf(element.getClasses())) {
+            if (existing.startsWith(prefix)) element.removeClass(existing);
+        }
+        if (next != null && !next.isEmpty()) element.addClass(next);
+    }
+
     private final class RowRenderer implements TreeRenderer<CgPath> {
 
         @Override
         public UIElement createTemplate() {
             UIElement row = new UIElement();
             row.addClass(ROW_CLASS);
+
+            // FOUR SLOTS, BUILT ONCE HERE. Not in bind(): an element created during bind lands after the
+            // layout pass that frame, which is how the command palette's key chips shipped squashed and
+            // how the editor's gutter arrows ended up toggling whichever row their slot was first used
+            // for. A recycled row keeps its slots and bind() only ever writes into them.
+            UIElement twisty = new UIElement();
+            twisty.addClass(TWISTY_CLASS);
+            UIElement icon = new UIElement();
+            icon.addClass(ICON_CLASS);
             UIText label = new UIText("");
-            // The label refuses the click so the press lands on the row. Click targeting takes the exact
+            UIText badge = new UIText("");
+            badge.addClass(BADGE_CLASS);
+
+            // Every part refuses the click so the press lands on the row. Click targeting takes the exact
             // element hit and never walks up to a handler-bearing ancestor, which is why every composite
             // in this engine does this.
+            twisty.setHitTest(false);
+            icon.setHitTest(false);
             label.setHitTest(false);
+            badge.setHitTest(false);
+
+            row.addChild(twisty);
+            row.addChild(icon);
             row.addChild(label);
+            row.addChild(badge);
+            rowParts.put(row, new RowParts(icon, label, badge));
             // A FOLDER TOGGLES ON ONE CLICK; A FILE OPENS ON TWO. Not one rule for both, and the
             // difference is not a compromise -- the two rows mean different things.
             //
@@ -636,9 +715,36 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
         @Override
         public void bind(CgPath item, TreeRow<CgPath> row, int index, UIElement template) {
             rowItems.put(template, item);
+            RowParts parts = rowParts.get(template);
+            if (parts == null) return;
+
             String name = item.isProjectRoot() ? source.displayNameOf(item) : item.name();
-            ((UIText) template.getChildren().get(0)).setText("  ".repeat(row.depth())
-                    + (row.expandable() ? (row.expanded() ? "- " : "+ ") : "   ") + name);
+            // No manual indent and no "+ "/"- " prefix any more: TreeView already writes padding-left from
+            // the depth and puts __expanded__/__collapsed__/__leaf__ on the row, so doing either here
+            // indented every row TWICE and spelled the twisty in text where CSS can draw it.
+            parts.label().setText(name);
+
+            // Icon and filetype class are read from the theme PER BIND, never captured, because a template
+            // is a different row every time it is recycled.
+            boolean directory = row.expandable();
+            FileIconTheme theme = FileIconTheme.getDefault();
+            CgUiDrawable glyph = theme.drawableFor(name, directory, row.expanded());
+            // EMPTY, never null: null is how the cascade spells "nobody set this", so writing it would
+            // leave the previous file's icon in place on a recycled row rather than clearing it.
+            //
+            // DEFAULT origin, matching what TreeView already does for the row's indent. The theme JSON is
+            // a default the cascade can beat -- write it INLINE and `.filetype-java { overlay: icon(...) }`
+            // in a stylesheet silently does nothing, which makes the icon the one part of a row a theme
+            // cannot touch.
+            StyleGroup.defaultPipeline(parts.icon().getStyle().getGeneralGroup(),
+                    g -> g.overlay(glyph == null ? CgUiDrawable.EMPTY : glyph));
+            swapPrefixedClass(parts.icon(), FILETYPE_PREFIX, theme.classFor(name, directory));
+
+            FileDecoration decoration = decorations.resolve(item, directory);
+            swapPrefixedClass(template, DECORATION_PREFIX,
+                    decoration == null ? null : decoration.styleClass());
+            parts.badge().setText(decoration == null || decoration.letter() == null
+                    ? "" : decoration.letter());
         }
 
         @Override

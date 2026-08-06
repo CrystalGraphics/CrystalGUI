@@ -1009,6 +1009,12 @@ The things that are invisible from any single class and expensive to rediscover.
 | The plane's `transform-origin` is pinned to `0 0` at IMPORTANT | It defaults to 50%, so every world↔screen conversion in `CanvasView` would be off by half a viewport times the zoom — and it would look plausible, since the picture is still internally consistent |
 | A drag ghost is registered **per drag** — `UIDragController` drops it when the drag ends | Register once and you get a ghost for the first drag only; retaining it was a real bug, where a ghost outlived its drag and reappeared on unrelated screens |
 | A `SplitView` divider must clamp against the pane's **CSS** `min-width`, not only against `setPaneSizeLimits` | Taffy refuses to shrink the pane, but the weight is a number SplitView keeps and nothing stopped it going lower. Drag past the minimum and release, and the stored split says 20px where the layout shows 150 — so the next drag back spends 130px before anything moves. **It cannot be fixed inside the drag**: `applyDividerDelta` already measures from the drag's own start so clamping cannot accumulate *within* a gesture, which is a different bug with the same symptom. This one accumulates *between* them |
+| A shipped third-party asset needs a notice file, not a javadoc comment | MIT requires its copyright notice to travel with the distribution and Apache 2.0 requires the licence, any NOTICE, and a statement of modifications. Naming the source in a class comment is good practice and satisfies neither. `THIRD-PARTY.md` indexes them |
+| Trademarks survive every licence — Apache 2.0 § 6 says so outright | The IntelliJ Platform *file-type* icons are JetBrains' own drawings and ship; the IntelliJ IDEA *logo* is a mark and lives in `core/src/test/resources/`, where it is the SVG renderer's torture test and not in the jar |
+| A recycled row must **swap** its data-driven classes, never merely add them | A template is a different row every time the view reuses it, so adding `filetype-java` without removing `filetype-md` leaves both on the element — and the cascade then resolves whichever rule happens to win, which reads as a random colour rather than as a stale class. Same for `decoration-*`. `ProjectFileTree.swapPrefixedClass` is the one definition |
+| A row's slots are built in `createTemplate`, never in `bind` | An element created during bind lands after that frame's layout pass. Cost a session on the command palette's key chips and again on the editor's gutter arrows, which toggled whichever row their slot was first used for |
+| A `FileDecorations` change must reach the rows, and through the deferred refresh | Decorations are read during `bind`, so an already-bound tree shows whatever was true when it last bound. Routed through `pendingRefresh` rather than an immediate `refresh()` because a provider may fire from inside a click handler on a row — and a widget must never rebuild the elements it is being clicked on |
+| A bubbled decoration keeps the colour and drops the badge | A folder showing `M` claims the folder itself is modified. The colour on the folder and the badge on the file is the entire information content of the bubble |
 | An icon's colour comes from the `.filetype-*` class, never from the theme JSON | A dozen languages share one `code` glyph and still need their own colours — keying colour to the icon cannot express that. Same split `graph.css` already makes for port types |
 | Leading (top/left) resize handles exist only for out-of-flow elements | `left`/`top` on an in-flow box is a *relative offset* — it slides over the sibling above and reflows nothing, so the panel eats its neighbour |
 | A leading resize derives its origin from the size **achieved**, never from the pointer delta | The box shrinks to `min-height` and then keeps travelling — while the trailing edge, which moves nothing, correctly just stops |
@@ -1248,6 +1254,9 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
                                part each — LineNumbersPart, ViewCursorsPart, SelectionsPart,
                                CurrentLinePart, IndentGuidesPart, WhitespacePart, RulersPart,
                                GutterEdgePart, FoldingDecorationsPart, ZoomIndicatorPart
+    .workbench.decoration      FileDecoration, FileDecorationProvider, FileDecorations — VS Code's
+                               IDecorationsProvider. Independent contributors (dirty, read-only, errors,
+                               VCS) merged per field, with bubbling up to ancestor folders
     .canvas                    CanvasView (pan/zoom viewport), WorldRect — the node graph's substrate
     .graph                     GraphView, GraphNode, NodePort, NodeWireLayer, GraphConnection,
                                GraphSelection, GraphCommands, PortType (SPI) + BasicPortType +
@@ -1297,8 +1306,11 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `ui/styles/ore.css` | Minecraft Ore UI theme, ported from LDLib2's `ore.lss`. |
 | `ui/styles/graph.css` | Node-graph theme — Unity Shader Graph's look, including the per-type port palette every wire reads its colour from. |
 | `ui/styles/filetypes.css` | Per-file-type colour palette, keyed on the `.filetype-*` class `FileIconTheme.classFor` returns. **Not** in `default.css` — that is the UA sheet and carries geometry only. |
-| `ui/icons/*.svg` | Feather icons (MIT) and the JetBrains mark, drawn as vectors. `icon("crystalgui:folder")` in CSS. |
+| `ui/styles/decorations.css` | Decoration palette, keyed on the `decoration-*` class a `FileDecoration` names. Same split, same reason. |
+| `ui/icons/*.svg` | Feather icons (MIT), stroked `currentColor` chrome marks. `icon("crystalgui:folder")` in CSS. |
+| `ui/icons/filetypes/*.svg` | 50 IntelliJ Platform icons (Apache 2.0), filled, 16px, carrying their own palette. What the file tree draws. |
 | `ui/icons/default.json` | The default file-icon theme: extension/name → icon. Colour is deliberately not in it. |
+| `ui/icons/ATTRIBUTION.md` | **An obligation, not documentation** — MIT and Apache 2.0 both require notices to travel with the distribution. Indexed from the repo-root `THIRD-PARTY.md`. |
 | `ui/sprites/ore.json` | Sprite definitions backing `ore.css`. |
 | `textures/gui/ore_styles.png` | Ore theme atlas. |
 | `textures/gui/gdp_styles.png` | **Unreferenced by any code today.** |

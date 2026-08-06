@@ -4035,15 +4035,71 @@ projectfiletree .__project-tree__ {
  * cascade and paint a 12px row inside a 16px slot, leaving a dead band between every pair that quietly
  * swallowed clicks. Padding is what belongs here: it sits inside the row rather than shrinking it. */
 projectfiletree .__project-row__ {
-    /* JUSTIFY-CONTENT for the vertical centring, not align-items.
+    /* A ROW container now, so ALIGN-ITEMS does the vertical centring.
      *
-     * A row is a COLUMN container -- this engine's flex-direction default -- so its MAIN axis is vertical
-     * and its cross axis is horizontal. align-items: center therefore centres the label across the row's
-     * WIDTH, which is what it did: every file name lined up down the middle of the panel. The same trap
-     * `tabview .__strip__` already records about its rail. */
-    justify-content: center;
-    padding-left: 2px;
-    padding-right: 2px;
+     * It used to be `justify-content: center`, and that was right when the row was a column with one
+     * label in it: this engine's flex-direction default is COLUMN, so the main axis was vertical. With
+     * four slots side by side the main axis is horizontal, and justify-content would now centre the whole
+     * group across the panel's WIDTH -- which is the exact symptom the old comment recorded, arriving
+     * from the other direction. */
+    flex-direction: row;
+    align-items: center;
+    height: 20px;
+
+    /* NO padding-left. It used to be 2px, and that quietly outranked the indent.
+     *
+     * TreeView writes `padding-left: depth * indentPerDepth` at DEFAULT origin, and this sheet is
+     * USER_AGENT -- which is higher -- so a constant here pins every row at the same inset however deep
+     * it is. It went unnoticed for as long as the renderer ALSO indented by prefixing the label with two
+     * spaces per level: the tree looked right and was being indented by the wrong mechanism entirely.
+     * Deleting the text prefix, which is the correct thing to do once TreeView owns the indent, made the
+     * whole tree go flat at once. Any rule that wants inset on these rows has to say `margin-left`, or
+     * put it on the tree's content box instead. */
+    padding-right: 4px;
+}
+
+/* Fixed width and flex-shrink: 0 on both leading slots. A long file name must ellipsize in the LABEL,
+ * never squeeze the icon. */
+projectfiletree .__project-row__ .__twisty__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+projectfiletree .__project-row__.__collapsed__ .__twisty__ {
+    overlay: shape("chevron-right");
+}
+
+projectfiletree .__project-row__.__expanded__ .__twisty__ {
+    overlay: shape("chevron-down");
+}
+
+/* A leaf keeps the slot and draws nothing, so every label in the tree starts at the same x. Collapsing
+ * it to zero width would step file names left of folder names at the same depth. */
+projectfiletree .__project-row__.__leaf__ .__twisty__ {
+    overlay: none;
+}
+
+projectfiletree .__project-row__ .__pre-icon__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    margin-right: 4px;
+    overlay-fit: contain;
+}
+
+projectfiletree .__project-row__ text {
+    flex-shrink: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The badge is pushed to the trailing edge and never shrinks -- it is one or two characters and the
+ * label is what has room to give. */
+projectfiletree .__project-row__ .__badge__ {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding-left: 4px;
 }
 
 /* SELECTION IS THE ONLY HIGHLIGHT, and there is deliberately no :hover rule beside it.

@@ -40,14 +40,35 @@ public record SvgGradient(boolean radial, boolean userSpace, SvgTransform transf
     public static final int SPREAD_REPEAT = 2;
 
     /**
-     * How finely a gradient fill is cut, as a fraction of the whole ramp.
+     * The largest per-band colour step, in 8-bit levels, before the banding is visible.
      *
-     * <p>32 bands across the full colour range. Chosen against the visible artefact rather than by feel:
-     * the widest jump between adjacent stops in the JetBrains gradients is about a fifth of the range, so a
-     * band carries at most a few units of colour difference — under the threshold where a flat step reads
-     * as a line. Doubling it doubles the triangle count and removes nothing anyone can see.</p>
+     * <p>Two. Below that a step is inside the noise of an ordinary display and dithering nobody asked for
+     * would cost more than it buys; above it, a flat band reads as a facet rather than as part of a ramp.
+     * <b>This is a quality target, not a subdivision count</b> — see {@link #sampleSpacing}.</p>
      */
-    public static final int STEPS = 32;
+    private static final float LEVELS_PER_BAND = 2f;
+
+    /** Floor and ceiling on bands across a shape, so neither a flat ramp nor a violent one runs away. */
+    private static final int MIN_BANDS = 8;
+
+    private static final int MAX_BANDS = 96;
+
+    /**
+     * The most cells one gradient fill may be cut into, before the spacing is relaxed to fit.
+     *
+     * <h3>Why a budget and not just a band count</h3>
+     *
+     * <p>The cuts are axis-aligned — horizontal bands, and slices across each band — so a gradient running
+     * <b>diagonally</b> is approximated by a grid, and asking for N bands of quality costs N² cells rather
+     * than N. Only O(N) of them carry new colour; the rest repeat a neighbour. Following the ramp's own
+     * iso-lines would fix that properly and means cutting at angles the scanline does not produce.</p>
+     *
+     * <p>Left unbounded this bites hard: {@code htaccess}'s feather runs orange to crimson across its whole
+     * diagonal, asked for the maximum in both axes, and came to <b>30,406 triangles for one 16px icon</b>.
+     * The budget relaxes both spacings by the same factor until it fits, so the ramp stays smooth in the
+     * direction that matters and simply gets coarser everywhere rather than failing in one place.</p>
+     */
+    public static final int CELL_BUDGET = 900;
 
     /**
      * Where {@code (x, y)} falls on the ramp, in {@code [0, 1]} after the spread method.
@@ -94,6 +115,11 @@ public record SvgGradient(boolean radial, boolean userSpace, SvgTransform transf
         return spread(t);
     }
 
+    /** {@link #spread} for a caller that has computed the raw projection itself. */
+    public float spreadPublic(float t) {
+        return spread(t);
+    }
+
     private float spread(float t) {
         return switch (spread) {
             case SPREAD_REPEAT -> t - (float) Math.floor(t);
@@ -123,6 +149,38 @@ public record SvgGradient(boolean radial, boolean userSpace, SvgTransform transf
         return colourAt(parameterAt(x, y, box));
     }
 
+    /**
+     * The axis in the shape's own space, as {@code x1, y1, x2, y2}, after units and
+     * {@code gradientTransform} are resolved.
+     *
+     * <p>Exposed because a caller that wants to cut ALONG the ramp needs the direction, not just the
+     * ability to sample it — see {@code SvgDocument.emitFill}.</p>
+     */
+    public float[] effectiveAxis(float[] box) {
+        float ax1 = x1, ay1 = y1, ax2 = x2, ay2 = y2;
+        if (!userSpace) {
+            ax1 = box[0] + ax1 * box[2];
+            ay1 = box[1] + ay1 * box[3];
+            ax2 = box[0] + ax2 * box[2];
+            ay2 = box[1] + ay2 * box[3];
+        }
+        if (transform != SvgTransform.IDENTITY) {
+            float tx1 = transform.applyX(ax1, ay1), ty1 = transform.applyY(ax1, ay1);
+            float tx2 = transform.applyX(ax2, ay2), ty2 = transform.applyY(ax2, ay2);
+            ax1 = tx1;
+            ay1 = ty1;
+            ax2 = tx2;
+            ay2 = ty2;
+        }
+        return new float[]{ax1, ay1, ax2, ay2};
+    }
+
+    /** How many bands a shape spanning {@code [t0, t1]} needs. Public so a caller cutting along the ramp
+     * can size its own strips. */
+    public int bandCountFor(float t0, float t1) {
+        return bandsFor(t0, t1);
+    }
+
     /** The single colour this reduces to when it has to be one — used for strokes and as a fallback. */
     public int representativeColour() {
         return colourAt(0.5f);
@@ -143,7 +201,15 @@ public record SvgGradient(boolean radial, boolean userSpace, SvgTransform transf
             ax2 = box[0] + ax2 * box[2];
             ay2 = box[1] + ay2 * box[3];
         }
-        float target = 1f / STEPS;
+
+        // How much of the ramp this shape actually spans, and how much colour moves across it. Both are
+        // needed: a fixed band count is wrong at both ends -- a shape sitting in 10% of a long axis gets a
+        // tenth of the bands and facets visibly, while a shape spanning a near-flat ramp gets hundreds it
+        // cannot show.
+        float[] range = parameterRange(box);
+        float target = (range[1] - range[0]) / bandsFor(range[0], range[1]);
+        if (target <= 0f) return new float[]{0f, 0f};
+
         if (radial) {
             float radius = Math.max(1e-6f, ax2 - ax1);
             float step = radius * target;
@@ -156,6 +222,45 @@ public record SvgGradient(boolean radial, boolean userSpace, SvgTransform transf
         float perX = Math.abs(dx) / lengthSq;
         float perY = Math.abs(dy) / lengthSq;
         return new float[]{perX < 1e-9f ? 0f : target / perX, perY < 1e-9f ? 0f : target / perY};
+    }
+
+    /** The ramp positions of the shape's four bounding-box corners, as {@code [min, max]}. */
+    private float[] parameterRange(float[] box) {
+        float minT = Float.MAX_VALUE;
+        float maxT = -Float.MAX_VALUE;
+        for (int corner = 0; corner < 4; corner++) {
+            float px = box[0] + ((corner & 1) == 0 ? 0f : box[2]);
+            float py = box[1] + ((corner & 2) == 0 ? 0f : box[3]);
+            float t = parameterAt(px, py, box);
+            minT = Math.min(minT, t);
+            maxT = Math.max(maxT, t);
+        }
+        // A shape entirely past one end of a `pad` ramp is one flat colour, and subdividing it would be
+        // pure cost. The floor keeps a degenerate range from dividing by zero.
+        return new float[]{minT, Math.max(maxT, minT + 1e-4f)};
+    }
+
+    /**
+     * How many bands this shape needs, from the colour it actually traverses.
+     *
+     * <p>Walks the ramp over the shape's own span, sums the per-channel change, and asks for enough bands
+     * that each carries at most {@link #LEVELS_PER_BAND}. That makes the cost track the visible problem:
+     * a subtle blend gets the minimum, an orange-to-crimson feather gets what it needs, and neither is
+     * decided by a constant that was right for one icon.</p>
+     */
+    private int bandsFor(float t0, float t1) {
+        final int probes = 32;
+        float total = 0f;
+        int previous = colourAt(spread(t0));
+        for (int i = 1; i <= probes; i++) {
+            int current = colourAt(spread(t0 + (t1 - t0) * i / probes));
+            total += Math.abs(((current >>> 16) & 0xFF) - ((previous >>> 16) & 0xFF))
+                    + Math.abs(((current >>> 8) & 0xFF) - ((previous >>> 8) & 0xFF))
+                    + Math.abs((current & 0xFF) - (previous & 0xFF));
+            previous = current;
+        }
+        int bands = (int) Math.ceil(total / LEVELS_PER_BAND);
+        return Math.max(MIN_BANDS, Math.min(MAX_BANDS, bands));
     }
 
     // ── Parsing ─────────────────────────────────────────────────────────────────────────────────────

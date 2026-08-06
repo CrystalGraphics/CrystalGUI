@@ -100,6 +100,7 @@ public final class CgUiSvg implements CgUiDrawable {
         float scale = Math.min(width / boxWidth, height / boxHeight);
         float left = x + (width - boxWidth * scale) * 0.5f;
         float top = y + (height - boxHeight * scale) * 0.5f;
+
         int argb = ArgbMath.multiply(tintArgb, ctx.getColor());
 
         if (monochrome) {
