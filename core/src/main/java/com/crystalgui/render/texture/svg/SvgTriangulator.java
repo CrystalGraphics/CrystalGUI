@@ -53,9 +53,6 @@ public final class SvgTriangulator {
 
     private static final float EPSILON = 1e-5f;
 
-    /** Twice the area below which a triangle is treated as having none; see {@link #add}. */
-    private static final float DEGENERATE_AREA = 1e-7f;
-
     /**
      * Ceilings on gradient subdivision, per shape.
      *
@@ -144,15 +141,24 @@ public final class SvgTriangulator {
      * {@code stepY = 0} and a shape of any height stays at its handful of natural bands. See
      * {@link SvgGradient#sampleSpacing}.</p>
      *
-     * <h3>Degenerate triangles are never emitted, and that is not tidiness</h3>
+     * <h3>Both halves of every trapezoid are emitted, even a degenerate one</h3>
      *
-     * <p>Wherever the shape comes to a point the trapezoid collapses to a triangle, so one of the two
-     * halves has a repeated vertex and no area. Dropping it saves a draw — and, far more importantly,
-     * {@code sdf_triangle} takes the triangle's winding from {@code sign(area)}, which for zero area is
-     * {@code 0}, and its inside test then reads {@code 0 >= 0} at <b>every</b> point. A zero-area triangle
-     * handed to the GPU therefore fills its whole axis-aligned bounding quad solid. It presents as
-     * rectangular blocks of the wrong colour at every tip of every shape, and no CPU rasterisation of the
-     * same mesh reproduces it, because an ordinary point-in-triangle test yields nothing at all.</p>
+     * <p>Where the shape comes to a point the trapezoid collapses and one half has a repeated vertex and
+     * no area. Dropping it looks obviously right and <b>breaks the caller's seam partition</b>: that
+     * scheme offsets the upper half of each trapezoid outward and the lower half inward, so a band's
+     * lower edge meets the next band's upper edge with opposite signs and every shared edge is claimed
+     * once. Remove one half and the survivor carries the wrong sign for one of its edges — the two sides
+     * of that boundary both pull away from it and leave a gap of twice the offset.</p>
+     *
+     * <p>It presents as sparse dots and short dashes along a band boundary rather than a continuous line,
+     * because only the trapezoids that actually degenerate are affected — one in a triangle, two in a
+     * 64-gon. Raising the offset makes it worse, which is what ruled out precision as the cause.</p>
+     *
+     * <p>Emitting them is safe on two independent counts, and was not always: {@code sdf_triangle} reports
+     * a zero-area triangle as outside everywhere rather than inside everywhere, and the fill's bounding
+     * geometry is now the triangle itself, so a degenerate one collapses to a line and rasterises nothing.
+     * Before either of those it filled its whole axis-aligned bounding box, which is why the filter
+     * existed.</p>
      *
      * @param stepX how far apart, in the contours' own units, two samples may sit across the shape before
      *              the step between them shows; {@code 0} for no horizontal subdivision
@@ -160,6 +166,17 @@ public final class SvgTriangulator {
      */
     public static Fill fill(List<List<float[]>> contours, boolean evenOdd,
                             float stepX, float stepY) {
+        return fill(contours, evenOdd, stepX, stepY, null);
+    }
+
+    /**
+     * @param extraCuts additional band boundaries in {@code y}, on top of the vertex cuts. A caller that
+     *                  needs a band to stop at a particular line — a gradient stop, say — states it here
+     *                  rather than approximating it with a fine {@code stepY}, which would cut everywhere
+     *                  to get one cut in the right place
+     */
+    public static Fill fill(List<List<float[]>> contours, boolean evenOdd,
+                            float stepX, float stepY, float[] extraCuts) {
         // Edges as a flat array: x0,y0,x1,y1 per edge. Horizontal edges are dropped at build time -- they
         // can never cross a band's midline, so keeping them only costs a test per band per edge.
         List<float[]> edges = new ArrayList<>();
@@ -175,7 +192,7 @@ public final class SvgTriangulator {
         Fill empty = new Fill(new float[0], new int[0], new boolean[0]);
         if (edges.isEmpty()) return empty;
 
-        float[] bands = bandBoundaries(edges, stepY);
+        float[] bands = bandBoundaries(edges, stepY, extraCuts);
         if (bands.length < 2) return empty;
 
         List<float[]> triangles = new ArrayList<>();
@@ -256,18 +273,15 @@ public final class SvgTriangulator {
     }
 
     /**
-     * Appends one triangle, unless it has no area.
+     * Appends one triangle, degenerate or not.
      *
-     * <p>The area test is the load-bearing half — see the degeneracy note on {@link #fill(List, boolean,
-     * float, float)}. Compared against a tolerance rather than exact zero, because a slice one ten-
-     * thousandth of a unit wide is degenerate for every purpose that matters and its winding sign is
-     * whatever the rounding decided.</p>
+     * <p>Unconditional on purpose — see the note on {@link #fill(List, boolean, float, float)}. A pair
+     * that loses a member stops partitioning its own edges, and that costs far more than the empty
+     * instance a zero-area triangle becomes.</p>
      */
     private static void add(List<float[]> out, List<Integer> slices, List<Boolean> uppers,
                             int slice, boolean upper,
                             float x0, float y0, float x1, float y1, float x2, float y2) {
-        float area = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0);
-        if (Math.abs(area) < DEGENERATE_AREA) return;
         out.add(new float[]{x0, y0, x1, y1, x2, y2});
         slices.add(slice);
         uppers.add(upper);
@@ -286,7 +300,7 @@ public final class SvgTriangulator {
      *       never substituted for them.</li>
      * </ol>
      */
-    private static float[] bandBoundaries(List<float[]> edges, float stepY) {
+    private static float[] bandBoundaries(List<float[]> edges, float stepY, float[] extraCuts) {
         int extra = 0;
         float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
         if (stepY > 0f) {
@@ -298,7 +312,8 @@ public final class SvgTriangulator {
         }
 
         float[] crossings = selfIntersections(edges);
-        float[] all = new float[edges.size() * 2 + Math.max(0, extra) + crossings.length];
+        int explicit = extraCuts == null ? 0 : extraCuts.length;
+        float[] all = new float[edges.size() * 2 + Math.max(0, extra) + crossings.length + explicit];
         for (int i = 0; i < edges.size(); i++) {
             all[i * 2] = edges.get(i)[1];
             all[i * 2 + 1] = edges.get(i)[3];
@@ -306,6 +321,7 @@ public final class SvgTriangulator {
         int at = edges.size() * 2;
         for (int i = 0; i < extra; i++) all[at++] = minY + (maxY - minY) * (i + 0.5f) / extra;
         for (float y : crossings) all[at++] = y;
+        for (int i = 0; i < explicit; i++) all[at++] = extraCuts[i];
 
         Arrays.sort(all);
         float[] unique = new float[all.length];

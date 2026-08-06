@@ -175,8 +175,12 @@ public record SvgGradient(boolean radial, boolean userSpace, SvgTransform transf
         return new float[]{ax1, ay1, ax2, ay2};
     }
 
-    /** How many bands a shape spanning {@code [t0, t1]} needs. Public so a caller cutting along the ramp
-     * can size its own strips. */
+    /**
+     * How many bands a shape spanning {@code [t0, t1]} needs to approximate the ramp with FLAT cells.
+     *
+     * <p>Only the radial path still asks. A linear gradient is evaluated per pixel now, so its band count
+     * comes from the stop offsets alone — see {@code SvgDocument.emitLinearGradientFill}.</p>
+     */
     public int bandCountFor(float t0, float t1) {
         return bandsFor(t0, t1);
     }
