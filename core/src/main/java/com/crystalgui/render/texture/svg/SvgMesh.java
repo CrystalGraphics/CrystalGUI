@@ -37,12 +37,17 @@ import org.jetbrains.annotations.Nullable;
  * @param upper     whether triangle {@code i} is the upper half of its trapezoid; see
  *                  {@link SvgTriangulator.Fill}. Drives which way a seam is nudged
  * @param opaque    every colour is fully opaque, so the fill may safely overlap its own seams
+ * @param outerWall whether triangle {@code i}'s designated wall is on the shape's CONTOUR rather than a
+ *                  seam shared with the cell beside it. Only the contour may be antialiased: feathering a
+ *                  seam fades it from one side against a neighbour that steps hard there, so the coverage
+ *                  never reaches 1 and the boundary shows as a line. Always true unless a band was sliced,
+ *                  which only a radial gradient does
  */
 record SvgMesh(float[] triangles, @Nullable int[] colour0, @Nullable int[] colour1,
-               @Nullable float[] axes, boolean[] upper, boolean opaque) {
+               @Nullable float[] axes, boolean[] upper, boolean[] outerWall, boolean opaque) {
 
     static final SvgMesh EMPTY =
-            new SvgMesh(new float[0], null, null, null, new boolean[0], true);
+            new SvgMesh(new float[0], null, null, null, new boolean[0], new boolean[0], true);
 
     boolean isEmpty() {
         return triangles.length == 0;

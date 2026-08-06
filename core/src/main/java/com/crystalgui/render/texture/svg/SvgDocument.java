@@ -173,7 +173,8 @@ public final class SvgDocument {
      */
     public record DrawOp(boolean fill, float[] data, @Nullable int[] colours,
                          @Nullable int[] coloursEnd, @Nullable float[] gradients,
-                         @Nullable boolean[] upper, boolean opaque, int argb, boolean currentColor,
+                         @Nullable boolean[] upper, @Nullable boolean[] outerWall, boolean opaque,
+                         int argb, boolean currentColor,
                          float halfWidth, int cap, @Nullable int[] segmentCaps) {
 
         /** Whether triangle {@code i} carries a per-pixel ramp rather than a flat colour. */
@@ -592,8 +593,8 @@ public final class SvgDocument {
                     int argb = paint instanceof SvgScene.Gradient ramp
                             ? ramp.argb() : ((SvgScene.Solid) paint).argb();
                     ops.add(new DrawOp(true, mesh.triangles(), mesh.colour0(), mesh.colour1(),
-                            mesh.axes(), mesh.upper(), mesh.opaque(), argb, paint.currentColor(),
-                            0f, 0, null));
+                            mesh.axes(), mesh.upper(), mesh.outerWall(), mesh.opaque(), argb,
+                            paint.currentColor(), 0f, 0, null));
                 }
             }
 
@@ -603,7 +604,7 @@ public final class SvgDocument {
                         node.contours(), stroke.cap() & 3, (stroke.cap() >> 2) & 3);
                 if (segments.data().length > 0) {
                     SvgScene.Solid paint = (SvgScene.Solid) stroke.paint();
-                    ops.add(new DrawOp(false, segments.data(), null, null, null, null, true,
+                    ops.add(new DrawOp(false, segments.data(), null, null, null, null, null, true,
                             paint.argb(), paint.currentColor(), stroke.halfWidth(), stroke.cap(),
                             segments.caps()));
                 }
@@ -753,10 +754,23 @@ public final class SvgDocument {
             // right wall (p1->p2) and the lower half the left wall (p2->p0). Everything else it touches --
             // the horizontal band cuts and the diagonal split -- is a seam shared with a neighbour, and
             // softening those would fade each one out from both sides into a visible line.
+            // ...and only when that wall is REALLY the contour. A band cut into slices has one contour
+            // edge at each end and seams in between, and handing a seam over as the silhouette feathers it
+            // from one side while the neighbour steps hard there -- coverage never reaches 1, and every
+            // slice boundary draws as a line down the shape. Only a radial gradient slices, so for
+            // everything else outerWall is true throughout and nothing changes.
+            boolean[] outer = op.outerWall();
+            boolean contourWall = outer == null || outer[triangle];
+            // EDGE_NONE means "antialias the WHOLE outline", not "antialias nothing" -- with a feather it
+            // would soften all three edges of an interior cell, which is worse than the seam it is meant to
+            // cure. A feather of zero is what makes every edge a hard step: stroke.glsl clamps the ramp to
+            // 1e-6, so the smoothstep degenerates.
             out.cornerRadius(op.opaque() || upper[triangle] ? FILL_OFFSET : -FILL_OFFSET)
-                    .silhouetteEdge(upper[triangle]
-                            ? CgVectorRenderer.EDGE_P1_P2 : CgVectorRenderer.EDGE_P2_P0)
-                    .feather(SILHOUETTE_FEATHER)
+                    .silhouetteEdge(contourWall
+                            ? (upper[triangle]
+                                    ? CgVectorRenderer.EDGE_P1_P2 : CgVectorRenderer.EDGE_P2_P0)
+                            : CgVectorRenderer.EDGE_NONE)
+                    .feather(contourWall ? SILHOUETTE_FEATHER : 0f)
                     .submit();
         }
         }
