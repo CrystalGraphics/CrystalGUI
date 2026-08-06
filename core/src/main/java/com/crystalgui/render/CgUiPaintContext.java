@@ -532,7 +532,7 @@ public final class CgUiPaintContext {
         // Measured on the icon grid: 59 flushes per frame for 57 labels, 1.21ms in quadRenderer.upload of
         // which 0.88ms was streamBuffer.ssbo.map, plus 1.35ms across 58 glFlush calls -- about 2.5ms/frame,
         // more than every icon's geometry put together.
-        textRenderer.beginBatch();
+        //textRenderer.beginBatch();
     }
 
     public void bindTexture(CgTexture2D texture) {
