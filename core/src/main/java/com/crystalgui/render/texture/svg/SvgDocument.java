@@ -147,6 +147,35 @@ public final class SvgDocument {
      */
     private static final float SILHOUETTE_FEATHER = 1f;
 
+    /**
+     * Narrower than this, in screen pixels, and the edge is drawn as a hard step instead.
+     *
+     * <h3>Half a pixel is where antialiasing stops carrying information</h3>
+     *
+     * <p>A coverage ramp narrower than half a pixel spans less than one sample spacing, so at most one
+     * pixel can land inside it and there is no gradient left to resolve — the edge is decided by a single
+     * sample either way. Tapering it therefore buys nothing, and it <b>costs</b> something: that one pixel
+     * comes out at partial coverage, and partial coverages from abutting shapes composite as
+     * {@code 1-(1-c)^n} rather than summing, so the shortfall shows as background leaking through.</p>
+     *
+     * <p>That is the whole of the grainy dark speckle on artwork built from many small abutting shapes. The
+     * clamp against triangle height already stops a 1px band being smeared over a 0.2px wedge; this
+     * finishes the job by refusing the residual sliver of a feather that is left.</p>
+     *
+     * <h3>Why it is safe for detail, which is what it was tested against</h3>
+     *
+     * <p>The obvious fear is thin features vanishing: a hairline with no coverage ramp is visible only if a
+     * pixel centre happens to fall inside it. What makes it safe is that the threshold is compared against
+     * the shape's <b>own height</b> and never against the zoom — anything half a pixel or wider keeps its
+     * full feather, so only shapes already too small to antialias are ever snapped.</p>
+     *
+     * <p>Measured rather than assumed, on the IntelliJ mark at 0.75x — the most detail-dense icon shipped:
+     * turning the cutoff on changes <b>8 pixels, by at most 29/255</b>, and nothing is lost or broken up.
+     * Over the same step the colour wheel goes from grainy to clean. That ratio is the argument for the
+     * number; it is not free, it is just very cheap.</p>
+     */
+    private static final float MINIMUM_FEATHER = 0.5f;
+
 
 
 
@@ -761,6 +790,40 @@ public final class SvgDocument {
             // everything else outerWall is true throughout and nothing changes.
             boolean[] outer = op.outerWall();
             boolean contourWall = outer == null || outer[triangle];
+
+            // A FEATHER MAY NEVER BE WIDER THAN THE SHAPE IT SOFTENS.
+            //
+            // The band is stated in screen pixels, which is right for a silhouette and catastrophic for a
+            // sliver. Artwork built from many abutting shapes -- a colour wheel is 361 separate wedges --
+            // puts each of them below a pixel once the icon is small: at 24px the disc's circumference is
+            // ~75px over 361 wedges, so a wedge is 0.2px wide and was being softened over 1px. Its coverage
+            // spreads to about 0.2, five neighbours composite to 1-0.8^5 = 0.67, and the missing third is
+            // BACKGROUND showing through. That is the muddy, dark wheel at tab size, and it is why turning
+            // the feather off entirely made it clean.
+            //
+            // Clamping to the triangle's own height against the edge being softened fixes it without
+            // costing anything at sizes where the shape is bigger than the band -- there the clamp never
+            // binds and the silhouette is antialiased exactly as before.
+            float featherPx = 0f;
+            if (contourWall) {
+                float ax = t[i], ay = t[i + 1];
+                float bx = t[i + 2], by = t[i + 3];
+                float cx = t[i + 4], cy = t[i + 5];
+                // The upper half softens p1->p2 (opposite p0), the lower half p2->p0 (opposite p1).
+                float ex, ey, sx, sy, ox, oy;
+                if (upper[triangle]) {
+                    sx = bx; sy = by; ex = cx - bx; ey = cy - by; ox = ax; oy = ay;
+                } else {
+                    sx = cx; sy = cy; ex = ax - cx; ey = ay - cy; ox = bx; oy = by;
+                }
+                float edgeLength = (float) Math.sqrt(ex * ex + ey * ey);
+                if (edgeLength > 1e-9f) {
+                    float area2 = Math.abs(ex * (oy - sy) - ey * (ox - sx));
+                    featherPx = Math.min(SILHOUETTE_FEATHER, area2 / edgeLength * scale);
+                    // ...and below half a pixel, drop it entirely rather than taper. See MINIMUM_FEATHER.
+                    if (featherPx < MINIMUM_FEATHER) featherPx = 0f;
+                }
+            }
             // EDGE_NONE means "antialias the WHOLE outline", not "antialias nothing" -- with a feather it
             // would soften all three edges of an interior cell, which is worse than the seam it is meant to
             // cure. A feather of zero is what makes every edge a hard step: stroke.glsl clamps the ramp to
@@ -770,7 +833,7 @@ public final class SvgDocument {
                             ? (upper[triangle]
                                     ? CgVectorRenderer.EDGE_P1_P2 : CgVectorRenderer.EDGE_P2_P0)
                             : CgVectorRenderer.EDGE_NONE)
-                    .feather(contourWall ? SILHOUETTE_FEATHER : 0f)
+                    .feather(featherPx)
                     .submit();
         }
         }
