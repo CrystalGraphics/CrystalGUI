@@ -2,6 +2,8 @@ package com.crystalgui.render.texture.svg;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.crystalgraphics.util.profiling.CgProfiler;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -54,12 +56,16 @@ final class SvgResolver {
     private final Map<String, Integer> gradientColours = new HashMap<>();
     private final List<SvgScene.Node> nodes = new ArrayList<>();
 
-    private SvgResolver(List<SvgScanner.Tag> tags) {
+    /** Curve-flattening resolution, carried down to every shape — see {@link SvgPath#parse(String, int)}. */
+    private final int steps;
+
+    private SvgResolver(List<SvgScanner.Tag> tags, int steps) {
         this.tags = tags;
+        this.steps = steps;
     }
 
-    static SvgScene resolve(List<SvgScanner.Tag> tags) {
-        return new SvgResolver(tags).run();
+    static SvgScene resolve(List<SvgScanner.Tag> tags, int steps) {
+        return new SvgResolver(tags, steps).run();
     }
 
     private SvgScene run() {
@@ -85,8 +91,10 @@ final class SvgResolver {
             break;
         }
 
-        indexIds();
-        collectGradients();
+        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.resolve.gradients")) {
+            indexIds();
+            collectGradients();
+        }
 
         // The origin lands in the root transform rather than in a fix-up pass over the points, so nothing
         // downstream ever sees coordinates that are not already in the icon's own 0,0 space.
@@ -267,7 +275,11 @@ final class SvgResolver {
      */
     private void resolveShape(SvgScanner.Tag tag, SvgStyle style, SvgTransform transform) {
         if (!style.fills() && !style.strokes()) return;
-        List<SvgPath.Polyline> contours = SvgGeometry.of(tag);
+        List<SvgPath.Polyline> contours;
+        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.resolve.flatten")) {
+            contours = SvgGeometry.of(tag, steps);
+        }
+        CgProfiler.count("svg.shapes");
         if (contours.isEmpty()) return;
 
         SvgScene.Fill fill = style.fills() ? resolveFill(contours, style, transform) : null;

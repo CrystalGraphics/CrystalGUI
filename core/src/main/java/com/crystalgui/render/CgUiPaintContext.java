@@ -151,6 +151,7 @@ public final class CgUiPaintContext {
     // coordinates (runtimeCache.getX()/getY()) as the normal path, so nothing needs translating —
     // matches LDLib2's own "off-target spans the full window" approach for the same reason.
     private int screenWidth, screenHeight;
+    private long frameId;
     private final List<CgFrameBuffer> layerFboPool = new ArrayList<>();
     /** One saved frame per nested {@link #beginLayerFbo}/{@link #endLayerFbo} pair. */
     private final Deque<LayerFrame> layerStack = new ArrayDeque<>();
@@ -308,7 +309,18 @@ public final class CgUiPaintContext {
      * an orthographic screen-space projection, and binds the shared box-model
      * material. Call once per frame before {@code rootElement.drawSubtree(ctx)}.
      */
+    /**
+     * Monotonic frame counter, for work a drawable wants to rate-limit to once per frame.
+     *
+     * <p>Exposed as a plain token rather than a callback so the dependency points the right way: a
+     * drawable can ask "is this a new frame" without this class having to know which drawables exist.</p>
+     */
+    public long frameId() {
+        return frameId;
+    }
+
     public void beginFrame(int screenWidth, int screenHeight) {
+        frameId++;
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
@@ -696,6 +708,20 @@ public final class CgUiPaintContext {
      * positive costs a draw that contributes nothing; a false negative is a missing icon, so the test is
      * an overlap on the transformed AABB and nothing cleverer.</p>
      */
+    /**
+     * The pose's uniform scale — how many device pixels one logical unit currently covers.
+     *
+     * <p>What a level-of-detail decision has to key on: the same logical size is twice the pixels at
+     * {@code uiScale} 2, and a mesh chosen from the logical size alone would be visibly coarse on a HiDPI
+     * display and correct everywhere else — the worst kind of bug to reproduce.</p>
+     */
+    public float deviceScale() {
+        Matrix4f m = poseStack.last().pose();
+        float sx = (float) Math.sqrt(m.m00() * m.m00() + m.m01() * m.m01());
+        float sy = (float) Math.sqrt(m.m10() * m.m10() + m.m11() * m.m11());
+        return Math.max(sx, sy);
+    }
+
     public boolean isVisible(float x, float y, float w, float h) {
         Matrix4f m = poseStack.last().pose();
         float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;

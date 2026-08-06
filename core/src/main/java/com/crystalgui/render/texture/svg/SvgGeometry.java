@@ -32,21 +32,21 @@ final class SvgGeometry {
     private SvgGeometry() {
     }
 
-    static List<SvgPath.Polyline> of(SvgScanner.Tag tag) {
+    static List<SvgPath.Polyline> of(SvgScanner.Tag tag, int steps) {
         List<SvgPath.Polyline> out = new ArrayList<>();
         switch (tag.name()) {
-            case "path" -> out.addAll(SvgPath.parse(tag.get("d")));
+            case "path" -> out.addAll(SvgPath.parse(tag.get("d"), steps));
             case "polyline" -> addPoints(out, tag.get("points"), false);
             case "polygon" -> addPoints(out, tag.get("points"), true);
             case "line" -> out.add(new SvgPath.Polyline(List.of(
                     new float[]{SvgDocument.number(tag.get("x1"), 0f), SvgDocument.number(tag.get("y1"), 0f)},
                     new float[]{SvgDocument.number(tag.get("x2"), 0f), SvgDocument.number(tag.get("y2"), 0f)}),
                     false));
-            case "rect" -> addRect(out, tag);
-            case "circle" -> addEllipse(out, SvgDocument.number(tag.get("cx"), 0f),
+            case "rect" -> addRect(out, tag, steps);
+            case "circle" -> addEllipse(out, steps, SvgDocument.number(tag.get("cx"), 0f),
                     SvgDocument.number(tag.get("cy"), 0f),
                     SvgDocument.number(tag.get("r"), 0f), SvgDocument.number(tag.get("r"), 0f));
-            case "ellipse" -> addEllipse(out, SvgDocument.number(tag.get("cx"), 0f),
+            case "ellipse" -> addEllipse(out, steps, SvgDocument.number(tag.get("cx"), 0f),
                     SvgDocument.number(tag.get("cy"), 0f),
                     SvgDocument.number(tag.get("rx"), 0f), SvgDocument.number(tag.get("ry"), 0f));
             default -> { }
@@ -66,7 +66,7 @@ final class SvgGeometry {
     }
 
     /** A rect, with {@code rx}/{@code ry} corners when it has them. */
-    private static void addRect(List<SvgPath.Polyline> out, SvgScanner.Tag tag) {
+    private static void addRect(List<SvgPath.Polyline> out, SvgScanner.Tag tag, int steps) {
         float x = SvgDocument.number(tag.get("x"), 0f), y = SvgDocument.number(tag.get("y"), 0f);
         float w = SvgDocument.number(tag.get("width"), 0f);
         float h = SvgDocument.number(tag.get("height"), 0f);
@@ -90,14 +90,17 @@ final class SvgGeometry {
                 + " V" + (y + h - ry) + " A" + rx + " " + ry + " 0 0 1 " + (x + w - rx) + " " + (y + h)
                 + " H" + (x + rx) + " A" + rx + " " + ry + " 0 0 1 " + x + " " + (y + h - ry)
                 + " V" + (y + ry) + " A" + rx + " " + ry + " 0 0 1 " + (x + rx) + " " + y + " Z";
-        out.addAll(SvgPath.parse(d));
+        out.addAll(SvgPath.parse(d, steps));
     }
 
-    private static void addEllipse(List<SvgPath.Polyline> out, float cx, float cy, float rx, float ry) {
+    /** {@code steps} is per quarter-turn, so a full ellipse is four times it — see {@link SvgPath#parse(String, int)}. */
+    private static void addEllipse(List<SvgPath.Polyline> out, int steps, float cx, float cy,
+                                   float rx, float ry) {
+        int segments = Math.max(8, steps * 4);
         if (rx <= 0f || ry <= 0f) return;
         List<float[]> points = new ArrayList<>();
-        for (int i = 0; i < CIRCLE_STEPS; i++) {
-            double t = 2 * Math.PI * i / CIRCLE_STEPS;
+        for (int i = 0; i < segments; i++) {
+            double t = 2 * Math.PI * i / segments;
             points.add(new float[]{(float) (cx + rx * Math.cos(t)), (float) (cy + ry * Math.sin(t))});
         }
         out.add(new SvgPath.Polyline(points, true));
