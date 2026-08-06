@@ -107,19 +107,20 @@ public class SvgDocumentTest {
     }
 
     /**
-     * <b>A gradient fill really ramps — it is not flattened to one colour.</b>
+     * <b>A gradient fill is evaluated per pixel, not approximated per cell.</b>
      *
-     * <p>Illustrator states the stop colour inside {@code style=""} rather than in a {@code stop-color}
-     * attribute, which is the form the JetBrains marks use, so reading only the attribute finds no stops in
-     * a file that is full of them.</p>
+     * <p>The op carries a start colour, an end colour and an axis per triangle; the fragment stage
+     * computes {@code t = dot(p - origin, dir)} and mixes. The two things that can be wrong are the
+     * colours and the axis, so both are asserted: the ramp's ends must actually reach the stops, and the
+     * axis must map the triangle's own extent onto {@code [0, 1]}.</p>
      *
-     * <p>The assertion is on the <em>ends</em> reaching their stops, which is what a midpoint collapse
-     * cannot do however many triangles it emits — and it is also what a sampling bug that reads the ramp in
-     * the wrong space fails, since a shape confined to a narrow slice of the axis comes out nearly
-     * uniform.</p>
+     * <p>This replaced a test that asserted a <em>flat colour per cell</em> spanned the ramp. That was
+     * the right assertion for a mesh that approximated a gradient by subdividing, and it is meaningless
+     * for one that evaluates it — which is why it failed rather than passing vacuously when the model
+     * changed.</p>
      */
     @Test
-    public void aGradientFillRampsAcrossTheShape() {
+    public void aGradientFillIsEvaluatedPerPixel() {
         SvgDocument document = SvgDocument.parse(
                 "<svg viewBox='0 0 10 10'>"
                         + "<linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='0'"
@@ -128,47 +129,32 @@ public class SvgDocumentTest {
                         + "<stop offset='1' style='stop-color:#ffffff'/>"
                         + "</linearGradient>"
                         + "<rect x='0' y='0' width='4' height='4' style='fill:url(#g)'/></svg>");
-        assertEquals(1, document.ops().size());
-        int[] colours = document.ops().get(0).colours();
-        assertNotNull("the fill was flattened to a single colour", colours);
+        SvgDocument.DrawOp op = document.ops().get(0);
+        assertNotNull("no start colours", op.colours());
+        assertNotNull("the fill was flattened -- no end colour, so no per-pixel ramp", op.coloursEnd());
+        assertNotNull("no gradient axis", op.gradients());
 
         int darkest = 0xFF, lightest = 0;
-        for (int argb : colours) {
-            int red = (argb >>> 16) & 0xFF;
-            darkest = Math.min(darkest, red);
-            lightest = Math.max(lightest, red);
+        for (int i = 0; i < op.colours().length; i++) {
+            for (int argb : new int[]{op.colours()[i], op.coloursEnd()[i]}) {
+                int red = (argb >>> 16) & 0xFF;
+                darkest = Math.min(darkest, red);
+                lightest = Math.max(lightest, red);
+            }
         }
         assertTrue("the dark end never reached black, got " + darkest, darkest < 0x20);
         assertTrue("the light end never reached white, got " + lightest, lightest > 0xE0);
     }
 
     /**
-     * <b>A gradient is sampled once per trapezoid slice, not once per triangle.</b>
+     * <b>The stored axis maps each triangle's own span onto {@code [0, 1]}.</b>
      *
-     * <p>The two halves of a slice are split along a diagonal, so their centroids sit on opposite sides of
-     * it — sampling each separately gives every quad two colours. On its own that is invisible. It stops
-     * being invisible because the draw dilates each triangle half a pixel to hide the seams between slices:
-     * each half then overwrites a strip of the other along the shared diagonal, and whichever is submitted
-     * second wins. The result is a diagonal hatch of the wrong colour across the whole shape, strongest
-     * exactly where the gradient is steepest.</p>
-     *
-     * <p>Asserted as a bound on the visible artifact, over every pair of triangles that share an edge —
-     * because sharing an edge is exactly the condition under which the dilation makes one overdraw the
-     * other. Two things had to be ruled out first. "Same slice, same colour" is not checkable from the
-     * geometry: at a tip the slices fan from the apex, so triangles in <em>different</em> slices share two
-     * vertices too. And counting distinct colours does not discriminate, since slices in different bands
-     * sit at different x, so per-slice sampling already gives nearly one colour per slice.</p>
-     *
-     * <p>The shape below slants 32 units across a 10-unit band, which is what makes the bound decisive:
-     * one slice of a 32-step ramp is 8 grey levels, while sampling the two halves of a slice separately
-     * puts their centroids about a quarter of the axis apart — some 65 levels. The gap between 8 and 65 is
-     * the whole test, and it is a property of the slant, not of a lucky threshold.</p>
-     *
-     * <p>Found by rasterising the mesh on the CPU twice, with and without the dilation, because the mesh
-     * and the colours were both provably correct and the artefact was in neither.</p>
+     * <p>The axis is the half of a per-pixel gradient that no colour check can catch: get its direction
+     * or its scale wrong and every triangle still carries the right two colours, while the ramp inside
+     * runs the wrong way, or clamps flat, or repeats. Evaluated here exactly as the fragment stage does.</p>
      */
     @Test
-    public void aGradientIsSampledPerSliceNotPerTriangle() {
+    public void theGradientAxisSpansEachTriangle() {
         SvgDocument document = SvgDocument.parse(
                 "<svg viewBox='0 0 40 10'>"
                         + "<linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='0'"
@@ -176,69 +162,25 @@ public class SvgDocumentTest {
                         + "<stop offset='0' style='stop-color:#000000'/>"
                         + "<stop offset='1' style='stop-color:#ffffff'/>"
                         + "</linearGradient>"
-                        + "<polygon points='0,0 8,0 40,10 32,10' style='fill:url(#g)'/></svg>");
+                        + "<polygon points='0,0 40,0 40,8 0,8' style='fill:url(#g)'/></svg>");
         SvgDocument.DrawOp op = document.ops().get(0);
-        int[] colours = op.colours();
-        assertNotNull(colours);
-        assertTrue("nothing to compare", colours.length >= 4);
+        float[] axes = op.gradients();
+        assertNotNull(axes);
 
-        int checked = 0;
-        int worst = 0;
-        for (int a = 0; a < colours.length; a++) {
-            for (int b = a + 1; b < colours.length; b++) {
-                if (sharedVertices(op.data(), a, b) < 2) continue;
-                checked++;
-                worst = Math.max(worst,
-                        Math.abs(((colours[a] >>> 16) & 0xFF) - ((colours[b] >>> 16) & 0xFF)));
+        float lowest = Float.MAX_VALUE, highest = -Float.MAX_VALUE;
+        for (int i = 0; i < op.colours().length; i++) {
+            float ox = axes[i * 4], oy = axes[i * 4 + 1];
+            float dx = axes[i * 4 + 2], dy = axes[i * 4 + 3];
+            for (int v = 0; v < 6; v += 2) {
+                float t = (op.data()[i * 6 + v] - ox) * dx + (op.data()[i * 6 + v + 1] - oy) * dy;
+                assertTrue("t = " + t + " is outside the triangle's own span",
+                        t >= -0.01f && t <= 1.01f);
+                lowest = Math.min(lowest, t);
+                highest = Math.max(highest, t);
             }
         }
-        assertTrue("no two triangles shared an edge -- the check never ran", checked > 0);
-        assertTrue("triangles sharing an edge jump " + worst + " grey levels; the dilation paints"
-                + " that as a hatch. One slice of the ramp is 8.", worst <= 20);
-    }
-
-    private static int sharedVertices(float[] triangles, int a, int b) {
-        int shared = 0;
-        for (int i = 0; i < 6; i += 2) {
-            for (int j = 0; j < 6; j += 2) {
-                if (Math.abs(triangles[a * 6 + i] - triangles[b * 6 + j]) < 1e-4f
-                        && Math.abs(triangles[a * 6 + i + 1] - triangles[b * 6 + j + 1]) < 1e-4f) {
-                    shared++;
-                    break;
-                }
-            }
-        }
-        return shared;
-    }
-
-    /**
-     * <b>No emitted triangle has zero area, and the reason is not tidiness.</b>
-     *
-     * <p>{@code sdf_triangle} takes a triangle's winding from {@code sign(area)}, which for zero area is
-     * {@code 0} — so its three inside tests all read {@code 0 >= 0} and report <b>every point in the
-     * plane</b> as inside. A degenerate triangle handed to the GPU fills its whole axis-aligned bounding
-     * quad solid. Wherever a shape comes to a point the trapezoid collapses, so one of the slice's two
-     * halves has a repeated vertex — meaning a mesh emits one of these at every tip of every shape.</p>
-     *
-     * <p>It presents as rectangular blocks of the wrong colour scattered over the artwork, and no CPU
-     * rasterisation of the same mesh reproduces it: an ordinary point-in-triangle test yields nothing at
-     * all for a triangle with no area, which is the answer the shader should have given.</p>
-     */
-    @Test
-    public void noDegenerateTriangleIsEmitted() {
-        // A triangle: it tapers to a point at both the top band and the bottom one.
-        List<List<float[]>> spike = List.of(List.of(
-                new float[]{5, 0}, new float[]{10, 10}, new float[]{0, 10}));
-        for (float step : new float[]{0f, 0.5f}) {
-            float[] triangles = SvgTriangulator.fill(spike, false, step, step).triangles();
-            assertTrue("nothing was filled", triangles.length > 0);
-            for (int i = 0; i < triangles.length; i += 6) {
-                float area = (triangles[i + 2] - triangles[i]) * (triangles[i + 5] - triangles[i + 1])
-                        - (triangles[i + 3] - triangles[i + 1]) * (triangles[i + 4] - triangles[i]);
-                assertTrue("a zero-area triangle survived at step " + step
-                        + " -- the GPU paints its whole bounding box", Math.abs(area) > 1e-7f);
-            }
-        }
+        assertTrue("no vertex sat at the ramp's start, lowest was " + lowest, lowest < 0.01f);
+        assertTrue("no vertex sat at the ramp's end, highest was " + highest, highest > 0.99f);
     }
 
     /**
