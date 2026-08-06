@@ -1,5 +1,6 @@
 package com.crystalgui.core.command;
 
+import com.crystalgui.core.data.DataContext;
 import com.crystalgui.ui.UIElement;
 
 import javax.annotation.Nullable;
@@ -20,5 +21,21 @@ public record CommandContext(@Nullable UIElement source, @Nullable Object args) 
 
     public static CommandContext of(@Nullable UIElement source) {
         return new CommandContext(source, null);
+    }
+
+    /**
+     * What is being acted on — the answers reachable from {@link #source}.
+     *
+     * <p>This is how a command finds its subject without naming the widget that supplies it. Prefer it
+     * to walking {@code source().getParent()} by hand: three such walks existed before
+     * {@link DataContext} did, one per type, and each was a place where a new widget silently failed to
+     * participate.</p>
+     *
+     * <p><b>Built fresh each call, deliberately.</b> A context caches within one pass and is only valid
+     * for that pass — see {@code DataContext}. A command that asks several keys should hold the result
+     * of one call rather than calling this repeatedly, and must not keep it past the invocation.</p>
+     */
+    public DataContext data() {
+        return DataContext.from(source);
     }
 }

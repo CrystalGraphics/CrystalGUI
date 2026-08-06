@@ -2,6 +2,7 @@ package com.crystalgui.graph.shader;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.CompositeEdit;
@@ -1180,12 +1181,19 @@ public class BlackboardPanel extends UIElement {
      * themselves — the commands are registered once by id and shared, and a captured {@code this} would
      * make the second board drive the first.</p>
      */
+    /** This board, for a command that acts on one. */
+    public static final DataKey<BlackboardPanel> BLACKBOARD =
+            DataKey.create("blackboard", BlackboardPanel.class);
+
+    @Override
+    public Object getData(DataKey<?> key) {
+        if (key == BLACKBOARD) return this;
+        return super.getData(key);
+    }
+
     @Nullable
     private static BlackboardPanel boardFor(CommandContext context) {
-        for (UIElement element = context.source(); element != null; element = element.getParent()) {
-            if (element instanceof BlackboardPanel board) return board;
-        }
-        return null;
+        return context.data().get(BLACKBOARD);
     }
 
     /**

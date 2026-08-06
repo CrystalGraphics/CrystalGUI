@@ -23,6 +23,8 @@ import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -69,6 +71,26 @@ import java.util.Set;
  * precisely so this class inherits it for real.</p>
  */
 public class GraphView extends CanvasView implements UndoScope {
+
+    /** This graph, for a command that acts on one — replaces {@code GraphCommands.graphFor}'s walk. */
+    public static final DataKey<GraphView> GRAPH_VIEW = DataKey.create("graphView", GraphView.class);
+
+    /**
+     * What this graph knows: itself, its selected nodes, and its undo history.
+     *
+     * <p>{@code super.getData(key)} last, so the generic {@code ELEMENT} answer stays reachable — the
+     * rule every override of this method follows.</p>
+     */
+    @Override
+    public Object getData(DataKey<?> key) {
+        if (key == GRAPH_VIEW) return this;
+        if (key == UiDataKeys.SELECTION) {
+            return new java.util.ArrayList<Object>(getSelection().nodes());
+        }
+        Object undo = undoScopeData(key);
+        return undo != null ? undo : super.getData(key);
+    }
+
 
     /**
      * Logical px, before zoom — Unity's wire is a hairline, and this used to be twice it.

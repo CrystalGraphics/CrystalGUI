@@ -49,6 +49,8 @@ import lombok.experimental.Accessors;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.function.Consumer;
@@ -60,7 +62,7 @@ import static com.crystalgui.ui.UIWindow.EMPTY_LAYOUT;
  * like an HTML {@code <div>}).
  */
 @Accessors(chain = true)
-public class UIElement implements SettingsScope {
+public class UIElement implements SettingsScope, DataProvider {
     private static final Comparator<UIElement> Z_INDEX_DESCENDING = (a, b) -> Integer.compare(b.style.generalGroup.zIndex(), a.style.generalGroup.zIndex());
 
     // ── Core state ───────────────────────────────────────────────────────────
@@ -187,6 +189,24 @@ public class UIElement implements SettingsScope {
             notifyIdentityChanged();
         }
         return this;
+    }
+
+    /**
+     * What this element knows — {@link UiDataKeys#ELEMENT}, and nothing else by default.
+     *
+     * <p>Every element is a {@link DataProvider} so that a walk always terminates with an answer for
+     * {@code ELEMENT} rather than depending on somebody having implemented the interface. Override to
+     * add what your widget knows, and <b>call {@code super.getData(key)} last</b> so the generic answer
+     * stays available.</p>
+     *
+     * <p>Answer for yourself only. An element that answers on behalf of its children defeats the walk,
+     * which asks inner elements first precisely so the innermost answer wins.</p>
+     */
+    @Override
+    @Nullable
+    public Object getData(DataKey<?> key) {
+        if (key == UiDataKeys.ELEMENT) return this;
+        return null;
     }
 
     public boolean hasClass(String cls) {
