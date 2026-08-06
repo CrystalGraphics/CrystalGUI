@@ -1,9 +1,13 @@
 package com.crystalgui.lifecycle;
 
+import com.crystalgui.core.dispose.Disposer;
+
 import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.gl.lifecycle.CgLifecycleListener;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
+
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * CrystalGUI's single hook into the GL context lifecycle.
@@ -84,20 +88,43 @@ public final class CgUiLifecycle implements CgLifecycleListener {
      */
     @Override
     public void onInit(int width, int height) {
-        // Intentionally empty — see javadoc.
+        // The GL gate, installed the moment a context exists.
+        //
+        // Until now Disposer has been running every disposal immediately, which is correct while there
+        // is no context to be off the thread of -- and is what keeps the whole class usable from
+        // headlessTest. From here a Disposable.Gl disposed from anywhere else is queued and drained by
+        // onFrame below, because freeing a GL object off the GL thread is silent corruption rather than
+        // an exception.
+        //
+        // The thread that receives onInit IS the GL thread: CgGraphicsLifecycle.initContext() is called
+        // from it by definition, and a listener registered later is delivered onInit on the caller's
+        // thread for the same reason.
+        Thread glThread = Thread.currentThread();
+        Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
     }
 
     /**
-     * No per-frame work today.
+     * Disposals that arrived off the GL thread, waiting for {@link #onFrame}.
      *
-     * <p>CrystalGUI's per-frame work is driven by {@code UIWindow.paintFrame()}, which is per-window
-     * and called by whoever owns the window — not by the engine's frame tick. {@code UIFrameTicker}
-     * registrations are likewise per-window. Nothing is global-per-frame yet, and inventing work here
-     * to justify the hook would be worse than leaving it honestly empty.</p>
+     * <p>A queue rather than a direct hand-off because there is no way to <em>call</em> the GL thread —
+     * it is a loop, not an executor. {@code onFrame} is the one place we are certainly on it.</p>
+     */
+    private final ConcurrentLinkedQueue<Runnable> pending = new ConcurrentLinkedQueue<>();
+
+    /**
+     * Drains GL disposals that were requested from elsewhere.
+     *
+     * <p>The rest of CrystalGUI's per-frame work is driven by {@code UIWindow.paintFrame()}, which is
+     * per-window and called by whoever owns the window rather than by the engine's tick. This hook has
+     * one global job and this is it: {@code Disposer} defers anything owning GPU memory to the GL
+     * thread, and this is the one moment we are certainly on it.</p>
+     *
+     * <p>Costs one empty-queue check per frame when nothing is pending, which is the steady state.</p>
      */
     @Override
     public void onFrame(long frame) {
-        // Intentionally empty — see javadoc.
+        Runnable due;
+        while ((due = pending.poll()) != null) due.run();
     }
 
     /**
