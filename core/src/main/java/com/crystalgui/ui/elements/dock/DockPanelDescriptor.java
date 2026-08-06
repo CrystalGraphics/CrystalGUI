@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.dock;
 
+import javax.annotation.Nullable;
 import java.util.Objects;
 
 /**
@@ -29,16 +30,25 @@ public final class DockPanelDescriptor {
     private final String title;
     private final boolean singleton;
     private final boolean closable;
+    private final String icon;
+    private final DockDropZone anchor;
 
     public DockPanelDescriptor(String typeId, String title) {
         this(typeId, title, false, true);
     }
 
     public DockPanelDescriptor(String typeId, String title, boolean singleton, boolean closable) {
+        this(typeId, title, singleton, closable, null, DockDropZone.SPLIT_LEFT);
+    }
+
+    private DockPanelDescriptor(String typeId, String title, boolean singleton, boolean closable,
+                                @Nullable String icon, DockDropZone anchor) {
         this.typeId = Objects.requireNonNull(typeId, "typeId");
         this.title = Objects.requireNonNull(title, "title");
         this.singleton = singleton;
         this.closable = closable;
+        this.icon = icon;
+        this.anchor = Objects.requireNonNull(anchor, "anchor");
     }
 
     public static DockPanelDescriptor singleton(String typeId, String title) {
@@ -47,6 +57,57 @@ public final class DockPanelDescriptor {
 
     public static DockPanelDescriptor document(String typeId, String title) {
         return new DockPanelDescriptor(typeId, title, false, true);
+    }
+
+    /**
+     * The panel type's own icon — what the activity bar draws for it.
+     *
+     * <h3>Not a tab icon</h3>
+     *
+     * <p>Both editors put a tool window's icon on its <b>stripe button</b> and leave its header plain
+     * text: IntelliJ's Project panel is a folder glyph on the rail and the word "Project" on the window,
+     * and VS Code's Explorer is the same. So this is a different concept from the file icon a document tab
+     * carries, which is a property of the <em>file</em> and comes from
+     * {@link DockPanelRegistry#setIconProvider}. Feeding this to a tab as well would put a folder next to
+     * the word "Project" and read as clutter in exactly the way both editors avoided.</p>
+     *
+     * <p>An icon <em>name</em>, resolved the way {@code icon()} resolves one in CSS.</p>
+     */
+    public DockPanelDescriptor icon(@Nullable String iconName) {
+        return new DockPanelDescriptor(typeId, title, singleton, closable, iconName, anchor);
+    }
+
+    @Nullable
+    public String icon() {
+        return icon;
+    }
+
+    /**
+     * Which outer edge this panel opens against, and therefore which stripe carries its button.
+     *
+     * <h3>One fact, not two</h3>
+     *
+     * <p>IntelliJ's {@code ToolWindowAnchor} is exactly this, and it is deliberately a single value: the
+     * stripe you appear on <em>is</em> where you dock. Splitting it into "which rail" and "where it opens"
+     * gives two things that can disagree, and the disagreement is invisible until someone closes a panel
+     * and reopens it somewhere they were not looking.</p>
+     *
+     * <p>Stated as a {@link DockDropZone} rather than a fresh {@code Anchor} enum because
+     * {@link DockLayout#dropOnOuterEdge} already consumes exactly this vocabulary — a parallel enum would
+     * be a mapping to keep in step for no expressive gain.</p>
+     *
+     * <p><b>This is a real concession</b> and worth naming. The class note above says this design rejects
+     * the editor-area/tool-window asymmetry that VS Code and IntelliJ build into their layouts, and an
+     * anchor puts some of it back. It earns its place by answering a question the uniform tree cannot: a
+     * <em>closed</em> panel is in no leaf, so "where does it reopen?" has no answer derivable from the
+     * layout — and that is precisely the moment the activity bar exists for.</p>
+     */
+    public DockPanelDescriptor anchor(DockDropZone zone) {
+        return new DockPanelDescriptor(typeId, title, singleton, closable, icon, zone);
+    }
+
+    public DockDropZone anchor() {
+        return anchor;
     }
 
     public String typeId() {

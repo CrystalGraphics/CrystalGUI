@@ -30,7 +30,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 
@@ -63,32 +65,6 @@ public class CrystalEditorPanelsTest extends UiTestBase {
         return editor.workbench().dock().layout().leafContaining(new DockPanelRef(typeId));
     }
 
-    /**
-     * <b>The emitted source opens beside the canvas, not on top of it.</b>
-     *
-     * <p>The two shared an internal {@code SplitView} and are now two dock panels, and the risk of that
-     * move is landing the source in the graph's own strip — where it is a tab, so exactly one of the two is
-     * ever visible. Watching the GLSL change as you wire is the entire reason it is on screen, so a panel
-     * you must switch away from the graph to read is a panel that is never read.</p>
-     *
-     * <p>Two different leaves is the observable form of "both at once", and it is what the tab-vs-pane
-     * mistake would break while every other assertion here still passed.</p>
-     */
-    @Test
-    public void theEmittedSourceGetsAPaneOfItsOwn() {
-        CrystalEditor editor = new CrystalEditor(client());
-
-        DockLeaf source = leafOf(editor, CrystalEditor.SHADER_SOURCE_TYPE);
-        assertNotNull("the emitted source did not open", source);
-        // The WORK AREA is a leaf of its own and starts empty -- graphs are files now, so there is
-        // nothing in it until one is opened. The source must not have landed in it: watching the GLSL
-        // change as you wire is the whole reason it is on screen, and a tab in the graph's own strip
-        // would mean exactly one of the two is ever visible.
-        assertNotSame("the source took the work area instead of a pane beside it",
-                editor.workbench().dock().layout().leaves().get(0), source);
-        editor.workbench().dock().layout().checkInvariants();
-    }
-
     /** The tab says what the file is. A generated shader still reads best as a file name. */
     @Test
     public void theSourceTabIsNamedForTheFileItIs() {
@@ -97,72 +73,108 @@ public class CrystalEditorPanelsTest extends UiTestBase {
                 .titleOf(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE)));
     }
 
+    // ── The generated shader is a DOCUMENT, one per graph ────────────────────
+
     /**
-     * The panel IS the graph's source editor, not a copy of its text.
+     * <b>Five graphs, five generated-shader tabs — not one shared panel.</b>
      *
-     * <p>{@code DockArea} asks the registry for content on every rebuild, so a factory returning anything
-     * freshly built would hand back an empty editor after each split, drag or close — and the recompiles
-     * would go on landing in an editor nobody is looking at.</p>
+     * <p>This is the whole reason it stopped being a singleton. A shared panel showing whichever graph is
+     * in front cannot be left open beside a second graph, cannot be compared with one, and loses its
+     * scroll position on every tab change. Unity's Shader Graph opens "View Generated Shader" per graph
+     * for exactly this reason.</p>
+     *
+     * <p>Distinctness comes from the ref carrying the graph's own path, and {@code DockPanelRef} equality
+     * being over type <em>and</em> state — so the same call for the same graph finds its tab instead of
+     * opening a second.</p>
      */
     @Test
-    public void theSourcePanelIsAStableHostThatFollowsTheActiveGraph() {
+    public void everyGraphGetsItsOwnGeneratedShaderTab() {
         CrystalEditor editor = new CrystalEditor(client());
-        UIElement built = editor.workbench().panels()
-                .create(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE));
-        assertSame("a second build must not produce a second panel",
-                built, editor.workbench().panels()
-                        .create(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE)));
+        CgPath one = CgPath.parse("mymod.proj:one.shadergraph");
+        CgPath two = CgPath.parse("mymod.proj:two.shadergraph");
+        ShaderGraphEditor first = (ShaderGraphEditor) editor.workbench().documentFor(one);
+        ShaderGraphEditor second = (ShaderGraphEditor) editor.workbench().documentFor(two);
+
+        // Each graph opened as its own tab first, so its generated source has a strip to join.
+        editor.workbench().openPanel(editor.workbench().refFor(one));
+        editor.workbench().openPanel(editor.workbench().refFor(two));
+
+        assertTrue("the first graph's generated source did not open", editor.showCompiled(first));
+        assertTrue("the second graph's generated source did not open", editor.showCompiled(second));
+
+        DockPanelRef refOne = compiledRef("mymod.proj:one.shadergraph");
+        DockPanelRef refTwo = compiledRef("mymod.proj:two.shadergraph");
+        assertNotNull("no tab for the first graph's source", leafOfRef(editor, refOne));
+        assertNotNull("no tab for the second graph's source", leafOfRef(editor, refTwo));
+        // TWO TABS, not two panes. They now open in their graph's own strip, so when both graphs share a
+        // strip so do their sources -- and asserting different LEAVES would be asserting the old
+        // beside-the-graph placement rather than distinctness. What matters is that there are two of them.
+        assertNotEquals("both graphs resolved to one generated-source panel", refOne, refTwo);
+        assertEquals("a generated source did not join its own graph's strip",
+                leafOfRef(editor, editor.workbench().refFor(one)), leafOfRef(editor, refOne));
+        assertEquals(leafOfRef(editor, editor.workbench().refFor(two)), leafOfRef(editor, refTwo));
+    }
+
+    /** Asking twice finds the tab rather than opening a second onto the same graph. */
+    @Test
+    public void askingTwiceDoesNotOpenASecondTab() {
+        CrystalEditor editor = new CrystalEditor(client());
+        ShaderGraphEditor graph = (ShaderGraphEditor) editor.workbench()
+                .documentFor(CgPath.parse("mymod.proj:one.shadergraph"));
+        editor.showCompiled(graph);
+        int leaves = editor.workbench().dock().layout().leaves().size();
+
+        editor.showCompiled(graph);
+        assertEquals("a second request split the work area again",
+                leaves, editor.workbench().dock().layout().leaves().size());
+    }
+
+    /** The tab IS that graph's own source editor — not a copy of its text, and not another graph's. */
+    @Test
+    public void theTabShowsItsOwnGraphsSourceEditor() {
+        CrystalEditor editor = new CrystalEditor(client());
+        ShaderGraphEditor first = (ShaderGraphEditor) editor.workbench()
+                .documentFor(CgPath.parse("mymod.proj:one.shadergraph"));
+        ShaderGraphEditor second = (ShaderGraphEditor) editor.workbench()
+                .documentFor(CgPath.parse("mymod.proj:two.shadergraph"));
+
+        assertSame("the tab is not the graph's own source editor", first.source(),
+                editor.workbench().panels().create(compiledRef("mymod.proj:one.shadergraph")));
+        assertSame(second.source(),
+                editor.workbench().panels().create(compiledRef("mymod.proj:two.shadergraph")));
+    }
+
+    /** Named for its graph, so two of them are told apart on the strip. */
+    @Test
+    public void aGeneratedTabIsNamedForItsGraph() {
+        assertEquals("fire_compiled.shader",
+                CrystalEditor.compiledTitleFor("mymod.proj:shaders/fire.shadergraph"));
+        assertEquals("noext_compiled.shader",
+                CrystalEditor.compiledTitleFor("mymod.proj:noext"));
     }
 
     /**
-     * <b>The inspector shares the source's strip rather than taking a pane.</b>
+     * <b>It does not open with the editor.</b>
      *
-     * <p>Same leaf, because reading the generated GLSL and adjusting a node's properties are alternatives
-     * — a third column would spend the work area on whichever you are not looking at. The graph, by
-     * contrast, must stay visible alongside both, so it keeps its own pane.</p>
+     * <p>It is a document derived from a graph, and at startup no graph is open — so a tab for one would
+     * be a tab for nothing. The Inspector, which is a tool window and global, does open.</p>
      */
     @Test
-    public void theInspectorIsATabBesideTheEmittedSourceNotAThirdPane() {
+    public void theGeneratedSourceIsNotInTheDefaultLayout() {
         CrystalEditor editor = new CrystalEditor(client());
-
-        DockLeaf source = leafOf(editor, CrystalEditor.SHADER_SOURCE_TYPE);
-        DockLeaf inspector = leafOf(editor, CrystalEditor.INSPECTOR_TYPE);
-        assertNotNull("the inspector did not open at all", inspector);
-        assertSame("the inspector took a pane of its own instead of joining the source's strip",
-                source, inspector);
-        editor.workbench().dock().layout().checkInvariants();
+        assertNull("a generated-source tab opened with no graph to generate from",
+                leafOf(editor, CrystalEditor.SHADER_SOURCE_TYPE));
+        assertNotNull("the inspector did not open", leafOf(editor, CrystalEditor.INSPECTOR_TYPE));
     }
 
-    /**
-     * It opens <em>behind</em> the source rather than on top of it.
-     *
-     * <p>A panel that steals its sibling's tab on open is a panel that opens by hiding the thing you were
-     * looking at — and the emitted source is what the pane was split off for.</p>
-     */
-    @Test
-    public void theInspectorDoesNotStealTheActiveTabOnOpen() {
-        CrystalEditor editor = new CrystalEditor(client());
-        DockLeaf leaf = leafOf(editor, CrystalEditor.SHADER_SOURCE_TYPE);
-        assertEquals(CrystalEditor.SHADER_SOURCE_TYPE, leaf.activePanel().typeId());
+    private static DockPanelRef compiledRef(String path) {
+        return new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE)
+                .withState(Workbench.PATH_STATE, path)
+                .withState(DockPanelRef.TITLE, CrystalEditor.compiledTitleFor(path));
     }
 
-    /**
-     * Opening an already-open panel reveals it where it is rather than splitting again.
-     *
-     * <p>Without this a menu item wired to "show the compiled source" adds a pane every time it is chosen,
-     * and each one is a legitimate leaf so nothing complains — the work area just gets narrower.</p>
-     */
-    @Test
-    public void openingItAgainRevealsItRatherThanSplittingAgain() {
-        CrystalEditor editor = new CrystalEditor(client());
-        int before = editor.workbench().dock().layout().leaves().size();
-
-        editor.workbench().openPanelBeside(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE),
-                DockDropZone.SPLIT_RIGHT, 0.28f);
-
-        assertEquals("a second open split the work area again",
-                before, editor.workbench().dock().layout().leaves().size());
-        editor.workbench().dock().layout().checkInvariants();
+    private static DockLeaf leafOfRef(CrystalEditor editor, DockPanelRef ref) {
+        return editor.workbench().dock().layout().leafContaining(ref);
     }
 
     // ── .shadergraph opens as a graph (E24b + the FileDocument seam) ─────────

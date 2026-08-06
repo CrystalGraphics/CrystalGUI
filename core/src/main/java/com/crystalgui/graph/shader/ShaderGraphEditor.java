@@ -12,6 +12,9 @@ import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgraphics.shadergraph.CgMasterNode;
 import com.crystalgraphics.shadergraph.CgShaderEmitter;
 import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
+import com.crystalgui.core.command.Command;
+import com.crystalgui.core.command.CommandContext;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
@@ -509,6 +512,69 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
      * not exist on the first frame; {@code registerTicker} is idempotent and this drops itself once both
      * are up, so the retry costs one comparison per frame until then.</p>
      */
+    /** Opens the GLSL this graph emits, as its own tab. */
+    public static final String VIEW_GENERATED_COMMAND = "shadergraph.viewGenerated";
+
+    /**
+     * Asked for when someone invokes {@link #VIEW_GENERATED_COMMAND} on this graph.
+     *
+     * <h3>A request, not a call — the dependency points outward</h3>
+     *
+     * <p>The graph knows it can emit GLSL and knows nothing about docks, tabs or where a panel should
+     * land; that is the shell's business. So it announces the intent and {@code CrystalEditor} decides
+     * what a tab is and where it goes. The reverse — the graph reaching for a workbench — would put the
+     * whole editor shell on the far side of every test that builds a graph, and would make a graph
+     * unusable anywhere but inside one.</p>
+     *
+     * <p>Same shape as {@link #onStatusChanged}, which already reports upward rather than writing to a
+     * status bar it would otherwise have to know about.</p>
+     */
+    public final Signal.Action onViewGeneratedRequested = new Signal.Action();
+
+    private boolean commandsInstalled;
+
+    /**
+     * Registers this widget's own commands on the window, once.
+     *
+     * <p><b>The widget owns this, not its host</b> — the same rule {@link #ensureGraphTheme} and
+     * {@code BlackboardPanel.installCommands} already follow, and for the same reason: a graph dropped
+     * into any scene should answer to its own commands without the scene remembering to ask.</p>
+     *
+     * <p>The command resolves the nearest enclosing graph from the focused element, exactly as
+     * {@link GraphCommands} does, so with several graphs open the one you are looking at is the one that
+     * answers. Registration is global and idempotent; the <em>binding</em> is what makes it reachable.</p>
+     *
+     * @return whether the commands are installed — false only while there is no window yet
+     */
+    public boolean installCommands() {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return false;
+        if (commandsInstalled) return true;
+        commandsInstalled = true;
+
+        CommandRegistry registry = window.getCommands();
+        if (!registry.contains(VIEW_GENERATED_COMMAND)) {
+            // Unity's "View Generated Shader". A command rather than only a button, so it reaches the
+            // palette and can be bound -- and so a toolbar button invokes THIS rather than duplicating it,
+            // which is how "the button works but the shortcut does not" is avoided.
+            registry.register(Command.of(VIEW_GENERATED_COMMAND, "View Generated Shader")
+                    .run(context -> {
+                        ShaderGraphEditor graph = editorFor(context);
+                        if (graph != null) graph.onViewGeneratedRequested.emit();
+                    })
+                    .enabledWhen(context -> editorFor(context) != null));
+        }
+        return true;
+    }
+
+    @Nullable
+    private static ShaderGraphEditor editorFor(CommandContext context) {
+        for (UIElement element = context.source(); element != null; element = element.getParent()) {
+            if (element instanceof ShaderGraphEditor graph) return graph;
+        }
+        return null;
+    }
+
     private boolean attachPreviews(float deltaSeconds) {
         ensureGraphTheme();
         // Commands are NOT installed here: GraphView installs its own, so a bare graph anywhere gets
@@ -518,6 +584,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
             previewsAttached = true;
         }
         if (!mainPreviewAttached) mainPreviewAttached = mainPreview.attach();
+        installCommands();
         blackboard.installCommands();
         blackboard.reclamp();
         return !(previewsAttached && mainPreviewAttached);

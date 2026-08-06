@@ -1,6 +1,7 @@
 package com.crystalgui.editor;
 
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.graph.shader.ShaderGraphEditor;
 import com.crystalgui.graph.shader.ShaderGraphInspector;
@@ -19,6 +20,7 @@ import com.crystalgui.ui.elements.dock.DockCommands;
 import com.crystalgui.ui.elements.dock.DockDropZone;
 import com.crystalgui.ui.elements.dock.DockGroup;
 import com.crystalgui.ui.elements.dock.DockLayout;
+import com.crystalgui.ui.elements.dock.DockLeaf;
 import com.crystalgui.ui.elements.dock.DockLayoutCodec;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
@@ -70,15 +72,28 @@ public class CrystalEditor extends UIElement {
     public static final String SHADER_GRAPH_FILE_TYPE = "shadergraph.file";
 
     /**
-     * The GLSL the graph emits, as a panel of its own.
+     * The GLSL a graph emits, as a document of its own — one per graph.
      *
-     * <p><b>Singleton, not a document.</b> There is one emit and it is a <em>view of</em> the graph rather
-     * than a thing you can have two of; closing it means "hide it", and opening it again must find the same
-     * editor — with its scroll position and its caret — rather than a second copy showing the same text.</p>
+     * <h3>A document, not a singleton, and it was the other thing</h3>
+     *
+     * <p>The old reasoning was that "there is one emit and it is a <em>view of</em> the graph rather than a
+     * thing you can have two of". That is true of one graph and false of the editor: <b>five open graphs
+     * have five different generated shaders</b>, and a single panel showing whichever is in front cannot be
+     * left open beside a second graph, cannot be compared with one, and loses its scroll position every
+     * time the front tab changes. Its own title gave the answer away — {@code compiled_graph.shader} reads
+     * as a file because it is one.</p>
+     *
+     * <p>So it is a derived document, keyed by the graph it came from: Unity's Shader Graph opens "View
+     * Generated Shader" per graph, and it is the same shape as IntelliJ's decompiled-class view and VS
+     * Code's diff editor. {@link #showCompiled(ShaderGraphEditor)} opens one.</p>
+     *
+     * <p>Being a document also keeps it off the activity bar without anyone saying so, since that lists
+     * singletons only — which is right: it is not a tool window, and there is no single one of it to
+     * toggle.</p>
      */
     public static final String SHADER_SOURCE_TYPE = "shadersource";
 
-    /** What the tab says. A generated file still reads best as a file name. */
+    /** The descriptor's fallback title. A real tab is named for its graph — see {@link #compiledTitleFor}. */
     public static final String SHADER_SOURCE_TITLE = "compiled_graph.shader";
 
     /**
@@ -111,8 +126,10 @@ public class CrystalEditor extends UIElement {
      * active editor's own {@code source()} would hand back a different element each time the active tab
      * changed, which the dock has no way to notice. A stable host whose child is swapped does.</p>
      */
-    private final UIElement sourceHost = fillingHost();
     private final UIElement inspectorHost = fillingHost();
+
+    /** Graph document path -> its editor, so a generated-source tab can find what it was derived from. */
+    private final Map<String, ShaderGraphEditor> graphPaths = new HashMap<>();
 
     /**
      * A host that fills its panel and lets its one child fill it in turn.
@@ -145,10 +162,6 @@ public class CrystalEditor extends UIElement {
      */
     private final List<ShaderGraphEditor> graphs = new ArrayList<>();
 
-    /** What {@link #followActiveGraph} last put in the hosts, so it can tell when nothing has changed. */
-    @Nullable
-    private ShaderGraphEditor shownGraph;
-
     /** The last {@link #saveLayout} result, so {@link #restoreLayout()} has something to restore. */
     @Nullable
     private Object savedLayout;
@@ -174,6 +187,10 @@ public class CrystalEditor extends UIElement {
             editor.onStatusChanged.connect(onStatus::emit);
             editor.onLineOwnerChanged.connect(onStatus::emit);
             graphs.add(editor);
+            graphPaths.put(path.toString(), editor);
+            // THE GRAPH ASKS, THE SHELL DECIDES. The graph knows it can emit GLSL and nothing about docks;
+            // wiring it here is what keeps a graph usable outside an editor -- and testable without one.
+            editor.onViewGeneratedRequested.connect(() -> showCompiled(editor));
             // FOLLOW THE SELECTION, not only the active tab. Clicking a node is the gesture that means
             // "inspect this", and it is a truer signal than which panel the dock considers focused --
             // pressing a node in a graph that is not the active tab must still fill the inspector, and
@@ -184,17 +201,40 @@ public class CrystalEditor extends UIElement {
         workbench.bindEditorExtensions(SHADER_GRAPH_FILE_TYPE, "shadergraph");
         // HOSTS, not the editors' own parts. There is no longer one graph to bind these to, so each is a
         // container that follows whichever shader graph is in front -- see followActiveGraph().
-        workbench.registerPanel(
-                DockPanelDescriptor.singleton(SHADER_SOURCE_TYPE, SHADER_SOURCE_TITLE),
-                ref -> sourceHost);
+        // Icons and anchors, so the activity bar can draw them and reopen them where they belong. A
+        // singleton with no icon still gets a button -- it just draws as a bare accent block, which is
+        // what the rail looked like before these two were given one.
+        // A DOCUMENT, one per graph -- not a singleton view that follows the front tab.
+        //
+        // It was the latter, and the tell was in its own title: "compiled_graph.shader" reads as a file
+        // because it IS one, conceptually. Five open graphs have five different generated shaders, and one
+        // shared panel showing whichever is in front cannot be diffed against another, cannot be left open
+        // beside a second graph, and loses its scroll position every time the front tab changes.
+        //
+        // Unity's Shader Graph does exactly this -- "View Generated Shader" opens a separate window per
+        // graph -- and it is the same shape as IntelliJ's decompiled-class view and VS Code's diff editor:
+        // a DERIVED document, keyed by what it was derived from.
+        //
+        // Being a document also takes it off the activity bar for free, since that lists singletons only.
+        workbench.registerPanel(DockPanelDescriptor.document(SHADER_SOURCE_TYPE, SHADER_SOURCE_TITLE),
+                ref -> {
+                    ShaderGraphEditor graph = graphForPath(ref.state(Workbench.PATH_STATE, ""));
+                    // An empty box rather than null when the graph has since closed: a tab with nothing
+                    // behind it is visible and reportable, a silently absent one looks like a failed
+                    // restore. Same reasoning DockGroup.contentFor already uses.
+                    return graph == null ? new UIElement() : graph.source();
+                });
         // BESIDE the canvas, not in its strip. A tab in the same group would hide the graph, and the whole
         // point of the emitted source is watching it change as you wire -- a panel you have to switch away
         // from the graph to read is a panel that is never read.
-        workbench.registerPanel(DockPanelDescriptor.singleton(INSPECTOR_TYPE, "Inspector"),
+        workbench.registerPanel(DockPanelDescriptor.singleton(INSPECTOR_TYPE, "Inspector")
+                        .icon("crystalgui:package").anchor(DockDropZone.SPLIT_RIGHT),
                 ref -> inspectorHost);
-        DockPanelRef source = new DockPanelRef(SHADER_SOURCE_TYPE);
-        workbench.openPanelBeside(source, DockDropZone.SPLIT_RIGHT, SOURCE_SHARE);
-        workbench.openPanelWith(source, new DockPanelRef(INSPECTOR_TYPE));
+        // The Inspector opens with the workbench; the generated source does not. It is now a document
+        // opened on demand by showCompiled(), so putting one in the default layout would mean a tab for a
+        // graph nobody has opened yet.
+        workbench.openPanelBeside(new DockPanelRef(INSPECTOR_TYPE),
+                DockDropZone.SPLIT_RIGHT, SOURCE_SHARE);
 
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
@@ -279,18 +319,151 @@ public class CrystalEditor extends UIElement {
     private boolean ticking;
 
     private void followActiveGraph() {
-        show(activeGraph());
+        // LATCHED. activeGraph() means "the graph in front", and focusing chrome legitimately means there
+        // is none -- reopening the Inspector makes the INSPECTOR'S group active, so the very gesture that
+        // asks to see a graph is the one that reports none. IntelliJ has the same requirement and answers
+        // it the same way: FileEditorManagerListener.selectionChanged fires on EDITOR selection, so
+        // clicking a tool window never clears what a tool window is looking at.
+        ShaderGraphEditor active = activeGraph();
+        if (active != null) followed = active;
+        if (followed != null) show(followed);
     }
 
-    /** Points both panels at {@code graph}. Null and unchanged are both no-ops. @see #followActiveGraph */
-    private void show(@Nullable ShaderGraphEditor graph) {
-        if (graph == null || graph == shownGraph) return;
-        shownGraph = graph;
+    /**
+     * The graph the panels are pointed at, which outlives any moment when nothing is in front.
+     *
+     * <p>Separate from {@link #activeGraph()} rather than folded into it, because the two answer different
+     * questions and only one of them should be sticky: a command asking "which graph am I acting on"
+     * wants the honest null, and a panel asking "what am I displaying" wants the last real answer.</p>
+     */
+    @Nullable
+    private ShaderGraphEditor followed;
 
-        sourceHost.clearAllChildren();
-        sourceHost.addChild(graph.source());
-        inspectorHost.clearAllChildren();
-        inspectorHost.addChild(inspectorFor(graph));
+    /**
+     * Opens the generated shader for a graph, or focuses the tab that is already showing it.
+     *
+     * <h3>Keyed by the graph's path, which is what makes them distinct</h3>
+     *
+     * <p>The ref carries the graph's own path in {@code PATH_STATE}, so five open graphs produce five
+     * refs and therefore five tabs -- and re-invoking on a graph that already has one finds it rather
+     * than opening a second, because {@code DockPanelRef} equality is over type and state.</p>
+     *
+     * <p>Opened <b>in the graph's own strip</b>, as a sibling tab. It used to be a pane beside it, on the
+     * reasoning that the point of the generated source is watching it change as you wire — but that was an
+     * argument for the old <em>singleton</em>, which had nowhere else to be. Now that a graph has its own,
+     * they belong together: the pair travels as one when the strip is dragged, and anyone who does want
+     * them side by side drags the tab out, which is one gesture and their choice rather than ours.</p>
+     *
+     * @return whether anything was opened -- false when the graph has no path, which is not a document
+     */
+    public boolean showCompiled(@Nullable ShaderGraphEditor graph) {
+        if (graph == null) return false;
+        String path = pathOf(graph);
+        if (path == null) return false;
+
+        DockPanelRef ref = new DockPanelRef(SHADER_SOURCE_TYPE)
+                .withState(Workbench.PATH_STATE, path)
+                .withState(DockPanelRef.TITLE, compiledTitleFor(path));
+        DockPanelRef graphRef = workbench.refFor(CgPath.parse(path));
+        if (workbench.dock().layout().leafContaining(graphRef) != null) {
+            workbench.openPanelWith(graphRef, ref);
+            // openPanelWith deliberately restores the previous selection -- right for its original caller
+            // and wrong here, since this tab is open because someone just asked to see it.
+            DockLeaf strip = workbench.dock().layout().leafContaining(ref);
+            if (strip != null) strip.activate(ref);
+            workbench.dock().syncGroups();
+        } else {
+            workbench.openPanel(ref);
+        }
+        return true;
+    }
+
+    /** Opens the generated shader for whichever graph is in front. */
+    public boolean showCompiled() {
+        return showCompiled(activeGraph());
+    }
+
+    /** {@code proj:shaders/fire.shadergraph} to {@code fire_compiled.shader}. */
+    public static String compiledTitleFor(String rawPath) {
+        String name = CgPath.parse(rawPath).name();
+        int dot = name.lastIndexOf('.');
+        return (dot < 0 ? name : name.substring(0, dot)) + "_compiled.shader";
+    }
+
+    @Nullable
+    private ShaderGraphEditor graphForPath(String rawPath) {
+        return rawPath.isEmpty() ? null : graphPaths.get(rawPath);
+    }
+
+    @Nullable
+    private String pathOf(ShaderGraphEditor graph) {
+        for (Map.Entry<String, ShaderGraphEditor> entry : graphPaths.entrySet()) {
+            if (entry.getValue() == graph) return entry.getKey();
+        }
+        return null;
+    }
+
+    /** Points both panels at {@code graph} — <b>by asserting the result, not by remembering the act</b>.
+     *
+     * <h3>Why there is no "unchanged, skip it" guard any more</h3>
+     *
+     * <p>There was one, keyed on a {@code shownGraph} field, and it was the bug: it memoised a <em>side
+     * effect that something else could undo</em>. The hosts are ordinary elements in a dock that rebuilds
+     * itself on every open, close, split and restore, so anything that emptied one left the guard still
+     * claiming it was populated — and the panel came back blank with nothing able to notice. That it
+     * happened only sometimes is the signature of the bug rather than a mitigating detail: it depended on
+     * tick ordering.</p>
+     *
+     * <p>Comparing the host's actual child instead is <b>self-healing</b>: it does not need to know which
+     * paths can empty a host, only what the host should contain. That is the difference between a fix for
+     * the cause you found and a fix for the class of causes.</p>
+     *
+     * <p>Still cheap enough for the per-frame poll it is called from — a size check and one reference
+     * comparison per host, and it touches no element in the settled case.</p>
+     */
+    private void show(@Nullable ShaderGraphEditor graph) {
+        if (graph == null) return;
+        // THE ONE PLACE THE FOLLOWED GRAPH CHANGES. show() is called by the per-frame poll and directly by
+        // a graph's own selection handler, and only the poll used to update the latch -- so a selection in
+        // a graph that was not the front tab pointed the panels at it for exactly one frame before the
+        // poll pulled them back. Setting it here makes the two agree by construction rather than by both
+        // happening to want the same thing.
+        followed = graph;
+        assertOnlyChild(inspectorHost, inspectorFor(graph));
+    }
+
+    /**
+     * Makes {@code wanted} the host's child, doing nothing when it already is.
+     *
+     * <h3>Asks about PARENTAGE, not about the child list</h3>
+     *
+     * <p>This read {@code children.size() == 1 && children.get(0) == wanted}, and that threw
+     * {@code "Cannot add the same child twice"} — because {@code clearAllChildren()} <b>silently refuses
+     * internal children</b>, so a host whose subtree had been stamped by a {@code markAsInternal()}
+     * somewhere above it kept its child through the clear and then rejected the add. The list said one
+     * thing and the tree another.</p>
+     *
+     * <p>Parentage cannot disagree with itself. It is also the question actually being asked: "is the host
+     * already showing this?" — and the size check was answering a stricter one that happens to coincide
+     * most of the time, which is the worst kind of check.</p>
+     */
+    private static void assertOnlyChild(UIElement host, UIElement wanted) {
+        if (wanted.getParent() == host) return;
+        // NOT clearAllChildren(). It skips internal children by design, and a ShaderGraphInspector calls
+        // markAsInternal() on ITSELF in its constructor -- so the outgoing one could never leave, and the
+        // incoming one stacked underneath it. Two inspectors in one tab, which is what that looked like.
+        //
+        // Removing through the matching API is the fix rather than un-marking the inspector: internal is
+        // the inspector's own statement about its parts, and it is right -- nobody should be able to
+        // reach into it with removeChild. What was wrong was the host assuming one kind of child.
+        for (UIElement child : new ArrayList<>(host.getChildren())) {
+            if (child.isInternalUI()) {
+                host.removeInternalChild(child);
+            } else {
+                host.removeChild(child);
+            }
+        }
+        host.addChild(wanted);
     }
 
     /**

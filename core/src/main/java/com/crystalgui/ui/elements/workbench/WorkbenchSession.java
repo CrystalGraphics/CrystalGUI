@@ -5,6 +5,10 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.ConfigStorage;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.elements.dock.DockLeaf;
+import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
+import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.ui.elements.dock.DockPath;
 import com.crystalgui.ui.elements.dock.DockLayout;
 import com.crystalgui.ui.elements.dock.DockLayoutCodec;
 
@@ -74,11 +78,27 @@ import javax.annotation.Nullable;
  */
 public final class WorkbenchSession {
 
-    /** Bump when the shape changes meaning. An unknown version is discarded, never guessed at. */
-    public static final int VERSION = 1;
+    /**
+     * Bump when the shape changes meaning. An unknown version is discarded, never guessed at.
+     *
+     * <p><b>2</b> added {@link #KEY_TOOL_WINDOWS}.</p>
+     *
+     * <p><b>3</b> is not a shape change at all — it is a <em>meaning</em> change, and that is the harder
+     * case to spot. {@code CrystalEditor}'s {@code shadersource} panel went from a singleton view that
+     * followed the front graph to a document keyed by a graph's path, so a record written at 2 holds a
+     * pathless {@code shadersource} entry that decodes perfectly and means nothing: a tab titled
+     * {@code compiled_graph.shader} with no graph behind it. Nothing about the record is malformed, which
+     * is exactly why the version has to say so.</p>
+     *
+     * <p>An old record is discarded rather than migrated, which is right here and would be wrong for
+     * settings: the cost is one arrangement that the very next save rewrites, against panels landing
+     * somewhere nobody asked for.</p>
+     */
+    public static final int VERSION = 3;
 
     private static final String KEY_VERSION = "version";
     private static final String KEY_DOCK = "dock";
+    private static final String KEY_TOOL_WINDOWS = "toolWindows";
     private static final String KEY_ACTIVE = "active";
     private static final String KEY_EXPANDED = "expanded";
     private static final String KEY_FILES = "files";
@@ -139,6 +159,14 @@ public final class WorkbenchSession {
         out.putRaw(KEY_DOCK, DockLayoutCodec.encode(workbench.dock().layout(), JsonOps.INSTANCE,
                 viewportWidth, viewportHeight));
 
+        // BESIDE the dock, never inside it -- see ToolWindowLayout. The dock records what is on screen; a
+        // closed tool window has left it entirely, and this is the only place its placement survives. It is
+        // captured here rather than continuously because hidePanel already writes a placement the moment a
+        // panel closes; what is left is the panels that are still OPEN, whose current geometry is only
+        // knowable now.
+        captureOpenToolWindows();
+        workbench.toolWindows().encodeInto(out, KEY_TOOL_WINDOWS);
+
         CgPath active = workbench.activeFilePath();
         if (active != null) out.putString(KEY_ACTIVE, active.toString());
 
@@ -157,6 +185,44 @@ public final class WorkbenchSession {
         });
 
         return new GsonBuilder().setPrettyPrinting().create().toJson(out.encode()) + "\n";
+    }
+
+    /**
+     * Records where every <em>currently open</em> tool window is, so the record describes the screen.
+     *
+     * <h3>Why saving needs this and hiding does not</h3>
+     *
+     * <p>{@link Workbench#hidePanel} captures a placement at the moment a panel closes, which is the only
+     * moment its position is still readable. A panel that is <b>open</b> when the session is saved has
+     * never been through that path, so its stored placement is whatever it had when it was last hidden —
+     * potentially several drags ago, or nothing at all. Walking the open ones at save time is what makes a
+     * restored session match the screen rather than the history.</p>
+     *
+     * <p>Runs after {@code pullWeightsIntoLayout}, so the weights recorded are the ones the dividers are
+     * actually at rather than the ones the layout was built with.</p>
+     */
+    private void captureOpenToolWindows() {
+        for (DockLeaf leaf : workbench.dock().layout().leaves()) {
+            for (DockPanelRef panel : leaf.panels()) {
+                DockPanelDescriptor descriptor = workbench.panels().descriptor(panel.typeId());
+                if (descriptor == null || !descriptor.isSingleton()) continue;
+
+                List<DockPanelRef> neighbours = new ArrayList<>(leaf.panels());
+                neighbours.remove(panel);
+                DockPath parent = leaf.parent() == null
+                        ? null : workbench.dock().layout().pathOf(leaf.parent());
+                int index = leaf.parent() == null ? -1 : leaf.parent().indexOf(leaf);
+
+                ToolWindowState state = workbench.toolWindows()
+                        .getOrCreate(panel.typeId(), descriptor.anchor())
+                        .withVisible(true)
+                        .withWeight(leaf.size())
+                        .withGroupedWith(neighbours)
+                        .withActive(panel.equals(leaf.activePanel()))
+                        .withPlacement(parent, index);
+                workbench.toolWindows().put(state);
+            }
+        }
     }
 
     // ── Restoring ───────────────────────────────────────────────────────────────────────────────
@@ -206,6 +272,16 @@ public final class WorkbenchSession {
         }
 
         workbench.dock().setLayout(layout);
+
+        // AFTER the layout is installed, so a placement naming a path describes the tree that is now
+        // there. Absent is not a failure: a record written before tool-window placements existed still has
+        // a usable dock, and every panel simply falls back to its descriptor's anchor the first time it is
+        // hidden -- which is exactly the first-run behaviour.
+        workbench.toolWindows().clear();
+        for (ToolWindowState state
+                : ToolWindowLayout.decodeFrom(in, KEY_TOOL_WINDOWS).ordered()) {
+            workbench.toolWindows().put(state);
+        }
 
         pendingExpansion.clear();
         for (String raw : in.getList(KEY_EXPANDED, map -> map.getString(KEY_PATH, ""))) {

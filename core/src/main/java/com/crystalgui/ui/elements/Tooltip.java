@@ -43,6 +43,39 @@ public class Tooltip extends UIElement {
 
     public static final String LABEL_CLASS = "__label__";
 
+    /**
+     * Which side of its anchor the tooltip prefers, and how far off it sits.
+     *
+     * <h3>Why this is settable rather than always below</h3>
+     *
+     * <p>Below is right for the common case — a toolbar button, a truncated label — and wrong for anything
+     * in a narrow vertical rail. An activity bar button is 16px in a 20px column, so a tooltip below it
+     * covers the <em>next</em> button down, which is the one you were about to read. Both editors place a
+     * stripe tooltip to the side for exactly that reason.</p>
+     *
+     * <p>A preference, not an instruction: {@link AnchoredPlacement} still flips to the opposite side when
+     * there is no room, so a right-hand rail gets its tooltips on the left without anyone configuring
+     * it.</p>
+     */
+    private AnchoredPlacement.Side side = AnchoredPlacement.Side.BOTTOM;
+
+    /** Distance from the anchor's edge, in logical pixels. Zero for the flush look a label wants. */
+    private float gap;
+
+    public Tooltip setSide(AnchoredPlacement.Side preferred) {
+        this.side = preferred == null ? AnchoredPlacement.Side.BOTTOM : preferred;
+        return this;
+    }
+
+    public Tooltip setGap(float pixels) {
+        this.gap = pixels;
+        return this;
+    }
+
+    public AnchoredPlacement.Side getSide() {
+        return side;
+    }
+
     private final UIText label;
 
     @Nullable
@@ -209,7 +242,7 @@ public class Tooltip extends UIElement {
      * tooltip is just {@code Side.BOTTOM} with no offset.</p>
      */
     public void reposition() {
-        AnchoredPlacement.place(this, anchor, AnchoredPlacement.Side.BOTTOM, 0f);
+        AnchoredPlacement.place(this, anchor, side, gap);
     }
 
     /** Keeps placement current while shown, then drops itself. Registration is idempotent
