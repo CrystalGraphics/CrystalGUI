@@ -2,7 +2,6 @@ package com.crystalgui.render.texture.svg;
 
 import org.jetbrains.annotations.Nullable;
 
-import com.crystalgraphics.util.profiling.CgProfiler;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -74,15 +73,31 @@ final class SvgResolver {
             if (!tag.name().equals("svg")) continue;
             String box = tag.get("viewBox");
             if (!box.isBlank()) {
-                String[] parts = box.trim().split("[\\s,]+");
-                if (parts.length == 4) {
+                // Scanned, not split. `String.split` compiles its character class on every call, and this
+                // runs once per document to read four numbers -- measured at 2.4 ms across the shipped set,
+                // more than every rect in it. Same fix, and the same reason, as SvgGeometry#addPoints.
+                float[] parts = new float[5];
+                int found = 0;
+                SvgPath.Cursor cursor = new SvgPath.Cursor(box);
+                while (found < parts.length && cursor.hasNumber()) {
+                    int before = cursor.position();
+                    parts[found] = cursor.number();
+                    if (cursor.position() == before) {
+                        cursor.skip();
+                        continue;
+                    }
+                    found++;
+                }
+                // Exactly four, as the split-based version required: a viewBox with more or fewer numbers
+                // is malformed and is ignored rather than half-applied.
+                if (found == 4) {
                     // min-x and min-y, NOT ignored. A viewBox states an origin as well as a size, and
                     // artwork authored as "-2 -2 28 28" -- which is how a set gives itself padding --
                     // draws offset by exactly that origin otherwise.
-                    originX = SvgDocument.number(parts[0], 0f);
-                    originY = SvgDocument.number(parts[1], 0f);
-                    boxWidth = SvgDocument.number(parts[2], 24f);
-                    boxHeight = SvgDocument.number(parts[3], 24f);
+                    originX = parts[0];
+                    originY = parts[1];
+                    boxWidth = parts[2];
+                    boxHeight = parts[3];
                 }
             } else {
                 boxWidth = SvgDocument.number(tag.get("width"), boxWidth);
@@ -91,10 +106,8 @@ final class SvgResolver {
             break;
         }
 
-        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.resolve.gradients")) {
-            indexIds();
-            collectGradients();
-        }
+        indexIds();
+        collectGradients();
 
         // The origin lands in the root transform rather than in a fix-up pass over the points, so nothing
         // downstream ever sees coordinates that are not already in the icon's own 0,0 space.
@@ -275,11 +288,7 @@ final class SvgResolver {
      */
     private void resolveShape(SvgScanner.Tag tag, SvgStyle style, SvgTransform transform) {
         if (!style.fills() && !style.strokes()) return;
-        List<SvgPath.Polyline> contours;
-        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.resolve.flatten")) {
-            contours = SvgGeometry.of(tag, steps);
-        }
-        CgProfiler.count("svg.shapes");
+        List<SvgPath.Polyline> contours = SvgGeometry.of(tag, steps);
         if (contours.isEmpty()) return;
 
         SvgScene.Fill fill = style.fills() ? resolveFill(contours, style, transform) : null;

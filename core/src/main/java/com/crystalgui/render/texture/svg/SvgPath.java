@@ -179,6 +179,44 @@ public final class SvgPath {
         return relative ? origin + raw : raw;
     }
 
+    /**
+     * A rounded rectangle, built directly rather than via a {@code d} string.
+     *
+     * <h3>Why this exists</h3>
+     *
+     * <p>{@code SvgGeometry.addRect} used to compose the equivalent path as text — {@code "M" + (x + rx) +
+     * " " + y + " H" + …} — and hand it back to {@link #parse}. That is a lovely way to guarantee the corner
+     * arcs go through one arc implementation, and it was <b>39% of the entire parse</b>: nineteen rects in
+     * the shipped set cost 11.9 ms against 2.5 ms for eighty-two real paths, or <b>21× per shape</b>. Nearly
+     * all of it is {@code Float.toString}, which is expensive by construction — it has to find the shortest
+     * decimal that round-trips — and it was being called ten times per rect only for {@link Cursor#number}
+     * to parse every one of them straight back.</p>
+     *
+     * <p>The original reason for the round-trip is preserved: this still calls the same {@link #arc} the
+     * {@code A} command does, in the same order, with the same arguments. It is the string that has gone,
+     * not the shared implementation.</p>
+     *
+     * <p><b>The geometry is bit-identical</b>, and not merely close. {@code Float.toString} emits the
+     * shortest decimal that parses back to the same {@code float}, so the round-trip was always exactly the
+     * identity on these coordinates — which means computing them in place cannot differ.
+     * {@code SvgRoundedRectTest} pins that against the old text form.</p>
+     */
+    static List<Polyline> roundedRect(float x, float y, float w, float h, float rx, float ry, int steps) {
+        List<float[]> points = new ArrayList<>();
+        points.add(new float[]{x + rx, y});
+        points.add(new float[]{x + w - rx, y});
+        arc(steps, points, x + w - rx, y, rx, ry, 0f, false, true, x + w, y + ry);
+        points.add(new float[]{x + w, y + h - ry});
+        arc(steps, points, x + w, y + h - ry, rx, ry, 0f, false, true, x + w - rx, y + h);
+        points.add(new float[]{x + rx, y + h});
+        arc(steps, points, x + rx, y + h, rx, ry, 0f, false, true, x, y + h - ry);
+        points.add(new float[]{x, y + ry});
+        arc(steps, points, x, y + ry, rx, ry, 0f, false, true, x + rx, y);
+        List<Polyline> out = new ArrayList<>(1);
+        out.add(new Polyline(points, true));
+        return out;
+    }
+
     private static void cubic(int steps, List<float[]> out, float x0, float y0, float x1, float y1,
                               float x2, float y2, float x3, float y3) {
         for (int i = 1; i <= steps; i++) {
@@ -255,13 +293,78 @@ public final class SvgPath {
         return ux * vy - uy * vx < 0 ? -a : a;
     }
 
-    /** Walks the {@code d} string. Commas and whitespace are both separators, and both are optional. */
-    private static final class Cursor {
+    /**
+     * The largest integer a {@code float} holds exactly, {@code 2^24}.
+     *
+     * <p>Above it, consecutive integers stop being representable and the accumulate-then-divide path below
+     * loses its exactness guarantee.</p>
+     */
+    private static final long EXACT_MANTISSA = 1L << 24;
+
+    /**
+     * The most fractional digits the divide-by-a-power-of-ten path may take.
+     *
+     * <p>{@code 10^7} is 10,000,000, still under {@link #EXACT_MANTISSA}; {@code 10^8} is not, so the
+     * divisor itself would be rounded and the result would no longer be a single correctly-rounded
+     * operation on exact inputs.</p>
+     */
+    private static final int EXACT_FRACTION_DIGITS = 7;
+
+    private static final float[] POWERS_OF_TEN =
+            {1f, 10f, 100f, 1000f, 10_000f, 100_000f, 1_000_000f, 10_000_000f};
+
+    /**
+     * Walks the {@code d} string. Commas and whitespace are both separators, and both are optional.
+     *
+     * <h3>Numbers are accumulated as integers, and it is exact rather than approximate</h3>
+     *
+     * <p>{@link Cursor#number()} used to hand every token to {@code Float.parseFloat(text.substring(…))},
+     * which allocates a {@code String} per number. Path data is nothing but numbers — <b>8,928 of them
+     * across the shipped icon set</b> — and tokenising was measured at <b>64% of the cost of flattening a
+     * path</b>, well above the curve arithmetic it exists to feed.</p>
+     *
+     * <p>So the digits are accumulated into a {@code long} and the value is finished as
+     * {@code mantissa / 10^k}. <b>That is not an approximation of what the library parser does, it is the
+     * same answer</b>, and the two constants above are what make it so: when {@code mantissa} and
+     * {@code 10^k} are each exactly representable as a {@code float}, IEEE-754 requires the division to be
+     * correctly rounded — so the result is the correctly-rounded {@code float} nearest the true decimal
+     * value, which is precisely {@code Float.parseFloat}'s contract. One rounding, not two.</p>
+     *
+     * <p><b>Anything that cannot clear that bar falls back to {@code Float.parseFloat}</b>: exponents, more
+     * than 18 digits, a mantissa past {@code 2^24}, more than seven decimal places. The fallback is the
+     * correctness story — the fast path is not a re-implementation of decimal parsing and must never grow
+     * into one. {@code SvgPathNumberTest} checks the two against each other over the corpus and over
+     * randomised input, which is the only reason to believe any of this.</p>
+     *
+     * <p>A hand-rolled float parser is normally a bad trade, and the reason this one is not is that it
+     * refuses the hard cases instead of guessing at them.</p>
+     */
+    static final class Cursor {
         private final String text;
         private int at;
 
         Cursor(String text) {
             this.text = text;
+        }
+
+        /** How far the walk has got — a caller looping on {@link #number()} uses it to detect no progress. */
+        int position() {
+            return at;
+        }
+
+        /**
+         * Whether a number token starts here, separators skipped.
+         *
+         * <p>{@link #number()} answers {@code 0} both for "the number zero" and for "there was no number",
+         * which is fine inside {@code d} data where the command says how many to expect and a missing one
+         * is malformed anyway. A {@code points} list has no such structure — it ends when the numbers do —
+         * so it needs to ask before reading.</p>
+         */
+        boolean hasNumber() {
+            skipSeparators();
+            if (at >= text.length()) return false;
+            char c = text.charAt(at);
+            return c == '-' || c == '+' || c == '.' || (c >= '0' && c <= '9');
         }
 
         boolean hasMore() {
@@ -315,13 +418,29 @@ public final class SvgPath {
         float number() {
             skipSeparators();
             int start = at;
-            if (at < text.length() && (text.charAt(at) == '-' || text.charAt(at) == '+')) at++;
+            boolean negative = false;
+            if (at < text.length() && (text.charAt(at) == '-' || text.charAt(at) == '+')) {
+                negative = text.charAt(at) == '-';
+                at++;
+            }
 
+            // Accumulated as an integer while that stays provably exact -- see the note below.
+            long mantissa = 0;
+            int digits = 0;
+            int fractionDigits = 0;
             boolean seenDot = false;
             boolean seenExponent = false;
+            boolean exact = true;
             while (at < text.length()) {
                 char c = text.charAt(at);
-                if (Character.isDigit(c)) {
+                if (c >= '0' && c <= '9') {
+                    if (digits < 18) {
+                        mantissa = mantissa * 10 + (c - '0');
+                        digits++;
+                    } else {
+                        exact = false;
+                    }
+                    if (seenDot) fractionDigits++;
                     at++;
                 } else if (c == '.') {
                     // The dot after an exponent belongs to no number at all -- `1e2.5` is `1e2` then `.5`.
@@ -330,6 +449,7 @@ public final class SvgPath {
                     at++;
                 } else if ((c == 'e' || c == 'E') && !seenExponent && at > start) {
                     seenExponent = true;
+                    exact = false;
                     at++;
                     if (at < text.length() && (text.charAt(at) == '-' || text.charAt(at) == '+')) at++;
                 } else {
@@ -337,6 +457,14 @@ public final class SvgPath {
                 }
             }
             if (start == at) return 0f;
+
+            if (exact && digits > 0 && mantissa <= EXACT_MANTISSA
+                    && fractionDigits <= EXACT_FRACTION_DIGITS) {
+                float value = fractionDigits == 0
+                        ? (float) mantissa
+                        : (float) mantissa / POWERS_OF_TEN[fractionDigits];
+                return negative ? -value : value;
+            }
             try {
                 return Float.parseFloat(text.substring(start, at));
             } catch (NumberFormatException malformed) {

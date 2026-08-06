@@ -1,6 +1,5 @@
 package com.crystalgui.render.texture.svg;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -38,10 +37,54 @@ import java.util.List;
  * covers a wedge the shape does not occupy and leaves a matching wedge bare. On stacked artwork that reads
  * as smears of whatever is <em>underneath</em>, which looks like a paint bug rather than a geometry one.</p>
  *
- * <p>{@link #selfIntersections} finds every crossing and adds its {@code y} to the band cuts, which is all
- * it takes: below the crossing the edges are in one order and above it the other, so no band ever contains
- * a swap. Not an edge case worth skipping — the JetBrains mark has four polygons that each fold back over
- * themselves.</p>
+ * <p>{@link Edges#selfIntersections} finds every crossing and adds its {@code y} to the band cuts, which is
+ * all it takes: below the crossing the edges are in one order and above it the other, so no band ever
+ * contains a swap. Not an edge case worth skipping — the JetBrains mark has four polygons that each fold
+ * back over themselves.</p>
+ *
+ * <h3>Why both sweeps carry an active set — the cost that was actually being paid</h3>
+ *
+ * <p>Bands are cut at every vertex, so <b>a shape has about as many bands as edges</b>. The obvious way to
+ * write either sweep is a nested loop — for each band, ask every edge whether it crosses; for each edge,
+ * ask every other edge whether it meets it — and both are then quadratic in the vertex count. That is not a
+ * pathological case, it is the normal one: a curve-heavy icon flattens to a few hundred edges and pays a
+ * few hundred <em>squared</em>, which is where 54% of a document's load time was going.</p>
+ *
+ * <p>The fix is the same in both places and is the oldest trick in scanline rendering: an <b>active edge
+ * table</b>. Sort the edges once by their top {@code y}; as the sweep descends, admit each edge when it
+ * starts and retire it when it ends. Both boundaries are monotone in the sweep position, so every edge is
+ * admitted once and retired once, and a band only ever touches the edges genuinely spanning it. That takes
+ * the band sweep from {@code O(bands × edges)} to {@code O(n log n + crossings)} — and the crossing count
+ * is the size of the output, so it cannot be beaten.</p>
+ *
+ * <p>{@link Edges#selfIntersections} gets the same treatment with the same argument: two edges can only
+ * meet where their {@code y} ranges <em>overlap</em>, so the pairs worth testing are exactly the pairs
+ * simultaneously live in the sweep. A bounding-box reject on {@code x} sits inside that, because the
+ * intersection maths costs two divides and a box test costs two comparisons.</p>
+ *
+ * <p><b>Both prunes are exact, not heuristic</b>, and that distinction is the whole safety argument. An
+ * intersection strictly interior to both edges lies at a single {@code y}, which must be strictly inside
+ * both edges' {@code y} spans — so a pair whose spans do not overlap could not have contributed a crossing
+ * to begin with, and skipping it changes nothing. The same holds for the box reject. This rewrite is
+ * therefore a pure performance change: it emits <b>the same triangles, in the same order, bit for bit</b>,
+ * which is the property to check first if it is ever suspected of a visual regression.</p>
+ *
+ * <h3>Flat arrays, and why they are not premature</h3>
+ *
+ * <p>Edges and output triangles are flat primitive arrays rather than {@code List<float[]>}. A moderately
+ * complex icon reaches tens of thousands of triangles, and the list form costs a {@code float[6]}, a boxed
+ * {@code Integer} and a boxed {@code Boolean} for each of them — allocation that outweighs the arithmetic
+ * it accompanies. The parallel-array note on {@link #sortByX} already made this argument for the innermost
+ * loop; this is the same argument applied to the two structures around it.</p>
+ *
+ * <h3>This class cannot profile itself</h3>
+ *
+ * <p><b>No {@code CgProfiler} scopes here, and that is a constraint rather than an oversight.</b> Filling is
+ * pure geometry, so it is reachable from {@code headlessTest} — where CrystalGraphics <em>core</em> is
+ * deliberately absent — and {@code CgProfiler} lives there. A scope in a method body resolves on first
+ * execution, so adding one does not fail the build: it fails at run time with {@code NoClassDefFoundError},
+ * and only in the source set that exists to catch exactly that. {@link SvgTessellator} is one level up, is
+ * not headless-reachable, and already times the whole call as {@code svg.tessellate} — put the scope there.</p>
  */
 public final class SvgTriangulator {
 
@@ -95,7 +138,18 @@ public final class SvgTriangulator {
 
     private static final int MAX_EXTRA_BANDS = 192;
 
-    /** Above this edge count the pairwise crossing search is skipped; see {@link #selfIntersections}. */
+    /**
+     * Above this edge count the crossing search is skipped entirely.
+     *
+     * <p>The search is no longer quadratic in the general case — see the class note on the active set — but
+     * its worst case still is, and the worst case is reachable: a shape whose every edge spans its whole
+     * height leaves every pair simultaneously live and no prune can help. The cap bounds that.</p>
+     *
+     * <p>It is deliberately unchanged from the value the quadratic version used. Raising it would find
+     * crossings that are currently missed and would therefore <em>change</em> the mesh on exactly the
+     * documents most likely to be sensitive to it — a separate decision, to be made on its own evidence,
+     * and not something to fold into a rewrite whose whole claim is that the output is identical.</p>
+     */
     private static final int MAX_INTERSECTION_EDGES = 1200;
 
     /**
@@ -177,231 +231,386 @@ public final class SvgTriangulator {
      */
     public static Fill fill(List<List<float[]>> contours, boolean evenOdd,
                             float stepX, float stepY, float[] extraCuts) {
-        // Edges as a flat array: x0,y0,x1,y1 per edge. Horizontal edges are dropped at build time -- they
-        // can never cross a band's midline, so keeping them only costs a test per band per edge.
-        List<float[]> edges = new ArrayList<>();
-        for (List<float[]> contour : contours) {
-            if (contour.size() < MINIMUM_POINTS) continue;
-            for (int i = 0; i < contour.size(); i++) {
-                float[] a = contour.get(i);
-                float[] b = contour.get((i + 1) % contour.size());
-                if (Math.abs(a[1] - b[1]) < EPSILON) continue;
-                edges.add(new float[]{a[0], a[1], b[0], b[1]});
+        Edges edges = Edges.of(contours);
+        if (edges.count == 0) return empty();
+
+        float[] bands = edges.bandBoundaries(stepY, extraCuts);
+        if (bands.length < 2) return empty();
+
+        return edges.sweep(bands, evenOdd, stepX);
+    }
+
+    private static Fill empty() {
+        return new Fill(new float[0], new int[0], new boolean[0]);
+    }
+
+    /**
+     * The shape reduced to non-horizontal edges, in flat arrays, plus the sweep that consumes them.
+     *
+     * <p>Horizontal edges are dropped at build time — they can never cross a band's midline, so keeping
+     * them only costs a test per band per edge. {@code lo}/{@code hi} are precomputed for the same reason:
+     * the sweep asks for them far more often than there are edges.</p>
+     */
+    private static final class Edges {
+
+        final float[] x0, y0, x1, y1;
+        /** Per edge, its {@code y} span — {@code lo} is where it enters the sweep, {@code hi} where it leaves. */
+        final float[] lo, hi;
+        final int count;
+        /** Edge indices ordered by {@link #lo}, so both sweeps can admit edges as they reach them. */
+        final int[] byLo;
+
+        private Edges(float[] x0, float[] y0, float[] x1, float[] y1, int count) {
+            this.x0 = x0;
+            this.y0 = y0;
+            this.x1 = x1;
+            this.y1 = y1;
+            this.count = count;
+            this.lo = new float[count];
+            this.hi = new float[count];
+            for (int i = 0; i < count; i++) {
+                lo[i] = Math.min(y0[i], y1[i]);
+                hi[i] = Math.max(y0[i], y1[i]);
             }
+            this.byLo = orderBy(lo, count);
         }
-        Fill empty = new Fill(new float[0], new int[0], new boolean[0]);
-        if (edges.isEmpty()) return empty;
 
-        float[] bands = bandBoundaries(edges, stepY, extraCuts);
-        if (bands.length < 2) return empty;
-
-        List<float[]> triangles = new ArrayList<>();
-        List<Integer> slices = new ArrayList<>();
-        List<Boolean> uppers = new ArrayList<>();
-        int sliceIndex = 0;
-        // Shared out now that the bands are known. A shape whose outline already supplies three hundred
-        // bands gets a handful of slices each; a rectangle with two bands may have the lot.
-        int sliceAllowance = Math.max(1, MAX_CELLS / Math.max(1, bands.length - 1));
-        float[] crossX = new float[edges.size()];
-        int[] crossDir = new int[edges.size()];
-        int[] crossEdge = new int[edges.size()];
-
-        for (int band = 0; band + 1 < bands.length; band++) {
-            float top = bands[band];
-            float bottom = bands[band + 1];
-            if (bottom - top < EPSILON) continue;
-            float middle = (top + bottom) * 0.5f;
-
-            int found = 0;
-            for (int e = 0; e < edges.size(); e++) {
-                float[] edge = edges.get(e);
-                float lo = Math.min(edge[1], edge[3]);
-                float hi = Math.max(edge[1], edge[3]);
-                if (middle < lo || middle >= hi) continue;
-                crossX[found] = xAt(edge, middle);
-                crossDir[found] = edge[3] > edge[1] ? 1 : -1;
-                crossEdge[found] = e;
-                found++;
-            }
-            if (found < 2) continue;
-            sortByX(crossX, crossDir, crossEdge, found);
-
-            int winding = 0;
-            for (int i = 0; i + 1 < found; i++) {
-                winding += evenOdd ? 1 : crossDir[i];
-                boolean inside = evenOdd ? (winding & 1) == 1 : winding != 0;
-                if (!inside) continue;
-
-                float[] left = edges.get(crossEdge[i]);
-                float[] right = edges.get(crossEdge[i + 1]);
-                float lt = xAt(left, top), lb = xAt(left, bottom);
-                float rt = xAt(right, top), rb = xAt(right, bottom);
-                if (Math.abs(rt - lt) < EPSILON && Math.abs(rb - lb) < EPSILON) continue;
-
-                // Sliced by interpolating BETWEEN the two walls rather than by cutting at fixed x. A
-                // vertical cut through a slanted trapezoid produces pieces that are no longer trapezoids
-                // wherever the cut leaves the shape partway down the band; lerping the walls keeps every
-                // piece the same shape as the whole, so the slicing needs no clipping and no special case.
-                float widest = Math.max(Math.abs(rt - lt), Math.abs(rb - lb));
-                int count = stepX > 0f
-                        ? Math.max(1, Math.min(Math.min(MAX_SLICES, sliceAllowance),
-                                (int) Math.ceil(widest / stepX)))
-                        : 1;
-                for (int s = 0; s < count; s++) {
-                    float a = (float) s / count, b = (float) (s + 1) / count;
-                    float at = lt + (rt - lt) * a, ab = lb + (rb - lb) * a;
-                    float bt = lt + (rt - lt) * b, bb = lb + (rb - lb) * b;
-                    // Upper half first: it carries the band's TOP edge. The lower carries the bottom, which
-                    // is the next band's top -- so "upper" alternates across every horizontal seam as well
-                    // as across the diagonal the two of them share.
-                    add(triangles, slices, uppers, sliceIndex, true, at, top, bt, top, bb, bottom);
-                    add(triangles, slices, uppers, sliceIndex, false, at, top, bb, bottom, ab, bottom);
-                    sliceIndex++;
+        static Edges of(List<List<float[]>> contours) {
+            int total = 0;
+            for (List<float[]> contour : contours) {
+                int n = contour.size();
+                if (n < MINIMUM_POINTS) continue;
+                for (int i = 0; i < n; i++) {
+                    if (Math.abs(contour.get(i)[1] - contour.get((i + 1) % n)[1]) < EPSILON) continue;
+                    total++;
                 }
             }
-        }
-
-        float[] packed = new float[triangles.size() * 6];
-        int[] tags = new int[triangles.size()];
-        boolean[] halves = new boolean[triangles.size()];
-        for (int i = 0; i < triangles.size(); i++) {
-            System.arraycopy(triangles.get(i), 0, packed, i * 6, 6);
-            tags[i] = slices.get(i);
-            halves[i] = uppers.get(i);
-        }
-        return new Fill(packed, tags, halves);
-    }
-
-    /**
-     * Appends one triangle, degenerate or not.
-     *
-     * <p>Unconditional on purpose — see the note on {@link #fill(List, boolean, float, float)}. A pair
-     * that loses a member stops partitioning its own edges, and that costs far more than the empty
-     * instance a zero-area triangle becomes.</p>
-     */
-    private static void add(List<float[]> out, List<Integer> slices, List<Boolean> uppers,
-                            int slice, boolean upper,
-                            float x0, float y0, float x1, float y1, float x2, float y2) {
-        out.add(new float[]{x0, y0, x1, y1, x2, y2});
-        slices.add(slice);
-        uppers.add(upper);
-    }
-
-    /**
-     * Every {@code y} at which the shape's edge ordering can change, ascending.
-     *
-     * <p>Three sources, and all three are load-bearing:</p>
-     *
-     * <ol>
-     *   <li><b>Vertex {@code y}s</b> — what makes the decomposition exact rather than stair-stepped. No
-     *       vertex may fall inside a band, or an edge bends where the trapezoid cannot follow it.</li>
-     *   <li><b>Self-intersection {@code y}s</b> — see {@link #selfIntersections}.</li>
-     *   <li><b>Extra cuts at {@code stepY}</b>, for gradient subdivision. <b>Added to</b> the first two,
-     *       never substituted for them.</li>
-     * </ol>
-     */
-    private static float[] bandBoundaries(List<float[]> edges, float stepY, float[] extraCuts) {
-        int extra = 0;
-        float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
-        if (stepY > 0f) {
-            for (float[] edge : edges) {
-                minY = Math.min(minY, Math.min(edge[1], edge[3]));
-                maxY = Math.max(maxY, Math.max(edge[1], edge[3]));
+            float[] x0 = new float[total], y0 = new float[total];
+            float[] x1 = new float[total], y1 = new float[total];
+            int at = 0;
+            for (List<float[]> contour : contours) {
+                int n = contour.size();
+                if (n < MINIMUM_POINTS) continue;
+                for (int i = 0; i < n; i++) {
+                    float[] a = contour.get(i);
+                    float[] b = contour.get((i + 1) % n);
+                    if (Math.abs(a[1] - b[1]) < EPSILON) continue;
+                    x0[at] = a[0];
+                    y0[at] = a[1];
+                    x1[at] = b[0];
+                    y1[at] = b[1];
+                    at++;
+                }
             }
-            extra = Math.min(MAX_EXTRA_BANDS, (int) Math.ceil((maxY - minY) / stepY));
+            return new Edges(x0, y0, x1, y1, total);
         }
 
-        float[] crossings = selfIntersections(edges);
-        int explicit = extraCuts == null ? 0 : extraCuts.length;
-        float[] all = new float[edges.size() * 2 + Math.max(0, extra) + crossings.length + explicit];
-        for (int i = 0; i < edges.size(); i++) {
-            all[i * 2] = edges.get(i)[1];
-            all[i * 2 + 1] = edges.get(i)[3];
-        }
-        int at = edges.size() * 2;
-        for (int i = 0; i < extra; i++) all[at++] = minY + (maxY - minY) * (i + 0.5f) / extra;
-        for (float y : crossings) all[at++] = y;
-        for (int i = 0; i < explicit; i++) all[at++] = extraCuts[i];
+        /**
+         * The band sweep, carrying an active edge table.
+         *
+         * <p>Bands ascend, so an edge's admission ({@code lo <= middle}) and its retirement
+         * ({@code hi <= middle}) are each crossed once and never uncrossed. {@code next} walks
+         * {@link #byLo} for the first; the compaction pass that gathers crossings performs the second, for
+         * free, since it is already visiting every active edge.</p>
+         *
+         * <p>A band skipped for being thinner than {@link #EPSILON} does not disturb that: neither pointer
+         * moves, and the following band's midpoint is strictly larger, so the {@code while} catches up.</p>
+         */
+        Fill sweep(float[] bands, boolean evenOdd, float stepX) {
+            Sink sink = new Sink();
+            int sliceIndex = 0;
+            // Shared out now that the bands are known. A shape whose outline already supplies three hundred
+            // bands gets a handful of slices each; a rectangle with two bands may have the lot.
+            int sliceAllowance = Math.max(1, MAX_CELLS / Math.max(1, bands.length - 1));
 
-        Arrays.sort(all);
-        float[] unique = new float[all.length];
-        int count = 0;
-        for (float value : all) {
-            if (count == 0 || value - unique[count - 1] > EPSILON) unique[count++] = value;
+            float[] crossX = new float[count];
+            int[] crossDir = new int[count];
+            int[] crossEdge = new int[count];
+            int[] active = new int[count];
+            int activeCount = 0;
+            int next = 0;
+
+            for (int band = 0; band + 1 < bands.length; band++) {
+                float top = bands[band];
+                float bottom = bands[band + 1];
+                if (bottom - top < EPSILON) continue;
+                float middle = (top + bottom) * 0.5f;
+
+                while (next < count && lo[byLo[next]] <= middle) active[activeCount++] = byLo[next++];
+
+                int found = 0;
+                int keep = 0;
+                for (int a = 0; a < activeCount; a++) {
+                    int e = active[a];
+                    if (hi[e] <= middle) continue;
+                    active[keep++] = e;
+                    crossX[found] = xAt(e, middle);
+                    crossDir[found] = y1[e] > y0[e] ? 1 : -1;
+                    crossEdge[found] = e;
+                    found++;
+                }
+                activeCount = keep;
+                if (found < 2) continue;
+                sortByX(crossX, crossDir, crossEdge, found);
+
+                int winding = 0;
+                for (int i = 0; i + 1 < found; i++) {
+                    winding += evenOdd ? 1 : crossDir[i];
+                    boolean inside = evenOdd ? (winding & 1) == 1 : winding != 0;
+                    if (!inside) continue;
+
+                    int left = crossEdge[i];
+                    int right = crossEdge[i + 1];
+                    float lt = xAt(left, top), lb = xAt(left, bottom);
+                    float rt = xAt(right, top), rb = xAt(right, bottom);
+                    if (Math.abs(rt - lt) < EPSILON && Math.abs(rb - lb) < EPSILON) continue;
+
+                    // Sliced by interpolating BETWEEN the two walls rather than by cutting at fixed x. A
+                    // vertical cut through a slanted trapezoid produces pieces that are no longer trapezoids
+                    // wherever the cut leaves the shape partway down the band; lerping the walls keeps every
+                    // piece the same shape as the whole, so the slicing needs no clipping and no special case.
+                    float widest = Math.max(Math.abs(rt - lt), Math.abs(rb - lb));
+                    int slices = stepX > 0f
+                            ? Math.max(1, Math.min(Math.min(MAX_SLICES, sliceAllowance),
+                                    (int) Math.ceil(widest / stepX)))
+                            : 1;
+                    for (int s = 0; s < slices; s++) {
+                        float a = (float) s / slices, b = (float) (s + 1) / slices;
+                        float at = lt + (rt - lt) * a, ab = lb + (rb - lb) * a;
+                        float bt = lt + (rt - lt) * b, bb = lb + (rb - lb) * b;
+                        // Upper half first: it carries the band's TOP edge. The lower carries the bottom,
+                        // which is the next band's top -- so "upper" alternates across every horizontal seam
+                        // as well as across the diagonal the two of them share.
+                        sink.add(sliceIndex, true, at, top, bt, top, bb, bottom);
+                        sink.add(sliceIndex, false, at, top, bb, bottom, ab, bottom);
+                        sliceIndex++;
+                    }
+                }
+            }
+            return sink.toFill();
         }
-        return Arrays.copyOf(unique, count);
+
+        /**
+         * Every {@code y} at which the shape's edge ordering can change, ascending.
+         *
+         * <p>Three sources, and all three are load-bearing:</p>
+         *
+         * <ol>
+         *   <li><b>Vertex {@code y}s</b> — what makes the decomposition exact rather than stair-stepped. No
+         *       vertex may fall inside a band, or an edge bends where the trapezoid cannot follow it.</li>
+         *   <li><b>Self-intersection {@code y}s</b> — see {@link #selfIntersections}.</li>
+         *   <li><b>Extra cuts at {@code stepY}</b>, for gradient subdivision. <b>Added to</b> the first two,
+         *       never substituted for them.</li>
+         * </ol>
+         */
+        float[] bandBoundaries(float stepY, float[] extraCuts) {
+            int extra = 0;
+            float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
+            if (stepY > 0f) {
+                for (int i = 0; i < count; i++) {
+                    minY = Math.min(minY, lo[i]);
+                    maxY = Math.max(maxY, hi[i]);
+                }
+                extra = Math.min(MAX_EXTRA_BANDS, (int) Math.ceil((maxY - minY) / stepY));
+            }
+
+            float[] crossings = selfIntersections();
+            int explicit = extraCuts == null ? 0 : extraCuts.length;
+            float[] all = new float[count * 2 + Math.max(0, extra) + crossings.length + explicit];
+            for (int i = 0; i < count; i++) {
+                all[i * 2] = y0[i];
+                all[i * 2 + 1] = y1[i];
+            }
+            int at = count * 2;
+            for (int i = 0; i < extra; i++) all[at++] = minY + (maxY - minY) * (i + 0.5f) / extra;
+            for (float y : crossings) all[at++] = y;
+            for (int i = 0; i < explicit; i++) all[at++] = extraCuts[i];
+
+            Arrays.sort(all);
+            float[] unique = new float[all.length];
+            int unifiedCount = 0;
+            for (float value : all) {
+                if (unifiedCount == 0 || value - unique[unifiedCount - 1] > EPSILON) {
+                    unique[unifiedCount++] = value;
+                }
+            }
+            return Arrays.copyOf(unique, unifiedCount);
+        }
+
+        /**
+         * Every {@code y} where two edges of the shape cross each other.
+         *
+         * <p><b>This is what makes a self-intersecting contour come out right, and it is not an edge
+         * case.</b> Exported logo artwork is full of them: the JetBrains mark has four polygons of seven and
+         * eight points that each fold back over themselves. Without a cut at the crossing, one band contains
+         * the swap — its left and right walls trade places partway down — and the trapezoid built from them
+         * is a bowtie covering a wedge of space the shape does not occupy, while leaving a matching wedge
+         * that it does bare. On a stack of overlapping polygons that reads as smears of the colour
+         * <em>underneath</em> showing through, which looks like a paint bug rather than a geometry one.</p>
+         *
+         * <p>Cutting there is enough. Below the crossing the two edges are in one order and above it the
+         * other; within each band they never swap, so the ordinary sweep is exact again. There is no need to
+         * split the edges themselves or to know where the crossing is in {@code x} — the per-band midpoint
+         * sort finds that on its own.</p>
+         *
+         * <h3>Which pairs are worth testing</h3>
+         *
+         * <p>An intersection strictly interior to both edges sits at one {@code y}, and each edge is
+         * non-horizontal, so its parameter is monotone in {@code y} — the crossing's {@code y} therefore
+         * lies strictly inside <em>both</em> spans. Two edges whose spans do not overlap cannot produce one.
+         * Sweeping by {@code lo} and keeping an active set tests exactly the overlapping pairs and no
+         * others, which is why this is a prune rather than an approximation.</p>
+         *
+         * <p>The lower-indexed edge is always taken as {@code a}. The intersection is symmetric in exact
+         * arithmetic and not in floats, and the answer feeds a list that is deduplicated by
+         * {@link #EPSILON} — so fixing the roles keeps the output identical to the naive {@code i < j}
+         * order rather than merely equivalent to it.</p>
+         */
+        float[] selfIntersections() {
+            if (count < 2 || count > MAX_INTERSECTION_EDGES) return new float[0];
+
+            float[] found = new float[64];
+            int size = 0;
+            int[] active = new int[count];
+            int activeCount = 0;
+
+            for (int k = 0; k < count; k++) {
+                int current = byLo[k];
+                float enters = lo[current];
+                float currentMinX = Math.min(x0[current], x1[current]);
+                float currentMaxX = Math.max(x0[current], x1[current]);
+
+                int keep = 0;
+                for (int a = 0; a < activeCount; a++) {
+                    int other = active[a];
+                    if (hi[other] <= enters) continue;
+                    active[keep++] = other;
+
+                    // Boxes first: two comparisons against two divides.
+                    if (currentMaxX < Math.min(x0[other], x1[other])
+                            || Math.max(x0[other], x1[other]) < currentMinX) continue;
+
+                    int i = Math.min(current, other), j = Math.max(current, other);
+                    float ax = x1[i] - x0[i], ay = y1[i] - y0[i];
+                    float bx = x1[j] - x0[j], by = y1[j] - y0[j];
+                    float denominator = ax * by - ay * bx;
+                    if (Math.abs(denominator) < 1e-9f) continue;      // parallel, or both degenerate
+
+                    float dx = x0[j] - x0[i], dy = y0[j] - y0[i];
+                    float t = (dx * by - dy * bx) / denominator;
+                    float u = (dx * ay - dy * ax) / denominator;
+                    // Strictly interior on both: edges that merely share an endpoint are every adjacent pair
+                    // in the contour, and their shared vertex is already a band boundary.
+                    if (t <= EPSILON || t >= 1f - EPSILON || u <= EPSILON || u >= 1f - EPSILON) continue;
+
+                    if (size == found.length) found = Arrays.copyOf(found, size * 2);
+                    found[size++] = y0[i] + ay * t;
+                }
+                activeCount = keep;
+                active[activeCount++] = current;
+            }
+            return Arrays.copyOf(found, size);
+        }
+
+        private float xAt(int edge, float y) {
+            float dy = y1[edge] - y0[edge];
+            // Guarded even though horizontal edges never reach here: a denormal dy would otherwise produce
+            // an infinity that propagates into the vertex buffer and takes the whole draw with it.
+            if (Math.abs(dy) < 1e-9f) return x0[edge];
+            return x0[edge] + (x1[edge] - x0[edge]) * (y - y0[edge]) / dy;
+        }
     }
 
     /**
-     * Every {@code y} where two edges of the shape cross each other.
+     * The growing mesh.
      *
-     * <p><b>This is what makes a self-intersecting contour come out right, and it is not an edge case.</b>
-     * Exported logo artwork is full of them: the JetBrains mark has four polygons of seven and eight points
-     * that each fold back over themselves. Without a cut at the crossing, one band contains the swap — its
-     * left and right walls trade places partway down — and the trapezoid built from them is a bowtie
-     * covering a wedge of space the shape does not occupy, while leaving a matching wedge that it does
-     * bare. On a stack of overlapping polygons that reads as smears of the colour <em>underneath</em>
-     * showing through, which looks like a paint bug rather than a geometry one.</p>
-     *
-     * <p>Cutting there is enough. Below the crossing the two edges are in one order and above it the other;
-     * within each band they never swap, so the ordinary sweep is exact again. There is no need to split the
-     * edges themselves or to know where the crossing is in {@code x} — the per-band midpoint sort finds
-     * that on its own.</p>
+     * <p>Doubling flat arrays rather than a {@code List<float[]>} plus boxed tags. A gradient-heavy icon
+     * reaches tens of thousands of triangles and the list form allocates four objects for each of them,
+     * which costs more than the arithmetic that produced it.</p>
      */
-    private static float[] selfIntersections(List<float[]> edges) {
-        int count = edges.size();
-        // O(n²), so bounded. Above this an exact sweep-line is the right structure, and a shape with that
-        // many edges is a curve-heavy path whose crossings are sub-pixel anyway.
-        if (count < 2 || count > MAX_INTERSECTION_EDGES) return new float[0];
+    private static final class Sink {
 
-        float[] found = new float[64];
-        int size = 0;
+        private float[] triangles = new float[6 * 64];
+        private int[] slice = new int[64];
+        private boolean[] upper = new boolean[64];
+        private int count;
+
+        /**
+         * Appends one triangle, degenerate or not.
+         *
+         * <p>Unconditional on purpose — see the note on {@link #fill(List, boolean, float, float)}. A pair
+         * that loses a member stops partitioning its own edges, and that costs far more than the empty
+         * instance a zero-area triangle becomes.</p>
+         */
+        void add(int sliceIndex, boolean isUpper,
+                 float x0, float y0, float x1, float y1, float x2, float y2) {
+            if (count == slice.length) {
+                triangles = Arrays.copyOf(triangles, triangles.length * 2);
+                slice = Arrays.copyOf(slice, slice.length * 2);
+                upper = Arrays.copyOf(upper, upper.length * 2);
+            }
+            int at = count * 6;
+            triangles[at] = x0;
+            triangles[at + 1] = y0;
+            triangles[at + 2] = x1;
+            triangles[at + 3] = y1;
+            triangles[at + 4] = x2;
+            triangles[at + 5] = y2;
+            slice[count] = sliceIndex;
+            upper[count] = isUpper;
+            count++;
+        }
+
+        Fill toFill() {
+            return new Fill(Arrays.copyOf(triangles, count * 6),
+                    Arrays.copyOf(slice, count), Arrays.copyOf(upper, count));
+        }
+    }
+
+    /**
+     * Indices of {@code keys[0..count)}, ascending by key, ties broken by index.
+     *
+     * <p>Packed into a {@code long} — sortable key high, index low — so this is one {@code Arrays.sort}
+     * over primitives rather than a boxed comparator. {@link #sortableBits} is the standard IEEE-754
+     * total-order transform: it leaves non-negative floats alone and flips the magnitude bits of negative
+     * ones, which is what makes descending negatives compare as ascending ints.</p>
+     */
+    private static int[] orderBy(float[] keys, int count) {
+        long[] packed = new long[count];
         for (int i = 0; i < count; i++) {
-            float[] a = edges.get(i);
-            float ax = a[2] - a[0], ay = a[3] - a[1];
-            for (int j = i + 1; j < count; j++) {
-                float[] b = edges.get(j);
-                float bx = b[2] - b[0], by = b[3] - b[1];
-                float denominator = ax * by - ay * bx;
-                if (Math.abs(denominator) < 1e-9f) continue;      // parallel, or both degenerate
-
-                float dx = b[0] - a[0], dy = b[1] - a[1];
-                float t = (dx * by - dy * bx) / denominator;
-                float u = (dx * ay - dy * ax) / denominator;
-                // Strictly interior on both: edges that merely share an endpoint are every adjacent pair in
-                // the contour, and their shared vertex is already a band boundary.
-                if (t <= EPSILON || t >= 1f - EPSILON || u <= EPSILON || u >= 1f - EPSILON) continue;
-
-                if (size == found.length) found = Arrays.copyOf(found, size * 2);
-                found[size++] = a[1] + ay * t;
-            }
+            packed[i] = ((long) sortableBits(keys[i]) << 32) | (i & 0xFFFFFFFFL);
         }
-        return Arrays.copyOf(found, size);
+        Arrays.sort(packed);
+        int[] order = new int[count];
+        for (int i = 0; i < count; i++) order[i] = (int) packed[i];
+        return order;
     }
 
-    private static float xAt(float[] edge, float y) {
-        float dy = edge[3] - edge[1];
-        // Guarded even though horizontal edges never reach here: a denormal dy would otherwise produce an
-        // infinity that propagates into the vertex buffer and takes the whole draw with it.
-        if (Math.abs(dy) < 1e-9f) return edge[0];
-        return edge[0] + (edge[2] - edge[0]) * (y - edge[1]) / dy;
+    private static int sortableBits(float value) {
+        int bits = Float.floatToIntBits(value);
+        return bits ^ ((bits >> 31) & 0x7FFFFFFF);
     }
 
     /**
-     * Insertion sort over the three parallel arrays.
+     * Insertion sort over the three parallel arrays, ascending by {@code x} and then by edge index.
      *
      * <p>Parallel primitive arrays rather than a list of crossing objects because this runs once per band
      * per fill, which is the only part of the whole loader that is genuinely hot — a logo with a few
      * hundred flattened vertices is a few hundred bands, and allocating a crossing object for each edge in
      * each of them is the difference between a load you notice and one you do not. Insertion sort because
      * a band typically has two crossings and rarely more than a dozen.</p>
+     *
+     * <p><b>The index tiebreak is not cosmetic.</b> Crossings used to be gathered by walking every edge in
+     * order, so a stable sort left equal {@code x} in index order for free. They now arrive in active-set
+     * order, which is admission order — so the tiebreak is what keeps two coincident crossings in the same
+     * relation as before, and with them the winding walk that reads them.</p>
      */
     private static void sortByX(float[] x, int[] dir, int[] edge, int count) {
         for (int i = 1; i < count; i++) {
             float keyX = x[i];
             int keyDir = dir[i], keyEdge = edge[i];
             int j = i - 1;
-            while (j >= 0 && x[j] > keyX) {
+            while (j >= 0 && (x[j] > keyX || (x[j] == keyX && edge[j] > keyEdge))) {
                 x[j + 1] = x[j];
                 dir[j + 1] = dir[j];
                 edge[j + 1] = edge[j];

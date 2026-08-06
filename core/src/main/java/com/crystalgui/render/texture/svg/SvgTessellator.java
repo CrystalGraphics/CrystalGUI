@@ -1,7 +1,5 @@
 package com.crystalgui.render.texture.svg;
 
-import com.crystalgraphics.util.profiling.CgProfiler;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,14 +27,13 @@ final class SvgTessellator {
     private SvgTessellator() {
     }
 
+    /**
+     * <p><b>Not profiled, and it cannot be.</b> Tessellation is reachable from {@code SvgDocument.parse},
+     * which is pure geometry and therefore runs in {@code headlessTest} with CrystalGraphics core absent —
+     * so a {@code CgProfiler} scope here compiles, passes {@code :core:test}, and dies with
+     * {@code NoClassDefFoundError} on a dedicated server. {@code SvgDocument.load} is the profiled seam.</p>
+     */
     static SvgMesh tessellate(List<SvgPath.Polyline> contours, boolean evenOdd, SvgScene.Paint paint) {
-        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.tessellate")) {
-            return tessellateImpl(contours, evenOdd, paint);
-        }
-    }
-
-    private static SvgMesh tessellateImpl(List<SvgPath.Polyline> contours, boolean evenOdd,
-                                          SvgScene.Paint paint) {
         List<List<float[]>> rings = SvgGeometry.ringsOf(contours);
         if (paint instanceof SvgScene.Gradient gradient) {
             return gradient.gradient().radial()
