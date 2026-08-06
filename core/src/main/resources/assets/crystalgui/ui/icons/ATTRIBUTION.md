@@ -6,41 +6,52 @@ re-exported. That is worth stating plainly because Apache 2.0 requires modificat
 
 ## `filetypes/` — IntelliJ Platform icons
 
-**Copyright © 2000–2021 JetBrains s.r.o. — Apache License 2.0.**
+**Copyright © 2000–2023 JetBrains s.r.o. and contributors — Apache License 2.0.**
 
-From [`platform/icons/src/`](https://github.com/JetBrains/intellij-community/tree/master/platform/icons/src)
-in [intellij-community](https://github.com/JetBrains/intellij-community); the browsable index is at
-<https://intellij-icons.jetbrains.design/>. Most files carry the licence header in their own source.
+The **2023 "New UI" set**, taken from the official browsable index at
+<https://intellij-icons.jetbrains.design/>. Every file carries the licence header in its own source.
 
 Full licence text: <https://www.apache.org/licenses/LICENSE-2.0>
 
-- `fileTypes/` — 47 file-type icons.
-- `nodes/` — `folder`, `package`, `moduleGroup`.
+Each file type ships a light and a dark drawing, as `name.svg` and `name_dark.svg`. The set is **not
+enumerated here on purpose** — it grows as icons are pulled from the index, and a list in a notice file is
+a second copy of a fact that `ls filetypes/` already states, which is the copy that goes stale. The licence
+below covers everything in that directory.
 
 **Unmodified.** Only the directory they sit in has changed.
 
+> An earlier revision of this file described a 2021 set of 47 icons pulled from `platform/icons/src/` in
+> the `intellij-community` repository. That set was **replaced wholesale**, not extended: the 2023 icons
+> are a different drawing language — outlined and warm where the old ones were flat polygons in blue and
+> grey — so the two cannot appear in one file tree without looking like a mistake. The old set also carried
+> a long tail nothing here will ever open (`jsp`, `jspx`, `jupyter`, `microsoftWindows`, `uiForm`,
+> `diagram`, `aspectj`, `idl`, `hprof`, `jfr`, `wsdl`), which is why the replacement is smaller as well as
+> newer.
+
 ### Light and dark
 
-The IntelliJ Platform ships one icon per file type in the general case; a `_dark` variant exists only where
-the light one genuinely does not read on a dark background, which here is four files:
-`Csharp_dark`, `binaryData_dark`, `json_dark`, `jsonSchema_dark`.
+Every icon here ships as both `name.svg` and `name_dark.svg`, and **both are wired up**: `default.json`
+names only the stem, and `FileIconTheme.withVariant` appends the suffix for the active
+`FileIconTheme.Variant`, falling back to the stem when an icon has no dark drawing. An icon that reads on
+either background is therefore free to ship once, and a theme never has to say so.
 
-**Both variants are checked in and neither is wired up yet.** `default.json` names the unsuffixed file in
-every case. Wiring them means a `darkSuffix` key in the theme and a way to ask which chrome is current —
-a small change, and one worth doing once rather than discovering per icon. They are here so that decision
-does not start with re-downloading anything.
+Which variant is active is currently one static on `FileIconTheme` — provisional, and documented there as
+such: there is no editor-theme concept for it to be a property of yet.
 
 ### What is deliberately missing
 
-Kotlin, Python, TypeScript, Rust, Go, C/C++, Ruby, PHP, shell, SQL, Markdown and GLSL have **no icon in the
-Platform set** — theirs live in per-language plugin modules scattered across the repository, and several are
-specific to a paid product. Those extensions resolve to the plain text document.
+Several languages have **no icon in the Platform set** — theirs live in per-language plugin modules, and a
+few are specific to a paid product. GLSL has no JetBrains icon at all; its IntelliJ support is third-party.
+Those extensions resolve to the plain text document until an icon is pulled in for them.
+
+Which ones are still outstanding is stated where it is actionable — in `default.json`, as the entries whose
+value is `filetypes/text`. It is not restated here, for the same reason the shipped set is not listed above.
 
 They are still listed individually in `default.json` rather than left to fall through, because listing them
 is what gives each one its own `.filetype-*` class — so a stylesheet can tell a Kotlin file from a Rust one
-today, on the label, even while they share a glyph.
+today, on the label, even while they share a glyph. Filling one in later is a one-line change to the value.
 
-Closing the gap means either hunting the plugin paths or filling in from
+Closing the gap means either hunting the plugin paths on the index above or filling in from
 [Material Icon Theme](https://github.com/PKief/vscode-material-icon-theme) (MIT), which is licence-compatible
 but a visibly different drawing style: 32px and saturated against IntelliJ's 16px and muted. Mixing them in
 one file tree is the cost.

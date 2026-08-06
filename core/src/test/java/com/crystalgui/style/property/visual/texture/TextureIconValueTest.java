@@ -76,7 +76,10 @@ public class TextureIconValueTest {
         // after the shipped theme was swapped wholesale for a different set -- it was checking that five
         // files still existed, not that the theme and the keyword agree, which is the thing it is for.
         java.util.Set<String> names = FileIconTheme.getDefault().iconNames();
-        assertTrue("the theme named nothing to check", names.size() >= 20);
+        // A floor, deliberately well under what ships (16 as of the 2023 New UI set) rather than tracking
+        // it. What this guards is the theme having PARSED -- pinning it to the exact count turns every
+        // curation of the icon set into an edit of a test that was not testing that.
+        assertTrue("the theme named nothing to check", names.size() >= 10);
         for (String name : names) {
             assertTrue(name + " is in the theme but does not parse as CSS",
                     TextureValue.parseDrawable("icon(\"" + name + "\")") instanceof CgUiSvg);

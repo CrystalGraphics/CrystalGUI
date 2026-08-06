@@ -14,6 +14,7 @@ import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
+import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -155,8 +156,13 @@ public class ProjectTreeIconsTest extends UiTestBase {
         // Identity against a fresh lookup, which is exact: SvgDocument.of caches per path, so the row can
         // only be holding this instance if it resolved this path. Asserting "not EMPTY" instead would pass
         // on the wrong icon entirely, which is the failure a wrong extension map produces.
+        //
+        // Through withVariant rather than naming java.svg outright, so this asserts "the java icon" and not
+        // "the light java icon" -- the active variant is a global, and pinning one here makes flipping the
+        // default fail a test about the extension map for a reason that has nothing to do with it.
         assertSame("the row is not showing the java icon",
-                SvgDocument.of("crystalgui:ui/icons/filetypes/java.svg"),
+                SvgDocument.of(FileIconTheme.toResourcePath(
+                        FileIconTheme.withVariant("crystalgui:filetypes/java"))),
                 ((CgUiSvg) overlay).getDocument());
     }
 

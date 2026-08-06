@@ -8,6 +8,8 @@ import com.crystalgui.render.texture.CgUiSvg;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -95,6 +97,92 @@ public final class FileIconTheme {
     /** Drops every cached theme. Not wired to resource reload yet, same as {@code SvgDocument.of}. */
     public static void invalidateCache() {
         CACHE.clear();
+        DARK_VARIANTS.clear();
+    }
+
+    // ── Light and dark drawings ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Which of an icon's two drawings to use.
+     *
+     * <p>JetBrains ships each icon twice — {@code java.svg} and {@code java_dark.svg} — because an icon
+     * carries its own palette (that is the whole reason {@code filetypes.css} does not tint it), so it
+     * cannot be recoloured for a dark background the way a monochrome glyph can. The two files are
+     * genuinely different drawings, not one drawing inverted.</p>
+     */
+    public enum Variant {
+
+        LIGHT(""),
+        DARK("_dark");
+
+        private final String suffix;
+
+        Variant(String suffix) {
+            this.suffix = suffix;
+        }
+
+        /** Appended to an icon name to reach this variant's file. Empty for {@link #LIGHT}. */
+        public String suffix() {
+            return suffix;
+        }
+    }
+
+    /**
+     * <b>Provisional, and deliberately a static.</b>
+     *
+     * <p>There is no editor-theme concept yet, so there is nothing for an icon variant to be a property
+     * <em>of</em> — and inventing a seam before the thing it seams exists is how you get an abstraction
+     * shaped for a guess. When editor themes land this becomes a property of the active theme and this
+     * field goes away; until then one global switch is the honest representation of "the whole application
+     * is light or dark".</p>
+     *
+     * <p>{@code volatile} because a theme switch is not going to happen on the render thread and a stale
+     * read would show one row's icon from the old variant.</p>
+     */
+    private static volatile Variant variant = Variant.DARK;
+
+    /** Icon name → whether that name's file is actually on disk; see {@link #withVariant}. */
+    private static final ConcurrentHashMap<String, Boolean> DARK_VARIANTS = new ConcurrentHashMap<>();
+
+    public static Variant getVariant() {
+        return variant;
+    }
+
+    public static void setVariant(Variant newVariant) {
+        variant = Objects.requireNonNull(newVariant, "variant");
+    }
+
+    /**
+     * An icon name with the active variant applied — {@code "…/java"} to {@code "…/java_dark"}.
+     *
+     * <h3>Why a suffix convention rather than VS Code's {@code light} override block</h3>
+     *
+     * <p>VS Code's file-icon themes carry a whole second copy of the mapping under a {@code light} key,
+     * because its icons are referenced by arbitrary {@code iconDefinitions} ids with no naming rule — so
+     * there is no way to <em>derive</em> one variant's id from the other's. JetBrains' assets do have that
+     * rule, which lets the same thing be said once per theme instead of once per entry. Sixty duplicated
+     * lines is not a neutral cost: it is sixty chances for the two halves to disagree, and a theme that
+     * maps {@code .yaml} in one block and forgets it in the other is broken only in one colour scheme.</p>
+     *
+     * <p><b>Falls back rather than failing.</b> Not every icon has a dark drawing — a shape that reads on
+     * both backgrounds ships once — so a missing file means "this one is variant-neutral", which is a
+     * legitimate thing for an icon to be and not an authoring error to warn about. The probe is cached
+     * per name because it answers a question about the jar, which does not change while it is running.</p>
+     */
+    @Nullable
+    public static String withVariant(@Nullable String iconName) {
+        if (iconName == null || variant == Variant.LIGHT) return iconName;
+        String candidate = iconName + variant.suffix();
+        return DARK_VARIANTS.computeIfAbsent(candidate, FileIconTheme::resourceExists)
+                ? candidate : iconName;
+    }
+
+    private static boolean resourceExists(String iconName) {
+        try (InputStream stream = CgIO.openStream(toResourcePath(iconName))) {
+            return stream != null;
+        } catch (IOException unreadable) {
+            return false;
+        }
     }
 
     // ── Lookup ──────────────────────────────────────────────────────────────────────────────────────
@@ -141,10 +229,17 @@ public final class FileIconTheme {
         return out;
     }
 
-    /** The icon as a drawable, ready for {@code style().general().overlay(...)}. Null when unresolvable. */
+    /**
+     * The icon as a drawable, ready for {@code style().general().overlay(...)}. Null when unresolvable.
+     *
+     * <p>The active {@link Variant} is applied here rather than in {@link #iconFor}, so a caller asking
+     * which icon a theme <em>maps</em> to gets the theme's own answer while a caller asking for something
+     * to draw gets the drawing that suits the background. Every consumer in the engine goes through this
+     * one, which is why the variant needs no plumbing through {@code ProjectFileTree}.</p>
+     */
     @Nullable
     public CgUiSvg drawableFor(String name, boolean directory, boolean expanded) {
-        String icon = iconFor(name, directory, expanded);
+        String icon = withVariant(iconFor(name, directory, expanded));
         return icon == null ? null : CgUiSvg.of(toResourcePath(icon));
     }
 
@@ -241,14 +336,39 @@ public final class FileIconTheme {
         return root.has(field) ? root.get(field).getAsString() : null;
     }
 
+    /**
+     * A theme's map, with comma-grouped keys expanded.
+     *
+     * <h3>One line may register many keys</h3>
+     *
+     * <p>{@code "png, jpg, jpeg, gif": "…/image"} registers four extensions against one icon, and is
+     * exactly equivalent to writing four entries. Nine image formats and seven archive formats share one
+     * glyph each, so the ungrouped form spends thirty lines saying "and this one too" — and a reader
+     * scanning for what a theme covers has to hold thirty lines in their head to learn there are two
+     * groups. VS Code's own themes have this shape and no such shorthand, which is why theirs run to
+     * several hundred lines.</p>
+     *
+     * <p>Splitting happens at <b>load</b>, so nothing downstream knows it exists: {@link #iconFor} still
+     * sees one key per extension, and a theme written the long way behaves identically. Grouping is
+     * therefore a convenience for whoever writes the file and not a concept the engine carries.</p>
+     *
+     * <p>Whitespace around a member is trimmed, so the separator can be {@code ", "} and stay readable.
+     * An empty member — a trailing comma, a doubled one — is skipped rather than registered as the empty
+     * key, which would otherwise match every name with a leading dot.</p>
+     */
     private static Map<String, String> optMap(JsonObject root, String field) {
         if (!root.has(field)) return Map.of();
         Map<String, String> out = new LinkedHashMap<>();
         for (Map.Entry<String, com.google.gson.JsonElement> entry
                 : root.getAsJsonObject(field).entrySet()) {
-            // Lower-cased on the way IN, so every lookup can lower-case once and compare directly rather
-            // than scanning. File systems disagree about case and users disagree with both.
-            out.put(entry.getKey().toLowerCase(Locale.ROOT), entry.getValue().getAsString());
+            String icon = entry.getValue().getAsString();
+            for (String key : entry.getKey().split(",")) {
+                String trimmed = key.trim();
+                if (trimmed.isEmpty()) continue;
+                // Lower-cased on the way IN, so every lookup can lower-case once and compare directly
+                // rather than scanning. File systems disagree about case and users disagree with both.
+                out.put(trimmed.toLowerCase(Locale.ROOT), icon);
+            }
         }
         return new HashMap<>(out);
     }
