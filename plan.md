@@ -8,7 +8,7 @@
 | Step | | Status |
 |---|---|---|
 | 1 | `Disposable` / `Disposer`, GL-aware (§14) | **DONE** |
-| 2 | `DataContext` + context keys (§15) | not started |
+| 2 | `DataContext` + context keys (§15) | **DONE** |
 | 3 | Typed service events; delete the polling loops (§16) | not started |
 | 4 | `Resource`: schemes, virtual documents (§17) | not started |
 | 5 | `DockPane`: retargetable views (§18) | not started |
@@ -1170,7 +1170,13 @@ wants to be owned by the paint context, and not before.
 
 ---
 
-## 15. Step 2 — `DataContext` and context keys
+## 15. Step 2 — `DataContext` and context keys — **DONE**
+
+> **Shipped.** `core/data/{DataKey,DataProvider,DataContext}.java`, `ui/UiDataKeys.java`, 13 contract
+> tests in `headlessTest`. `UIElement` is now a `DataProvider`; `GraphView`, `ShaderGraphEditor` and
+> `UndoScope` answer keys; `GraphCommands.graphFor` and `ShaderGraphEditor.editorFor` are one line each
+> over the shared walk. The `when` parser stays deferred (§15.6).
+
 
 **Why second:** it retires three hand-rolled parent walks, makes commands conditional, and is the
 precondition for menu contributions. Self-contained and high leverage.

@@ -12,6 +12,8 @@ import com.crystalgui.style.StyleGroup;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.asset.FileIconTheme;
@@ -754,4 +756,18 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             rowItems.remove(template);
         }
     }
+
+    /**
+     * Routes {@link UiDataKeys#UNDO_STACK} through the same walk everything else uses.
+     *
+     * <p>Without this the key would answer null for this widget while {@code UndoScope.nearest} found a
+     * stack — two mechanisms disagreeing about the same question, which is the thing {@code DataContext}
+     * exists to stop.</p>
+     */
+    @Override
+    public Object getData(DataKey<?> key) {
+        Object undo = undoScopeData(key);
+        return undo != null ? undo : super.getData(key);
+    }
+
 }

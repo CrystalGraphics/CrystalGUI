@@ -48,6 +48,8 @@ import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.text.wrap.ShapedLineBreaks;
 import com.crystalgui.text.wrap.WrapIndent;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.event.KeyboardEvent;
@@ -3551,4 +3553,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public boolean acceptsPublicChildren() {
         return false;
     }
+
+    /**
+     * Routes {@link UiDataKeys#UNDO_STACK} through the same walk everything else uses.
+     *
+     * <p>Without this the key would answer null for this widget while {@code UndoScope.nearest} found a
+     * stack — two mechanisms disagreeing about the same question, which is the thing {@code DataContext}
+     * exists to stop.</p>
+     */
+    @Override
+    public Object getData(DataKey<?> key) {
+        Object undo = undoScopeData(key);
+        return undo != null ? undo : super.getData(key);
+    }
+
 }

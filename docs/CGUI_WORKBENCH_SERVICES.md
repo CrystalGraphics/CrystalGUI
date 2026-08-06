@@ -19,7 +19,7 @@ looks like a needed helper is the symptom of one that does not — see
 | Service | State | Section |
 |---|---|---|
 | `Disposer` — ownership and lifetime | **shipped** | [Disposal](#disposal) |
-| `DataContext` — "what am I acting on" | planned (plan §15) | — |
+| `DataContext` — "what am I acting on" | **shipped** | [Data context](#data-context) |
 | Typed service events — replacing polling | planned (plan §16) | — |
 | `Resource` — URI schemes, virtual documents | planned (plan §17) | — |
 | `DockPane` — retargetable panel views | planned (plan §18) | — |
@@ -151,3 +151,64 @@ disposing on close would destroy the file tree the first time somebody closes th
 
 The missing half is the dock announcing a close so the workbench can drop the document. That is
 `plan.md` step 3. Do not work around it locally.
+
+---
+
+## Data context
+
+`com.crystalgui.core.data` — `DataKey`, `DataProvider`, `DataContext`. Standard keys in
+`com.crystalgui.ui.UiDataKeys`.
+
+How a command finds its subject without naming the widget that supplies it. Ported from IntelliJ's
+`DataKey`/`DataProvider`/`DataContext`.
+
+```java
+// asking, from a command
+GraphView graph = context.data().get(GraphView.GRAPH_VIEW);
+if (context.data().has(UiDataKeys.SELECTION)) { … }
+
+// answering, from a widget
+@Override
+public Object getData(DataKey<?> key) {
+    if (key == GRAPH_VIEW) return this;
+    return super.getData(key);        // ALWAYS last
+}
+```
+
+### The rule
+
+**First non-null answer of the right type, walking outward from the focused element.** The same rule
+the keymap uses to resolve a binding and `UndoScope.nearest` uses to find a stack — so a keystroke, an
+undo and a command all agree about what they are addressing.
+
+This replaced three hand-rolled copies of the same walk (`GraphCommands.graphFor`,
+`ShaderGraphEditor.editorFor`, `UndoScope.nearestScope`), each with a different `instanceof`. The point
+is not that it is shorter: a widget can now *supply* a subject without **being** it, so a wrapper, a
+preview or something not yet written can participate in a command written today.
+
+### Rules for implementers
+
+- **Answer for yourself only.** An element that answers on behalf of its children defeats the walk —
+  inner elements are asked first precisely so the innermost answer wins.
+- **Call `super.getData(key)` last**, or the generic `ELEMENT` answer stops being reachable.
+- **Be cheap and side-effect free.** This runs while menus are built and palettes filtered — often, for
+  many keys. Cache where the value changes, not here.
+- **Declare a key where its concept lives.** `UiDataKeys` is for what the engine has an opinion about;
+  a key belonging to one feature belongs with that feature (`GraphView.GRAPH_VIEW`,
+  `ShaderGraphEditor.SHADER_GRAPH`).
+- **Do not keep a `DataContext`.** It caches for one pass and is only valid for that pass.
+
+### Two behaviours worth knowing
+
+- **Internal children are walked.** Click-focus targets the exact element hit, which in a composite is
+  one of its internal parts — a walk that skipped them would lose the subject for precisely the widgets
+  built properly.
+- **A wrong-typed answer is skipped, not fatal, and does not stop the walk.** Accepting it and casting
+  to null afterwards would let one mistaken provider shadow a correct one further out; the command then
+  reports "nothing selected" in a widget that plainly has a selection.
+
+### Not yet here
+
+The `when`-expression parser (`editorFocus && resourceExtname == .java`). Predicates over
+`DataContext` cover commands today; the parser is only needed when keymaps want conditions, and it is
+~1000 lines in VS Code with most of that being parsing. See `plan.md` §15.6.

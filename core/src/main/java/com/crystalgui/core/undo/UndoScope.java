@@ -1,6 +1,8 @@
 package com.crystalgui.core.undo;
 
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.core.data.DataKey;
 
 import javax.annotation.Nullable;
 
@@ -43,5 +45,19 @@ public interface UndoScope {
             if (element instanceof UndoScope scope) return scope;
         }
         return null;
+    }
+
+    /**
+     * Answers {@link UiDataKeys#UNDO_STACK} for a scope, so a command can ask for the stack alongside
+     * everything else instead of through a second lookup.
+     *
+     * <p>A {@code UIElement} implementing this interface should call it from its own
+     * {@code getData}. The walk in {@link com.crystalgui.core.data.DataContext} and the walk in
+     * {@link #nearestScope} are then the same walk, which is the point — a keystroke, an undo and a
+     * command all agree about which document they are addressing.</p>
+     */
+    @Nullable
+    default Object undoScopeData(DataKey<?> key) {
+        return key == UiDataKeys.UNDO_STACK ? undoStack() : null;
     }
 }

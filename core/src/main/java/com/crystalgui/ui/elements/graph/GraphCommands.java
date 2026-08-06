@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.graph;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
+import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.ui.UIElement;
@@ -231,12 +232,17 @@ public final class GraphCommands {
         install(window.getCommands(), window.ui.rootElement);
     }
 
+    /**
+     * The graph this command is acting on.
+     *
+     * <p>Was a hand-rolled walk up {@code getParent()}. It is now one line over {@link DataContext},
+     * which is the same walk with the type pulled out — so a widget that wants to supply a graph
+     * (a wrapper, a preview, something not written yet) can do so by answering the key, rather than by
+     * being a {@code GraphView} in the parent chain.</p>
+     */
     @Nullable
     private static GraphView graphFor(CommandContext context) {
-        for (UIElement element = context.source(); element != null; element = element.getParent()) {
-            if (element instanceof GraphView graph) return graph;
-        }
-        return null;
+        return context.data().get(GraphView.GRAPH_VIEW);
     }
 
     private static void withGraph(CommandContext context, Consumer<GraphView> action) {

@@ -15,6 +15,7 @@ import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.signal.Signal;
@@ -569,12 +570,26 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         return true;
     }
 
+    /** This editor, for a command that acts on one. Declared here because it is this feature's concept. */
+    public static final DataKey<ShaderGraphEditor> SHADER_GRAPH =
+            DataKey.create("shaderGraph", ShaderGraphEditor.class);
+
+    /**
+     * What this editor knows: itself, plus whatever the canvas below it answers.
+     *
+     * <p>Note it does <b>not</b> answer {@code SELECTION} — the {@code GraphView} inside it does, and it
+     * is inside, so the walk reaches it first. Answering here as well would mean the outer element
+     * shadowing the inner one whenever the inner answer happened to be empty.</p>
+     */
+    @Override
+    public Object getData(DataKey<?> key) {
+        if (key == SHADER_GRAPH) return this;
+        return super.getData(key);
+    }
+
     @Nullable
     private static ShaderGraphEditor editorFor(CommandContext context) {
-        for (UIElement element = context.source(); element != null; element = element.getParent()) {
-            if (element instanceof ShaderGraphEditor graph) return graph;
-        }
-        return null;
+        return context.data().get(SHADER_GRAPH);
     }
 
     private boolean attachPreviews(float deltaSeconds) {
