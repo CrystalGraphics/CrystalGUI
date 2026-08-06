@@ -2,6 +2,7 @@ package com.crystalgui.style.property.visual.texture;
 
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
+import com.crystalgui.render.texture.asset.FileIconTheme;
 
 import org.junit.Test;
 
@@ -71,8 +72,12 @@ public class TextureIconValueTest {
      */
     @Test
     public void everyThemeIconIsAlsoNameableFromCss() {
-        for (String name : new String[]{"crystalgui:folder", "crystalgui:file-text", "crystalgui:image",
-                "crystalgui:code", "crystalgui:package"}) {
+        // Walked, not restated. This test previously listed the five icons by hand and went on passing
+        // after the shipped theme was swapped wholesale for a different set -- it was checking that five
+        // files still existed, not that the theme and the keyword agree, which is the thing it is for.
+        java.util.Set<String> names = FileIconTheme.getDefault().iconNames();
+        assertTrue("the theme named nothing to check", names.size() >= 20);
+        for (String name : names) {
             assertTrue(name + " is in the theme but does not parse as CSS",
                     TextureValue.parseDrawable("icon(\"" + name + "\")") instanceof CgUiSvg);
         }

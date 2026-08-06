@@ -66,6 +66,36 @@ public final class SvgTriangulator {
      */
     private static final int MAX_SLICES = 64;
 
+    /**
+     * The most cells one fill may be cut into, shared out across however many bands it has.
+     *
+     * <h3>Why the cap has to know the band count</h3>
+     *
+     * <p>The cuts are axis-aligned, so a gradient running <b>diagonally</b> is approximated by a grid and
+     * asking for N bands of quality costs N² cells rather than N. Only O(N) of them carry new colour.</p>
+     *
+     * <p>Capping the two axes independently does not bound that. A curve-heavy outline already arrives
+     * with hundreds of natural bands — one per flattened vertex — and giving each of them {@link
+     * #MAX_SLICES} slices is what took {@code htaccess}'s feather to <b>30,406 triangles for one 16px
+     * icon</b>. Dividing the budget by the bands that actually exist is the only place the product is
+     * visible, which is why this lives here and not with the spacing that requested it.</p>
+     *
+     * <h3>Why 900, and why it is a ceiling rather than an answer</h3>
+     *
+     * <p>A mesh is built once and cached <em>scale-free</em>, so the number has to be chosen for the size
+     * the artwork is actually drawn at. <b>A 16px icon can display at most sixteen bands</b> — anything
+     * finer is subdivision no display can resolve. 900 cells is a 30×30 grid: smooth well past the sizes
+     * a file tree or a toolbar uses, and enough headroom that a moderate zoom does not fall apart.</p>
+     *
+     * <p>It does fall apart eventually. Zoomed to several hundred pixels, a diagonal ramp facets into a
+     * visible mosaic, and no CPU subdivision fixes that without a mesh per zoom level. The real answer
+     * there is a paint-server shader — the instance record already carries {@code color0}/{@code color1}
+     * and the fragment already mixes them, but a fill forces {@code t = 0} and there is nowhere in the
+     * record to put a gradient axis. Widening it is a backend change, and one worth making only if
+     * something needs large gradient artwork.</p>
+     */
+    private static final int MAX_CELLS = 3000;
+
     private static final int MAX_EXTRA_BANDS = 192;
 
     /** Above this edge count the pairwise crossing search is skipped; see {@link #selfIntersections}. */
@@ -97,8 +127,13 @@ public final class SvgTriangulator {
      * triangle; see the degeneracy note in {@link #fill(List, boolean, float, float)}.</p>
      *
      * @param slice {@code slice[i]} is the slice index of the triangle at {@code triangles[i * 6]}
+     * @param upper {@code true} when that triangle is the <b>upper</b> half of its trapezoid — the one
+     *              touching the band's top edge. The lower half touches the bottom edge, and therefore the
+     *              top edge of the band below. That alternation is what lets a caller give the two sides of
+     *              every shared edge opposite sub-pixel offsets and get an exact coverage partition; see
+     *              {@code SvgDocument.drawFill}
      */
-    public record Fill(float[] triangles, int[] slice) {
+    public record Fill(float[] triangles, int[] slice, boolean[] upper) {
     }
 
     /**
@@ -137,7 +172,7 @@ public final class SvgTriangulator {
                 edges.add(new float[]{a[0], a[1], b[0], b[1]});
             }
         }
-        Fill empty = new Fill(new float[0], new int[0]);
+        Fill empty = new Fill(new float[0], new int[0], new boolean[0]);
         if (edges.isEmpty()) return empty;
 
         float[] bands = bandBoundaries(edges, stepY);
@@ -145,7 +180,11 @@ public final class SvgTriangulator {
 
         List<float[]> triangles = new ArrayList<>();
         List<Integer> slices = new ArrayList<>();
+        List<Boolean> uppers = new ArrayList<>();
         int sliceIndex = 0;
+        // Shared out now that the bands are known. A shape whose outline already supplies three hundred
+        // bands gets a handful of slices each; a rectangle with two bands may have the lot.
+        int sliceAllowance = Math.max(1, MAX_CELLS / Math.max(1, bands.length - 1));
         float[] crossX = new float[edges.size()];
         int[] crossDir = new int[edges.size()];
         int[] crossEdge = new int[edges.size()];
@@ -188,14 +227,18 @@ public final class SvgTriangulator {
                 // piece the same shape as the whole, so the slicing needs no clipping and no special case.
                 float widest = Math.max(Math.abs(rt - lt), Math.abs(rb - lb));
                 int count = stepX > 0f
-                        ? Math.max(1, Math.min(MAX_SLICES, (int) Math.ceil(widest / stepX)))
+                        ? Math.max(1, Math.min(Math.min(MAX_SLICES, sliceAllowance),
+                                (int) Math.ceil(widest / stepX)))
                         : 1;
                 for (int s = 0; s < count; s++) {
                     float a = (float) s / count, b = (float) (s + 1) / count;
                     float at = lt + (rt - lt) * a, ab = lb + (rb - lb) * a;
                     float bt = lt + (rt - lt) * b, bb = lb + (rb - lb) * b;
-                    add(triangles, slices, sliceIndex, at, top, bt, top, bb, bottom);
-                    add(triangles, slices, sliceIndex, at, top, bb, bottom, ab, bottom);
+                    // Upper half first: it carries the band's TOP edge. The lower carries the bottom, which
+                    // is the next band's top -- so "upper" alternates across every horizontal seam as well
+                    // as across the diagonal the two of them share.
+                    add(triangles, slices, uppers, sliceIndex, true, at, top, bt, top, bb, bottom);
+                    add(triangles, slices, uppers, sliceIndex, false, at, top, bb, bottom, ab, bottom);
                     sliceIndex++;
                 }
             }
@@ -203,11 +246,13 @@ public final class SvgTriangulator {
 
         float[] packed = new float[triangles.size() * 6];
         int[] tags = new int[triangles.size()];
+        boolean[] halves = new boolean[triangles.size()];
         for (int i = 0; i < triangles.size(); i++) {
             System.arraycopy(triangles.get(i), 0, packed, i * 6, 6);
             tags[i] = slices.get(i);
+            halves[i] = uppers.get(i);
         }
-        return new Fill(packed, tags);
+        return new Fill(packed, tags, halves);
     }
 
     /**
@@ -218,12 +263,14 @@ public final class SvgTriangulator {
      * thousandth of a unit wide is degenerate for every purpose that matters and its winding sign is
      * whatever the rounding decided.</p>
      */
-    private static void add(List<float[]> out, List<Integer> slices, int slice,
+    private static void add(List<float[]> out, List<Integer> slices, List<Boolean> uppers,
+                            int slice, boolean upper,
                             float x0, float y0, float x1, float y1, float x2, float y2) {
         float area = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0);
         if (Math.abs(area) < DEGENERATE_AREA) return;
         out.add(new float[]{x0, y0, x1, y1, x2, y2});
         slices.add(slice);
+        uppers.add(upper);
     }
 
     /**

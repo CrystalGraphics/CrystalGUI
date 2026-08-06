@@ -8,10 +8,7 @@ import com.crystalgui.render.texture.CgUiSvg;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
@@ -123,6 +120,25 @@ public final class FileIconTheme {
         if (named != null) return named;
         String extension = matchExtension(key, fileExtensions);
         return extension != null ? fileExtensions.get(extension) : fileIcon;
+    }
+
+    /**
+     * Every distinct icon this theme can produce, in no particular order.
+     *
+     * <p>Exists so a test can walk a theme rather than restate it. A hand-written list of "the icons we
+     * ship" is two copies of the same fact, and the copy in the test is the one that goes stale — the
+     * theme grows an entry, nothing checks the file exists, and the first anyone hears of it is a blank
+     * row in a file tree.</p>
+     */
+    public Set<String> iconNames() {
+        Set<String> out = new LinkedHashSet<>();
+        if (fileIcon != null) out.add(fileIcon);
+        if (folderIcon != null) out.add(folderIcon);
+        if (folderExpandedIcon != null) out.add(folderExpandedIcon);
+        out.addAll(fileExtensions.values());
+        out.addAll(fileNames.values());
+        out.addAll(folderNames.values());
+        return out;
     }
 
     /** The icon as a drawable, ready for {@code style().general().overlay(...)}. Null when unresolvable. */

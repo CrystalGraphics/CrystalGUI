@@ -1,10 +1,13 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.render.texture.svg.SvgDocument;
 
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
@@ -18,7 +21,42 @@ public class FileIconThemeTest {
 
     private static final FileIconTheme THEME = FileIconTheme.getDefault();
 
-    /** The shipped theme parses and every icon it names actually exists as a file. */
+    /**
+     * <b>Every icon the shipped theme names exists, loads, and draws something.</b>
+     *
+     * <p>Walks the theme rather than restating it. A hand-written list of "the icons we ship" is two
+     * copies of one fact and the copy in the test is the one that goes stale — a theme grows an entry,
+     * nothing checks the file is there, and the first anyone hears of it is a blank row in a file tree.</p>
+     *
+     * <p>"Draws something" is the half that matters. A missing file and a file that parses to nothing both
+     * produce an empty icon on screen, and only the second one gets past a null check.</p>
+     */
+    @Test
+    public void everyIconTheThemeNamesLoadsAndDraws() {
+        // A FLOOR, not merely non-empty. `file` and `folder` alone make iconNames() non-empty, so an
+        // extension map that failed to parse -- or a theme file truncated to its first few keys -- would
+        // sail past an isEmpty() check while the file tree quietly showed one glyph for everything.
+        assertTrue("the shipped theme resolved only " + THEME.iconNames().size()
+                        + " distinct icons; the extension map did not parse",
+                THEME.iconNames().size() >= 20);
+        for (String name : THEME.iconNames()) {
+            SvgDocument document = SvgDocument.of(FileIconTheme.toResourcePath(name));
+            assertNotNull(name + " is named by the theme but has no file", document);
+            assertFalse(name + " loaded but draws nothing", document.isEmpty());
+
+            // Inside its own box, so a mishandled transform shows up as a failure rather than as artwork
+            // sprayed across the row.
+            float w = document.width(), h = document.height();
+            for (SvgDocument.DrawOp op : document.ops()) {
+                for (int i = 0; i < op.data().length; i += 2) {
+                    assertTrue(name + " escaped its viewBox",
+                            op.data()[i] >= -1f && op.data()[i] <= w + 1f
+                                    && op.data()[i + 1] >= -1f && op.data()[i + 1] <= h + 1f);
+                }
+            }
+        }
+    }
+
     @Test
     public void theShippedThemeResolvesToRealIcons() {
         assertNotNull("Main.java", THEME.drawableFor("Main.java", false, false));
@@ -36,8 +74,8 @@ public class FileIconThemeTest {
      */
     @Test
     public void anExactNameBeatsAnExtension() {
-        assertEquals("crystalgui:package", THEME.iconFor("package.json", false, false));
-        assertEquals("crystalgui:code", THEME.iconFor("tsconfig.json", false, false));
+        assertEquals("crystalgui:filetypes/json", THEME.iconFor("package.json", false, false));
+        assertEquals("crystalgui:filetypes/json", THEME.iconFor("tsconfig.json", false, false));
     }
 
     /**
@@ -65,15 +103,15 @@ public class FileIconThemeTest {
     @Test
     public void aNameWithNoDotMatchesNoExtension() {
         assertEquals("filetype-file", THEME.classFor("ts", false));
-        assertEquals("crystalgui:file-text", THEME.iconFor("ts", false, false));
+        assertEquals("crystalgui:filetypes/text", THEME.iconFor("ts", false, false));
     }
 
     /** Case is not meaningful in a file name here, and disagreeing file systems are why. */
     @Test
     public void lookupIsCaseInsensitive() {
-        assertEquals("crystalgui:code", THEME.iconFor("MAIN.JAVA", false, false));
+        assertEquals("crystalgui:filetypes/java", THEME.iconFor("MAIN.JAVA", false, false));
         assertEquals("filetype-java", THEME.classFor("Main.Java", false));
-        assertEquals("crystalgui:package", THEME.iconFor("Package.JSON", false, false));
+        assertEquals("crystalgui:filetypes/json", THEME.iconFor("Package.JSON", false, false));
     }
 
     /**

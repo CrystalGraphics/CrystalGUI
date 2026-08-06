@@ -44,7 +44,7 @@ import javax.annotation.Nullable;
  * <h3>Where it approximates, on purpose</h3>
  *
  * <p>A gradient is sampled per triangle rather than per pixel, so it is a fine staircase rather than a
- * ramp — invisible at the density {@link SvgGradient#STEPS} sets, and it costs no shader. A <b>stroked</b>
+ * ramp — cut fine enough that each band moves the colour by at most two levels, and it costs no shader. A <b>stroked</b>
  * gradient does collapse to one colour: a stroke is not subdivided, and a per-segment ramp along a
  * two-unit-wide outline is not a thing anyone can see. Patterns, filters, masks and clip paths are ignored
  * outright — a clipped shape draws unclipped rather than vanishing, on the reasoning that a visible
@@ -74,12 +74,51 @@ public final class SvgDocument {
     private static final int MAX_USE_DEPTH = 8;
 
     /**
-     * How far each fill triangle is grown, in screen pixels, to cover the seams between them.
+     * How far a fill triangle is nudged, in screen pixels, to make the coverage partition exact.
      *
-     * <p>Half a pixel: enough that two neighbours overlap by a full one, small enough that the outline
-     * being that much proud is invisible at any size an icon is drawn at.</p>
+     * <h3>Why a fill needs this at all</h3>
+     *
+     * <p>A fill is a strip of trapezoids, each split into two triangles, and every internal edge is shared
+     * by exactly two of them. A pixel centre landing <b>exactly</b> on a shared edge is at SDF distance
+     * zero from both, so each reports half coverage and source-over yields {@code 1-(1-0.5)² = 0.75}
+     * instead of 1. Measured at a <b>25% dip</b> on one row spanning the whole shape — and only when the
+     * coincidence actually happens, which is why the line appears and disappears as a viewer zooms rather
+     * than being reliably present.</p>
+     *
+     * <h3>Two obvious fixes, both wrong</h3>
+     *
+     * <p>Growing every triangle so neighbours overlap removes the dip and replaces it with a double blend:
+     * correct for an opaque fill, and these are not — the IntelliJ set states {@code fill-opacity=".7"}
+     * and {@code ".8"} on most shapes, so an overlap composites twice and draws a <em>lighter</em> line
+     * along every internal edge, always, at every zoom. Snapping the draw to whole pixels is worse still:
+     * this artwork sits on a half-unit grid, so an integer origin at scale 1 puts the band edges
+     * <em>precisely</em> on pixel centres. Measured: 0.0000px away.</p>
+     *
+     * <h3>The partition, made exact</h3>
+     *
+     * <p>Each triangle is offset by ±this, by which half of its trapezoid it is: the upper half is grown,
+     * the lower is shrunk. The two halves share a diagonal, so one claims it and the other does not; and
+     * a band's lower half meets the next band's upper half, so every horizontal seam is likewise a shrunk
+     * edge against a grown one. <b>Every internal edge therefore belongs to exactly one triangle</b> —
+     * full coverage, once, with no gap and no double blend, at any zoom and any alpha.</p>
+     *
+     * <p>The magnitude only has to beat the shader's own coverage ramp, which is {@code 1e-4}px wide. A
+     * thousandth of a pixel does that with three orders of margin and is not a size anything can show.</p>
      */
-    private static final float FILL_DILATION = 0.5f;
+    private static final float FILL_OFFSET = 0.001f;
+
+    /**
+     * How long a gradient cell may be relative to its depth, before it is cut.
+     *
+     * <p>Purely a rasterisation bound — see the note in {@code emitLinearGradientFill}. A cell's colour is
+     * constant along its length, so this trades triangles for fragments, and fragments are what a zoomed
+     * icon runs out of first: a long diagonal cell's axis-aligned bounding box grows with the square of
+     * its length while the cell itself grows linearly.</p>
+     *
+     * <p>Two, rather than one: square cells minimise the box but a 2:1 cell's box is only about a quarter
+     * larger, for half the triangles.</p>
+     */
+    private static final float MAX_CELL_ASPECT = 2f;
 
     /**
      * Elements whose content is a definition, not a picture.
@@ -117,8 +156,8 @@ public final class SvgDocument {
      *                     time. Late-bound rather than resolved here because a document is cached and
      *                     shared, and the same icon is routinely drawn in two colours in one frame
      */
-    public record DrawOp(boolean fill, float[] data, @Nullable int[] colours, int argb,
-                         boolean currentColor, float halfWidth, int cap) {
+    public record DrawOp(boolean fill, float[] data, @Nullable int[] colours, @Nullable boolean[] upper,
+                         int argb, boolean currentColor, float halfWidth, int cap) {
     }
 
     private final List<DrawOp> ops;
@@ -420,7 +459,7 @@ public final class SvgDocument {
             if (style.strokes()) {
                 float[] segments = segmentsOf(contours);
                 if (segments.length > 0) {
-                    ops.add(new DrawOp(false, segments, null, style.strokeArgb(),
+                    ops.add(new DrawOp(false, segments, null, null, style.strokeArgb(),
                             style.stroke().currentColor(),
                             style.strokeHalfWidth() * transform.lengthScale(), style.cap()));
                 }
@@ -436,26 +475,130 @@ public final class SvgDocument {
             if (gradient != null && gradient.colours().length < 2) gradient = null;
 
             float[] box = boundsOf(rings);
+            float alpha = style.fillOpacity() * style.opacity();
+
+            if (gradient != null && !gradient.radial()) {
+                emitLinearGradientFill(rings, style, transform, gradient, box, alpha);
+                return;
+            }
+
             float[] spacing = gradient == null ? new float[]{0f, 0f} : gradient.sampleSpacing(box);
             SvgTriangulator.Fill mesh =
                     SvgTriangulator.fill(rings, style.evenOdd(), spacing[0], spacing[1]);
             float[] triangles = mesh.triangles();
             if (triangles.length == 0) return;
 
-            int[] colours = null;
-            if (gradient != null) {
-                colours = gradientColours(mesh, gradient, box,
-                        style.fillOpacity() * style.opacity());
+            int[] colours = gradient == null ? null : gradientColours(mesh, gradient, box, alpha);
+            transformInPlace(triangles, transform);
+            ops.add(new DrawOp(true, triangles, colours, mesh.upper(), style.fillArgb(),
+                    style.fill().currentColor(), 0f, 0));
+        }
+
+        /**
+         * A linear gradient, cut into strips that lie ALONG the ramp rather than across it.
+         *
+         * <h3>Why the frame is rotated</h3>
+         *
+         * <p>The scanline cuts in {@code y}. For a gradient running any other direction, a band therefore
+         * spans a <em>range</em> of ramp positions, so no single colour is right for it — the flat colour
+         * is correct only down the band's middle and wrong at both edges, and the error reverses at the
+         * next band. That reads as visible strips with a smooth fade inside each one, which is exactly
+         * what it is: the fade is the slices doing their job, and the strip edges are the bands failing
+         * at theirs.</p>
+         *
+         * <p>Rotating the shape so the gradient points along {@code +y} makes every band an <b>iso-line
+         * strip</b> — constant ramp position from end to end — so one flat colour per band is not an
+         * approximation at all. The triangles are rotated back before they are stored, so nothing
+         * downstream knows this happened.</p>
+         *
+         * <h3>It is also far cheaper</h3>
+         *
+         * <p>Cutting on both axes to chase a diagonal ramp costs N² cells for N bands of quality, and
+         * only O(N) of them carry new colour. Cutting along the ramp needs no horizontal slicing at all,
+         * so the cost drops to the bands themselves.</p>
+         *
+         * <p>Radial gradients keep the old path: their iso-lines are circles, and no rotation makes a
+         * circle straight.</p>
+         */
+        private void emitLinearGradientFill(List<List<float[]>> rings, SvgStyle style,
+                                            SvgTransform transform, SvgGradient gradient,
+                                            float[] box, float alpha) {
+            float[] axis = gradient.effectiveAxis(box);
+            float dx = axis[2] - axis[0], dy = axis[3] - axis[1];
+            float lengthSq = dx * dx + dy * dy;
+            if (lengthSq < 1e-9f) return;
+            float length = (float) Math.sqrt(lengthSq);
+            float ux = dx / length, uy = dy / length;
+
+            // R maps the ramp direction onto +y, so v is the projection along the axis and u runs across
+            // it. Chosen over a general matrix because the inverse is the transpose and both are two
+            // multiply-adds -- and because v IS the gradient parameter, unnormalised, which is the whole
+            // reason for the change of frame.
+            List<List<float[]>> rotated = new ArrayList<>(rings.size());
+            for (List<float[]> ring : rings) {
+                List<float[]> out = new ArrayList<>(ring.size());
+                for (float[] p : ring) out.add(new float[]{uy * p[0] - ux * p[1], ux * p[0] + uy * p[1]});
+                rotated.add(out);
             }
 
+            float originV = ux * axis[0] + uy * axis[1];
+            float minV = Float.MAX_VALUE, maxV = -Float.MAX_VALUE;
+            for (List<float[]> ring : rotated) {
+                for (float[] p : ring) {
+                    minV = Math.min(minV, p[1]);
+                    maxV = Math.max(maxV, p[1]);
+                }
+            }
+            float t0 = (minV - originV) / length;
+            float t1 = (maxV - originV) / length;
+            int bands = gradient.bandCountFor(t0, t1);
+            float stepV = (maxV - minV) / Math.max(1, bands);
+
+            // SLICED ALONG THE BAND TOO -- for the GPU, not for the colour.
+            //
+            // A band is one ramp position from end to end, so cutting it changes nothing anyone can see.
+            // What it changes is the shape of the triangles: rotated back into screen space a band is a
+            // long thin DIAGONAL strip, and an instance rasterises the AXIS-ALIGNED bounding quad of its
+            // triangle. For a diagonal strip spanning the icon that box is nearly the whole icon.
+            //
+            // Measured: the JetBrains mark asked the rasteriser for 55.7x its own area in fragments while
+            // covering 1.44x -- close to 39x overdraw, which at full-screen zoom is a GPU pinned at 90%
+            // and audible fans. Capping each cell's length against its height brings the box back down to
+            // roughly the cell itself.
+            float stepU = stepV * MAX_CELL_ASPECT;
+
+            SvgTriangulator.Fill mesh = SvgTriangulator.fill(rotated, style.evenOdd(), stepU, stepV);
+            float[] triangles = mesh.triangles();
+            if (triangles.length == 0) return;
+
+            int[] colours = new int[triangles.length / 6];
+            for (int i = 0; i < colours.length; i++) {
+                int at = i * 6;
+                float v = (triangles[at + 1] + triangles[at + 3] + triangles[at + 5]) / 3f;
+                colours[i] = SvgColor.withOpacity(
+                        gradient.colourAt(gradient.spreadPublic((v - originV) / length)), alpha);
+            }
+
+            // Back out of the rotated frame, then through the element's own transform. Both are affine, so
+            // the triangles stay triangles and the mesh stays valid.
+            for (int i = 0; i < triangles.length; i += 2) {
+                float u = triangles[i], v = triangles[i + 1];
+                float x = uy * u + ux * v;
+                float y = -ux * u + uy * v;
+                triangles[i] = transform.applyX(x, y);
+                triangles[i + 1] = transform.applyY(x, y);
+            }
+            ops.add(new DrawOp(true, triangles, colours, mesh.upper(), style.fillArgb(),
+                    style.fill().currentColor(), 0f, 0));
+        }
+
+        private static void transformInPlace(float[] triangles, SvgTransform transform) {
             for (int i = 0; i < triangles.length; i += 2) {
                 float px = transform.applyX(triangles[i], triangles[i + 1]);
                 float py = transform.applyY(triangles[i], triangles[i + 1]);
                 triangles[i] = px;
                 triangles[i + 1] = py;
             }
-            ops.add(new DrawOp(true, triangles, colours, style.fillArgb(),
-                    style.fill().currentColor(), 0f, 0));
         }
 
         /**
@@ -727,21 +870,21 @@ public final class SvgDocument {
                                  float x, float y, float scale, int argb, boolean flat) {
         float[] t = op.data();
         int[] colours = op.colours();
+        boolean[] upper = op.upper();
         for (int i = 0; i < t.length; i += 6) {
+            int triangle = i / 6;
             ctx.triangle()
                     .points(x + t[i] * scale, y + t[i + 1] * scale,
                             x + t[i + 2] * scale, y + t[i + 3] * scale,
                             x + t[i + 4] * scale, y + t[i + 5] * scale)
-                    .color(colours == null || flat ? argb : colours[i / 6])
-                    // Dilated by half the feather, and this pairing is the whole trick. A fill is a mosaic
-                    // of triangles that tile EXACTLY, so a feathered edge on each of them lands two 50%
-                    // coverages on every shared edge -- a mesh of pale seams across the middle of a solid
-                    // shape. Growing each triangle by half a pixel makes neighbours overlap by a full one,
-                    // so the shared edge is at 100% from both sides and the seams vanish. The cost is that
-                    // the outline sits half a pixel proud; the alternative, feather 0, is a hard aliased
-                    // edge on the outside, which is the one edge anybody actually looks at.
-                    .cornerRadius(FILL_DILATION)
-                    .feather(FILL_DILATION * 2f)
+                    .color(colours == null || flat ? argb : colours[triangle])
+                    // Grown or shrunk by a thousandth of a pixel, alternating across every shared edge --
+                    // see FILL_OFFSET. A NEGATIVE radius erodes, which is why stroke.glsl no longer clamps
+                    // it to zero.
+                    .cornerRadius(upper[triangle] ? FILL_OFFSET : -FILL_OFFSET)
+                    // No feather: the offsets above make the partition exact, and any ramp would put the
+                    // two sides of an internal edge back into partial coverage together.
+                    .feather(0f)
                     .submit();
         }
     }

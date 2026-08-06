@@ -1,0 +1,48 @@
+/*
+ * File decoration palette — the colours a FileDecorationProvider's styleClass resolves to.
+ *
+ * A theme fragment, like filetypes.css and for the same reason: default.css is the user-agent sheet and
+ * carries geometry only. Add it with
+ * styleEngine.addStylesheet(StyleSheetRegistry.of("crystalgui:decorations")).
+ *
+ * WHY THESE ARE CLASSES AND NOT ARGB INTS. VS Code's IDecorationData names a theme colour id; a
+ * FileDecoration names a CSS class. Same intent, and it is the rule the rest of this engine already
+ * follows -- graph.css owns the port palette and NodePort reads its wire colour back out of the cascade,
+ * rather than Java holding colours no theme can reach.
+ *
+ * `color` is inherited, so setting it on the ROW reaches the label and any currentColor mark inside it.
+ * It does NOT reach the file-type icon: the shipped IntelliJ icons carry their own fills. That is
+ * deliberate and matches every editor -- a modified Java file keeps its Java icon and turns its NAME
+ * orange, rather than repainting the glyph.
+ *
+ * Colours follow VS Code's own git decoration set, because they are the ones people already read without
+ * being told.
+ */
+
+/* Version control ---------------------------------------------------------------------------------- */
+.decoration-modified   { color: #E2C08D; }
+.decoration-added      { color: #81B88B; }
+.decoration-deleted    { color: #C74E39; text-decoration-line: line-through; }
+.decoration-renamed    { color: #73C991; }
+.decoration-untracked  { color: #73C991; }
+.decoration-conflict   { color: #E4676B; }
+
+/* Ignored is the one that reads as ABSENCE rather than as a colour: it is dimmed, not tinted. A colour
+ * would make an ignored file more prominent than a tracked one, which is backwards. */
+.decoration-ignored    { color: #6B6B6B; }
+
+/* Diagnostics -------------------------------------------------------------------------------------- */
+.decoration-error      { color: #F14C4C; }
+.decoration-warning    { color: #CCA700; }
+.decoration-info       { color: #3794FF; }
+
+/* Editor state ------------------------------------------------------------------------------------- */
+.decoration-dirty      { color: #E2C08D; }
+.decoration-readonly   { color: #8A9199; }
+
+/* The badge inherits the row's decoration colour through `color`, so it needs no rule per state --
+ * only the shared shrink. Stated here rather than in default.css because a theme that wants no badges
+ * at all should be able to say so without editing the user-agent sheet. */
+.__project-row__ .__badge__ {
+    font-size: 11px;
+}
