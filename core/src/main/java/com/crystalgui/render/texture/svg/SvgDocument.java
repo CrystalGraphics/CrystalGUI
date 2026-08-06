@@ -2,6 +2,7 @@ package com.crystalgui.render.texture.svg;
 
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.util.io.CgIO;
+import com.crystalgraphics.util.profiling.CgProfiler;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
@@ -181,6 +182,8 @@ public final class SvgDocument {
     private final List<SvgPath.Polyline> outline;
     private final float width;
     private final float height;
+    /** {@code minX, minY, maxX, maxY} over every op's geometry — see {@link #boundsOf}. */
+    private final float[] bounds;
 
     private SvgDocument(List<DrawOp> ops, List<SvgPath.Polyline> outline, float width, float height) {
         // Unmodifiable, because a document is cached and shared by every consumer drawing that icon --
@@ -189,6 +192,55 @@ public final class SvgDocument {
         this.outline = Collections.unmodifiableList(outline);
         this.width = width;
         this.height = height;
+        this.bounds = boundsOf(this.ops);
+    }
+
+    /**
+     * The box every op actually occupies, for culling.
+     *
+     * <p><b>Measured, not taken from the viewBox.</b> Artwork routinely draws outside its own viewBox —
+     * a stroke centred on the edge puts half its width beyond it — and a cull box that is too small is a
+     * missing icon, which is the one failure mode worth engineering against here.</p>
+     *
+     * <p>Because it is measured, it needs <b>no slack</b>. {@code CgTextCuller} pads by a full layout
+     * height because a text box is a layout construct that glyphs are not obliged to stay inside; this
+     * box is the geometry itself, so there is nothing to overhang it. Strokes are expanded by their own
+     * half-width, which is the only thing the raw points understate.</p>
+     */
+    private static float[] boundsOf(List<DrawOp> ops) {
+        float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
+        float maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
+        for (DrawOp op : ops) {
+            float[] data = op.data();
+            float pad = op.fill() ? 0f : op.halfWidth();
+            int stride = op.fill() ? 6 : 4;
+            for (int i = 0; i + stride <= data.length; i += stride) {
+                for (int v = 0; v < stride; v += 2) {
+                    minX = Math.min(minX, data[i + v] - pad);
+                    minY = Math.min(minY, data[i + v + 1] - pad);
+                    maxX = Math.max(maxX, data[i + v] + pad);
+                    maxY = Math.max(maxY, data[i + v + 1] + pad);
+                }
+            }
+        }
+        return minX > maxX ? new float[]{0f, 0f, 0f, 0f} : new float[]{minX, minY, maxX, maxY};
+    }
+
+    /**
+     * A cheap reject before any geometry is submitted.
+     *
+     * <p>The saving is not the draw call — one instanced draw of every icon on screen measured 3.8
+     * <b>micro</b>seconds. It is the CPU submission loop that feeds it: {@code drawFill} costs about 90ns
+     * per triangle, so an icon scrolled out of a tree, or the fifty-odd cells of a grid that a zoom has
+     * pushed off screen, are paid for in full every frame for nothing.</p>
+     */
+    private boolean cullable(CgUiPaintContext ctx, float x, float y, float scale, float extra) {
+        if (ops.isEmpty()) return true;
+        float x0 = x + bounds[0] * scale - extra;
+        float y0 = y + bounds[1] * scale - extra;
+        float x1 = x + bounds[2] * scale + extra;
+        float y1 = y + bounds[3] * scale + extra;
+        return !ctx.isVisible(x0, y0, x1 - x0, y1 - y0);
     }
 
     /**
@@ -324,6 +376,7 @@ public final class SvgDocument {
      * @param tint what {@code currentColor} resolves to — the hook a monochrome icon set is themed through
      */
     public void render(CgUiPaintContext ctx, float x, float y, float scale, int tint) {
+        if (cullable(ctx, x, y, scale, 0f)) return;
         for (DrawOp op : ops) {
             int argb = op.currentColor() ? tint : op.argb();
             if (op.fill()) {
@@ -346,6 +399,10 @@ public final class SvgDocument {
      */
     public void renderMonochrome(CgUiPaintContext ctx, float x, float y, float scale,
                                  int argb, float halfWidth) {
+        // The override can be WIDER than the stroke the bounds were measured from, so it has to expand
+        // the box -- otherwise a thick monochrome stroke gets culled at the viewport edge while still
+        // partly on screen.
+        if (cullable(ctx, x, y, scale, Math.max(0f, halfWidth))) return;
         for (DrawOp op : ops) {
             if (op.fill()) {
                 drawFill(ctx, op, x, y, scale, argb, true);
@@ -363,6 +420,13 @@ public final class SvgDocument {
      */
     private static void drawFill(CgUiPaintContext ctx, DrawOp op,
                                  float x, float y, float scale, int argb, boolean flat) {
+        // Scoped per OP, never per triangle: a scope costs a nanoTime pair, and a fill is hundreds of
+        // triangles, so per-triangle instrumentation would measure itself. The triangle count rides along
+        // as a counter instead, which is what turns "drawFill is slow" into "drawFill is slow per triangle"
+        // or "there are simply a lot of triangles".
+        CgProfiler.Scope scope = CgProfiler.scope("svg.drawFill");
+        CgProfiler.count("svg.fillTriangles", op.data().length / 6);
+        try (CgProfiler.Scope ignored = scope) {
         float[] t = op.data();
         boolean[] upper = op.upper();
         int[] start = op.colours();
@@ -403,10 +467,13 @@ public final class SvgDocument {
                     .feather(SILHOUETTE_FEATHER)
                     .submit();
         }
+        }
     }
 
     private static void drawStroke(CgUiPaintContext ctx, DrawOp op,
                                    float x, float y, float scale, int argb, float halfWidth) {
+        CgProfiler.count("svg.strokeSegments", op.data().length / 4);
+        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.drawStroke")) {
         float[] s = op.data();
         for (int i = 0; i < s.length; i += 4) {
             // Per SEGMENT, not per op: the caps were decided where the contour structure was still known,
@@ -421,6 +488,7 @@ public final class SvgDocument {
                     .color(argb)
                     .cap(packed & 3, (packed >> 2) & 3)
                     .submit();
+        }
         }
     }
 
