@@ -1,8 +1,10 @@
 package com.crystalgui.ui.elements.dock;
 
+import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * {@code typeId} → what it is, and how to build one.
@@ -69,10 +71,77 @@ public final class DockPanelRegistry<C> {
         return factory == null ? null : factory.create(ref);
     }
 
-    /** The tab label for a panel: its own {@code title} state if it carries one, else the type's. */
+    /**
+     * Decorates a tab label with whatever the owner knows and the ref cannot — a dirty marker, most of
+     * all. Null from the provider means "nothing to add", not an error.
+     *
+     * <p>This is IntelliJ's {@code EditorTabTitleProvider}, and it exists because a panel's title is
+     * <b>partly</b> a function of its ref and partly not. The ref half is immutable and known at build
+     * time; the other half changes as a document is typed into, and putting it in the ref is not an
+     * option — a ref's identity <em>includes</em> its state, so editing a title would silently make it a
+     * different panel and orphan its own tab.</p>
+     *
+     * <p>A provider rather than a setter on the tab, because the strip is rebuilt on every dock
+     * rearrangement: anything pushed in has to be pushed again after each rebuild by someone who noticed
+     * it happened, and nobody notices. Pulling means a tab is correct the moment it is built, whoever
+     * built it and whenever.</p>
+     */
+    @Nullable
+    private Function<DockPanelRef, String> titleProvider;
+
+    public DockPanelRegistry<C> setTitleProvider(@Nullable Function<DockPanelRef, String> provider) {
+        this.titleProvider = provider;
+        return this;
+    }
+
+    /**
+     * The tab label for a panel: the {@linkplain #setTitleProvider provider}'s answer if it has one, else
+     * its own {@code title} state, else the type's.
+     */
     public String titleOf(DockPanelRef ref) {
+        if (titleProvider != null) {
+            String decorated = titleProvider.apply(ref);
+            if (decorated != null) return decorated;
+        }
         DockPanelDescriptor descriptor = descriptors.get(ref.typeId());
         String fallback = descriptor != null ? descriptor.title() : ref.typeId();
         return ref.state(DockPanelRef.TITLE, fallback);
+    }
+
+    /**
+     * Supplies a tab icon for panels that do not name one themselves — how a workbench says "a panel on a
+     * {@code .java} file gets the java glyph" without the dock learning what a file type is.
+     */
+    @Nullable
+    private Function<DockPanelRef, String> iconProvider;
+
+    public DockPanelRegistry<C> setIconProvider(@Nullable Function<DockPanelRef, String> provider) {
+        this.iconProvider = provider;
+        return this;
+    }
+
+    /**
+     * The tab icon name for a panel, or null when it has none.
+     *
+     * <p>Beside {@link #titleOf} because it answers the same question about the same thing, and a panel's
+     * presentation being reachable from one place is what lets the strip build a tab completely in one
+     * pass. Null is a real answer, not a failure: a tool window has no file and therefore no icon, and it
+     * must get no icon <em>element</em> rather than an empty one — an empty slot still takes its width and
+     * would step that tab's label out of line with its neighbours.</p>
+     *
+     * <p><b>Provider first, state second, and the ordering is not arbitrary.</b> An explicit
+     * {@link DockPanelRef#ICON} is a panel naming its own icon and is the more specific statement, so it
+     * would normally win — but it is also the value a <em>saved layout</em> carries, which means it is
+     * potentially stale in a way a provider never is. Asking the live workbench first is what lets a
+     * changed icon theme reach a restored layout.</p>
+     */
+    @Nullable
+    public String iconOf(DockPanelRef ref) {
+        if (iconProvider != null) {
+            String provided = iconProvider.apply(ref);
+            if (provided != null && !provided.isEmpty()) return provided;
+        }
+        String icon = ref.state(DockPanelRef.ICON, "");
+        return icon.isEmpty() ? null : icon;
     }
 }
