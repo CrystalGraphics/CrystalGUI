@@ -21,6 +21,7 @@ Read the files relevant to your task scope **before** doing any work.
 | Touching style, CSS, painting, drawables, compositing | `docs/CGUI_STYLE_RENDER_PIPELINE.md` |
 | Writing or modifying a widget | `docs/CGUI_WIDGETS.md` |
 | Touching `serialization/` or `net/` | `docs/CGUI_SERVER_AND_SERIALIZATION.md` |
+| Touching `dock/`, `workbench/` or `editor/` | `docs/CGUI_WORKBENCH_SERVICES.md` — **and add any new service API to it in the same commit** |
 | Touching any rendering/buffer/shader/VAO/mesh code | `CrystalGraphics/AGENTS.md` |
 | Working inside a package | any `AGENTS.md` found in that package (none exist under `core/` today) |
 
@@ -1181,6 +1182,10 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                registry it used to hold now lives in CrystalGraphics; see below.
   .data                        CacheCell / IntCacheCell / LongCacheCell (dirty-flag memoization),
                                ReadOnlyVec2f (immutable view over a mutable JOML Vector2f), Transform2D
+  .dispose                     Disposable, Disposable.Gl, Disposer — the ownership tree. NOT a
+                               replacement for CgGraphicsLifecycle's registry sweep; it exists to
+                               release on CLOSE rather than on exit, and to reach createOwned GL
+                               objects no registry can see. docs/CGUI_WORKBENCH_SERVICES.md
   .property                    Property<T> (binding, equality-suppressing set), ObservableList<T>
   .signal                      Signal.Action/Value/Pair, SignalBase, Connection, ConnectionGroup
   .command                     Command (a named invocable action), CommandContext, CommandRegistry —
@@ -1358,6 +1363,8 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `docs/CGUI_STYLE_RENDER_PIPELINE.md` | **current** | Cascade, selectors, stylesheets, transitions, frame lifecycle, drawables & compositing channels, `background:` grammar, border-radius layer, visual layers (opacity + masking), `transform`/`transform-origin`, known gaps vs. the web, file map |
 | `docs/CGUI_WIDGETS.md` | **current** | All thirteen widgets: API, internal-child class hooks, pseudo-classes, covering harness scene |
 | `docs/CGUI_SERVER_AND_SERIALIZATION.md` | **current** | Codecs, `StateMap`, descriptions, content hashing, network ids, `SheetRef`, packets/sessions/RPC, known gaps, the headless contract |
+| `docs/CGUI_WORKBENCH_SERVICES.md` | **current** | The service layer under the dock/workbench/editor — what a widget may *ask* rather than reach through the application for. `Disposer` today; `DataContext`, service events, `Resource`, `DockPane` and `DockService` as they land. **Every new service API is added here in the same commit** |
+| `plan.md` (repo root) | **live** | The architecture review this layer is being rebuilt from: audit, VS Code/IntelliJ research, the six-step port, and what each step deliberately does not do |
 
 These three are the only docs under `docs/` — audited against the code on 2026-07-29 and accurate as
 of that pass. `CRYSTALGUI_OVERHAUL_V4.md` (the historical decision record for why CrystalGUI stopped

@@ -15,6 +15,8 @@ import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
@@ -69,7 +71,7 @@ import javax.annotation.Nullable;
  * that. Doing it from {@link #onLayoutChanged()} makes it the widget's own business, the same way
  * {@code ListView} starts its ticker: by the time layout has run, the element is attached by definition.</p>
  */
-public class ShaderGraphEditor extends UIElement implements FileDocument {
+public class ShaderGraphEditor extends UIElement implements FileDocument, Disposable.Gl {
 
     /** UNIQUE, never the shared "__content__" -- see ProjectFileTree.CONTENT_CLASS for why. */
     public static final String CONTENT_CLASS = "__shader-content__";
@@ -583,7 +585,10 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
             previews.attach();
             previewsAttached = true;
         }
-        if (!mainPreviewAttached) mainPreviewAttached = mainPreview.attach();
+        if (!mainPreviewAttached) {
+            mainPreviewAttached = mainPreview.attach();
+            if (mainPreviewAttached) ownGlParts();
+        }
         installCommands();
         blackboard.installCommands();
         blackboard.reclamp();
@@ -614,14 +619,33 @@ public class ShaderGraphEditor extends UIElement implements FileDocument {
         window.getStyleEngine().addStylesheet(theme);
     }
 
-    /** Releases the preview renderers' GL resources. Safe to call more than once. */
-    public void delete() {
+    /**
+     * Releases the preview renderers' GL resources. Safe to call more than once.
+     *
+     * <p>{@code Disposable.Gl} rather than plain {@code Disposable}: a {@code CgPreviewRenderer} owns
+     * {@code createOwned} framebuffers, and freeing those off the GL thread is silent corruption rather
+     * than an exception. {@link com.crystalgui.core.dispose.Disposer} defers accordingly.</p>
+     */
+    @Override
+    public void dispose() {
         if (previewsAttached) {
             previews.delete();
             previewsAttached = false;
         }
         mainPreviewAttached = false;
     }
+
+    /**
+     * Takes ownership of the parts that hold GL resources.
+     *
+     * <p>{@link MainPreviewPanel} is the reason this exists: its {@code delete()} had <b>no caller
+     * anywhere</b>, so its {@code createOwned} target and meshes leaked for the life of the process.
+     * Registration is how that stops being something somebody has to remember.</p>
+     */
+    private void ownGlParts() {
+        Disposer.register(this, mainPreview);
+    }
+    
 
     // ── As a FileDocument ───────────────────────────────────────────────────────────────────────
 

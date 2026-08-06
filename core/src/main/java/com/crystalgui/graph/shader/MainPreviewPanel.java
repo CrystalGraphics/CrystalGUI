@@ -10,6 +10,8 @@ import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.AnchoredPlacement;
@@ -49,7 +51,7 @@ import javax.annotation.Nullable;
  * ({@link com.crystalgraphics.shadergraph.CgShaderEmitter.Shading}), touching no engine state, and the
  * {@code Lighting} menu entry turns it off when the colour matters more than the form.</p>
  */
-public class MainPreviewPanel extends UIElement implements UIFrameTicker {
+public class MainPreviewPanel extends UIElement implements UIFrameTicker, Disposable.Gl {
 
     public static final String PANEL_CLASS = "__main-preview__";
     /** The header strip. A CONTAINER, matching the configurator's group heading exactly — see the
@@ -459,8 +461,20 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker {
     }
 
     /** Frees the render target and meshes. */
-    public void delete() {
-        renderer.delete();
+    /**
+     * Releases the preview renderer.
+     *
+     * <p>{@code Disposable.Gl} because {@code CgMainPreviewRenderer}'s target is {@code createOwned} and
+     * therefore invisible to {@code CgFrameBufferRegistry} — so nothing else in the engine can free it,
+     * and freeing it off the GL thread would corrupt silently rather than throw.</p>
+     *
+     * <p><b>This was dead code.</b> {@code delete()} existed and had no caller anywhere:
+     * {@code ShaderGraphEditor}'s teardown released {@code previews} and not this, so the target and
+     * its meshes leaked for the life of the process. It is now owned by the graph editor that builds it.</p>
+     */
+    @Override
+    public void dispose() {
+        Disposer.dispose(this);
     }
 
     public CgMainPreviewRenderer renderer() {

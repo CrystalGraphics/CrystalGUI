@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.fs.CgPath;
 
 import java.util.ArrayList;
@@ -152,8 +154,23 @@ final class OpenDocuments {
         return dirty;
     }
 
+    /**
+     * Drops a document, releasing whatever it owned.
+     *
+     * <p><b>The dispose is the point.</b> A {@code ShaderGraphEditor} holds a {@code CgPreviewRenderer}
+     * whose targets are {@code createOwned} and therefore invisible to every CrystalGraphics registry —
+     * so dropping the entry without releasing it strands GPU memory until the process ends. Nothing
+     * else can find it: the map was the only reference.</p>
+     *
+     * <p>Only reached today when a file is <em>deleted or moved</em>, which is genuinely the end of that
+     * document. Closing a tab does not come through here yet, so a closed tab still keeps its document
+     * alive — see the plan's step 3, where the dock gains a close event to route it.</p>
+     */
     void close(CgPath path) {
-        byPath.remove(path);
+        Entry entry = byPath.remove(path);
+        if (entry != null && entry.document instanceof Disposable disposable) {
+            Disposer.dispose(disposable);
+        }
     }
 
     /**

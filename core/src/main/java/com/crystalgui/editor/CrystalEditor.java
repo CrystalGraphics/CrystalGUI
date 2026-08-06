@@ -1,5 +1,7 @@
 package com.crystalgui.editor;
 
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceClient;
@@ -58,7 +60,7 @@ import java.util.Map;
  * palette with its accelerator, and can be greyed when it does not apply — none of which a
  * {@code switch} on a scan code can offer. See {@link CrystalEditorCommands}.</p>
  */
-public class CrystalEditor extends UIElement {
+public class CrystalEditor extends UIElement implements Disposable {
 
     /**
      * A shader graph, one editor per path. <b>Every</b> shader graph — there is no other kind.
@@ -162,6 +164,18 @@ public class CrystalEditor extends UIElement {
      */
     private final List<ShaderGraphEditor> graphs = new ArrayList<>();
 
+    /**
+     * Owns every graph this editor built, so closing the editor releases their preview renderers.
+     *
+     * <p>Registration replaces what {@code delete()} used to do by looping {@link #graphs}. The list
+     * survives only as "which graphs exist"; it is no longer what keeps them alive, which is the
+     * distinction that was quietly wrong before — nothing pruned it, so it retained every graph ever
+     * opened for the whole session.</p>
+     */
+    private void own(ShaderGraphEditor graph) {
+        Disposer.register(this, graph);
+    }
+
     /** The last {@link #saveLayout} result, so {@link #restoreLayout()} has something to restore. */
     @Nullable
     private Object savedLayout;
@@ -187,6 +201,7 @@ public class CrystalEditor extends UIElement {
             editor.onStatusChanged.connect(onStatus::emit);
             editor.onLineOwnerChanged.connect(onStatus::emit);
             graphs.add(editor);
+            own(editor);
             graphPaths.put(path.toString(), editor);
             // THE GRAPH ASKS, THE SHELL DECIDES. The graph knows it can emit GLSL and nothing about docks;
             // wiring it here is what keeps a graph usable outside an editor -- and testable without one.
@@ -621,7 +636,12 @@ public class CrystalEditor extends UIElement {
      * {@code CgPreviewRenderer} holding an FBO per node, so freeing only the one in front would leak the
      * rest — which the single scratch graph this replaced could never do.</p>
      */
-    public void delete() {
-        for (ShaderGraphEditor graph : graphs) graph.delete();
+    @Override
+    public void dispose() {
+        // Nothing of its own: every graph is registered as a child when it is built, so the tree
+        // releases them. The list this replaced was never pruned -- every graph ever opened stayed
+        // reachable for the session, and that retention was the only reason its GL pool was freed at
+        // exit at all.
     }
+
 }
