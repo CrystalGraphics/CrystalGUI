@@ -130,6 +130,35 @@ public class DockArea extends UIElement implements UIFrameTicker {
         return groups.get(leaf);
     }
 
+    /**
+     * Tells the dock that a panel's presentation has changed, so its tab can catch up.
+     *
+     * <h3>Why an owner asks rather than reaching in</h3>
+     *
+     * <p>A tab's label is not always a function of the panel ref: a document gains a dirty marker by being
+     * typed into, and nothing in the ref moves when that happens. Something outside therefore has to say
+     * so — and before this existed, "something outside" did it by walking
+     * {@code layout().leaves()} to {@code groupFor} to {@code panels()} to {@code tabFor} and calling
+     * {@code setText} on a widget it did not own. That works until the dock changes how it builds a tab,
+     * at which point every caller that learned the walk is wrong, silently, because the walk still
+     * compiles.</p>
+     *
+     * <p>This is the same seam VS Code spells {@code onDidChangeLabel} and IntelliJ spells
+     * {@code EditorTabTitleProvider}: the owner of the fact announces it, and the owner of the widget
+     * decides what that means. Callers no longer need to know that a tab is a {@code Tab}, or that there
+     * is a strip, or that groups exist.</p>
+     *
+     * <p><b>Refreshes in place</b>, never by rebuilding the strip — see
+     * {@link DockGroup#refreshPresentation}. Unknown panels are ignored rather than reported: a panel
+     * that has just been closed is the ordinary case, not a caller error.</p>
+     */
+    public void refreshPanelPresentation(DockPanelRef panel) {
+        for (DockLeaf leaf : layout.leaves()) {
+            DockGroup group = groups.get(leaf);
+            if (group != null) group.refreshPresentation(panel);
+        }
+    }
+
     @Nullable
     public DockGroup activeGroup() {
         return activeGroup;

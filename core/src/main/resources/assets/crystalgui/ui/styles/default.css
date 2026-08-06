@@ -386,6 +386,22 @@ tabview.__left__ tab {
 tabview.__right__ tab {
     border-radius: 0 2px 2px 0;
 }
+/* The file-type icon, when a tab has one. Sized here rather than inherited from the file tree's rule:
+ * that one is scoped to `projectfiletree .__project-row__`, so without this a tab's icon element exists,
+ * holds the right drawable, and lays out at zero by zero -- which reads as the icon never having been
+ * set at all.
+ *
+ * `contain`, so an icon whose art is not square keeps its aspect instead of being stretched to the box.
+ * `flex-shrink: 0`, because a strip full of tabs is exactly where the engine's shrink default would
+ * otherwise eat the icon before it touches the label. */
+tab .__pre-icon__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    margin-right: 3px;
+    overlay-fit: contain;
+}
+
 tab:hover {
     background: #8C8C8C;
 }

@@ -34,6 +34,27 @@ public final class DockPanelRef {
      */
     public static final String TITLE = "title";
 
+    /**
+     * The second key the dock reads: an icon name for the tab, resolved the way {@code icon()} resolves
+     * one in CSS. Optional — a panel that names no icon gets none.
+     *
+     * <p>An <em>icon name</em> and not a drawable, for the same reason the whole map is strings: a ref
+     * has to survive into a saved layout.</p>
+     *
+     * <h3>Most panels should NOT set this</h3>
+     *
+     * <p>A ref is <b>immutable and its identity includes its state</b> — it is the key {@code tabByPanel}
+     * is built on, and the value {@code Workbench.refFor} rebuilds to find an already-open tab. So adding
+     * a key changes what a panel <em>is</em>: a layout saved before the key existed would stop matching
+     * the ref built for the same file today, and the workbench would open a second tab onto it rather
+     * than focusing the first.</p>
+     *
+     * <p>That is why an icon derivable from the panel — which, for a file, it always is — belongs in
+     * {@link DockPanelRegistry#setIconProvider} instead. This key is for a panel whose icon is genuinely
+     * its own business and cannot be derived, and it is consulted only after the provider declines.</p>
+     */
+    public static final String ICON = "icon";
+
     private final String typeId;
     private final Map<String, String> state;
 

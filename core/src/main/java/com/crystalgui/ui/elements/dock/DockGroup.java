@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.dock;
 
+import com.crystalgui.render.texture.CgUiSvg;
+import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.FocusEvent;
@@ -217,10 +219,52 @@ public class DockGroup extends UIElement {
 
         for (DockPanelRef panel : wanted) {
             Tab tab = tabs.addTab(area.registry().titleOf(panel));
+            applyIcon(tab, area.registry().iconOf(panel));
             tab.content().addChild(contentFor(panel));
             tabByPanel.put(panel, tab);
             area.installTabDrag(this, panel, tab);
         }
+    }
+
+    /**
+     * Re-reads one panel's title onto its tab, in place.
+     *
+     * <p>In place, never through {@link #rebuildStrip}: a rebuild detaches and recreates every tab
+     * element, and a tab is a drag source — so rebuilding one to change its label tears down the element
+     * the pointer is holding. That is the same rule the file tree and the table header are both written
+     * to, and the reason the presentation seam exists at all.</p>
+     *
+     * <p>The icon is deliberately <b>not</b> re-read. It is a function of the ref, the ref is immutable,
+     * and so the icon cannot have changed without this being a different panel entirely — at which point
+     * {@link #sync} rebuilds the strip anyway. Re-reading it here would be work that provably cannot find
+     * anything, on a path called from a frame tick.</p>
+     */
+    void refreshPresentation(DockPanelRef panel) {
+        Tab tab = tabByPanel.get(panel);
+        // setText suppresses an equal write, so a caller that cannot cheaply tell whether anything moved
+        // may call this freely.
+        if (tab != null) tab.setText(area.registry().titleOf(panel));
+    }
+
+    /**
+     * Gives a tab its file-type icon, or leaves it without one.
+     *
+     * <p>Resolved through {@code FileIconTheme.toResourcePath}, which is the single definition of where an
+     * icon lives — shared with CSS {@code icon()} so a stylesheet and a tab can never disagree about the
+     * path a name maps to. The dock learns a name and resolves it; it never learns what a {@code .java}
+     * is.</p>
+     */
+    private static void applyIcon(Tab tab, @Nullable String iconName) {
+        if (iconName == null) return;
+        CgUiSvg glyph = CgUiSvg.of(FileIconTheme.toResourcePath(FileIconTheme.withVariant(iconName)));
+        if (glyph == null) return;
+        UIElement slot = new UIElement();
+        // Unhittable, like every other composite part: click-focus targets the exact element hit rather
+        // than the nearest focusable ancestor, so a hittable icon would swallow the press meant to select
+        // the tab -- and the drag that starts from it.
+        slot.setHitTest(false);
+        StyleGroup.defaultPipeline(slot.getStyle().getGeneralGroup(), g -> g.overlay(glyph));
+        tab.setPreIcon(slot);
     }
 
     private UIElement contentFor(DockPanelRef panel) {

@@ -194,6 +194,36 @@ public class UIElement implements SettingsScope {
     }
 
     /**
+     * Replaces whichever class in a family this element carries with {@code next}, or removes it when
+     * {@code next} is null or empty.
+     *
+     * <h3>Swap, never merely add</h3>
+     *
+     * <p>Data-driven classes come in families — {@code filetype-*}, {@code decoration-*} — of which an
+     * element should carry exactly one. Adding the new one without removing the old is the bug this
+     * exists to prevent, and it is a quiet one: an element reused for different data accumulates
+     * {@code filetype-java} <em>and</em> {@code filetype-md}, and the cascade then resolves whichever
+     * rule happens to win. That reads as a random colour rather than as a stale class, so it is looked
+     * for in the stylesheet, where there is nothing wrong.</p>
+     *
+     * <p>Recycling makes it certain rather than merely possible — a virtualised row is a different file
+     * every time the view scrolls — but nothing about the trap is specific to recycling: any element
+     * whose class tracks changing data has it, which is why this sits on {@code UIElement} rather than
+     * in the one widget that first needed it.</p>
+     *
+     * @param prefix the family, e.g. {@code "filetype-"}
+     * @param next   the member to carry, or null/empty to carry none
+     */
+    public UIElement swapPrefixedClass(String prefix, @Nullable String next) {
+        // Copied because removeClass mutates the set being walked.
+        for (String existing : List.copyOf(classes)) {
+            if (existing.startsWith(prefix) && !existing.equals(next)) removeClass(existing);
+        }
+        if (next != null && !next.isEmpty()) addClass(next);
+        return this;
+    }
+
+    /**
      * Lowercase tag/type used by selector-engine type selectors (e.g. {@code button { ... }}) and by
      * serialization.
      *
