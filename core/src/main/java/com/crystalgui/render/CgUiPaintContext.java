@@ -656,6 +656,62 @@ public final class CgUiPaintContext {
     }
 
     /**
+     * Whether a logical-space box could put anything on screen — a cheap reject before building geometry.
+     *
+     * <h3>Why this lives here and not on the drawable</h3>
+     *
+     * <p>A {@code CgUiDrawable} is handed a rect and nothing else: no projection, no pose, no viewport.
+     * That looks like it makes culling impossible, and the natural repair — passing a view-projection down
+     * the draw call — is the wrong one, because <b>this context already holds all three</b>. The drawable
+     * does not need to be told where the screen is; it needs to be able to ask.</p>
+     *
+     * <h3>A rect test, deliberately NOT a frustum</h3>
+     *
+     * <p>{@code CgTextCuller} tests a {@link com.crystalgraphics.api.render.CgViewFrustum} because a 3D
+     * text layout can sit at any orientation in a perspective view. The UI cannot: {@link #beginFrame}
+     * installs {@code ortho(0, w, h, 0)}, so post-pose coordinates <em>are</em> window pixels and the
+     * visible region is an axis-aligned rectangle. Against that, six plane dot-products would be a slower
+     * way to compute an answer an overlap test gets exactly.</p>
+     *
+     * <p>It also honours the <b>scissor</b>, which a frustum knows nothing about. Inside a clipped
+     * scroller the visible region is the clip rect, not the window, and that is usually far smaller —
+     * which is exactly the case where culling pays.</p>
+     *
+     * <p>All four corners are transformed, not two: the pose may rotate, and a min/max over two corners
+     * silently reports the wrong box the moment anything does.</p>
+     *
+     * <p>Conservative by construction — it answers "could this be visible", never "is it". A false
+     * positive costs a draw that contributes nothing; a false negative is a missing icon, so the test is
+     * an overlap on the transformed AABB and nothing cleverer.</p>
+     */
+    public boolean isVisible(float x, float y, float w, float h) {
+        Matrix4f m = poseStack.last().pose();
+        float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
+        float maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
+        for (int corner = 0; corner < 4; corner++) {
+            float cx = (corner & 1) == 0 ? x : x + w;
+            float cy = (corner & 2) == 0 ? y : y + h;
+            float px = m.m00() * cx + m.m10() * cy + m.m30();
+            float py = m.m01() * cx + m.m11() * cy + m.m31();
+            minX = Math.min(minX, px);
+            minY = Math.min(minY, py);
+            maxX = Math.max(maxX, px);
+            maxY = Math.max(maxY, py);
+        }
+
+        float clipX0 = 0f, clipY0 = 0f, clipX1 = screenWidth, clipY1 = screenHeight;
+        if (scissorStack.hasScissor()) {
+            // ScissorStack holds GL's bottom-left-origin pixels; flip back to the top-left-origin space
+            // the pose just produced. Getting this backwards culls exactly the rows that ARE visible.
+            clipX0 = scissorStack.currentX();
+            clipX1 = clipX0 + scissorStack.currentW();
+            clipY1 = screenHeight - scissorStack.currentY();
+            clipY0 = clipY1 - scissorStack.currentH();
+        }
+        return maxX >= clipX0 && minX <= clipX1 && maxY >= clipY0 && minY <= clipY1;
+    }
+
+    /**
      * Pushes a new clip rect, intersected with whatever scissor is already active, and enables
      * {@code GL_SCISSOR_TEST} against it. Pair with {@link #popScissor()}.
      *
