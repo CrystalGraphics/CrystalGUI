@@ -184,7 +184,7 @@ public final class SvgTriangulator {
      *              every shared edge opposite sub-pixel offsets and get an exact coverage partition; see
      *              {@code SvgDocument.drawFill}
      */
-    public record Fill(float[] triangles, int[] slice, boolean[] upper) {
+    public record Fill(float[] triangles, int[] slice, boolean[] upper, boolean[] outerWall) {
     }
 
     /**
@@ -241,7 +241,7 @@ public final class SvgTriangulator {
     }
 
     private static Fill empty() {
-        return new Fill(new float[0], new int[0], new boolean[0]);
+        return new Fill(new float[0], new int[0], new boolean[0], new boolean[0]);
     }
 
     /**
@@ -375,14 +375,23 @@ public final class SvgTriangulator {
                                     (int) Math.ceil(widest / stepX)))
                             : 1;
                     for (int s = 0; s < slices; s++) {
+                        // Which of this cell's two walls is REAL. A band sliced into N cells has one
+                        // contour edge at each end and N-1 seams in between, and the caller antialiases
+                        // whichever wall it is told is the silhouette -- so an interior seam handed over as
+                        // one gets feathered from a single side, against a neighbour with a hard step, and
+                        // the coverage never reaches 1. That is a visible line down every slice boundary.
+                        boolean firstSlice = s == 0;
+                        boolean lastSlice = s == slices - 1;
                         float a = (float) s / slices, b = (float) (s + 1) / slices;
                         float at = lt + (rt - lt) * a, ab = lb + (rb - lb) * a;
                         float bt = lt + (rt - lt) * b, bb = lb + (rb - lb) * b;
                         // Upper half first: it carries the band's TOP edge. The lower carries the bottom,
                         // which is the next band's top -- so "upper" alternates across every horizontal seam
                         // as well as across the diagonal the two of them share.
-                        sink.add(sliceIndex, true, at, top, bt, top, bb, bottom);
-                        sink.add(sliceIndex, false, at, top, bb, bottom, ab, bottom);
+                        // The upper half owns the right wall, the lower half the left -- so only the last
+                        // slice's upper and the first slice's lower touch the contour.
+                        sink.add(sliceIndex, true, lastSlice, at, top, bt, top, bb, bottom);
+                        sink.add(sliceIndex, false, firstSlice, at, top, bb, bottom, ab, bottom);
                         sliceIndex++;
                     }
                 }
@@ -533,6 +542,7 @@ public final class SvgTriangulator {
         private float[] triangles = new float[6 * 64];
         private int[] slice = new int[64];
         private boolean[] upper = new boolean[64];
+        private boolean[] outerWall = new boolean[64];
         private int count;
 
         /**
@@ -542,12 +552,13 @@ public final class SvgTriangulator {
          * that loses a member stops partitioning its own edges, and that costs far more than the empty
          * instance a zero-area triangle becomes.</p>
          */
-        void add(int sliceIndex, boolean isUpper,
+        void add(int sliceIndex, boolean isUpper, boolean isOuterWall,
                  float x0, float y0, float x1, float y1, float x2, float y2) {
             if (count == slice.length) {
                 triangles = Arrays.copyOf(triangles, triangles.length * 2);
                 slice = Arrays.copyOf(slice, slice.length * 2);
                 upper = Arrays.copyOf(upper, upper.length * 2);
+                outerWall = Arrays.copyOf(outerWall, outerWall.length * 2);
             }
             int at = count * 6;
             triangles[at] = x0;
@@ -558,12 +569,14 @@ public final class SvgTriangulator {
             triangles[at + 5] = y2;
             slice[count] = sliceIndex;
             upper[count] = isUpper;
+            outerWall[count] = isOuterWall;
             count++;
         }
 
         Fill toFill() {
             return new Fill(Arrays.copyOf(triangles, count * 6),
-                    Arrays.copyOf(slice, count), Arrays.copyOf(upper, count));
+                    Arrays.copyOf(slice, count), Arrays.copyOf(upper, count),
+                    Arrays.copyOf(outerWall, count));
         }
     }
 

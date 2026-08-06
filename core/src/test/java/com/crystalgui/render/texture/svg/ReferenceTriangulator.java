@@ -36,7 +36,7 @@ final class ReferenceTriangulator {
             }
         }
         SvgTriangulator.Fill empty =
-                new SvgTriangulator.Fill(new float[0], new int[0], new boolean[0]);
+                new SvgTriangulator.Fill(new float[0], new int[0], new boolean[0], new boolean[0]);
         if (edges.isEmpty()) return empty;
 
         float[] bands = bandBoundaries(edges, stepY, extraCuts);
@@ -107,7 +107,7 @@ final class ReferenceTriangulator {
             tags[i] = slices.get(i);
             halves[i] = uppers.get(i);
         }
-        return new SvgTriangulator.Fill(packed, tags, halves);
+        return new SvgTriangulator.Fill(packed, tags, halves, allTrue(halves.length));
     }
 
     private static void add(List<float[]> out, List<Integer> slices, List<Boolean> uppers,
@@ -116,6 +116,18 @@ final class ReferenceTriangulator {
         out.add(new float[]{x0, y0, x1, y1, x2, y2});
         slices.add(slice);
         uppers.add(upper);
+    }
+
+    /**
+     * The old sweep had no notion of a wall being a seam rather than the contour — every wall was treated
+     * as the silhouette, which is what made sliced radial gradients show a line down every cell boundary.
+     * Filled in as all-true so the geometry comparison stays exact; the flag itself is new behaviour and is
+     * covered by {@code SvgRadialSeamTest} rather than here.
+     */
+    private static boolean[] allTrue(int count) {
+        boolean[] out = new boolean[count];
+        java.util.Arrays.fill(out, true);
+        return out;
     }
 
     private static float[] bandBoundaries(List<float[]> edges, float stepY, float[] extraCuts) {
