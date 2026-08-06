@@ -37,7 +37,7 @@
     "sh, bat, cmd, ps1, gradle": "crystalgui:filetypes/text",
     "mf": "crystalgui:filetypes/manifest",
     
-    "glsl, vert, frag, vsh, fsh, shader": "crystalgui:filetypes/text"
+    "glsl, vert, frag, vsh, fsh, shader, shadergraph": "crystalgui:filetypes/shader"
   },
 
   "fileNames": {
