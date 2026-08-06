@@ -35,7 +35,17 @@ public final class SvgPath {
     public record Polyline(List<float[]> points, boolean closed) {
     }
 
+    /** Flattens at the default resolution — see {@link #parse(String, int)}. */
     public static List<Polyline> parse(String d) {
+        return parse(d, STEPS);
+    }
+
+    /**
+     * @param steps segments per curve or arc. {@link #STEPS} is the resolution a large draw needs; a
+     *              caller that knows the artwork will be small can ask for fewer and get a proportionally
+     *              smaller mesh, since every flattened vertex becomes a band cut downstream
+     */
+    public static List<Polyline> parse(String d, int steps) {
         List<Polyline> out = new ArrayList<>();
         if (d == null || d.isBlank()) return out;
 
@@ -105,7 +115,7 @@ public final class SvgPath {
                     float c2y = value(cursor.number(), y, relative);
                     float ex = value(cursor.number(), x, relative);
                     float ey = value(cursor.number(), y, relative);
-                    cubic(current, x, y, c1x, c1y, c2x, c2y, ex, ey);
+                    cubic(steps, current, x, y, c1x, c1y, c2x, c2y, ex, ey);
                     lastCx = c2x;
                     lastCy = c2y;
                     x = ex;
@@ -125,7 +135,7 @@ public final class SvgPath {
                     float ex = value(cursor.number(), x, relative);
                     float ey = value(cursor.number(), y, relative);
                     // A quadratic IS a cubic with both controls at 2/3 of the way to the single one.
-                    cubic(current, x, y, x + 2f / 3f * (cx - x), y + 2f / 3f * (cy - y),
+                    cubic(steps, current, x, y, x + 2f / 3f * (cx - x), y + 2f / 3f * (cy - y),
                             ex + 2f / 3f * (cx - ex), ey + 2f / 3f * (cy - ey), ex, ey);
                     lastCx = cx;
                     lastCy = cy;
@@ -140,7 +150,7 @@ public final class SvgPath {
                     boolean sweep = cursor.number() != 0f;
                     float ex = value(cursor.number(), x, relative);
                     float ey = value(cursor.number(), y, relative);
-                    arc(current, x, y, rx, ry, rotation, largeArc, sweep, ex, ey);
+                    arc(steps, current, x, y, rx, ry, rotation, largeArc, sweep, ex, ey);
                     x = ex;
                     y = ey;
                     break;
@@ -169,10 +179,10 @@ public final class SvgPath {
         return relative ? origin + raw : raw;
     }
 
-    private static void cubic(List<float[]> out, float x0, float y0, float x1, float y1,
+    private static void cubic(int steps, List<float[]> out, float x0, float y0, float x1, float y1,
                               float x2, float y2, float x3, float y3) {
-        for (int i = 1; i <= STEPS; i++) {
-            float t = (float) i / STEPS;
+        for (int i = 1; i <= steps; i++) {
+            float t = (float) i / steps;
             float u = 1 - t;
             float a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, e = t * t * t;
             out.add(new float[]{a * x0 + b * x1 + c * x2 + e * x3,
@@ -191,7 +201,7 @@ public final class SvgPath {
      * <p>They are not optional in practice. Feather, Lucide and Material all round their corners with
      * {@code a}, so a parser without this handles almost no real icon.</p>
      */
-    private static void arc(List<float[]> out, float x0, float y0, float rx, float ry,
+    private static void arc(int steps, List<float[]> out, float x0, float y0, float rx, float ry,
                             float rotationDeg, boolean largeArc, boolean sweep, float x1, float y1) {
         if (rx == 0 || ry == 0) {
             out.add(new float[]{x1, y1});
@@ -230,8 +240,8 @@ public final class SvgPath {
         if (!sweep && sweepAngle > 0) sweepAngle -= 2 * Math.PI;
         if (sweep && sweepAngle < 0) sweepAngle += 2 * Math.PI;
 
-        for (int i = 1; i <= STEPS; i++) {
-            double t = startAngle + sweepAngle * i / STEPS;
+        for (int i = 1; i <= steps; i++) {
+            double t = startAngle + sweepAngle * i / steps;
             double px = cos * rx * Math.cos(t) - sin * ry * Math.sin(t) + cx;
             double py = sin * rx * Math.cos(t) + cos * ry * Math.sin(t) + cy;
             out.add(new float[]{(float) px, (float) py});

@@ -1,5 +1,7 @@
 package com.crystalgui.render.texture.svg;
 
+import com.crystalgraphics.util.profiling.CgProfiler;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,6 +30,13 @@ final class SvgTessellator {
     }
 
     static SvgMesh tessellate(List<SvgPath.Polyline> contours, boolean evenOdd, SvgScene.Paint paint) {
+        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.tessellate")) {
+            return tessellateImpl(contours, evenOdd, paint);
+        }
+    }
+
+    private static SvgMesh tessellateImpl(List<SvgPath.Polyline> contours, boolean evenOdd,
+                                          SvgScene.Paint paint) {
         List<List<float[]>> rings = SvgGeometry.ringsOf(contours);
         if (paint instanceof SvgScene.Gradient gradient) {
             return gradient.gradient().radial()

@@ -234,6 +234,62 @@ public final class SvgDocument {
      * per triangle, so an icon scrolled out of a tree, or the fifty-odd cells of a grid that a zoom has
      * pushed off screen, are paid for in full every frame for nothing.</p>
      */
+    /**
+     * The coarsest mesh whose faceting this draw size cannot resolve, or {@code this} when the icon is
+     * large enough to need the reference one.
+     *
+     * <p>Keyed on DEVICE height, so the pose's scale counts: the same icon in the same layout box is a
+     * different number of real pixels at {@code uiScale} 1 and 2, and picking a level from the logical
+     * size alone would facet on a HiDPI display and nowhere else.</p>
+     */
+    private SvgDocument lodFor(CgUiPaintContext ctx, float scale) {
+        if (tags == null) return this;
+        float devicePx = Math.max(width, height) * scale * ctx.deviceScale();
+        for (int i = 0; i < LOD_MAX_DEVICE_PX.length; i++) {
+            if (devicePx > LOD_MAX_DEVICE_PX[i]) continue;
+            SvgDocument cached = lods.get(LOD_STEPS[i]);
+            if (cached != null) return cached;
+
+            long frame = ctx.frameId();
+            if (frame != lodBudgetFrame) {
+                // Sampled on the way OUT of a frame, which is the only place the per-frame total is known.
+                // An aggregate scope cannot answer "did the budget spread the work" -- 12ms of building
+                // looks identical whether it landed on one frame or twenty. This records the distribution,
+                // so the max IS the worst frame.
+                if (lodNanosThisFrame > 0L) {
+                    CgProfiler.sample("svg.lodMsPerFrame", lodNanosThisFrame / 1_000_000.0);
+                }
+                lodBudgetFrame = frame;
+                lodNanosThisFrame = 0L;
+            }
+            // Out of budget: draw with the reference mesh this frame and try again next. Deliberately not
+            // a queue -- whatever is on screen next frame is what deserves the budget, and a queue built
+            // from this frame's visibility would keep building icons a zoom has already left behind.
+            if (lodNanosThisFrame >= LOD_BUILD_BUDGET_NANOS) {
+                // Counted, so "the budget deferred work" is visible rather than inferred from its absence.
+                CgProfiler.count("svg.lodDeferred.count");
+                CgProfiler.sample("svg.lodDeferred", 1.0);
+                return this;
+            }
+            long startedAt = System.nanoTime();
+            // Scoped so the COST OF BUILDING one is visible separately from drawing with it: this runs on
+            // the first frame a size is used, so a zoom crossing a threshold rebuilds every visible icon
+            // in a single frame. That is the hitch worth knowing about, and it cannot be seen in a steady
+            // state average.
+            try (CgProfiler.Scope ignored = CgProfiler.scope("svg.lodBuild")) {
+                CgProfiler.count("svg.lodBuild.count");
+                CgProfiler.count("svg.lodBuild.steps" + LOD_STEPS[i]);
+                CgProfiler.sample("svg.lodDevicePx", devicePx);
+                CgProfiler.sample("svg.lodDeferred", 0.0);
+                SvgDocument built = lods.computeIfAbsent(LOD_STEPS[i],
+                        steps -> fromScene(SvgResolver.resolve(tags, steps)));
+                lodNanosThisFrame += System.nanoTime() - startedAt;
+                return built;
+            }
+        }
+        return this;
+    }
+
     private boolean cullable(CgUiPaintContext ctx, float x, float y, float scale, float extra) {
         if (ops.isEmpty()) return true;
         float x0 = x + bounds[0] * scale - extra;
@@ -271,7 +327,10 @@ public final class SvgDocument {
     /** Loads {@code "namespace:ui/icons/folder.svg"} through {@code CgIO}, or null when it is unreadable. */
     @Nullable
     public static SvgDocument load(String path) {
-        String source = CgIO.loadSource(path);
+        String source;
+        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.loadSource")) {
+            source = CgIO.loadSource(path);
+        }
         if (source == null) {
             CrystalGuiCore.LOGGER.warn("Icon {} could not be read", path);
             return null;
@@ -280,8 +339,82 @@ public final class SvgDocument {
     }
 
     public static SvgDocument parse(String svg) {
-        return fromScene(SvgResolver.resolve(SvgScanner.scan(svg)));
+        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.parse")) {
+            CgProfiler.count("svg.parse.count");
+            List<SvgScanner.Tag> tags;
+            try (CgProfiler.Scope ignored2 = CgProfiler.scope("svg.scan")) {
+                tags = SvgScanner.scan(svg);
+            }
+            SvgScene scene;
+            try (CgProfiler.Scope ignored2 = CgProfiler.scope("svg.resolve")) {
+                scene = SvgResolver.resolve(tags, REFERENCE_STEPS);
+            }
+            SvgDocument document;
+            try (CgProfiler.Scope ignored2 = CgProfiler.scope("svg.buildOps")) {
+                document = fromScene(scene);
+            }
+            document.tags = tags;
+            return document;
+        }
     }
+
+    /**
+     * Curve resolution the reference mesh is built at — what {@link #ops()} and every test sees.
+     *
+     * <p>Chosen for a LARGE draw: an icon zoomed to fill a screen must not facet. That makes it far finer
+     * than a file-tree row can resolve, which is what {@link #lodFor} exists to walk back.</p>
+     */
+    private static final int REFERENCE_STEPS = 16;
+
+    /**
+     * Coarse resolutions and the device height each is good for, largest first.
+     *
+     * <p><b>A mesh is cut at every flattened vertex</b>, so halving the flattening roughly halves the
+     * triangle count — and {@link SvgTriangulator}'s own note is that "a 16px icon can display at most
+     * sixteen bands; anything finer is subdivision no display can resolve". A file tree drawing 40 icons
+     * at 16px was submitting ~18,000 triangles to fill 40 boxes sixteen pixels tall.</p>
+     *
+     * <p>The thresholds are deliberately generous — each level is used only well below the size where its
+     * own faceting could reach a pixel — because the failure mode is a visibly polygonal icon and the
+     * saving is already large at conservative settings.</p>
+     */
+    private static final int[] LOD_MAX_DEVICE_PX = {24, 64, 160};
+    private static final int[] LOD_STEPS = {3, 5, 9};
+
+    /**
+     * The scanned document, retained so a coarser mesh can be built on demand.
+     *
+     * <p>Lazily, and only for the resolutions actually asked for: most icons are drawn at one size for
+     * their whole life, so building every level up front would be strictly worse than not having levels
+     * at all.</p>
+     */
+    /**
+     * How long may be spent building coarser meshes in one frame, in nanoseconds.
+     *
+     * <p><b>The build is lazy, so without a budget it all lands on one frame.</b> Measured: 0.21ms per
+     * icon and 12.07ms to build all 57 at once — a dropped frame, and it recurs every time a zoom crosses
+     * a level threshold, which is precisely while the user is interacting.</p>
+     *
+     * <p>Spreading it costs nothing visually. An icon whose coarse mesh is not ready yet draws with the
+     * REFERENCE mesh, which is the same picture with more triangles — so the only observable effect is
+     * that the saving arrives over a few frames instead of all at once. That is the right trade: a steady
+     * state reached a quarter of a second late is invisible, a dropped frame during a zoom is not.</p>
+     *
+     * <p>A time budget rather than a count, because per-icon cost varies nearly tenfold (0.21ms average
+     * against a 1.87ms worst case) and a count would let a few complex icons blow through it anyway.</p>
+     */
+    private static final long LOD_BUILD_BUDGET_NANOS = 1_000_000L;
+
+    /**
+     * Render-thread only, hence plain statics: CrystalGUI paints from one thread, and a budget shared
+     * across documents is the whole point — the stall comes from FIFTY-SEVEN of them building at once, so
+     * a per-document limit would not bound anything.
+     */
+    private static long lodBudgetFrame = -1L;
+    private static long lodNanosThisFrame;
+
+    private List<SvgScanner.Tag> tags;
+    private final Map<Integer, SvgDocument> lods = new ConcurrentHashMap<>();
 
     // ---- Building ---------------------------------------------------------------------------------
 
@@ -377,6 +510,11 @@ public final class SvgDocument {
      */
     public void render(CgUiPaintContext ctx, float x, float y, float scale, int tint) {
         if (cullable(ctx, x, y, scale, 0f)) return;
+        SvgDocument lod = lodFor(ctx, scale);
+        if (lod != this) {
+            lod.render(ctx, x, y, scale, tint);
+            return;
+        }
         for (DrawOp op : ops) {
             int argb = op.currentColor() ? tint : op.argb();
             if (op.fill()) {
@@ -403,6 +541,11 @@ public final class SvgDocument {
         // the box -- otherwise a thick monochrome stroke gets culled at the viewport edge while still
         // partly on screen.
         if (cullable(ctx, x, y, scale, Math.max(0f, halfWidth))) return;
+        SvgDocument lod = lodFor(ctx, scale);
+        if (lod != this) {
+            lod.renderMonochrome(ctx, x, y, scale, argb, halfWidth);
+            return;
+        }
         for (DrawOp op : ops) {
             if (op.fill()) {
                 drawFill(ctx, op, x, y, scale, argb, true);
