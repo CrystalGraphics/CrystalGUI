@@ -36,9 +36,13 @@ public class FileIconThemeTest {
         // A FLOOR, not merely non-empty. `file` and `folder` alone make iconNames() non-empty, so an
         // extension map that failed to parse -- or a theme file truncated to its first few keys -- would
         // sail past an isEmpty() check while the file tree quietly showed one glyph for everything.
+        //
+        // Deliberately well under the number shipped (16 as of the 2023 New UI set) rather than tracking
+        // it. The assertion is about the map having PARSED, not about how many icons exist -- pinning it
+        // to the exact count means every curation of the icon set edits a test that was not testing that.
         assertTrue("the shipped theme resolved only " + THEME.iconNames().size()
                         + " distinct icons; the extension map did not parse",
-                THEME.iconNames().size() >= 20);
+                THEME.iconNames().size() >= 10);
         for (String name : THEME.iconNames()) {
             SvgDocument document = SvgDocument.of(FileIconTheme.toResourcePath(name));
             assertNotNull(name + " is named by the theme but has no file", document);
@@ -103,7 +107,10 @@ public class FileIconThemeTest {
     @Test
     public void aNameWithNoDotMatchesNoExtension() {
         assertEquals("filetype-file", THEME.classFor("ts", false));
-        assertEquals("crystalgui:filetypes/text", THEME.iconFor("ts", false, false));
+        // anyType, not text: the fallback is for a file whose type we could not identify, and IntelliJ's
+        // anyType is exactly that icon. A text document is a positive claim about the contents, which is
+        // the one thing an unmatched name has not made.
+        assertEquals("crystalgui:filetypes/anyType", THEME.iconFor("ts", false, false));
     }
 
     /** Case is not meaningful in a file name here, and disagreeing file systems are why. */
@@ -142,5 +149,67 @@ public class FileIconThemeTest {
         assertEquals("crystalgui:ui/icons/folder.svg", FileIconTheme.toResourcePath("crystalgui:folder"));
         assertEquals("crystalgui:ui/icons/folder.svg", FileIconTheme.toResourcePath("folder"));
         assertEquals("mymod:ui/icons/deep/thing.svg", FileIconTheme.toResourcePath("mymod:deep/thing"));
+    }
+
+    /**
+     * <b>A comma-grouped key registers every name in it, and each still matches on its own.</b>
+     *
+     * <p>The half that is easy to get wrong is the <em>class</em>: it keys on the extension that matched,
+     * not on the group or the icon, so grouping nine image formats onto one line must still leave
+     * {@code .filetype-png} distinct from {@code .filetype-svg}. If it did not, grouping would silently
+     * cost every grouped type its own colour — a cascade change disguised as a formatting one.</p>
+     */
+    @Test
+    public void aCommaGroupedKeyRegistersEveryNameInIt() {
+        assertEquals("crystalgui:filetypes/image", THEME.iconFor("a.png", false, false));
+        assertEquals("crystalgui:filetypes/image", THEME.iconFor("a.jpeg", false, false));
+        assertEquals("crystalgui:filetypes/image", THEME.iconFor("a.tga", false, false));
+
+        assertEquals("filetype-png", THEME.classFor("a.png", false));
+        assertEquals("filetype-tga", THEME.classFor("a.tga", false));
+
+        // Whitespace around a member is trimmed rather than becoming part of the key -- otherwise only the
+        // first name on each line would ever match and the rest would silently do nothing.
+        assertEquals("crystalgui:filetypes/javaScript", THEME.iconFor("a.jsx", false, false));
+
+        // Multi-dot members survive grouping, so longest-first extension matching still works. Asserted
+        // as "d.ts agrees with ts, and is still its own class" rather than by naming the icon: which
+        // glyph TypeScript uses is the theme's business and changes whenever one is dropped in, and a
+        // test that restates it fails for a reason that has nothing to do with grouping.
+        assertEquals(THEME.iconFor("a.ts", false, false), THEME.iconFor("types.d.ts", false, false));
+        assertEquals("filetype-d-ts", THEME.classFor("types.d.ts", false));
+        assertEquals("filetype-ts", THEME.classFor("a.ts", false));
+    }
+
+    /**
+     * <b>The dark variant is taken when it exists and skipped when it does not.</b>
+     *
+     * <p>The fallback is the half worth pinning. Not every icon needs two drawings — a shape that reads on
+     * either background ships once — so a missing {@code _dark} file has to mean "variant-neutral" rather
+     * than resolving to a path with nothing behind it, which would blank the row instead of drawing the
+     * icon that does exist.</p>
+     */
+    @Test
+    public void theDarkVariantIsUsedOnlyWhereThereIsOne() {
+        FileIconTheme.Variant original = FileIconTheme.getVariant();
+        try {
+            FileIconTheme.setVariant(FileIconTheme.Variant.LIGHT);
+            assertEquals("crystalgui:filetypes/java",
+                    FileIconTheme.withVariant("crystalgui:filetypes/java"));
+
+            FileIconTheme.setVariant(FileIconTheme.Variant.DARK);
+            assertEquals("crystalgui:filetypes/java_dark",
+                    FileIconTheme.withVariant("crystalgui:filetypes/java"));
+            // The Feather chrome marks are stroke="currentColor", so they theme from the cascade and ship
+            // exactly one drawing -- the fallback case, using a real asset rather than an invented one.
+            assertEquals("crystalgui:folder", FileIconTheme.withVariant("crystalgui:folder"));
+            assertNull(FileIconTheme.withVariant(null));
+
+            // The drawable follows the variant without any caller passing it, which is what keeps the
+            // switch out of ProjectFileTree.
+            assertNotNull(THEME.drawableFor("Main.java", false, false));
+        } finally {
+            FileIconTheme.setVariant(original);
+        }
     }
 }
