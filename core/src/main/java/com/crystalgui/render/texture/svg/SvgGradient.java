@@ -176,6 +176,28 @@ public record SvgGradient(boolean radial, boolean userSpace, SvgTransform transf
     }
 
     /**
+     * This gradient restated in <b>plain user space</b>, against a shape's box.
+     *
+     * <p>usvg's conversion, and the reason {@link SvgScene} can promise that nothing downstream needs a
+     * bounding box: {@code objectBoundingBox} units and {@code gradientTransform} are both folded into the
+     * axis here, once, leaving a gradient whose numbers mean what they say. The same paint server
+     * legitimately paints two shapes of different sizes, which is why this takes a box rather than being
+     * done at parse time — the result belongs to the <em>use</em>, not to the element.</p>
+     *
+     * <p>Exact for both kinds. A radial gradient stores its centre in {@code (x1, y1)} and its radius as
+     * {@code x2 - x1}, so mapping the two points maps the circle — and under a non-uniform transform that
+     * circle is genuinely an ellipse, which this representation cannot hold and which
+     * {@link #parameterAt} could not have expressed either. That is a pre-existing limit being carried
+     * forward unchanged, not one introduced here.</p>
+     */
+    public SvgGradient resolvedAgainst(float[] box) {
+        if (userSpace && transform == SvgTransform.IDENTITY) return this;
+        float[] axis = effectiveAxis(box);
+        return new SvgGradient(radial, true, SvgTransform.IDENTITY,
+                axis[0], axis[1], axis[2], axis[3], offsets, colours, spread);
+    }
+
+    /**
      * How many bands a shape spanning {@code [t0, t1]} needs to approximate the ramp with FLAT cells.
      *
      * <p>Only the radial path still asks. A linear gradient is evaluated per pixel now, so its band count
