@@ -641,11 +641,13 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
      * every file type the slot has ever shown, and the cascade then resolves whichever rule happens to win
      * — which looks like a random colour rather than a stale class, because nothing is obviously wrong.</p>
      */
+    /**
+     * Delegates to {@link UIElement#swapPrefixedClass}, which is where this moved once the editor tab
+     * strip needed the same thing — the trap it guards is not specific to recycled rows, and two copies
+     * of it would be two chances to get the "swap, never add" half wrong.
+     */
     private static void swapPrefixedClass(UIElement element, String prefix, String next) {
-        for (String existing : List.copyOf(element.getClasses())) {
-            if (existing.startsWith(prefix)) element.removeClass(existing);
-        }
-        if (next != null && !next.isEmpty()) element.addClass(next);
+        element.swapPrefixedClass(prefix, next);
     }
 
     private final class RowRenderer implements TreeRenderer<CgPath> {

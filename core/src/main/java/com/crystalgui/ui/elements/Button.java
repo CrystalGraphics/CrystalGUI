@@ -8,6 +8,8 @@ import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgraphics.platform.CgPlatform;
 
+import javax.annotation.Nullable;
+
 /**
  * Clickable button with an internal text label and optional pre/post icon slots.
  *
@@ -92,6 +94,26 @@ public class Button extends UIElement {
     public Button setText(String value) {
         label.setText(value);
         return this;
+    }
+
+    /**
+     * The icon shown before the label, or null when there is none.
+     *
+     * <p>Exists so a caller can <b>update the slot in place</b> rather than replacing it. {@link
+     * #setPreIcon} detaches the old element and inserts a new one, which is a structural change — and a
+     * button whose icon tracks something live (a file's type, a connection's state) would then rebuild the
+     * element under the pointer on every refresh, the failure the table header and the file tree both
+     * paid for. With a getter the refresh is a style write on an element that never moves.</p>
+     */
+    @Nullable
+    public UIElement getPreIcon() {
+        return preIcon;
+    }
+
+    /** The icon shown after the label, or null when there is none. See {@link #getPreIcon}. */
+    @Nullable
+    public UIElement getPostIcon() {
+        return postIcon;
     }
 
     /** Sets (or clears, passing {@code null}) the icon shown before the label. */

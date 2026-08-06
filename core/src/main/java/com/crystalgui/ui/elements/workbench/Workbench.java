@@ -17,6 +17,7 @@ import com.crystalgui.ui.elements.dock.DockGroup;
 import com.crystalgui.ui.elements.dock.DockLayout;
 import com.crystalgui.ui.elements.dock.DockLeaf;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
+import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockPanelRegistry;
 import com.crystalgui.ui.elements.editor.EditorCommands;
@@ -138,6 +139,13 @@ public class Workbench extends UIElement {
             fileTree.source().invalidate(change.path().parent());
             fileTree.treeView().refresh();
         });
+
+        // How a tab presents itself. Both are PULLED by the strip when it builds a tab rather than pushed
+        // in afterwards, which is what makes a rebuilt strip correct on the frame it is rebuilt -- a dock
+        // rearrangement recreates every tab element, and anything pushed would have to be pushed again by
+        // someone who noticed.
+        registry.setTitleProvider(this::tabTitleFor);
+        registry.setIconProvider(Workbench::tabIconFor);
 
         registry.register(DockPanelDescriptor.singleton(PROJECT_TYPE, "Project"), ref -> fileTree);
         registry.register(DockPanelDescriptor.singleton(PROBLEMS_TYPE, "Problems"), ref -> problems);
@@ -641,12 +649,36 @@ public class Workbench extends UIElement {
         return false;
     }
 
-    /** What each tab's label should say right now — the file name, plus a marker when it is modified. */
+    /**
+     * What each tab's label should say right now — the file name, plus a marker when it is modified.
+     *
+     * <p>Registered as the registry's title provider, so it is consulted whenever a tab is built or
+     * refreshed. Returns null for a panel with no file, which is the provider contract's way of saying
+     * "nothing to add" and lets the registry fall through to the panel's own title.</p>
+     *
+     * <p>Reads {@code TITLE} state directly rather than calling {@code registry.titleOf}, which would
+     * re-enter this method.</p>
+     */
+    @Nullable
     private String tabTitleFor(DockPanelRef panel) {
-        String title = registry.titleOf(panel);
         String path = panel.state(PATH_STATE, "");
-        if (path.isEmpty()) return title;
+        if (path.isEmpty()) return null;
+        String title = panel.state(DockPanelRef.TITLE, CgPath.parse(path).name());
         return isDirty(CgPath.parse(path)) ? title + DIRTY_MARKER : title;
+    }
+
+    /**
+     * Which icon a tab shows — the same one the file's row in the tree shows, from the same theme.
+     *
+     * <p>Static, because it depends on nothing but the panel: the icon is a function of the file name,
+     * which is already in the ref. That is the whole reason it can be pulled at build time and never
+     * refreshed, unlike the dirty marker beside it.</p>
+     */
+    @Nullable
+    private static String tabIconFor(DockPanelRef panel) {
+        String path = panel.state(PATH_STATE, "");
+        if (path.isEmpty()) return null;
+        return FileIconTheme.getDefault().iconFor(CgPath.parse(path).name(), false, false);
     }
 
     /**
@@ -661,12 +693,7 @@ public class Workbench extends UIElement {
         for (DockLeaf leaf : dock.layout().leaves()) {
             DockGroup group = dock.groupFor(leaf);
             if (group == null) continue;
-            for (DockPanelRef panel : group.panels()) {
-                com.crystalgui.ui.elements.Tab tab = group.tabFor(panel);
-                // setText suppresses an equal write, so the common case -- nothing changed -- costs one
-                // string comparison per visible tab and touches no element.
-                if (tab != null) tab.setText(tabTitleFor(panel));
-            }
+            for (DockPanelRef panel : group.panels()) dock.refreshPanelPresentation(panel);
         }
     }
 
