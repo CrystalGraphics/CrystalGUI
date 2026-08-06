@@ -510,6 +510,17 @@ public final class CgUiPaintContext {
         renderer.flush();
         activePath = InstancePath.TEXT;
         currentTexture = null;
+        // OPENING THE BATCH IS THE WHOLE POINT OF HAVING A TEXT PATH.
+        //
+        // CgTextRenderer.draw() tolerates being called with no batch open by auto-wrapping itself in a
+        // begin/flush/end -- so every label costs its own upload, buffer map and draw. This used to open
+        // the path and close the batch (endTextPath already called endBatch), which is half a pairing: the
+        // tolerance meant it still rendered correctly, so the cost never surfaced as a bug.
+        //
+        // Measured on the icon grid: 59 flushes per frame for 57 labels, 1.21ms in quadRenderer.upload of
+        // which 0.88ms was streamBuffer.ssbo.map, plus 1.35ms across 58 glFlush calls -- about 2.5ms/frame,
+        // more than every icon's geometry put together.
+        textRenderer.beginBatch();
     }
 
     public void bindTexture(CgTexture2D texture) {
@@ -632,6 +643,7 @@ public final class CgUiPaintContext {
      * draw. It matters for the caller that opened one explicitly and then drew a quad: those glyphs would
      * otherwise flush later, against whatever material had been bound since, and out of order.</p>
      */
+    /** Symmetric with {@link #beginTextPath()}; both are guarded on {@code activePath} so the pairing holds. */
     private void endTextPath() {
         if (activePath == InstancePath.TEXT) textRenderer.endBatch();
     }
