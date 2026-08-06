@@ -37,6 +37,34 @@ public record SvgTransform(float a, float b, float c, float d, float e, float f)
     }
 
     /**
+     * Maps a <b>gradient covector</b> through this transform — the inverse transpose of the linear part.
+     *
+     * <h3>Why a linear gradient's direction does not transform like a direction</h3>
+     *
+     * <p>A linear gradient is an affine scalar function of position: {@code t(p) = dot(g, p - origin)}.
+     * Composing it with this transform's inverse — which is what "state the same ramp in the space this
+     * maps to" means — gives {@code t(q) = dot(A⁻ᵀ g, q - T(origin))}. So the ramp stays exactly
+     * expressible as an origin and a direction in the new space, but the direction is {@code A⁻ᵀ g} and
+     * <b>not</b> the transformed axis.</p>
+     *
+     * <p>The two agree for any similarity — rotation, uniform scale, translation — which is every
+     * transform real icon artwork uses, and that is why taking the transformed axis instead looks correct
+     * almost always. They diverge under a skew or a non-uniform scale, where the ramp's iso-lines are no
+     * longer perpendicular to the axis joining its endpoints. Using this keeps the ramp exact for every
+     * affine transform at the cost of one division, so there is no case left to get wrong.</p>
+     *
+     * <p>Degenerate transforms (a collapsed determinant) return the input unchanged rather than dividing
+     * by zero: the shape has no area in that space, so nothing will be sampled from the ramp anyway.</p>
+     *
+     * @return a fresh {@code [x, y]}
+     */
+    public float[] mapCovector(float gx, float gy) {
+        float det = a * d - b * c;
+        if (Math.abs(det) < 1e-12f) return new float[]{gx, gy};
+        return new float[]{(d * gx - b * gy) / det, (-c * gx + a * gy) / det};
+    }
+
+    /**
      * How much this scales lengths, for scaling a stroke width with its shape.
      *
      * <p>The geometric mean of the two axis scales — {@code sqrt(|ad - bc|)}, the square root of the

@@ -11,7 +11,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
@@ -67,11 +66,7 @@ import javax.annotation.Nullable;
  */
 public final class SvgDocument {
 
-    /** How many points a full circle or an ellipse is sampled at. */
-    private static final int CIRCLE_STEPS = 32;
 
-    /** {@code <use>} recursion depth. A file may legally reference a group that references another. */
-    private static final int MAX_USE_DEPTH = 8;
 
     /**
      * How far every fill triangle is grown, in screen pixels, so its seams with its neighbours close.
@@ -136,22 +131,19 @@ public final class SvgDocument {
     private static final float FILL_OFFSET = 0.001f;
 
     /**
-     * Elements whose content is a definition, not a picture.
+     * Width of the antialiased band on a fill's outline, in <b>post-pose</b> units — i.e. screen pixels.
      *
-     * <p>{@code defs} and {@code symbol} are the reason this set exists: their children are templates to
-     * be pulled in by {@code <use>}, and drawing them where they sit paints every template on top of the
-     * artwork at whatever coordinates it was authored at. The rest are things we cannot honour — a
-     * {@code clipPath}'s geometry is a stencil, and drawing it as a shape adds an outline that is not in
-     * the file at all.</p>
+     * <p>One pixel, which is what an analytic coverage ramp wants: the edge should go from fully covered
+     * to fully uncovered across exactly the pixel it passes through, and no further. Wider reads as a
+     * blurry icon rather than a smooth one.</p>
+     *
+     * <p>Only the outline gets it — see the note at the submission site. Internal seams stay a hard step,
+     * which is why this can be turned on at all.</p>
      */
-    private static final Set<String> DEFINITIONS = Set.of(
-            "defs", "symbol", "clipPath", "mask", "pattern", "marker", "filter",
-            "linearGradient", "radialGradient", "title", "desc", "metadata", "style", "script");
+    private static final float SILHOUETTE_FEATHER = 1f;
 
-    private static final Set<String> SHAPES = Set.of(
-            "path", "rect", "circle", "ellipse", "line", "polyline", "polygon");
 
-    private static final Set<String> CONTAINERS = Set.of("svg", "g", "a", "switch");
+
 
     /** Path to parsed document; see {@link #of}. */
     private static final Map<String, SvgDocument> CACHE = new ConcurrentHashMap<>();
@@ -170,11 +162,14 @@ public final class SvgDocument {
      * @param currentColor the paint was {@code currentColor}, so the consumer's tint decides it at draw
      *                     time. Late-bound rather than resolved here because a document is cached and
      *                     shared, and the same icon is routinely drawn in two colours in one frame
+     * @param segmentCaps  one packed cap pair per stroke segment, so that an interior joint gets exactly
+     *                     one round cap and not two — see {@link SvgGeometry#segmentsOf}. Null for a fill,
+     *                     which has no ends
      */
     public record DrawOp(boolean fill, float[] data, @Nullable int[] colours,
                          @Nullable int[] coloursEnd, @Nullable float[] gradients,
                          @Nullable boolean[] upper, boolean opaque, int argb, boolean currentColor,
-                         float halfWidth, int cap) {
+                         float halfWidth, int cap, @Nullable int[] segmentCaps) {
 
         /** Whether triangle {@code i} carries a per-pixel ramp rather than a flat colour. */
         public boolean hasGradient(int triangle) {
@@ -233,606 +228,57 @@ public final class SvgDocument {
     }
 
     public static SvgDocument parse(String svg) {
-        List<SvgScanner.Tag> tags = SvgScanner.scan(svg);
-        return new Builder(tags).build();
+        return fromScene(SvgResolver.resolve(SvgScanner.scan(svg)));
     }
 
-    // ── Building ────────────────────────────────────────────────────────────────────────────────────
+    // ---- Building ---------------------------------------------------------------------------------
 
     /**
-     * The one-shot walk that turns tags into ops.
+     * Flattens a resolved scene into the draw ops the paint context submits.
      *
-     * <p>A class rather than a pile of static methods with a dozen parameters: the walk carries an
-     * accumulating output, an id index and a gradient table through every level of recursion, and threading
-     * those by hand is how a {@code <use>} ends up appending to the wrong list.</p>
+     * <p>All three stages are visible in one method on purpose -- {@link SvgResolver} answers the SVG
+     * questions, {@link SvgTessellator} turns geometry and paint into triangles, and this turns triangles
+     * into submissions. Each stage's output is a type the next one takes, so any of them can be exercised
+     * without the others; that is the whole reason the walk is no longer a private class here.</p>
+     *
+     * <p>Fill before stroke, per node. SVG's own painting order for a single element, and the reason a
+     * stroked shape shows its full stroke rather than half of it hidden under the fill.</p>
      */
-    private static final class Builder {
+    static SvgDocument fromScene(SvgScene scene) {
+        List<DrawOp> ops = new ArrayList<>();
+        List<SvgPath.Polyline> outline = new ArrayList<>();
+        for (SvgScene.Node node : scene.nodes()) {
+            outline.addAll(node.contours());
 
-        private final List<SvgScanner.Tag> tags;
-        private final Map<String, Integer> idIndex = new HashMap<>();
-        private final Map<String, SvgGradient> servers = new HashMap<>();
-        /** The same servers reduced to one colour each — what {@code SvgStyle} needs for strokes. */
-        private final Map<String, Integer> gradients = new HashMap<>();
-        private final List<DrawOp> ops = new ArrayList<>();
-        private final List<SvgPath.Polyline> outline = new ArrayList<>();
-
-        Builder(List<SvgScanner.Tag> tags) {
-            this.tags = tags;
-        }
-
-        SvgDocument build() {
-            float boxWidth = 24f, boxHeight = 24f, originX = 0f, originY = 0f;
-            for (SvgScanner.Tag tag : tags) {
-                if (!tag.name().equals("svg")) continue;
-                String box = tag.get("viewBox");
-                if (!box.isBlank()) {
-                    String[] parts = box.trim().split("[\\s,]+");
-                    if (parts.length == 4) {
-                        // min-x and min-y, NOT ignored. A viewBox states an origin as well as a size, and
-                        // artwork authored as "-2 -2 28 28" -- which is how a set gives itself padding --
-                        // draws offset by exactly that origin otherwise.
-                        originX = number(parts[0], 0f);
-                        originY = number(parts[1], 0f);
-                        boxWidth = number(parts[2], 24f);
-                        boxHeight = number(parts[3], 24f);
-                    }
-                } else {
-                    boxWidth = number(tag.get("width"), boxWidth);
-                    boxHeight = number(tag.get("height"), boxHeight);
-                }
-                break;
-            }
-
-            indexIds();
-            collectGradients();
-
-            // The origin lands in the root transform rather than in a fix-up pass over the points, so
-            // nothing downstream ever sees coordinates that are not already in the icon's own 0,0 space.
-            SvgTransform root = new SvgTransform(1, 0, 0, 1, -originX, -originY);
-            emitRange(0, tags.size(), SvgStyle.ROOT, root, 0);
-            return new SvgDocument(ops, outline, boxWidth, boxHeight);
-        }
-
-        private void indexIds() {
-            for (int i = 0; i < tags.size(); i++) {
-                SvgScanner.Tag tag = tags.get(i);
-                if (tag.kind() == SvgScanner.Kind.CLOSE) continue;
-                String id = tag.get("id");
-                if (!id.isEmpty()) idIndex.putIfAbsent(id, i);
-            }
-        }
-
-        // ── Gradients ───────────────────────────────────────────────────────────────────────────────
-
-        /**
-         * Reads every paint server in the file, keeping the whole ramp and not only a colour.
-         *
-         * <p>Two passes over the same tags: the first builds each gradient from its own attributes and
-         * stops, the second resolves {@code href} inheritance. Bounded iteration rather than recursion —
-         * a file can reference itself in a cycle, and that must not be how we find out.</p>
-         */
-        private void collectGradients() {
-            Map<String, String> inherits = new HashMap<>();
-            for (int i = 0; i < tags.size(); i++) {
-                SvgScanner.Tag tag = tags.get(i);
-                if (tag.kind() == SvgScanner.Kind.CLOSE) continue;
-                boolean linear = tag.name().equals("linearGradient");
-                if (!linear && !tag.name().equals("radialGradient")) continue;
-                String id = tag.get("id");
-                if (id.isEmpty()) continue;
-
-                String href = tag.has("href") ? tag.get("href") : tag.get("xlink:href");
-                if (href.startsWith("#")) inherits.put(id, href.substring(1));
-
-                Map<String, String> attributes = new HashMap<>(tag.attributes());
-                // SvgGradient reads the element kind out of the same map as everything else, so that its
-                // factory takes one argument instead of a boolean nobody can read at the call site.
-                attributes.put("__tag__", tag.name());
-                int end = tag.kind() == SvgScanner.Kind.OPEN ? matchingClose(i) : i;
-                List<Stop> stops = readStops(i, end);
-                float[] offsets = new float[stops.size()];
-                int[] colours = new int[stops.size()];
-                for (int s = 0; s < stops.size(); s++) {
-                    offsets[s] = stops.get(s).offset();
-                    colours[s] = stops.get(s).argb();
-                }
-                servers.put(id, SvgGradient.of(attributes, offsets, colours, null));
-            }
-            for (int pass = 0; pass < 4; pass++) {
-                for (Map.Entry<String, String> entry : inherits.entrySet()) {
-                    SvgGradient self = servers.get(entry.getKey());
-                    SvgGradient source = servers.get(entry.getValue());
-                    if (self == null || source == null || self.colours().length > 0) continue;
-                    servers.put(entry.getKey(), new SvgGradient(self.radial(), self.userSpace(),
-                            self.transform(), self.x1(), self.y1(), self.x2(), self.y2(),
-                            source.offsets(), source.colours(), self.spread()));
+            SvgScene.Fill fill = node.fill();
+            if (fill != null) {
+                SvgMesh mesh = SvgTessellator.tessellate(node.contours(), fill.evenOdd(), fill.paint());
+                if (!mesh.isEmpty()) {
+                    SvgScene.Paint paint = fill.paint();
+                    int argb = paint instanceof SvgScene.Gradient ramp
+                            ? ramp.argb() : ((SvgScene.Solid) paint).argb();
+                    ops.add(new DrawOp(true, mesh.triangles(), mesh.colour0(), mesh.colour1(),
+                            mesh.axes(), mesh.upper(), mesh.opaque(), argb, paint.currentColor(),
+                            0f, 0, null));
                 }
             }
-            for (Map.Entry<String, SvgGradient> entry : servers.entrySet()) {
-                if (entry.getValue().colours().length == 0) continue;
-                gradients.put(entry.getKey(), entry.getValue().representativeColour());
-            }
-        }
 
-        /**
-         * One gradient stop.
-         *
-         * <p>A record rather than a {@code float[2]} because the second value is an ARGB int, and a float
-         * cannot hold one: 24 bits of mantissa against 32 bits of colour. Opaque colours happen to survive
-         * the round trip — {@code 0xFF000000} is exactly {@code -2^24} — and anything with a partial alpha
-         * does not, so packing them would work on every stop in the shipped set and quietly shift the
-         * colour of the first translucent one anybody adds.</p>
-         */
-        private record Stop(float offset, int argb) {
-        }
-
-        private List<Stop> readStops(int from, int to) {
-            List<Stop> out = new ArrayList<>();
-            for (int i = from + 1; i <= to && i < tags.size(); i++) {
-                SvgScanner.Tag stop = tags.get(i);
-                if (!stop.name().equals("stop") || stop.kind() == SvgScanner.Kind.CLOSE) continue;
-
-                // stop-color lives in an attribute OR inside style="", and Illustrator exports use the
-                // second exclusively -- reading only the attribute finds no stops at all in a file that is
-                // full of them, and every gradient then falls back to grey.
-                Map<String, String> declarations = new HashMap<>(stop.attributes());
-                declarations.putAll(styleDeclarations(stop.get("style")));
-
-                Integer colour = SvgColor.parseColor(declarations.get("stop-color"));
-                if (colour == null) colour = 0xFF000000;
-                String opacity = declarations.get("stop-opacity");
-                if (opacity != null) colour = SvgColor.withOpacity(colour, number(opacity, 1f));
-
-                String rawOffset = declarations.getOrDefault("offset", "0").trim();
-                float offset = rawOffset.endsWith("%")
-                        ? number(rawOffset.substring(0, rawOffset.length() - 1), 0f) / 100f
-                        : number(rawOffset, 0f);
-                out.add(new Stop(Math.max(0f, Math.min(1f, offset)), colour));
-            }
-            return out;
-        }
-
-        // ── The walk ────────────────────────────────────────────────────────────────────────────────
-
-        private void emitRange(int from, int to, SvgStyle style, SvgTransform transform, int depth) {
-            int i = from;
-            while (i < to) {
-                i = emitNode(i, style, transform, depth, false) + 1;
-            }
-        }
-
-        /**
-         * Draws one node and everything under it.
-         *
-         * @param forced the node was reached through {@code <use>}, so a {@code <symbol>} or a member of
-         *               {@code <defs>} is now genuinely part of the picture
-         * @return the index of the last token this node consumed
-         */
-        private int emitNode(int index, SvgStyle style, SvgTransform transform, int depth, boolean forced) {
-            SvgScanner.Tag tag = tags.get(index);
-            if (tag.kind() == SvgScanner.Kind.CLOSE) return index;
-
-            int end = tag.kind() == SvgScanner.Kind.OPEN ? matchingClose(index) : index;
-            String name = tag.name();
-            if (DEFINITIONS.contains(name) && !forced) return end;
-
-            SvgStyle childStyle = style.inherit(tag.attributes(), gradients);
-            SvgTransform childTransform = SvgTransform.parse(tag.get("transform")).then(transform);
-
-            if (name.equals("use")) {
-                emitUse(tag, childStyle, childTransform, depth);
-                return end;
-            }
-            if (SHAPES.contains(name)) {
-                emitShape(tag, childStyle, childTransform);
-                return end;
-            }
-            if (tag.kind() == SvgScanner.Kind.OPEN
-                    && (CONTAINERS.contains(name) || forced || !DEFINITIONS.contains(name))) {
-                // <symbol> and <defs> reached through <use> descend as ordinary groups, and so does any
-                // element we do not recognise -- an unknown container that swallowed its children would
-                // lose whole regions of a file for a tag we simply had not heard of.
-                emitRange(index + 1, end, childStyle, childTransform, depth);
-            }
-            return end;
-        }
-
-        private void emitUse(SvgScanner.Tag tag, SvgStyle style, SvgTransform transform, int depth) {
-            if (depth >= MAX_USE_DEPTH) return;
-            String href = tag.has("href") ? tag.get("href") : tag.get("xlink:href");
-            if (!href.startsWith("#")) return;
-            Integer target = idIndex.get(href.substring(1));
-            if (target == null) return;
-
-            // x/y on a <use> are a translation, applied INSIDE its own transform -- a sprite sheet that
-            // places twenty copies of one symbol depends on it, and dropping it stacks all twenty.
-            float x = number(tag.get("x"), 0f);
-            float y = number(tag.get("y"), 0f);
-            SvgTransform placed = (x != 0f || y != 0f)
-                    ? new SvgTransform(1, 0, 0, 1, x, y).then(transform)
-                    : transform;
-            emitNode(target, style, placed, depth + 1, true);
-        }
-
-        private void emitShape(SvgScanner.Tag tag, SvgStyle style, SvgTransform transform) {
-            if (!style.fills() && !style.strokes()) return;
-            List<SvgPath.Polyline> contours = geometryOf(tag);
-            if (contours.isEmpty()) return;
-
-            // Fill first, then stroke -- SVG's own painting order for a single element, and the reason a
-            // stroked shape shows its full stroke rather than half of it hidden under the fill.
-            //
-            // Built BEFORE the contours are transformed, because a gradient has to be sampled in the space
-            // it was stated in. userSpaceOnUse means the user space in effect where the gradient is
-            // REFERENCED -- so a shape inside a scaled <g> has its paint scaled with it, and sampling after
-            // the transform would read the ramp at coordinates it knows nothing about.
-            if (style.fills()) emitFill(contours, style, transform);
-
-            for (SvgPath.Polyline contour : contours) {
-                for (float[] point : contour.points()) {
-                    float px = transform.applyX(point[0], point[1]);
-                    float py = transform.applyY(point[0], point[1]);
-                    point[0] = px;
-                    point[1] = py;
-                }
-            }
-            outline.addAll(contours);
-
-            if (style.strokes()) {
-                float[] segments = segmentsOf(contours);
-                if (segments.length > 0) {
-                    ops.add(new DrawOp(false, segments, null, null, null, null, true, style.strokeArgb(),
-                            style.stroke().currentColor(),
-                            style.strokeHalfWidth() * transform.lengthScale(), style.cap()));
+            SvgScene.Stroke stroke = node.stroke();
+            if (stroke != null) {
+                SvgGeometry.Segments segments = SvgGeometry.segmentsOf(
+                        node.contours(), stroke.cap() & 3, (stroke.cap() >> 2) & 3);
+                if (segments.data().length > 0) {
+                    SvgScene.Solid paint = (SvgScene.Solid) stroke.paint();
+                    ops.add(new DrawOp(false, segments.data(), null, null, null, null, true,
+                            paint.argb(), paint.currentColor(), stroke.halfWidth(), stroke.cap(),
+                            segments.caps()));
                 }
             }
         }
-
-        private void emitFill(List<SvgPath.Polyline> contours, SvgStyle style, SvgTransform transform) {
-            List<List<float[]>> rings = new ArrayList<>(contours.size());
-            for (SvgPath.Polyline contour : contours) rings.add(contour.points());
-
-            SvgGradient gradient = style.fill().reference() == null
-                    ? null : servers.get(style.fill().reference());
-            if (gradient != null && gradient.colours().length < 2) gradient = null;
-
-            float[] box = boundsOf(rings);
-            float alpha = style.fillOpacity() * style.opacity();
-
-            if (gradient != null && !gradient.radial()) {
-                emitLinearGradientFill(rings, style, transform, gradient, box, alpha);
-                return;
-            }
-
-            float[] spacing = gradient == null ? new float[]{0f, 0f} : gradient.sampleSpacing(box);
-            SvgTriangulator.Fill mesh =
-                    SvgTriangulator.fill(rings, style.evenOdd(), spacing[0], spacing[1]);
-            float[] triangles = mesh.triangles();
-            if (triangles.length == 0) return;
-
-            int[] colours = gradient == null ? null : gradientColours(mesh, gradient, box, alpha);
-            transformInPlace(triangles, transform);
-            ops.add(new DrawOp(true, triangles, colours, null, null, mesh.upper(),
-                    colours == null ? (style.fillArgb() >>> 24) == 0xFF : isOpaque(colours),
-                    style.fillArgb(), style.fill().currentColor(), 0f, 0));
-        }
-
-        /**
-         * A linear gradient, cut into strips that lie ALONG the ramp rather than across it.
-         *
-         * <h3>Why the frame is rotated</h3>
-         *
-         * <p>The scanline cuts in {@code y}. For a gradient running any other direction, a band therefore
-         * spans a <em>range</em> of ramp positions, so no single colour is right for it — the flat colour
-         * is correct only down the band's middle and wrong at both edges, and the error reverses at the
-         * next band. That reads as visible strips with a smooth fade inside each one, which is exactly
-         * what it is: the fade is the slices doing their job, and the strip edges are the bands failing
-         * at theirs.</p>
-         *
-         * <p>Rotating the shape so the gradient points along {@code +y} makes every band an <b>iso-line
-         * strip</b> — constant ramp position from end to end — so one flat colour per band is not an
-         * approximation at all. The triangles are rotated back before they are stored, so nothing
-         * downstream knows this happened.</p>
-         *
-         * <h3>It is also far cheaper</h3>
-         *
-         * <p>Cutting on both axes to chase a diagonal ramp costs N² cells for N bands of quality, and
-         * only O(N) of them carry new colour. Cutting along the ramp needs no horizontal slicing at all,
-         * so the cost drops to the bands themselves.</p>
-         *
-         * <p>Radial gradients keep the subdivided path: their iso-lines are circles, so no rotation makes a
-         * band constant, and their colour still has to be approximated per cell.</p>
-         */
-        private void emitLinearGradientFill(List<List<float[]>> rings, SvgStyle style,
-                                            SvgTransform transform, SvgGradient gradient,
-                                            float[] box, float alpha) {
-            float[] axis = gradient.effectiveAxis(box);
-            float dx = axis[2] - axis[0], dy = axis[3] - axis[1];
-            float lengthSq = dx * dx + dy * dy;
-            if (lengthSq < 1e-9f) return;
-            float length = (float) Math.sqrt(lengthSq);
-            float ux = dx / length, uy = dy / length;
-
-            // R maps the ramp onto +y, so v IS the gradient parameter (unnormalised) and a band cut in v
-            // is an iso-line. The inverse is the transpose, so mapping back costs the same two
-            // multiply-adds.
-            List<List<float[]>> rotated = new ArrayList<>(rings.size());
-            for (List<float[]> ring : rings) {
-                List<float[]> out = new ArrayList<>(ring.size());
-                for (float[] p : ring) out.add(new float[]{uy * p[0] - ux * p[1], ux * p[0] + uy * p[1]});
-                rotated.add(out);
-            }
-            float originV = ux * axis[0] + uy * axis[1];
-
-            // ONE CUT PER STOP, AND NOTHING ELSE.
-            //
-            // The fragment stage interpolates color0 -> color1 across each triangle now, so a band no
-            // longer has to be small enough that a flat colour passes for a ramp -- it only has to stay
-            // inside ONE stop interval, because a two-colour lerp is exact there and wrong across a stop.
-            // That takes the band count from "however many the colour delta demands" to "however many
-            // stops the gradient has", which for real artwork is three or four.
-            float[] offsets = gradient.offsets();
-            float[] cuts = new float[offsets.length];
-            for (int i = 0; i < offsets.length; i++) cuts[i] = originV + offsets[i] * length;
-
-            SvgTriangulator.Fill mesh = SvgTriangulator.fill(rotated, style.evenOdd(), 0f, 0f, cuts);
-            float[] triangles = mesh.triangles();
-            if (triangles.length == 0) return;
-
-            int count = triangles.length / 6;
-            int[] colour0 = new int[count];
-            int[] colour1 = new int[count];
-            float[] axes = new float[count * 4];
-
-            for (int i = 0; i < count; i++) {
-                int at = i * 6;
-                float vMin = Math.min(triangles[at + 1], Math.min(triangles[at + 3], triangles[at + 5]));
-                float vMax = Math.max(triangles[at + 1], Math.max(triangles[at + 3], triangles[at + 5]));
-                if (vMax - vMin < 1e-6f) vMax = vMin + 1e-6f;
-
-                colour0[i] = SvgColor.withOpacity(
-                        gradient.colourAt(gradient.spreadPublic((vMin - originV) / length)), alpha);
-                colour1[i] = SvgColor.withOpacity(
-                        gradient.colourAt(gradient.spreadPublic((vMax - originV) / length)), alpha);
-
-                // The axis is stated in FINAL space -- after the rotation is undone and the element's own
-                // transform applied -- because that is the space the fragment stage sees. Deriving it from
-                // two transformed points rather than transforming a direction is what keeps it correct
-                // under a non-uniform or skewed transform, where a direction does not scale uniformly.
-                float[] a = toFinal(0f, vMin, ux, uy, transform);
-                float[] b = toFinal(0f, vMax, ux, uy, transform);
-                float abx = b[0] - a[0], aby = b[1] - a[1];
-                float abLenSq = abx * abx + aby * aby;
-                if (abLenSq < 1e-12f) abLenSq = 1e-12f;
-                axes[i * 4] = a[0];
-                axes[i * 4 + 1] = a[1];
-                axes[i * 4 + 2] = abx / abLenSq;
-                axes[i * 4 + 3] = aby / abLenSq;
-            }
-
-            for (int i = 0; i < triangles.length; i += 2) {
-                float[] p = toFinal(triangles[i], triangles[i + 1], ux, uy, transform);
-                triangles[i] = p[0];
-                triangles[i + 1] = p[1];
-            }
-            ops.add(new DrawOp(true, triangles, colour0, colour1, axes, mesh.upper(),
-                    isOpaque(colour0) && isOpaque(colour1), style.fillArgb(),
-                    style.fill().currentColor(), 0f, 0));
-        }
-
-        /** Rotated frame to final space: undo R, then apply the element's own transform. */
-        private static float[] toFinal(float u, float v, float ux, float uy, SvgTransform transform) {
-            float x = uy * u + ux * v;
-            float y = -ux * u + uy * v;
-            return new float[]{transform.applyX(x, y), transform.applyY(x, y)};
-        }
-
-        private static void transformInPlace(float[] triangles, SvgTransform transform) {
-            for (int i = 0; i < triangles.length; i += 2) {
-                float px = transform.applyX(triangles[i], triangles[i + 1]);
-                float py = transform.applyY(triangles[i], triangles[i + 1]);
-                triangles[i] = px;
-                triangles[i + 1] = py;
-            }
-        }
-
-        /**
-         * One colour per triangle, sampled once per <b>slice</b> rather than once per triangle.
-         *
-         * <p>The two halves of a slice are split along a diagonal, so their centroids sit on opposite
-         * sides of it and pick up different colours. That is invisible on its own, and stops being
-         * invisible the moment the draw dilates each triangle half a pixel to hide the seams between
-         * slices: each half then overwrites a strip of the other along the shared diagonal, and whichever
-         * is submitted second wins. The result is a diagonal hatch of the wrong colour across the whole
-         * shape, strongest exactly where the gradient is steepest. Giving a slice one colour makes that
-         * overlap land on itself.</p>
-         */
-        private static int[] gradientColours(SvgTriangulator.Fill mesh, SvgGradient gradient,
-                                             float[] box, float alpha) {
-            int[] slice = mesh.slice();
-            float[] triangles = mesh.triangles();
-            int count = slice.length;
-            if (count == 0) return new int[0];
-
-            int sliceCount = slice[count - 1] + 1;
-            float[] sumX = new float[sliceCount];
-            float[] sumY = new float[sliceCount];
-            int[] samples = new int[sliceCount];
-            for (int i = 0; i < count; i++) {
-                int at = i * 6;
-                for (int v = 0; v < 6; v += 2) {
-                    sumX[slice[i]] += triangles[at + v];
-                    sumY[slice[i]] += triangles[at + v + 1];
-                }
-                samples[slice[i]] += 3;
-            }
-
-            int[] resolved = new int[sliceCount];
-            for (int s = 0; s < sliceCount; s++) {
-                if (samples[s] == 0) continue;
-                resolved[s] = SvgColor.withOpacity(
-                        gradient.colourAt(sumX[s] / samples[s], sumY[s] / samples[s], box), alpha);
-            }
-            int[] out = new int[count];
-            for (int i = 0; i < count; i++) out[i] = resolved[slice[i]];
-            return out;
-        }
-
-        /**
-         * Whether every colour is fully opaque, and the fill may therefore safely overlap its own seams.
-         *
-         * <p>A gradient counts only if <b>both</b> ends of every band are opaque — a ramp that fades out
-         * is translucent where it matters even though it starts solid.</p>
-         */
-        private static boolean isOpaque(int[] colours) {
-            if (colours == null) return false;
-            for (int argb : colours) {
-                if ((argb >>> 24) != 0xFF) return false;
-            }
-            return true;
-        }
-
-        /** {@code minX, minY, width, height} — what an {@code objectBoundingBox} gradient resolves against. */
-        private static float[] boundsOf(List<List<float[]>> rings) {
-            float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
-            float maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
-            for (List<float[]> ring : rings) {
-                for (float[] point : ring) {
-                    minX = Math.min(minX, point[0]);
-                    minY = Math.min(minY, point[1]);
-                    maxX = Math.max(maxX, point[0]);
-                    maxY = Math.max(maxY, point[1]);
-                }
-            }
-            if (minX > maxX) return new float[]{0f, 0f, 1f, 1f};
-            return new float[]{minX, minY, Math.max(1e-6f, maxX - minX), Math.max(1e-6f, maxY - minY)};
-        }
-
-        // ── Geometry ────────────────────────────────────────────────────────────────────────────────
-
-        private static List<SvgPath.Polyline> geometryOf(SvgScanner.Tag tag) {
-            List<SvgPath.Polyline> out = new ArrayList<>();
-            switch (tag.name()) {
-                case "path" -> out.addAll(SvgPath.parse(tag.get("d")));
-                case "polyline" -> addPoints(out, tag.get("points"), false);
-                case "polygon" -> addPoints(out, tag.get("points"), true);
-                case "line" -> out.add(new SvgPath.Polyline(List.of(
-                        new float[]{number(tag.get("x1"), 0f), number(tag.get("y1"), 0f)},
-                        new float[]{number(tag.get("x2"), 0f), number(tag.get("y2"), 0f)}), false));
-                case "rect" -> addRect(out, tag);
-                case "circle" -> addEllipse(out, number(tag.get("cx"), 0f), number(tag.get("cy"), 0f),
-                        number(tag.get("r"), 0f), number(tag.get("r"), 0f));
-                case "ellipse" -> addEllipse(out, number(tag.get("cx"), 0f), number(tag.get("cy"), 0f),
-                        number(tag.get("rx"), 0f), number(tag.get("ry"), 0f));
-                default -> { }
-            }
-            return out;
-        }
-
-        private static void addPoints(List<SvgPath.Polyline> out, String raw, boolean closed) {
-            if (raw.isBlank()) return;
-            String[] numbers = raw.trim().split("[\\s,]+");
-            List<float[]> points = new ArrayList<>();
-            for (int i = 0; i + 1 < numbers.length; i += 2) {
-                points.add(new float[]{number(numbers[i], 0f), number(numbers[i + 1], 0f)});
-            }
-            if (points.size() > 1) out.add(new SvgPath.Polyline(points, closed));
-        }
-
-        /** A rect, with {@code rx}/{@code ry} corners when it has them. */
-        private static void addRect(List<SvgPath.Polyline> out, SvgScanner.Tag tag) {
-            float x = number(tag.get("x"), 0f), y = number(tag.get("y"), 0f);
-            float w = number(tag.get("width"), 0f), h = number(tag.get("height"), 0f);
-            float rx = number(tag.get("rx"), 0f), ry = number(tag.get("ry"), 0f);
-            if (w <= 0f || h <= 0f) return;
-            if (ry == 0f) ry = rx;
-            if (rx == 0f) rx = ry;
-            rx = Math.min(rx, w / 2f);
-            ry = Math.min(ry, h / 2f);
-
-            if (rx <= 0f || ry <= 0f) {
-                out.add(new SvgPath.Polyline(new ArrayList<>(List.of(
-                        new float[]{x, y}, new float[]{x + w, y},
-                        new float[]{x + w, y + h}, new float[]{x, y + h})), true));
-                return;
-            }
-            // Expressed as a path so the corner arcs go through the one arc implementation rather than a
-            // second, subtly different one here.
-            String d = "M" + (x + rx) + " " + y
-                    + " H" + (x + w - rx) + " A" + rx + " " + ry + " 0 0 1 " + (x + w) + " " + (y + ry)
-                    + " V" + (y + h - ry) + " A" + rx + " " + ry + " 0 0 1 " + (x + w - rx) + " " + (y + h)
-                    + " H" + (x + rx) + " A" + rx + " " + ry + " 0 0 1 " + x + " " + (y + h - ry)
-                    + " V" + (y + ry) + " A" + rx + " " + ry + " 0 0 1 " + (x + rx) + " " + y + " Z";
-            out.addAll(SvgPath.parse(d));
-        }
-
-        private static void addEllipse(List<SvgPath.Polyline> out, float cx, float cy, float rx, float ry) {
-            if (rx <= 0f || ry <= 0f) return;
-            List<float[]> points = new ArrayList<>();
-            for (int i = 0; i < CIRCLE_STEPS; i++) {
-                double t = 2 * Math.PI * i / CIRCLE_STEPS;
-                points.add(new float[]{(float) (cx + rx * Math.cos(t)), (float) (cy + ry * Math.sin(t))});
-            }
-            out.add(new SvgPath.Polyline(points, true));
-        }
-
-        /**
-         * Flattens runs into drawable segments.
-         *
-         * <p>Degenerate segments are dropped <b>here</b> rather than at draw time. A round cap on a segment
-         * of no length paints a filled dot, so a path whose {@code z} closes onto the point it already
-         * ended at would leave a speck at its start — and filtering per frame would pay for that check on
-         * every draw of every icon forever. It is a property of the geometry, so it belongs with it.</p>
-         */
-        private static float[] segmentsOf(List<SvgPath.Polyline> contours) {
-            List<float[]> found = new ArrayList<>();
-            for (SvgPath.Polyline contour : contours) {
-                List<float[]> points = contour.points();
-                for (int i = 0; i + 1 < points.size(); i++) {
-                    addSegment(found, points.get(i), points.get(i + 1));
-                }
-                if (contour.closed() && points.size() > 1) {
-                    addSegment(found, points.get(points.size() - 1), points.get(0));
-                }
-            }
-            float[] packed = new float[found.size() * 4];
-            for (int i = 0; i < found.size(); i++) {
-                System.arraycopy(found.get(i), 0, packed, i * 4, 4);
-            }
-            return packed;
-        }
-
-        private static void addSegment(List<float[]> out, float[] a, float[] b) {
-            if (Math.abs(a[0] - b[0]) < 0.001f && Math.abs(a[1] - b[1]) < 0.001f) return;
-            out.add(new float[]{a[0], a[1], b[0], b[1]});
-        }
-
-        // ── Tokens ──────────────────────────────────────────────────────────────────────────────────
-
-        /**
-         * The index of the {@code </name>} closing the tag at {@code open}.
-         *
-         * <p>Matched <b>by name</b>, not by a bare depth counter: real files carry stray closing tags and
-         * unclosed ones, and a counter walks straight past the true close of a group into its siblings —
-         * which silently reparents them and applies the wrong transform to the rest of the file.</p>
-         */
-        private int matchingClose(int open) {
-            String name = tags.get(open).name();
-            int depth = 0;
-            for (int i = open + 1; i < tags.size(); i++) {
-                SvgScanner.Tag tag = tags.get(i);
-                if (!tag.name().equals(name)) continue;
-                if (tag.kind() == SvgScanner.Kind.OPEN) depth++;
-                else if (tag.kind() == SvgScanner.Kind.CLOSE) {
-                    if (depth == 0) return i;
-                    depth--;
-                }
-            }
-            return tags.size() - 1;
-        }
+        return new SvgDocument(ops, outline, scene.width(), scene.height());
     }
 
-    private static Map<String, String> styleDeclarations(String raw) {
+    static Map<String, String> styleDeclarations(String raw) {
         Map<String, String> out = new HashMap<>();
         if (raw == null) return out;
         for (String part : raw.split(";")) {
@@ -843,7 +289,7 @@ public final class SvgDocument {
         return out;
     }
 
-    private static float number(String raw, float fallback) {
+    static float number(String raw, float fallback) {
         if (raw == null) return fallback;
         try {
             return Float.parseFloat(raw.trim());
@@ -946,8 +392,15 @@ public final class SvgDocument {
 
             // OPAQUE OVERLAPS, TRANSLUCENT PARTITIONS -- see FILL_OFFSET. Overlap is exactly right when
             // compositing the colour over itself is a no-op, and only then.
+            // ONLY THE OUTER WALL IS ANTIALIASED. SvgTriangulator splits every trapezoid the same way,
+            // so which edge came from the contour is known rather than inferred: the upper half owns the
+            // right wall (p1->p2) and the lower half the left wall (p2->p0). Everything else it touches --
+            // the horizontal band cuts and the diagonal split -- is a seam shared with a neighbour, and
+            // softening those would fade each one out from both sides into a visible line.
             out.cornerRadius(op.opaque() || upper[triangle] ? FILL_OFFSET : -FILL_OFFSET)
-                    .feather(0f)
+                    .silhouetteEdge(upper[triangle]
+                            ? CgVectorRenderer.EDGE_P1_P2 : CgVectorRenderer.EDGE_P2_P0)
+                    .feather(SILHOUETTE_FEATHER)
                     .submit();
         }
     }
@@ -956,12 +409,17 @@ public final class SvgDocument {
                                    float x, float y, float scale, int argb, float halfWidth) {
         float[] s = op.data();
         for (int i = 0; i < s.length; i += 4) {
+            // Per SEGMENT, not per op: the caps were decided where the contour structure was still known,
+            // so an interior joint gets one round cap and the stroke's real ends keep what the file asked
+            // for. See SvgGeometry.segmentsOf.
+            int[] caps = op.segmentCaps();
+            int packed = caps == null ? op.cap() : caps[i / 4];
             ctx.curve()
                     .line(x + s[i] * scale, y + s[i + 1] * scale,
                             x + s[i + 2] * scale, y + s[i + 3] * scale)
                     .width(halfWidth)
                     .color(argb)
-                    .cap(op.cap() == CgVectorRenderer.CAP_BUTT ? CgVectorRenderer.CAP_ROUND : op.cap())
+                    .cap(packed & 3, (packed >> 2) & 3)
                     .submit();
         }
     }
