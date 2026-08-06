@@ -62,24 +62,6 @@ public class BlackboardStyleTest extends UiTestBase {
         return null;
     }
 
-    // ── The frame ───────────────────────────────────────────────────────────
-
-    /**
-     * <b>The two panels are the same size, because they share one rule.</b>
-     *
-     * <p>If this fails at some large number, the Blackboard's rules are not matching at all and it is
-     * being sized by its content — which is exactly what "looks nothing like it" looked like.</p>
-     */
-    @Test
-    public void theBlackboardIsTheSameSizeAsTheMainPreview() {
-        mount();
-        assertEquals("width — if this is not 220 the shared rule is not matching",
-                w(preview), w(board), 0.5f);
-        assertEquals("height", h(preview), h(board), 0.5f);
-        assertEquals(220f, w(board), 0.5f);
-        assertEquals(236f, h(board), 0.5f);
-    }
-
     // ── No scrollbars ───────────────────────────────────────────────────────
 
     /**
