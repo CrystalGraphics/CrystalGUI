@@ -11,8 +11,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Collection;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import javax.annotation.Nullable;
 
@@ -178,21 +182,26 @@ public final class SvgDocument {
         }
     }
 
-    private final List<DrawOp> ops;
+    /** Retained so {@link #ops()} can tessellate on demand; see the laziness note there. */
+    private final SvgScene scene;
+    /** Null until {@link #ops()} builds it. Volatile for the double-checked read in that method. */
+    private volatile List<DrawOp> ops;
     private final List<SvgPath.Polyline> outline;
     private final float width;
     private final float height;
-    /** {@code minX, minY, maxX, maxY} over every op's geometry — see {@link #boundsOf}. */
+    /** {@code minX, minY, maxX, maxY} over every contour — see {@link #boundsOf}. */
     private final float[] bounds;
 
-    private SvgDocument(List<DrawOp> ops, List<SvgPath.Polyline> outline, float width, float height) {
+    private SvgDocument(SvgScene scene) {
+        this.scene = scene;
+        List<SvgPath.Polyline> contours = new ArrayList<>();
+        for (SvgScene.Node node : scene.nodes()) contours.addAll(node.contours());
         // Unmodifiable, because a document is cached and shared by every consumer drawing that icon --
         // one caller sorting or clearing what it got back would corrupt the picture for all of them.
-        this.ops = Collections.unmodifiableList(ops);
-        this.outline = Collections.unmodifiableList(outline);
-        this.width = width;
-        this.height = height;
-        this.bounds = boundsOf(this.ops);
+        this.outline = Collections.unmodifiableList(contours);
+        this.width = scene.width();
+        this.height = scene.height();
+        this.bounds = boundsOf(scene);
     }
 
     /**
@@ -207,23 +216,29 @@ public final class SvgDocument {
      * box is the geometry itself, so there is nothing to overhang it. Strokes are expanded by their own
      * half-width, which is the only thing the raw points understate.</p>
      */
-    private static float[] boundsOf(List<DrawOp> ops) {
+    private static float[] boundsOf(SvgScene scene) {
         float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
         float maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
-        for (DrawOp op : ops) {
-            float[] data = op.data();
-            float pad = op.fill() ? 0f : op.halfWidth();
-            int stride = op.fill() ? 6 : 4;
-            for (int i = 0; i + stride <= data.length; i += stride) {
-                for (int v = 0; v < stride; v += 2) {
-                    minX = Math.min(minX, data[i + v] - pad);
-                    minY = Math.min(minY, data[i + v + 1] - pad);
-                    maxX = Math.max(maxX, data[i + v] + pad);
-                    maxY = Math.max(maxY, data[i + v + 1] + pad);
+        for (SvgScene.Node node : scene.nodes()) {
+            float pad = node.stroke() == null ? 0f : node.stroke().halfWidth();
+            for (SvgPath.Polyline contour : node.contours()) {
+                for (float[] point : contour.points()) {
+                    minX = Math.min(minX, point[0] - pad);
+                    minY = Math.min(minY, point[1] - pad);
+                    maxX = Math.max(maxX, point[0] + pad);
+                    maxY = Math.max(maxY, point[1] + pad);
                 }
             }
         }
-        return minX > maxX ? new float[]{0f, 0f, 0f, 0f} : new float[]{minX, minY, maxX, maxY};
+        if (minX > maxX) return new float[]{0f, 0f, 0f, 0f};
+        // Unioned with the viewBox, because the contours this is measured from are flattened at
+        // PARSE_STEPS -- the coarsest resolution in the document. A three-segment approximation of an arc
+        // sits INSIDE the true curve, so a box measured from it can be a fraction under the ink it is
+        // meant to contain, and a cull box that is too small is a missing icon. The viewBox is the author's
+        // own statement of where the artwork lives and costs nothing to include; the measured term is what
+        // still catches a stroke hanging outside it.
+        return new float[]{Math.min(minX, 0f), Math.min(minY, 0f),
+                Math.max(maxX, scene.width()), Math.max(maxY, scene.height())};
     }
 
     /**
@@ -262,14 +277,28 @@ public final class SvgDocument {
                 lodBudgetFrame = frame;
                 lodNanosThisFrame = 0L;
             }
-            // Out of budget: draw with the reference mesh this frame and try again next. Deliberately not
-            // a queue -- whatever is on screen next frame is what deserves the budget, and a queue built
-            // from this frame's visibility would keep building icons a zoom has already left behind.
+            // Out of budget: draw with whatever coarse mesh already exists and try again next frame.
+            // Deliberately not a queue -- whatever is on screen next frame is what deserves the budget,
+            // and a queue built from this frame's visibility would keep building icons a zoom has already
+            // left behind.
+            //
+            // It used to fall back to `this`, the reference mesh, which was free because parse had already
+            // built it. Now that ops() is lazy that fallback is the single MOST expensive mesh in the
+            // document and drawing it would tessellate at REFERENCE_STEPS mid-frame, outside this very
+            // budget -- so the deferral would cost more than the build it declined. Measured: parse got
+            // 24 ms cheaper and the first frame got 25 ms DEARER, for no net gain.
+            //
+            // So: prefer any tier already built, and if there is none, build the requested one anyway.
+            // Overshooting the budget by one coarse tier is strictly cheaper than the alternative.
             if (lodNanosThisFrame >= LOD_BUILD_BUDGET_NANOS) {
-                // Counted, so "the budget deferred work" is visible rather than inferred from its absence.
-                CgProfiler.count("svg.lodDeferred.count");
-                CgProfiler.sample("svg.lodDeferred", 1.0);
-                return this;
+                SvgDocument fallback = coarsestBuilt();
+                if (fallback != null) {
+                    // Counted, so "the budget deferred work" is visible rather than inferred from its absence.
+                    CgProfiler.count("svg.lodDeferred.count");
+                    CgProfiler.sample("svg.lodDeferred", 1.0);
+                    return fallback;
+                }
+                CgProfiler.count("svg.lodOverBudget.count");
             }
             long startedAt = System.nanoTime();
             // Scoped so the COST OF BUILDING one is visible separately from drawing with it: this runs on
@@ -281,8 +310,15 @@ public final class SvgDocument {
                 CgProfiler.count("svg.lodBuild.steps" + LOD_STEPS[i]);
                 CgProfiler.sample("svg.lodDevicePx", devicePx);
                 CgProfiler.sample("svg.lodDeferred", 0.0);
-                SvgDocument built = lods.computeIfAbsent(LOD_STEPS[i],
-                        steps -> fromScene(SvgResolver.resolve(tags, steps)));
+                SvgDocument built = lods.computeIfAbsent(LOD_STEPS[i], steps -> {
+                    SvgDocument tier = fromScene(SvgResolver.resolve(tags, steps));
+                    // Forced HERE rather than left to the first draw. ops() is lazy now, and the whole
+                    // point of this scope is that the build is charged against LOD_BUILD_BUDGET_NANOS --
+                    // let the tessellation escape it and the budget silently stops spreading the work it
+                    // exists to spread, which shows up as the zoom hitch it was written to remove.
+                    tier.ops();
+                    return tier;
+                });
                 lodNanosThisFrame += System.nanoTime() - startedAt;
                 return built;
             }
@@ -290,8 +326,25 @@ public final class SvgDocument {
         return this;
     }
 
+    /**
+     * The cheapest already-built tier, or null when none exists yet.
+     *
+     * <p>What a budget-exhausted frame draws with. Coarsest rather than closest-to-ideal because the
+     * point is to submit <em>something</em> without building, and a tier that is too coarse for one frame
+     * of a zoom is a facet nobody sees at 60fps — whereas the alternative this replaced was a full
+     * reference tessellation on the render thread.</p>
+     */
+    @Nullable
+    private SvgDocument coarsestBuilt() {
+        for (int steps : LOD_STEPS) {
+            SvgDocument tier = lods.get(steps);
+            if (tier != null) return tier;
+        }
+        return null;
+    }
+
     private boolean cullable(CgUiPaintContext ctx, float x, float y, float scale, float extra) {
-        if (ops.isEmpty()) return true;
+        if (scene.isEmpty()) return true;
         float x0 = x + bounds[0] * scale - extra;
         float y0 = y + bounds[1] * scale - extra;
         float x1 = x + bounds[2] * scale + extra;
@@ -324,6 +377,71 @@ public final class SvgDocument {
         CACHE.clear();
     }
 
+    /**
+     * Loads and parses icons on a worker thread, so the first frame that draws them finds them ready.
+     *
+     * <h3>Why this exists, and why it beats making the parse faster</h3>
+     *
+     * <p>Loading the shipped set costs about 70 ms from cold, and roughly <b>85% of that is JIT warmup</b>
+     * rather than work — the same parse warm is a few milliseconds. Optimising the code cannot reach the
+     * bulk of it, and every millisecond that is left still lands on whichever frame first draws an icon.
+     * Moving it off that frame removes all of it.</p>
+     *
+     * <p><b>Parsing is movable precisely because it touches no GL.</b> Everything from {@code CgIO} through
+     * scanning, resolution and tessellation is arithmetic over strings and floats — which is the same
+     * property that lets it run in {@code headlessTest} on a dedicated server, and the reason this is a
+     * safe threading boundary rather than a hopeful one.</p>
+     *
+     * <h3>What is safe here, and what is not</h3>
+     *
+     * <p>A parsed document is effectively immutable — {@link #ops()} builds under a lock into a volatile
+     * field, and the LOD map is concurrent — so sharing one across threads is fine. {@link #CACHE} is a
+     * {@code ConcurrentHashMap}, and a racing double parse of the same path wastes work without being
+     * wrong.</p>
+     *
+     * <p><b>Do not call {@link #render} from a worker.</b> That submits to the paint context and touches
+     * GL; only loading and parsing belong here. And {@link #lodFor}'s budget is per-frame global state, so
+     * tier builds stay on the render thread deliberately — this warms the parse, not the LOD ladder.</p>
+     *
+     * @param paths namespaced icon paths, exactly as {@link #of} takes them
+     * @return completes when every path has been attempted; a path that fails to load is logged by
+     *         {@link #load} and left out of the cache, as it would be on the render thread
+     */
+    public static CompletableFuture<Void> preload(Collection<String> paths) {
+        List<CompletableFuture<Void>> pending = new ArrayList<>(paths.size());
+        for (String path : paths) {
+            if (CACHE.containsKey(path)) continue;
+            pending.add(CompletableFuture.runAsync(() -> of(path), PreloadPool.INSTANCE));
+        }
+        return CompletableFuture.allOf(pending.toArray(new CompletableFuture[0]));
+    }
+
+    /**
+     * The worker pool preloading runs on, in a holder so it is created on first {@link #preload} and not
+     * before.
+     *
+     * <p>A {@code static final} field here would spin up threads the moment this class is touched — which
+     * on a dedicated server is every time an icon path is merely parsed, for a pool that will never be
+     * handed a task. Class initialisation is the laziness, and it costs nothing to get right.</p>
+     *
+     *
+     * <p>Daemon threads, so a process that exits mid-preload is not held open by icon parsing, and at most
+     * a few of them: this is CPU-bound work competing with the render thread for cores, and the point is to
+     * be finished before the first draw rather than to finish as fast as physically possible. Bounded at
+     * two below the core count for the same reason {@code CgProfiler}-era measurements showed the render
+     * thread starving when a pool took everything.</p>
+     */
+    private static final class PreloadPool {
+
+        static final Executor INSTANCE = Executors.newFixedThreadPool(
+                Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() - 2)),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "cgui-svg-preload");
+                    thread.setDaemon(true);
+                    return thread;
+                });
+    }
+
     /** Loads {@code "namespace:ui/icons/folder.svg"} through {@code CgIO}, or null when it is unreadable. */
     @Nullable
     public static SvgDocument load(String path) {
@@ -335,27 +453,35 @@ public final class SvgDocument {
             CrystalGuiCore.LOGGER.warn("Icon {} could not be read", path);
             return null;
         }
-        return parse(source);
-    }
-
-    public static SvgDocument parse(String svg) {
         try (CgProfiler.Scope ignored = CgProfiler.scope("svg.parse")) {
             CgProfiler.count("svg.parse.count");
-            List<SvgScanner.Tag> tags;
-            try (CgProfiler.Scope ignored2 = CgProfiler.scope("svg.scan")) {
-                tags = SvgScanner.scan(svg);
-            }
-            SvgScene scene;
-            try (CgProfiler.Scope ignored2 = CgProfiler.scope("svg.resolve")) {
-                scene = SvgResolver.resolve(tags, REFERENCE_STEPS);
-            }
-            SvgDocument document;
-            try (CgProfiler.Scope ignored2 = CgProfiler.scope("svg.buildOps")) {
-                document = fromScene(scene);
-            }
-            document.tags = tags;
-            return document;
+            return parse(source);
         }
+    }
+
+    /**
+     * Parses SVG text into a document.
+     *
+     * <h3>No profiler scopes in here, and they cannot be added</h3>
+     *
+     * <p>Parsing is pure geometry, so this is reachable from {@code headlessTest} — where CrystalGraphics
+     * <em>core</em> is deliberately absent, and {@code CgProfiler} lives there. A scope inside a method body
+     * still compiles and still passes {@code :core:test}; it fails at run time with
+     * {@code NoClassDefFoundError}, in the one source set that exists to catch it. This method shipped
+     * instrumented for exactly one session before that surfaced.</p>
+     *
+     * <p>{@link #load} is the profiled entry point and is <b>not</b> headless — it reads through {@code CgIO},
+     * which is CrystalGraphics core already. Anything wanting a finer breakdown than {@code svg.parse}
+     * should add it there, or temporarily, and take it back out.</p>
+     */
+    public static SvgDocument parse(String svg) {
+        List<SvgScanner.Tag> tags = SvgScanner.scan(svg);
+        SvgDocument document = fromScene(SvgResolver.resolve(tags, PARSE_STEPS));
+        document.tags = tags;
+        // The root IS the coarsest tier, registered as such so lodFor finds it rather than resolving a
+        // second, identical copy of it.
+        document.lods.put(PARSE_STEPS, document);
+        return document;
     }
 
     /**
@@ -378,8 +504,29 @@ public final class SvgDocument {
      * own faceting could reach a pixel — because the failure mode is a visibly polygonal icon and the
      * saving is already large at conservative settings.</p>
      */
-    private static final int[] LOD_MAX_DEVICE_PX = {24, 64, 160};
-    private static final int[] LOD_STEPS = {3, 5, 9};
+    /**
+     * Curve resolution {@link #parse} resolves at — the <b>coarsest</b> tier, not the reference one.
+     *
+     * <h3>Why parse builds the cheapest mesh rather than the best one</h3>
+     *
+     * <p>Parsing used to resolve at {@link #REFERENCE_STEPS}, the resolution a full-screen zoom needs.
+     * Almost nothing draws at that size, so for every icon in a file tree the finest flattening in the
+     * document was produced and then immediately replaced by a tier built independently from the retained
+     * tags. Measured over the shipped set, that was <b>the larger half of a 120 ms load</b>, spent on
+     * geometry that was never submitted.</p>
+     *
+     * <p>Resolving at the coarsest tier inverts it: parse produces the one mesh that is <em>always</em>
+     * useful — something to draw on the first frame — and every finer tier is built on demand, by the
+     * machinery that already existed for exactly that. {@link #REFERENCE_STEPS} is now simply the top
+     * tier, reached when an icon really is drawn past {@code LOD_MAX_DEVICE_PX}'s last threshold.</p>
+     *
+     * <p><b>This is not a quality change.</b> Which mesh gets drawn at a given size is decided by
+     * {@link #lodFor} and is unchanged; only the moment each one is built has moved.</p>
+     */
+    private static final int PARSE_STEPS = 3;
+
+    private static final int[] LOD_MAX_DEVICE_PX = {24, 64, 160, Integer.MAX_VALUE};
+    private static final int[] LOD_STEPS = {PARSE_STEPS, 5, 9, REFERENCE_STEPS};
 
     /**
      * The scanned document, retained so a coarser mesh can be built on demand.
@@ -430,11 +577,13 @@ public final class SvgDocument {
      * stroked shape shows its full stroke rather than half of it hidden under the fill.</p>
      */
     static SvgDocument fromScene(SvgScene scene) {
-        List<DrawOp> ops = new ArrayList<>();
-        List<SvgPath.Polyline> outline = new ArrayList<>();
-        for (SvgScene.Node node : scene.nodes()) {
-            outline.addAll(node.contours());
+        return new SvgDocument(scene);
+    }
 
+    /** The tessellation half of {@link #fromScene}, deferred — see {@link #ops()}. */
+    private static List<DrawOp> buildOps(SvgScene scene) {
+        List<DrawOp> ops = new ArrayList<>();
+        for (SvgScene.Node node : scene.nodes()) {
             SvgScene.Fill fill = node.fill();
             if (fill != null) {
                 SvgMesh mesh = SvgTessellator.tessellate(node.contours(), fill.evenOdd(), fill.paint());
@@ -460,7 +609,7 @@ public final class SvgDocument {
                 }
             }
         }
-        return new SvgDocument(ops, outline, scene.width(), scene.height());
+        return ops;
     }
 
     static Map<String, String> styleDeclarations(String raw) {
@@ -515,7 +664,7 @@ public final class SvgDocument {
             lod.render(ctx, x, y, scale, tint);
             return;
         }
-        for (DrawOp op : ops) {
+        for (DrawOp op : ops()) {
             int argb = op.currentColor() ? tint : op.argb();
             if (op.fill()) {
                 drawFill(ctx, op, x, y, scale, argb, false);
@@ -546,7 +695,7 @@ public final class SvgDocument {
             lod.renderMonochrome(ctx, x, y, scale, argb, halfWidth);
             return;
         }
-        for (DrawOp op : ops) {
+        for (DrawOp op : ops()) {
             if (op.fill()) {
                 drawFill(ctx, op, x, y, scale, argb, true);
             } else {
@@ -637,22 +786,45 @@ public final class SvgDocument {
 
     // ── Queries ─────────────────────────────────────────────────────────────────────────────────────
 
-    /** The draw operations, in document order. */
+    /**
+     * The draw operations, in document order — <b>tessellated on first request, not at parse.</b>
+     *
+     * <h3>Why this is lazy</h3>
+     *
+     * <p>A document is parsed at {@code REFERENCE_STEPS}, the resolution a full-screen zoom needs. Almost
+     * nothing draws at that size: {@link #lodFor} picks a coarser tier for anything under 160 device
+     * pixels and builds it <em>independently</em> from the retained tags, so at a file tree's 16px every
+     * icon threw the reference mesh away without ever submitting a triangle of it. Measured across the
+     * shipped set, tessellating it was <b>17.3 ms of a 62 ms load</b>, spent on geometry nothing drew.</p>
+     *
+     * <p>Deferring it is safe precisely because {@link #bounds} no longer depends on it — see
+     * {@link #boundsOf}. Were culling still reading a box measured off the triangles, the first
+     * {@link #render} would force the build and this would save nothing at all.</p>
+     *
+     * <p>Double-checked on a volatile field. Two threads racing here build the same mesh twice and one
+     * result is discarded, which is wasteful but not wrong; the alternative is holding a lock across a
+     * tessellation on the render thread.</p>
+     */
     public List<DrawOp> ops() {
-        return ops;
+        List<DrawOp> built = ops;
+        if (built != null) return built;
+        synchronized (this) {
+            if (ops == null) ops = Collections.unmodifiableList(buildOps(scene));
+            return ops;
+        }
     }
 
     /** How many stroke segments a draw submits. */
     public int segmentCount() {
         int total = 0;
-        for (DrawOp op : ops) if (!op.fill()) total += op.data().length / 4;
+        for (DrawOp op : ops()) if (!op.fill()) total += op.data().length / 4;
         return total;
     }
 
     /** How many fill triangles a draw submits. */
     public int triangleCount() {
         int total = 0;
-        for (DrawOp op : ops) if (op.fill()) total += op.data().length / 6;
+        for (DrawOp op : ops()) if (op.fill()) total += op.data().length / 6;
         return total;
     }
 
@@ -670,7 +842,19 @@ public final class SvgDocument {
         return height;
     }
 
+    /**
+     * Whether the document has anything to draw.
+     *
+     * <p>Answered from the scene rather than from {@link #ops()}, so asking does not force the
+     * tessellation the laziness exists to avoid — {@code isEmpty()} is exactly the sort of cheap-looking
+     * query a caller puts in front of a draw, and routing it through the mesh would rebuild the parse
+     * cost at the first guard.</p>
+     *
+     * <p>The two can differ in one direction: a scene whose every mesh degenerates to zero area has
+     * contours but no ops, and this reports it non-empty. That is the safe direction — a caller that
+     * draws anyway submits nothing.</p>
+     */
     public boolean isEmpty() {
-        return ops.isEmpty();
+        return scene.isEmpty();
     }
 }
