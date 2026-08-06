@@ -3984,10 +3984,80 @@ workbench {
     flex-basis: 0;
 }
 
+/* ROW, so the activity bar sits beside the dock rather than above it. The engine's flex-direction
+ * default is COLUMN (see TaffyBridge), which is the one Taffy divergence most likely to bite here. */
 workbench .__workbench-content__ {
     width: 100%;
     flex-grow: 1;
     flex-basis: 0;
+    flex-direction: row;
+}
+
+/* ── Activity bar ──────────────────────────────────────────────────────────────────────────────
+ * IntelliJ's tool window stripe / VS Code's Activity Bar: a narrow rail of icon-only toggles.
+ *
+ * Deliberately narrow and fixed. It is chrome that must never compete with the work area, and both
+ * originals keep it under three characters wide. */
+workbench .__activity-bar__ {
+    width: 20px;
+    height: 100%;
+    flex-shrink: 0;
+    align-items: center;
+    padding-top: 2px;
+    background: #2B2B2B;
+}
+
+/* WIDTH ZERO AS THE BASIS, not merely flex-grow. This engine defaults flex-shrink to 0, so a grown
+ * child keeps its content size as a floor and overflows its parent rather than shrinking -- the trap
+ * FlexShrinkOverflowTest pins, and the one that made __panes__ overhang its frame at small sizes. */
+workbench .__dock__ {
+    flex-grow: 1;
+    flex-basis: 0;
+    width: 0;
+    height: 100%;
+}
+
+workbench .__activity-item__ {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    margin-bottom: 2px;
+    justify-content: center;
+    align-items: center;
+    background: none;
+    border-radius: 2px;
+}
+
+workbench .__activity-item__ .__pre-icon__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+}
+
+/* HOVER IS THE ACCENT, and open is the quiet one -- the opposite of the usual arrangement, and
+ * deliberate. The rail's open panels are also the ones already visible on screen, so lighting them up
+ * says something the layout has already said; the accent is better spent on the button under the pointer,
+ * which is the one thing the layout cannot tell you. */
+workbench .__activity-item__:hover {
+    background: #3574F0;
+}
+
+/* The OPEN panel's button, which is what :checked means here -- ActivityBar.ItemButton derives it from
+ * the dock rather than storing it, so this cannot disagree with what is on screen.
+ *
+ * ACCENT, not a lighter grey. Grey is what :hover already means, so a grey :checked makes "this panel is
+ * open" and "the pointer is over this" the same signal -- and open is the one you need to read across the
+ * whole rail at a glance. Both editors use their selection accent here. */
+workbench .__activity-item__:checked {
+    background: #4E5157;
+}
+
+/* Hover still wins on an open button. Without this the two rules tie on specificity and source order
+ * decides, so pointing at an open panel's button would leave it looking untouched -- exactly when you are
+ * reaching for it to close it, which is the one moment the hover feedback is load-bearing. */
+workbench .__activity-item__:checked:hover {
+    background: #3574F0;
 }
 
 /* AN EDITOR OPENED FOR A FILE, which needs a size given to it because it has none of its own.

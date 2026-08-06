@@ -159,9 +159,31 @@ public class DockArea extends UIElement implements UIFrameTicker {
         }
     }
 
+    /**
+     * The group commands and "what is active" resolve against.
+     *
+     * <h3>Falls back to the central work area rather than reporting nothing</h3>
+     *
+     * <p>{@code activeGroup} is set by a press or by focus, so <b>immediately after a restore it is
+     * null</b> — the layout is on screen, a document is the front tab, and nothing has been clicked yet.
+     * Reporting null there makes every question downstream answer wrongly: {@code activeFilePath()} says
+     * no file is open, so {@code Ctrl+S} silently does nothing, and a panel that follows the active
+     * document comes up blank. Both look like separate bugs and are one.</p>
+     *
+     * <p>The central leaf is the right default because it is the work area — the one leaf that always
+     * exists and cannot be closed — and because it is where a restored session's document is. This is
+     * what both editors do implicitly: VS Code restores an active editor <em>group</em>, and IntelliJ's
+     * {@code FileEditorManager} has a selected editor the moment its state is loaded, neither waiting for
+     * a click to decide.</p>
+     *
+     * <p>Read-side rather than assigned during the rebuild, so it cannot race the order in which groups
+     * are built and needs no invalidation when the layout changes.</p>
+     */
     @Nullable
     public DockGroup activeGroup() {
-        return activeGroup;
+        if (activeGroup != null) return activeGroup;
+        DockLeaf central = layout.centralLeaf();
+        return central == null ? null : groups.get(central);
     }
 
     /**

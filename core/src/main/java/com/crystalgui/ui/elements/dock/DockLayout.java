@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.dock;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -179,6 +181,76 @@ public final class DockLayout {
      * <p>Visual Studio's compass has these and VS Code does not: VS Code reaches the frame edge through
      * whichever group happens to be there, which cannot express <em>"beside all four of these rows"</em>.</p>
      */
+    /**
+     * Where {@code node} sits, as a {@link DockPath} from the root.
+     *
+     * <p>Null when the node is not in this tree — which includes a node that has just been detached, so a
+     * caller wanting to remember a position must ask <b>before</b> removing it.</p>
+     */
+    @Nullable
+    public DockPath pathOf(DockNode node) {
+        if (node == root) return DockPath.ROOT;
+        List<Integer> reversed = new ArrayList<>();
+        DockNode current = node;
+        while (current != null && current != root) {
+            DockBranch parent = current.parent();
+            if (parent == null) return null;      // detached, or belongs to another tree
+            int index = parent.indexOf(current);
+            if (index < 0) return null;
+            reversed.add(index);
+            current = parent;
+        }
+        if (current != root) return null;
+        int[] indices = new int[reversed.size()];
+        for (int i = 0; i < indices.length; i++) indices[i] = reversed.get(indices.length - 1 - i);
+        return DockPath.of(indices);
+    }
+
+    /** The node a path names, or null when the tree no longer has that shape. */
+    @Nullable
+    public DockNode nodeAt(DockPath path) {
+        if (path == null) return null;
+        DockNode current = root;
+        for (int step = 0; step < path.depth(); step++) {
+            if (!(current instanceof DockBranch branch)) return null;
+            int index = path.index(step);
+            if (index >= branch.childCount()) return null;
+            current = branch.child(index);
+        }
+        return current;
+    }
+
+    /**
+     * Puts {@code inserted} back at a remembered position.
+     *
+     * <h3>Why this exists beside {@link #dropOnOuterEdge}</h3>
+     *
+     * <p>That one answers "against which wall", which is the only question a panel on the outside of the
+     * tree has. A panel <em>inside</em> the tree — a tool window beside the editor area rather than
+     * spanning the window — has no wall, and reopening it against one moves it. This restores the actual
+     * position instead.</p>
+     *
+     * <p><b>Best effort, and it says so in the return value.</b> The tree changes shape while a panel is
+     * closed, so the remembered path may name a leaf, a shorter branch, or nothing at all. Each of those
+     * is ordinary rather than exceptional, so this reports failure and leaves the tree untouched for the
+     * caller to fall back — silently inserting "somewhere near" would be the guessing this exists to
+     * avoid.</p>
+     *
+     * @param parent where the node's own parent branch was
+     * @param index  which child it was; clamped, since siblings may have come or gone
+     * @return whether it was inserted
+     */
+    public boolean insertAt(DockPath parent, int index, DockNode inserted) {
+        if (inserted == null || parent == null) return false;
+        if (inserted.parent != null) {
+            throw new IllegalArgumentException("the inserted node must be detached first");
+        }
+        if (!(nodeAt(parent) instanceof DockBranch branch)) return false;
+        branch.addChild(inserted, Math.max(0, Math.min(index, branch.childCount())));
+        normalise();
+        return true;
+    }
+
     public DockLeaf dropOnOuterEdge(DockDropZone zone, DockNode inserted) {
         if (!zone.isSplit()) throw new IllegalArgumentException("an outer-edge drop must be a split");
         if (inserted.parent != null) throw new IllegalArgumentException("the dropped node must be detached first");
