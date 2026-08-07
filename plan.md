@@ -13,7 +13,7 @@
 | 3 | Typed service events; delete the polling loops (§16) | **DONE** — 6 of 7 landings; loadProjects deferred to step 4, see §16.8 |
 | 4 | `Resource`: schemes, virtual documents (§17) | **DONE** — incl. `FileDocument.resource()`; `OpenDocuments` deliberately stays `CgPath`-keyed, see §17.6 note |
 | 5 | `DockPane`: retargetable views (§18) | **part done** — `DockInput`/`DockPane`/`DockPaneProvider`/registry shipped + tested; the `DockGroup` wiring is blocked on a re-parent hazard, see §18.4 note |
-| 6 | `DockService.open` + `DockPlacement` (§19) | **part done** — `DockPlacement` + `groupOf`/`leafOf` shipped + tested; `open()` waits on step 5 |
+| 6 | `DockService.open` + `DockPlacement` (§19) | **DONE** — `DockPlacement`, `groupOf`/`leafOf`, and `Workbench.open(input, placement, options)` replacing all three `openPanel*`. No `DockService` interface: the insertion logic lives with the workbench, and a second name for it would be indirection |
 
 Phase two — Parts/ViewContainers, menu contributions, the `when` parser, the model registry, and §11
 Tier 2 — is deliberately unscheduled until phase one has been lived with (§20.2).
@@ -23,6 +23,16 @@ Tier 2 — is deliberately unscheduled until phase one has been lived with (§20
 | Item | Where it is described | Why it is parked |
 |---|---|---|
 | ~~**Context-scoped preview pool**~~ **DONE** | `docs/CGUI_WORKBENCH_SERVICES.md` → *The disposal protocol for GL resources* | Shipped as `CgPreviewPool`: one pool per `(size, samples)`, scoped per renderer. Closing a graph releases keys and deletes nothing; the context frees the targets at teardown. Un-parked because making a closed tab release its document turned the retention advice into a real cost — a close/reopen cycle was deleting and re-creating framebuffers. |
+
+---
+
+## 0. Why this document exists
+
+The dock, the workbench and the editor were each built to answer the question in front of us at the
+time. Every individual answer is defensible; the accumulation is not. The symptoms we have actually
+paid for, in order:
+
+| Symptom | Root cause |
 |---|---|
 | Tool window reopened at the wrong size | placement derived from the tree instead of stored |
 | …then at the wrong wall | anchor was static, not updated on drag |
