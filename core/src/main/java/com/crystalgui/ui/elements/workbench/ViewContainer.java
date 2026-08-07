@@ -55,7 +55,10 @@ public class ViewContainer extends UIElement {
         title.setHitTest(false);
         header.addChild(title);
 
-        Button hide = new Button("✕");
+        // NO GLYPH. The bundled Minecraft fonts have no U+2715 and it renders as tofu -- the same trap
+        // UIText records for U+2026 and ConfiguratorGroup for its chevron. The mark is a real vector icon
+        // set in default.css, so a theme can restyle it and no Java names a character.
+        Button hide = new Button("");
         hide.addClass(HIDE_CLASS);
         hide.onPressed.connect(onHideRequested::emit);
         header.addChild(hide);
