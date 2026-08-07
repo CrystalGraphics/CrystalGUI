@@ -994,16 +994,19 @@ public class ExplorerCommandsTest extends UiTestBase {
     public void closingAToolPanelIsNeverGuarded() {
         workbench.fileTree().loadProjects();
         settle();
-        DockPanelRef problems = new DockPanelRef(Workbench.PROBLEMS_TYPE);
-        assertNotNull("fixture wrong -- no Problems panel is open",
-                workbench.dock().layout().leafContaining(problems));
+        // A tool window is not a dock panel any more -- it occupies a REGION, so it is hidden rather than
+        // closed. The behaviour being pinned is unchanged: hiding one must never prompt, whatever the
+        // mechanism underneath.
+        var region = workbench.toolWindowManager().regionOf(Workbench.PROBLEMS_TYPE);
+        assertEquals("fixture wrong -- no Problems panel is showing",
+                Workbench.PROBLEMS_TYPE, workbench.regions().host(region).showing());
 
-        workbench.dock().closePanel(problems);
+        workbench.hidePanel(Workbench.PROBLEMS_TYPE);
         settle();
 
         assertEquals("a tool panel should close with no prompt", null,
                 window.ui.rootElement.querySelector("." + InputDialog.PROMPT_CLASS));
-        assertEquals(null, workbench.dock().layout().leafContaining(problems));
+        assertEquals(null, workbench.regions().host(region).showing());
     }
 
     // ── Go to File (E17) ────────────────────────────────────────────────────

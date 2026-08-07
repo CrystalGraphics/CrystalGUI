@@ -114,21 +114,10 @@ public final class ToolWindowLayout {
             entry.putInt(KEY_ORDER, state.order());
             entry.putBool(KEY_ACTIVE, state.active());
             entry.putBool(KEY_STRIPE, state.showStripeButton());
-            // Absent rather than written empty when there is no remembered position -- an omitted optional
-            // is how the rest of this project's records spell "not applicable", and it keeps a first-run
-            // session from carrying a page of nulls.
-            if (state.path() != null) {
-                entry.putString(KEY_PATH, state.path().toString());
-                entry.putInt(KEY_INDEX, state.indexInParent());
-            }
-            if (state.relativeTo() != null) {
-                entry.putString(KEY_RELATIVE_TO, state.relativeTo().typeId());
-                entry.putString(KEY_RELATIVE_ZONE, state.relativeZone().name());
-            }
-            if (!state.groupedWith().isEmpty()) {
-                entry.putList(KEY_GROUPED, state.groupedWith(),
-                        (grouped, ref) -> grouped.putString(KEY_TYPE_ID, ref.typeId()));
-            }
+            // The path, the strip-mates and the neighbour are GONE, with the four-tier restoration
+            // heuristic that consumed them. All three described a position in the dock tree, which a tool
+            // window no longer occupies: it belongs to a REGION, and a region is not destroyed by hiding
+            // the thing in it. See ToolWindowManager and plan.md §23 F2b.
         });
     }
 
@@ -164,25 +153,9 @@ public final class ToolWindowLayout {
                 .withWeight(entry.getFloat(KEY_WEIGHT, ToolWindowState.DEFAULT_WEIGHT))
                 .withActive(entry.getBool(KEY_ACTIVE, true))
                 .withShowStripeButton(entry.getBool(KEY_STRIPE, true));
-
-        DockPath path = DockPath.parse(entry.getString(KEY_PATH, ""));
-        if (path != null && entry.getRaw(KEY_PATH) != null) {
-            state = state.withPlacement(path, entry.getInt(KEY_INDEX, -1));
-        }
-
-        List<DockPanelRef> grouped = entry.getList(KEY_GROUPED, ref -> {
-            String typeId = ref.getString(KEY_TYPE_ID, "");
-            return typeId.isEmpty() ? null : new DockPanelRef(typeId);
-        });
-        grouped = new ArrayList<>(grouped);
-        grouped.removeIf(java.util.Objects::isNull);
-        if (!grouped.isEmpty()) state = state.withGroupedWith(grouped);
-
-        String relative = entry.getString(KEY_RELATIVE_TO, "");
-        if (!relative.isEmpty()) {
-            state = state.withRelativeTo(new DockPanelRef(relative),
-                    anchorOf(entry.getString(KEY_RELATIVE_ZONE, "")));
-        }
+        // A record written at session 3 still carries path/grouped/relative keys. They are simply not
+        // read: an unknown key is ignored by StateMap, and the version bump is what says the omission is
+        // deliberate rather than a reader that fell behind.
         return state;
     }
 

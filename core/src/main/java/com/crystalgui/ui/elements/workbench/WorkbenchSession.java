@@ -8,6 +8,7 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.elements.dock.DockLeaf;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.dock.DockPath;
 import com.crystalgui.ui.elements.dock.DockLayout;
 import com.crystalgui.ui.elements.dock.DockLayoutCodec;
@@ -115,7 +116,7 @@ public final class WorkbenchSession {
      * <p>The cost is one lost arrangement per user, once, which the next save rewrites. Stated here so it
      * reads as a decision rather than as a regression when somebody's layout comes back default.</p>
      */
-    public static final int VERSION = 3;
+    public static final int VERSION = 4;
 
     private static final String KEY_VERSION = "version";
     private static final String KEY_DOCK = "dock";
@@ -235,26 +236,18 @@ public final class WorkbenchSession {
      * actually at rather than the ones the layout was built with.</p>
      */
     private void captureOpenToolWindows() {
-        for (DockLeaf leaf : workbench.dock().layout().leaves()) {
-            for (DockPanelRef panel : leaf.panels()) {
-                DockPanelDescriptor descriptor = workbench.panels().descriptor(panel.typeId());
-                if (descriptor == null || !descriptor.isSingleton()) continue;
-
-                List<DockPanelRef> neighbours = new ArrayList<>(leaf.panels());
-                neighbours.remove(panel);
-                DockPath parent = leaf.parent() == null
-                        ? null : workbench.dock().layout().pathOf(leaf.parent());
-                int index = leaf.parent() == null ? -1 : leaf.parent().indexOf(leaf);
-
-                ToolWindowState state = workbench.toolWindows()
-                        .getOrCreate(panel.typeId(), descriptor.anchor())
-                        .withVisible(true)
-                        .withWeight(leaf.size())
-                        .withGroupedWith(neighbours)
-                        .withActive(panel.equals(leaf.activePanel()))
-                        .withPlacement(parent, index);
-                workbench.toolWindows().put(state);
-            }
+        // TOOL WINDOWS ARE NOT IN THE DOCK TREE. This used to walk every leaf looking for singletons and
+        // record the strip-mates and the structural path for the four-tier restoration heuristic to
+        // replay. A region cannot be collapsed away, so what is left to capture is whether it is showing
+        // and how wide its region is -- which is the whole of what a lookup needs.
+        for (DockRegion region : DockRegion.values()) {
+            if (region == DockRegion.EDITOR) continue;
+            RegionHost host = workbench.regions().host(region);
+            if (host == null || host.isEmpty() || host.showing() == null) continue;
+            workbench.toolWindows().put(workbench.toolWindows()
+                    .getOrCreate(host.showing(), region.wall())
+                    .withVisible(true)
+                    .withWeight(workbench.regions().weightOf(region)));
         }
     }
 
@@ -314,7 +307,14 @@ public final class WorkbenchSession {
         for (ToolWindowState state
                 : ToolWindowLayout.decodeFrom(in, KEY_TOOL_WINDOWS).ordered()) {
             workbench.toolWindows().put(state);
+            // The region's share comes back with the placement, because a region's size is not derivable
+            // from anything else once its occupant is hidden -- the same reason placement itself moved out
+            // of the tree.
+            if (state.visible()) workbench.regions().setWeight(state.region(), state.weight());
         }
+        // AND PUT THEM BACK. One lookup per entry: the whole of what replaced replaying drops into a tree
+        // and hoping the branches they named still existed.
+        workbench.toolWindowManager().restoreVisible();
 
         pendingExpansion.clear();
         for (String raw : in.getList(KEY_EXPANDED, map -> map.getString(KEY_PATH, ""))) {

@@ -28,6 +28,7 @@ import com.crystalgui.ui.elements.dock.DockInput;
 import com.crystalgui.ui.elements.dock.DockOpenOptions;
 import com.crystalgui.ui.elements.dock.DockPlacement;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.dock.DockPath;
 import com.crystalgui.ui.elements.dock.DockPanelRegistry;
 import com.crystalgui.ui.elements.editor.EditorCommands;
@@ -115,6 +116,14 @@ public class Workbench extends UIElement {
     private final ProjectFileTree fileTree;
     private final ProblemsPanel problems = new ProblemsPanel();
     private final DockArea dock;
+
+    /** The fixed region frame — sidebar, editor, panel, auxiliary. @see WorkbenchRegions */
+    private WorkbenchRegions regions;
+
+    /** @see WorkbenchRegions */
+    public WorkbenchRegions regions() {
+        return regions;
+    }
 
     /**
      * Tool windows — which exist, where each belongs, whether it is on screen.
@@ -266,7 +275,7 @@ public class Workbench extends UIElement {
         });
 
         dock = new DockArea(registry, defaultLayout());
-        toolWindowManager = new ToolWindowManager(dock, registry, this::open);
+
         // ASKED BEFORE ANYTHING IS DISCARDED. Ctrl+W on an edited file used to throw the work away with no
         // warning at all -- the tab marker said it was modified and nothing acted on that.
         dock.setCloseGuard(this::confirmClose);
@@ -301,7 +310,17 @@ public class Workbench extends UIElement {
         // Named so the stylesheet can give it the remaining width. DockArea carries no class of its own
         // and is not a registered tag, so there is otherwise nothing for a selector to hold onto.
         dock.addClass(DOCK_CLASS);
-        content.addChild(dock);
+        // THE DOCK IS THE EDITOR REGION, and the frame is what goes in the workbench. The dock is no
+        // longer added directly: it is one region among four, and the other three are fixed slots that
+        // hiding cannot collapse away. See WorkbenchRegions.
+        regions = new WorkbenchRegions(dock);
+        toolWindowManager = new ToolWindowManager(regions, registry);
+        content.addChild(regions.root());
+        // THE DEFAULT ARRANGEMENT, which used to be three leaves in defaultLayout(). Stated as "show these
+        // two" rather than as a tree, which is the whole difference: a region cannot be collapsed away, so
+        // this says what is on screen rather than where in a structure it sits.
+        toolWindowManager.showPanel(PROJECT_TYPE);
+        toolWindowManager.showPanel(PROBLEMS_TYPE);
 
         problems.onProblemChosen.connect(diagnostic -> {
             TextEditor editor = activeEditor();
@@ -319,15 +338,17 @@ public class Workbench extends UIElement {
      * half to the newcomer, so building this in the obvious order would hand half the screen to the file
      * tree — a default layout has to state what it wants.</p>
      */
+    /**
+     * The work area, and nothing else — <b>documents only</b>.
+     *
+     * <p>It used to drop Project into a left leaf and Problems into a bottom one, which is what made the
+     * dock tree responsible for tool windows and cost the four-tier restoration heuristic. Those two are
+     * regions now: {@link DockRegion#SIDEBAR} and {@link DockRegion#PANEL}. See {@link WorkbenchRegions}.</p>
+     */
     private DockLayout defaultLayout() {
         DockLeaf centre = new DockLeaf();
         centre.setCentral(true);
-        DockLayout layout = DockLayout.of(centre);
-        layout.drop(centre, DockDropZone.SPLIT_LEFT, new DockLeaf(new DockPanelRef(PROJECT_TYPE)));
-        layout.drop(centre, DockDropZone.SPLIT_DOWN, new DockLeaf(new DockPanelRef(PROBLEMS_TYPE)));
-        layout.root().child(0).size(0.20f);
-        layout.root().child(1).size(0.80f);
-        return layout;
+        return DockLayout.of(centre);
     }
 
     @Override
