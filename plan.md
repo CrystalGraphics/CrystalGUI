@@ -12,7 +12,7 @@
 | 2.5 | Commands: global registration, context-resolved (§15b) | **DONE** — all three owner-capturing classes migrated; `install` is gone |
 | 3 | Typed service events; delete the polling loops (§16) | **DONE** — 6 of 7 landings; loadProjects deferred to step 4, see §16.8 |
 | 4 | `Resource`: schemes, virtual documents (§17) | **DONE** — incl. `FileDocument.resource()`; `OpenDocuments` deliberately stays `CgPath`-keyed, see §17.6 note |
-| 5 | `DockPane`: retargetable views (§18) | **part done** — `DockInput`/`DockPane`/`DockPaneProvider`/registry shipped + tested; the `DockGroup` wiring is blocked on a re-parent hazard, see §18.4 note |
+| 5 | `DockPane`: retargetable views (§18) | **DONE** — wired into `DockGroup` via per-panel hosts; see the §18.4 note for why that shape sidesteps the re-parent hazard |
 | 6 | `DockService.open` + `DockPlacement` (§19) | **DONE** — `DockPlacement`, `groupOf`/`leafOf`, and `Workbench.open(input, placement, options)` replacing all three `openPanel*`. No `DockService` interface: the insertion logic lives with the workbench, and a second name for it would be indirection |
 
 Phase two — Parts/ViewContainers, menu contributions, the `when` parser, the model registry, and §11
@@ -1936,16 +1936,19 @@ public enum DockCapability { SINGLETON, READONLY, UNTITLED, DERIVED, CAN_SPLIT }
 
 ### 18.4 The retargeting rule — the important design decision
 
-> **Implementation note (found while wiring it).** The types are shipped; the `DockGroup` half is not,
-> and the reason is a genuine hazard rather than effort. A pane is one instance per **type**, while
-> `DockGroup.content` is keyed per **panel** — so two tabs of one type resolve to the same element and
-> `rebuildStrip` parents one element into two tabs, which is the *"cannot add the same child twice"*
-> class of bug this package has already paid for twice.
+> **Implementation note — the hazard, and the shape that avoids it.** A pane is one instance per
+> **type** while `DockGroup.content` is keyed per **panel**, so returning the pane's view from
+> `contentFor` hands the same element to two tabs and `rebuildStrip` parents it twice: the *"cannot add
+> the same child twice"* bug this package has paid for before.
 >
-> The fix is not a bigger map. With panes, only the **active** tab has a body at all (VS Code builds no
-> DOM for an inactive editor), so the view must be re-parented into the active tab on every activation —
-> and `sync()` runs *during a tab click*, which is precisely when this codebase's rule says a widget must
-> not re-parent what is being clicked. That ordering wants the harness to validate, not a unit test.
+> **Every pane-backed panel therefore keeps its own stable, empty host**, and only the host of the
+> *active* panel holds the view. `rebuildStrip` is untouched, nothing is shared, and moving the view is
+> one `setOnlyChild` — which re-parents correctly, including out of an internal parent.
+>
+> This was held back once on the grounds that `sync()` runs during a tab click and a widget must not
+> re-parent what it is being clicked on. Re-read against this shape, the rule does not bite: the click
+> target is the `Tab` in the **strip**, and what moves is the view inside the tab's **content**. That is
+> the reason to prefer per-panel hosts over moving one shared view between tabs.
 
 `DockGroup` caches **one pane per (group, typeId)**, not per input:
 
