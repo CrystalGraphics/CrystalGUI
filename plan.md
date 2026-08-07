@@ -18,6 +18,7 @@
 | 7 | Editor-type resolution as a contribution (§21) | **DONE** — `DocumentType` + `Workbench.contribute`; `com.crystalgui.editor` imports one name from `com.crystalgui.graph` |
 | 8 | The Inspector as a contribution surface (§22) | **DONE** — `Inspector` + `InspectorSection`/`InspectorRegistry`; `ShaderGraphInspector` deleted |
 | 9 | Notifications + status, and the last hand-written menu | **DONE** — `com.crystalgui.core.notify`; `register(workbench)` takes nothing else; `BlackboardPanel`'s row menu is a `MenuId` query |
+| 10 | Editor banners, and the last per-frame poll | **DONE** — `DockBannerProvider` (§11 Tier 2's one kept item); `GraphView.discoverPortEditors` is push-based |
 
 Steps 7 and 8 came from reading the result of 1–6: the six steps made the *framework* extensible and left
 `CrystalEditor` naming one application's file types, and left the Inspector a graph-shaped class. Neither
@@ -913,8 +914,9 @@ the port, not a footnote.
   remaining work was migrating `BlackboardPanel`'s row menu, which was the last hand-written one. The
   `when`-expression *parser* stays cut: `enabledWhen`/`enabledWhereData` already state the condition in
   Java, and a string language buys nothing until keymaps and menus are authored outside Java.
-- **Everything in §11 Tier 2** except `EditorNotificationProvider` (the generated-shader banner is a
-  real, current need), activity badges (a few lines once the bar exists), and **Notifications, now done** —
+- **Everything in §11 Tier 2** except activity badges (a few lines once the bar exists),
+  `EditorNotificationProvider` — **now done** as `DockBannerProvider`, and asked with a `DockPanelRef`
+  rather than a document, because the tab that needed it is not one — and **Notifications, now done** —
   it was promoted because it is what a contribution needed in order to stop being handed a status sink.
 - **§11 Tier 3 entirely**, permanently.
 

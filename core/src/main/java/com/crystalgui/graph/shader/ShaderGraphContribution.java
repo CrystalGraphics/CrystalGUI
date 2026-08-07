@@ -3,6 +3,8 @@ package com.crystalgui.graph.shader;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.core.notify.Notification;
+import com.crystalgui.ui.elements.dock.DockBanners;
 import com.crystalgui.ui.elements.dock.DockInput;
 import com.crystalgui.ui.elements.dock.DockOpenOptions;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
@@ -102,6 +104,20 @@ public final class ShaderGraphContribution {
                     // restore.
                     return graph == null ? new UIElement() : graph.source();
                 });
+
+        // AND WHY THAT TAB IS NOT AN ORDINARY EDITOR. It is setReadOnly(true), so typing in it silently
+        // does nothing -- which reads as a broken editor rather than as a generated file, and there was
+        // nowhere for it to say otherwise. The action is the useful half: the thing you actually wanted
+        // was the graph, and the derived resource carries its origin, so this can offer it.
+        DockBanners.register(panel -> {
+            if (!SOURCE_TYPE.equals(panel.typeId())) return null;
+            ShaderGraphEditor graph = graphFor(workbench, panel.state(DockPanelRef.PATH, ""));
+            Notification banner = Notification.info(
+                    "Generated from the shader graph. Edit the graph, not this file.");
+            if (graph == null || graph.resource() == null || !graph.resource().isProject()) return banner;
+            return banner.withAction("Open Graph",
+                    () -> workbench.openFile(graph.resource().asPath()));
+        });
 
         ShaderInspectorSections.register();
     }

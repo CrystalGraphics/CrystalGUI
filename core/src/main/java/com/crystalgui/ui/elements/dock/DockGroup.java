@@ -5,6 +5,8 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.core.notify.Notification;
+import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.MouseEvent;
@@ -408,25 +410,62 @@ public class DockGroup extends UIElement {
     }
 
     private UIElement contentFor(DockPanelRef panel) {
-        return content.computeIfAbsent(panel, ref -> {
-            // A pane-backed panel gets a stable EMPTY host of its own. The pane's view moves into
-            // whichever host is active -- see retargetPane -- so no element is ever in two tabs.
-            if (area.registry().paneProviderFor(DockInput.of(ref)) != null) {
-                UIElement host = new UIElement();
-                host.addClass(PANE_HOST_CLASS);
-                StyleGroup.defaultPipeline(host.getStyle().getLayoutGroup(),
-                        l -> l.flexGrow(1f).flexBasis(0));
-                return host;
-            }
-            UIElement built = area.registry().create(ref);
-            if (built != null) return built;
-            // An unbuildable panel is shown as an empty box rather than skipped: a tab with nothing
-            // behind it is visible and reportable, while a silently absent tab looks like the layout
-            // failed to restore.
-            UIElement placeholder = new UIElement();
-            placeholder.addClass("__missing__");
-            return placeholder;
-        });
+        return content.computeIfAbsent(panel, ref -> withBanners(ref, buildContent(ref)));
+    }
+
+    /**
+     * Puts whatever {@link DockBanners} had to say above {@code built}.
+     *
+     * <h3>Here, because this is the only place every panel passes through</h3>
+     *
+     * <p>A banner has to work for a tab that is <b>not</b> a document — the generated shader is a panel
+     * type, not a {@code FileDocument} — so hanging it off the document layer would have missed the one
+     * case that asked for it. {@code contentFor} sees every kind: document tabs, pane-backed panels and
+     * plain registry-built ones alike.</p>
+     *
+     * <p><b>Nothing is wrapped when nothing answered</b>, which is nearly always. A wrapper column per
+     * panel would add a layout level to every tab in the engine to serve the rare one, and the extra box
+     * is not free — it is another flex context between a pane and its content.</p>
+     *
+     * <p>The content keeps growing into what is left: the grow is written at {@code DEFAULT} origin, so a
+     * panel that states its own layout still wins, exactly as the pane host above does.</p>
+     */
+    private UIElement withBanners(DockPanelRef ref, UIElement built) {
+        List<Notification> banners = DockBanners.bannersFor(ref);
+        if (banners.isEmpty()) return built;
+
+        UIElement column = new UIElement();
+        column.addClass(BANNERED_CLASS);
+        StyleGroup.defaultPipeline(column.getStyle().getLayoutGroup(),
+                l -> l.flexDirection(FlexDirection.COLUMN).flexGrow(1f).flexBasis(0));
+        for (Notification banner : banners) column.addChild(new DockBannerBar(banner));
+        StyleGroup.defaultPipeline(built.getStyle().getLayoutGroup(),
+                l -> l.flexGrow(1f).flexBasis(0));
+        column.addChild(built);
+        return column;
+    }
+
+    /** The banner column wrapping a panel's own content. Only present when something answered. */
+    public static final String BANNERED_CLASS = "__dock-bannered__";
+
+    private UIElement buildContent(DockPanelRef ref) {
+        // A pane-backed panel gets a stable EMPTY host of its own. The pane's view moves into
+        // whichever host is active -- see retargetPane -- so no element is ever in two tabs.
+        if (area.registry().paneProviderFor(DockInput.of(ref)) != null) {
+            UIElement host = new UIElement();
+            host.addClass(PANE_HOST_CLASS);
+            StyleGroup.defaultPipeline(host.getStyle().getLayoutGroup(),
+                    l -> l.flexGrow(1f).flexBasis(0));
+            return host;
+        }
+        UIElement built = area.registry().create(ref);
+        if (built != null) return built;
+        // An unbuildable panel is shown as an empty box rather than skipped: a tab with nothing
+        // behind it is visible and reportable, while a silently absent tab looks like the layout
+        // failed to restore.
+        UIElement placeholder = new UIElement();
+        placeholder.addClass("__missing__");
+        return placeholder;
     }
 
     void setActive(boolean active) {
