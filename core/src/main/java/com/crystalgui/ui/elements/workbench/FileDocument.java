@@ -3,6 +3,8 @@ package com.crystalgui.ui.elements.workbench;
 import com.crystalgui.ui.UIElement;
 
 import com.crystalgui.core.signal.Connection;
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
 
 /**
  * One open file, whatever kind of file it is.
@@ -41,6 +43,20 @@ import com.crystalgui.core.signal.Connection;
  */
 
 public interface FileDocument {
+
+    /**
+     * What this document <b>is</b> — IntelliJ's {@code FileEditor.getFile()}, VS Code's
+     * {@code EditorInput.resource}.
+     *
+     * <p>Without it, anything wanting to go from a document back to its address needs a map kept beside
+     * the document store, maintained by whoever created it. {@code CrystalEditor} had exactly that: a
+     * {@code Map<String, ShaderGraphEditor>} plus a reverse linear scan over it, so that "View Generated
+     * Shader" could work out which graph it was looking at.</p>
+     *
+     * <p>A {@link Resource} rather than a {@link CgPath} because a document need not be a file — and
+     * because the two are the same string for project files, so this costs nothing to store or save.</p>
+     */
+    Resource resource();
 
     /** The element the dock shows for this file. */
     UIElement view();

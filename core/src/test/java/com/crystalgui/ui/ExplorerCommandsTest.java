@@ -57,6 +57,7 @@ import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.list.SelectionMode;
 import com.crystalgui.ui.elements.workbench.FileDocument;
 import com.crystalgui.core.signal.Connection;
+import com.crystalgui.fs.Resource;
 
 /**
  * {@link ExplorerCommands} — the Project panel's verbs.
@@ -866,6 +867,7 @@ public class ExplorerCommandsTest extends UiTestBase {
                     // Never changes, so nothing to announce -- and the empty subscription is the honest
                     // way to say that rather than a default that hides it.
                     @Override public Connection onDidChange(Runnable listener) { return () -> { }; }
+                    @Override public Resource resource() { return Resource.of(path); }
                 });
         workbench.bindEditorExtensions("refuses", "weirdgraph");
         backingStore.seed("mymod.proj:thing.weirdgraph", "REAL CONTENT");

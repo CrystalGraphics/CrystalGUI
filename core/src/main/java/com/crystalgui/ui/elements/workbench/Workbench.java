@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.FilePatternMap;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.fs.WorkingCopies;
@@ -237,7 +238,7 @@ public class Workbench extends UIElement {
             // apply to the files that happened to be open when a preference was last changed and to no
             // others -- which reads as the setting working intermittently.
             WorkbenchSettings.applyTo(this, created);
-            return new TextFileDocument(created);
+            return new TextFileDocument(created, Resource.of(path));
         });
 
         dock = new DockArea(registry, defaultLayout());
