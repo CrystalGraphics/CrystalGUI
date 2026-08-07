@@ -65,6 +65,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import com.crystalgui.core.command.CommandRegistry;
 
 /**
  * A multi-line plain-text editor over a {@link TextBuffer}.
@@ -100,6 +101,31 @@ import java.util.Map;
  * level up.</p>
  */
 public class TextEditor extends ScrollerView implements UndoScope {
+
+    /**
+     * The editor's named actions — registered once for the class, by the engine.
+     *
+     * <p>This used to run from {@code updateWindow()} behind a {@code commandsInstalled} flag, which is
+     * to say from the <b>layout path</b>: an editor's commands did not exist until it had been laid out
+     * at least once, so a palette opened before that was missing every one of them, and an editor built
+     * and never shown had none at all.</p>
+     */
+    @Override
+    protected void registerCommands(CommandRegistry registry) {
+        EditorCommands.register();
+    }
+
+    /**
+     * The editor's chords, on the editor.
+     *
+     * <p>Per instance and element-scoped, because that is what makes them the editor's: {@code Mod+D}
+     * adds a caret here and duplicates a node in a graph, and neither knows the other exists. Only
+     * genuinely application-wide chords belong on the command itself.</p>
+     */
+    @Override
+    protected void bindKeys() {
+        EditorCommands.bindDefaults(keymap());
+    }
 
     public static final String LINE_CLASS = "__line__";
     public static final String CARET_CLASS = "__caret__";
@@ -172,9 +198,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Rows before the edit in flight, so its line-count delta names the rows to reproject. */
     private int previousLineCount = 1;
-
-    /** Whether {@link EditorCommands} has been installed for this editor — see {@code updateWindow}. */
-    private boolean commandsInstalled;
 
     /** Whether the live projection was built with real measurement, or is the no-font fallback. */
     private boolean projectedWithMeasurement = true;
@@ -2961,15 +2984,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // scrolled would never tick — and the caret would never blink. Registration is a HashSet insert,
         // so repeating it is free and there is deliberately no unregister in the SPI.
         window.registerTicker(this);
-        // The editor's own named actions, on the editor's own keymap. Installed here rather than left to
-        // the host — unlike UndoCommands, which is an APPLICATION concern bound at the root and would be
-        // a surprise if a window acquired it silently. These are the widget's own keys, and an editor
-        // that does nothing on Mod+D is broken rather than neutral. Both halves are idempotent.
-        if (!commandsInstalled) {
-            EditorCommands.install(window, this);
-            commandsInstalled = true;
-        }
-
         float height = lineHeight();
         // Before ANY geometry is read: every position below goes through textOriginX, which needs these.
         refreshGutterMetrics();

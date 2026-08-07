@@ -35,6 +35,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.command.CommandRegistry;
 
 /**
  * The editor — the whole application, as one element.
@@ -181,6 +183,42 @@ public class CrystalEditor extends UIElement implements Disposable {
     private Object savedLayout;
 
     private boolean focusGiven;
+
+    /**
+     * This editor, for a command that acts on one.
+     *
+     * <p>What let {@code CrystalEditorCommands} stop capturing an editor and a window, and with them the
+     * last reason {@code install(window)} existed.</p>
+     */
+    public static final DataKey<CrystalEditor> CRYSTAL_EDITOR =
+            DataKey.create("crystalEditor", CrystalEditor.class);
+
+    @Override
+    public Object getData(DataKey<?> key) {
+        if (key == CRYSTAL_EDITOR) return this;
+        return super.getData(key);
+    }
+
+    /** Names this editor at the window level too — {@code Mod+S} is pressed with nothing focused as often
+     * as not. Same reason {@code Workbench} does it; see {@code DataContext}. */
+    @Override
+    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        if (previous != null) previous.removeDataProvider(this);
+        if (current != null) current.addDataProvider(this);
+    }
+
+    /**
+     * The application's own verbs — saving, layout, and the command palette.
+     *
+     * <p>These are the <em>product's</em> offerings rather than a widget's, which is why they sit on the
+     * shell element and not on a generic one. They are still per class and context-resolved like every
+     * other set; nothing here is registered per window any more.</p>
+     */
+    @Override
+    protected void registerCommands(CommandRegistry registry) {
+        CrystalEditorCommands.register();
+        ChromeCommands.register();
+    }
 
     public CrystalEditor(WorkspaceClient<?> client) {
         setFocusPolicy(FocusPolicy.NONE);
@@ -481,19 +519,13 @@ public class CrystalEditor extends UIElement implements Disposable {
         host.addChild(wanted);
     }
 
-    /**
-     * Registers every command set the editor answers to, and binds their defaults.
-     *
-     * <p>Explicit, like every other command set in this engine: nothing here injects itself, because a
-     * registry that quietly acquired commands nobody registered surprises anything that enumerates it —
-     * and the command palette is precisely such a thing.</p>
-     */
-    public CrystalEditor install(UIWindow window) {
-        DockCommands.install(window);
-        ChromeCommands.install(window);
-        CrystalEditorCommands.install(window, this);
-        return this;
-    }
+    // install(UIWindow) is gone, and nothing replaced it.
+    //
+    // Every command set in the application now arrives with the element that owns it -- DockArea the
+    // dock's, GraphView the graph's, TextEditor the editor's, Workbench the explorer's, and this class
+    // its own -- each through UIElement.registerCommands, once per class. Their chords are either
+    // declared on the commands (application-wide) or bound in bindKeys on the element that scopes them.
+    // Constructing the editor is what wires it; there is nothing for a host to remember.
 
     // ── Persistence ─────────────────────────────────────────────────────────────────────────────
 

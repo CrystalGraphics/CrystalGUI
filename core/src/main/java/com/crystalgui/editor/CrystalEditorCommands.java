@@ -1,11 +1,13 @@
 package com.crystalgui.editor;
 
 import com.crystalgui.core.command.Command;
+import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.input.keymap.Keymap;
+
+import javax.annotation.Nullable;
 
 /**
  * The editor's own commands — saving a file, and saving or restoring the pane arrangement.
@@ -38,36 +40,51 @@ public final class CrystalEditorCommands {
     private CrystalEditorCommands() {
     }
 
-    public static void register(CommandRegistry registry, UIWindow window, CrystalEditor editor) {
-        if (registry.contains(SAVE_FILE)) return;
+    /**
+     * Registers the editor's commands. Global — nothing is captured.
+     *
+     * <p>These held a {@code CrystalEditor} <em>and</em> a {@code UIWindow}, so they could not be
+     * registered once: the second editor would have driven the first. Both now come from the data
+     * context — {@link CrystalEditor#CRYSTAL_EDITOR} and {@link UiDataKeys#WINDOW} — which answers with
+     * the editor and window the <b>focused</b> element is in. Two windows on one screen therefore save
+     * the right layout each, which the captured version could not have done at all.</p>
+     *
+     * <p>The chords are declared with the commands: all three are modifier chords, so application scope
+     * is what they want, and nothing has to bind them on a root.</p>
+     */
+    public static void register() {
+        CommandRegistry.global().contribute(CrystalEditorCommands.class, CrystalEditorCommands::declare);
+    }
 
+    private static void declare(CommandRegistry registry) {
         registry.register(Command.of(SAVE_FILE, "Save File")
-                .run(context -> editor.workbench().saveActiveFile())
+                .binding("Mod+S")
+                .run(context -> editorFor(context).workbench().saveActiveFile())
                 // Greyed when the active tab is not a file, so the palette says so rather than offering a
                 // command that would report "no file tab active" after the fact.
-                .enabledWhen(context -> editor.workbench().activeFilePath() != null));
+                .enabledWhen(context -> {
+                    CrystalEditor editor = editorFor(context);
+                    return editor != null && editor.workbench().activeFilePath() != null;
+                }));
 
         registry.register(Command.of(SAVE_LAYOUT, "Save Window Layout")
-                .run(context -> editor.saveLayout(PlainOps.INSTANCE,
-                        window.getScreenWidth(), window.getScreenHeight())));
+                .binding("Mod+Shift+S")
+                .run(context -> {
+                    UIWindow window = context.data().get(UiDataKeys.WINDOW);
+                    editorFor(context).saveLayout(PlainOps.INSTANCE,
+                            window.getScreenWidth(), window.getScreenHeight());
+                })
+                .enabledWhen(context -> editorFor(context) != null
+                        && context.data().get(UiDataKeys.WINDOW) != null));
 
         registry.register(Command.of(RESTORE_LAYOUT, "Restore Window Layout")
-                .run(context -> editor.restoreLayout(PlainOps.INSTANCE)));
+                .binding("Mod+O")
+                .run(context -> editorFor(context).restoreLayout(PlainOps.INSTANCE))
+                .enabledWhen(context -> editorFor(context) != null));
     }
 
-    public static void bindDefaults(Keymap keymap) {
-        keymap.bind("Mod+S", SAVE_FILE);
-        keymap.bind("Mod+Shift+S", SAVE_LAYOUT);
-        keymap.bind("Mod+O", RESTORE_LAYOUT);
-    }
-
-    public static void install(UIWindow window, CrystalEditor editor) {
-        install(window.getCommands(), window, editor, window.ui.rootElement);
-    }
-
-    public static void install(CommandRegistry registry, UIWindow window,
-                               CrystalEditor editor, UIElement root) {
-        register(registry, window, editor);
-        bindDefaults(root.keymap());
+    @Nullable
+    private static CrystalEditor editorFor(CommandContext context) {
+        return context.data().get(CrystalEditor.CRYSTAL_EDITOR);
     }
 }

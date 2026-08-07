@@ -50,4 +50,19 @@ public final class UiDataKeys {
      */
     public static final DataKey<UndoStack> UNDO_STACK =
             DataKey.create("undoStack", UndoStack.class);
+
+    /**
+     * The window this position is in.
+     *
+     * <p>Answered by {@code UIElement} from {@code getAttachedWindow()}, so every attached element
+     * answers it and a detached one answers nothing — which is the correct answer, not a gap.</p>
+     *
+     * <p>Here rather than on {@code UIWindow} for the reason this class exists: it is what let the last
+     * window-capturing command sets become global. A command that needed a window used to be registered
+     * <em>per</em> window and hold a reference, which meant it could not be registered once — and a
+     * registry keyed by nothing but id then handed every later invocation to whichever window was built
+     * first.</p>
+     */
+    public static final DataKey<UIWindow> WINDOW =
+            DataKey.create("window", UIWindow.class);
 }

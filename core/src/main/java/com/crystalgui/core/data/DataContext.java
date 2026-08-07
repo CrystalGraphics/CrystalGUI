@@ -1,6 +1,7 @@
 package com.crystalgui.core.data;
 
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -113,6 +114,41 @@ public final class DataContext {
     private Object walk(DataKey<?> key) {
         for (UIElement element = source; element != null; element = element.getParent()) {
             if (!(element instanceof DataProvider provider)) continue;
+            Object answer = provider.getData(key);
+            if (answer != null && key.cast(answer) != null) return answer;
+        }
+        return fromWindow(key);
+    }
+
+    /**
+     * The window's own provider — IntelliJ's frame-level {@code DataProvider}, and the last resort.
+     *
+     * <h3>Why the element chain is not enough</h3>
+     *
+     * <p>The walk goes <b>outward</b>, so it can only find subjects that are ancestors of the focused
+     * element. A `Workbench` is not: it is a descendant of the root, alongside everything else. So with
+     * nothing focused — which is exactly how a window looks the moment it opens — the walk starts at the
+     * root and finds no workbench at all.</p>
+     *
+     * <p>That is not a corner case. {@code Ctrl+P} (Go to File) and {@code F5} (Reload) are precisely the
+     * verbs reached <em>before</em> touching anything, and both had already been moved to the root keymap
+     * for that reason. Making them resolve their subject from focus alone would have re-broken them, and
+     * silently: the command simply reports itself disabled and the key does nothing.</p>
+     *
+     * <p>So a window may name what the application is about, and the walk falls back to it once no
+     * element has answered. Both references have this: IntelliJ hangs a provider off the frame — which is
+     * how {@code CommonDataKeys.PROJECT} is answerable with nothing focused — and VS Code publishes
+     * window-scoped context keys beside the focus-scoped ones.</p>
+     *
+     * <p><b>Last, never first.</b> An element that answers must still win, or two open editors would both
+     * resolve to whatever the window named and focus would stop deciding anything.</p>
+     */
+    @Nullable
+    private Object fromWindow(DataKey<?> key) {
+        if (source == null) return null;
+        UIWindow window = source.getAttachedWindow();
+        if (window == null) return null;
+        for (DataProvider provider : window.getDataProviders()) {
             Object answer = provider.getData(key);
             if (answer != null && key.cast(answer) != null) return answer;
         }

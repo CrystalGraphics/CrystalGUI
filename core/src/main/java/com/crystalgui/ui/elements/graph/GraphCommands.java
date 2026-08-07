@@ -83,9 +83,22 @@ public final class GraphCommands {
     private GraphCommands() {
     }
 
-    public static void register(CommandRegistry registry) {
-        if (registry.contains(DELETE)) return;
+    /**
+     * Registers into {@link CommandRegistry#global()}.
+     *
+     * <p>Commands are global; a command is a fact about the application, and what varies per window is
+     * what is <em>focused</em> — which is {@code DataContext}'s job. Registering per window meant every
+     * window re-registered everything, and a widget had to find "its" window before it could contribute.</p>
+     *
+     * <p>Still <b>explicit</b>: a host calls this. Nothing self-registers, because a registry that
+     * quietly acquired commands nobody asked for surprises anything that enumerates it — which the
+     * command palette does.</p>
+     */
+    public static void register() {
+        CommandRegistry.global().contribute(GraphCommands.class, GraphCommands::declare);
+    }
 
+    private static void declare(CommandRegistry registry) {
         registry.register(Command.of(DELETE, "Delete")
                 .run(context -> withGraph(context, GraphView::deleteSelection))
                 .enabledWhen(context -> {
@@ -222,15 +235,9 @@ public final class GraphCommands {
         return graph != null && !graph.getSelection().nodes().isEmpty();
     }
 
-    public static void install(CommandRegistry registry, UIElement root) {
-        register(registry);
-        bindDefaults(root.keymap());
-    }
-
-    /** Installs into {@code window} — its registry, bound on its root. */
-    public static void install(UIWindow window) {
-        install(window.getCommands(), window.ui.rootElement);
-    }
+    // No install() pair: GraphView registers these itself and binds bindDefaults on ITSELF, which is
+    // what scopes the bare letters to a focused graph. The old overloads bound them on a window ROOT,
+    // where F and A would have been live over every text field in the application.
 
     /**
      * The graph this command is acting on.
@@ -249,4 +256,6 @@ public final class GraphCommands {
         GraphView graph = graphFor(context);
         if (graph != null) action.accept(graph);
     }
+
+
 }

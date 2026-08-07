@@ -18,6 +18,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgui.core.command.CommandContext;
+import com.crystalgui.testsupport.TestPlatformService;
 
 /**
  * P6.1.9 — how undo reaches the DOM.
@@ -46,8 +49,10 @@ public class UndoWiringTest extends UiTestBase {
 
         window = new UIWindow(Ui.of(root));
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
-        // Opt-in, exactly like the stylesheet above — the engine injects neither.
-        UndoCommands.install(window);
+        // Registration only — the chords are declared on the commands, so there is nothing to bind and
+        // no element to bind it on. (A GraphView registers these itself; stated here anyway, because
+        // this test is about undo rather than about the graph.)
+        UndoCommands.register();
         window.init(800, 800);
         frame();
     }
@@ -65,7 +70,7 @@ public class UndoWiringTest extends UiTestBase {
 
     /** The stub input service reports modifiers, so a chord has to be delivered through it. */
     private void pressWithCtrl(int key) {
-        com.crystalgui.testsupport.TestPlatformService.get().input(new com.crystalgraphics.platform.service.CgInputService() {
+        TestPlatformService.get().input(new CgInputService() {
             @Override public int getCurrentModifiers() { return CgModifiers.CTRL; }
             @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
             @Override public boolean isKeyDown(int localKeyCode) { return false; }
@@ -166,7 +171,7 @@ public class UndoWiringTest extends UiTestBase {
         assertNull(UndoScope.nearest(outside));
         var undo = window.getCommands().get(UndoCommands.UNDO);
         assertNotNull(undo);
-        assertFalse(undo.isEnabled(new com.crystalgui.core.command.CommandContext(outside, null)));
+        assertFalse(undo.isEnabled(new CommandContext(outside, null)));
     }
 
     /** Enablement is one mechanism with three consumers — the keystroke, a menu item and the palette all
@@ -179,7 +184,7 @@ public class UndoWiringTest extends UiTestBase {
         NodePort in = b.addInput(VEC3, "A");
         frame();
 
-        var context = new com.crystalgui.core.command.CommandContext(a, null);
+        var context = new CommandContext(a, null);
         var undo = window.getCommands().get(UndoCommands.UNDO);
         assertFalse("nothing has happened yet", undo.isEnabled(context));
 

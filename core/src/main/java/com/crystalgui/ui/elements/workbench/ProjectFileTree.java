@@ -35,6 +35,11 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
+import com.crystalgui.core.undo.UndoScope;
+import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.ui.elements.list.SelectionMode;
+import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.input.UIInputHandler;
 
 /**
  * The project's files, as a tree — click a directory to expand, click a file to open it.
@@ -57,7 +62,23 @@ import javax.annotation.Nullable;
  * <p>{@link #onFileChosen} fires and that is all. What "open" means belongs to whatever owns the editors —
  * see {@link Workbench} — and a tree that held one could only ever serve a single host.</p>
  */
-public class ProjectFileTree extends UIElement implements com.crystalgui.core.undo.UndoScope {
+public class ProjectFileTree extends UIElement implements UndoScope {
+
+    /**
+     * The explorer's bare keys, on the tree — which is the whole reason they are scoped here.
+     *
+     * <p>{@code Delete} and {@code F2} must be live only while focus is inside the panel. Declaring them
+     * on the commands would make them application-wide, and a bare key at that scope fires while typing
+     * into any editor sharing the window. The explorer's <em>chords</em> ({@code Mod+N}, {@code F5},
+     * {@code Mod+P}, {@code Alt+Shift+S}) are the opposite case and are declared on the commands.</p>
+     *
+     * <p>On the tree rather than on {@code Workbench}: the dock — and therefore every open editor — is
+     * inside the workbench too, so binding there would recreate exactly the problem this avoids.</p>
+     */
+    @Override
+    protected void bindKeys() {
+        ExplorerCommands.bindDefaults(keymap());
+    }
 
     /** UNIQUE, never the shared "__content__". CanvasView uses that name for its transformed world
      * plane, so any descendant rule naming it also styles every graph plane below -- and a flex rule on
@@ -126,15 +147,15 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
      * Set by {@link Workbench}, which owns the file service.</p>
      */
     @Nullable
-    private com.crystalgui.core.undo.UndoStack workspaceHistory;
+    private UndoStack workspaceHistory;
 
     @Override
-    public com.crystalgui.core.undo.UndoStack undoStack() {
-        if (workspaceHistory == null) workspaceHistory = new com.crystalgui.core.undo.UndoStack();
+    public UndoStack undoStack() {
+        if (workspaceHistory == null) workspaceHistory = new UndoStack();
         return workspaceHistory;
     }
 
-    ProjectFileTree setUndoStack(com.crystalgui.core.undo.UndoStack stack) {
+    ProjectFileTree setUndoStack(UndoStack stack) {
         this.workspaceHistory = stack;
         return this;
     }
@@ -147,7 +168,7 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
         // MULTIPLE, which ListView already implements in full -- Ctrl to toggle, Shift for a range. This
         // is configuration rather than code, and it is what every file command that acts on "the
         // selection" rather than "the selected path" needs.
-        tree.setSelectionMode(com.crystalgui.ui.elements.list.SelectionMode.MULTIPLE);
+        tree.setSelectionMode(SelectionMode.MULTIPLE);
         // THE WRAPPER IS MARKED INTERNAL WHILE EMPTY; the tree is an ordinary child of it.
         //
         // addInternalChild(tree) is the obvious line and it is wrong, because markAsInternal() RECURSES.
@@ -166,7 +187,7 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
         //
         // CLICK rather than FOCUSABLE: the tree is reached by pointing at it, and rows carry their own
         // roving tab stop, so the panel does not want a second one in the Tab sequence.
-        setFocusPolicy(com.crystalgui.ui.input.FocusPolicy.CLICK);
+        setFocusPolicy(FocusPolicy.CLICK);
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         content.addChild(tree);
@@ -355,7 +376,7 @@ public class ProjectFileTree extends UIElement implements com.crystalgui.core.un
             //
             // KEYBOARD_DETAIL is the opt-out the input handler already provides for exactly this, and
             // GraphView is the widget that found it: Enter synthesized a press and started a marquee.
-            if (event.getDetail() == com.crystalgui.ui.input.UIInputHandler.KEYBOARD_DETAIL) return;
+            if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
             UIWindow window = getAttachedWindow();
             CgPath item = rowItems.get(row);
             if (window == null || item == null || item.isProjectRoot()) return;

@@ -5,6 +5,7 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
@@ -26,6 +27,7 @@ import org.joml.Matrix4f;
 import javax.annotation.Nullable;
 
 import java.util.*;
+import com.crystalgui.ui.elements.Popover;
 
 /**
  * Runtime engine. Owns the paint context, the live
@@ -129,11 +131,43 @@ public final class UIWindow {
      */
     private int popoverShowSeq;
 
+    /**
+     * What this window is about, for questions no element on the focus path can answer.
+     *
+     * <p>IntelliJ's frame-level {@code DataProvider}. {@code DataContext} consults these <b>after</b> the
+     * element walk, so focus still decides wherever an element answers — see {@code DataContext} for why
+     * the walk alone is not enough, and what broke when it was.</p>
+     *
+     * <p>A list rather than one, because more than one shell-level element legitimately names something:
+     * the workbench answers "which workbench", the editor around it answers "which editor". First
+     * non-null wins, in the order they attached. With two workbenches in one window the window-level
+     * answer is genuinely ambiguous — focus is the only honest discriminator, and the element walk that
+     * runs first is exactly that.</p>
+     *
+     * <p>Empty by default: a window that names nothing is an ordinary window, and most are.</p>
+     */
+    private final List<DataProvider> dataProviders = new ArrayList<>();
+
+    public List<DataProvider> getDataProviders() {
+        return Collections.unmodifiableList(dataProviders);
+    }
+
+    /** Idempotent — an element re-attached to the same window must not answer twice. */
+    public UIWindow addDataProvider(DataProvider provider) {
+        if (provider != null && !dataProviders.contains(provider)) dataProviders.add(provider);
+        return this;
+    }
+
+    public UIWindow removeDataProvider(DataProvider provider) {
+        dataProviders.remove(provider);
+        return this;
+    }
+
     public UIWindow(Ui ui) {
         this.ui = ui;
-        // Deliberately NOT installing edit.undo/edit.redo here — see UndoCommands.install(UIWindow).
-        // This engine never injects its own defaults: StyleSheet.DEFAULT says so in its own header, and
-        // a keymap that acquires bindings nobody registered is the same surprise as a stylesheet that
+        // Deliberately NOT registering edit.undo/edit.redo here — call UndoCommands.register(). This
+        // engine never injects its own defaults: StyleSheet.DEFAULT says so in its own header, and a
+        // window that acquires commands nobody registered is the same surprise as a stylesheet that
         // applies itself. It cost four KeymapTest failures to be reminded.
         this.taffyTree = new TaffyTree();
         this.taffyTree.disableRounding();
@@ -886,7 +920,7 @@ public final class UIWindow {
         for (int i = autoPopovers.size() - 1; i >= 0; i--) {
             UIElement popover = autoPopovers.get(i);
             if (popover == ancestor) break;
-            if (popover instanceof com.crystalgui.ui.elements.Popover p && p.getLastShownSeq() > shownBefore) {
+            if (popover instanceof Popover p && p.getLastShownSeq() > shownBefore) {
                 continue; // shown by the very press that is now dismissing
             }
             doomed.add(popover);

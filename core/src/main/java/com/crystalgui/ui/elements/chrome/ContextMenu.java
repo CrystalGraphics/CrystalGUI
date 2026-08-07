@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.chrome;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Menu;
@@ -13,10 +14,12 @@ import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 
 /**
  * A right-click menu built from commands.
@@ -46,8 +49,13 @@ import javax.annotation.Nullable;
  */
 public final class ContextMenu {
 
-    /** One row: a command id, or a separator, or a submenu. */
-    private sealed interface Entry permits CommandEntry, SeparatorEntry, SubmenuEntry {
+    /** One row: a command id, a separator, a submenu, or everything contributed to a {@link MenuId}. */
+    private sealed interface Entry
+            permits CommandEntry, SeparatorEntry, SubmenuEntry, ContributedEntry {
+    }
+
+    /** Expanded at build time from whatever is registered against {@code menu}. */
+    private record ContributedEntry(MenuId menu) implements Entry {
     }
 
     private record CommandEntry(String commandId, @Nullable String labelOverride) implements Entry {
@@ -66,6 +74,38 @@ public final class ContextMenu {
 
     public static ContextMenu builder() {
         return new ContextMenu();
+    }
+
+    /**
+     * Everything contributed to {@code menu} — the whole menu, written nowhere.
+     *
+     * <h3>Why this exists beside the builder</h3>
+     *
+     * <p>A hand-written builder says exactly which items a menu has, which means <b>only its author can
+     * add one</b>. That is the coupling {@link MenuId} was introduced to remove, and until this method
+     * existed the id had no users at all: {@code Command.menu(...)} recorded placements that nothing ever
+     * read, so the explorer's menu was still a literal list in {@code ExplorerCommands}.</p>
+     *
+     * <p>Items come out in {@code group} then {@code order}, with a separator between groups. Groups sort
+     * lexicographically, so VS Code's {@code "1_new"}, {@code "2_clipboard"} convention is what orders
+     * them; a contributor picks its group and needs to know nothing about the rest.</p>
+     *
+     * <p><b>Disabled commands are included, dimmed</b> — this class's rule, stated at the top, and not
+     * {@link CommandRegistry#menu}'s. That method filters, which is right for a caller assembling a list
+     * from scratch and wrong here for the reason the header gives: a menu whose items move depending on
+     * what happens to apply is a menu whose items are never in the same place twice.</p>
+     *
+     * <p>Composable with the builder: {@code ContextMenu.builder().item(...).contributions(id)} puts a
+     * fixed item above everything contributed.</p>
+     */
+    public static ContextMenu of(MenuId menu) {
+        return new ContextMenu().contributions(menu);
+    }
+
+    /** Splices everything contributed to {@code menu} in at this point. */
+    public ContextMenu contributions(MenuId menu) {
+        entries.add(new ContributedEntry(menu));
+        return this;
     }
 
     /** Adds a command, labelled from the registry. */
@@ -111,7 +151,7 @@ public final class ContextMenu {
         boolean pendingSeparator = false;
         boolean anyItem = false;
 
-        for (Entry entry : entries) {
+        for (Entry entry : resolve(registry, source)) {
             if (entry instanceof SeparatorEntry) {
                 // Deferred rather than added: a separator is only real once something follows it, which is
                 // what makes leading and doubled ones disappear without the caller tracking groups.
@@ -130,6 +170,64 @@ public final class ContextMenu {
             anyItem = true;
         }
         return menu;
+    }
+
+    /** Declared entries, with every {@link ContributedEntry} replaced by what is registered for it. */
+    private List<Entry> resolve(CommandRegistry registry, UIElement source) {
+        List<Entry> out = new ArrayList<>();
+        for (Entry entry : entries) {
+            if (entry instanceof ContributedEntry contributed) {
+                out.addAll(contributionsOf(contributed.menu(), registry, source));
+            } else {
+                out.add(entry);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What is registered for {@code menu}, in group-then-order, separated between groups.
+     *
+     * <p>Commands and submenus are interleaved by the same {@code (group, order)} pair, so a submenu is
+     * an ordinary participant rather than something pinned to one end.</p>
+     *
+     * <p><b>A submenu with nothing contributed to it at all is dropped</b> — not one whose items are
+     * merely disabled, which still opens and shows them dimmed. An empty submenu is a registration that
+     * never happened; a disabled one is an answer.</p>
+     */
+    private static List<Entry> contributionsOf(MenuId menu, CommandRegistry registry, UIElement source) {
+        record Row(String group, int order, Entry entry) {
+        }
+        List<Row> rows = new ArrayList<>();
+
+        for (Command command : registry.all()) {
+            for (MenuId.Placement placement : command.menus()) {
+                if (placement.menu() != menu) continue;
+                rows.add(new Row(placement.group(), placement.order(),
+                        new CommandEntry(command.getId(), null)));
+                break;
+            }
+        }
+
+        for (MenuId.Submenu nested : menu.submenus()) {
+            ContextMenu built = ContextMenu.of(nested.menu());
+            if (built.resolve(registry, source).isEmpty()) continue;
+            rows.add(new Row(nested.group(), nested.order(),
+                    new SubmenuEntry(nested.title(), built)));
+        }
+
+        rows.sort(Comparator.comparing(Row::group).thenComparingInt(Row::order));
+
+        List<Entry> out = new ArrayList<>();
+        String previousGroup = null;
+        for (Row row : rows) {
+            // Emitted freely between groups: build() drops leading, trailing and doubled separators, so
+            // there is nothing to count here.
+            if (previousGroup != null && !previousGroup.equals(row.group())) out.add(new SeparatorEntry());
+            out.add(row.entry());
+            previousGroup = row.group();
+        }
+        return out;
     }
 
     private static void addCommand(Menu menu, CommandRegistry registry, UIElement source,
@@ -190,7 +288,7 @@ public final class ContextMenu {
         List<Menu> live = new ArrayList<>();
 
         on.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
-            if (event.getButtonId() != com.crystalgraphics.platform.input.CgMouseCodes.RIGHT_BUTTON) return;
+            if (event.getButtonId() != CgMouseCodes.RIGHT_BUTTON) return;
             UIWindow window = on.getAttachedWindow();
             if (window == null) return;
             UIElement target = event.getTarget() == null ? on : event.getTarget();

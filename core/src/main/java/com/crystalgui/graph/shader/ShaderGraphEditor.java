@@ -381,7 +381,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
     }
 
     /** The compiler-side master. Written only at compile time — see {@link ShaderGraphSettings}. */
-    public com.crystalgraphics.shadergraph.CgMasterNode master() {
+    public CgMasterNode master() {
         return master;
     }
 
@@ -534,7 +534,6 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      */
     public final Signal.Action onViewGeneratedRequested = new Signal.Action();
 
-    private boolean commandsInstalled;
 
     /**
      * Registers this widget's own commands on the window, once.
@@ -546,28 +545,27 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      * <p>The command resolves the nearest enclosing graph from the focused element, exactly as
      * {@link GraphCommands} does, so with several graphs open the one you are looking at is the one that
      * answers. Registration is global and idempotent; the <em>binding</em> is what makes it reachable.</p>
-     *
-     * @return whether the commands are installed — false only while there is no window yet
      */
-    public boolean installCommands() {
-        UIWindow window = getAttachedWindow();
-        if (window == null) return false;
-        if (commandsInstalled) return true;
-        commandsInstalled = true;
-
-        CommandRegistry registry = window.getCommands();
-        if (!registry.contains(VIEW_GENERATED_COMMAND)) {
-            // Unity's "View Generated Shader". A command rather than only a button, so it reaches the
-            // palette and can be bound -- and so a toolbar button invokes THIS rather than duplicating it,
-            // which is how "the button works but the shortcut does not" is avoided.
-            registry.register(Command.of(VIEW_GENERATED_COMMAND, "View Generated Shader")
-                    .run(context -> {
-                        ShaderGraphEditor graph = editorFor(context);
-                        if (graph != null) graph.onViewGeneratedRequested.emit();
-                    })
-                    .enabledWhen(context -> editorFor(context) != null));
-        }
-        return true;
+    /**
+     * Registers this widget's commands. No window needed, so it runs from the constructor.
+     *
+     * <p>It used to need one, purely to reach {@code window.getCommands()} — and because the window is
+     * not there at construction, the call lived in {@code attachPreviews}, which is a <b>frame
+     * ticker</b>. So a graph's commands did not exist until a frame after it attached, and a palette
+     * opened before that was missing them. Commands being global removes the reason the window was ever
+     * involved.</p>
+     */
+    @Override
+    protected void registerCommands(CommandRegistry registry) {
+        // Unity's "View Generated Shader". A command rather than only a button, so it reaches the
+        // palette and can be bound -- and so a toolbar button invokes THIS rather than duplicating it,
+        // which is how "the button works but the shortcut does not" is avoided.
+        registry.register(Command.of(VIEW_GENERATED_COMMAND, "View Generated Shader")
+                .run(context -> {
+                    ShaderGraphEditor graph = editorFor(context);
+                    if (graph != null) graph.onViewGeneratedRequested.emit();
+                })
+                .enabledWhen(context -> editorFor(context) != null));
     }
 
     /** This editor, for a command that acts on one. Declared here because it is this feature's concept. */
@@ -604,8 +602,6 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
             mainPreviewAttached = mainPreview.attach();
             if (mainPreviewAttached) ownGlParts();
         }
-        installCommands();
-        blackboard.installCommands();
         blackboard.reclamp();
         return !(previewsAttached && mainPreviewAttached);
     }

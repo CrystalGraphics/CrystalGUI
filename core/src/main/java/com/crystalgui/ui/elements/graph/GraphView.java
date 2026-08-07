@@ -24,6 +24,7 @@ import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.event.MouseEvent;
@@ -74,6 +75,38 @@ public class GraphView extends CanvasView implements UndoScope {
 
     /** This graph, for a command that acts on one — replaces {@code GraphCommands.graphFor}'s walk. */
     public static final DataKey<GraphView> GRAPH_VIEW = DataKey.create("graphView", GraphView.class);
+
+    /**
+     * Every graph gets its commands, with nothing installing them.
+     *
+     * <p>The engine calls this once for this class — see {@link UIElement#registerCommands}. Before, a
+     * host had to call {@code GraphCommands.install(window)} and a graph dropped into a scene that
+     * forgot had no Delete, no Select All and no framing, silently.</p>
+     */
+    @Override
+    protected void registerCommands(CommandRegistry registry) {
+        GraphCommands.register();
+        // Undo comes with any graph, because a graph is an UndoScope -- the stack is resolved from
+        // focus, so this needs no element and binds to nothing.
+        UndoCommands.register();
+    }
+
+    /**
+     * The graph's own chords, on the graph.
+     *
+     * <p>Per instance, and it has to be: {@code F}, {@code A} and {@code Space} are <b>bare letters</b>,
+     * so they may only be live while focus is inside a graph. Declaring them on the commands would make
+     * them application-wide and cost every text field in the application three letters.</p>
+     *
+     * <p>This was missing for one commit and nothing failed: registration had moved to
+     * {@link #registerCommands} while the binding half was still waiting on a host to call
+     * {@code GraphCommands.install(window)} — which by then nothing did. Every graph command existed, was
+     * enabled, showed in the palette, and answered no key at all.</p>
+     */
+    @Override
+    protected void bindKeys() {
+        GraphCommands.bindDefaults(keymap());
+    }
 
     /**
      * What this graph knows: itself, its selected nodes, and its undo history.
@@ -330,10 +363,7 @@ public class GraphView extends CanvasView implements UndoScope {
         // calling it again every layout pass is idempotent rather than wasteful.
         UIWindow window = getAttachedWindow();
         if (window != null) window.registerTicker(this);
-        installCommands();
     }
-
-    private boolean commandsInstalled;
 
     /**
      * Registers this widget's own commands, bound on <b>itself</b>, once it has a window.
@@ -362,14 +392,6 @@ public class GraphView extends CanvasView implements UndoScope {
      * <p>Which is also why binding it here does not conflict with a host that installs undo application-
      * wide: the inner scope wins while focus is inside the graph, and both routes end at the same lookup.</p>
      */
-    private void installCommands() {
-        if (commandsInstalled) return;
-        UIWindow window = getAttachedWindow();
-        if (window == null) return;
-        GraphCommands.install(window.getCommands(), this);
-        UndoCommands.install(window.getCommands(), this);
-        commandsInstalled = true;
-    }
 
     /**
      * Finds input ports that have never been seen before and starts watching them — {@code onBlankChanged}

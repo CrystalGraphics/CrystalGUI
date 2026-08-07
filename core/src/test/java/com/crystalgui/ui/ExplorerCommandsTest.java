@@ -41,11 +41,21 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.crystalgui.ui.input.keymap.Keymap;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgui.core.data.Transform2D;
+import com.crystalgui.testsupport.TestPlatformService;
+import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.elements.list.SelectionMode;
+import com.crystalgui.ui.elements.workbench.FileDocument;
 
 /**
  * {@link ExplorerCommands} — the Project panel's verbs.
@@ -96,8 +106,8 @@ public class ExplorerCommandsTest extends UiTestBase {
         window.init(1200, 800);
         // The keymap reads modifier state from the PLATFORM, not from the event, so a chord like
         // Mod+Z never matches unless the stub says the key is held.
-        com.crystalgui.testsupport.TestPlatformService.get().input(
-                new com.crystalgraphics.platform.service.CgInputService() {
+        TestPlatformService.get().input(
+                new CgInputService() {
                     @Override public int getCurrentModifiers() { return heldModifiers; }
                     @Override public int translateKeyboardCodes(int c) { return c; }
                     @Override public boolean isKeyDown(int c) { return false; }
@@ -230,11 +240,17 @@ public class ExplorerCommandsTest extends UiTestBase {
      */
     @Test
     public void newFileIsBoundGloballyWhileTheBareKeysStayScoped() {
+        // Asserted through acceleratorFor, which answers "what would actually fire this here" -- the
+        // question both halves care about. Ctrl+N is now a DECLARED binding on the command rather than an
+        // entry written onto the root keymap, and the distinction the test exists to protect is about
+        // reach, not about which map holds the row.
         assertNotNull("Ctrl+N is not reachable outside the Project panel",
-                window.ui.rootElement.keymap().chordFor(ExplorerCommands.NEW_FILE));
-        assertEquals("a bare key reached the window root -- it would fire while typing",
-                null, window.ui.rootElement.keymap().chordFor(ExplorerCommands.DELETE));
+                Keymap.acceleratorFor(window.ui.rootElement, ExplorerCommands.NEW_FILE));
+        assertNull("a bare key reached the window root -- it would fire while typing",
+                Keymap.acceleratorFor(window.ui.rootElement, ExplorerCommands.DELETE));
+        // And still scoped to the tree, which is the half that keeps Delete off every text field.
         assertNotNull(workbench.fileTree().keymap().chordFor(ExplorerCommands.DELETE));
+        assertNotNull(Keymap.acceleratorFor(workbench.fileTree(), ExplorerCommands.DELETE));
     }
 
     /**
@@ -320,7 +336,7 @@ public class ExplorerCommandsTest extends UiTestBase {
     /** The tree takes multi-select, which is what every command acting on "the selection" needs. */
     @Test
     public void theTreeAllowsMoreThanOneSelection() {
-        assertEquals(com.crystalgui.ui.elements.list.SelectionMode.MULTIPLE,
+        assertEquals(SelectionMode.MULTIPLE,
                 workbench.fileTree().treeView().getSelectionMode());
     }
 
@@ -411,7 +427,7 @@ public class ExplorerCommandsTest extends UiTestBase {
         for (UIElement row : workbench.fileTree().treeView().getChildren()) {
             if (!row.hasClass(ProjectFileTree.ROW_CLASS)) continue;
             for (UIElement child : row.getChildren()) {
-                if (child instanceof com.crystalgui.ui.elements.UIText text
+                if (child instanceof UIText text
                         && text.getText().contains(name)) return row;
             }
         }
@@ -421,7 +437,7 @@ public class ExplorerCommandsTest extends UiTestBase {
     /** A real press of a given button at the row's centre, through the input handler. */
     private void pressButton(UIElement row, int button) {
         var cache = row.getRuntimeCache();
-        var centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld.get(),
+        var centre = Transform2D.apply(cache.localToWorld.get(),
                 cache.getX() + cache.getWidth() * 0.5f, cache.getY() + cache.getHeight() * 0.5f);
         int x = Math.round(centre.x());
         int y = Math.round(centre.y());
@@ -669,7 +685,7 @@ public class ExplorerCommandsTest extends UiTestBase {
         assertFalse("fixture wrong -- the delete did not happen",
                 rootChildNames().contains("README.md"));
 
-        chord(CgKeyCodes.KEY_Z, com.crystalgraphics.platform.input.CgModifiers.CTRL);
+        chord(CgKeyCodes.KEY_Z, CgModifiers.CTRL);
 
         assertTrue("Ctrl+Z did not bring the file back. Saw " + rootChildNames(),
                 rootChildNames().contains("README.md"));
@@ -708,7 +724,7 @@ public class ExplorerCommandsTest extends UiTestBase {
         // UndoScope outward from the focused element, so with nothing focused there is no stack to
         // reach and this would assert against a keystroke that never ran.
         window.getInputHandler().requestPointerFocus(workbench.fileTree());
-        chord(CgKeyCodes.KEY_Z, com.crystalgraphics.platform.input.CgModifiers.CTRL);
+        chord(CgKeyCodes.KEY_Z, CgModifiers.CTRL);
 
         assertTrue("one Ctrl+Z did not bring BOTH files back -- the drop was recorded per file. Saw "
                         + rootChildNames(),
@@ -741,7 +757,7 @@ public class ExplorerCommandsTest extends UiTestBase {
                 rootChildNames().contains("one.txt"));
 
         window.getInputHandler().requestPointerFocus(workbench.fileTree());
-        chord(CgKeyCodes.KEY_Z, com.crystalgraphics.platform.input.CgModifiers.CTRL);
+        chord(CgKeyCodes.KEY_Z, CgModifiers.CTRL);
 
         assertTrue("one Ctrl+Z did not bring BOTH files back -- the paste was recorded per file. Saw "
                         + rootChildNames(),
@@ -839,7 +855,7 @@ public class ExplorerCommandsTest extends UiTestBase {
     @Test
     public void aDocumentThatCannotLoadIsNeitherModifiedNorSaveable() {
         workbench.registerDocumentType("refuses", "Refuses", path ->
-                new com.crystalgui.ui.elements.workbench.FileDocument() {
+                new FileDocument() {
                     private final UIElement view = new UIElement();
                     @Override public UIElement view() { return view; }
                     @Override public byte[] encode() { return "EMPTY".getBytes(); }
@@ -1048,7 +1064,7 @@ public class ExplorerCommandsTest extends UiTestBase {
                 new CgSystemInput.Keyboard.Event('p', CgKeyCodes.KEY_P, true, false, 30L));
         assertFalse("a bare Mod+P must not fire without the modifier held", consumed);
 
-        heldModifiers = com.crystalgraphics.platform.input.CgModifiers.CTRL;
+        heldModifiers = CgModifiers.CTRL;
         try {
             assertTrue("Ctrl+P reached nothing -- the binding is scoped to a panel with no focus",
                     window.getInputHandler().consumeKeyboardEvent(

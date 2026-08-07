@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import javax.annotation.Nullable;
+import com.crystalgui.core.command.CommandRegistry;
 
 /**
  * A {@link DockLayout}, drawn — and the one place a drag becomes a structural change.
@@ -35,6 +36,18 @@ import javax.annotation.Nullable;
  * Every structural change here therefore sets a flag and the ticker does the work on the next frame.</p>
  */
 public class DockArea extends UIElement implements UIFrameTicker {
+
+    /**
+     * A dock brings its own verbs — split, close, cycle tabs — with nothing installing them.
+     *
+     * <p>Their chords are declared on the commands rather than bound here, because they are genuinely
+     * application-wide: a dock wraps everything, so "is there a dock above me" is true almost everywhere.
+     * See {@code DockCommands}.</p>
+     */
+    @Override
+    protected void registerCommands(CommandRegistry registry) {
+        DockCommands.register();
+    }
 
     /** On the area while a dock drag is in flight, so a theme can dim or outline the whole thing. */
     public static final String DRAGGING_CLASS = "__dock-dragging__";

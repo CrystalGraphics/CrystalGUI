@@ -138,10 +138,18 @@ public final class KeymapResolver {
         if (TRACE) trace(focused, stroke, typing);
 
         boolean prefixMatched = false;
+        // Which commands some scope has bound EXPLICITLY. A command that anything in the chain has
+        // deliberately bound does not also answer to the default it declared for itself -- otherwise
+        // remapping is impossible: rebinding undo to Mod+U would leave Mod+Z working as well, and the
+        // old chord could never be taken away. VS Code spells the same idea with a "-command" entry.
+        java.util.Set<String> userBound = new java.util.HashSet<>();
         for (UIElement scope = focused; scope != null; scope = scope.getParent()) {
             Keymap keymap = scope.keymapOrNull();
             if (keymap == null) continue;
 
+            for (KeyBinding binding : keymap.bindings()) {
+                userBound.add(binding.getCommandId());
+            }
             for (KeyBinding binding : keymap.bindings()) {
                 if (binding.getEventType() != type) continue;
                 if (!binding.getChord().startsWith(attempt)) continue;
@@ -162,6 +170,33 @@ public final class KeymapResolver {
                 // Bound but disabled. Keep walking: an outer scope may have its own binding for this
                 // chord that IS applicable, which is what lets a disabled editor command fall through to
                 // an application-wide one.
+            }
+        }
+
+        if (prefixMatched) {
+            pending.clear();
+            pending.addAll(attempt);
+            pendingSinceMillis = nowMillis;
+            onPendingChanged.emit(new KeyChord(pending));
+            return true;
+        }
+
+        // No SCOPE claimed it. Fall back to the defaults commands declared for themselves, which are
+        // application-wide by construction -- see CommandRegistry.declaredBindings(). Last, so an
+        // element-scoped binding always wins and one chord can still mean different things in different
+        // widgets.
+        for (KeyBinding binding : commands.declaredBindings().bindings()) {
+            if (userBound.contains(binding.getCommandId())) continue;
+            if (binding.getEventType() != type) continue;
+            if (!binding.getChord().startsWith(attempt)) continue;
+            if (typing && !binding.isAllowedWhileTyping() && !stroke.hasNonShiftModifier()) continue;
+            if (binding.getChord().length() > attempt.size()) {
+                prefixMatched = true;
+                continue;
+            }
+            if (fire(binding, focused)) {
+                cancelPending();
+                return true;
             }
         }
 
