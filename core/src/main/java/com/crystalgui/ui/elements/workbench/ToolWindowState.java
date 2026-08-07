@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.ui.elements.dock.DockDropZone;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.dock.DockPath;
 
 import java.util.Collections;
@@ -105,6 +106,21 @@ public final class ToolWindowState {
     }
 
     /** Which wall it opens against when {@link #path} cannot be honoured. */
+    /**
+     * The region this tool window belongs to — see {@link DockRegion}.
+     *
+     * <p><b>Derived from {@link #anchor()} rather than stored</b>, deliberately: it is the same fact said
+     * the durable way, so deriving it costs no persisted field and therefore no version bump. The field
+     * appears — and the bump with it — at plan.md §23 step 7, when a region becomes a real element and an
+     * anchor stops being able to express one.</p>
+     *
+     * <p>Ask this rather than {@link #anchor()} in anything new. An anchor is a wall of the current tree;
+     * a region survives the tree changing, which is the whole point of the Parts model.</p>
+     */
+    public DockRegion region() {
+        return DockRegion.ofWall(anchor);
+    }
+
     public DockDropZone anchor() {
         return anchor;
     }

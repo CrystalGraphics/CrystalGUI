@@ -52,6 +52,26 @@ public sealed interface DockPlacement {
         return new Leaf(Objects.requireNonNull(leaf, "leaf"));
     }
 
+    /**
+     * The region a panel <b>belongs to</b> — the sidebar, the bottom panel, the work area.
+     *
+     * <h3>Why this is a different question from every variant above</h3>
+     *
+     * <p>The others all name a <em>position in a tree</em>: this group, beside that element, that leaf.
+     * They answer "where in the grid", and they are the right answer for a document, which has no home
+     * and belongs wherever you were working.</p>
+     *
+     * <p>A tool window does have a home, and a position cannot express it. That is the whole of the Parts
+     * model: {@code open()} answers <b>which region</b> first and <b>where within it</b> second, and a
+     * region survives the splits, drags and collapses that invalidate a position. See {@link DockRegion}.</p>
+     *
+     * <p>Added now, before there are regions to resolve it against, precisely so it is designed rather
+     * than retrofitted through every call site later — plan.md §23 F5.</p>
+     */
+    static DockPlacement in(DockRegion region) {
+        return new InRegion(Objects.requireNonNull(region, "region"));
+    }
+
     record Side(DockDropZone zone) implements DockPlacement {
     }
 
@@ -59,6 +79,10 @@ public sealed interface DockPlacement {
     }
 
     record Leaf(DockLeaf leaf) implements DockPlacement {
+    }
+
+    /** @see DockPlacement#in(DockRegion) */
+    record InRegion(DockRegion region) implements DockPlacement {
     }
 
     final class Active implements DockPlacement {
@@ -99,6 +123,14 @@ public sealed interface DockPlacement {
         if (placement instanceof With with) {
             DockGroup group = area.groupOf(with.element());
             return group == null ? null : group.leaf();
+        }
+        if (placement instanceof InRegion region) {
+            // TRANSITIONAL. Regions are not elements yet, so EDITOR means the central leaf and every other
+            // region means its wall -- which is what a tool window's anchor already meant. The variant is
+            // here so callers can state the question correctly now; step 7 gives it a real answer without
+            // any of them changing. See DockRegion.wall().
+            if (region.region() == DockRegion.EDITOR) return area.layout().centralLeaf();
+            return null;
         }
         // Active, and Side before its split exists, both resolve from the active group -- Side's caller
         // then splits it. Falling back the way activeGroup() does, so a placement asked for before

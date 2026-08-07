@@ -28,7 +28,8 @@ public final class DockPanelDescriptor {
 
     private final String typeId;
     private final String title;
-    private final boolean singleton;
+    private DockPanelKind kind;
+    private DockRegion region;
     private final boolean closable;
     private final String icon;
     private final DockDropZone anchor;
@@ -45,7 +46,7 @@ public final class DockPanelDescriptor {
                                 @Nullable String icon, DockDropZone anchor) {
         this.typeId = Objects.requireNonNull(typeId, "typeId");
         this.title = Objects.requireNonNull(title, "title");
-        this.singleton = singleton;
+        this.kind = singleton ? DockPanelKind.VIEW : DockPanelKind.DOCUMENT;
         this.closable = closable;
         this.icon = icon;
         this.anchor = Objects.requireNonNull(anchor, "anchor");
@@ -53,6 +54,23 @@ public final class DockPanelDescriptor {
 
     public static DockPanelDescriptor singleton(String typeId, String title) {
         return new DockPanelDescriptor(typeId, title, true, true);
+    }
+
+    /**
+     * A group of {@link DockPanelKind#VIEW}s sharing a region — what an activity bar button toggles.
+     *
+     * <p>The kind that did not exist. See {@link DockPanelKind#CONTAINER}.</p>
+     */
+    public static DockPanelDescriptor container(String typeId, String title, DockRegion region) {
+        return new DockPanelDescriptor(typeId, title, true, true, null, region.wall())
+                .region(region)
+                .asKind(DockPanelKind.CONTAINER);
+    }
+
+    /** Sets the kind outright — for {@link #container}, which is neither of the two boolean states. */
+    private DockPanelDescriptor asKind(DockPanelKind value) {
+        this.kind = value;
+        return this;
     }
 
     public static DockPanelDescriptor document(String typeId, String title) {
@@ -74,7 +92,7 @@ public final class DockPanelDescriptor {
      * <p>An icon <em>name</em>, resolved the way {@code icon()} resolves one in CSS.</p>
      */
     public DockPanelDescriptor icon(@Nullable String iconName) {
-        return new DockPanelDescriptor(typeId, title, singleton, closable, iconName, anchor);
+        return new DockPanelDescriptor(typeId, title, isSingleton(), closable, iconName, anchor).region(region);
     }
 
     @Nullable
@@ -103,7 +121,7 @@ public final class DockPanelDescriptor {
      * layout — and that is precisely the moment the activity bar exists for.</p>
      */
     public DockPanelDescriptor anchor(DockDropZone zone) {
-        return new DockPanelDescriptor(typeId, title, singleton, closable, icon, zone);
+        return new DockPanelDescriptor(typeId, title, isSingleton(), closable, icon, zone).region(region);
     }
 
     public DockDropZone anchor() {
@@ -119,8 +137,36 @@ public final class DockPanelDescriptor {
         return title;
     }
 
+    /**
+     * What this panel type is — see {@link DockPanelKind}.
+     *
+     * <p>Replaces the {@code singleton} boolean, which could not express a third kind. {@link #isSingleton}
+     * survives as {@code kind() == VIEW} so every existing call site keeps its exact meaning.</p>
+     */
+    public DockPanelKind kind() {
+        return kind;
+    }
+
+    /**
+     * Where a panel of this type belongs — see {@link DockRegion}.
+     *
+     * <p>Defaults from {@link #anchor()}, which is the same fact stated as a wall. The anchor is what a
+     * tool window's placement has always meant; naming it a region is what lets it survive the tree it is
+     * currently expressed in.</p>
+     */
+    public DockRegion region() {
+        return region != null ? region : DockRegion.ofWall(anchor);
+    }
+
+    /** @see #region() */
+    public DockPanelDescriptor region(DockRegion value) {
+        this.region = value;
+        return this;
+    }
+
+    /** {@code kind() == VIEW}. Kept because it is what every call site already asks. */
     public boolean isSingleton() {
-        return singleton;
+        return kind == DockPanelKind.VIEW;
     }
 
     public boolean isClosable() {
@@ -129,6 +175,6 @@ public final class DockPanelDescriptor {
 
     @Override
     public String toString() {
-        return typeId + (singleton ? " (singleton)" : "");
+        return typeId + " (" + kind + ")";
     }
 }
