@@ -3637,6 +3637,13 @@ dockgroup .__missing__ {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
+    overlay: icon("crystalgui:x");
+    overlay-fit: contain;
+    color: #A0A0A0;
+}
+
+.__view-container__ .__header__ .__hide__:hover {
+    color: #E0E0E0;
 }
 
 .__view-container__ .__content__ {
