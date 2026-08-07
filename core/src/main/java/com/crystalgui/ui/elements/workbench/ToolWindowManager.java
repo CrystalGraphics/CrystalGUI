@@ -100,9 +100,13 @@ public final class ToolWindowManager {
     public boolean hidePanel(String typeId) {
         RegionHost host = regions.host(regionOf(typeId));
         if (host == null || !typeId.equals(host.showing())) return false;
+        // The WIDTH IS READ BEFORE the clear, because a region with nothing in it is about to leave the
+        // split and its share stops being readable. Same shape as the old hidePanel, which captured
+        // placement before a close for the same reason -- that part of it was always right.
+        float weight = regions.weightOf(regionOf(typeId));
         host.clear();
         regions.sync();
-        toolWindows.put(placementOf(typeId).withVisible(false));
+        toolWindows.put(placementOf(typeId).withVisible(false).withWeight(weight));
         return false;
     }
 
@@ -145,14 +149,18 @@ public final class ToolWindowManager {
     }
 
     /**
-     * Puts every tool window back where its remembered placement says — what a session restore calls.
+     * Applies every tool window's remembered visibility — what a session restore calls.
      *
      * <p>A lookup per entry, which is the point. The old equivalent was replaying drops into a tree and
      * hoping the branches it named were still there.</p>
      */
-    public void restoreVisible() {
+    public void applyVisibility() {
         for (ToolWindowState state : toolWindows.ordered()) {
+            // BOTH DIRECTIONS. Showing alone is not a restore: the workbench opens Project and Problems in
+            // its constructor and the application opens the Inspector, all BEFORE a session is read -- so
+            // a region the record says is hidden is simply never told, and comes back open every launch.
             if (state.visible()) showPanel(state.typeId());
+            else hidePanel(state.typeId());
         }
     }
 

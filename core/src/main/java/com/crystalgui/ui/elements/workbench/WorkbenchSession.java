@@ -7,6 +7,7 @@ import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.elements.dock.DockLeaf;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
+import com.crystalgui.ui.elements.dock.DockPanelKind;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.dock.DockPath;
@@ -115,8 +116,20 @@ public final class WorkbenchSession {
      *
      * <p>The cost is one lost arrangement per user, once, which the next save rewrites. Stated here so it
      * reads as a decision rather than as a regression when somebody's layout comes back default.</p>
+     *
+     * <h3>5 — the Inspector left the dock, which is a MEANING change</h3>
+     *
+     * <p>The same shape as 3, and missed for the same reason. A record written at 4 — after regions landed
+     * but before the Inspector moved into one — holds an {@code inspector} leaf in the dock tree. It
+     * decodes perfectly and is wrong: the panel factory hands back the <em>same element</em> the auxiliary
+     * region is showing, so whichever host re-parents last wins and the other is left with an empty box.
+     * On screen that was a working inspector wedged between the splits and an empty one on the wall.</p>
+     *
+     * <p>{@code stripToolWindows} makes it unreachable regardless of version, which is the durable half —
+     * a layout is also something one user can hand to another. The bump is what clears the records that
+     * already exist.</p>
      */
-    public static final int VERSION = 4;
+    public static final int VERSION = 5;
 
     private static final String KEY_VERSION = "version";
     private static final String KEY_DOCK = "dock";
@@ -235,6 +248,18 @@ public final class WorkbenchSession {
      * <p>Runs after {@code pullWeightsIntoLayout}, so the weights recorded are the ones the dividers are
      * actually at rather than the ones the layout was built with.</p>
      */
+    /** Removes any panel the dock should never hold — anything whose kind is not a document. */
+    private void stripToolWindows(DockLayout layout) {
+        for (DockLeaf leaf : new ArrayList<>(layout.leaves())) {
+            for (DockPanelRef panel : new ArrayList<>(leaf.panels())) {
+                DockPanelDescriptor descriptor = workbench.panels().descriptor(panel.typeId());
+                if (descriptor != null && descriptor.kind() != DockPanelKind.DOCUMENT) {
+                    layout.closePanel(panel);
+                }
+            }
+        }
+    }
+
     private void captureOpenToolWindows() {
         // TOOL WINDOWS ARE NOT IN THE DOCK TREE. This used to walk every leaf looking for singletons and
         // record the strip-mates and the structural path for the four-tier restoration heuristic to
@@ -243,7 +268,10 @@ public final class WorkbenchSession {
         for (DockRegion region : DockRegion.values()) {
             if (region == DockRegion.EDITOR) continue;
             RegionHost host = workbench.regions().host(region);
-            if (host == null || host.isEmpty() || host.showing() == null) continue;
+            if (host == null || host.showing() == null) continue;
+            // Only what is SHOWING is captured here -- a cleared host has forgotten what it held. A
+            // hidden region's entry is written by hidePanel instead, which is the moment its width is
+            // still known.
             workbench.toolWindows().put(workbench.toolWindows()
                     .getOrCreate(host.showing(), region.wall())
                     .withVisible(true)
@@ -297,6 +325,17 @@ public final class WorkbenchSession {
             pendingViewState.put(entry.getKey(), entry.getValue());
         }
 
+        // TOOL WINDOWS ARE NOT DOCUMENTS, and a saved layout may still name one.
+        //
+        // A record written between the regions landing and the Inspector moving out of the dock holds an
+        // `inspector` leaf, which restores into the tree while showPanel also puts it in the auxiliary
+        // region -- and the registry hands back the SAME element, so whichever host re-parents last wins
+        // and the other is left with an empty box. That is exactly what it looked like: a working
+        // inspector wedged between the splits and an empty one on the wall.
+        //
+        // The version bump below clears the records that already exist; this makes it unreachable, which
+        // matters because a layout is also a thing a user can hand to another user.
+        stripToolWindows(layout);
         workbench.dock().setLayout(layout);
 
         // AFTER the layout is installed, so a placement naming a path describes the tree that is now
@@ -310,11 +349,16 @@ public final class WorkbenchSession {
             // The region's share comes back with the placement, because a region's size is not derivable
             // from anything else once its occupant is hidden -- the same reason placement itself moved out
             // of the tree.
-            if (state.visible()) workbench.regions().setWeight(state.region(), state.weight());
+            //
+            // FOR HIDDEN ONES TOO, and that is the whole point of storing it. Restricting this to visible
+            // regions left a closed one's remembered width unknown to the model -- and applyVisibility
+            // then calls hidePanel, which records the width it can currently see. That is the DEFAULT at
+            // that moment, so reopening a region you had resized and closed always came back at 20%.
+            workbench.regions().setWeight(state.region(), state.weight());
         }
         // AND PUT THEM BACK. One lookup per entry: the whole of what replaced replaying drops into a tree
         // and hoping the branches they named still existed.
-        workbench.toolWindowManager().restoreVisible();
+        workbench.toolWindowManager().applyVisibility();
 
         pendingExpansion.clear();
         for (String raw : in.getList(KEY_EXPANDED, map -> map.getString(KEY_PATH, ""))) {
