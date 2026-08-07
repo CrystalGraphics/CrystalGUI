@@ -31,7 +31,24 @@ public abstract class SignalBase<L> {
 
     private final List<SlotEntry<L>> slots = new ArrayList<>();
     private final List<SlotEntry<L>> pendingDisconnect = new ArrayList<>();
-    private boolean emitting;
+
+    /**
+     * How many emissions are in flight on this signal — a <b>depth</b>, never a boolean.
+     *
+     * <h3>Why a count</h3>
+     *
+     * <p>Every {@code emit} caches {@code int n = slots.size()} and indexes up to it. A boolean flag is
+     * cleared by the <em>first</em> {@link #endEmit()} to finish, so a re-entrant emission would flush
+     * {@link #pendingDisconnect} — shrinking {@code slots} — while an outer loop still held the old
+     * {@code n}, and the outer loop would then run off the end with an
+     * {@code IndexOutOfBoundsException} raised inside somebody's listener.</p>
+     *
+     * <p>Re-entrancy is not exotic here: it is the intended shape of the service events in
+     * {@code plan.md} step 3, where a dirty change fires a title refresh which fires a layout change.
+     * Before those existed every signal was a leaf and the boolean was fine, which is exactly why this
+     * would have surfaced as a crash in unrelated code months later.</p>
+     */
+    private int emitDepth;
 
     /**
      * Adds a listener slot and returns the disconnect handle.
@@ -51,7 +68,7 @@ public abstract class SignalBase<L> {
                 entry.connected = false;
                 DebugHook dh = debugHook;
                 if (dh != null) dh.onDisconnect(className);
-                if (emitting) {
+                if (emitDepth > 0) {
                     pendingDisconnect.add(entry);
                 } else {
                     slots.remove(entry);
@@ -78,12 +95,17 @@ public abstract class SignalBase<L> {
 
     /** Marks emission as started. Must be called before iterating slots. */
     protected final void beginEmit() {
-        emitting = true;
+        emitDepth++;
     }
 
-    /** Marks emission as ended and flushes any deferred disconnects. */
+    /**
+     * Marks emission as ended, and flushes deferred disconnects <b>only once the outermost one
+     * finishes</b> — see {@link #emitDepth}. Removing a slot while an enclosing emission is still
+     * iterating is what the depth exists to prevent.
+     */
     protected final void endEmit() {
-        emitting = false;
+        emitDepth--;
+        if (emitDepth > 0) return;
         if (!pendingDisconnect.isEmpty()) {
             for (int i = 0; i < pendingDisconnect.size(); i++) {
                 slots.remove(pendingDisconnect.get(i));
@@ -97,11 +119,21 @@ public abstract class SignalBase<L> {
         return slots.size();
     }
 
-    /** Disconnects all listeners. */
+    /**
+     * Disconnects all listeners.
+     *
+     * <p>Safe during an emission, for the reason {@link #emitDepth} gives: clearing the list outright
+     * would leave an enclosing loop indexing past the end. Mid-emit this marks every slot disconnected —
+     * which stops them receiving the rest of <em>this</em> emission, since the loops test
+     * {@code entry.connected} — and defers the removal.</p>
+     */
     public final void disconnectAll() {
         for (int i = 0; i < slots.size(); i++) {
-            slots.get(i).connected = false;
+            SlotEntry<L> entry = slots.get(i);
+            entry.connected = false;
+            if (emitDepth > 0) pendingDisconnect.add(entry);
         }
+        if (emitDepth > 0) return;
         slots.clear();
         pendingDisconnect.clear();
     }
