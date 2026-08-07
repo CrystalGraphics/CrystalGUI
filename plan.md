@@ -22,17 +22,7 @@ Tier 2 — is deliberately unscheduled until phase one has been lived with (§20
 
 | Item | Where it is described | Why it is parked |
 |---|---|---|
-| **Context-scoped preview pool** | `docs/CGUI_WORKBENCH_SERVICES.md` → *The disposal protocol for GL resources* | `CgPreviewSlots` is per-`CgPreviewRenderer`, so N open graphs hold N pools — and only one graph is visible at a time, so the other N-1 are holding framebuffers nothing is drawing. Moving the pool to context scope makes closing a graph pure bookkeeping and tab-switching allocation-free. A CrystalGraphics change; no current bug depends on it, and until it lands **prefer not disposing a graph over disposing it**, because the churn costs more than the retention |
-
----
-
-## 0. Why this document exists
-
-The dock, the workbench and the editor were each built to answer the question in front of us at the
-time. Every individual answer is defensible; the accumulation is not. The symptoms we have actually
-paid for, in order:
-
-| Symptom | Root cause |
+| ~~**Context-scoped preview pool**~~ **DONE** | `docs/CGUI_WORKBENCH_SERVICES.md` → *The disposal protocol for GL resources* | Shipped as `CgPreviewPool`: one pool per `(size, samples)`, scoped per renderer. Closing a graph releases keys and deletes nothing; the context frees the targets at teardown. Un-parked because making a closed tab release its document turned the retention advice into a real cost — a close/reopen cycle was deleting and re-creating framebuffers. |
 |---|---|
 | Tool window reopened at the wrong size | placement derived from the tree instead of stored |
 | …then at the wrong wall | anchor was static, not updated on drag |

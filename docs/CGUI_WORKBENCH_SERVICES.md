@@ -98,22 +98,26 @@ preview keys, delete nothing — and reopening it should allocate nothing, becau
 the targets. The FBOs live as long as the context, which is the lifetime they should have had all
 along.
 
-#### The gap today
+#### How it was closed
 
-`CgPreviewSlots` is already the right primitive — capacity-bounded, LRU, with `acquire`/`release`/
-`retainOnly`. It is instantiated **per `CgPreviewRenderer`, therefore per open graph**:
+`CgPreviewSlots` was instantiated **per `CgPreviewRenderer`, therefore per open graph**, so N open graphs
+held N × capacity targets and closing one *deleted a whole pool*. It is now owned by
+`CgPreviewPool` — one shared pool per `(size, samples)`, keyed by a per-renderer **scope prefix** so one
+graph's cull cannot release another's targets.
 
-```java
-this.targets = new CgPreviewSlots<>(capacity, () -> new CgPreviewTarget("cg_preview", size, samples));
-```
+| | Before | Now |
+|---|---|---|
+| Memory | scales with graphs **open** | bounded by capacity — what is **visible** |
+| Close a graph | deletes its framebuffers | releases keys; deletes nothing |
+| Reopen | allocates a pool | takes slots back; allocates nothing |
+| Teardown | every renderer's owner had to remember `delete()` | `CgGraphicsLifecycle.destroyContext()` frees the pool |
 
-So N open graphs hold N × capacity targets, and closing one deletes a whole pool. The decisive point
-is that **only one graph is visible at a time** — the others are behind tabs and are not drawing — so a
-single context-scoped pool of the same capacity would serve every graph with a fraction of the memory
-and no allocation on tab switch.
+That last row is the ownership point made real: the targets are `createOwned`, so no registry sweeps them,
+and release depended on somebody remembering — which is the thing an ownership tree exists to stop
+depending on.
 
-Moving the pool up a level is a CrystalGraphics change and is tracked in `plan.md`; until it lands,
-prefer **not disposing** a graph over disposing it, because the churn costs more than the retention.
+`CgPreviewRenderer.delete()` still deletes its own two meshes. Those are genuinely its own, and they are
+the small half.
 
 #### The rule that follows
 
