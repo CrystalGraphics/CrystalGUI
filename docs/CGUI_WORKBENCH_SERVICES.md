@@ -21,9 +21,9 @@ looks like a needed helper is the symptom of one that does not — see
 | `Disposer` — ownership and lifetime | **shipped** | [Disposal](#disposal) |
 | `DataContext` — "what am I acting on" | **shipped** | [Data context](#data-context) |
 | Typed service events — replacing polling | **shipped** | [Service events](#service-events) |
-| `Resource` — URI schemes, virtual documents | **part shipped** — the type, the provider SPI and the registry; documents are still keyed by `CgPath` | [Resources](#resources) |
-| `DockPane` — retargetable panel views | planned (plan §18) | — |
-| `DockService` — `open(input, placement)` | planned (plan §19) | — |
+| `Resource` — URI schemes, virtual documents | **shipped** | [Resources](#resources) |
+| `DockPane` — retargetable panel views | **part shipped** — types + provider selection; the group wiring is blocked, see below | [Panes and placement](#panes-and-placement) |
+| `DockService` — `open(input, placement)` | **part shipped** — `DockPlacement`, `groupOf`, `leafOf`; `open()` waits on panes | [Panes and placement](#panes-and-placement) |
 
 ---
 
@@ -545,8 +545,83 @@ graph* rather than one shared panel showing whichever is in front.
   what it was derived from, and a pane can render a banner over empty but not over an exception.
 - Registration is explicit and global, for the same reasons commands are.
 
-### Not wired yet
+### `FileDocument.resource()` — and what it deleted
 
-`FileDocument` has no `resource()`, and `OpenDocuments` is still keyed by `CgPath` — so the generated
-shader still goes through `CrystalEditor`'s graph-path map. That re-key touches the session codec and
-needs a version bump; it is plan §17.5–17.6.
+A document says what it *is* (IntelliJ's `FileEditor.getFile()`, VS Code's `EditorInput.resource`).
+Without it, going from a document back to its address needs a map maintained beside the document store —
+`CrystalEditor` had `Map<String, ShaderGraphEditor>` plus a **reverse linear scan** to answer "which graph
+is this". Gone, with `graphForPath` and `pathOf`.
+
+The generated shader's tab input is now the derived resource itself, so a restored session resolves by
+**parsing its own input** — nothing has to have been rebuilt first, which the map could not promise.
+
+### `OpenDocuments` stays keyed by `CgPath`, deliberately
+
+It is the *disk* store: `onDisk` bytes, `unreadable`, `requested`, `markSaved`. A derived resource has no
+disk presence, so re-keying would give every entry fields half of them can never use — the flag-shaped
+design schemes exist to replace. **A derived document needs a provider and a view, not a slot in the file
+store.**
+
+No session version bump either. That tab's state used to be the graph's bare path, which parses as a
+project resource with no origin; reading it as the origin itself is one line, and the forms are
+unambiguous — a derived resource always has an origin, a bare path never does.
+
+---
+
+## Panes and placement
+
+`com.crystalgui.ui.elements.dock` — `DockInput`, `DockPane`, `DockPaneProvider`, `DockPlacement`.
+
+### `DockInput` — the runtime form of what a tab shows
+
+`DockPanelRef` stays the **persisted** form; `DockInput` wraps it, so the session codec is untouched
+(`ref()` is what gets written). What it adds is the question a ref cannot answer without every caller
+re-deriving it: which `Resource` this panel is about.
+
+- Unparseable state degrades to a **null resource, never a throw** — this runs while a layout is built
+  from a saved session, so one odd value costs that panel its content and not the whole restore.
+- `matches()` is **ref equality**. A ref's identity includes its state, which is what makes two file tabs
+  on different paths different panels; comparing resources alone would make two panel *types* over one
+  file look like one input, and a retarget would be skipped with the pane pointed at the wrong thing.
+
+### `DockPane` — one instance per (group, type), retargeted
+
+VS Code's `EditorPane`, IntelliJ's `FileEditor`. `setInput` / `clearInput` / `onVisible` / `onHidden`, with
+`writeViewState`/`readViewState` **keyed by the framework**. A pane that keyed its own state is the
+stacked-inspector bug one level down.
+
+> **The contract:** a pane holds no per-input state except through view state, because two tabs of one
+> type in one group share the instance.
+
+`DockPaneProvider.accepts` + `priority()` resolve the two-providers-one-input case — IntelliJ's
+`FileEditorPolicy` — independent of registration order.
+
+**Not wired into `DockGroup` yet, and the reason matters.** A pane is one instance per *type*, while
+`DockGroup.content` is keyed per *panel*: two tabs of one type would resolve to the same element and
+`rebuildStrip` would parent one element into two tabs — the *"cannot add the same child twice"* bug this
+package has paid for twice. The fix is that only the **active** tab has a body at all, so the view must be
+re-parented on every activation — and `sync()` runs during a tab click, which is exactly when a widget
+must not re-parent what is being clicked.
+
+### `DockPlacement` — "where", as a request
+
+```java
+dockArea.groupOf(myElement)                          // the group I am in
+DockPlacement.resolve(DockPlacement.with(me), dock)  // "next to me"
+```
+
+VS Code's `PreferredGroup`, typed: `active()`, `side(zone)`, `with(element)`, `central()`, `leaf()`.
+Until placement is a value, "open this next to me" is not a request a widget can make —
+`CrystalEditor.showCompiled` hand-rolled `layout().leafContaining(refFor(parse(path)))`, an application
+reaching through the dock and the layout to ask what the dock knows about itself.
+
+- **`groupOf` walks `getParent()`**, which returns the real parent regardless of how a child was added. A
+  panel's content is often an internal child of a composite, so skipping internal parents would answer
+  null for exactly the widgets built properly.
+- **`resolve` returning null is ordinary**: `with()` may name an element outside any dock, `side()` names
+  a split that does not exist yet. Opening reads null as "make one"; asking reads it as "nowhere".
+- `active()` falls back the way `activeGroup()` does, so a placement asked for before anything is clicked
+  answers with the work area — the same bug class that made `Ctrl+S` silently do nothing after a restore.
+
+`DockService.open()` is not here: opening needs the insertion logic in `Workbench.openPanel*`, and folding
+that into the dock only removes duplication once panes exist.
