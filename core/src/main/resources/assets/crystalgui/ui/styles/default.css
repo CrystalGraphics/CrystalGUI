@@ -3616,7 +3616,6 @@ dockgroup .__missing__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
-    flex-shrink: 1;
 }
 
 .__view-container__ .__header__ {
@@ -3646,11 +3645,10 @@ dockgroup .__missing__ {
     color: #E0E0E0;
 }
 
-.__view-container__ .__content__ {
+.__view-container__ .__view-content__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
-    flex-shrink: 1;
 }
 
 /* The rail's bottom-anchored group: the first one pushes itself and everything after it down. */
@@ -3666,7 +3664,6 @@ dockgroup .__missing__ {
 
 .__region-host__ {
     flex-grow: 1;
-    flex-shrink: 1;
     overflow: hidden;
 }
 
@@ -4138,7 +4135,6 @@ workbench .__activity-bar__ {
  * framed and empty while a file was open behind it. Grow along the axis you are actually in. */
 workbench .__dock__ {
     flex-grow: 1;
-    flex-shrink: 1;
     width: 100%;
     height: 0;
 }
@@ -4146,15 +4142,20 @@ workbench .__dock__ {
 /* The region frame fills the row beside the activity bar. */
 workbench .__workbench-regions__ {
     flex-grow: 1;
-    flex-shrink: 1;
     width: 0;
     height: 100%;
+}
+
+/* A split is mounted inside the frame box, or inside another split's pane. Column-filling either way. */
+.__workbench-split__ {
+    flex-grow: 1;
+    width: 100%;
+    height: 0;
 }
 
 /* Also a pane's child, so also column-filling -- see the region rule below. */
 .__workbench-centre__ {
     flex-grow: 1;
-    flex-shrink: 1;
     width: 100%;
     height: 0;
 }

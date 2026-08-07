@@ -32,7 +32,16 @@ public class ViewContainer extends UIElement {
     public static final String HEADER_CLASS = "__header__";
     public static final String TITLE_CLASS = "__title__";
     public static final String HIDE_CLASS = "__hide__";
-    public static final String CONTENT_CLASS = "__content__";
+    /**
+     * UNIQUE, never the shared {@code "__content__"}.
+     *
+     * <p>{@code ConfiguratorGroup} names its body that too, so a descendant rule written against
+     * {@code .__view-container__ .__content__} reaches <b>every group in every panel inside this
+     * container</b> — which gave each one {@code height: 0} and collapsed Preview, Compile and About to a
+     * sliver while their chevrons said open. {@code CrystalEditor.CONTENT_CLASS} carries the same warning
+     * for the same reason.</p>
+     */
+    public static final String CONTENT_CLASS = "__view-content__";
 
     private final String containerId;
     private final UIElement header = new UIElement();

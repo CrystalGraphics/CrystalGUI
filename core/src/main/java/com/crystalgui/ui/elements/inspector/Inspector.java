@@ -89,6 +89,28 @@ public class Inspector extends UIElement implements UIFrameTicker {
         subscriptions.add(InspectorRegistry.onDidChangeSubject.connect(this::refresh));
         // AND THE FOCUS OWNER, which is where the subject actually comes from — see subjectFrom.
         subscriptions.add(current.getInputHandler().onDidChangeFocus.connect(this::onFocusChanged));
+
+        // AND RE-ASK, because entering a tree is itself a reason the answer may have changed.
+        //
+        // A RegionHost re-parents its occupant on every sync -- SplitView.paneContent clears and re-adds
+        // -- so being detached and reattached is a ROUTINE state here rather than an edge case. Anything
+        // resolved while detached was resolved against a tree this element was not in, and shownKey then
+        // latches that answer: the panel sits empty for a subject it would happily describe, and nothing
+        // later disagrees with it because the key never changes again.
+        //
+        // NOT by clearing shownKey, which is what this did first and was a real bug: the key is also what
+        // the "nothing can describe it, keep the last subject" rule below tests. Clearing it disables that
+        // rule for one rebuild -- and a rebuild is exactly what a re-parent triggers.
+        //
+        // Closing a region does BOTH at once. The press moves focus to the header's close button, so
+        // inspect(thatButton) is queued; hiding the region re-parents this element; and the rebuild then
+        // ran against a button with the retention rule switched off. The panel blanked, and clicking the
+        // graph brought it back -- which is precisely what a lost subject looks like rather than a lost
+        // layout.
+        //
+        // Setting pending alone is enough: a genuinely different answer has a different key and gets
+        // through on its own merit, and one that resolves to nothing is held back as it should be.
+        pending = true;
     }
 
     /** Everything this inspector subscribed to that outlives it. @see #onWindowChanged */
@@ -176,6 +198,21 @@ public class Inspector extends UIElement implements UIFrameTicker {
     }
 
     private void rebuild(@Nullable UIElement source) {
+        // A DETACHED SUBJECT ANSWERS NOTHING, and that is not the same as "nothing to describe".
+        //
+        // DataContext walks up from the source, so an element that is momentarily out of the tree finds
+        // no providers and looks exactly like an unremarkable subject. Regions re-parent constantly --
+        // closing any one of them re-mounts the others -- so this fires routinely, and rebuilding on it
+        // wiped the graph's tabs every time a panel was closed.
+        //
+        // Keeping what is shown is the same rule the no-sections branch below follows, for the same
+        // reason: the panel should only change when there is a better answer, never because the question
+        // was asked at a bad moment.
+        // Only while THIS inspector is live. A headless caller inspects detached elements deliberately --
+        // that is the whole of how the contribution tests work -- and there the subject being out of a
+        // tree is the normal case rather than a symptom.
+        if (getAttachedWindow() != null && source != null && source.getAttachedWindow() == null) return;
+
         DataContext context = source == null ? null : DataContext.from(source);
         List<InspectorSection> sections =
                 context == null ? List.of() : InspectorRegistry.sectionsFor(context);
