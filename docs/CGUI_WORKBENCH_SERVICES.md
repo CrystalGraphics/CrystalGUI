@@ -21,7 +21,7 @@ looks like a needed helper is the symptom of one that does not — see
 | `Disposer` — ownership and lifetime | **shipped** | [Disposal](#disposal) |
 | `DataContext` — "what am I acting on" | **shipped** | [Data context](#data-context) |
 | Typed service events — replacing polling | **shipped** | [Service events](#service-events) |
-| `Resource` — URI schemes, virtual documents | planned (plan §17) | — |
+| `Resource` — URI schemes, virtual documents | **part shipped** — the type, the provider SPI and the registry; documents are still keyed by `CgPath` | [Resources](#resources) |
 | `DockPane` — retargetable panel views | planned (plan §18) | — |
 | `DockService` — `open(input, placement)` | planned (plan §19) | — |
 
@@ -504,3 +504,49 @@ per frame until the workspace is mapped — there is no "change" to announce, th
 opened, and a packet sent earlier is discarded with no error. The latch is set on the *attempt*, not on
 success, so calling it from `onWindowChanged` poisons it permanently — twelve explorer tests came up with
 no project roots. It needs a session-opened announcement.
+
+---
+
+## Resources
+
+`com.crystalgui.fs` — `Resource`, `ResourceContentProvider`, `ResourceRegistry`.
+
+**A tab's input, whether or not it is a file.** A workbench opens things with no disk presence — a
+generated shader, a diff, an untitled buffer — and both references model that with a *scheme* rather than
+a flag (VS Code's `URI` + `IFileSystemProvider`, IntelliJ's `VirtualFile` + `VirtualFileSystem`).
+
+```java
+Resource.of(cgPath)                                   // project://, spelled as the bare path
+Resource.of("untitled", "buffer-1")                   // untitled://buffer-1
+Resource.derived("shader-generated", Resource.of(p))  // shader-generated://mymod.proj:fire.shadergraph
+Resource.parse(text)                                  // round-trips all of the above
+```
+
+### The project scheme keeps `CgPath`'s exact text
+
+Not negotiable: `CgPath` is written into saved documents and must round trip *"exactly and forever"*. So a
+project resource is spelled as the bare path and everything else as `scheme://path`. They cannot collide,
+because a project id may not contain `/` and so `://` cannot occur in the existing form — which is why
+`parse` looks for the marker first. **A colon inside a path segment is still a project path.**
+
+### Derived resources carry their origin, in the text
+
+`shader-generated://mymod.proj:fire.shadergraph`. That relationship is what an application would otherwise
+keep a map for, and because it survives `parse` it survives a saved session with nothing to keep in step.
+Five graphs give five distinct generated resources — which is what makes a compiled source a *document per
+graph* rather than one shared panel showing whichever is in front.
+
+### Rules
+
+- **The project scheme refuses a provider.** It is read through the workspace client, which needs a
+  session and a round trip; a provider is a synchronous byte-returning method reached from a paint path.
+- **Unregistered schemes are read-only.** Refusing to write something nobody claims is the safe direction.
+- **`read()` must answer when the origin is gone** — empty bytes, never a throw. A derived tab outlives
+  what it was derived from, and a pane can render a banner over empty but not over an exception.
+- Registration is explicit and global, for the same reasons commands are.
+
+### Not wired yet
+
+`FileDocument` has no `resource()`, and `OpenDocuments` is still keyed by `CgPath` — so the generated
+shader still goes through `CrystalEditor`'s graph-path map. That re-key touches the session codec and
+needs a version bump; it is plan §17.5–17.6.

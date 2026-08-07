@@ -11,7 +11,7 @@
 | 2 | `DataContext` + context keys (§15) | **DONE** |
 | 2.5 | Commands: global registration, context-resolved (§15b) | **DONE** — all three owner-capturing classes migrated; `install` is gone |
 | 3 | Typed service events; delete the polling loops (§16) | **DONE** — 6 of 7 landings; loadProjects deferred to step 4, see §16.8 |
-| 4 | `Resource`: schemes, virtual documents (§17) | not started |
+| 4 | `Resource`: schemes, virtual documents (§17) | **part done** — Resource/provider/registry shipped + tested; the re-key (§17.5–17.6) is not started |
 | 5 | `DockPane`: retargetable views (§18) | not started |
 | 6 | `DockService.open` + `DockPlacement` (§19) | not started |
 
