@@ -136,7 +136,7 @@ behaves.
 
 | Action | Disposes? | Why |
 |---|---|---|
-| **Close a tab** | no | Nothing tells the panel — the step-3 gap. Also the *right* answer once pooling lands, since a closed graph should return slots rather than delete anything |
+| **Close a tab** | **yes**, when it was the last panel showing that path | `DockArea.onDidClosePanel` → `Workbench` releases the document and emits `onDidCloseDocument`. Guarded on "is anything else still showing this", because one document can have several panels — releasing on the first close leaves the surviving tab drawing something torn down, which is worse than the leak because it fails while looking fine. Derived resources are skipped: releasing a graph because its generated-source tab closed would take the document with it |
 | **Rename / move a file** | **no** | Goes through `OpenDocuments.retarget`, not `close`. It is the same document at a new address; disposing and rebuilding would discard unsaved work and churn GL for a path change |
 | **Delete a file** | **yes** | `WorkspaceFileService` closes what was open under it. The document is genuinely dead |
 | **Close the editor** | yes | `Disposer.dispose(editor)` — the root of the tree |
@@ -442,6 +442,8 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 | Signal | Owner | Replaced |
 |---|---|---|
 | `onDidChangeActivePanel` | `DockArea` | three per-frame polls at once |
+| `onDidClosePanel` | `DockArea` | nothing — the fact nobody could state |
+| `onDidOpenDocument` / `onDidCloseDocument` | `Workbench` | `onDocumentLoaded`, and its missing half |
 | `onDidChangeLayout` | `DockArea` | the activity bar's `:checked` sweep |
 | `onDidRegister` | `DockPanelRegistry` | the activity bar's descriptor walk |
 | `onDidLoadListing` | `WorkspaceTreeSource` | `WorkbenchSession.tick`'s per-frame restore retry |
@@ -625,3 +627,42 @@ reaching through the dock and the layout to ask what the dock knows about itself
 
 `DockService.open()` is not here: opening needs the insertion logic in `Workbench.openPanel*`, and folding
 that into the dock only removes duplication once panes exist.
+
+---
+
+## Opening things
+
+**One opener, and it is the dock's.**
+
+```java
+workbench.open(input);                                              // central, activated
+workbench.open(input, DockPlacement.with(me), DockOpenOptions.ACTIVATE);
+workbench.open(input, DockPlacement.side(SPLIT_RIGHT),
+               DockOpenOptions.INACTIVE.withShare(0.28f));
+```
+
+This replaced `openPanel(ref)`, `openPanelWith(sibling, ref)` and `openPanelBeside(ref, zone, share)` —
+three methods that read as three operations and were one operation with two independent variables. Their
+real differences were buried in their bodies: one activated what it opened, one deliberately restored the
+previous selection, one set a size share. **A caller wanting "beside, without stealing focus" had no
+overload and no way to ask.** That is why VS Code's is `openEditor(input, options, group)`.
+
+`showCompiled` went from fourteen lines to one.
+
+### Rules
+
+- **"Already open" wins over placement**, in one place rather than in two of three overloads. Re-opening
+  something on screen means "show me that one", never "make a second copy somewhere else".
+- **A ref is a panel's identity**, so the same ref cannot be opened twice. Two tabs on one file means two
+  panel *types* over one path, which is what the release guard checks for.
+- `open` returns the leaf it landed in, so a caller acts on it rather than searching for it again.
+
+## `UIElement.setOnlyChild`
+
+**"Show one of several things in this slot", done correctly.** Not
+`clearAllChildren().addChild(wanted)` — that skips internal children *by design*, and a composite widget
+routinely marks itself internal, so the obvious pair leaves the outgoing child in place and stacks the
+incoming one underneath. That was "two inspectors in one tab", and it read as a paint bug.
+
+Removing through the **matching** API is the fix rather than un-marking the child: internal is the child's
+own statement about its parts, and it is right. The host was what assumed one kind of child.
