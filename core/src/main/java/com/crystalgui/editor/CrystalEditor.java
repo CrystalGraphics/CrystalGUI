@@ -27,6 +27,8 @@ import com.crystalgui.ui.elements.dock.DockLeaf;
 import com.crystalgui.ui.elements.dock.DockLayoutCodec;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPlacement;
+import com.crystalgui.ui.elements.dock.DockInput;
+import com.crystalgui.ui.elements.dock.DockOpenOptions;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.workbench.FileDocument;
 import com.crystalgui.ui.elements.workbench.Workbench;
@@ -311,8 +313,10 @@ public class CrystalEditor extends UIElement implements Disposable {
         // The Inspector opens with the workbench; the generated source does not. It is now a document
         // opened on demand by showCompiled(), so putting one in the default layout would mean a tab for a
         // graph nobody has opened yet.
-        workbench.openPanelBeside(new DockPanelRef(INSPECTOR_TYPE),
-                DockDropZone.SPLIT_RIGHT, SOURCE_SHARE);
+        workbench.open(DockInput.of(new DockPanelRef(INSPECTOR_TYPE)),
+                DockPlacement.side(DockDropZone.SPLIT_RIGHT),
+                // Not activated: a companion pane should not take the work area's focus at startup.
+                DockOpenOptions.INACTIVE.withShare(SOURCE_SHARE));
 
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
@@ -430,21 +434,11 @@ public class CrystalEditor extends UIElement implements Disposable {
         DockPanelRef ref = new DockPanelRef(SHADER_SOURCE_TYPE)
                 .withState(Workbench.PATH_STATE, generated.toString())
                 .withState(DockPanelRef.TITLE, compiledTitleFor(generated));
-        // WHERE, as a request rather than a search. This used to be
-        // layout().leafContaining(refFor(parse(path))) -- an application reaching through the dock and
-        // the layout to answer a question the dock can answer about itself.
-        DockLeaf beside = DockPlacement.resolve(DockPlacement.with(graph), workbench.dock());
-        DockPanelRef graphRef = workbench.refFor(origin.asPath());
-        if (beside != null || workbench.dock().layout().leafContaining(graphRef) != null) {
-            workbench.openPanelWith(graphRef, ref);
-            // openPanelWith deliberately restores the previous selection -- right for its original caller
-            // and wrong here, since this tab is open because someone just asked to see it.
-            DockLeaf strip = workbench.dock().layout().leafContaining(ref);
-            if (strip != null) strip.activate(ref);
-            workbench.dock().syncGroups();
-        } else {
-            workbench.openPanel(ref);
-        }
+        // WHERE and HOW, as a request. This was fourteen lines: resolve the graph's ref, ask the layout
+        // which leaf holds it, branch on that, open beside it, then UNDO the "restore the previous
+        // selection" the overload did -- because that behaviour was right for its original caller and
+        // wrong here, and there was no way to ask for the other one.
+        workbench.open(DockInput.of(ref), DockPlacement.with(graph), DockOpenOptions.ACTIVATE);
         return true;
     }
 

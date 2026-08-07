@@ -34,6 +34,10 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.ui.elements.dock.DockInput;
+import com.crystalgui.ui.elements.dock.DockOpenOptions;
+import com.crystalgui.ui.elements.dock.DockPlacement;
+import com.crystalgui.ui.elements.dock.DockLeaf;
 
 /**
  * The tool-window rail — IntelliJ's stripe, VS Code's Activity Bar.
@@ -167,7 +171,7 @@ public class ActivityBarTest extends UiTestBase {
         var host = workbench.dock().layout().leafContaining(new DockPanelRef(Workbench.PROBLEMS_TYPE));
         assertNotNull(host);
         workbench.dock().layout().drop(host, DockDropZone.SPLIT_DOWN,
-                new com.crystalgui.ui.elements.dock.DockLeaf(console));
+                new DockLeaf(console));
         workbench.dock().requestRebuild();
         settle();
 
@@ -244,7 +248,7 @@ public class ActivityBarTest extends UiTestBase {
         // openPanelBeside: that nests the panel next to a leaf rather than against the root, and a nested
         // panel is genuinely not "on an edge" -- see the limitation noted on Workbench.outerEdgeOf.
         workbench.dock().layout().dropOnOuterEdge(DockDropZone.SPLIT_DOWN,
-                new com.crystalgui.ui.elements.dock.DockLeaf(new DockPanelRef(Workbench.PROJECT_TYPE)));
+                new DockLeaf(new DockPanelRef(Workbench.PROJECT_TYPE)));
         workbench.dock().requestRebuild();
         settle();
 
@@ -260,7 +264,7 @@ public class ActivityBarTest extends UiTestBase {
     }
 
     /** Which outer edge a leaf sits against — the same rule {@code dropOnOuterEdge} inverts. */
-    private DockDropZone edgeOf(com.crystalgui.ui.elements.dock.DockLeaf leaf) {
+    private DockDropZone edgeOf(DockLeaf leaf) {
         com.crystalgui.ui.elements.dock.DockNode node = leaf;
         var root = workbench.dock().layout().root();
         while (node.parent() != null && node.parent() != root) node = node.parent();
@@ -285,7 +289,8 @@ public class ActivityBarTest extends UiTestBase {
         register();
         // Put the console in the SAME leaf as Problems, so they are two tabs in one pane.
         DockPanelRef console = new DockPanelRef(TOOL_TYPE);
-        workbench.openPanelWith(new DockPanelRef(Workbench.PROBLEMS_TYPE), console);
+        workbench.open(DockInput.of(console),
+                DockPlacement.with(workbench.problems()), DockOpenOptions.INACTIVE);
         settle();
         var shared = workbench.dock().layout().leafContaining(console);
         assertNotNull(shared);

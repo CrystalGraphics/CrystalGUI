@@ -36,6 +36,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.ui.elements.dock.DockInput;
+import com.crystalgui.ui.elements.dock.DockOpenOptions;
+import com.crystalgui.ui.elements.dock.DockPlacement;
 
 /**
  * Which panels the editor ships, and where they land.
@@ -97,8 +100,8 @@ public class CrystalEditorPanelsTest extends UiTestBase {
         ShaderGraphEditor second = (ShaderGraphEditor) editor.workbench().documentFor(two);
 
         // Each graph opened as its own tab first, so its generated source has a strip to join.
-        editor.workbench().openPanel(editor.workbench().refFor(one));
-        editor.workbench().openPanel(editor.workbench().refFor(two));
+        editor.workbench().open(DockInput.of(editor.workbench().refFor(one)));
+        editor.workbench().open(DockInput.of(editor.workbench().refFor(two)));
 
         assertTrue("the first graph's generated source did not open", editor.showCompiled(first));
         assertTrue("the second graph's generated source did not open", editor.showCompiled(second));

@@ -34,6 +34,9 @@ import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.ui.elements.dock.DockInput;
+import com.crystalgui.ui.elements.dock.DockOpenOptions;
+import com.crystalgui.ui.elements.dock.DockPlacement;
 
 /**
  * Opening a file, and acting on the tab it opened in.
@@ -100,7 +103,7 @@ public class WorkbenchFileTabTest extends UiTestBase {
     private TextEditor openWithContent(CgPath path) {
         TextEditor editor = workbench.editorFor(path);
         editor.setText(README);
-        workbench.openPanel(workbench.refFor(path));
+        workbench.open(DockInput.of(workbench.refFor(path)));
         settle();
         return editor;
     }
