@@ -4075,23 +4075,17 @@ texteditor.__file-editor__ {
     flex-grow: 1;
 }
 
-/* A PANEL THAT FOLLOWS SOMETHING, rather than being it — the compiled source and the Inspector, each of
- * which shows whichever shader graph is in front.
+/* A PANEL THAT FOLLOWS SOMETHING, rather than being it — the Inspector, which shows whichever shader
+ * graph is in front.
  *
- * The dock sizes whatever the registry hands it, and it used to be handed the editor's own source()
- * directly, which therefore got the panel's box. A wrapper in between takes that box and then hands its
- * child CONTENT height, because Taffy's flex-shrink defaults to 0 and a column child with no basis keeps
- * its own size — so the panel measures right and paints empty. Same trap `__file-editor__` above records,
- * one level further out.
+ * The dock sizes whatever the registry hands it, and Taffy's flex-shrink defaults to 0, so a column child
+ * with no basis keeps its own CONTENT size: the panel measures right and paints empty. Same trap
+ * `__file-editor__` above records.
  *
- * The child rule is the half that is easy to forget: sizing the host alone leaves it correct and its
- * contents collapsed inside it. */
-.__panel-host__ {
-    width: 100%;
-    height: 0;
-    flex-grow: 1;
-}
-.__panel-host__ > * {
+ * This used to be a `__panel-host__` wrapper with a `> *` rule, because the inspector was swapped INTO a
+ * host element. The inspector is retargeted in place now and is handed the panel's box directly, so it
+ * carries the rule itself — and the child half, which was the easy half to forget, is simply gone. */
+.__graph-inspector__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
