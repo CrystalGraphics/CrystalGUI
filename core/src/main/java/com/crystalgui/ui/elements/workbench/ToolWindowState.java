@@ -1,15 +1,9 @@
 package com.crystalgui.ui.elements.workbench;
 
-import com.crystalgui.ui.elements.dock.DockDropZone;
-import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockRegion;
-import com.crystalgui.ui.elements.dock.DockPath;
+import com.crystalgui.ui.elements.dock.RegionSide;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
-
-import javax.annotation.Nullable;
 
 /**
  * Everything known about one tool window, whether or not it is currently on screen — a port of IntelliJ's
@@ -29,25 +23,24 @@ import javax.annotation.Nullable;
  * it has collapsed. The record makes placement a thing that is <b>stored</b>, so closing stops being
  * destructive.</p>
  *
- * <h3>What each field is for, and which are ours rather than IntelliJ's</h3>
+ * <h3>The anchor is gone, and the region is a real field now</h3>
  *
- * <p>{@link #anchor}, {@link #weight}, {@link #order}, {@link #visible} and {@link #active} are the direct
- * counterparts. Two are additions this design needs because it keeps tool windows in the same tree as
- * documents — which IntelliJ does not, and which is the trade
- * {@code DockPanelDescriptor} documents:</p>
+ * <p>{@link #region()} used to be <em>derived</em> from a {@code DockDropZone} anchor — "the sidebar" said
+ * as "against the left wall" — with a javadoc promising the real field would arrive <i>"when a region
+ * becomes a real element"</i>. It is one: {@link WorkbenchRegions} holds four, {@link RegionHost} is keyed
+ * by them, and nothing about a tool window's placement is expressed as a wall any more.</p>
  *
- * <ul>
- *   <li>{@link #path} — the structural position. IntelliJ needs no equivalent because its tool windows are
- *       never in a tree; an anchor plus a weight fully determines where one goes. Here a panel may sit
- *       <em>inside</em> the tree, and nothing about a wall describes that.</li>
- *   <li>{@link #groupedWith} — the panels sharing its strip. Same reason: IntelliJ's tool windows do not
- *       share a tab strip with an editor, so the situation cannot arise there.</li>
- * </ul>
+ * <p>Keeping the derivation while adding {@link #side()} would have left two placement facts where there is
+ * only one truth, and the stored one would win in some paths and the derived one in others. That is the
+ * failure this whole record exists to stop.</p>
  *
- * <p>{@code sideWeight}, {@code type} (docked/floating/windowed) and {@code autoHide} are deliberately
- * <b>not</b> ported: floating tool windows do not exist here, and a side weight only means something on a
- * stripe that stacks two tool windows on one wall, which is a feature of IntelliJ's tool-window host
- * rather than of a dock tree. They are named here so their absence reads as a decision.</p>
+ * <h3>{@code sideWeight} — refused once, ported now</h3>
+ *
+ * <p>{@link #side()} is IntelliJ's {@code isSplit}. §23.5 named it as deliberately not ported; plan.md §24.5
+ * reverses that, and the reversal is the honest part — the reason given was that stacking two tool windows
+ * on one wall belongs to a tool-window host rather than to a dock tree, which stopped being an argument the
+ * moment we started building a tool-window host. {@code type} (docked/floating/windowed) and {@code autoHide}
+ * are still absent: floating tool windows do not exist here. Named so their absence reads as a decision.</p>
  *
  * <p>Immutable, with withers — so a placement can be captured and handed around without any chance of a
  * caller mutating the record that another is about to persist.</p>
@@ -55,8 +48,9 @@ import javax.annotation.Nullable;
 public final class ToolWindowState {
 
     /** What a tool window nobody has ever opened is worth: enough to place it, nothing remembered. */
-    public static ToolWindowState initial(String typeId, DockDropZone anchor, int order) {
-        return new ToolWindowState(typeId, false, anchor, DEFAULT_WEIGHT, order, true, true);
+    public static ToolWindowState initial(String typeId, DockRegion region, int order) {
+        return new ToolWindowState(typeId, false, region, RegionSide.PRIMARY, DEFAULT_WEIGHT, order,
+                true, true);
     }
 
     /** The share of its axis a tool window takes when nothing has ever sized it. */
@@ -64,17 +58,19 @@ public final class ToolWindowState {
 
     private final String typeId;
     private final boolean visible;
-    private final DockDropZone anchor;
+    private final DockRegion region;
+    private final RegionSide side;
     private final float weight;
     private final int order;
     private final boolean active;
     private final boolean showStripeButton;
 
-    private ToolWindowState(String typeId, boolean visible, DockDropZone anchor, float weight, int order,
-                            boolean active, boolean showStripeButton) {
+    private ToolWindowState(String typeId, boolean visible, DockRegion region, RegionSide side, float weight,
+                            int order, boolean active, boolean showStripeButton) {
         this.typeId = Objects.requireNonNull(typeId, "typeId");
         this.visible = visible;
-        this.anchor = Objects.requireNonNull(anchor, "anchor");
+        this.region = Objects.requireNonNull(region, "region");
+        this.side = Objects.requireNonNull(side, "side");
         this.weight = weight;
         this.order = order;
         this.active = active;
@@ -90,24 +86,24 @@ public final class ToolWindowState {
         return visible;
     }
 
-    /** Which wall it opens against when {@link #path} cannot be honoured. */
     /**
      * The region this tool window belongs to — see {@link DockRegion}.
      *
-     * <p><b>Derived from {@link #anchor()} rather than stored</b>, deliberately: it is the same fact said
-     * the durable way, so deriving it costs no persisted field and therefore no version bump. The field
-     * appears — and the bump with it — at plan.md §23 step 7, when a region becomes a real element and an
-     * anchor stops being able to express one.</p>
-     *
-     * <p>Ask this rather than {@link #anchor()} in anything new. An anchor is a wall of the current tree;
-     * a region survives the tree changing, which is the whole point of the Parts model.</p>
+     * <p>Stored, not derived; see the class note. A region survives the tree changing, which is the whole
+     * point of the Parts model.</p>
      */
     public DockRegion region() {
-        return DockRegion.ofWall(anchor);
+        return region;
     }
 
-    public DockDropZone anchor() {
-        return anchor;
+    /**
+     * Which half of that region — see {@link RegionSide}.
+     *
+     * <p>Together with the region this is the <b>whole</b> of where a tool window lives, and it is what
+     * {@link StripeRail} derives the rail and the group from.</p>
+     */
+    public RegionSide side() {
+        return side;
     }
 
     /** Its share of the axis it divides — {@code DockNode.size()}. */
@@ -115,7 +111,7 @@ public final class ToolWindowState {
         return weight;
     }
 
-    /** Its position on the activity bar. */
+    /** Its position on the stripe. */
     public int order() {
         return order;
     }
@@ -125,33 +121,37 @@ public final class ToolWindowState {
         return active;
     }
 
-    /** Whether it appears on the activity bar at all — IntelliJ's {@code show_stripe_button}. */
+    /** Whether it appears on a stripe at all — IntelliJ's {@code show_stripe_button}. */
     public boolean showStripeButton() {
         return showStripeButton;
     }
 
     public ToolWindowState withVisible(boolean nowVisible) {
-        return new ToolWindowState(typeId, nowVisible, anchor, weight, order, active, showStripeButton);
+        return new ToolWindowState(typeId, nowVisible, region, side, weight, order, active, showStripeButton);
     }
 
-    public ToolWindowState withAnchor(DockDropZone nowAnchor) {
-        return new ToolWindowState(typeId, visible, nowAnchor, weight, order, active, showStripeButton);
+    public ToolWindowState withRegion(DockRegion nowRegion) {
+        return new ToolWindowState(typeId, visible, nowRegion, side, weight, order, active, showStripeButton);
+    }
+
+    public ToolWindowState withSide(RegionSide nowSide) {
+        return new ToolWindowState(typeId, visible, region, nowSide, weight, order, active, showStripeButton);
     }
 
     public ToolWindowState withWeight(float nowWeight) {
-        return new ToolWindowState(typeId, visible, anchor, nowWeight, order, active, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, side, nowWeight, order, active, showStripeButton);
     }
 
     public ToolWindowState withOrder(int nowOrder) {
-        return new ToolWindowState(typeId, visible, anchor, weight, nowOrder, active, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, side, weight, nowOrder, active, showStripeButton);
     }
 
     public ToolWindowState withActive(boolean nowActive) {
-        return new ToolWindowState(typeId, visible, anchor, weight, order, nowActive, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, side, weight, order, nowActive, showStripeButton);
     }
 
     public ToolWindowState withShowStripeButton(boolean shown) {
-        return new ToolWindowState(typeId, visible, anchor, weight, order, active, shown);
+        return new ToolWindowState(typeId, visible, region, side, weight, order, active, shown);
     }
 
     @Override
@@ -161,17 +161,17 @@ public final class ToolWindowState {
         return visible == other.visible && Float.compare(weight, other.weight) == 0
                 && order == other.order
                 && active == other.active && showStripeButton == other.showStripeButton
-                && typeId.equals(other.typeId) && anchor == other.anchor;
+                && typeId.equals(other.typeId) && region == other.region && side == other.side;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(typeId, visible, anchor, weight, order, active, showStripeButton);
+        return Objects.hash(typeId, visible, region, side, weight, order, active, showStripeButton);
     }
 
     @Override
     public String toString() {
-        return "ToolWindowState[" + typeId + (visible ? " visible" : " hidden") + " " + region()
+        return "ToolWindowState[" + typeId + (visible ? " visible" : " hidden") + " " + region + "/" + side
                 + " w=" + weight + "]";
     }
 }
