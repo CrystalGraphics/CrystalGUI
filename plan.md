@@ -20,6 +20,7 @@
 | 9 | Notifications + status, and the last hand-written menu | **DONE** — `com.crystalgui.core.notify`; `register(workbench)` takes nothing else; `BlackboardPanel`'s row menu is a `MenuId` query |
 | 10 | Editor banners, and the last per-frame poll | **DONE** — `DockBannerProvider` (§11 Tier 2's one kept item); `GraphView.discoverPortEditors` is push-based |
 | 11 | The Parts model, and the six foundations it needs (§23) | **IN PROGRESS** — F1, F3, F4, F5, F6 landed; F2 landed as shape only (see §23.6's correction: the deletion cannot precede step 7) |
+| 12 | The Parts stack — regions, containers, stripes, toolbar, status bar (§24) | **PLANNED** — full audit and design; three genuinely new mechanisms, everything else is composition over what steps 1–11 built |
 
 Steps 7 and 8 came from reading the result of 1–6: the six steps made the *framework* extensible and left
 `CrystalEditor` naming one application's file types, and left the Inspector a graph-shaped class. Neither
@@ -2814,3 +2815,220 @@ the durable way, so it costs no persisted field and therefore no version bump. T
 deletion all land together at step 7, which is when they stop being separable.
 
 **Revised:** F2 splits into **F2a — state it as a region** (done) and **F2b — delete the tiers** (step 7).
+
+---
+
+## 24. Step 12 — the Parts stack, in full
+
+> **Status: PLANNED.** The foundations (§23 F1, F3–F6, F2a) are in. This is the shell they were for.
+>
+> **Goal, stated by the user and taken literally: the same visual output and the same functionality as
+> IntelliJ's New UI.** Where VS Code differs it is noted, but IntelliJ is the target.
+
+### 24.1 The target
+
+```
++--------------------------------------------------------------+
+| MAIN TOOLBAR   burger | project | branch | run | search | gear |
++---+--------------+--------------------------------+------+---+
+| L |              |  EDITOR                        |      | R |
+| E |   SIDEBAR    |  +--------------------------+  | AUX  | S |
+| F |  (container) |  | tabs                     |  |(cont)| T |
+| T |              |  | gutter | text | stripe   |  |      | R |
+|   |              |  +--------------------------+  |      | I |
+| S +--------------+--------------------------------+------+ P |
+| T | PANEL   (container: Problems > File | Project | ...)  | E |
++---+-------------------------------------------------------+---+
+| STATUS BAR   breadcrumb path            51:39 CRLF UTF-8     |
++--------------------------------------------------------------+
+```
+
+**Two families, and the split is the design.** Content regions hold movable panels and are already spelled
+by {@link DockRegion}; chrome parts hold fixed furniture and deliberately are not — a panel cannot be put
+in the status bar, and an enum that lets you ask needs an answer.
+
+| Content region | VS Code | IntelliJ | Have |
+|---|---|---|---|
+| `EDITOR` | `EDITOR_PART` | `EditorsSplitters` | **yes** — `DockArea`, unchanged |
+| `SIDEBAR` | `SIDEBAR_PART` | `LEFT` anchor | no |
+| `PANEL` | `PANEL_PART` | `BOTTOM` anchor | no |
+| `AUXILIARY` | `AUXILIARYBAR_PART` | `RIGHT` anchor | no |
+
+| Chrome part | Contents | Have |
+|---|---|---|
+| Main toolbar | burger menu, project, branch, run config + run/debug, search, settings, bell | no |
+| Left stripe | two groups: top (Project, Commit, Structure…) and bottom (Terminal, Services…) | `ActivityBar`, flat, lists panels |
+| Right stripe | Notifications, Database, Gradle | no |
+| Status bar | breadcrumb left; caret, line ending, encoding, indent right | no |
+
+### 24.2 What this sits on — the reason it is mostly assembly
+
+The point of steps 1–11 was that this step should be small. It is worth listing, because every row is a
+piece of the Parts stack that already exists and is already tested:
+
+| Have | Does the work of |
+|---|---|
+| `SplitView` — n panes, weights, **and real min/max** (`setPaneSizeLimits`) | Region sizing. A weight cannot say "the sidebar is at least 150px"; this already can, and it is what VS Code's grid does |
+| `DockArea` / `DockLayout` / `DockPane` | The `EDITOR` region, entire. Untouched |
+| `TabView` | A container's view tabs — the `File | Project Errors | Qodana` strip |
+| `Popover` (`AUTO`) + top layer + light dismiss + close watchers | The burger menu overlay and every dropdown in it, including Escape and press-outside |
+| `Menu` / `MenuItem` / `ContextMenu` / `MenuId` (+ `nestedIn`) | The whole main menu: items, submenus, separators from group boundaries, accelerators read from the live keymap, dimming from `enabledWhen` |
+| `DockRegion`, `DockPanelKind`, `ViewId` | The vocabulary (§23 F5, F6, F3) |
+| `ToolWindowManager` | Visibility and placement, already extracted (§23 F1) |
+| `Notifications` / `StatusBar` service | The status bar's model, already keyed per writer |
+| `Breadcrumbs` | The status bar's left half |
+| `ErrorStripePart`, `InspectionWidgetPart`, `SquigglesPart`, `GutterEdgePart`, `LineNumbersPart` | Every editor-internal part in the reference shot. **Already done** |
+| `Disposer`, `DataContext`, `CommandRegistry`, `Keymap` | Lifetimes, subjects, every toolbar button's action |
+
+**Genuinely new mechanisms: three.** Region visibility/sizing persistence, menu mnemonics, and menubar
+hover-switching. Everything else is composition.
+
+### 24.3 The region shell
+
+```
+WorkbenchShell (column)
+  +-- MainToolbar                      chrome, fixed height
+  +-- body (row)
+  |     +-- StripeView LEFT            chrome, fixed width
+  |     +-- SplitView (horizontal)
+  |     |     +-- RegionHost SIDEBAR
+  |     |     +-- SplitView (vertical)
+  |     |     |     +-- DockArea            <- the EDITOR region
+  |     |     |     +-- RegionHost PANEL
+  |     |     +-- RegionHost AUXILIARY
+  |     +-- StripeView RIGHT            chrome, fixed width
+  +-- StatusBarView                     chrome, fixed height
+```
+
+**Regions are a fixed frame, not a dock tree — and that is the whole point.** You cannot drag the sidebar
+into the panel; you drag a *container* between them. Using `DockLayout` here would reintroduce exactly the
+problem §23 removed: a region whose identity has to be recovered from tree position.
+
+So `SplitView` rather than `DockLayout`, and the nesting above is deliberate: the panel spans the editor
+**and** the auxiliary bar in VS Code's default and IntelliJ's alike, which the vertical split inside the
+horizontal one gives for free.
+
+**`RegionHost`** is one element per region: it shows **one container at a time** (or two — see 24.4), owns
+the region's visibility class, and is the drop target for a container dragged from a stripe.
+
+**Persistence.** Region visibility and size are `ToolWindowState`'s job extended to regions, or a small
+`RegionState` beside it. This is where §23 F4's version 4 finally lands: the field, the bump and F2b's
+deletion of the restoration tiers all happen together, because they stop being separable once a region can
+hold a placement.
+
+### 24.4 `ViewContainer` and `View` — the split that was missing
+
+```
+ViewContainer  "Problems"   region = PANEL, order = 1
+   +-- View    "File"        <- TabView tab
+   +-- View    "Project Errors"
+   +-- View    "Qodana"
+```
+
+The reference shot shows this literally: **Problems is one container with four views as tabs.** Ours is one
+flat `ProblemsPanel`, which is why it is the right first container to build.
+
+- **`ViewContainerRegistry`** — container → its views, container → its region and order. A view **never**
+  names its container (§23 F3): membership is the container's, so moving a view is one write.
+- **The header** — title, chevron, kebab (`MenuId.VIEW_CONTAINER_CONTEXT`, so a container's menu is
+  contributable like every other), hide button.
+- **The tab strip** — a `TabView`, shown only when the container has more than one view. One view means the
+  header alone, which is what IntelliJ does for Project.
+- **Badges** — `IActivityService.showViewContainerActivity` is on the *container*, which is why badges could
+  not exist before this and why they are the same piece of work.
+
+### 24.5 The stripes, and the `sideWeight` reversal
+
+**`StripeView`** replaces `ActivityBar`. It lists **containers**, not panel types, and has **two groups** —
+top-anchored and bottom-anchored — which is what the left rail's split in the reference shot is.
+
+Dragging a container from one stripe to another **is** changing its region. That is the whole interaction,
+and it is a one-field write because the container owns its region.
+
+> **§23.5 said "do not port `sideWeight`". That is reversed here, and the reversal is the honest part.**
+>
+> The reason given was that stacking two tool windows on one wall is *"a feature of IntelliJ's tool-window
+> host rather than of a dock tree"*. True — and irrelevant once we are building a tool-window host. IntelliJ
+> splits a stripe: Project top-left, Structure bottom-left, one region divided along its cross axis. It is
+> visible behaviour in the target, so ruling it out on the old grounds would be keeping a decision after its
+> premise expired.
+>
+> **Port it, with IntelliJ's own limit: at most two containers per region**, split by a `SplitView`. That
+> limit is what keeps it a region rather than a second dock tree.
+
+### 24.6 The main toolbar, and the burger main menu
+
+The toolbar is one chrome part with two states of the same row, so its height never changes and no region
+re-measures when the menu opens.
+
+**Collapsed:** burger, project widget, branch widget, run configuration + run/debug/stop, search, settings,
+notifications bell.
+
+**Expanded (`Alt+\`, or clicking the burger):** the classic bar — File, Edit, View, Navigate, Code,
+Refactor, Build, Run, Tools, Git, Window, Help — **overlaid** across the row, collapsing when it stops being
+hovered or active.
+
+| Piece | How |
+|---|---|
+| The bar's items | `MenuId.MAIN_FILE`, `MAIN_EDIT`, … Each opens `ContextMenu.of(id)` — the same call `BlackboardPanel` already makes |
+| Submenus (`New >`, `Recent Projects >`) | `MenuId.nestedIn`, already working |
+| Accelerators, dimming, separators | Free: live keymap, `enabledWhen`, group boundaries |
+| Contribution | **Any package can add `File > New > Shader Graph` with one `.menu(...)` call and no reference to the bar** |
+| The overlay itself | `Popover` in `AUTO` mode — light dismiss and Escape come with it |
+
+**Two new mechanisms, and only two:**
+
+1. **Mnemonics.** `Alt+F` while the bar is showing, with the underline drawn *only while Alt is held*. This
+   is not an accelerator: it is scoped to the open menu, single-letter, and has a rendering half. `Keymap`
+   has no concept of it.
+2. **Menubar hover-switching.** With File open, moving onto Edit switches without a click. `Menu` has
+   `SubmenuTicker` for parent-to-child; sibling-to-sibling is the bar's own state and is the thing people
+   notice instantly when it is missing.
+
+### 24.7 The status bar
+
+**A name collision to settle first.** `com.crystalgui.core.notify.StatusBar` is the *service* (keyed items,
+no view). The widget is `StatusBarView` in `ui/elements/chrome`. Model and view, named so, rather than two
+`StatusBar`s in two packages — which compiles and reads as a mistake forever after.
+
+The service already does the hard half: items keyed per writer, replaced not accumulated, silent when
+unchanged. `StatusBarView` renders them, plus:
+
+- **Left:** the breadcrumb path — `Breadcrumbs` exists.
+- **Right:** caret `51:39`, line ending `CRLF`, encoding `UTF-8`, indent `4 spaces` — each a status item
+  written by whoever owns the fact, which is what the keying was for.
+
+This also retires the harness scene drawing `onStatus` into a hand-placed label.
+
+### 24.8 Traps
+
+- **Do not build regions out of `DockLayout`.** A region's identity would again be a tree position, which is
+  the exact problem §23 exists to remove. `SplitView` has weights *and minimums*, which is what a region
+  needs and a dock leaf cannot express.
+- **A hidden region still exists.** The uncloseable central leaf already states the general form: a region
+  that vanishes when empty cannot be reopened, and Ctrl+B has nothing to toggle.
+- **Region size is persisted per region, never derived from the split.** The same lesson as
+  `ToolWindowState` — a size read back out of the layout is a size that a collapse destroys.
+- **The toolbar's height must not change between its two states**, or opening the menu reflows every region
+  below it.
+- **A container with one view shows no tab strip.** IntelliJ does not draw a one-tab strip, and a strip that
+  appears when a second view is added is correct rather than inconsistent.
+- **Two containers per region, and no more.** The limit is what keeps a region a region.
+- **`StatusBarView` renders; it does not compute.** Anything it shows is a status item somebody else wrote,
+  or the keying is pointless.
+- **The burger bar overlays; it does not push.** Pushing makes every region re-measure on a hover.
+
+### 24.9 Sequencing
+
+| # | Work | Why here |
+|---|---|---|
+| 1 | **Region shell** — `WorkbenchShell`, `RegionHost` x3, `SplitView` frame, `DockArea` into `EDITOR` | Structure only; nothing moves between regions yet |
+| 2 | **Region visibility + size + persistence**, session v4, and **F2b** — delete the four restoration tiers | They stop being separable here, which is what §23's correction records |
+| 3 | **`ViewContainer` + header + tab strip**; `ProblemsPanel` becomes the first container with its views | Where F6 stops being a type and becomes visible |
+| 4 | **`StripeView`** — containers, two groups, drag between stripes; **badges** | The `ActivityBar` rewrite |
+| 5 | **Stripe splitting** — two containers per region | The `sideWeight` reversal, once regions and containers both exist |
+| 6 | **`StatusBarView`** | Cheap, self-contained, retires the harness's hand-drawn line |
+| 7 | **Main toolbar** — widgets first, then the burger bar, then mnemonics and hover-switching | Largest, least structural, and every button is a command that already exists |
+
+Steps 1–2 are the risky pair, because they move persisted state and layout together. Everything after is
+additive and independently revertable.
