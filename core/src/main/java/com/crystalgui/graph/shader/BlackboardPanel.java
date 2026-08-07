@@ -4,6 +4,8 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.ui.elements.chrome.ContextMenu;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.core.undo.Edit;
@@ -1144,13 +1146,19 @@ public class BlackboardPanel extends UIElement {
      */
     @Override
     protected void registerCommands(CommandRegistry registry) {
+        // The row menu is DECLARED here, not built in openRowMenu. Group `1_modify` acts on what is
+        // there; `2_create` makes something new, which is why Duplicate is separated -- Unity splits it
+        // the same way, and the separator falls out of the group boundary rather than being asked for.
         registry.register(Command.of(DELETE_COMMAND, "Delete Property").binding("Delete", "Backspace")
+                .menu(MenuId.BLACKBOARD_CONTEXT, "1_modify", 20)
                 .run(context -> withBoard(context, BlackboardPanel::removeSelected))
                 .enabledWhen(BlackboardPanel::isActionable));
         registry.register(Command.of(DUPLICATE_COMMAND, "Duplicate Property").binding("Mod+D")
+                .menu(MenuId.BLACKBOARD_CONTEXT, "2_create", 10)
                 .run(context -> withBoard(context, BlackboardPanel::duplicateSelected))
                 .enabledWhen(BlackboardPanel::isActionable));
         registry.register(Command.of(RENAME_COMMAND, "Rename Property").binding("F2")
+                .menu(MenuId.BLACKBOARD_CONTEXT, "1_modify", 10)
                 .run(context -> withBoard(context, BlackboardPanel::renameSelected))
                 .enabledWhen(BlackboardPanel::isActionable));
     }
@@ -1207,35 +1215,40 @@ public class BlackboardPanel extends UIElement {
     // ── The row menu ────────────────────────────────────────────────────────
 
     /**
-     * Rename / Delete / Duplicate for the selected property.
+     * The row menu for the selected property — <b>queried, not written</b>.
      *
-     * <p>Built once and reopened, like the {@code +} menu — and like it, one listener dispatching on the
-     * label rather than a closure per item, since a closure would capture the property the menu was
-     * FIRST opened on and quietly act on it forever after.</p>
+     * <h3>What this used to be</h3>
+     *
+     * <p>Three literal {@code addItem} calls, a hand-placed separator, a hand-read accelerator, and one
+     * listener dispatching on the item's <em>label</em>. Every one of those was a copy of something the
+     * command already knew: {@code DELETE_COMMAND} carries its own label, its own binding and its own
+     * {@code enabledWhen}, and the menu restated all three in a second place that could drift from the
+     * first. Worse, only this method could add a fourth item — the exact coupling {@link MenuId} exists to
+     * remove, and the same one {@code ExplorerCommands} shed when its thirteen-line literal became a
+     * query.</p>
+     *
+     * <p>Now the three commands declare {@code .menu(MenuId.BLACKBOARD_CONTEXT, group, order)} where they
+     * are registered, and this asks. Anything else — another package, a future feature — can put an item
+     * on a blackboard property without touching this class.</p>
+     *
+     * <p>What falls out for free, rather than being maintained here: accelerators (read from the live
+     * keymap, so a rebind is reflected), the separator (a group boundary), disabled items dimmed rather
+     * than dropped, and dispatch by command id instead of by matching a display string.</p>
      */
     public void openRowMenu(float screenX, float screenY) {
         UIWindow window = getAttachedWindow();
         if (window == null || selectedId == null) return;
-        if (rowMenu == null) {
-            rowMenu = new Menu();
-            rowMenu.addItem(RENAME_LABEL);
-            rowMenu.addItem(DELETE_LABEL);
-            rowMenu.addSeparator();
-            // Duplicate is grouped apart because it CREATES rather than acts on what is there -- Unity
-            // separates it for the same reason, and the accelerator is shown because a menu is where a
-            // shortcut is learned.
-            // The accelerator is READ FROM THE KEYMAP rather than typed here. A hard-coded label is a
-            // promise the menu cannot keep: rebind the key and the menu goes on advertising the old one,
-            // which is worse than showing nothing. Null when unbound, and setAccelerator takes that.
-            var chord = Keymap.acceleratorFor(this, DUPLICATE_COMMAND);
-            rowMenu.addItem(DUPLICATE_LABEL).setAccelerator(chord == null ? null : chord.toString());
-            rowMenu.onItemActivated.connect(item -> applyRowMenu(item.getText()));
-            // Must be IN the tree to be promoted to the top layer -- a Menu is a Popover, and an
-            // unparented one has nothing to promote from. showFor can attach itself through its anchor;
-            // showAt has no anchor to find a host from, so it throws. Internal, because this is a
-            // composite. The Main Preview's mesh menu records the same requirement.
-            addInternalChild(rowMenu);
-        }
+        // REBUILT PER PRESS, unlike the + and type menus above. Those list a fixed set this class owns;
+        // this one is a query whose answer depends on what is registered and what applies right now, and
+        // caching it would freeze both. ContextMenu.attach discards its previous menu per press for the
+        // same reason -- see the Taffy child-index note there for what a retained promoted menu costs.
+        if (rowMenu != null) rowMenu.removeSelf();
+        rowMenu = ContextMenu.of(MenuId.BLACKBOARD_CONTEXT).build(CommandRegistry.global(), this);
+        // Must be IN the tree to be promoted to the top layer -- a Menu is a Popover, and an unparented
+        // one has nothing to promote from. showFor can attach itself through its anchor; showAt has no
+        // anchor to find a host from, so it throws. Internal, because this is a composite. The Main
+        // Preview's mesh menu records the same requirement.
+        addInternalChild(rowMenu);
         // ROOT space, not physical pixels: the menu is promoted to the top layer, whose containing block
         // is the root, so a raw pointer position lands wherever that number falls in root coordinates --
         // which put an earlier menu in the corner of the whole window.
@@ -1243,17 +1256,6 @@ public class BlackboardPanel extends UIElement {
         rowMenu.showAt(at.x(), at.y(), null);
     }
 
-    private void applyRowMenu(String label) {
-        if (RENAME_LABEL.equals(label)) {
-            renameSelected();
-            return;
-        }
-        if (DELETE_LABEL.equals(label)) {
-            removeSelected();
-            return;
-        }
-        if (DUPLICATE_LABEL.equals(label)) duplicateSelected();
-    }
 
     /**
      * Renames a property, undoably.

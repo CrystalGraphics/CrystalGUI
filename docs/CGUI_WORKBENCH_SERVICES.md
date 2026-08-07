@@ -155,18 +155,29 @@ anywhere else reaches it. The store outlives the widget by a long way: a `Settin
 application and a `GraphDocument` as long as the file is open, while an inspector rebuilds every control
 it shows on every click.
 
-So the connection needs an owner, and the owner is **the control**:
+**A binder declares the subscription; the engine decides when it is live.**
 
 ```java
-control.connections().add(settings.onChanged.connect(...));   // ConfigControl.connections()
+control.follows(() -> {                       // ConfigControl.follows
+    control.setValueObject(read(store));      // read FIRST — it may have moved while detached
+    return store.onChanged.connect(...);
+});
 ```
 
-`ConfiguratorPanel.clearRows()` releases them, walking *all* children rather than the public ones — a
-`Configurator` is internal and holds its control as an internal child.
+`ConfigControl` connects on attach, disconnects on detach, and **re-establishes on re-attach** —
+`onWindowChanged` already fires for every element of a detached subtree, so leaving the tree is announced
+without anyone arranging it.
 
-Ownership is on the control rather than on whoever called the binder, because the reason the subscription
-exists *is* that control. A binder can then register what it wires without being handed a lifetime, and a
-control that is thrown away takes its subscriptions with it whatever built it.
+> **Nobody releases these, because nobody can be trusted to.** The first version had the binder subscribe
+> directly and every *owner* release: a `ConfiguratorPanel` replacing its rows, a `GraphNode` being
+> deleted, the graph clearing every node, and a floating port editor being unmounted — four owners sharing
+> no supertype, each needing to remember a call whose omission is invisible, and a fifth owner would
+> simply not know. That is the bookkeeping the ownership tree exists to remove.
+
+> **Re-subscribing, not merely releasing.** Dropping on detach alone is a trap: a control taken out of the
+> tree and put back — a tab hidden and shown, a pane retargeted — comes back permanently deaf, and only in
+> cases nobody tests. It also means a detached control follows nothing *by design*: it cannot be seen, so
+> there is nothing to keep current, and it re-reads on the way back in.
 
 > **This is the failure mode the whole `Disposable` layer exists for, and it is invisible from both ends.**
 > The host looks correct because it subscribed; the store looks correct because it notified. Nothing
@@ -175,12 +186,8 @@ control that is thrown away takes its subscriptions with it whatever built it.
 > `ConfiguratorPanelLifetimeTest`, which asserts both that the count stops growing **and** that the
 > surviving rows still follow the store — a fix that disconnects everything passes the first alone.
 
-### Known gap
-
-**Controls attached to a `GraphNode` are still never released.** `NodeFieldBinder.attach` registers its
-document subscription on the control exactly as above, but nothing disposes a node's controls when the
-node is deleted — only `ConfiguratorPanel.clearRows()` releases anything today. The mechanism is in the
-right place; the node needs a disposal path to call it.
+No known gap here. A node's field controls, a floating port editor's control and an inspector row all
+release the same way, because none of them is doing anything — leaving the tree is the release.
 
 ---
 
@@ -435,6 +442,19 @@ is the coupling `MenuId` was introduced to remove — and for a while it removed
 `Command.menu(...)` recorded placements that nothing read: the explorer's menu was still a thirteen-line
 literal and the id had no production users at all.
 
+**Two menus were queried and one was still written.** `BlackboardPanel.openRowMenu` built Rename / Delete /
+Duplicate by hand: three literal items, a hand-placed separator, an accelerator read by hand, and a
+listener dispatching on the item's **display label**. All three commands already existed with their own
+labels, bindings and `enabledWhen`, so the menu was a second copy of each that could drift from the first —
+and nothing could add a fourth item without editing that method. It is now
+`ContextMenu.of(MenuId.BLACKBOARD_CONTEXT)`, and accelerators, the separator, dimming and dispatch all fall
+out instead of being maintained.
+
+> **A picker is not a menu.** `BlackboardPanel`'s `+` and type menus and the Main Preview's mesh menu stay
+> hand-built, correctly: they list a fixed data set their owner defines, and there is no third party who
+> could meaningfully contribute a mesh. `MenuId` is for menus of *commands*, where the open set is the
+> point.
+
 - Group then order, groups sorted lexicographically — VS Code's `"1_new"`, `"2_clipboard"` convention.
 - Separators fall out of group boundaries; no contributor asks for one.
 - **A submenu is its own `MenuId`** (`MenuId.EXPLORER_NEW`), nested via `nestedIn(parent, title, group,
@@ -545,6 +565,39 @@ per frame until the workspace is mapped — there is no "change" to announce, th
 opened, and a packet sent earlier is discarded with no error. The latch is set on the *attempt*, not on
 success, so calling it from `onWindowChanged` poisons it permanently — twelve explorer tests came up with
 no project roots. It needs a session-opened announcement.
+
+---
+
+## Notifications and status
+
+`com.crystalgui.core.notify` — `Notification`, `Notifications`, `StatusBar`.
+
+```java
+Notifications.error("copy failed: " + name).withAction("Retry", again);   // an EVENT
+StatusBar.set(ShaderGraphEditor.COMPILE_STATUS, "compiled 9n/8e");        // AMBIENT
+```
+
+**Two channels, deliberately.** A notification *happened once*, may deserve an action, and belongs in a
+history. A status item describes *how things are right now*, is replaced rather than accumulated, and has
+no history. The shader graph produces both — a compile result is ambient (it re-arrives every frame while
+a node animates), a failed copy is an event. Routed through one channel the ambient half buries the other
+within seconds, which is why VS Code separates them and so does every editor that has both.
+
+**This is what let a contribution stop being handed anything.** `ShaderGraphContribution.register` took a
+`Signal.Value<String> status`, with a javadoc arguing that where a status line lives is the application's
+decision. True — and the wrong conclusion: *where* a message is displayed belongs to the application,
+*that* one exists does not, and a parameter for it couples every contribution to an application that has
+one. It now takes only the workbench.
+
+| Rule | Why |
+|---|---|
+| Status items are **keyed per writer** | `onStatus` was one slot, so the line-owner readout (every caret move) erased "created folder" milliseconds after it appeared, and neither writer could tell |
+| Re-stating an unchanged item is **silent** | The compile summary is written from a recompile, and an animated graph recompiles every frame — an announcement per frame is a poll wearing a callback |
+| Severity is on the notification, not in the text | "saved" and "save failed" arrived identically as Strings; a consumer cannot colour, hold or filter what it cannot distinguish |
+| The history is **bounded** | It is a convenience, not a log. Its value is that a message which arrived while you were looking elsewhere is still findable |
+| Nothing is displayed by default | A core that drew its own toast would be deciding application layout, and there is no window here to draw it in. `CrystalEditor` subscribes to both and flattens them into one line for the harness |
+
+Pinned by `NotifyTest`, headlessly — a dedicated server that creates a folder should be able to say so.
 
 ---
 

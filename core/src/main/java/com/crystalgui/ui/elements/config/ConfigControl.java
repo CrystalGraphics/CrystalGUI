@@ -1,8 +1,15 @@
 package com.crystalgui.ui.elements.config;
 
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
+
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * <b>The bare editor for one value — no label, no row, no idea where it is mounted.</b>
@@ -67,38 +74,70 @@ public abstract class ConfigControl extends UIElement {
     public final Signal.Value<Boolean> interacting = new Signal.Value<>();
 
     /**
-     * Subscriptions that exist <b>to update this control</b>, released when the control is.
+     * The live subscriptions, rebuilt from {@link #follows} whenever this control enters a tree.
      *
-     * <h3>Why the control owns them and not the host</h3>
+     * <h3>Why a control follows anything at all</h3>
      *
-     * <p>A bound control follows its store — {@code settings.onChanged}, {@code document.onChanged} — so
-     * that an edit made anywhere else reaches the widget. Those stores <b>outlive the control by a long
-     * way</b>: a {@code Settings} lives as long as the application and a {@code GraphDocument} as long as
-     * the file is open, while the control is rebuilt every time the inspector's subject changes.</p>
+     * <p>So that an edit made <em>elsewhere</em> reaches the widget — {@code settings.onChanged},
+     * {@code document.onChanged}. Those stores outlive the control by a long way: a {@code Settings} lives
+     * as long as the application and a {@code GraphDocument} as long as the file is open, while a control
+     * is rebuilt every time an inspector's subject changes.</p>
      *
-     * <p>Nothing disconnected them. Every rebuild added one listener per row to an object that never goes
-     * away, each holding a control that had already been removed from the tree — so the lists grew for as
-     * long as a graph stayed open, and every write walked all of them to update widgets nobody could see.
-     * It is invisible from either end: the host looks correct because it subscribed, and the store looks
-     * correct because it notified.</p>
+     * <p>Nothing disconnected them, so a store accumulated one listener per row per rebuild, each holding
+     * a widget that had already left the tree. Invisible from both ends: the host subscribed, the store
+     * notified, nothing failed, and the only symptom was a session that got slower the longer it ran.</p>
      *
-     * <p>Ownership sits here because the <em>reason</em> the subscription exists is this control, which is
-     * the general answer — a binder registers what it wires without needing to be handed a lifetime, and
-     * a control that is thrown away takes its subscriptions with it whatever built them.</p>
-     *
-     * @see ConfiguratorPanel#clearRows() where a panel releases the rows it is replacing
+     * <p><b>Private on purpose.</b> A public group invites a binder to register a connection directly,
+     * which is the manual-lifetime pattern {@link #follows} exists to remove — and one that would then go
+     * missing on the first re-attach, since this is cleared wholesale.</p>
      */
     private final ConnectionGroup connections = new ConnectionGroup();
 
     /**
-     * Where a binder registers anything it connects <b>to something outside this control</b>.
+     * Declares how this control follows something that outlives it. <b>The engine decides when.</b>
      *
-     * <p>A connection to one of this control's own signals ({@link #changed}, {@link #interacting}) does
-     * not belong here — it dies with the control regardless. This is for the other direction: a store,
-     * a document, a registry, anything that will still be alive afterwards.</p>
+     * <h3>Nobody releases these, because nobody can be trusted to</h3>
+     *
+     * <p>The first version of this had a binder subscribe directly and every <em>owner</em> release: a
+     * {@link ConfiguratorPanel} replacing its rows, a {@code GraphNode} being deleted, the graph clearing
+     * every node, and a floating port editor being unmounted. Four owners sharing no supertype, each
+     * needing to remember a call whose omission is invisible — which is the same bookkeeping the
+     * ownership tree exists to remove, and a fifth owner would simply not know.</p>
+     *
+     * <p>So the control does it. {@code onWindowChanged} fires for every element of a detached subtree,
+     * so leaving the tree is already announced; the binder states the subscription and never thinks about
+     * its lifetime again.</p>
+     *
+     * <h3>Re-established on re-attach, not merely dropped</h3>
+     *
+     * <p>Releasing on detach alone would be a trap: a control taken out of the tree and put back — a tab
+     * hidden and shown, a pane retargeted — would come back permanently deaf, and only in cases nobody
+     * tests. Re-subscribing makes detachment ordinary rather than terminal.</p>
+     *
+     * <p>Which is also why a control does not need to follow anything while detached: it cannot be seen,
+     * so there is nothing to keep current. {@code subscribe} is expected to <b>read the live value
+     * first</b> and then connect, so a control that was away during an edit comes back correct rather
+     * than stale.</p>
      */
-    public ConnectionGroup connections() {
-        return connections;
+    public void follows(Supplier<Connection> subscribe) {
+        if (subscribe == null) return;
+        follows.add(subscribe);
+        // Bound NOW when this is already in a tree, since onWindowChanged has been and gone. A binder
+        // may run either side of attachment -- SettingsConfigurator builds into a detached panel, and
+        // NodeFieldBinder rebuilds a port editor on a live plane -- and neither should have to know.
+        if (getAttachedWindow() != null) connections.add(subscribe.get());
+    }
+
+    /** @see #follows */
+    private final List<Supplier<Connection>> follows = new ArrayList<>();
+
+    @Override
+    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        // Dropped unconditionally and re-established only if there is a tree to be in. Disconnecting
+        // first also covers a move BETWEEN windows, where both arguments are non-null.
+        connections.disconnectAll();
+        if (current == null) return;
+        for (Supplier<Connection> subscribe : follows) connections.add(subscribe.get());
     }
 
     private final ConfigDescriptor descriptor;

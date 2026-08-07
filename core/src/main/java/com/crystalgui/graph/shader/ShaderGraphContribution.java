@@ -56,17 +56,20 @@ public final class ShaderGraphContribution {
     /**
      * Declares the graph document type, its generated-source view, and its inspector sections.
      *
-     * @param status where a graph's own messages go — the one thing the application still supplies,
-     *               because where a status line lives is its decision and not this feature's
+     * <p><b>Takes nothing but the workbench.</b> It used to take a status sink, with a note explaining
+     * that where a status line lives is the application's decision — which is true, and was the wrong
+     * conclusion: <em>where</em> a message is shown belongs to the application, but <em>that</em> one
+     * exists does not, and a parameter for it couples every contribution to an application that has one.
+     * The graph announces through {@link com.crystalgui.core.notify.StatusBar} and
+     * {@link com.crystalgui.core.notify.Notifications} instead, and an application displays them or does
+     * not.</p>
      */
-    public static void register(Workbench workbench, Signal.Value<String> status) {
+    public static void register(Workbench workbench) {
         workbench.contribute(DocumentType.of(GRAPH_TYPE, "Shader Graph")
                 .forExtensions("shadergraph")
                 .document(path -> {
                     ShaderGraphEditor editor = new ShaderGraphEditor();
                     editor.setResource(Resource.of(path));
-                    editor.onStatusChanged.connect(status::emit);
-                    editor.onLineOwnerChanged.connect(status::emit);
                     // THE GRAPH ASKS, THE SHELL DECIDES -- and the shell is this contribution now rather
                     // than the application. The graph knows it can emit GLSL and nothing about docks.
                     editor.onViewGeneratedRequested.connect(() -> showGenerated(workbench, editor));

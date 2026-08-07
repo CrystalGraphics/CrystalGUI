@@ -2,6 +2,8 @@ package com.crystalgui.editor;
 
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
+import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -81,7 +83,17 @@ public class CrystalEditor extends UIElement implements Disposable {
     /** How much of the work area the emitted source takes when it is first opened. */
     private static final float SOURCE_SHARE = 0.28f;
 
-    /** Whatever a status line should say: an open, a save, a compile summary, or a refusal. */
+    /**
+     * Whatever a status line should say — <b>composed here, announced elsewhere</b>.
+     *
+     * <p>No longer a sink anything writes into. Events go to {@link Notifications} and ambient text to
+     * {@link StatusBar}, and this editor subscribes to both and flattens them into the one string a host
+     * can bind. That is the split those two exist for: a contribution announces without knowing whether
+     * anyone is listening, and where the result is drawn stays this application's decision.</p>
+     *
+     * <p>Kept as a {@code Signal.Value<String>} because a host wants one line, not a channel per kind —
+     * the harness scene binds exactly this.</p>
+     */
     public final Signal.Value<String> onStatus = new Signal.Value<>();
 
     private final Workbench workbench;
@@ -144,7 +156,11 @@ public class CrystalEditor extends UIElement implements Disposable {
     public CrystalEditor(WorkspaceClient<?> client) {
         setFocusPolicy(FocusPolicy.NONE);
         workbench = new Workbench(client);
-        workbench.onStatus.connect(onStatus::emit);
+        // BOTH CHANNELS INTO ONE LINE. A notification is an event and wins the line when it arrives; the
+        // ambient text is what is left showing between them. Flattening is this application's choice --
+        // a host with room for a toast area would connect them separately instead.
+        Notifications.onDidNotify.connect(notification -> onStatus.emit(notification.getMessage()));
+        StatusBar.onDidChange.connect(text -> { if (!text.isEmpty()) onStatus.emit(text); });
         // The inspector and the generated source follow the front tab. Was a per-frame poll; the dock
         // announces it now. Subscribed here rather than on attach because the dock exists as soon as the
         // workbench does, and this editor owns the workbench -- there is nothing to wait for and nothing
@@ -173,7 +189,7 @@ public class CrystalEditor extends UIElement implements Disposable {
         // generated source is and what it tells the inspector are all that package's statements about
         // itself -- see ShaderGraphContribution. This class chooses which contributions to enable, which
         // is the only decision about file types an application should be making.
-        ShaderGraphContribution.register(workbench, onStatus);
+        ShaderGraphContribution.register(workbench);
 
         // BESIDE the canvas, not in its strip. A tab in the same group would hide the graph, and the whole
         // point of the emitted source is watching it change as you wire -- a panel you have to switch away
@@ -356,16 +372,16 @@ public class CrystalEditor extends UIElement implements Disposable {
     @SuppressWarnings("unchecked")
     public <T> boolean restoreLayout(DynamicOps<T> ops) {
         if (savedLayout == null) {
-            onStatus.emit("nothing saved yet");
+            Notifications.info("nothing saved yet");
             return false;
         }
         DockLayout restored = DockLayoutCodec.decode((T) savedLayout, ops, workbench.panels());
         if (restored == null) {
-            onStatus.emit("saved layout refused");
+            Notifications.error("saved layout refused");
             return false;
         }
         workbench.dock().setLayout(restored);
-        onStatus.emit("layout restored");
+        Notifications.info("layout restored");
         return true;
     }
 

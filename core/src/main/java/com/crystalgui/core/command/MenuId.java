@@ -45,6 +45,9 @@ public final class MenuId {
     /** Right-click on a node graph's canvas. */
     public static final MenuId GRAPH_CONTEXT = of("graph/context");
 
+    /** Right-click a row in the shader graph's blackboard — a property. */
+    public static final MenuId BLACKBOARD_CONTEXT = of("blackboard/context");
+
     /** Right-click on an editor tab. */
     public static final MenuId EDITOR_TAB_CONTEXT = of("editor/tab/context");
 
