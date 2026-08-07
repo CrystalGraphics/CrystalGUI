@@ -19,6 +19,7 @@
 | 8 | The Inspector as a contribution surface (§22) | **DONE** — `Inspector` + `InspectorSection`/`InspectorRegistry`; `ShaderGraphInspector` deleted |
 | 9 | Notifications + status, and the last hand-written menu | **DONE** — `com.crystalgui.core.notify`; `register(workbench)` takes nothing else; `BlackboardPanel`'s row menu is a `MenuId` query |
 | 10 | Editor banners, and the last per-frame poll | **DONE** — `DockBannerProvider` (§11 Tier 2's one kept item); `GraphView.discoverPortEditors` is push-based |
+| 11 | The Parts model, and the six foundations it needs (§23) | **PLANNED** — audit, research and sequencing written; F3 (view identity) and F4 (session version) are decisions to settle before any code moves |
 
 Steps 7 and 8 came from reading the result of 1–6: the six steps made the *framework* extensible and left
 `CrystalEditor` naming one application's file types, and left the Inspector a graph-shaped class. Neither
@@ -2553,3 +2554,248 @@ is the same act against a second registry, and the two land in one commit per pa
 
 Neither step needs new infrastructure. `DataContext` (step 2), service events (step 3) and
 `DockPaneProvider` (step 5) are the substrate, and `FileDecorations` is the template.
+
+---
+
+## 23. Step 11 — the Parts model, and the six foundations it needs
+
+> **Status: NOT STARTED.** This section is the audit and the decision record; no code has moved.
+
+### 23.1 Why now — the trigger §9 decision 2 set
+
+Decision 2 said: *keep the uniform tree; revisit only if a second class of bug appears.* That bar has
+been met, and it is worth naming the evidence rather than calling this a preference.
+
+- **`Workbench.showPanel` is a four-tier restoration heuristic.** Strip-mate, then structural path, then
+  surviving neighbour, then anchor — with a javadoc explaining that the order is load-bearing in both
+  directions. It is careful, correct, well-tested code, and **every tier of it exists because closing a
+  tool window collapses the branch that held it.**
+- **`ToolWindowState` carries two fields IntelliJ does not need** — `path` and `groupedWith` — and says so
+  in its own javadoc: *"IntelliJ needs no equivalent because its tool windows are never in a tree."*
+- **`ToolWindowLayout` exists at all** to keep placement *beside* the tree, because placement cannot be
+  recovered *from* the tree once a branch collapses.
+- **The activity bar lists panel types, not containers**, so two tool windows cannot share a region and a
+  view cannot be dragged from the sidebar to the bottom panel.
+- **Ctrl+B has nowhere to live**, because the sidebar is not a thing — it is wherever the Project panel
+  happens to be docked.
+
+That is one shape of bug, found five ways. The heuristic is the tell: **we built a recovery mechanism for
+information we should never have destroyed.**
+
+### 23.2 Reference research
+
+#### VS Code — parts, then containers, then views
+
+A fixed set of `Part`s, each independently visible, sizeable, positionable and persisted: `TITLEBAR`,
+`BANNER`, `ACTIVITYBAR`, `SIDEBAR`, `EDITOR`, `PANEL`, `AUXILIARYBAR`, `STATUSBAR`. The workbench itself is
+a grid *of parts*; the editor's own splittable grid is nested **inside** `EDITOR_PART` and knows nothing
+about the rest.
+
+`IWorkbenchLayoutService` owns the region questions — `setPartHidden(hidden, part)`, `isVisible(part)`,
+`getSize(part)`, `resizePart`, `setPanelPosition`, `toggleMaximizedPanel`. None of those is expressible
+against a uniform tree, because none of them names a *position*; they name a **region**.
+
+Inside that sits a second split we have no counterpart for at all:
+
+```
+ViewContainer   "Explorer", "Source Control"      <- what an activity bar button toggles
+   \-- View     "Folders", "Outline", "Timeline"  <- draggable BETWEEN containers
+```
+
+A view declares a `containerId`; a container declares a location (`Sidebar` / `Panel` / `AuxiliaryBar`).
+A user dragging a view to the bottom panel rewrites **the view's container**, not the layout tree.
+Persisted as `workbench.views.state` and `workbench.activity.pinnedViewlets2`, separately from the editor
+grid.
+
+Badges live on the *container*: `IActivityService.showViewContainerActivity(containerId, { badge })`. That
+is why badges and Parts are one piece of work — a badge has no home until containers exist.
+
+#### IntelliJ — anchors, `WindowInfo`, and `ContentManager`
+
+The same split under different names. `ToolWindowManager` owns tool windows; `ToolWindowAnchor` is
+`LEFT`/`RIGHT`/`TOP`/`BOTTOM`; `WindowInfoImpl` persists `anchor`, `weight`, `sideWeight`, `order`,
+`visible`, `active`, `type`. The editor area is `EditorsSplitters` and **never contains a tool window**.
+
+The container/view split is `ToolWindow` — holding `Content`s in a `ContentManager` — over `Content`. A
+tool window is not one panel; it is a host for several.
+
+#### What both agree on, and where we sit
+
+| Concept | VS Code | IntelliJ | Ours today |
+|---|---|---|---|
+| Fixed regions | `Part` | anchors + editor area | absent — one uniform tree |
+| Group of views in a region | `ViewContainer` | `ToolWindow` + `ContentManager` | absent |
+| A movable view | `ViewPane` | `Content` | a dock panel |
+| Region visibility | `setPartHidden` | `ToolWindow.hide()` | absent |
+| Region size, persisted apart | grid serialization | `WindowInfo.weight` | inside the tree |
+| Editor area | nested grid | `EditorsSplitters` | **the same tree as everything else** |
+
+The last row is the whole difference. **Both references keep a splittable tree for documents only.**
+§12.4's recommendation stands: keep our dock tree for the editor area — it is good, and it is what makes
+arbitrary splits work — and introduce Parts around it.
+
+### 23.3 The six foundations
+
+Ordered as they must land, not by size.
+
+---
+
+#### F1 — The tool-window manager leaves `Workbench`
+
+**Now.** `Workbench` is 1324 lines and owns `isPanelOpen`, `showPanel`, `hidePanel`, `togglePanel`,
+`toolWindows()`, `placementOf`, `withRelativePosition` and `outerEdgeOf` — plus the four-tier heuristic.
+This is §7 stage 6, the one marked **High** risk and never done, which §7's own note calls superseded.
+
+**Parts un-supersedes it.** Stage 6 was skipped because the *coupling* complaint behind it was answered by
+decoupling callers instead — correct at the time. But Parts is a rewrite of precisely this surface, and
+doing it inside `Workbench` would grow it past 1400 lines and re-entangle what steps 1–10 separated.
+
+**Do:** extract `PartService` (regions: visibility, size, which container is showing) and
+`ViewContainerRegistry` (containers, their views, their location). **Not** the four-way split §5.3
+imagined — that was wrong and is recorded as wrong. One extraction, the one Parts needs.
+
+**Size:** medium. The risk §7 assigned was for a four-way split; a single extraction, with the contract
+tests from §8 already in place, is materially smaller.
+
+---
+
+#### F2 — `ToolWindowState` sheds its tree fields, and the heuristic dies with them
+
+**Now.** `path` and `groupedWith` exist only because tool windows live in the tree. `showPanel`'s four
+tiers consume them.
+
+**After Parts** a tool window has a **region**, an **order within it** and a **size**. Restoration becomes
+a lookup. Tiers 1–3 have nothing left to be about: there is no strip to rejoin, no branch to have
+collapsed, and no neighbour to be relative to.
+
+**Do:** reduce `ToolWindowState` to IntelliJ's actual field set — anchor becomes a region, plus `order`,
+`weight`, `visible`, `active` — and delete the heuristic along with the fields that fed it.
+
+**This is the largest deletion in the step, and it is the point.** Keep the tests: they describe behaviour
+that must still hold (hide-then-show is exact), and they should pass against a lookup.
+
+**Size:** small once F1 lands, and it removes more than it adds.
+
+---
+
+#### F3 — View identity, settled before any codec is written
+
+**Now.** `DockPanelRef.equals` includes `state`, and §1.5 already flags it: *"correct, but it makes adding
+a state key a breaking change (bit us with `ICON`)."*
+
+**What breaks.** A view needs identity, a container membership and per-view state. If membership lands as
+ref state, two refs for the same view in different containers are **different refs** — so
+`leafContaining`, `content.computeIfAbsent`, every `Map<DockPanelRef, …>` and every saved layout change
+meaning at once. Dragging a view between containers would destroy and rebuild it rather than move it.
+
+**Do:** decide **before** touching persistence. The recommendation is a separate `ViewId` — an interned
+string like `DataKey`/`MenuId` — with container membership held **by the container**, never by the view.
+That is both references' arrangement: a VS Code view declares a `containerId` and the registry owns the
+mapping; an IntelliJ `Content` does not know its `ContentManager`'s identity.
+
+**Size:** small in code, large in consequence. **This is the one to get right first.**
+
+---
+
+#### F4 — The session version: discard once, deliberately
+
+**Now.** `WorkbenchSession.VERSION = 3`, and the class states that an unknown version is *"discarded,
+never guessed at"*. Parts adds at least four newly persisted facts: region visibility, region size,
+container membership, and view order within a container.
+
+§11 Tier 1's last row predicted this exactly — *"every newly persisted thing is bespoke; §7 stage 8 will
+feel this."* This is stage 8 arriving.
+
+**Do:** pick one, in writing, before the first field is added.
+
+| Option | Cost | Verdict |
+|---|---|---|
+| Bump to 4, discard old sessions | one lost layout per user, once | **Recommended.** The shape change is total, and a migration would mean translating a tree position into a region — which is exactly the information the tree does not preserve |
+| Write a migration | real work, and it cannot be faithful | Rejected. It would have to guess, and guessing is what the version field exists to refuse |
+| A declarative state framework first | large | Deferred. Worth doing when a *fifth* bespoke codec appears, not to unblock this |
+
+**Say it in the version comment**, so the discard reads as a decision rather than a regression.
+
+---
+
+#### F5 — `DockPlacement` grows a region
+
+**Now.** `DockPlacement` is `Active` / `Side(zone)` / `With(element)` / `Leaf(leaf)`, and every variant
+resolves against **one** dock. It is a sealed interface, so adding a variant is a compile-time-checked
+change rather than a silent one — which is the good news.
+
+**After Parts,** `open()` answers *which region* first and *where within it* second. A document goes to
+`EDITOR`; a view goes to its container's region.
+
+**Do:** add an `InRegion(part)` variant (or a `PartPlacement` wrapper) and route `open` through region
+resolution before tree resolution. Design it now — retrofitting a dimension through every call site later
+is the expensive version.
+
+**Size:** small, if done before F6 puts new callers on it.
+
+---
+
+#### F6 — `isSingleton()` becomes a three-way kind
+
+**Now.** `DockPanelDescriptor.singleton` is the "is this a tool window" test, and `ActivityBar` is a view
+over exactly that predicate: *"one button per singleton panel type. That filter is the whole
+definition."*
+
+**What breaks.** Parts needs **three** kinds — a **document** (many, in the editor region), a **view**
+(one, inside a container) and a **container** (a group of views, the thing a rail button toggles). A
+boolean cannot carry a third, and the rail must list containers rather than panel types.
+
+**Do:** replace the boolean with `DockPanelKind { DOCUMENT, VIEW, CONTAINER }`. `isSingleton()` becomes
+`kind() == VIEW`, so existing call sites are mechanical. Then `ActivityBar` is rewritten as a view over
+containers — which is also where badges finally have a home, since a badge belongs to a container.
+
+**Size:** medium, and it is the one users see.
+
+---
+
+### 23.4 What deliberately does not change
+
+Worth stating, because the list is longer than the change:
+
+- **`DockLayout`, `DockArea`, `DockGroup`, `DockPane`, `DockLeaf`, `DockPath`** — the editor grid is right,
+  and both references keep one. It stops holding tool windows; it is not otherwise touched.
+- **`Workbench.open(input, placement, options)`** — gains a region step, keeps its shape.
+- **Documents** — `DocumentType`, `FileDocument`, `OpenDocuments`, `Resource` are unaffected.
+- **The contribution surfaces** — `InspectorSection`, `MenuId`, `DockBannerProvider`, `Notifications`. A
+  view container is a fifth surface of the same shape, not a new mechanism.
+- **The `when` parser, the model registry, lifecycle phases, cross-document undo** — all still cut or
+  deferred, and none of them blocks this.
+
+### 23.5 Traps
+
+- **Do not let container membership become ref state.** F3 exists for this. Dragging a view between
+  containers must *move* it, and a state-keyed identity makes that a destroy-and-rebuild.
+- **Do not migrate the session.** A tree position does not carry a region, so the migration would guess —
+  and the version field exists to refuse guessing.
+- **Do not port `sideWeight`, floating or windowed tool windows.** `ToolWindowState` already records that
+  decision and the reasons still hold.
+- **Do not split `Workbench` four ways.** §5.3 predicted it, it did not happen, and nothing has needed it.
+  Extract the one service Parts requires.
+- **Keep the hide-then-show-is-exact tests.** They describe a behaviour that must survive the mechanism
+  changing underneath it, which is what makes them the safety net for F2.
+- **A region with no visible container still exists.** The uncloseable central leaf already states the
+  general form: a region that vanishes when empty cannot be reopened.
+
+### 23.6 Sequencing
+
+State shape first, behaviour second, the visible layer last — so that if the result is wrong, which half
+is wrong is answerable.
+
+| # | Work | Depends on | Why here |
+|---|---|---|---|
+| 1 | **F3** view identity | — | Everything persisted or keyed depends on the answer |
+| 2 | **F4** version decision | F3 | Written down before the first new field |
+| 3 | **F1** extract the manager | — | Can run beside 1–2; it is the surface Parts rewrites |
+| 4 | **F5** region in `DockPlacement` | F1 | Before F6 puts callers on it |
+| 5 | **F2** shed the tree fields | F1, F5 | The deletion, once a region exists to hold placement |
+| 6 | **F6** three-way kind | F5 | Introduces containers |
+| 7 | Parts proper — regions, visibility, sizes, Ctrl+B | F1–F6 | |
+| 8 | `ActivityBar` rewrite + badges | 7 | A view over containers; badges have a home only now |
+
+**F3 and F4 are the two that must be shot down before anything else moves.** They are small, and both are
+decisions rather than code — which is exactly why they are easy to skip and expensive to revisit.
