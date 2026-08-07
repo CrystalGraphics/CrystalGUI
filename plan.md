@@ -3018,6 +3018,95 @@ This also retires the harness scene drawing `onStatus` into a hand-placed label.
   or the keying is pointless.
 - **The burger bar overlays; it does not push.** Pushing makes every region re-measure on a hover.
 
+### 24.10 IntelliJ's actual tool-window machinery — read from the source
+
+Written after the stripe drag was built twice from screenshots and got the *shape* right and the *seams*
+wrong. Every claim below is from `JetBrains/intellij-community` at `master`, path given, so the next person
+argues with the source rather than with a memory of it.
+
+#### The model: four anchors x one boolean
+
+`ToolWindowDescriptor` carries **`anchor: ToolWindowAnchor`** (`TOP`, `LEFT`, `BOTTOM`, `RIGHT`),
+**`isSplit: Boolean`**, and **`sideWeight: Float = 0.5f`**, alongside `weight`, `order`, `type`,
+`isVisible`, `isAutoHide`, `contentUiType`.
+
+That is `DockRegion` + `RegionSide` + one field we do **not** have: `sideWeight` is the divider *between the
+two halves of one anchor*, distinct from `weight`, which is the anchor's share of the whole. We store which
+half a tool window is in and have nothing to say how the two halves divide.
+
+#### The rails — confirmed exactly right
+
+`toolWindow/ToolWindowLeftToolbar.kt` and `ToolWindowRightToolbar.kt`:
+
+| Toolbar | topStripe | bottomStripe |
+|---|---|---|
+| Left | `StripeV2(LEFT)` | `StripeV2(BOTTOM)` |
+| Right | `StripeV2(RIGHT)` | `StripeV2(BOTTOM, split = true)` |
+
+`StripeRail.of(region, side)` reproduces this row for row, including the asymmetry that only `BOTTOM`'s
+split changes which rail its button is on. **Nothing here needs to change.**
+
+#### The divider inside a stripe is `isSplit`, not a third area
+
+`openapi/wm/impl/AbstractDroppableStripe.kt` — a **single** stripe holds both halves of its anchor and
+separates them visually:
+
+```kotlin
+if (useStripeButtonSeparator) { /* StripeButtonSeparator groups the split buttons */ }
+else { /* useSplitGap: split buttons pushed to the far end with a Classic-style gap */ }
+```
+
+So the line between Project/Commit/Structure and the Debug beetle is **not** a third stripe — it is
+`LEFT` vs `LEFT+split` inside one stripe, drawn with a separator in the new UI and a gap in the classic one.
+Our top group runs the two halves together with nothing between them; that is the whole visual difference.
+
+#### Drop targeting is per-stripe, and the split comes from halving the STRIPE
+
+`toolWindow/ToolWindowDragHelper.kt`. `getTargetStripeByDropLocation()` finds *"the stripe whose drop area
+contains the screen point"*, and — the detail that matters — *"prioritises the initial anchor to avoid
+overlaps"*, so a drag starting on the left rail resolves to the left rail while the areas overlap. Then:
+
+```kotlin
+if (dropToSide != null) { val half = if (targetStripe.anchor.isHorizontal) bounds.width / 2
+                                     else bounds.height / 2
+```
+
+**The half is of the stripe's bounds, not of the window or of the region.** Feedback is two things: a
+semi-transparent rectangle on the glass pane *"with bounds calculated from stripe geometry"*, and, new UI
+only, a tooltip reading `UIBundle.message("tool.window.move.to.action.group.name") + " " + anchor`.
+
+`RegionDropZones` bands the whole window instead. That is a real divergence and arguably the friendlier
+rule — it is what made the drag land at all — but it is **ours**, and the "Move to …" wording is IntelliJ's
+around a target computed differently. Say so rather than implying a port.
+
+#### The outer splitter is not fixed — it follows a setting
+
+`toolWindow/ToolWindowPane.kt`:
+
+```kotlin
+if (isWideScreen) { horizontalSplitter.innerComponent = verticalSplitter }
+else { verticalSplitter.innerComponent = horizontalSplitter }
+```
+
+Two `ThreeComponentsSplitter`s, each `first/inner/last` = `TOP|doc|BOTTOM` and `LEFT|doc|RIGHT`. **Widescreen
+mode makes the horizontal splitter outer**, so `LEFT`/`RIGHT` run the full height and `BOTTOM` stops between
+them; otherwise `BOTTOM` spans the full width. `WorkbenchRegions` hardcodes the non-widescreen arrangement,
+which is the default and which its javadoc already argues for — but it is a *setting* there, not a law.
+
+`isSplit` decides component order within a splitter (`false` -> first, `true` -> last) and `sideWeight` sets
+the proportion between them.
+
+#### What we do not have, and whether it matters
+
+| IntelliJ | Us | Verdict |
+|---|---|---|
+| `TOP` anchor | absent | A real gap. Rarely used; no rail slot exists for it either |
+| `sideWeight` | absent | **Needed** the moment two containers share a region — §24.9 step 5. `RegionSide` (which half) shipped in step 4; the ratio between the halves did not |
+| Split/non-split separator in a stripe | ✅ **done** | `StripeView.SEPARATOR_CLASS`, shown only when both halves are populated |
+| Per-stripe drop areas | whole-window bands | Deliberate divergence, now recorded |
+| Widescreen layout | fixed vertical-outer | Fine as a default; note it is a choice |
+| `type` (floating/windowed), `autoHide` | absent | Still deliberately out — §23.5 |
+
 ### 24.9 Sequencing
 
 | # | Work | Why here |
@@ -3025,8 +3114,8 @@ This also retires the harness scene drawing `onStatus` into a hand-placed label.
 | 1 | **Region shell** — `WorkbenchShell`, `RegionHost` x3, `SplitView` frame, `DockArea` into `EDITOR` | Structure only; nothing moves between regions yet |
 | 2 | **Region visibility + size + persistence**, session v4, and **F2b** — delete the four restoration tiers | They stop being separable here, which is what §23's correction records |
 | 3 | **`ViewContainer` + header + tab strip**; `ProblemsPanel` becomes the first container with its views | Where F6 stops being a type and becomes visible |
-| 4 | **`StripeView`** — containers, two groups, drag between stripes; **badges** | The `ActivityBar` rewrite |
-| 5 | **Stripe splitting** — two containers per region | The `sideWeight` reversal, once regions and containers both exist |
+| 4 | **`StripeView`** — containers, two groups, drag between stripes; **badges** | The `ActivityBar` rewrite | ✅ **DONE** |
+| 5 | **Stripe splitting** — two containers per region | The `sideWeight` reversal, once regions and containers both exist | *model landed in step 4* |
 | 6 | **`StatusBarView`** | Cheap, self-contained, retires the harness's hand-drawn line |
 | 7 | **Main toolbar** — widgets first, then the burger bar, then mnemonics and hover-switching | Largest, least structural, and every button is a command that already exists |
 

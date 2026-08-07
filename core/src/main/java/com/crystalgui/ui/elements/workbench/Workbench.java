@@ -161,11 +161,30 @@ public class Workbench extends UIElement {
      * dock grew duplicate unclickable tabs and how the shader graph editor hung the window. */
     private final UIElement content = new UIElement();
 
-    /** The tool-window rail. Chrome, not a panel — see where it is added. */
-    private final ActivityBar activityBar = new ActivityBar(this);
+    /**
+     * The two tool-window rails. Chrome, not panels — see where they are added.
+     *
+     * <p><b>Two, because a region is not spellable with one.</b> IntelliJ's New UI has a left stripe and a
+     * right stripe, each with a top and a bottom group, and which of the four a button is in <em>is</em>
+     * which region its tool window opens in. See {@link StripeRail}.</p>
+     */
+    private final StripeView leftStripe = new StripeView(this, StripeRail.LEFT);
+    private final StripeView rightStripe = new StripeView(this, StripeRail.RIGHT);
 
-    public ActivityBar activityBar() {
-        return activityBar;
+    /** Where a dragged tool window would land, drawn over the whole workbench. @see RegionDropOverlay */
+    private final RegionDropOverlay dropOverlay = new RegionDropOverlay(this);
+
+    public RegionDropOverlay dropOverlay() {
+        return dropOverlay;
+    }
+
+    public StripeView stripe(StripeRail rail) {
+        return rail == StripeRail.RIGHT ? rightStripe : leftStripe;
+    }
+
+    /** Both rails, left first. */
+    public List<StripeView> stripes() {
+        return List.of(leftStripe, rightStripe);
     }
 
     /**
@@ -203,7 +222,7 @@ public class Workbench extends UIElement {
         // second workbench would silently reuse the first's command and toggle a panel in a window
         // nobody was looking at. That is the rule step 2.5 wrote down after the suite caught it, and
         // routing these through the global registry walks straight back into it.
-        activityBar.listenToPanels(registry, current.getCommands());
+        for (StripeView stripe : stripes()) stripe.listenToPanels(registry, current.getCommands());
     }
 
     /** The explorer's verbs come with the explorer. Global, so no window is needed. */
@@ -286,9 +305,9 @@ public class Workbench extends UIElement {
             revealActiveFile();
             rebindProblems();
         });
-        // The rail's :checked state follows the dock's structure and nothing else, so it can subscribe
-        // now. Its BUTTONS wait for a window -- see onWindowChanged.
-        activityBar.listenToLayout(dock);
+        // The rails' :checked state follows the dock's structure and nothing else, so they can subscribe
+        // now. Their BUTTONS wait for a window -- see onWindowChanged.
+        for (StripeView stripe : stripes()) stripe.listenToLayout(dock);
         // A CLOSED TAB RELEASES ITS DOCUMENT. Until the dock could announce a close, nothing did: the
         // document stayed open, its editor stayed reachable and anything it owned -- a preview pool, a
         // renderer -- lived until the process did. Disposer could not help, because the thing that knew
@@ -302,11 +321,11 @@ public class Workbench extends UIElement {
         open.onDidChangeDirty.connect(path -> refreshDirtyMarkers());
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
-        // The rail sits BESIDE the dock rather than inside it, which is what both originals do and is not
+        // The rails sit BESIDE the dock rather than inside it, which is what both originals do and is not
         // merely cosmetic: a stripe inside the dock would be a panel, and therefore droppable onto,
         // draggable and closable. It is chrome -- the thing that gets you back when everything else is
         // closed -- so it must not be something the layout can lose.
-        content.addChild(activityBar);
+        content.addChild(leftStripe);
         // Named so the stylesheet can give it the remaining width. DockArea carries no class of its own
         // and is not a registered tag, so there is otherwise nothing for a selector to hold onto.
         dock.addClass(DOCK_CLASS);
@@ -316,6 +335,18 @@ public class Workbench extends UIElement {
         regions = new WorkbenchRegions(dock);
         toolWindowManager = new ToolWindowManager(regions, registry);
         content.addChild(regions.root());
+        // AFTER the regions, so the row reads left rail | regions | right rail. Order here is the only
+        // thing that puts the right-hand stripe on the right: it is an ordinary flex child, not something
+        // positioned, and both rails carry the same fixed width.
+        content.addChild(rightStripe);
+        // LAST, so it draws over everything it covers, and listening on `content` so it hears a drag
+        // anywhere in the workbench -- DragEvent.Over bubbles, which is what makes one listener enough.
+        content.addInternalChild(dropOverlay);
+        dropOverlay.listenOn(content);
+        // The overlay ANNOUNCES where a drag is aiming; each rail decides what that means for its own gap
+        // and its own ghost. Wired here because this is where the workbench's parts are introduced to
+        // each other -- neither of them goes looking for the other.
+        for (StripeView stripe : stripes()) stripe.listenToDrag(dropOverlay);
         // THE DEFAULT ARRANGEMENT, which used to be three leaves in defaultLayout(). Stated as "show these
         // two" rather than as a tree, which is the whole difference: a region cannot be collapsed away, so
         // this says what is on screen rather than where in a structure it sits.
