@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.workbench.document;
 
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.editor.TextEditor;
 import com.crystalgui.ui.elements.workbench.DocumentViewState;
@@ -36,6 +37,17 @@ public record TextFileDocument(TextEditor editor) implements FileDocument, Docum
     @Override
     public byte[] encode() {
         return editor.getText().getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * The editor's own change signal, adapted.
+     *
+     * <p>Nothing is stored: a record has no room for a signal, and there is no need for one — the editor
+     * already announces this and inventing a second source would be a copy to keep in step.</p>
+     */
+    @Override
+    public Connection onDidChange(Runnable listener) {
+        return editor.onChanged.connect(text -> listener.run());
     }
 
     @Override

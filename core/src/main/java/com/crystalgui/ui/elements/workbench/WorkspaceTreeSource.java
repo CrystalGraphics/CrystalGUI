@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.fs.CgFileEntry;
 import com.crystalgui.fs.CgFileError;
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.ProjectInfo;
 import com.crystalgui.fs.WorkspaceClient;
@@ -130,8 +131,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
      * <p><b>A refused listing is announced too.</b> It is still an answer about that directory, and the
      * case that most needs the restore to move on is the one where the folder is simply gone.</p>
      */
-    public final com.crystalgui.core.signal.Signal.Value<CgPath> onDidLoadListing =
-            new com.crystalgui.core.signal.Signal.Value<>();
+    public final Signal.Value<CgPath> onDidLoadListing = new Signal.Value<>();
 
     @Nullable
     private String failure;

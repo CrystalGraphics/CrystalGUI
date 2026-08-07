@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.signal.Connection;
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.fs.CgPath;
@@ -52,6 +54,10 @@ final class OpenDocuments {
         /** True once a read has been asked for, so a dock rebuild does not re-read over unsaved work. */
         boolean requested;
 
+        /** This document's change subscription, dropped when it closes. */
+        @Nullable
+        Connection changes;
+
         Entry(FileDocument document) {
             this.document = document;
         }
@@ -59,10 +65,40 @@ final class OpenDocuments {
 
     private final Map<CgPath, Entry> byPath = new HashMap<>();
 
-    /** The document for a path, built on first use. */
+    /**
+     * The document for a path, built on first use.
+     *
+     * <p>A newly built document is subscribed to immediately, so {@link #onDidChangeDirty} can announce
+     * it. Doing it here rather than at each call site is the point of the entry existing at all: there is
+     * one place a document comes into existence, and therefore one place its subscription can be paired
+     * with its {@link #close}.</p>
+     */
     FileDocument documentFor(CgPath path, Function<CgPath, FileDocument> factory) {
-        return byPath.computeIfAbsent(path, key -> new Entry(factory.apply(key))).document;
+        Entry entry = byPath.get(path);
+        if (entry != null) return entry.document;
+        entry = new Entry(factory.apply(path));
+        byPath.put(path, entry);
+        entry.changes = entry.document.onDidChange(() -> onDidChangeDirty.emit(path));
+        return entry.document;
     }
+
+    /**
+     * A document's content changed, so whether it is dirty may have.
+     *
+     * <h3>What it replaced</h3>
+     *
+     * <p>{@code Workbench.refreshDirtyMarkers} ran every frame, and "is anything unsaved" means
+     * {@code encode()} on <b>every open document</b> compared against the bytes last read — so an open
+     * shader graph was serialised sixty times a second to keep a tab marker up to date.</p>
+     *
+     * <p>Carries the path rather than the dirty set. The set is what the poll computed; a path is what
+     * the change <em>is</em>, and a listener wanting the set can ask {@code dirtyPaths()} once per change
+     * instead of once per frame.</p>
+     *
+     * <p><b>Over-fires by design.</b> It means "content moved", not "dirtiness flipped" — deciding the
+     * latter needs the encode this exists to avoid doing eagerly.</p>
+     */
+    final Signal.Value<CgPath> onDidChangeDirty = new Signal.Value<>();
 
     /** The document already open for a path, or null. */
     @Nullable
@@ -168,7 +204,11 @@ final class OpenDocuments {
      */
     void close(CgPath path) {
         Entry entry = byPath.remove(path);
-        if (entry != null && entry.document instanceof Disposable disposable) {
+        if (entry == null) return;
+        // BEFORE disposing. A listener told about a document whose dispose() has already run will ask it
+        // something -- and encode() on a released graph is exactly the question dirtiness asks.
+        if (entry.changes != null) entry.changes.disconnect();
+        if (entry.document instanceof Disposable disposable) {
             Disposer.dispose(disposable);
         }
     }

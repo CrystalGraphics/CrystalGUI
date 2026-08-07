@@ -2,6 +2,8 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.ui.UIElement;
 
+import com.crystalgui.core.signal.Connection;
+
 /**
  * One open file, whatever kind of file it is.
  *
@@ -37,6 +39,7 @@ import com.crystalgui.ui.UIElement;
  * under any encoding. Text documents answer with UTF-8, which is what the save path already did one layer
  * further out.</p>
  */
+
 public interface FileDocument {
 
     /** The element the dock shows for this file. */
@@ -69,4 +72,39 @@ public interface FileDocument {
      * refuses to save that file at all — see {@code Workbench.isDirty}.</p>
      */
     void adopt(byte[] bytes);
+
+    /**
+     * Fires when this document's <b>content</b> changes — what makes it dirty, or clean again.
+     *
+     * <h3>Why the workbench cannot work this out for itself</h3>
+     *
+     * <p>Dirtiness is {@code encode()} compared against the bytes last read, so "is anything unsaved"
+     * means encoding <em>every open document</em>. {@code Workbench.refreshDirtyMarkers} did exactly that
+     * every frame — serialising an entire shader graph sixty times a second to notice a tab marker that
+     * changes when somebody types.</p>
+     *
+     * <p>Each document already knows. {@code TextFileDocument} has its editor's {@code onChanged}, and a
+     * graph has its {@link com.crystalgui.core.undo.UndoStack}: every document change goes through an
+     * {@code Edit} by construction, which is the boundary this codebase already draws between document
+     * state and view state. So the announcement costs an implementation one line and the poll goes.</p>
+     *
+     * <h3>No default, deliberately</h3>
+     *
+     * <p>A default returning a signal that never fires is an answer chosen for someone who never saw the
+     * question: the implementation compiles, and its tab silently never gains a dirty marker. Abstract
+     * makes the compiler ask. Same rule the platform SPI states for sound and cursor.</p>
+     *
+     * <p><b>May over-fire.</b> "Something changed" is enough; whether it changed <em>back</em> is
+     * {@code isDirty}'s business, and re-encoding one document on an edit is nothing like re-encoding all
+     * of them on a frame.</p>
+     *
+     * <h3>A subscription, not an exposed signal</h3>
+     *
+     * <p>Returning a {@code Signal} would force every implementation to <em>own</em> one, which
+     * {@code TextFileDocument} — a record wrapping an editor that already has {@code onChanged} — cannot
+     * do without inventing state to keep in step. Taking a listener lets an implementation adapt whatever
+     * it already has, and the {@link Connection} it hands back is a {@code Disposable}, so the caller can
+     * drop the subscription when the document closes.</p>
+     */
+    Connection onDidChange(Runnable listener);
 }

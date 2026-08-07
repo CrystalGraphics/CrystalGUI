@@ -32,6 +32,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.core.signal.Connection;
 
 /**
  * Opening a file, and acting on the tab it opened in.
@@ -257,6 +258,7 @@ public class WorkbenchFileTabTest extends UiTestBase {
                 return new byte[0];
             }
             @Override public void adopt(byte[] bytes) { }
+            @Override public Connection onDidChange(Runnable listener) { return () -> { }; }
         });
         workbench.bindEditorExtensions("fake", "shadergraph");
 

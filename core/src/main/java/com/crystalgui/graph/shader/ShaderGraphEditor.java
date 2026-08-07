@@ -18,6 +18,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
@@ -692,6 +693,19 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
     public static final String VIEW_ZOOM = "graph.view.zoom";
     public static final String VIEW_PAN_X = "graph.view.panX";
     public static final String VIEW_PAN_Y = "graph.view.panY";
+
+    /**
+     * The graph's undo stack, which <b>is</b> its change log.
+     *
+     * <p>Every document change goes through an {@code Edit} by construction — the boundary this codebase
+     * draws between document state and view state — so "something was pushed, undone or redone" is
+     * exactly "the content changed". Pan, zoom and selection move nothing here, which is correct: they
+     * are view state and cannot make a file dirty.</p>
+     */
+    @Override
+    public Connection onDidChange(Runnable listener) {
+        return graph.undoStack().onChanged.connect(listener);
+    }
 
     /** The graph as it stands, in the serialized form {@link GraphCodecs#DOCUMENT} defines. */
     @Override
