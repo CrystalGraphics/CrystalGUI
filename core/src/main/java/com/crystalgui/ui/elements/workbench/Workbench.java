@@ -1065,7 +1065,7 @@ public class Workbench extends UIElement {
     /**
      * A document was released, because the last tab showing it closed.
      *
-     * <p>The counterpart of {@link #onDocumentLoaded}, and the half that did not exist — which is why
+     * <p>The counterpart of {@link #onDidOpenDocument}, and the half that did not exist — which is why
      * nothing could clean up after a close.</p>
      */
     public final Signal.Value<CgPath> onDidCloseDocument = new Signal.Value<>();
@@ -1095,7 +1095,7 @@ public class Workbench extends UIElement {
         // AFTER the bytes are in, which is the whole reason this signal exists rather than the panel
         // factory announcing the open. A document restoring a caret at line 400 into text that has not
         // landed yet clamps it to 0, and the failure looks like the caret never having been saved.
-        onDocumentLoaded.emit(path);
+        onDidOpenDocument.emit(path);
     }
 
     /**
@@ -1105,7 +1105,7 @@ public class Workbench extends UIElement {
      * diagnostic pass -- can act. There is deliberately no signal for "a panel was created": that happens
      * while the read is still in flight.</p>
      */
-    public final Signal.Value<CgPath> onDocumentLoaded =
+    public final Signal.Value<CgPath> onDidOpenDocument =
             new Signal.Value<>();
 
     /** The document for a path, created on first use from whichever type its name binds to. */

@@ -513,7 +513,7 @@ public class CrystalEditor extends UIElement implements Disposable {
         // poll pulled them back. Setting it here makes the two agree by construction rather than by both
         // happening to want the same thing.
         followed = graph;
-        assertOnlyChild(inspectorHost, inspectorFor(graph));
+        inspectorHost.setOnlyChild(inspectorFor(graph));
     }
 
     /**
@@ -531,24 +531,6 @@ public class CrystalEditor extends UIElement implements Disposable {
      * already showing this?" — and the size check was answering a stricter one that happens to coincide
      * most of the time, which is the worst kind of check.</p>
      */
-    private static void assertOnlyChild(UIElement host, UIElement wanted) {
-        if (wanted.getParent() == host) return;
-        // NOT clearAllChildren(). It skips internal children by design, and a ShaderGraphInspector calls
-        // markAsInternal() on ITSELF in its constructor -- so the outgoing one could never leave, and the
-        // incoming one stacked underneath it. Two inspectors in one tab, which is what that looked like.
-        //
-        // Removing through the matching API is the fix rather than un-marking the inspector: internal is
-        // the inspector's own statement about its parts, and it is right -- nobody should be able to
-        // reach into it with removeChild. What was wrong was the host assuming one kind of child.
-        for (UIElement child : new ArrayList<>(host.getChildren())) {
-            if (child.isInternalUI()) {
-                host.removeInternalChild(child);
-            } else {
-                host.removeChild(child);
-            }
-        }
-        host.addChild(wanted);
-    }
 
     // install(UIWindow) is gone, and nothing replaced it.
     //
