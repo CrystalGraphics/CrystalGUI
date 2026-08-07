@@ -9,6 +9,7 @@
 |---|---|---|
 | 1 | `Disposable` / `Disposer`, GL-aware (§14) | **DONE** |
 | 2 | `DataContext` + context keys (§15) | **DONE** |
+| 2.5 | Commands: global registration, context-resolved (§15b) | **DONE** — all three owner-capturing classes migrated; `install` is gone |
 | 3 | Typed service events; delete the polling loops (§16) | not started |
 | 4 | `Resource`: schemes, virtual documents (§17) | not started |
 | 5 | `DockPane`: retargetable views (§18) | not started |
@@ -1277,6 +1278,146 @@ Standard keys — `com.crystalgui.ui.UiDataKeys`:
 The `when`-expression **parser** (`editorFocus && resourceExtname == .java`). Predicates over
 `DataContext` cover commands today. The parser is needed only when keymaps want conditions, and it is
 ~1000 lines in VS Code, most of it parsing.
+
+---
+
+---
+
+## 15b. Step 2.5 — Actions: global registration, context-resolved
+
+**Why here:** it is the completion of step 2, not a new idea. `DataContext` gave a widget the ability to
+*supply* a subject; this removes its obligation to *install* the commands that consume one. Doing it
+before step 3 matters because every later step registers commands — doing it after means writing them
+twice.
+
+### 15b.1 What is wrong today, measured
+
+| Finding | Evidence |
+|---|---|
+| **`CommandRegistry` is per-`UIWindow`** | `UIWindow:57 private final CommandRegistry commands` |
+| **Commands are installed from a frame ticker** | `ShaderGraphEditor.attachPreviews` calls `installCommands()` every frame until previews attach — so a graph's commands **do not exist until a frame after it attaches**, and the palette opened before that is missing them |
+| **Three incompatible install shapes** | static `install(registry)`, static `install(window, owner)`, instance `installCommands()` + a `commandsInstalled` guard |
+| **25 install-shaped call sites** | across 6 command classes and 2 widget-owned installers |
+| **A command bound to a specific element** | `UndoCommands.install(registry, fileTree)` — even though `UndoScope` already resolves the right stack from focus. Step 2 made that wiring redundant |
+
+The single sentence: **commands are global, context is local — and we made both local.**
+
+### 15b.2 What the references do
+
+**VS Code.** One declaration site carries id, title, precondition, keybinding *and* menu placement,
+registered at module load:
+
+```ts
+registerAction2(class extends Action2 {
+  constructor() { super({
+    id: 'editor.action.deleteLines',
+    precondition: EditorContextKeys.writable,
+    keybinding: { primary: KeyMod.CtrlCmd | KeyCode.KeyK, weight: KeybindingWeight.EditorContrib },
+    menu: [{ id: MenuId.EditorContext, group: '1_modification', order: 2 }]
+  }); }
+  run(accessor: ServicesAccessor, ...args) { … }
+});
+```
+
+`CommandsRegistry` is a **singleton**; `IContextKeyService` is what is scoped. `MenuRegistry` holds
+menu contributions keyed by `MenuId`.
+
+**IntelliJ.** `AnAction` registered once (via `plugin.xml` or `ActionManager.registerAction`).
+`update(AnActionEvent)` reads `e.getDataContext()` and sets `Presentation.enabled`;
+`actionPerformed(e)` reads the same context. Placement is `<add-to-group group-id="EditorPopupMenu">`.
+
+**Neither has a widget that installs commands.** A widget answers data keys; that is its whole
+contribution.
+
+### 15b.3 API
+
+```java
+package com.crystalgui.core.command;
+
+public final class Action {
+    public static Builder of(String id, String title);
+
+    public static final class Builder {
+        public Builder enabledWhen(Predicate<DataContext> precondition);
+        public Builder run(Consumer<DataContext> body);
+        public Builder binding(String... keySpecs);          // declared WITH the action
+        public Builder menu(MenuId menu, String group, int order);
+        public Action build();
+    }
+
+    public String id();
+    public String title();
+    public boolean isEnabled(DataContext context);
+    public boolean run(DataContext context);                 // false when disabled
+    public List<String> bindings();
+    public List<MenuPlacement> menus();
+}
+
+/** The one registry. Static, populated at class init, never per-window. */
+public final class ActionRegistry {
+    public static void register(Action action);
+    @Nullable public static Action get(String id);
+    public static Collection<Action> all();
+    public static boolean run(String id, DataContext context);
+    /** Every action placed in {@code menu}, in group then order, filtered by enablement. */
+    public static List<Action> menu(MenuId menu, DataContext context);
+}
+```
+
+`MenuId` is an interned name (`GRAPH_CONTEXT`, `EXPLORER_CONTEXT`, `EDITOR_TAB_CONTEXT`, `PALETTE`),
+mirroring VS Code's. Placement is `(group, order)` so unrelated contributors interleave predictably —
+`navigation@1` in VS Code's spelling.
+
+### 15b.4 Migration strategy — adapters, then deletion
+
+`CommandRegistry` stays and becomes a **view over `ActionRegistry` plus this window's context**:
+
+```java
+// UIWindow.getCommands() keeps working
+public boolean run(String id) { return ActionRegistry.run(id, DataContext.from(focused())); }
+```
+
+So every existing caller, keymap binding and palette entry keeps working while actions migrate one
+class at a time. The per-window registry is deleted when its last direct registration is gone.
+
+**Order:** `UndoCommands` first (it is the clearest win and the smallest), then `GraphCommands`,
+`ChromeCommands`, `DockCommands`, `ExplorerCommands`, `EditorCommands`, `CrystalEditorCommands`, then
+the two widget-owned installers (`ShaderGraphEditor`, `BlackboardPanel`) — which is where
+`installCommands()`, `commandsInstalled` and the ticker call all disappear.
+
+### 15b.5 What this affects beyond commands
+
+| Framework | Today | After |
+|---|---|---|
+| **Keymap** | `keymap().bind(spec, id)` called from inside widgets, after install | declared with the action; the keymap reads the registry and stays the place a *user* remaps |
+| **Menus** | `ExplorerCommands::menu` builds a list by hand | `MenuId` + group/order. **This is plan §11's Tier-0 item 0.7**, and half its value is here |
+| **ContextMenu** | `setContextMenu(registry, builder)` per widget | one call, filtered by context |
+| **Command palette** | enumerates one window's registry | enumerates globally; enablement per context |
+| **`UndoCommands`** | installed against `fileTree` specifically | global, resolved through `UNDO_STACK`. The wiring step disappears |
+| **`CommandContext`** | `source` + `args` | a thin wrapper over `DataContext`; `args` survives as binding payload |
+
+### 15b.6 Tests (contract)
+
+1. An action is registered **at class init** — available before any window exists, and before any
+   widget has been built. This is the one that fails today.
+2. Registering the same id twice is refused, naming the id.
+3. `isEnabled` is evaluated against the *passed* context, so one action reports differently for two
+   different focus positions.
+4. `run` on a disabled action does nothing and returns false.
+5. `menu(id, context)` returns contributions in group-then-order, and **omits disabled ones**.
+6. Two actions in the same group from unrelated registrations interleave by order, not by
+   registration sequence.
+7. A binding declared with an action is discoverable from the keymap without the widget existing.
+8. **Acceptance:** a graph command runs correctly when invoked from a nested widget inside the graph,
+   with no `installCommands` anywhere in the call path.
+
+### 15b.7 Deliberately not in this step
+
+- The **`when`-expression parser**. `Predicate<DataContext>` covers preconditions; the string form is
+  ~1000 lines in VS Code and is only needed when *users* write conditions in a keymap file.
+- **Menu rendering.** This step gives menus a source of truth; making `ContextMenu` read it is a
+  follow-on, and the two widgets that build menus by hand keep working until then.
+- **Action groups / submenus.** `MenuId` + group covers everything we currently draw.
 
 ---
 

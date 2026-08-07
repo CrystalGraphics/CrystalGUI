@@ -2,6 +2,7 @@ package com.crystalgui.ui;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Menu;
@@ -17,6 +18,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.ui.elements.UIText;
 
 /**
  * {@link ContextMenu} — a right-click menu built from commands rather than lambdas.
@@ -227,11 +229,113 @@ public class ContextMenuTest extends UiTestBase {
     /** Where the row's text actually begins, in the row's own space. */
     private static float labelXOf(MenuItem item) {
         for (UIElement child : item.getChildren()) {
-            if (child instanceof com.crystalgui.ui.elements.UIText text && !text.getText().isEmpty()
+            if (child instanceof UIText text && !text.getText().isEmpty()
                     && !child.hasClass(MenuItem.ACCELERATOR_CLASS)) {
                 return child.getRuntimeCache().getX();
             }
         }
         throw new AssertionError("no label found on " + item.getText());
+    }
+
+    // ── Contributions: the menu nobody writes ───────────────────────────────────────────────────
+
+    /**
+     * <b>A menu assembled from what commands declare, rather than from a literal list.</b>
+     *
+     * <p>Until this path existed {@link MenuId} had no production users at all: {@code Command.menu(...)}
+     * recorded placements nothing read, and the explorer's menu stayed a thirteen-line builder that only
+     * its author could add to. These pin the property that made the id worth having — a command declares
+     * where it sits, and the menu is a query.</p>
+     */
+    private CommandRegistry contributed() {
+        CommandRegistry local = new CommandRegistry();
+        local.register(Command.of("c.paste", "Paste").menu(MENU, "2_clipboard", 20).run(c -> { }));
+        local.register(Command.of("c.copy", "Copy").menu(MENU, "2_clipboard", 10).run(c -> { }));
+        local.register(Command.of("c.rename", "Rename").menu(MENU, "3_modify", 10).run(c -> { }));
+        return local;
+    }
+
+    private static final MenuId MENU = MenuId.of("test/contributions");
+    private static final MenuId NESTED =
+            MenuId.of("test/contributions/new").nestedIn(MENU, "New", "1_new", 0);
+
+    @Test
+    public void contributionsComeOutInGroupThenOrder() {
+        Menu menu = ContextMenu.of(MENU).build(contributed(), root);
+        assertEquals(List.of("Copy", "Paste", "Rename"), labelsOf(menu));
+    }
+
+    /** A group boundary is where a separator goes, so no contributor has to ask for one. */
+    @Test
+    public void aSeparatorFallsOutOfEachGroupBoundary() {
+        Menu menu = ContextMenu.of(MENU).build(contributed(), root);
+        // Two groups -> exactly one rule between them; leading and trailing ones are dropped by build().
+        assertEquals(1, separatorCount(menu));
+    }
+
+    /**
+     * <b>Disabled contributions are dimmed, not dropped.</b>
+     *
+     * <p>This class's rule rather than {@code CommandRegistry.menu}'s, which filters. A menu whose items
+     * move depending on what happens to apply is a menu whose items are never in the same place twice —
+     * the same reasoning the header records for the palette that listed 1 of 9.</p>
+     */
+    @Test
+    public void aDisabledContributionIsShownDimmedRatherThanOmitted() {
+        CommandRegistry local = contributed();
+        local.register(Command.of("c.rename", "Rename").menu(MENU, "3_modify", 10)
+                .enabledWhen(c -> false).run(c -> { }));
+
+        Menu menu = ContextMenu.of(MENU).build(local, root);
+        assertEquals(List.of("Copy", "Paste", "Rename"), labelsOf(menu));
+        assertFalse(itemNamed(menu, "Rename").isEnabled());
+    }
+
+    /** A submenu is its own MenuId, so anything can contribute into it without touching the parent. */
+    @Test
+    public void aSubmenuIsItselfContributedInto() {
+        CommandRegistry local = contributed();
+        local.register(Command.of("c.newFile", "File…").menu(NESTED, "1", 10).run(c -> { }));
+
+        Menu menu = ContextMenu.of(MENU).build(local, root);
+        assertEquals(List.of("New", "Copy", "Paste", "Rename"), labelsOf(menu));
+    }
+
+    /**
+     * A submenu nobody contributed to is dropped, because it would open onto nothing.
+     *
+     * <p>Distinct from one whose items are merely disabled, which still opens and shows them dimmed: an
+     * empty submenu is a registration that never happened, a disabled one is an answer.</p>
+     */
+    @Test
+    public void anUncontributedSubmenuIsDropped() {
+        Menu menu = ContextMenu.of(MENU).build(contributed(), root);
+        assertFalse("an empty New submenu should not be offered", labelsOf(menu).contains("New"));
+    }
+
+    /** The point of the whole thing: a stranger adds an item without the menu's owner knowing. */
+    @Test
+    public void aForeignCommandCanContributeWithoutTouchingTheMenu() {
+        CommandRegistry local = contributed();
+        local.register(Command.of("other.thing", "Something Else")
+                .menu(MENU, "2_clipboard", 15).run(c -> { }));
+
+        assertEquals(List.of("Copy", "Something Else", "Paste", "Rename"),
+                labelsOf(ContextMenu.of(MENU).build(local, root)));
+    }
+
+    private static MenuItem itemNamed(Menu menu, String label) {
+        for (MenuItem item : menu.getItems()) {
+            if (label.equals(item.getText())) return item;
+        }
+        throw new AssertionError("no item labelled " + label + " in " + labelsOf(menu));
+    }
+
+    private static int separatorCount(Menu menu) {
+        int found = 0;
+        for (UIElement child : menu.itemsContainer().getChildren()) {
+            if (!(child instanceof MenuItem)) found++;
+        }
+        return found;
     }
 }

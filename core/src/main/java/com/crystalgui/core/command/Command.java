@@ -1,7 +1,11 @@
 package com.crystalgui.core.command;
 
+import com.crystalgui.core.data.DataContext;
 import lombok.Getter;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -61,6 +65,63 @@ public final class Command {
         this.enabled = predicate == null ? context -> true : predicate;
         return this;
     }
+
+    /**
+     * Enablement stated over the {@link com.crystalgui.core.data.DataContext} instead.
+     *
+     * <p>The common case once subjects come from the context: {@code data(c -> c.has(GRAPH_VIEW))}
+     * rather than {@code enabledWhen(c -> c.data().has(GRAPH_VIEW))}. Named differently rather than
+     * overloaded because two lambda-taking overloads on one name are ambiguous at every call site.</p>
+     */
+    public Command enabledWhereData(Predicate<DataContext> predicate) {
+        return enabledWhen(context -> predicate.test(context.data()));
+    }
+
+    /** As {@link #run(Consumer)}, but handed the data context directly. */
+    public Command runWithData(Consumer<DataContext> handler) {
+        return run(context -> handler.accept(context.data()));
+    }
+
+    /**
+     * Default key specs this command answers to, in {@code Keymap}'s syntax.
+     *
+     * <h3>Declared with the command, not beside it</h3>
+     *
+     * <p>A binding and the thing it invokes are one fact, and both references keep them together —
+     * VS Code's {@code keybinding:} field, IntelliJ's {@code <keyboard-shortcut>}. Ours were split: the
+     * command was registered in one place and {@code keymap().bind(spec, id)} was called in another,
+     * usually from inside a widget and therefore only after that widget existed. That is how a command
+     * ends up registered but unreachable, or a binding ends up pointing at nothing.</p>
+     *
+     * <p>A user's keymap still overrides these. This is the default, not the rule.</p>
+     */
+    public Command binding(String... keySpecs) {
+        java.util.Collections.addAll(bindings, keySpecs);
+        return this;
+    }
+
+    public java.util.List<String> bindings() {
+        return java.util.Collections.unmodifiableList(bindings);
+    }
+
+    /**
+     * Where this appears in menus. Empty means "palette only".
+     *
+     * <p>{@code group} then {@code order}, so unrelated contributors interleave predictably rather than
+     * by whoever registered first — VS Code spells the pair {@code "navigation@1"}. This is what lets a
+     * widget contribute to a menu it does not own, instead of reaching the method that builds it.</p>
+     */
+    public Command menu(MenuId menu, String group, int order) {
+        menus.add(new MenuId.Placement(menu, group, order));
+        return this;
+    }
+
+    public List<MenuId.Placement> menus() {
+        return Collections.unmodifiableList(menus);
+    }
+
+    private final List<String> bindings = new ArrayList<>();
+    private final List<MenuId.Placement> menus = new ArrayList<>();
 
     public boolean isEnabled(CommandContext context) {
         return enabled.test(context);

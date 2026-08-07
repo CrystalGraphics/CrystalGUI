@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.crystalgui.ui.input.keymap.Keymap;
 
 /**
  * The Blackboard — every property the graph declares, as a floating panel over the canvas.
@@ -266,7 +267,6 @@ public class BlackboardPanel extends UIElement {
     @Nullable
     private String renaming;
 
-    private boolean commandsInstalled;
 
     /** @see #refresh */
     private boolean refreshing;
@@ -1134,39 +1134,27 @@ public class BlackboardPanel extends UIElement {
     /**
      * Registers this panel's commands and binds their defaults on it. Idempotent; safe to call per frame.
      *
-     * <p>Explicit, like every command set in this engine — nothing injects its own defaults, because a
-     * registry that quietly acquired commands nobody registered surprises anything that enumerates it,
-     * and the palette is exactly such a thing.</p>
+    /**
+     * Registers this panel's commands. Global, so no window is needed — see
+     * {@code ShaderGraphEditor.registerCommands()} for why that mattered.
      *
-     * @return true once a window was found and the keys are live
+     * <p>No re-registration guard: the engine calls this once for this class. A
+     * {@code if (!registry.contains(DELETE_COMMAND))} here was one command id standing in for three,
+     * which is a check that answers a different question than the one it looks like it asks.</p>
      */
-    public boolean installCommands() {
-        UIWindow window = getAttachedWindow();
-        if (window == null) return false;
-        if (commandsInstalled) return true;
-        commandsInstalled = true;
-
-        CommandRegistry registry = window.getCommands();
-        if (!registry.contains(DELETE_COMMAND)) {
-            registry.register(Command.of(DELETE_COMMAND, "Delete Property")
-                    .run(context -> withBoard(context, BlackboardPanel::removeSelected))
-                    .enabledWhen(BlackboardPanel::isActionable));
-            registry.register(Command.of(DUPLICATE_COMMAND, "Duplicate Property")
-                    .run(context -> withBoard(context, BlackboardPanel::duplicateSelected))
-                    .enabledWhen(BlackboardPanel::isActionable));
-            registry.register(Command.of(RENAME_COMMAND, "Rename Property")
-                    .run(context -> withBoard(context, BlackboardPanel::renameSelected))
-                    .enabledWhen(BlackboardPanel::isActionable));
-        }
-
-        // Delete AND Backspace, for the reason GraphCommands records: the platform convention differs
-        // between a full keyboard and a laptop one. F2 is the rename key wherever a list has one.
-        keymap().bind("Delete", DELETE_COMMAND);
-        keymap().bind("Backspace", DELETE_COMMAND);
-        keymap().bind("Mod+D", DUPLICATE_COMMAND);
-        keymap().bind("F2", RENAME_COMMAND);
-        return true;
+    @Override
+    protected void registerCommands(CommandRegistry registry) {
+        registry.register(Command.of(DELETE_COMMAND, "Delete Property").binding("Delete", "Backspace")
+                .run(context -> withBoard(context, BlackboardPanel::removeSelected))
+                .enabledWhen(BlackboardPanel::isActionable));
+        registry.register(Command.of(DUPLICATE_COMMAND, "Duplicate Property").binding("Mod+D")
+                .run(context -> withBoard(context, BlackboardPanel::duplicateSelected))
+                .enabledWhen(BlackboardPanel::isActionable));
+        registry.register(Command.of(RENAME_COMMAND, "Rename Property").binding("F2")
+                .run(context -> withBoard(context, BlackboardPanel::renameSelected))
+                .enabledWhen(BlackboardPanel::isActionable));
     }
+
 
     /** Opens a rename on whatever is selected. The command's body, and the row menu's. */
     public void renameSelected() {
@@ -1239,7 +1227,7 @@ public class BlackboardPanel extends UIElement {
             // The accelerator is READ FROM THE KEYMAP rather than typed here. A hard-coded label is a
             // promise the menu cannot keep: rebind the key and the menu goes on advertising the old one,
             // which is worse than showing nothing. Null when unbound, and setAccelerator takes that.
-            var chord = com.crystalgui.ui.input.keymap.Keymap.acceleratorFor(this, DUPLICATE_COMMAND);
+            var chord = Keymap.acceleratorFor(this, DUPLICATE_COMMAND);
             rowMenu.addItem(DUPLICATE_LABEL).setAccelerator(chord == null ? null : chord.toString());
             rowMenu.onItemActivated.connect(item -> applyRowMenu(item.getText()));
             // Must be IN the tree to be promoted to the top layer -- a Menu is a Popover, and an

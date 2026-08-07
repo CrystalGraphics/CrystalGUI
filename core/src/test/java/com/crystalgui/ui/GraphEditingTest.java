@@ -18,6 +18,10 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgui.core.undo.UndoCommands;
+import com.crystalgui.ui.elements.graph.GraphCommands;
+import com.crystalgui.ui.input.keymap.KeyStroke;
 
 /**
  * P6.2.4 — selection, marquee, move-many and delete.
@@ -485,16 +489,15 @@ public class GraphEditingTest extends UiTestBase {
      */
     @Test
     public void theShippedKeyBindingsAllParse() {
-        com.crystalgui.core.undo.UndoCommands.install(window);
-        com.crystalgui.ui.elements.graph.GraphCommands.install(window);
-
+        // Nothing installs anything: constructing the GraphView registered both sets and bound the
+        // graph's own chords on itself. If a spec failed to parse, that constructor threw.
         var commands = window.getCommands();
-        assertNotNull(commands.get(com.crystalgui.ui.elements.graph.GraphCommands.DELETE));
-        assertNotNull(commands.get(com.crystalgui.core.undo.UndoCommands.UNDO));
+        assertNotNull(commands.get(GraphCommands.DELETE));
+        assertNotNull(commands.get(UndoCommands.UNDO));
 
         // And the alias resolves to the same key the reflected name does.
-        assertEquals(com.crystalgui.ui.input.keymap.KeyStroke.parse("Back"),
-                com.crystalgui.ui.input.keymap.KeyStroke.parse("Backspace"));
+        assertEquals(KeyStroke.parse("Back"),
+                KeyStroke.parse("Backspace"));
     }
 
     private void pressKey(int key, int mods) {
@@ -518,8 +521,6 @@ public class GraphEditingTest extends UiTestBase {
      */
     @Test
     public void theGraphKeysWorkAfterPressingTheCanvas() {
-        com.crystalgui.core.undo.UndoCommands.install(window);
-        com.crystalgui.ui.elements.graph.GraphCommands.install(window);
         GraphNode a = node("A", 20f, 20f);
         GraphNode b = node("B", 20f, 220f);
         frame();
@@ -530,17 +531,17 @@ public class GraphEditingTest extends UiTestBase {
         release(physicalOfWorld(320f, 260f));
         frame();
 
-        pressKey(com.crystalgraphics.platform.input.CgKeyCodes.KEY_A, CgModifiers.CTRL);
+        pressKey(CgKeyCodes.KEY_A, CgModifiers.CTRL);
         assertEquals("Ctrl+A selects all", 2, graph.selectedNodes().size());
 
-        pressKey(com.crystalgraphics.platform.input.CgKeyCodes.KEY_ESCAPE, 0);
+        pressKey(CgKeyCodes.KEY_ESCAPE, 0);
         assertTrue("Escape clears", graph.getSelection().isEmpty());
 
         graph.getSelection().selectOnly(a);
-        pressKey(com.crystalgraphics.platform.input.CgKeyCodes.KEY_DELETE, 0);
+        pressKey(CgKeyCodes.KEY_DELETE, 0);
         assertEquals("Delete removes the selection", 1, graph.nodes().size());
 
-        pressKey(com.crystalgraphics.platform.input.CgKeyCodes.KEY_Z, CgModifiers.CTRL);
+        pressKey(CgKeyCodes.KEY_Z, CgModifiers.CTRL);
         assertEquals("and Ctrl+Z brings it back", 2, graph.nodes().size());
     }
 
@@ -568,7 +569,6 @@ public class GraphEditingTest extends UiTestBase {
     /** Selecting a wire and pressing Delete removes it — the exact sequence that did nothing. */
     @Test
     public void deleteRemovesASelectedWireFromTheKeyboard() {
-        com.crystalgui.ui.elements.graph.GraphCommands.install(window);
         GraphNode a = node("A", 20f, 20f);
         GraphNode b = node("B", 260f, 20f);
         graph.connect(a.getOutputPorts().get(0), b.addInput(VEC3, "A"));
@@ -587,7 +587,7 @@ public class GraphEditingTest extends UiTestBase {
         frame();
 
         assertNotNull("the press should have selected the wire", graph.getSelection().wire());
-        pressKey(com.crystalgraphics.platform.input.CgKeyCodes.KEY_DELETE, 0);
+        pressKey(CgKeyCodes.KEY_DELETE, 0);
         assertTrue("and Delete should remove it", graph.getConnections().isEmpty());
     }
 

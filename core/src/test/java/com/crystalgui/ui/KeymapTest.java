@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.*;
+import com.crystalgui.core.command.CommandRegistry;
 
 /**
  * P6.1.2 — the keymap.
@@ -95,7 +96,7 @@ public class KeymapTest extends UiTestBase {
         assertTrue(up.isWheel());
         assertEquals("Ctrl+WheelUp", up.toString());
         assertEquals(KeyStroke.parse("Mod+WheelDown"),
-                new KeyStroke(KeyStroke.WHEEL_DOWN, com.crystalgraphics.platform.input.CgModifiers.CTRL));
+                new KeyStroke(KeyStroke.WHEEL_DOWN, CgModifiers.CTRL));
     }
 
     /**
@@ -478,9 +479,18 @@ public class KeymapTest extends UiTestBase {
         assertNull(Keymap.acceleratorFor(el, "pan.end"));
     }
 
-    /** What a command palette lists: everything reachable, innermost shadowing outer. */
+    /**
+     * What a command palette lists: everything reachable, innermost shadowing outer — and a command's
+     * own declared default counts as reachable, shadowed by any scope that rebinds it.
+     */
     @Test
     public void thePaletteViewListsEverythingReachableWithInnermostWinning() {
+        // The global registry is shared, and declared bindings are now part of the answer -- so this
+        // asserts against a known set rather than against whatever else the suite has registered.
+        CommandRegistry.global().resetForTesting();
+        CommandRegistry.global().register(
+                Command.of("app.wide", "App Wide").binding("Mod+G"));
+
         UIElement outer = build();
         UIElement inner = new UIElement();
         outer.addChild(inner);
@@ -489,10 +499,26 @@ public class KeymapTest extends UiTestBase {
         inner.keymap().bind("Mod+Shift+S", "edit.save");
 
         var all = Keymap.acceleratorsFrom(inner);
-        assertEquals(2, all.size());
+        assertEquals(3, all.size());
         assertEquals("the inner rebinding shadows the outer one, as pressing it would",
                 KeyChord.parse("Mod+Shift+S"), all.get("edit.save"));
         assertEquals(KeyChord.parse("Mod+P"), all.get("palette.open"));
+        assertEquals("a command's declared default is reachable everywhere, so a palette lists it",
+                KeyChord.parse("Mod+G"), all.get("app.wide"));
+    }
+
+    /** A scope's rebinding shadows the command's declared default, in the list as at the keystroke. */
+    @Test
+    public void aScopeRebindingShadowsTheDeclaredDefaultInThePaletteView() {
+        CommandRegistry.global().resetForTesting();
+        CommandRegistry.global().register(
+                Command.of("app.wide", "App Wide").binding("Mod+G"));
+
+        UIElement element = build();
+        element.keymap().bind("Mod+H", "app.wide");
+
+        assertEquals(KeyChord.parse("Mod+H"), Keymap.acceleratorFor(element, "app.wide"));
+        assertEquals(KeyChord.parse("Mod+H"), Keymap.acceleratorsFrom(element).get("app.wide"));
     }
 
     // ── Sheets: bindings as data ────────────────────────────────────────────

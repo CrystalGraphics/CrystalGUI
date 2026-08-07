@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.crystalgui.core.command.CommandRegistry;
 
 /**
  * The key bindings owned by one element — its scope.
@@ -173,7 +174,16 @@ public final class Keymap {
             KeyChord chord = keymap.chordFor(commandId);
             if (chord != null) return chord;
         }
-        return null;
+        // Then the command's own declared default -- the resolver's outermost scope, and therefore part
+        // of "what would actually fire it here". Omitting this is the failure the note above describes,
+        // arrived at from the other side: undo and every dock command work on their declared chord while
+        // every menu and palette entry for them renders blank.
+        return declaredChordFor(commandId);
+    }
+
+    @Nullable
+    private static KeyChord declaredChordFor(String commandId) {
+        return CommandRegistry.global().declaredBindings().chordFor(commandId);
     }
 
     /**
@@ -195,6 +205,13 @@ public final class Keymap {
                 // the same precedence resolution uses.
                 out.putIfAbsent(binding.getCommandId(), binding.getChord());
             }
+        }
+        // Declared defaults last, so a scope's rebinding still shadows them -- same precedence as the
+        // walk above and as KeymapResolver.
+        for (KeyBinding binding : CommandRegistry.global()
+                .declaredBindings().bindings) {
+            if (binding.getEventType() != KeyEventType.PRESS) continue;
+            out.putIfAbsent(binding.getCommandId(), binding.getChord());
         }
         return Collections.unmodifiableMap(out);
     }

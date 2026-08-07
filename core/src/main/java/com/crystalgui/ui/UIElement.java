@@ -49,6 +49,8 @@ import lombok.experimental.Accessors;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 
+import com.crystalgui.core.command.Command;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import javax.annotation.Nullable;
@@ -175,6 +177,75 @@ public class UIElement implements SettingsScope, DataProvider {
         return this;
     }
 
+    /**
+     * Declare this widget type's commands here. The engine calls it <b>once per class</b>, automatically.
+     *
+     * <h3>Why the engine calls it and not you</h3>
+     *
+     * <p>Every previous shape was something a caller had to remember. A static {@code register(registry)}
+     * had to be invoked by a host that knew the widget existed; an instance {@code installCommands()}
+     * needed a window, so it was called from a <b>frame ticker</b> and the commands did not exist until a
+     * frame after the widget attached. Both were unreliable in the same way: a widget's commands are a
+     * property of the widget, and anything that depends on somebody else calling a method will
+     * eventually not be called.</p>
+     *
+     * <p>So: override this, and it happens. There is nothing to install, nothing to remember, and no
+     * window needed — commands are global (see {@link CommandRegistry#global()}), which is what removed
+     * the last reason a window was ever involved.</p>
+     *
+     * <h3>You cannot capture instance state here, and that is the point</h3>
+     *
+     * <p>This runs from {@code UIElement}'s constructor, so <b>this object's fields are not initialised
+     * yet</b> — the classic Java hazard, deliberately embraced. A command must resolve its subject from
+     * {@link com.crystalgui.core.data.DataContext}, never from a captured owner: registration happens
+     * once per class, so a captured {@code this} would pin every later invocation to whichever instance
+     * happened to be built first. The suite caught exactly that when a workbench-capturing command set
+     * was made global. Here the compiler and the timing make it hard to get wrong instead.</p>
+     *
+     * <p>Bindings declared with a command ({@link Command#binding}) become application-wide defaults
+     * without anything binding them to an element — see {@code KeymapResolver}. An element-scoped
+     * binding is still possible through {@link #keymap()} and still wins, which is what lets one chord
+     * mean different things in different widgets.</p>
+     */
+    protected void registerCommands(CommandRegistry registry) {
+        // Nothing by default.
+    }
+
+    /**
+     * Bind this widget type's own chords here, on its own {@link #keymap()}. Called for <b>every
+     * instance</b>, automatically.
+     *
+     * <h3>Why this is per instance while {@link #registerCommands} is per class</h3>
+     *
+     * <p>Because they answer different questions. A command is one fact about the application, so it is
+     * registered once and resolves its subject from {@link com.crystalgui.core.data.DataContext}. A
+     * <em>binding on an element</em> is what scopes a chord to a widget — {@code KeymapResolver} takes
+     * the innermost match on the focus path, which is how {@code F} frames a graph without stealing the
+     * letter from every text field on screen. That scoping only exists if each element carries the
+     * binding, so this runs per instance.</p>
+     *
+     * <p>Bindings that really are application-wide do not belong here at all — declare them on the
+     * command with {@link Command#binding}, and the resolver falls back to them when no scope claims the
+     * stroke.</p>
+     *
+     * <p>Like {@link #registerCommands}, this runs before subclass fields exist, so it may only name
+     * static specs and ids. That is all a binding is.</p>
+     */
+    protected void bindKeys() {
+        // Nothing by default -- and nothing allocates a Keymap unless an override asks for one.
+    }
+
+    {
+        // An instance initialiser, so it runs for every subclass without each one remembering a super
+        // call -- the same reason the decorations listener above is written this way.
+        //
+        // Once-ness is the REGISTRY's, deliberately not a static latch here: a static one survives
+        // CommandRegistry.resetForTesting(), so a reset test that builds an already-seen class gets no
+        // commands and nothing says so. See CommandRegistry.contribute.
+        CommandRegistry.global().contribute(getClass(), this::registerCommands);
+        bindKeys();
+    }
+
     public UIElement addClass(String cls) {
         if (classes.add(cls)) {
             invalidateStyleMatch();
@@ -206,6 +277,9 @@ public class UIElement implements SettingsScope, DataProvider {
     @Nullable
     public Object getData(DataKey<?> key) {
         if (key == UiDataKeys.ELEMENT) return this;
+        // Answered here rather than by the root, so it costs nothing and cannot be missing: the walk
+        // stops at the first element that answers, and every element knows its own window.
+        if (key == UiDataKeys.WINDOW) return getAttachedWindow();
         return null;
     }
 
@@ -276,7 +350,7 @@ public class UIElement implements SettingsScope, DataProvider {
      * uses.</p>
      */
     public UIElement setDisplayed(boolean displayed) {
-        com.crystalgui.style.StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
+        StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
                 l -> l.display(displayed ? dev.vfyjxf.taffy.style.TaffyDisplay.FLEX
                         : dev.vfyjxf.taffy.style.TaffyDisplay.NONE));
         return this;
@@ -2317,9 +2391,30 @@ public class UIElement implements SettingsScope, DataProvider {
             uiWindow.registerElement(this);
         }
 
-        // TODO: Fire event for Window change
+        onWindowChanged(previousWindow, uiWindow);
 
         children.forEach(child -> child.setAttachedWindow(uiWindow));
+    }
+
+    /**
+     * This element moved between windows — either of which may be null.
+     *
+     * <h3>Why this exists rather than a poll</h3>
+     *
+     * <p>Anything an element must do <em>once it has a window</em> previously had to be done from a
+     * frame path, because there was no other way to learn: {@code Workbench} called
+     * {@code installExplorerCommands(window)} every frame behind a flag, and {@code TextEditor} installed
+     * its commands from {@code updateWindow()}. Both were the same workaround for a missing hook, and
+     * both failed the same way — the work did not exist until a frame had run, or never, if the widget
+     * was never laid out.</p>
+     *
+     * <p>Fired before children are attached, so a parent has registered whatever it provides by the time
+     * a child asks. Both arguments are given because detach is the half that leaks: an element that adds
+     * itself to a window on attach must remove itself on detach, or the window keeps answering with a
+     * subtree that is no longer in it.</p>
+     */
+    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        // Nothing by default.
     }
 
     // ── Runtime cache ────────────────────────────────────────────────────────

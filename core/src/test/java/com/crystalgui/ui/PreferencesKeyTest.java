@@ -78,7 +78,7 @@ public class PreferencesKeyTest extends UiTestBase {
         window = new UIWindow(Ui.of(editor));
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
         window.init(1200, 800);
-        editor.install(window);
+        // Nothing to install: constructing the editor registered its commands.
 
         TestPlatformService.get().input(new CgInputService() {
             @Override public int getCurrentModifiers() { return heldModifiers; }

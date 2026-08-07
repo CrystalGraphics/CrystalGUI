@@ -5,11 +5,15 @@ import com.crystalgui.ui.elements.dock.DockCommands;
 import com.crystalgui.ui.elements.editor.EditorCommands;
 import com.crystalgui.ui.elements.graph.GraphCommands;
 import com.crystalgui.core.undo.UndoCommands;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.ui.input.keymap.KeyStroke;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import com.crystalgui.editor.CrystalEditorCommands;
+import com.crystalgui.ui.elements.chrome.ChromeCommands;
+import com.crystalgui.ui.elements.workbench.ExplorerCommands;
 
 /**
  * <b>Every shipped {@code bindDefaults} actually parses.</b>
@@ -36,11 +40,6 @@ public class ShippedKeymapDefaultsTest {
     }
 
     @Test
-    public void dockDefaultsParse() {
-        DockCommands.bindDefaults(freshKeymap());
-    }
-
-    @Test
     public void graphDefaultsParse() {
         GraphCommands.bindDefaults(freshKeymap());
     }
@@ -50,19 +49,31 @@ public class ShippedKeymapDefaultsTest {
         EditorCommands.bindDefaults(freshKeymap());
     }
 
+    /**
+     * The other place a shipped binding string lives: {@code Command.binding(...)}.
+     *
+     * <p>{@code UndoCommands} has no {@code bindDefaults} any more — its chords are declared on the
+     * commands, so the only thing that parses them is {@code declaredBindings()}. Asking for it here
+     * covers every declared spec in every bundle registered above, which is strictly more than the
+     * per-widget cases and needs no line added when a bundle grows one.</p>
+     */
     @Test
-    public void undoDefaultsParse() {
-        UndoCommands.bindDefaults(freshKeymap());
+    public void declaredBindingsParse() {
+        CommandRegistry.global().resetForTesting();
+        UndoCommands.register();
+        DockCommands.register();
+        GraphCommands.register();
+        EditorCommands.register();
+        CrystalEditorCommands.register();
+        ChromeCommands.register();
+        ExplorerCommands.register();
+        assertNotNull(CommandRegistry.global().declaredBindings());
     }
 
+    /** The explorer's bare keys stay element-scoped, so they still parse through a keymap. */
     @Test
-    public void editorAppDefaultsParse() {
-        com.crystalgui.editor.CrystalEditorCommands.bindDefaults(freshKeymap());
-    }
-
-    @Test
-    public void chromeDefaultsParse() {
-        com.crystalgui.ui.elements.chrome.ChromeCommands.bindDefaults(freshKeymap());
+    public void explorerDefaultsParse() {
+        ExplorerCommands.bindDefaults(freshKeymap());
     }
 
     // ── The two names that have caught us out ───────────────────────────────────────────────────

@@ -11,6 +11,7 @@ import com.crystalgui.ui.input.keymap.Keymap;
 import javax.annotation.Nullable;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import com.crystalgui.core.undo.UndoCommands;
 
 /**
  * The editor's named actions and their default chords — P6.1.7b §H.
@@ -90,15 +91,27 @@ public final class EditorCommands {
     }
 
     /** Registers every editor command. Idempotent — re-registering the same ids is a no-op. */
-    public static void register(CommandRegistry registry) {
+    /**
+     * Registers into {@link CommandRegistry#global()}.
+     *
+     * <p>Commands are global; a command is a fact about the application, and what varies per window is
+     * what is <em>focused</em> — which is {@code DataContext}'s job. Registering per window meant every
+     * window re-registered everything, and a widget had to find "its" window before it could contribute.</p>
+     *
+     * <p>Still <b>explicit</b>: a host calls this. Nothing self-registers, because a registry that
+     * quietly acquired commands nobody asked for surprises anything that enumerates it — which the
+     * command palette does.</p>
+     */
+    public static void register() {
         // edit.undo/edit.redo are UndoCommands' ids, not ours, and they already resolve the right history
         // through UndoScope.nearest -- which from a focused editor finds that editor's own buffer. Calling
         // its registrar rather than declaring editor.undo beside it keeps ONE command per concept, so a
-        // menu and the palette cannot show two entries that do the same thing. Idempotent at both ends.
-        com.crystalgui.core.undo.UndoCommands.register(registry);
+        // menu and the palette cannot show two entries that do the same thing.
+        UndoCommands.register();
+        CommandRegistry.global().contribute(EditorCommands.class, EditorCommands::declare);
+    }
 
-        if (registry.contains(PREFIX + "deleteLines")) return;
-
+    private static void declare(CommandRegistry registry) {
         // ── Multi-caret ─────────────────────────────────────────────────────────────────────────
         registry.register(Command.of(PREFIX + "addCaretAtNextOccurrence", "Add Caret At Next Occurrence")
                 .run(on(TextEditor::addCaretAtNextOccurrence)));
@@ -289,25 +302,13 @@ public final class EditorCommands {
         keymap.bindAll("Mod+WheelDown, Mod+Minus, Mod+Subtract", PREFIX + "zoomOut");
         keymap.bindAll("Mod+0, Mod+Numpad0", PREFIX + "zoomReset");
 
-        // Bound on the EDITOR, using UndoCommands' own chords and ids. A host that also installs undo at
-        // the root gets the same command either way, and the inner binding simply wins while focus is
-        // here -- there is no conflict to resolve because both routes end at UndoScope.nearest.
-        keymap.bind(com.crystalgui.core.undo.UndoCommands.UNDO_CHORD,
-                com.crystalgui.core.undo.UndoCommands.UNDO);
-        keymap.bind(com.crystalgui.core.undo.UndoCommands.REDO_CHORD,
-                com.crystalgui.core.undo.UndoCommands.REDO);
-        keymap.bind(com.crystalgui.core.undo.UndoCommands.REDO_CHORD_ALT,
-                com.crystalgui.core.undo.UndoCommands.REDO);
+        // Undo is deliberately NOT re-bound here. UndoCommands declares its own chords, so Mod+Z reaches
+        // edit.undo everywhere including inside an editor, and both routes end at UndoScope.nearest --
+        // which from a focused editor is that editor's buffer. Binding it again on the editor would be a
+        // second copy of one fact, and the copy would win: an element that binds a command explicitly
+        // suppresses that command's declared default, so remapping undo would stop working in editors
+        // and nowhere else.
     }
 
-    /** Registers the commands and binds the defaults on {@code editor}'s own keymap. */
-    public static void install(CommandRegistry registry, TextEditor editor) {
-        register(registry);
-        bindDefaults(editor.keymap());
-    }
 
-    /** The same, resolving the registry from the window the editor is in. */
-    public static void install(UIWindow window, TextEditor editor) {
-        install(window.getCommands(), editor);
-    }
 }

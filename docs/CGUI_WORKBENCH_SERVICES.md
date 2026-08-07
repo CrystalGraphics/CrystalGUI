@@ -212,3 +212,205 @@ preview or something not yet written can participate in a command written today.
 The `when`-expression parser (`editorFocus && resourceExtname == .java`). Predicates over
 `DataContext` cover commands today; the parser is only needed when keymaps want conditions, and it is
 ~1000 lines in VS Code with most of that being parsing. See `plan.md` §15.6.
+
+---
+
+## Commands
+
+`com.crystalgui.core.command` — `Command`, `CommandRegistry`, `MenuId`.
+
+One type. A command carries its id, title, enablement, default bindings **and** menu placement, and is
+registered into `CommandRegistry.global()`.
+
+```java
+CommandRegistry.global().register(Command.of("graph.delete", "Delete")
+        .binding("Delete", "Backspace")
+        .menu(MenuId.GRAPH_CONTEXT, "modify", 10)
+        .enabledWhereData(context -> context.has(GraphView.GRAPH_VIEW))
+        .runWithData(context -> context.require(GraphView.GRAPH_VIEW).deleteSelection()));
+```
+
+> There was briefly a separate `Action`/`ActionRegistry` beside this. It was the same concept under a
+> second name — a command with menu and binding metadata — so it was folded back in. If you find a
+> reference to `Action` anywhere, it is stale.
+
+### Commands are global; context is local
+
+A command is a fact about the *application*. What varies per window is what is **focused**, and that is
+`DataContext`'s job. Registering per window meant every window re-registered everything, a widget had
+to find "its" window before it could contribute, and one widget ended up calling `installCommands()`
+from a **frame ticker** — so its commands did not exist until a frame after it attached.
+
+`CommandRegistry` instances still exist and fall through to the global one. An instance is a place for
+*overrides*; almost nothing needs one, and tests use them for isolation.
+
+### The rule for whether a command may be global
+
+**A command can be global exactly when it resolves its subject from `DataContext`.**
+
+A command that *captures* an owner cannot: registration is idempotent, so the second registration is
+skipped and every later invocation runs against the **first** owner. That is not hypothetical — it is
+what the test suite caught when `ExplorerCommands` (which closes over a `Workbench`) was globalised.
+
+| Global today | Still per-window, because they capture an owner |
+|---|---|
+| `UndoCommands`, `GraphCommands`, `DockCommands`, `EditorCommands`, `ShaderGraphEditor`, `BlackboardPanel` | `ExplorerCommands` (`Workbench`), `CrystalEditorCommands` (`CrystalEditor`, `UIWindow`), `ChromeCommands` (`UIWindow`) |
+
+The three on the right migrate once there are data keys for a workbench, an editor and a window — the
+same move that turned `GraphCommands.graphFor` from an `instanceof` walk into a key.
+
+### A widget's commands arrive with the widget — two hooks on `UIElement`
+
+```java
+class GraphView extends CanvasView {
+    @Override protected void registerCommands(CommandRegistry registry) { GraphCommands.register(); }
+    @Override protected void bindKeys() { GraphCommands.bindDefaults(keymap()); }
+}
+```
+
+| Hook | Runs | For |
+|---|---|---|
+| `registerCommands(CommandRegistry)` | **once per concrete class** | the commands themselves — one application-wide fact each |
+| `bindKeys()` | **once per instance** | chords scoped to *this* widget, on `keymap()` |
+
+The split is load-bearing. A command is registered once and resolves its subject from `DataContext`; a
+**binding on an element** is the only thing that scopes a chord to a widget, so it must be on each one.
+`F` frames a graph and `Mod+D` adds a caret in an editor precisely because those live on the elements.
+
+Both run from `UIElement`'s constructor, so **subclass fields do not exist yet** — the classic Java
+hazard, deliberately embraced. Registration happens once per class, so a captured `this` would pin every
+later invocation to whichever instance was built first; the timing makes that hard to write by accident.
+
+> **Every earlier shape was something a caller had to remember, and each failed silently.** A static
+> `register(registry)` needed a host that knew the widget existed. An instance `installCommands()` needed
+> a window, so it was called from a **frame ticker** — commands did not exist until a frame after the
+> widget attached. `TextEditor` guarded one with a `commandsInstalled` flag consulted from the **layout
+> path**, so an editor never laid out had no commands at all. And for one commit `GraphView` had
+> registration without binding: every graph command existed, was enabled, showed in the palette, and
+> answered no key — because the binding half was still waiting on `GraphCommands.install(window)`, which
+> by then nothing called.
+
+### Once-ness belongs to the registry: `contribute`
+
+```java
+public static void register() {
+    CommandRegistry.global().contribute(GraphCommands.class, GraphCommands::declare);
+}
+```
+
+Bundles used to open with `if (registry.contains(SAVE_FILE)) return;` — one arbitrary command id
+standing in for a whole set. Wrong in both directions: add a command to the bundle and it never
+registers; unregister that one id and the whole bundle re-runs.
+
+Keying on the **contributor class** asks the real question, and because the record lives on the registry
+rather than in a static, `resetForTesting()` clears it too. A static latch does not — the reset empties
+the registry, the next widget of an already-seen class registers nothing, and the command is simply
+absent. `AutomaticCommandRegistrationTest` pins that case specifically.
+
+It is per registry instance, which is what gives an owner-capturing bundle **per-window** once-ness: those
+register into the window's own registry, so a second window gets its own copy instead of reusing the
+first's.
+
+### Registration is explicit
+
+Nothing self-registers. **No static initialisers** — a command's existence would then depend on
+class-loading order, and `CrystalEditorCommands` already states why that is refused: *"a registry that
+quietly acquired commands nobody registered surprises anything that enumerates it"*, which is exactly
+what the palette does. `registerCommands` is not an exception: it is triggered by constructing the
+widget, which is a deterministic act by a caller, not by a class happening to load.
+
+### Bindings and menus travel with the command
+
+A binding and the thing it invokes are one fact. They used to be two: registration in one place,
+`keymap().bind(spec, id)` in another — usually inside a widget, so it could only run after that widget
+existed. `Command.binding(...)` is the default; a user's keymap still overrides it.
+
+**Declared, or element-scoped — pick by scope, not by convenience.**
+
+| | Where | Example |
+|---|---|---|
+| Application-wide chord | `Command.binding(...)` | `Mod+Z` undo, `Mod+W` close panel — a dock wraps everything |
+| Widget-scoped chord | `bindKeys()` on the element | bare `F`/`A`/`Space` in a graph, `Mod+D` in an editor |
+
+A declared binding is application-wide *by definition*, so a bare letter must never be one — it would be
+live over every text field on screen. Conversely, binding an application-wide chord onto a root element
+makes the whole set a **host obligation**: `DockCommands` was bound that way, no harness scene called
+`install`, and every dock in the gallery had eight commands and not one key.
+
+Two consequences that are easy to miss:
+
+- **An element that binds a command explicitly suppresses that command's declared default** — otherwise
+  rebinding undo would leave `Mod+Z` live and the two would disagree. This is why `EditorCommands` no
+  longer re-binds `edit.undo` on the editor.
+- **`Keymap.acceleratorFor` / `acceleratorsFrom` consult declared bindings last**, after the scope walk.
+  They must, or every menu and palette entry for a declared chord renders blank while the key works —
+  the same "menu disagrees with the keystroke" failure their own javadoc warns about, from the other side.
+
+`menu(MenuId, group, order)` is what lets a widget contribute to a menu it does not own, instead of
+reaching the method that builds it. `CommandRegistry.menu(id, context)` returns the contributions in
+group-then-order, **omitting disabled ones** — a context menu is built for one position and an entry
+that cannot apply there is noise. A palette wants the opposite and asks `all()`, rendering enablement
+itself.
+
+### What a host still installs: nothing
+
+`CrystalEditor.install(window)` is **gone**, and so is every `install`/`bindDefaults` pair except the two
+element-scoped ones (`GraphCommands`, `EditorCommands`, `ExplorerCommands` — called from the owning
+widget's `bindKeys`). Constructing a widget is what registers its commands.
+
+The last three holdouts captured an owner, which is what made them un-registerable once. They now resolve
+it from the context instead:
+
+| Was captured | Now |
+|---|---|
+| `ExplorerCommands(Workbench)` | `Workbench.WORKBENCH` |
+| `CrystalEditorCommands(CrystalEditor, UIWindow)` | `CrystalEditor.CRYSTAL_EDITOR` + `UiDataKeys.WINDOW` |
+| `ChromeCommands(UIWindow)` | `UiDataKeys.WINDOW` |
+
+This is strictly better than capturing, not merely equivalent: with two windows open the palette now opens
+in the one you pressed the key in, and Save Layout saves the right one. The captured version could not
+have done either.
+
+**It also deleted a polling loop.** `Workbench.tick()` called `installExplorerCommands(window)` *every
+frame* behind a flag, for one reason — registration needed a window to reach a registry. Same for
+`TextEditor`, which installed from `updateWindow()`, i.e. the layout path.
+
+### `onWindowChanged`, and the window-level provider
+
+Two things fell out of that work.
+
+`UIElement.onWindowChanged(previous, current)` is the hook whose absence caused those polls. Anything an
+element must do *once it has a window* goes here. Both arguments are given because detach is the half that
+leaks.
+
+`UIWindow.addDataProvider(...)` is IntelliJ's frame-level `DataProvider`, consulted by `DataContext`
+**after** the element walk. It exists because the walk goes *outward*, so it only finds ancestors — and a
+`Workbench` is a descendant of the root, alongside everything else. With nothing focused, which is how a
+window looks the moment it opens, there is no workbench on the path at all. `Ctrl+P` and `F5` are precisely
+the keys pressed before anything is focused; resolving from focus alone re-broke both, and silently, since
+a command with no subject just reports itself disabled.
+
+Last, never first: an element that answers still wins, or two open editors would both resolve to whatever
+the window named and focus would stop deciding anything.
+
+### Menus are queried, not written
+
+```java
+Command.of(NEW_FILE, "New File…").menu(MenuId.EXPLORER_NEW, "1_new", 10)
+ContextMenu.of(MenuId.EXPLORER_CONTEXT)      // the whole menu
+```
+
+A hand-written builder lists exactly what a menu has, which means **only its author can add to it**. That
+is the coupling `MenuId` was introduced to remove — and for a while it removed nothing, because
+`Command.menu(...)` recorded placements that nothing read: the explorer's menu was still a thirteen-line
+literal and the id had no production users at all.
+
+- Group then order, groups sorted lexicographically — VS Code's `"1_new"`, `"2_clipboard"` convention.
+- Separators fall out of group boundaries; no contributor asks for one.
+- **A submenu is its own `MenuId`** (`MenuId.EXPLORER_NEW`), nested via `nestedIn(parent, title, group,
+  order)`. If it were an entry kind, only the parent's author could add to it — the same coupling one
+  level down.
+- **Disabled items are dimmed, not dropped** — `ContextMenu`'s rule, deliberately *not*
+  `CommandRegistry.menu`'s, which filters. A menu whose items move depending on what applies is a menu
+  whose items are never in the same place twice. A submenu with *nothing contributed* is dropped, which is
+  a different thing: that is a registration that never happened.

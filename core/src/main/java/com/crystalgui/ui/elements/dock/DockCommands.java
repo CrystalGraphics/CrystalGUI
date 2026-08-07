@@ -43,18 +43,34 @@ public final class DockCommands {
     private DockCommands() {
     }
 
-    public static void register(CommandRegistry registry) {
-        if (registry.contains(CLOSE_PANEL)) return;
+    /**
+     * Registers into {@link CommandRegistry#global()}.
+     *
+     * <p>Commands are global; a command is a fact about the application, and what varies per window is
+     * what is <em>focused</em> — which is {@code DataContext}'s job. Registering per window meant every
+     * window re-registered everything, and a widget had to find "its" window before it could contribute.</p>
+     *
+     * <p>Still <b>explicit</b>: a host calls this. Nothing self-registers, because a registry that
+     * quietly acquired commands nobody asked for surprises anything that enumerates it — which the
+     * command palette does.</p>
+     */
+    public static void register() {
+        CommandRegistry.global().contribute(DockCommands.class, DockCommands::declare);
+    }
 
+    private static void declare(CommandRegistry registry) {
         registry.register(Command.of(SPLIT_RIGHT, "Split Right")
+                .binding("Mod+Backslash")
                 .run(context -> splitActive(context, DockDropZone.SPLIT_RIGHT))
                 .enabledWhen(DockCommands::hasActivePanel));
 
         registry.register(Command.of(SPLIT_DOWN, "Split Down")
+                .binding("Mod+Shift+Backslash")
                 .run(context -> splitActive(context, DockDropZone.SPLIT_DOWN))
                 .enabledWhen(DockCommands::hasActivePanel));
 
         registry.register(Command.of(CLOSE_PANEL, "Close Panel")
+                .binding("Mod+W")
                 .run(context -> withArea(context, area -> {
                     DockGroup group = area.activeGroup();
                     if (group == null) return;
@@ -64,6 +80,7 @@ public final class DockCommands {
                 .enabledWhen(DockCommands::hasActivePanel));
 
         registry.register(Command.of(TOGGLE_MAXIMIZE, "Toggle Maximize Group")
+                .binding("Mod+M")
                 .run(context -> withArea(context, area -> {
                     DockGroup group = area.activeGroup();
                     if (group != null) area.toggleMaximize(group.leaf());
@@ -76,6 +93,7 @@ public final class DockCommands {
                 }));
 
         registry.register(Command.of(FOCUS_NEXT_GROUP, "Focus Next Group")
+                .binding("Mod+K")
                 .run(context -> cycleGroup(context, 1))
                 .enabledWhen(context -> {
                     DockArea area = areaFor(context);
@@ -83,6 +101,7 @@ public final class DockCommands {
                 }));
 
         registry.register(Command.of(FOCUS_PREVIOUS_GROUP, "Focus Previous Group")
+                .binding("Mod+Shift+K")
                 .run(context -> cycleGroup(context, -1))
                 .enabledWhen(context -> {
                     DockArea area = areaFor(context);
@@ -90,40 +109,26 @@ public final class DockCommands {
                 }));
 
         registry.register(Command.of(NEXT_TAB, "Next Tab")
+                .binding("Mod+PageDown")
                 .run(context -> cycleTab(context, 1))
                 .enabledWhen(DockCommands::hasSeveralTabs));
 
         registry.register(Command.of(PREVIOUS_TAB, "Previous Tab")
+                .binding("Mod+PageUp")
                 .run(context -> cycleTab(context, -1))
                 .enabledWhen(DockCommands::hasSeveralTabs));
     }
 
-    /**
-     * VS Code's set, because it is the one most people already have in their hands.
-     *
-     * <p>No bare-letter bindings here, unlike {@code GraphCommands}: a dock wraps <em>everything</em>, so
-     * a command scoped to "is there a dock anywhere above me" is scoped to the whole application, and a
-     * single letter would be intolerable.</p>
-     */
-    public static void bindDefaults(Keymap keymap) {
-        keymap.bind("Mod+Backslash", SPLIT_RIGHT);
-        keymap.bind("Mod+Shift+Backslash", SPLIT_DOWN);
-        keymap.bind("Mod+W", CLOSE_PANEL);
-        keymap.bind("Mod+M", TOGGLE_MAXIMIZE);
-        keymap.bind("Mod+K", FOCUS_NEXT_GROUP);
-        keymap.bind("Mod+Shift+K", FOCUS_PREVIOUS_GROUP);
-        keymap.bind("Mod+PageDown", NEXT_TAB);
-        keymap.bind("Mod+PageUp", PREVIOUS_TAB);
-    }
-
-    public static void install(CommandRegistry registry, UIElement root) {
-        register(registry);
-        bindDefaults(root.keymap());
-    }
-
-    public static void install(UIWindow window) {
-        install(window.getCommands(), window.ui.rootElement);
-    }
+    // The chords are VS Code's, and they are declared on the commands above rather than bound onto a
+    // root keymap here.
+    //
+    // That is not a style choice: a dock wraps EVERYTHING, so a command scoped to "is there a dock
+    // anywhere above me" is scoped to the whole application — which is exactly what a declared binding
+    // is. Binding them on a root element instead made the whole set a HOST OBLIGATION, and the harness
+    // never took it: no scene called DockCommands.install, so every dock in the gallery had eight
+    // commands and not one key. There is nothing left to forget.
+    //
+    // No bare letters, unlike GraphCommands — application scope and a single letter cannot coexist.
 
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
 
@@ -187,4 +192,6 @@ public final class DockCommands {
         }
         return null;
     }
+
+
 }

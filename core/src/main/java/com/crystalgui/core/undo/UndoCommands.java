@@ -1,11 +1,9 @@
 package com.crystalgui.core.undo;
 
+import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.input.keymap.Keymap;
 
 import javax.annotation.Nullable;
 
@@ -28,10 +26,10 @@ import javax.annotation.Nullable;
  * <p>{@code TextEditor} used to handle Ctrl+Z in its own key handler and consume the keystroke before the
  * resolver ever ran. That worked, and it made {@code edit.undo} <b>the one command in the engine that
  * could be remapped and still not move</b> — the resolver only sees an unconsumed event, so the editor ate
- * the key whatever the keymap said. It now calls {@link #register} and binds {@link #UNDO_CHORD} and
- * friends on its <em>own</em> element instead, so focus scoping does the work: the editor's binding wins
- * while focus is inside it, an application-wide binding covers everywhere else, and both routes end at the
- * same {@link UndoScope#nearest} lookup.</p>
+ * the key whatever the keymap said. It now calls {@link #register} and leaves the chords alone, so focus
+ * scoping does the work: {@link #UNDO_CHORD} is declared on the command and therefore applies everywhere,
+ * any element is free to bind {@link #UNDO} to something else and win while focus is inside it, and both
+ * routes end at the same {@link UndoScope#nearest} lookup.</p>
  *
  * <p>That is the general rule for any widget with a history — <b>bind these ids, do not invent your
  * own.</b> An {@code editor.undo} beside {@code edit.undo} would put two entries for one concept in every
@@ -52,67 +50,57 @@ public final class UndoCommands {
     private UndoCommands() {
     }
 
-    /** Registers both commands. Idempotent — re-registering the same ids is a no-op. */
-    public static void register(CommandRegistry registry) {
-        if (registry.contains(UNDO)) return;
+    /**
+     * Registers both actions globally. Idempotent.
+     *
+     * <h3>Explicit, and global</h3>
+     *
+     * <p>Two separate things changed here and only one of them is the interesting one.</p>
+     *
+     * <p><b>Global</b> is the fix: these used to be registered per {@code UIWindow}, so undo existed
+     * only where somebody had installed it, and {@code install(registry, fileTree)} named a
+     * <em>specific element</em> even though the stack was always resolved from focus. The element
+     * argument decided nothing but where the bindings landed.</p>
+     *
+     * <p><b>Explicit</b> is deliberately unchanged. A static initialiser would have made registration
+     * depend on whether anything had touched this class, so the command palette's contents would vary
+     * with class-loading order — and this engine already refuses that: {@code CrystalEditorCommands}
+     * states that "a registry that quietly acquired commands nobody registered surprises anything that
+     * enumerates it", which is exactly what a palette does.</p>
+     *
+     * <p>The subject comes from {@link UiDataKeys#UNDO_STACK}, which every {@code UndoScope} answers,
+     * so this reaches the innermost history from wherever it is invoked with nothing wired to
+     * anything.</p>
+     */
+    public static void register() {
+        CommandRegistry.global().contribute(UndoCommands.class, UndoCommands::declare);
+    }
+
+    private static void declare(CommandRegistry registry) {
         registry.register(Command.of(UNDO, "Undo")
-                .run(context -> {
-                    UndoStack history = stackFor(context);
-                    if (history != null) history.undo();
-                })
-                .enabledWhen(context -> {
-                    UndoStack history = stackFor(context);
-                    return history != null && history.canUndo();
-                }));
+                        .binding(UNDO_CHORD)
+                        .enabledWhereData(context -> {
+                            UndoStack history = context.get(UiDataKeys.UNDO_STACK);
+                            return history != null && history.canUndo();
+                        })
+                        .runWithData(context -> context.require(UiDataKeys.UNDO_STACK).undo()));
         registry.register(Command.of(REDO, "Redo")
-                .run(context -> {
-                    UndoStack history = stackFor(context);
-                    if (history != null) history.redo();
-                })
-                .enabledWhen(context -> {
-                    UndoStack history = stackFor(context);
-                    return history != null && history.canRedo();
-                }));
+                        .binding(REDO_CHORD, REDO_CHORD_ALT)
+                        .enabledWhereData(context -> {
+                            UndoStack history = context.get(UiDataKeys.UNDO_STACK);
+                            return history != null && history.canRedo();
+                        })
+                        .runWithData(context -> context.require(UiDataKeys.UNDO_STACK).redo()));
     }
 
-    /**
-     * Binds the default chords into {@code keymap} — normally the <b>root element's</b>, which is what
-     * makes them application-wide: the resolver falls back to the root when nothing holds focus, and any
-     * inner scope that binds the same chord wins over them.
-     */
-    public static void bindDefaults(Keymap keymap) {
-        keymap.bind(UNDO_CHORD, UNDO);
-        keymap.bind(REDO_CHORD, REDO);
-        keymap.bind(REDO_CHORD_ALT, REDO);
-    }
-
-    /** Registers the commands and binds them on {@code root}. */
-    public static void install(CommandRegistry registry, UIElement root) {
-        register(registry);
-        bindDefaults(root.keymap());
-    }
-
-    /**
-     * Installs undo into {@code window} — its command registry, bound on its root element.
-     *
-     * <p><b>Explicit, never automatic.</b> A host calls this exactly as it calls
-     * {@code addStylesheet(StyleSheet.DEFAULT)}, and for the same reason: this engine does not inject
-     * its own defaults. A window that quietly acquired two commands and three bindings nobody
-     * registered would surprise anything that enumerates either — which it promptly did, in the keymap's
-     * own tests.</p>
-     *
-     * <pre>{@code
-     * UIWindow window = new UIWindow(Ui.of(root));
-     * window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
-     * UndoCommands.install(window);
-     * }</pre>
-     */
-    public static void install(UIWindow window) {
-        install(window.getCommands(), window.ui.rootElement);
-    }
-
-    @Nullable
-    private static UndoStack stackFor(CommandContext context) {
-        return UndoScope.nearest(context.source());
-    }
+    // There is deliberately no bindDefaults/install pair here any more.
+    //
+    // Both chords are declared on the commands themselves (see .binding above), and CommandRegistry's
+    // declaredBindings() is the resolver's outermost scope -- so undo is application-wide with nothing
+    // binding it to any element. The old pair bound the same three chords onto a root keymap, which is
+    // now a second copy of one fact: rebinding undo through a keymap would leave the declared chord
+    // live, so the two would disagree about what Mod+Z does.
+    //
+    // An element that wants undo on a DIFFERENT chord still binds edit.undo on its own keymap, and the
+    // innermost match wins as it always did.
 }

@@ -30,6 +30,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
+import com.crystalgui.ui.elements.dock.DockPanelRef;
 
 /**
  * Opening a file, and acting on the tab it opened in.
@@ -79,7 +81,8 @@ public class WorkbenchFileTabTest extends UiTestBase {
         window = new UIWindow(Ui.of(root));
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
         window.init(1200, 800);
-        DockCommands.install(window);
+        // Nothing installs the dock's commands: the DockArea inside the workbench registers them, and
+        // their chords are declared on the commands rather than bound onto this root.
         settle();
     }
 
@@ -166,7 +169,7 @@ public class WorkbenchFileTabTest extends UiTestBase {
     @Test
     public void aBoundExtensionOpensItsOwnEditor() {
         workbench.registerPanel(
-                com.crystalgui.ui.elements.dock.DockPanelDescriptor.document("image", "Image"),
+                DockPanelDescriptor.document("image", "Image"),
                 ref -> new UIElement());
         workbench.bindEditorExtensions("image", "png", "jpg");
 
@@ -180,14 +183,14 @@ public class WorkbenchFileTabTest extends UiTestBase {
     @Test
     public void aBoundPanelStillCarriesThePath() {
         workbench.registerPanel(
-                com.crystalgui.ui.elements.dock.DockPanelDescriptor.document("image", "Image"),
+                DockPanelDescriptor.document("image", "Image"),
                 ref -> new UIElement());
         workbench.bindEditorExtensions("image", "png");
 
         CgPath path = CgPath.parse("mymod.proj:art/logo.png");
         assertEquals(path.toString(), workbench.refFor(path).state(Workbench.PATH_STATE, ""));
         assertEquals("logo.png",
-                workbench.refFor(path).state(com.crystalgui.ui.elements.dock.DockPanelRef.TITLE, ""));
+                workbench.refFor(path).state(DockPanelRef.TITLE, ""));
     }
 
     /**
@@ -200,10 +203,10 @@ public class WorkbenchFileTabTest extends UiTestBase {
     @Test
     public void anExactNameBeatsABoundExtension() {
         workbench.registerPanel(
-                com.crystalgui.ui.elements.dock.DockPanelDescriptor.document("image", "Image"),
+                DockPanelDescriptor.document("image", "Image"),
                 ref -> new UIElement());
         workbench.registerPanel(
-                com.crystalgui.ui.elements.dock.DockPanelDescriptor.document("licence", "Licence"),
+                DockPanelDescriptor.document("licence", "Licence"),
                 ref -> new UIElement());
         workbench.bindEditorExtensions("image", "png");
         workbench.bindEditorNames("licence", "NOTICE.png");
@@ -223,7 +226,7 @@ public class WorkbenchFileTabTest extends UiTestBase {
     @Test
     public void renamingAcrossABindingChangesTheEditorType() {
         workbench.registerPanel(
-                com.crystalgui.ui.elements.dock.DockPanelDescriptor.document("image", "Image"),
+                DockPanelDescriptor.document("image", "Image"),
                 ref -> new UIElement());
         workbench.bindEditorExtensions("image", "png");
 

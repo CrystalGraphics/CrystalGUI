@@ -35,6 +35,9 @@ import java.util.Map;
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.undo.UndoCommands;
 
 /**
  * A project editor: a dock, a file tree, one editor per open file, and a Problems panel — the shell.
@@ -131,11 +134,54 @@ public class Workbench extends UIElement {
         return activityBar;
     }
 
+    /**
+     * This workbench, for a command that acts on one.
+     *
+     * <p>What let {@code ExplorerCommands} stop capturing a workbench and become global — and with it,
+     * the per-frame {@code installExplorerCommands(window)} call that used to sit in {@link #tick}
+     * solely because registration needed a window to reach a registry.</p>
+     */
+    public static final DataKey<Workbench> WORKBENCH =
+            DataKey.create("workbench", Workbench.class);
+
+    @Override
+    public Object getData(DataKey<?> key) {
+        if (key == WORKBENCH) return this;
+        return super.getData(key);
+    }
+
+    /**
+     * Names this workbench at the <b>window</b> level as well as in the tree.
+     *
+     * <p>The element walk only finds ancestors, and a workbench is a descendant of the root — so with
+     * nothing focused there is no workbench on the path at all. {@code Ctrl+P} and {@code F5} are exactly
+     * the keys pressed before anything is focused, which is why they need this. See {@code DataContext}.</p>
+     */
+    @Override
+    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        if (previous != null) previous.removeDataProvider(this);
+        if (current != null) current.addDataProvider(this);
+    }
+
+    /** The explorer's verbs come with the explorer. Global, so no window is needed. */
+    @Override
+    protected void registerCommands(CommandRegistry registry) {
+        ExplorerCommands.register();
+        // Undo comes with a workbench because the file tree IS the workspace's UndoScope -- deleting a
+        // file is undoable and reaches the workspace stack. Same ids the editor and the graph use, so
+        // there is one Undo in the palette rather than one per widget.
+        UndoCommands.register();
+    }
+
     public Workbench(WorkspaceClient<?> client) {
         if (client == null) throw new IllegalArgumentException("A Workbench needs a workspace client");
         this.client = client;
         this.fileService = new WorkspaceFileService(client, new Copies());
         this.fileTree = new ProjectFileTree(client);
+        // At construction, not on the first frame with a window: the registry is global, so there is
+        // nothing left to wait for.
+        this.fileTree.setContextMenu(
+                CommandRegistry.global(), ExplorerCommands::menu);
         // The explorer IS the workspace's undo scope. UndoScope.nearest walks outward from focus, so
         // Ctrl+Z in the tree reaches file operations and Ctrl+Z in an editor still reaches its own text.
         this.fileTree.setUndoStack(fileService.undoStack());
@@ -175,8 +221,8 @@ public class Workbench extends UIElement {
             // A FRESH tokenizer per document -- the interface exists for implementations holding a parse
             // tree per file, and sharing one would cross-contaminate them.
             created.setTokenizer(entry.newTokenizer());
-            UIWindow window = getAttachedWindow();
-            if (window != null) EditorCommands.install(window, created);
+            // No command installation here: TextEditor registers its own and binds its own chords, so a
+            // document created before this workbench is attached is no longer a special case.
             // Here rather than only from WorkbenchSettings.apply: a document opened after the settings
             // were installed would otherwise get the widget's own defaults, so folding and tab size would
             // apply to the files that happened to be open when a preference was last changed and to no
@@ -994,8 +1040,8 @@ public class Workbench extends UIElement {
      * diagnostic pass -- can act. There is deliberately no signal for "a panel was created": that happens
      * while the read is still in flight.</p>
      */
-    public final com.crystalgui.core.signal.Signal.Value<CgPath> onDocumentLoaded =
-            new com.crystalgui.core.signal.Signal.Value<>();
+    public final Signal.Value<CgPath> onDocumentLoaded =
+            new Signal.Value<>();
 
     /** The document for a path, created on first use from whichever type its name binds to. */
     public FileDocument documentFor(CgPath path) {
@@ -1126,33 +1172,17 @@ public class Workbench extends UIElement {
         batch.sealed();
     }
 
-    private boolean commandsInstalled;
-
-    /**
-     * Installs the explorer's commands and its right-click menu, once there is a window.
-     *
-     * <p>Self-installed for the reason {@code GraphView} records: a widget's own verbs belong to the
-     * widget, and a requirement every host has to remember is one that gets forgotten — which it was,
-     * twice, for {@code GraphCommands} and again for undo. Bound on the <b>file tree</b>, so bare
-     * {@code Delete} and {@code F2} exist only while focus is in the panel rather than firing while
-     * typing into any editor sharing the window.</p>
-     */
-    private void installExplorerCommands(UIWindow window) {
-        if (commandsInstalled) return;
-        commandsInstalled = true;
-        ExplorerCommands.install(window, this);
-        // edit.undo/edit.redo bound on the TREE, against the workspace stack the tree scopes. Same ids the
-        // editor uses -- one Undo in the palette, not one per widget.
-        com.crystalgui.core.undo.UndoCommands.install(window.getCommands(), fileTree);
-        fileTree.setContextMenu(window.getCommands(), ExplorerCommands::menu);
-    }
+    // installExplorerCommands(window) used to live here and be called EVERY FRAME from tick(), behind a
+    // commandsInstalled flag, for one reason: registration needed a window to reach a registry. Commands
+    // are global and the explorer's resolve their workbench from the data context, so registration moved
+    // to registerCommands (once per class), the tree binds its own bare keys in bindKeys (once per
+    // instance), and the context menu is wired at construction. Nothing is left to do per frame.
 
     private boolean tick(float deltaSeconds) {
         if (getAttachedWindow() == null) {
             ticking = false;
             return false;
         }
-        installExplorerCommands(getAttachedWindow());
         // Re-synced every frame rather than once, because a host registers its own panels AFTER the
         // workbench is built -- CrystalEditor adds its inspector and emitted source that way. sync() skips
         // types it already has a button for, so the steady-state cost is one walk of a handful of

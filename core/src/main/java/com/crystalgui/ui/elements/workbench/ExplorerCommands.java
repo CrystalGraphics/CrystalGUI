@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceFileService;
 import com.crystalgui.ui.UIElement;
@@ -16,6 +17,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nullable;
+import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.elements.chrome.Preferences;
 
 /**
  * What the Project panel can do to a file — New, Rename, Delete, Copy Path.
@@ -72,50 +75,86 @@ public final class ExplorerCommands {
     private ExplorerCommands() {
     }
 
-    public static void register(CommandRegistry registry, Workbench workbench) {
-        if (registry.contains(RENAME)) return;
+    /**
+     * Registers the explorer's commands. Global — nothing is captured.
+     *
+     * <p>Every one of these used to close over a {@code Workbench}, which is why this set was the last
+     * holdout after commands went global: a captured owner makes registration un-repeatable, so the
+     * second workbench would have driven the first. They now resolve it from
+     * {@link Workbench#WORKBENCH} in the data context, which answers with the workbench the
+     * <em>focused</em> element is in — the same question, asked at the right time.</p>
+     */
+    public static void register() {
+        CommandRegistry.global().contribute(ExplorerCommands.class, ExplorerCommands::declare);
+    }
 
+    /**
+     * The workbench this command is acting on, or null when the focus is not in one.
+     *
+     * <p>Null is ordinary: a command asks in {@code enabledWhen} and disables itself, and because
+     * {@link Command#execute} refuses to run a disabled command, a {@code run} body may assume whatever
+     * its own enablement asserted.</p>
+     */
+    @Nullable
+    private static Workbench workbenchFor(CommandContext context) {
+        return context.data().get(Workbench.WORKBENCH);
+    }
+
+    private static void declare(CommandRegistry registry) {
         registry.register(Command.of(NEW_FILE, "New File…")
-                .run(context -> promptNew(workbench, context, false))
-                .enabledWhen(context -> destinationFor(workbench, context) != null));
+                .menu(MenuId.EXPLORER_NEW, "1_new", 10)
+                .binding("Mod+N")
+                .run(context -> promptNew(workbenchFor(context), context, false))
+                .enabledWhen(context -> workbenchFor(context) != null
+                        && destinationFor(workbenchFor(context), context) != null));
 
         registry.register(Command.of(NEW_FOLDER, "New Folder…")
-                .run(context -> promptNew(workbench, context, true))
-                .enabledWhen(context -> destinationFor(workbench, context) != null));
+                .menu(MenuId.EXPLORER_NEW, "1_new", 20)
+                .run(context -> promptNew(workbenchFor(context), context, true))
+                .enabledWhen(context -> workbenchFor(context) != null
+                        && destinationFor(workbenchFor(context), context) != null));
 
         registry.register(Command.of(RENAME, "Rename…")
-                .run(context -> promptRename(workbench, context))
+                .menu(MenuId.EXPLORER_CONTEXT, "4_modify", 10)
+                .run(context -> promptRename(workbenchFor(context), context))
                 // The project root is not a file and has no parent to rename within.
-                .enabledWhen(context -> isRenameable(target(context))));
+                .enabledWhen(context -> workbenchFor(context) != null && isRenameable(target(context))));
 
         registry.register(Command.of(DELETE, "Delete")
-                .run(context -> confirmDelete(workbench, context))
-                .enabledWhen(context -> isRenameable(target(context))));
+                .menu(MenuId.EXPLORER_CONTEXT, "4_modify", 20)
+                .run(context -> confirmDelete(workbenchFor(context), context))
+                .enabledWhen(context -> workbenchFor(context) != null && isRenameable(target(context))));
 
         registry.register(Command.of(COPY_PATH, "Copy Path")
-                .run(context -> copy(workbench, target(context), false))
-                .enabledWhen(context -> target(context) != null));
+                .menu(MenuId.EXPLORER_CONTEXT, "3_paths", 10)
+                .run(context -> copy(workbenchFor(context), target(context), false))
+                .enabledWhen(context -> workbenchFor(context) != null && target(context) != null));
 
         registry.register(Command.of(COPY_RELATIVE_PATH, "Copy Relative Path")
-                .run(context -> copy(workbench, target(context), true))
-                .enabledWhen(context -> target(context) != null));
+                .menu(MenuId.EXPLORER_CONTEXT, "3_paths", 20)
+                .run(context -> copy(workbenchFor(context), target(context), true))
+                .enabledWhen(context -> workbenchFor(context) != null && target(context) != null));
 
         registry.register(Command.of(CUT, "Cut")
+                .menu(MenuId.EXPLORER_CONTEXT, "2_clipboard", 10)
                 .run(context -> CLIPBOARD.cut(targets(context)))
                 .enabledWhen(context -> !targets(context).isEmpty()
                         && targets(context).stream().noneMatch(CgPath::isProjectRoot)));
 
         registry.register(Command.of(COPY, "Copy")
+                .menu(MenuId.EXPLORER_CONTEXT, "2_clipboard", 20)
                 .run(context -> CLIPBOARD.copy(targets(context)))
                 .enabledWhen(context -> !targets(context).isEmpty()
                         && targets(context).stream().noneMatch(CgPath::isProjectRoot)));
 
         registry.register(Command.of(PASTE, "Paste")
-                .run(context -> paste(workbench, context))
+                .menu(MenuId.EXPLORER_CONTEXT, "2_clipboard", 30)
+                .run(context -> paste(workbenchFor(context), context))
                 // Pasting into the empty space below the files means pasting into the project root,
                 // which is both useful and what every file manager does.
                 .enabledWhen(context -> !CLIPBOARD.isEmpty()
-                        && destinationFor(workbench, context) != null));
+                        && workbenchFor(context) != null
+                        && destinationFor(workbenchFor(context), context) != null));
 
         // EVERYTHING LISTED, not the selected row's folder.
         //
@@ -131,32 +170,42 @@ public final class ExplorerCommands {
         // Registered here rather than in a chrome-only place because the settings it shows are the
         // workbench's, and because this is where the global keymap is already being written.
         registry.register(Command.of(PREFERENCES, "Preferences…")
+                .binding("Alt+Shift+S")
                 .run(context -> {
-                    UIWindow window = workbench.getAttachedWindow();
+                    UIWindow window = context.data().get(UiDataKeys.WINDOW);
                     if (window == null) return;
                     // The WINDOW's store, not the workbench's: settings resolve outward, so writing at the
                     // root is what makes a preference apply to every panel rather than to one subtree.
-                    com.crystalgui.ui.elements.chrome.Preferences.open(window,
+                    Preferences.open(window,
                             window.ui.rootElement.settings());
                 }));
 
         registry.register(Command.of(GO_TO_FILE, "Go to File…")
+                .binding("Mod+P")
                 .run(context -> {
-                    UIWindow window = workbench.getAttachedWindow();
+                    Workbench workbench = workbenchFor(context);
+                    UIWindow window = workbench == null ? null : workbench.getAttachedWindow();
                     if (window != null) GoToFile.open(window, workbench);
                 })
                 // Enabled whenever there is a project, not whenever something is selected: it is how you
                 // reach a file you have NOT got selected, which is the whole point of it.
-                .enabledWhen(context -> !workbench.fileTree().source().roots().isEmpty()));
+                .enabledWhen(context -> hasProject(workbenchFor(context))));
 
         registry.register(Command.of(REFRESH, "Reload from Disk")
+                .menu(MenuId.EXPLORER_CONTEXT, "5_refresh", 10)
+                .binding("F5")
                 .run(context -> {
+                    Workbench workbench = workbenchFor(context);
                     workbench.fileTree().source().invalidateAll();
                     workbench.fileTree().treeView().refresh();
                 })
                 // No target needed any more -- it reloads the whole tree, so the only thing that could make
                 // it meaningless is having no project open at all.
-                .enabledWhen(context -> !workbench.fileTree().source().roots().isEmpty()));
+                .enabledWhen(context -> hasProject(workbenchFor(context))));
+    }
+
+    private static boolean hasProject(@Nullable Workbench workbench) {
+        return workbench != null && !workbench.fileTree().source().roots().isEmpty();
     }
 
     /**
@@ -175,68 +224,37 @@ public final class ExplorerCommands {
         keymap.bind("Delete", DELETE);
     }
 
+    // The application-wide chords -- Mod+N, Alt+Shift+S, Mod+P, F5 -- are DECLARED on the commands
+    // above rather than bound onto a root keymap here, which is what a declared binding means.
+    //
+    // The reasoning that put them at the root is unchanged and worth keeping: a keymap resolves outward
+    // from the FOCUSED element, so a binding on the tree is unreachable while nothing in the tree has
+    // focus -- which is how the panel looks the moment it opens, and is why F5 "needed a click first".
+    // Reload and Go to File are exactly the verbs you reach for before touching anything. All four are
+    // chords or function keys, so unlike Delete and F2 they cannot fire while typing.
+    //
+    // Alt+Shift+S, NOT VS Code's Ctrl+comma, and that is a deliberate retreat rather than a preference.
+    // Ctrl+comma is bound correctly and fires in every test -- including one built in the application's
+    // real shape, and one carrying the printable character a real keyboard sends with it -- and it does
+    // nothing in the running harness. The obvious explanation was wrong: on all four of this machine's
+    // keyboard layouts `,` maps to scancode 0x33, exactly CgKeyCodes.KEY_COMMA, so the right code is
+    // arriving. Whatever eats it lives somewhere no test has reproduced, and a shortcut that works on the
+    // bench and not in the product is worse than one spelled differently.
+    // -Dcrystalgui.keymap.trace=true is what will name the cause if anyone wants Ctrl+comma back.
+
     /**
-     * The keys that work from <b>anywhere</b> in the editor.
+     * The menu the Project panel opens on a right-click — <b>queried, not written</b>.
      *
-     * <p>{@code Ctrl+N} is an application verb rather than a panel one — IntelliJ's New is reachable from
-     * the editor, the tool windows and the menu alike, and a New File that worked only while the Project
-     * panel held focus is one nobody would find. It is a chord rather than a bare letter, so binding it at
-     * the root is safe in a way {@code Delete} is not: a chord cannot fire while typing.</p>
+     * <p>This was a literal builder listing thirteen items, which meant nothing could add a fourteenth
+     * without editing this method. Every command above now declares where it sits with
+     * {@link Command#menu}, and this asks. A feature that wants "New ▸ Shader Graph" declares it on its
+     * own command and appears here, knowing nothing about the explorer.</p>
      *
-     * <p>{@code F5} is here for a related but distinct reason, and it was on the panel until somebody found
-     * that it did nothing until they had clicked a row. A keymap resolves outward from the <b>focused</b>
-     * element, so a binding on the tree is unreachable while nothing inside the tree has focus — which is
-     * how the panel looks the moment it opens. Reload is exactly the verb you reach for before touching
-     * anything, so a scope that requires a click first is the one scope it cannot have.</p>
-     *
-     * <p>Safe at the root on both counts that keep {@code Delete} and {@code F2} off it: a function key
-     * cannot fire while typing, and reload has a sensible meaning with nothing selected — its own
-     * enablement already says so, falling back to the project root.</p>
+     * <p>Order comes from the group names ({@code 1_new}, {@code 2_clipboard}, …), VS Code's convention,
+     * and separators fall out of the group boundaries.</p>
      */
-    public static void bindGlobalDefaults(Keymap keymap) {
-        keymap.bind("Mod+N", NEW_FILE);
-        // Alt+Shift+S, NOT VS Code's Ctrl+comma, and this is a deliberate retreat rather than a
-        // preference. Ctrl+comma is bound correctly and fires in every test -- including one built in the
-        // application's real shape, and one carrying the printable character a real keyboard sends with
-        // it -- and it does nothing in the running harness. The obvious explanation was wrong: on all
-        // four of this machine's keyboard layouts `,` maps to scancode 0x33, exactly CgKeyCodes.KEY_COMMA,
-        // so the right code is arriving.
-        //
-        // Whatever eats it lives somewhere no test has reproduced. A shortcut that works on the bench and
-        // not in the product is worse than one spelled differently, so the letter chord is the binding
-        // rather than a fallback beside it. -Dcrystalgui.keymap.trace=true is what will name the cause if
-        // anyone wants Ctrl+comma back.
-        keymap.bind("Alt+Shift+S", PREFERENCES);
-        // Mod+P from VS Code. An application verb rather than a panel one, and for the same reason F5 is:
-        // a keymap resolves outward from the FOCUSED element, so a binding on the tree is unreachable
-        // while you are typing in an editor -- which is exactly when you reach for it.
-        keymap.bind("Mod+P", GO_TO_FILE);
-        keymap.bind("F5", REFRESH);
-    }
-
-    /** Registers on the window and binds on the file tree, which is what scopes the bare keys. */
-    public static void install(UIWindow window, Workbench workbench) {
-        register(window.getCommands(), workbench);
-        bindDefaults(workbench.fileTree().keymap());
-        bindGlobalDefaults(window.ui.rootElement.keymap());
-    }
-
-    /** The menu the Project panel opens on a right-click. */
     public static ContextMenu menu() {
-        return ContextMenu.builder()
-                .submenu("New", sub -> sub.item(NEW_FILE, "File…").item(NEW_FOLDER, "Folder…"))
-                .separator()
-                .item(CUT)
-                .item(COPY)
-                .item(PASTE)
-                .separator()
-                .item(COPY_PATH)
-                .item(COPY_RELATIVE_PATH)
-                .separator()
-                .item(RENAME)
-                .item(DELETE)
-                .separator()
-                .item(REFRESH);
+        return ContextMenu.of(MenuId.EXPLORER_CONTEXT);
     }
 
     // ── Target resolution ───────────────────────────────────────────────────────────────────────

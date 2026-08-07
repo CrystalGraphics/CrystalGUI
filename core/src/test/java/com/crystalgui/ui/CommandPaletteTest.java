@@ -24,6 +24,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.core.command.CommandRegistry;
 
 /**
  * The command palette, and above all <b>which element its commands are resolved against</b>.
@@ -57,6 +58,9 @@ public class CommandPaletteTest extends UiTestBase {
 
     @Before
     public void setUpWindow() {
+        // Commands are GLOBAL now, so a registry populated by another test is visible here. These
+        // assertions are about which rows a palette shows and in what order, so they need a known set.
+        CommandRegistry.global().resetForTesting();
         scope = new Scope();
         inner = new UIElement();
         inner.setFocusPolicy(FocusPolicy.FOCUSABLE);
@@ -384,7 +388,7 @@ public class CommandPaletteTest extends UiTestBase {
     /** The palette's own opener is a normal command and lists itself, as VS Code's does. */
     @Test
     public void theShowCommandsCommandInstallsAndIsItselfListed() {
-        ChromeCommands.install(window);
+        ChromeCommands.register();
         QuickPick pick = CommandPalette.open(window);
 
         assertTrue(idsOf(pick).contains(ChromeCommands.SHOW_COMMANDS));
