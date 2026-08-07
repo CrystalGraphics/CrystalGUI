@@ -224,6 +224,11 @@ public class CrystalEditor extends UIElement implements Disposable {
         setFocusPolicy(FocusPolicy.NONE);
         workbench = new Workbench(client);
         workbench.onStatus.connect(onStatus::emit);
+        // The inspector and the generated source follow the front tab. Was a per-frame poll; the dock
+        // announces it now. Subscribed here rather than on attach because the dock exists as soon as the
+        // workbench does, and this editor owns the workbench -- there is nothing to wait for and nothing
+        // that can outlive it.
+        workbench.dock().onDidChangeActivePanel.connect(panel -> followActiveGraph());
 
         // A .shadergraph FILE opens as a graph rather than as its own JSON. One editor per path, built by
         // the workbench and cached with the document, so two open graphs are two graphs.
@@ -334,25 +339,15 @@ public class CrystalEditor extends UIElement implements Disposable {
     }
 
     /**
-     * Points the source and inspector panels at whichever shader graph is in front. Cheap and idempotent;
-     * call once a frame.
+     * All that is left of this widget's ticker: the session restore's retry.
      *
-     * <p>Polled rather than driven by a signal because the workbench has no "the active tab changed" event
-     * and inventing one would mean a second thing to keep in step — the dock changes the active panel from
-     * a click, a close, a drag, a split and a layout restore, and a signal that missed any of those would
-     * leave these panels showing a graph that is no longer in front, which is precisely the confusion this
-     * whole change is removing.</p>
+     * <p>{@code followActiveGraph} used to run here every frame and is now driven by
+     * {@code DockArea.onDidChangeActivePanel}. What remains waits on listings that arrive over several
+     * frames — a folder cannot be expanded before the listing revealing it lands. {@code
+     * WorkbenchSession.tick} is a no-op once nothing is pending and gives up on its own rather than
+     * retrying for the rest of the session.</p>
      *
-     * <p><b>A non-graph tab leaves them alone.</b> Clicking a README must not blank the inspector — there
-     * is still a shader graph open and it is still what these panels are about. They follow the last graph
-     * until a different one comes forward.</p>
-     */
-    /**
-     * Starts the per-frame follow, once a window exists to tick from.
-     *
-     * <p>The same shape {@code ShaderGraphEditor} uses for its previews, and for the same reason: this is
-     * the widget's own business rather than something a host must remember to call, and there is no
-     * earlier moment — a constructor has no window.</p>
+     * <p>It goes too, in the next landing, once {@code WorkspaceTreeSource} announces a listing.</p>
      */
     @Override
     protected void onLayoutChanged() {
@@ -360,10 +355,6 @@ public class CrystalEditor extends UIElement implements Disposable {
         if (ticking || getAttachedWindow() == null) return;
         ticking = true;
         getAttachedWindow().registerTicker(delta -> {
-            followActiveGraph();
-            // A restore waits on listings that arrive over several frames -- a folder cannot be expanded
-            // before the listing revealing it lands. WorkbenchSession.tick is a no-op once nothing is
-            // pending, and gives up on its own rather than retrying for the rest of the session.
             if (session != null) session.tick();
             return true;
         });
@@ -371,6 +362,23 @@ public class CrystalEditor extends UIElement implements Disposable {
 
     private boolean ticking;
 
+    /**
+     * Points the source and inspector panels at whichever shader graph is in front.
+     *
+     * <h3>Driven by the dock, no longer polled</h3>
+     *
+     * <p>This ran every frame, and its own comment argued for that: the dock changes the active panel from
+     * a click, a close, a drag, a split and a layout restore, and a signal that missed any of those would
+     * leave these panels showing a graph that is no longer in front. The objection was sound and the
+     * answer was to make the announcement exact rather than to keep polling —
+     * {@code DockArea.announceActivePanel} compares against the last value it announced, so <em>every</em>
+     * one of those paths can call it and none of them has to know whether it changed anything.</p>
+     *
+     * <p><b>A non-graph tab leaves them alone.</b> Clicking a README must not blank the inspector — there
+     * is still a shader graph open and it is still what these panels are about. That is what
+     * {@link #followed} latches, and it matters more now, not less: the signal legitimately emits null
+     * when chrome takes focus, and reopening the Inspector is exactly that gesture.</p>
+     */
     private void followActiveGraph() {
         // LATCHED. activeGraph() means "the graph in front", and focusing chrome legitimately means there
         // is none -- reopening the Inspector makes the INSPECTOR'S group active, so the very gesture that

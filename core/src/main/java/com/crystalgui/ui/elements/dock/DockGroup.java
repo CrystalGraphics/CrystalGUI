@@ -121,6 +121,11 @@ public class DockGroup extends UIElement {
             if (panel != null) {
                 leaf.activate(panel);
                 area.setActiveGroup(this);
+                // Explicitly, because setActiveGroup above early-returns when this group was ALREADY
+                // active -- which is the ordinary case for switching tabs within one pane, and would
+                // otherwise be the one active-panel change that announces nothing. The announce is
+                // idempotent, so the two paths overlapping costs nothing.
+                area.announceActivePanel();
             }
         });
 

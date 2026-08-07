@@ -235,6 +235,13 @@ public class Workbench extends UIElement {
         // ASKED BEFORE ANYTHING IS DISCARDED. Ctrl+W on an edited file used to throw the work away with no
         // warning at all -- the tab marker said it was modified and nothing acted on that.
         dock.setCloseGuard(this::confirmClose);
+        // Two of this widget's per-frame polls, replaced by the announcement they were both watching for.
+        // Not registered on a Disposable: the signal belongs to the dock, this workbench owns the dock, so
+        // the subscription cannot outlive either -- an ownership registration here would be ceremony.
+        dock.onDidChangeActivePanel.connect(panel -> {
+            revealActiveFile();
+            rebindProblems();
+        });
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         // The rail sits BESIDE the dock rather than inside it, which is what both originals do and is not
@@ -1197,15 +1204,23 @@ public class Workbench extends UIElement {
         // queue, so asking every frame costs nothing once the queue is empty.
         fileTree.source().indexStep(WorkspaceTreeSource.DEFAULT_INDEX_BUDGET);
         refreshDirtyMarkers();
-        revealActiveFile();
         fileTree.loadProjects();
-        // Follows the active tab. Only on a CHANGE -- rebinding every frame would rebuild the table's
-        // rows sixty times a second for a set that has not moved.
-        TextEditor active = activeEditor();
-        if (active != boundTo) {
-            boundTo = active;
-            problems.bindTo(active == null ? null : active.diagnostics());
-        }
         return true;
+    }
+
+    /**
+     * Points the Problems panel at whatever editor is in front.
+     *
+     * <p>Was in {@link #tick}, deriving {@code activeEditor()} every frame and comparing it with
+     * {@link #boundTo} to avoid rebuilding the table's rows sixty times a second. The comparison
+     * <b>stays</b> — the announcement says the active <em>panel</em> moved, which is not the same as the
+     * active <em>editor</em> moving: switching between two non-file panels changes the panel and leaves
+     * this alone.</p>
+     */
+    private void rebindProblems() {
+        TextEditor active = activeEditor();
+        if (active == boundTo) return;
+        boundTo = active;
+        problems.bindTo(active == null ? null : active.diagnostics());
     }
 }

@@ -18,6 +18,8 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.signal.Signal;
+import java.util.Objects;
 
 /**
  * A {@link DockLayout}, drawn — and the one place a drag becomes a structural change.
@@ -200,6 +202,64 @@ public class DockArea extends UIElement implements UIFrameTicker {
     }
 
     /**
+     * The panel in front of the active group, or null when nothing is.
+     *
+     * <p>Derived, never stored — the same read-side reasoning {@link #activeGroup()} gives. What <em>is</em>
+     * stored is the last value {@link #onDidChangeActivePanel} announced, which is a different thing:
+     * one is the answer, the other is what listeners have been told.</p>
+     */
+    @Nullable
+    public DockPanelRef activePanel() {
+        DockGroup group = activeGroup();
+        return group == null ? null : group.leaf().activePanel();
+    }
+
+    /**
+     * The front panel changed — the single most-used signal in the dock.
+     *
+     * <h3>What it replaced</h3>
+     *
+     * <p>Three separate per-frame polls, each deriving the same answer from the dock and comparing it
+     * with a remembered copy: {@code Workbench.revealActiveFile}, {@code Workbench}'s
+     * {@code problems.bindTo} rebind, and {@code CrystalEditor.followActiveGraph}. That is not three
+     * problems, it is one missing announcement used three times.</p>
+     *
+     * <p><b>Emits null</b> when nothing is active, which is a real state rather than an absence: focusing
+     * chrome legitimately means no panel is in front. A listener that must keep showing the last real one
+     * latches it itself — {@code CrystalEditor.followed} is exactly that, and IntelliJ answers the same
+     * requirement the same way, by firing {@code selectionChanged} on <em>editor</em> selection so
+     * clicking a tool window never clears what a tool window is looking at.</p>
+     */
+    public final Signal.Value<DockPanelRef> onDidChangeActivePanel = new Signal.Value<>();
+
+    /** The last value announced, so a repeated announce is silent. Never read as "what is active". */
+    @Nullable
+    private DockPanelRef announcedPanel;
+
+    /**
+     * Announces the active panel if it moved. <b>Idempotent — call it freely.</b>
+     *
+     * <h3>Why a compare here rather than an emit at each mutation site</h3>
+     *
+     * <p>The front panel changes through several unrelated paths: a press, focus arriving, a tab
+     * selection, a close, a rebuild that had to pick a new group. Emitting from each one means each one
+     * has to know whether it really changed anything, and the paths overlap — a tab click both activates
+     * a panel and activates its group, which would be two emissions for one change.</p>
+     *
+     * <p>Comparing against the last announced value makes the callers dumb and the signal exact, which is
+     * the contract the tests pin: exactly once per change, and nothing at all on a settled frame.</p>
+     *
+     * <p>{@code Signal.Value} does <b>not</b> suppress equal values, so this guard is load-bearing rather
+     * than belt-and-braces.</p>
+     */
+    void announceActivePanel() {
+        DockPanelRef now = activePanel();
+        if (Objects.equals(now, announcedPanel)) return;
+        announcedPanel = now;
+        onDidChangeActivePanel.emit(now);
+    }
+
+    /**
      * The group commands resolve against.
      *
      * <p>Tracked explicitly and never inferred from focus: clicking inside a graph canvas focuses the
@@ -211,6 +271,7 @@ public class DockArea extends UIElement implements UIFrameTicker {
         if (activeGroup != null) activeGroup.setActive(false);
         activeGroup = group;
         if (group != null) group.setActive(true);
+        announceActivePanel();
         return this;
     }
 
@@ -288,6 +349,10 @@ public class DockArea extends UIElement implements UIFrameTicker {
             List<DockLeaf> leaves = layout.leaves();
             setActiveGroup(leaves.isEmpty() ? null : groups.get(leaves.get(0)));
         }
+        // AFTER the tree is built and the fallback has run. A rebuild is how a close, a drop and a
+        // restore all reach the front panel, and none of them announces on its own -- setActiveGroup
+        // only fires when the GROUP moved, which a close within one group does not.
+        announceActivePanel();
     }
 
 
