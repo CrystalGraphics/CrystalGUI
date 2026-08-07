@@ -144,6 +144,11 @@ public class DockGroup extends UIElement {
         return leaf;
     }
 
+    /** The dock this group belongs to. Lets a walk tell one dock's group from another's. */
+    public DockArea dockArea() {
+        return area;
+    }
+
     public TabView tabView() {
         return tabs;
     }
