@@ -30,6 +30,7 @@ public final class DockPanelDescriptor {
     private final String title;
     private DockPanelKind kind;
     private DockRegion region;
+    private RegionSide side = RegionSide.PRIMARY;
     private final boolean closable;
     private final String icon;
     private final DockDropZone anchor;
@@ -92,7 +93,8 @@ public final class DockPanelDescriptor {
      * <p>An icon <em>name</em>, resolved the way {@code icon()} resolves one in CSS.</p>
      */
     public DockPanelDescriptor icon(@Nullable String iconName) {
-        return new DockPanelDescriptor(typeId, title, isSingleton(), closable, iconName, anchor).region(region);
+        return new DockPanelDescriptor(typeId, title, isSingleton(), closable, iconName, anchor)
+                .region(region).side(side);
     }
 
     @Nullable
@@ -121,7 +123,8 @@ public final class DockPanelDescriptor {
      * layout — and that is precisely the moment the activity bar exists for.</p>
      */
     public DockPanelDescriptor anchor(DockDropZone zone) {
-        return new DockPanelDescriptor(typeId, title, isSingleton(), closable, icon, zone).region(region);
+        return new DockPanelDescriptor(typeId, title, isSingleton(), closable, icon, zone)
+                .region(region).side(side);
     }
 
     public DockDropZone anchor() {
@@ -162,6 +165,25 @@ public final class DockPanelDescriptor {
     public DockPanelDescriptor region(DockRegion value) {
         this.region = value;
         return this;
+    }
+
+    /**
+     * Which half of that region a panel of this type opens in — see {@link RegionSide}.
+     *
+     * <p>Only a <em>default</em>, and one almost every type should leave alone. It is where a tool window
+     * lands the first time anyone opens it and never again: from then on the answer is the user's, stored
+     * on its {@code ToolWindowState}. Worth setting for a type that ships as the second half of a pair —
+     * an outline beside a tree — so the pair is the out-of-the-box arrangement rather than something to be
+     * discovered.</p>
+     */
+    public DockPanelDescriptor side(RegionSide value) {
+        this.side = value == null ? RegionSide.PRIMARY : value;
+        return this;
+    }
+
+    /** @see #side(RegionSide) */
+    public RegionSide side() {
+        return side;
     }
 
     /** {@code kind() == VIEW}. Kept because it is what every call site already asks. */

@@ -7,6 +7,8 @@ import com.crystalgui.ui.elements.dock.DockLayout;
 import com.crystalgui.ui.elements.dock.DockLeaf;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockPath;
+import com.crystalgui.ui.elements.dock.DockRegion;
+import com.crystalgui.ui.elements.dock.RegionSide;
 import com.crystalgui.ui.elements.workbench.ToolWindowLayout;
 import com.crystalgui.ui.elements.workbench.ToolWindowState;
 
@@ -169,23 +171,49 @@ public class ToolWindowPlacementTest {
     /** Immutable: a wither must not mutate the record another caller is about to persist. */
     @Test
     public void withersDoNotMutateTheOriginal() {
-        ToolWindowState original = ToolWindowState.initial("project", DockDropZone.SPLIT_LEFT, 0);
-        ToolWindowState moved = original.withAnchor(DockDropZone.SPLIT_DOWN).withWeight(0.4f);
-        assertEquals(DockDropZone.SPLIT_LEFT, original.anchor());
+        ToolWindowState original = ToolWindowState.initial("project", DockRegion.SIDEBAR, 0);
+        ToolWindowState moved = original.withRegion(DockRegion.PANEL)
+                .withSide(RegionSide.SECONDARY).withWeight(0.4f);
+        assertEquals(DockRegion.SIDEBAR, original.region());
+        assertEquals(RegionSide.PRIMARY, original.side());
         assertEquals(ToolWindowState.DEFAULT_WEIGHT, original.weight(), 1e-6f);
-        assertEquals(DockDropZone.SPLIT_DOWN, moved.anchor());
+        assertEquals(DockRegion.PANEL, moved.region());
+        assertEquals(RegionSide.SECONDARY, moved.side());
         assertEquals(0.4f, moved.weight(), 1e-6f);
     }
 
-    /** Order is the activity bar's, and it survives independently of insertion order. */
+    /** Order is the stripe's, and it survives independently of insertion order. */
     @Test
     public void placementsComeBackInStripeOrder() {
         ToolWindowLayout layout = new ToolWindowLayout();
-        layout.put(ToolWindowState.initial("c", DockDropZone.SPLIT_LEFT, 2));
-        layout.put(ToolWindowState.initial("a", DockDropZone.SPLIT_LEFT, 0));
-        layout.put(ToolWindowState.initial("b", DockDropZone.SPLIT_LEFT, 1));
+        layout.put(ToolWindowState.initial("c", DockRegion.SIDEBAR, 2));
+        layout.put(ToolWindowState.initial("a", DockRegion.SIDEBAR, 0));
+        layout.put(ToolWindowState.initial("b", DockRegion.SIDEBAR, 1));
         assertEquals(List.of("a", "b", "c"),
                 layout.ordered().stream().map(ToolWindowState::typeId).toList());
+    }
+
+    /**
+     * <b>The side round-trips, which is the whole of what version 6 added.</b>
+     *
+     * <p>A record that dropped it would decode perfectly and be wrong: every tool window would come back in
+     * the first half of its region, so a bottom-right panel would reappear bottom-left — on the other rail,
+     * which is what makes it look like the button moved rather than the record being incomplete.</p>
+     */
+    @Test
+    public void theHalfOfARegionSurvivesTheRecord() {
+        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
+        ToolWindowLayout source = new ToolWindowLayout();
+        source.put(ToolWindowState.initial("terminal", DockRegion.PANEL, 0)
+                .withSide(RegionSide.SECONDARY).withVisible(true));
+        source.encodeInto(out, "toolWindows");
+
+        ToolWindowState read = ToolWindowLayout.decodeFrom(
+                new StateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows").get("terminal");
+        assertNotNull(read);
+        assertEquals(DockRegion.PANEL, read.region());
+        assertEquals(RegionSide.SECONDARY, read.side());
+        assertTrue(read.visible());
     }
 
     /**
@@ -196,8 +224,8 @@ public class ToolWindowPlacementTest {
     public void aMalformedEntryIsDroppedRatherThanTakingTheRecordWithIt() {
         StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
         ToolWindowLayout source = new ToolWindowLayout();
-        source.put(ToolWindowState.initial("", DockDropZone.SPLIT_LEFT, 0));   // no id
-        source.put(ToolWindowState.initial("good", DockDropZone.SPLIT_UP, 1).withWeight(0.3f));
+        source.put(ToolWindowState.initial("", DockRegion.SIDEBAR, 0));   // no id
+        source.put(ToolWindowState.initial("good", DockRegion.PANEL, 1).withWeight(0.3f));
         source.encodeInto(out, "toolWindows");
 
         ToolWindowLayout read = ToolWindowLayout.decodeFrom(
@@ -208,26 +236,45 @@ public class ToolWindowPlacementTest {
     }
 
     /**
-     * An anchor this build does not know costs one drag, not the whole placement.
+     * A region this build does not know costs one drag, not the whole placement.
      *
      * <p>Written as raw JSON, because that is what a newer build's record <em>is</em> — and because
      * {@code StateMap.getEnum} throws for an unknown constant, which is exactly the behaviour this decoder
      * must not inherit.</p>
      */
     @Test
-    public void anUnknownAnchorFallsBackWithoutLosingTheRest() {
+    public void anUnknownRegionFallsBackWithoutLosingTheRest() {
         JsonElement record = com.google.gson.JsonParser.parseString(
-                "{\"toolWindows\":[{\"id\":\"future\",\"anchor\":\"SPLIT_DIAGONAL\","
+                "{\"toolWindows\":[{\"id\":\"future\",\"region\":\"HOLOGRAM\",\"side\":\"TERTIARY\","
                         + "\"weight\":0.42,\"visible\":true,\"order\":3}]}");
 
         ToolWindowLayout read = ToolWindowLayout.decodeFrom(
                 new StateMap<>(JsonOps.INSTANCE, record), "toolWindows");
         ToolWindowState state = read.get("future");
-        assertNotNull("an unreadable anchor dropped the whole placement", state);
-        assertEquals(DockDropZone.SPLIT_LEFT, state.anchor());
+        assertNotNull("an unreadable region dropped the whole placement", state);
+        assertEquals(DockRegion.SIDEBAR, state.region());
+        assertEquals(RegionSide.PRIMARY, state.side());
         assertEquals(0.42f, state.weight(), 1e-6f);
         assertTrue(state.visible());
         assertEquals(3, state.order());
+    }
+
+    /**
+     * {@code EDITOR} is a legal region and an illegal <em>placement</em>, and it is refused here.
+     *
+     * <p>The interesting half of the fallback: an unknown name is obviously bad input, while this one
+     * decodes to a real constant that simply has no {@code RegionHost}. Honoured, it would give a tool
+     * window a region that can never show it — so it would never open, and never be reachable to move.</p>
+     */
+    @Test
+    public void aToolWindowCannotClaimTheEditorRegion() {
+        JsonElement record = com.google.gson.JsonParser.parseString(
+                "{\"toolWindows\":[{\"id\":\"greedy\",\"region\":\"EDITOR\",\"order\":0}]}");
+
+        ToolWindowState state = ToolWindowLayout.decodeFrom(
+                new StateMap<>(JsonOps.INSTANCE, record), "toolWindows").get("greedy");
+        assertNotNull(state);
+        assertEquals(DockRegion.SIDEBAR, state.region());
     }
 
     /** A missing key is a first run, not a failure. */

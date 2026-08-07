@@ -128,8 +128,22 @@ public final class WorkbenchSession {
      * <p>{@code stripToolWindows} makes it unreachable regardless of version, which is the durable half —
      * a layout is also something one user can hand to another. The bump is what clears the records that
      * already exist.</p>
+     *
+     * <h3>6 — the anchor became a region and a side</h3>
+     *
+     * <p>A genuine shape change, and the first one since 2. {@code ToolWindowState} stored a
+     * {@code DockDropZone} anchor and <em>derived</em> its region from it; it now stores
+     * {@link DockRegion} and {@link com.crystalgui.ui.elements.dock.RegionSide} outright, which is what
+     * lets a tool window say which <b>half</b> of a region it is in — IntelliJ's {@code isSplit}, and the
+     * one field the two rails derive their contents from.</p>
+     *
+     * <p>Discarded rather than migrated, and this time it genuinely could have been migrated: an anchor
+     * maps onto a region cleanly, which is what {@code DockRegion.ofWall} did. The reason not to is that
+     * a record written at 5 has <b>no side at all</b>, so a migration would have to invent one — and a
+     * silently invented {@code PRIMARY} for a panel the user had put in the bottom-right is a layout that
+     * comes back subtly wrong rather than obviously default. One lost arrangement, once, is cheaper.</p>
      */
-    public static final int VERSION = 5;
+    public static final int VERSION = 6;
 
     private static final String KEY_VERSION = "version";
     private static final String KEY_DOCK = "dock";
@@ -273,7 +287,7 @@ public final class WorkbenchSession {
             // hidden region's entry is written by hidePanel instead, which is the moment its width is
             // still known.
             workbench.toolWindows().put(workbench.toolWindows()
-                    .getOrCreate(host.showing(), region.wall())
+                    .getOrCreate(host.showing(), region)
                     .withVisible(true)
                     .withWeight(workbench.regions().weightOf(region)));
         }

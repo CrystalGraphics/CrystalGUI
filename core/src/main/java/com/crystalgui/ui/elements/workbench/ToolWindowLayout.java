@@ -1,9 +1,8 @@
 package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.elements.dock.DockDropZone;
-import com.crystalgui.ui.elements.dock.DockPanelRef;
-import com.crystalgui.ui.elements.dock.DockPath;
+import com.crystalgui.ui.elements.dock.DockRegion;
+import com.crystalgui.ui.elements.dock.RegionSide;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -41,17 +40,12 @@ public final class ToolWindowLayout {
 
     private static final String KEY_ID = "id";
     private static final String KEY_VISIBLE = "visible";
-    private static final String KEY_ANCHOR = "anchor";
+    private static final String KEY_REGION = "region";
+    private static final String KEY_SIDE = "side";
     private static final String KEY_WEIGHT = "weight";
     private static final String KEY_ORDER = "order";
-    private static final String KEY_PATH = "path";
-    private static final String KEY_INDEX = "index";
-    private static final String KEY_GROUPED = "groupedWith";
     private static final String KEY_ACTIVE = "active";
     private static final String KEY_STRIPE = "stripe";
-    private static final String KEY_TYPE_ID = "typeId";
-    private static final String KEY_RELATIVE_TO = "relativeTo";
-    private static final String KEY_RELATIVE_ZONE = "relativeZone";
 
     /** Insertion-ordered, so an encode is byte-stable for an unchanged layout. */
     private final Map<String, ToolWindowState> states = new LinkedHashMap<>();
@@ -69,9 +63,14 @@ public final class ToolWindowLayout {
      * activity-bar order until something reorders it — which is what both editors do for a freshly
      * installed extension.</p>
      */
-    public ToolWindowState getOrCreate(String typeId, DockDropZone anchor) {
+    public ToolWindowState getOrCreate(String typeId, DockRegion region, RegionSide side) {
         return states.computeIfAbsent(typeId,
-                id -> ToolWindowState.initial(id, anchor, states.size()));
+                id -> ToolWindowState.initial(id, region, states.size()).withSide(side));
+    }
+
+    /** As {@link #getOrCreate(String, DockRegion, RegionSide)}, taking the region's first half. */
+    public ToolWindowState getOrCreate(String typeId, DockRegion region) {
+        return getOrCreate(typeId, region, RegionSide.PRIMARY);
     }
 
     public ToolWindowLayout put(ToolWindowState state) {
@@ -109,7 +108,10 @@ public final class ToolWindowLayout {
         out.putList(key, ordered(), (entry, state) -> {
             entry.putString(KEY_ID, state.typeId());
             entry.putBool(KEY_VISIBLE, state.visible());
-            entry.putString(KEY_ANCHOR, state.anchor().name());
+            // REGION AND SIDE, which used to be one `anchor` naming an outer wall. Together they are the
+            // whole of where a tool window lives, and StripeRail derives its rail and group from the pair.
+            entry.putString(KEY_REGION, state.region().name());
+            entry.putString(KEY_SIDE, state.side().name());
             entry.putFloat(KEY_WEIGHT, state.weight());
             entry.putInt(KEY_ORDER, state.order());
             entry.putBool(KEY_ACTIVE, state.active());
@@ -125,8 +127,8 @@ public final class ToolWindowLayout {
      * Reads placements written by {@link #encodeInto}. Never throws: a malformed entry is skipped and the
      * rest are kept.
      *
-     * <p>An {@code anchor} this build does not recognise falls back to the left wall rather than dropping
-     * the whole placement — losing a wall costs one drag, losing the record costs the size, the group and
+     * <p>A {@code region} this build does not recognise falls back to the sidebar rather than dropping the
+     * whole placement — losing a region costs one drag, losing the record costs the size, the order and
      * whether it was open.</p>
      */
     public static <T> ToolWindowLayout decodeFrom(StateMap<T> in, String key) {
@@ -144,26 +146,33 @@ public final class ToolWindowLayout {
 
         // Read as a STRING and matched by hand, not through getEnum -- that throws a CodecException for a
         // constant this build does not have, which would take the whole placement with it. A record is
-        // untrusted input written by a possibly-newer build, and losing a wall must not cost the size, the
-        // group and whether it was open.
-        DockDropZone anchor = anchorOf(entry.getString(KEY_ANCHOR, ""));
+        // untrusted input written by a possibly-newer build, and losing a region must not cost the size,
+        // the order and whether it was open.
+        DockRegion region = regionOf(entry.getString(KEY_REGION, ""));
         ToolWindowState state = ToolWindowState
-                .initial(id, anchor, entry.getInt(KEY_ORDER, fallbackOrder))
+                .initial(id, region, entry.getInt(KEY_ORDER, fallbackOrder))
+                .withSide(RegionSide.ofName(entry.getString(KEY_SIDE, "")))
                 .withVisible(entry.getBool(KEY_VISIBLE, false))
                 .withWeight(entry.getFloat(KEY_WEIGHT, ToolWindowState.DEFAULT_WEIGHT))
                 .withActive(entry.getBool(KEY_ACTIVE, true))
                 .withShowStripeButton(entry.getBool(KEY_STRIPE, true));
-        // A record written at session 3 still carries path/grouped/relative keys. They are simply not
+        // A record written earlier still carries anchor/path/grouped/relative keys. They are simply not
         // read: an unknown key is ignored by StateMap, and the version bump is what says the omission is
         // deliberate rather than a reader that fell behind.
         return state;
     }
 
-    /** A name this build does not know falls back to the left wall rather than dropping the placement. */
-    private static DockDropZone anchorOf(String name) {
-        for (DockDropZone zone : DockDropZone.values()) {
-            if (zone.name().equals(name)) return zone;
+    /**
+     * A name this build does not know falls back to the sidebar rather than dropping the placement.
+     *
+     * <p>{@link DockRegion#EDITOR} is refused as well as unknown names, and that is the interesting case:
+     * it is a legal constant that no tool window may hold. A record claiming one would give it a
+     * {@link RegionHost} that does not exist, so it would never open and never be reachable to move.</p>
+     */
+    private static DockRegion regionOf(String name) {
+        for (DockRegion region : DockRegion.values()) {
+            if (region != DockRegion.EDITOR && region.name().equals(name)) return region;
         }
-        return DockDropZone.SPLIT_LEFT;
+        return DockRegion.SIDEBAR;
     }
 }
