@@ -414,3 +414,93 @@ literal and the id had no production users at all.
   `CommandRegistry.menu`'s, which filters. A menu whose items move depending on what applies is a menu
   whose items are never in the same place twice. A submenu with *nothing contributed* is dropped, which is
   a different thing: that is a registration that never happened.
+
+---
+
+## Service events
+
+`com.crystalgui.core.signal` — `Signal.Action` / `Signal.Value<T>` / `Signal.Pair<A,B>`, `Connection`,
+`ConnectionGroup`.
+
+**Service-owned typed signals, not a global topic bus.** A signal is a `public final` field on the thing
+that owns the fact:
+
+```java
+dock.onDidChangeActivePanel.connect(panel -> follow(panel));
+Disposer.register(this, source.onDidLoadListing.connect(this::retry));   // owned, not remembered
+```
+
+IntelliJ's `MessageBus`/`Topic` was rejected deliberately: a topic is a global constant anything may
+publish to, so "who fires this" is a repo-wide search and "what does this service announce" has no answer
+at all. A field is discoverable by autocomplete and impossible to publish to from outside.
+
+**Naming is VS Code's**: `onDidX`, past tense — the change has already happened. There is no `onWillX`
+(vetoable) signal yet and none should be invented speculatively.
+
+### What exists
+
+| Signal | Owner | Replaced |
+|---|---|---|
+| `onDidChangeActivePanel` | `DockArea` | three per-frame polls at once |
+| `onDidChangeLayout` | `DockArea` | the activity bar's `:checked` sweep |
+| `onDidRegister` | `DockPanelRegistry` | the activity bar's descriptor walk |
+| `onDidLoadListing` | `WorkspaceTreeSource` | `WorkbenchSession.tick`'s per-frame restore retry |
+| `onDidChangeDirty` | `OpenDocuments` | `encode()` on every open document, every frame |
+| `onDidChange(Runnable)` | `FileDocument` (SPI) | — the source the above is built from |
+
+### Three rules that are easy to get wrong
+
+**1. A connection is a `Disposable`.** `Disposer.register(owner, signal.connect(...))` and the
+subscription dies with its owner. Without this every listener needs a hand-written disconnect on a
+matching teardown path — the bookkeeping the ownership tree exists to remove, and what leaks when a panel
+closes: the widget goes, the subscription stays, and it keeps being called about a tree it is not in.
+
+**2. Subscribing is not catching up.** A signal only reports what happens *after* you subscribe. Anything
+registered before you subscribed is invisible, forever. `ActivityBar.listenToPanels` syncs first and
+subscribes second, because the workbench registers its own panel types in its constructor — subscribing
+alone left the rail permanently empty. **This is the failure mode of every poll-to-event change.**
+
+**3. Announce idempotently, from every mutation path.** `DockArea.announceActivePanel()` compares against
+the last value it announced and is called from the press path, the focus path, the tab-selection path and
+the end of a rebuild. That is the design, not a safety net: those paths overlap (a tab click activates
+both a panel and its group), and the one that looks redundant is the one that matters — a tab switch
+*within* a group changes no group, so `setActiveGroup`'s early return would make it the single change
+that announced nothing.
+
+> **`Signal.Value` does not suppress equal values** — `Property.set` does. Every emitter decides for
+> itself whether a no-op is worth announcing, and an existing equality guard must survive the move into
+> the emitter rather than being dropped as "the signal handles it".
+
+### Events are immediate; structural rebuilds are not
+
+Replacing a poll with an event changes *when* work runs — from "next frame" to "inside whatever mutated
+the state". The engine has a hard rule against that:
+
+> *A widget must never rebuild the elements it is being clicked or dragged on.*
+
+So the shape is **`event → set a dirty flag → next frame rebuilds once`**, not `event → rebuild`.
+`DockArea` already obeys this (`rebuildPending` + tick) and `ProjectFileTree` routes decoration changes
+through `pendingRefresh`. In-place updates — a tab's title, a button's checked class — are safe
+immediately; only structural changes defer.
+
+### Re-entrancy is supported, and was not free
+
+`SignalBase` tracks an emission **depth**, not a boolean. A nested emission's cleanup used to flush the
+pending-disconnect list while an enclosing loop still held the size it cached before starting, so the
+outer loop indexed past the end. Harmless while every signal was a leaf; service events chain by design
+(`onDidChangeDirty` → tab title → layout), so it had to be fixed before any of them landed.
+
+Two related behaviours, both deliberate: a listener connected *during* an emission does not receive that
+emission, and `disconnectAll()` mid-emit stops delivery immediately but defers the removal.
+
+### What stays per-frame
+
+**Incremental work, never a poll for change.** `WorkspaceTreeSource.indexStep` walks a few directories
+per frame until the workspace is mapped — there is no "change" to announce, the frame *is* the schedule.
+`Workbench.tick` survives for it.
+
+`fileTree.loadProjects()` is also still there and looks like a one-shot dressed as a loop, because
+`ProjectFileTree` latches it. It is a **retry**: a client's window id is not valid until its session has
+opened, and a packet sent earlier is discarded with no error. The latch is set on the *attempt*, not on
+success, so calling it from `onWindowChanged` poisons it permanently — twelve explorer tests came up with
+no project roots. It needs a session-opened announcement.
