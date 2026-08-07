@@ -22,8 +22,8 @@ looks like a needed helper is the symptom of one that does not — see
 | `DataContext` — "what am I acting on" | **shipped** | [Data context](#data-context) |
 | Typed service events — replacing polling | **shipped** | [Service events](#service-events) |
 | `Resource` — URI schemes, virtual documents | **shipped** | [Resources](#resources) |
-| `DockPane` — retargetable panel views | **part shipped** — types + provider selection; the group wiring is blocked, see below | [Panes and placement](#panes-and-placement) |
-| `DockService` — `open(input, placement)` | **part shipped** — `DockPlacement`, `groupOf`, `leafOf`; `open()` waits on panes | [Panes and placement](#panes-and-placement) |
+| `DockPane` — retargetable panel views | **shipped** | [Panes and placement](#panes-and-placement) |
+| `DockService` — `open(input, placement)` | **shipped** as `Workbench.open` | [Opening things](#opening-things) |
 
 ---
 
@@ -602,12 +602,27 @@ stacked-inspector bug one level down.
 `DockPaneProvider.accepts` + `priority()` resolve the two-providers-one-input case — IntelliJ's
 `FileEditorPolicy` — independent of registration order.
 
-**Not wired into `DockGroup` yet, and the reason matters.** A pane is one instance per *type*, while
-`DockGroup.content` is keyed per *panel*: two tabs of one type would resolve to the same element and
-`rebuildStrip` would parent one element into two tabs — the *"cannot add the same child twice"* bug this
-package has paid for twice. The fix is that only the **active** tab has a body at all, so the view must be
-re-parented on every activation — and `sync()` runs during a tab click, which is exactly when a widget
-must not re-parent what is being clicked.
+### How it is wired, and the trap it sidesteps
+
+A pane is one instance per *type* while `DockGroup.content` is keyed per *panel*, so returning the pane's
+view from `contentFor` would hand one element to two tabs and `rebuildStrip` would parent it twice.
+
+**So every pane-backed panel keeps its own stable, empty host**, and only the *active* panel's host holds
+the view. `rebuildStrip` is untouched, nothing is shared, and moving the view is one `setOnlyChild`.
+
+> This was held back once on the grounds that `sync()` runs during a tab click, and a widget must never
+> re-parent what it is being clicked on. Against this shape the rule does not bite: the click target is
+> the `Tab` in the **strip**; what moves lives in the tab's **content**. That is precisely why per-panel
+> hosts are better than moving one shared view between tabs.
+
+**Ordering is the contract**, asserted as a sequence: write the outgoing view state → `onHidden` →
+`setInput` → read the incoming state → `onVisible`. Backwards, it saves the incoming input's state over
+the outgoing one's — silent, and visible only as a caret in the wrong place.
+
+**A pane is released when its type has no panel left in the group** — `clearInput`, then dispose, once.
+Not when its tab merely stops being active: that pane is still the group's and returns on the next
+selection. Closing the *last* panel removes the leaf, so a departing group releases its own panes —
+otherwise the one case that most needs the release is the one a per-sync prune cannot reach.
 
 ### `DockPlacement` — "where", as a request
 
