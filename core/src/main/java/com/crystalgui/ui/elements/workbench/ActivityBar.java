@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
@@ -10,8 +11,12 @@ import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Tooltip;
+import com.crystalgui.ui.elements.dock.DockArea;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
+import com.crystalgui.ui.elements.dock.DockPanelRegistry;
 import com.crystalgui.ui.input.FocusPolicy;
+
+import javax.annotation.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -37,18 +42,17 @@ import java.util.Map;
  * a capability and one that is a second, subtly different way to reach it. The second kind is where
  * "the button works but the shortcut doesn't" comes from.</p>
  *
- * <h3>State is polled, and that is the cheap option here</h3>
+ * <h3>State is announced, not polled</h3>
  *
  * <p>A button is {@code :checked} while its panel is open. That fact lives in the dock layout, which
  * changes for reasons the bar cannot see — a panel closed from its own tab, a layout restored, a drag
- * that emptied a leaf. Rather than have the dock announce every one of those, each frame asks the
- * workbench whether each panel is open: a handful of {@code leafContaining} walks over a tree that is a
- * few nodes deep, against a set of buttons that is single digits. {@code addClass}/{@code removeClass}
- * both no-op when nothing changed, so a settled frame touches no element and invalidates no style.</p>
+ * that emptied a leaf. This class used to poll all of them every frame, on the argument that the walk was
+ * cheap and <i>"there is no such owner"</i> to announce it.</p>
  *
- * <p>The comparison worth making is with the tab presentation seam, which went the other way: there, the
- * work per refresh was building a drawable, which is not free, and the change had an owner who knew when
- * it happened. Here it is an integer comparison and there is no such owner.</p>
+ * <p>There is: the dock. {@code DockArea.onDidChangeLayout} fires when a rebuild produces a different set
+ * of panels, and buttons are built from {@code DockPanelRegistry.onDidRegister} rather than by re-walking
+ * every descriptor looking for one without a button. The cheapness argument was true and beside the
+ * point — the reason to stop polling is not cost but that a frame is the wrong thing to be listening to.</p>
  *
  * <h3>Deliberately not here yet</h3>
  *
@@ -99,11 +103,45 @@ public class ActivityBar extends UIElement {
     }
 
     /**
+     * The {@code :checked} half. Subscribable immediately — it needs no window and no registry.
+     *
+     * <p>{@code :checked} <b>is</b> "is this panel open", which is derived from the dock layout, so it
+     * moves exactly when the layout does and only a structural change can move it.</p>
+     */
+    void listenToLayout(DockArea dock) {
+        dock.onDidChangeLayout.connect(this::refresh);
+    }
+
+    /**
+     * The buttons half, which needs a command registry and therefore a window.
+     *
+     * <p>Split from {@link #listenToLayout} because the two halves become available at different moments,
+     * and folding them together would delay the layout half for no reason.</p>
+     *
+     * <p><b>Catches up before subscribing.</b> A signal only reports what happens after you subscribe,
+     * and the workbench registers its own three panel types in its constructor — long before there is a
+     * window. Subscribing without the initial pass leaves the rail permanently empty of everything that
+     * existed first, which is the failure mode of every "replace a poll with an event" change; it is the
+     * one this landing actually hit, and it is why the order here is written down.</p>
+     */
+    void listenToPanels(DockPanelRegistry<UIElement> registry, CommandRegistry commands) {
+        // Re-attaching a workbench to a second window calls this again, and the previous subscription
+        // would otherwise still be live -- syncing the OLD window's registry forever. Connections are
+        // Disposable now, so dropping the last one is one line rather than a flag.
+        if (panelSubscription != null) panelSubscription.disconnect();
+        sync(commands);
+        panelSubscription = registry.onDidRegister.connect(descriptor -> sync(commands));
+    }
+
+    @Nullable
+    private Connection panelSubscription;
+
+    /**
      * Registers a toggle command for every singleton panel type, and builds a button for each.
      *
      * <p>Idempotent per type, so it is safe to call again after a host registers more panels — which it
      * does: {@code CrystalEditor} adds its inspector and emitted-source panels after the workbench is
-     * constructed. A type that arrives late gets its button on the next call rather than never.</p>
+     * constructed. Driven by {@link #listenTo} now rather than by a frame.</p>
      */
     public void sync(CommandRegistry commands) {
         for (DockPanelDescriptor descriptor : workbench.panels().descriptors()) {

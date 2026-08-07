@@ -113,6 +113,26 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
 
     private volatile boolean dirty;
 
+    /**
+     * A directory's listing arrived — including an empty one from a refusal.
+     *
+     * <h3>What it replaced</h3>
+     *
+     * <p>{@code WorkbenchSession.tick()}, called every frame from {@code CrystalEditor}'s ticker, purely
+     * to re-attempt an expansion that could not happen yet: a folder cannot be expanded before the
+     * listing revealing it lands, and listings arrive over several frames. So the restore asked "has it
+     * arrived?" sixty times a second and gave up after a fixed number of tries.</p>
+     *
+     * <p>Now the arrival says so. The retry runs once per listing instead of once per frame, which is
+     * both fewer attempts and strictly better ones — every attempt happens at a moment when the answer
+     * may actually have changed.</p>
+     *
+     * <p><b>A refused listing is announced too.</b> It is still an answer about that directory, and the
+     * case that most needs the restore to move on is the one where the folder is simply gone.</p>
+     */
+    public final com.crystalgui.core.signal.Signal.Value<CgPath> onDidLoadListing =
+            new com.crystalgui.core.signal.Signal.Value<>();
+
     @Nullable
     private String failure;
 
@@ -428,12 +448,20 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
                 if (directories.contains(child)) enqueueForIndex(child);
             }
             dirty = true;
+            onDidLoadListing.emit(directory);
         }, failed -> {
             inFlight.remove(directory);
             // Retryable rather than latched -- the listing may have failed because the directory was
             // being written to.
             requested.remove(directory);
-            if (failed.error() != CgFileError.FILE_NOT_FOUND) children.put(directory, List.of());
+            if (failed.error() != CgFileError.FILE_NOT_FOUND) {
+                children.put(directory, List.of());
+                // Announced too. A refused listing is still an ANSWER about this directory, and a
+                // restore waiting on it has to learn that it arrived and was empty -- otherwise the one
+                // case that never resolves is the one where the folder is gone, which is exactly the
+                // case the retry budget exists for.
+                onDidLoadListing.emit(directory);
+            }
         });
     }
 }

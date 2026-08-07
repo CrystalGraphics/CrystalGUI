@@ -105,7 +105,19 @@ public final class WorkbenchSession {
     private static final String KEY_PATH = "path";
     private static final String KEY_VIEW = "view";
 
-    /** How many frames a pending expansion is retried before it is written off as unreachable. */
+    /**
+     * How many <b>listings</b> a pending expansion is retried across before it is written off.
+     *
+     * <p>Was frames, when {@link #tick()} ran from a per-frame ticker. It is now driven by
+     * {@code WorkspaceTreeSource.onDidLoadListing}, so each attempt happens at a moment when the answer
+     * may actually have changed rather than sixty times a second regardless.</p>
+     *
+     * <p>The budget therefore only counts down while the workspace is genuinely still answering. A folder
+     * that will <em>never</em> list — because it was deleted since the session was recorded — no longer
+     * decrements anything and simply lingers in the pending set. That is harmless in a way it was not
+     * before: the whole reason for a give-up was that the retry ran a set difference every frame for the
+     * rest of the session, and nothing runs per frame any more.</p>
+     */
     private static final int EXPANSION_ATTEMPTS = 600;
 
     private final Workbench workbench;
@@ -336,7 +348,10 @@ public final class WorkbenchSession {
     }
 
     /**
-     * Re-attempts what could not be restored yet. Call once a frame; cheap and self-terminating.
+     * Re-attempts what could not be restored yet.
+     *
+     * <p>Call it when a listing arrives — {@code WorkspaceTreeSource.onDidLoadListing} — not once a
+     * frame. It stays cheap and self-terminating either way, and is a no-op once nothing is pending.</p>
      *
      * @return whether anything is still pending
      */

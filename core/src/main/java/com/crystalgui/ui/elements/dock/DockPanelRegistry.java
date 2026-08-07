@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.dock;
 
+import com.crystalgui.core.signal.Signal;
+
 import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -36,9 +38,26 @@ public final class DockPanelRegistry<C> {
     private final Map<String, DockPanelDescriptor> descriptors = new LinkedHashMap<>();
     private final Map<String, Factory<C>> factories = new LinkedHashMap<>();
 
+    /**
+     * A panel type became available.
+     *
+     * <h3>What it replaced</h3>
+     *
+     * <p>{@code ActivityBar.sync()}, called <b>every frame</b> from {@code Workbench.tick}, walking every
+     * registered descriptor to find the ones that had no button yet. Its own comment explained why:
+     * <i>"a host registers its own panels AFTER the workbench is built"</i> — {@code CrystalEditor} adds
+     * its inspector and emitted source that way — so a one-shot pass at construction would miss them.</p>
+     *
+     * <p>That is a real requirement and the loop was the wrong answer to it: late registration is an
+     * <em>event</em>, and this is it. The rail now adds one button when one type appears, rather than
+     * asking about all of them sixty times a second forever in case a late one shows up.</p>
+     */
+    public final Signal.Value<DockPanelDescriptor> onDidRegister = new Signal.Value<>();
+
     public DockPanelRegistry<C> register(DockPanelDescriptor descriptor, Factory<C> factory) {
         descriptors.put(descriptor.typeId(), descriptor);
         factories.put(descriptor.typeId(), factory);
+        onDidRegister.emit(descriptor);
         return this;
     }
 
