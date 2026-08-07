@@ -11,9 +11,9 @@
 | 2 | `DataContext` + context keys (§15) | **DONE** |
 | 2.5 | Commands: global registration, context-resolved (§15b) | **DONE** — all three owner-capturing classes migrated; `install` is gone |
 | 3 | Typed service events; delete the polling loops (§16) | **DONE** — 6 of 7 landings; loadProjects deferred to step 4, see §16.8 |
-| 4 | `Resource`: schemes, virtual documents (§17) | **part done** — Resource/provider/registry shipped + tested; the re-key (§17.5–17.6) is not started |
-| 5 | `DockPane`: retargetable views (§18) | not started |
-| 6 | `DockService.open` + `DockPlacement` (§19) | not started |
+| 4 | `Resource`: schemes, virtual documents (§17) | **DONE** — incl. `FileDocument.resource()`; `OpenDocuments` deliberately stays `CgPath`-keyed, see §17.6 note |
+| 5 | `DockPane`: retargetable views (§18) | **part done** — `DockInput`/`DockPane`/`DockPaneProvider`/registry shipped + tested; the `DockGroup` wiring is blocked on a re-parent hazard, see §18.4 note |
+| 6 | `DockService.open` + `DockPlacement` (§19) | **part done** — `DockPlacement` + `groupOf`/`leafOf` shipped + tested; `open()` waits on step 5 |
 
 Phase two — Parts/ViewContainers, menu contributions, the `when` parser, the model registry, and §11
 Tier 2 — is deliberately unscheduled until phase one has been lived with (§20.2).
@@ -1826,8 +1826,19 @@ listed as its own step in §7 of Part I; it belongs here.
 tests `ResourceTest.java`, `ResourceRegistryTest.java`.
 
 **Modified:** `FileDocument` (+`resource()`), `TextFileDocument`, `ShaderGraphEditor`,
-`OpenDocuments` (keyed by `Resource`), `Workbench` (`refFor`, `openFile`, `documentFor`),
-`CrystalEditor` (deletions above), `UiDataKeys.RESOURCE` retyped from `CgPath`.
+`Workbench`, `CrystalEditor` (deletions above).
+
+> **`OpenDocuments` was deliberately NOT re-keyed by `Resource`.** It is the *disk* store — `onDisk`
+> bytes, `unreadable`, `requested`, `markSaved` — and a derived resource has no disk presence at all, so
+> re-keying it would give every entry fields half of them can never use. That is the flag-shaped design
+> the scheme system exists to replace. A derived document needs a provider and a view, not a slot in the
+> file store.
+>
+> The session codec was **not** version-bumped either, against §17.8. The generated tab's state used to be
+> the graph's bare path, which parses as a project resource with no origin; reading it as the origin
+> itself is one line, and the two forms are unambiguous — a derived resource always has an origin, a bare
+> path never does. A bump would have invalidated every saved layout that had the tab open, to avoid
+> writing that line.
 
 ### 17.7 Tests (contract)
 
@@ -1924,6 +1935,17 @@ public enum DockCapability { SINGLETON, READONLY, UNTITLED, DERIVED, CAN_SPLIT }
 ```
 
 ### 18.4 The retargeting rule — the important design decision
+
+> **Implementation note (found while wiring it).** The types are shipped; the `DockGroup` half is not,
+> and the reason is a genuine hazard rather than effort. A pane is one instance per **type**, while
+> `DockGroup.content` is keyed per **panel** — so two tabs of one type resolve to the same element and
+> `rebuildStrip` parents one element into two tabs, which is the *"cannot add the same child twice"*
+> class of bug this package has already paid for twice.
+>
+> The fix is not a bigger map. With panes, only the **active** tab has a body at all (VS Code builds no
+> DOM for an inactive editor), so the view must be re-parented into the active tab on every activation —
+> and `sync()` runs *during a tab click*, which is precisely when this codebase's rule says a widget must
+> not re-parent what is being clicked. That ordering wants the harness to validate, not a unit test.
 
 `DockGroup` caches **one pane per (group, typeId)**, not per input:
 
