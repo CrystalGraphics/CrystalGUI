@@ -232,7 +232,13 @@ public class CrystalEditorPanelsTest extends UiTestBase {
         CrystalEditor editor = new CrystalEditor(client());
         assertNull("a generated-source tab opened with no graph to generate from",
                 leafOf(editor, ShaderGraphContribution.SOURCE_TYPE));
-        assertNotNull("the inspector did not open", leafOf(editor, CrystalEditor.INSPECTOR_TYPE));
+        // The inspector is a TOOL WINDOW now, so it is in the auxiliary region rather than a dock leaf --
+        // it used to be opened into the tree with a SPLIT_RIGHT placement, which made it a leaf the layout
+        // could lose. Same assertion, asked of the place it actually lives.
+        assertEquals("the inspector did not open", CrystalEditor.INSPECTOR_TYPE,
+                editor.workbench().regions()
+                        .host(editor.workbench().toolWindowManager()
+                                .regionOf(CrystalEditor.INSPECTOR_TYPE)).showing());
     }
 
     private static DockPanelRef compiledRef(String path) {

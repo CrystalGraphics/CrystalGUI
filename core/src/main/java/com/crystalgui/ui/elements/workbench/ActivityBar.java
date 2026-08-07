@@ -10,6 +10,8 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.dock.DockRegion;
+import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.dock.DockArea;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
@@ -67,6 +69,9 @@ public class ActivityBar extends UIElement {
     public static final String BAR_CLASS = "__activity-bar__";
 
     /** One tool-window button. */
+    /** The count over a rail icon. @see ItemButton#setBadge */
+    public static final String BADGE_CLASS = "__badge__";
+
     public static final String ITEM_CLASS = "__activity-item__";
 
     /** Command ids are {@code view.} plus the panel type — {@code view.project}, {@code view.problems}. */
@@ -90,6 +95,7 @@ public class ActivityBar extends UIElement {
         this.workbench = workbench;
         addClass(BAR_CLASS);
         markAsInternal();
+
     }
 
     /** The rail builds its own buttons; it holds nothing a caller puts there. */
@@ -125,6 +131,17 @@ public class ActivityBar extends UIElement {
      * one this landing actually hit, and it is why the order here is written down.</p>
      */
     void listenToPanels(DockPanelRegistry<UIElement> registry, CommandRegistry commands) {
+        // HERE, not in the constructor. The rail is a FIELD INITIALISER on Workbench, so it is built
+        // before the constructor body assigns the tool-window manager -- reaching for it there is a
+        // guaranteed NPE, and one that only fires once something actually constructs a workbench.
+        if (badgeSubscription == null) {
+            // A badge is a fact about a CONTAINER, which is why it could not exist before containers did.
+            badgeSubscription = workbench.toolWindowManager().viewContainers().onDidChangeBadge
+                    .connect((containerId, text) -> {
+                        Button button = buttons.get(containerId);
+                        if (button instanceof ItemButton item) item.setBadge(text);
+                    });
+        }
         // Re-attaching a workbench to a second window calls this again, and the previous subscription
         // would otherwise still be live -- syncing the OLD window's registry forever. Connections are
         // Disposable now, so dropping the last one is one line rather than a flag.
@@ -180,10 +197,24 @@ public class ActivityBar extends UIElement {
             button.attachListener(() -> commands.run(commandId));
 
             buttons.put(typeId, button);
+            // TWO GROUPS, which is what the left rail's split is in the reference -- IntelliJ anchors the
+            // bottom tool windows (Terminal, Services) to the bottom of the same stripe.
+            //
+            // A CLASS, not a nested element. Grouping by wrapping put every button a level deeper and out
+            // of reach of the traversal that finds them, for a purely visual split; `margin-top: auto` on
+            // the first bottom-anchored button pushes the rest down and is how VS Code does it. The rule
+            // needs no new API either: a container's group follows its REGION.
+            if (descriptor.region() == DockRegion.PANEL) button.addClass(BOTTOM_GROUP_CLASS);
             addInternalChild(button);
         }
         refresh();
     }
+
+    @Nullable
+    private Connection badgeSubscription;
+
+    /** On the first button anchored to the bottom of the rail. @see #listenToPanels */
+    public static final String BOTTOM_GROUP_CLASS = "__bottom-anchored__";
 
     /** Lets every button's {@code :checked} state be re-evaluated if the dock has moved under it. */
     public void refresh() {
@@ -213,11 +244,27 @@ public class ActivityBar extends UIElement {
         private final String typeId;
         private boolean lastKnownOpen;
 
+        /** The count or dot over the icon — VS Code's activity badge. Absent until something sets one. */
+        private final UIText badge = new UIText("");
+
         ItemButton(Workbench workbench, String typeId) {
             super("");
             this.workbench = workbench;
             this.typeId = typeId;
             this.lastKnownOpen = workbench.isPanelOpen(typeId);
+            badge.addClass(BADGE_CLASS);
+            // Never a click target: the badge sits over the icon, and a press on it means the button.
+            badge.setHitTest(false);
+        }
+
+        /** Shows or clears the badge. Attached lazily, so an unbadged rail carries no extra elements. */
+        void setBadge(@Nullable String text) {
+            if (text == null || text.isEmpty()) {
+                badge.removeSelf();
+                return;
+            }
+            badge.setText(text);
+            if (badge.getParent() == null) addInternalChild(badge);
         }
 
         @Override

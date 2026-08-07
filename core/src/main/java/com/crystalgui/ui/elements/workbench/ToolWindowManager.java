@@ -41,8 +41,16 @@ public final class ToolWindowManager {
     private final WorkbenchRegions regions;
     private final DockPanelRegistry<UIElement> registry;
 
-    /** Type id -> its built content. Survives every hide; see the class note. */
-    private final Map<String, UIElement> contents = new LinkedHashMap<>();
+    /** Container id -> its built container. Survives every hide; see the class note. */
+    private final Map<String, ViewContainer> containers = new LinkedHashMap<>();
+
+    /** Which views each container holds, and its badge. */
+    private final ViewContainerRegistry viewContainers = new ViewContainerRegistry();
+
+    /** @see ViewContainerRegistry */
+    public ViewContainerRegistry viewContainers() {
+        return viewContainers;
+    }
 
     private final ToolWindowLayout toolWindows = new ToolWindowLayout();
 
@@ -112,11 +120,10 @@ public final class ToolWindowManager {
         RegionHost host = regions.host(region);
         if (host == null) return false;
 
-        UIElement content = contents.computeIfAbsent(typeId,
-                id -> registry.create(new DockPanelRef(id)));
-        if (content == null) return false;
+        ViewContainer container = containers.computeIfAbsent(typeId, this::buildContainer);
+        if (container == null) return false;
 
-        host.show(typeId, content);
+        host.show(typeId, container);
         regions.sync();
         toolWindows.put(placementOf(typeId).withVisible(true));
         return true;
@@ -149,9 +156,29 @@ public final class ToolWindowManager {
         }
     }
 
-    /** The built content for a type, or null if it has never been shown. For tests and diagnostics. */
+    /**
+     * Builds the container for a type: its header, and its views.
+     *
+     * <p>A tool window that registered no views is a container holding <b>one</b> view — itself, built by
+     * the panel factory. That default is what let containers land without every existing panel being
+     * re-registered, and it is also the honest description: Project really is one view.</p>
+     */
     @Nullable
-    public UIElement contentOf(String typeId) {
-        return contents.get(typeId);
+    private ViewContainer buildContainer(String typeId) {
+        DockPanelDescriptor descriptor = registry.descriptor(typeId);
+        String title = descriptor != null ? descriptor.title() : typeId;
+        ViewContainer container = new ViewContainer(typeId, title);
+        container.setViews(viewContainers.viewsOf(typeId, title,
+                () -> registry.create(new DockPanelRef(typeId))));
+        // The header's ✕ is the same verb the stripe button is, so it runs the same path rather than
+        // reaching into the region -- otherwise the two can disagree about what "hidden" means.
+        container.onHideRequested.connect(() -> hidePanel(typeId));
+        return container;
+    }
+
+    /** The built container for a type, or null if it has never been shown. For tests and diagnostics. */
+    @Nullable
+    public ViewContainer containerOf(String typeId) {
+        return containers.get(typeId);
     }
 }
