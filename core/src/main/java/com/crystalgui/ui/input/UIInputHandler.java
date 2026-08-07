@@ -2,6 +2,7 @@ package com.crystalgui.ui.input;
 
 import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.ReadOnlyVec2f;
+import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgSystemInput.Keyboard;
@@ -708,6 +709,37 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         emitAndSetFocus(element, FocusSource.POINTER);
     }
 
+    /**
+     * <b>The focus owner changed.</b> Carries the new one, or {@code null} when focus was dropped.
+     *
+     * <h3>Why this exists as an announcement</h3>
+     *
+     * <p>{@code FocusEvent.Focus}/{@code Blur} are dispatched <em>at the element</em> and bubble, so they
+     * answer "did I gain focus". They cannot answer "who holds focus now" for something that is not on the
+     * path — which is what any observer of the focus owner needs, and there is one in every workbench: an
+     * inspector, a context-sensitive toolbar, a status line.</p>
+     *
+     * <p>Without it those observers have two options, and both are wrong. Poll every frame — the shape
+     * plan step 3 deleted five times over — or have the application hand them a subject it picked itself,
+     * which caps what can ever be observed to whatever the application thought of. The Inspector had the
+     * second: its subject was always the active document's view, so nothing outside a document could be
+     * inspected however many sections were registered.</p>
+     *
+     * <p><b>Deduplicated</b>, so the blur-then-focus pair a single click produces announces the two real
+     * states and never the same one twice.</p>
+     */
+    public final Signal.Value<UIElement> onDidChangeFocus = new Signal.Value<>();
+
+    /** The last value {@link #onDidChangeFocus} carried, so re-stating it is silent. */
+    @Nullable
+    private UIElement announcedFocus;
+
+    private void announceFocus() {
+        if (announcedFocus == focusedElement) return;
+        announcedFocus = focusedElement;
+        onDidChangeFocus.emit(focusedElement);
+    }
+
     private void emitAndSetFocus(UIElement target, FocusSource source) {
         // A half-entered chord belongs to the scope it was begun in. Carrying it across a focus change
         // would let `Mod+K` typed in one panel complete as `Mod+K Mod+S` in another, firing a command the
@@ -726,6 +758,8 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         }
         FocusEvent.Focus event = new FocusEvent.Focus(target);
         sendInputEvent(target, event);
+        // AFTER the event, so an observer that reads the tree sees the state the event already applied.
+        announceFocus();
     }
 
     /** Drops focus if — and only if — {@code element} currently holds it. Called when an element
@@ -745,6 +779,7 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         target.setPressed(false);
         FocusEvent.Blur event = new FocusEvent.Blur(target);
         sendInputEvent(target, event);
+        announceFocus();
     }
 
     private class HoverFrameData {

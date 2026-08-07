@@ -85,6 +85,24 @@ public final class UITreeTraversal {
         return nodeA == nodeB ? nodeA : null;
     }
 
+    /**
+     * Whether {@code node} is {@code ancestor} or sits beneath it.
+     *
+     * <p>Reflexive, like the DOM's {@code contains}: an element contains itself. Callers asking "did this
+     * happen inside me" mean to include themselves, and the one that does not can compare first.</p>
+     *
+     * <p>Null-safe both ways, and walks parents rather than consulting the depth cache — a detached
+     * element's cached depth is whatever it was when it was attached, which is the trap
+     * {@link #commonAncestor} documents at length.</p>
+     */
+    public static boolean isAncestor(UIElement ancestor, UIElement node) {
+        if (ancestor == null || node == null) return false;
+        for (UIElement current = node; current != null; current = current.getParent()) {
+            if (current == ancestor) return true;
+        }
+        return false;
+    }
+
     /** Root-to-element chain, root first. Empty-safe: single-element list if element has no parent. */
     public static UIElement[] pathToRoot(UIElement element) {
         UIElement[] path = new UIElement[element.getRuntimeCache().getDepth()];
