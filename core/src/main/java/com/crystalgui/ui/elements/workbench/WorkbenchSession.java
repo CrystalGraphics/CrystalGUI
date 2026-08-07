@@ -63,7 +63,7 @@ import javax.annotation.Nullable;
  *
  * <ul>
  *   <li><b>View state</b> — a caret, a scroll offset, a fold set — is applied when the file's content
- *       lands ({@link Workbench#onDocumentLoaded}), never when the panel is built. A caret restored into a
+ *       lands ({@link Workbench#onDidOpenDocument}), never when the panel is built. A caret restored into a
  *       document that is still empty clamps to zero, and the symptom is a caret that looks like it was
  *       never saved.</li>
  *   <li><b>Tree expansion</b> waits for listings. A folder cannot be expanded before its parent's listing
@@ -137,7 +137,7 @@ public final class WorkbenchSession {
     public WorkbenchSession(Workbench workbench, ConfigStorage storage) {
         this.workbench = workbench;
         this.storage = storage;
-        workbench.onDocumentLoaded.connect(this::applyViewState);
+        workbench.onDidOpenDocument.connect(this::applyViewState);
     }
 
     /** {@code session.harness.scratch.json} — flat, so {@link ConfigStorage#list} can find them to prune. */

@@ -246,6 +246,41 @@ public class UIElement implements SettingsScope, DataProvider {
         bindKeys();
     }
 
+    /**
+     * Makes {@code wanted} this element's <b>only</b> child, removing whatever was there.
+     *
+     * <h3>Why this is not {@code clearAllChildren().addChild(wanted)}</h3>
+     *
+     * <p>{@link #clearAllChildren()} skips internal children <em>by design</em>, and a composite widget
+     * routinely calls {@code markAsInternal()} on itself. So a host swapping one composite for another
+     * with the obvious pair leaves the outgoing one in place and stacks the incoming one underneath —
+     * which is exactly what "two inspectors in one tab" was, and it looked like a paint bug.</p>
+     *
+     * <p>Removing through the <b>matching</b> API is the fix rather than un-marking the child: internal
+     * is the child's own statement about its parts and it is correct — nobody should be able to reach
+     * into a composite with {@code removeChild}. What was wrong was the host assuming one kind of
+     * child.</p>
+     *
+     * <p>Here rather than in the one application that hit it, because "show one of several things in
+     * this slot" is not an application's idea. It is what every retargetable panel does, and the next
+     * one to need it should not have to rediscover the trap.</p>
+     *
+     * <p>A no-op when {@code wanted} is already the only child, so it is safe to call every time
+     * something changes rather than only when it did.</p>
+     */
+    public UIElement setOnlyChild(@Nullable UIElement wanted) {
+        if (wanted != null && wanted.getParent() == this && children.size() == 1) return this;
+        for (UIElement child : new ArrayList<>(getChildren())) {
+            if (child.isInternalUI()) {
+                removeInternalChild(child);
+            } else {
+                removeChild(child);
+            }
+        }
+        if (wanted != null) addChild(wanted);
+        return this;
+    }
+
     public UIElement addClass(String cls) {
         if (classes.add(cls)) {
             invalidateStyleMatch();
