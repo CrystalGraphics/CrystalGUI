@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.graph;
 
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
@@ -177,7 +178,7 @@ public final class NodeFieldBinder {
     private static void followDocument(@Nullable UIElement control, GraphDocument document, String nodeId,
                                        NodeField field, String[] lastWritten, @Nullable Runnable onChange) {
         if (control == null) return;
-        document.onChanged.connect(() -> {
+        Connection following = document.onChanged.connect(() -> {
             if (control instanceof ConfigControl config && config.isInteracting()) return;
             String live = currentValue(document, nodeId, field);
             if (java.util.Objects.equals(live, lastWritten[0])) return;
@@ -187,6 +188,11 @@ public final class NodeFieldBinder {
             // stays as stale as the widget did.
             if (onChange != null) onChange.run();
         });
+        // TRACKED, for the same reason SettingsConfigurator tracks its own: a GraphDocument lives as long
+        // as the file is open, and the inspector rebuilds this control on every selection change — so an
+        // untracked connection meant one dead listener per field per click, walked on every document
+        // write for the rest of the session.
+        if (control instanceof ConfigControl config) config.connections().add(following);
     }
 
     /**
