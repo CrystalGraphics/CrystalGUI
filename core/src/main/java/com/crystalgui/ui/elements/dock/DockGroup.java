@@ -2,6 +2,8 @@ package com.crystalgui.ui.elements.dock;
 
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.FocusEvent;
@@ -271,6 +273,22 @@ public class DockGroup extends UIElement {
         StyleGroup.defaultPipeline(slot.getStyle().getGeneralGroup(), g -> g.overlay(glyph));
         tab.setPreIcon(slot);
     }
+
+    // The pane cache belongs here and is NOT wired yet -- deliberately, and the reason is worth keeping.
+    //
+    // A pane is one instance per (group, TYPE), retargeted by setInput. This group's `content` map is
+    // keyed per PANEL. So two tabs of one type would both resolve to the same view element, and
+    // rebuildStrip would parent one element into two tabs -- which is not a subtle failure, it is the
+    // "cannot add the same child twice" class of bug this package has already paid for twice.
+    //
+    // The fix is not a bigger map. It is that with panes, only the ACTIVE tab has a body at all (VS Code
+    // builds no DOM for an inactive editor), so the view has to be re-parented into the active tab on
+    // every activation -- and sync() runs during a tab click, which is exactly when this codebase's rule
+    // says a widget must not re-parent what is being clicked. Getting that ordering right needs the
+    // harness, not a unit test.
+    //
+    // DockInput, DockPane, DockPaneProvider and the registry half are shipped and tested; this is the
+    // remaining wiring. See plan.md §18.4.
 
     private UIElement contentFor(DockPanelRef panel) {
         return content.computeIfAbsent(panel, ref -> {

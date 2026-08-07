@@ -4,6 +4,10 @@ import com.crystalgui.core.signal.Signal;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -53,6 +57,34 @@ public final class DockPanelRegistry<C> {
      * asking about all of them sixty times a second forever in case a late one shows up.</p>
      */
     public final Signal.Value<DockPanelDescriptor> onDidRegister = new Signal.Value<>();
+
+    /**
+     * Providers, highest {@link DockPaneProvider#priority()} first.
+     *
+     * <p>Separate from {@link #factories} rather than replacing it: a factory builds one element per
+     * panel and is exactly right for a tool window, which is one instance showing one thing forever. A
+     * provider builds a pane that can be <b>retargeted</b>, which is what a document view wants. Both
+     * arrangements are legitimate and the dock asks for a pane first, falling back to a factory.</p>
+     */
+    private final List<DockPaneProvider> paneProviders = new ArrayList<>();
+
+    public DockPanelRegistry<C> registerPane(DockPaneProvider provider) {
+        Objects.requireNonNull(provider, "provider");
+        paneProviders.add(provider);
+        // Sorted on insert rather than at lookup: a menu opening is not the moment to sort, and the list
+        // is single digits and changes at startup.
+        paneProviders.sort(Comparator.comparingInt(DockPaneProvider::priority).reversed());
+        return this;
+    }
+
+    /** The highest-priority provider that accepts {@code input}, or null when none does. */
+    @Nullable
+    public DockPaneProvider paneProviderFor(DockInput input) {
+        for (DockPaneProvider provider : paneProviders) {
+            if (provider.accepts(input)) return provider;
+        }
+        return null;
+    }
 
     public DockPanelRegistry<C> register(DockPanelDescriptor descriptor, Factory<C> factory) {
         descriptors.put(descriptor.typeId(), descriptor);

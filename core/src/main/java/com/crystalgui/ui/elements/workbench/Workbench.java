@@ -68,8 +68,13 @@ public class Workbench extends UIElement {
     public static final String PROJECT_TYPE = "project";
     public static final String PROBLEMS_TYPE = "problems";
 
-    /** The state key carrying which file a {@link #FILE_TYPE} panel shows. */
-    public static final String PATH_STATE = "path";
+    /**
+     * The state key carrying which file a {@link #FILE_TYPE} panel shows.
+     *
+     * <p>An alias for {@link DockPanelRef#PATH}, which is where it belongs: the dock is what reads it,
+     * to build a {@code DockInput}. Kept because it is what every caller here names.</p>
+     */
+    public static final String PATH_STATE = DockPanelRef.PATH;
 
     /** UNIQUE, never the shared "__content__" -- see ProjectFileTree.CONTENT_CLASS. */
     public static final String CONTENT_CLASS = "__workbench-content__";

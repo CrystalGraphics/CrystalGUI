@@ -35,6 +35,17 @@ public final class DockPanelRef {
     public static final String TITLE = "title";
 
     /**
+     * The third key the dock reads: what this panel is <b>about</b>, as a {@code Resource} string.
+     *
+     * <p>Here rather than in the workbench because the dock is what turns a ref into a
+     * {@link DockInput}, and an input's whole job is answering "what is this panel showing". The
+     * workbench's {@code PATH_STATE} is an alias for it and stays for its callers.</p>
+     *
+     * <p>Optional: a tool window is a perfectly good panel that is about nothing.</p>
+     */
+    public static final String PATH = "path";
+
+    /**
      * The second key the dock reads: an icon name for the tab, resolved the way {@code icon()} resolves
      * one in CSS. Optional — a panel that names no icon gets none.
      *
