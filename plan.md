@@ -65,6 +65,13 @@ place and persist a panel without the application knowing anything about it.**
 
 ### 1.1 `Workbench` is five services in a trench coat
 
+> **PARTLY DONE.** The *consequence* is gone: `openPanel`/`openPanelWith`/`openPanelBeside` are one
+> `Workbench.open(input, placement, options)` (step 6), and `CrystalEditor.showCompiled` with them.
+> Editor-type resolution is a contribution (step 7) — `bindEditor*`/`registerDocumentType` survive as the
+> primitives `DocumentType` is built on, but nothing calls them directly any more.
+> **Still open:** tool windows (`showPanel`/`hidePanel`/`togglePanel`) remain on `Workbench`. That is
+> §12.4 Parts, deliberately unscheduled.
+
 1181 lines, and its public surface splits cleanly into five unrelated jobs:
 
 | Job | Methods | VS Code equivalent | IntelliJ equivalent |
@@ -84,6 +91,10 @@ service from the one that opens documents. Ours conflates them, which is why `to
 `openPanel` have overlapping, subtly different placement logic.
 
 ### 1.2 There is no pane lifecycle — the root of `assertOnlyChild`
+
+> **DONE** (step 5). `DockPane` retargets rather than rebuilds; `assertOnlyChild` is gone, promoted to
+> `UIElement.setOnlyChild` as a general capability. `contentFor` still caches per panel, which is correct
+> — a pane-backed panel gets a stable empty host and the pane's view moves between hosts.
 
 ```java
 // DockPanelRegistry
@@ -116,6 +127,9 @@ Both references have exactly the missing piece:
 
 ### 1.3 A document does not know its own resource
 
+> **DONE** (step 4). `FileDocument.resource()`; `graphPaths` is deleted. Derived resources carry their
+> origin in the text, which is what lets the generated-source tab resolve its graph without a side map.
+
 `FileDocument` is `view()`, `encode()`, `adopt()`, and nothing else. So:
 
 - `CrystalEditor` keeps `Map<String, ShaderGraphEditor> graphPaths` — a hand-rolled `getFile()`.
@@ -125,6 +139,10 @@ Both references consider this fundamental: **`EditorInput.resource`** and **`Fil
 
 ### 1.4 `DockArea` has no `open()`
 
+> **DONE** (step 6). `DockPlacement` (`ACTIVE`/`SIDE`/`with(x)`), `groupOf(UIElement)`/`leafOf`, and one
+> entry point. No `DockService` interface: the insertion logic lives with the workbench and a second name
+> for it would be indirection.
+
 It has `performDrop`, `closePanel`, `closePanelDiscarding`, `toggleMaximize`, `setActiveGroup` — but
 opening lives on `Workbench` in three overloads with different placement rules. There is no:
 
@@ -133,6 +151,13 @@ opening lives on `Workbench` in three overloads with different placement rules. 
 - single entry point that all three overloads and `togglePanel` funnel through.
 
 ### 1.5 Smaller flags, all the same shape
+
+> **MIXED.** `PATH_STATE` is now an alias of `DockPanelRef.PATH`, so the convention lives in the dock
+> layer where it belongs. The polling row is **DONE** — step 3 replaced all four loops with announcements
+> (`onDidChangeActivePanel`, `onDidChangeDirty`, `onDidRegister`, `onDidLoadListing`, and later
+> `onDidChangeFocus`). **Still true:** `refFor` and `DockGroup.tabFor` are public, `activeFilePath()` is
+> still four dereferences, and `DockPanelRef` equality still includes state — the last of which the row
+> already calls correct.
 
 | Flag | Note |
 |---|---|
@@ -317,6 +342,12 @@ com.crystalgui.editor                  PRODUCT. Which panels exist and what the 
 
 ### 5.4 What this makes possible (the acceptance tests for the design)
 
+> **DONE** — all three, and `CrystalEditor` did end up as "register panel types, state the default
+> layout, install commands" plus one `ShaderGraphContribution.register(workbench)` call. The one line
+> §5.3 got wrong is `Workbench` **splitting into four**: it did not, and nothing has yet needed it to.
+> Its jobs were decoupled from their callers instead, which is what the coupling complaint was actually
+> about. `DockGroup.tabFor` also stayed public.
+
 ```java
 // A widget opens a derived document next to itself. No application involved.
 dock().open(GeneratedShaderInput.of(path), DockPlacement.with(this));
@@ -339,6 +370,10 @@ class ShaderInspectorPane implements DockPane {
 Ordered by how much they cost to add *later* rather than now.
 
 ### Must be in the foundation (retrofitting is expensive)
+
+> **ALL DONE.** `DockPane` (step 5), `DockInput` + `Resource` (steps 4–5), `DockPlacement` +
+> `Workbench.open` (step 6), push events (step 3, plus `onDidChangeFocus` later). Per-pane view state
+> ships with `DockPane`.
 - `DockPane` lifecycle (`setInput`, `onVisible`/`onHidden`, view state) — everything depends on it
 - `DockInput` with `resource` + `capabilities`
 - `DockPlacement` and `DockService.open`
@@ -346,6 +381,9 @@ Ordered by how much they cost to add *later* rather than now.
 - Per-pane view-state serialization (replaces `DocumentViewState`)
 
 ### Should be designed for, implemented later
+
+> **Still open, all seven** — and deliberately. None has been asked for by using the thing, which is the
+> bar §20.2 sets for phase two.
 - **Preview (italic) tabs** — needs a per-tab flag in the group and a replace rule
 - **Pinned/sticky tabs** — needs tab ordering to be group state, not layout state
 - **MRU order** — needs the group to keep an access list
@@ -355,6 +393,9 @@ Ordered by how much they cost to add *later* rather than now.
 - **Locked groups** — one boolean on the group, but it changes `open` routing
 
 ### Nice, and genuinely independent
+
+> **Still open.** `FloatingDock` exists; the aux-window integration it needs is §11 Tier 2's
+> *Window / focus* row.
 - Tab overflow menu, tab limit + LRU close
 - Watermark in an empty central group
 - Back/forward navigation history
@@ -364,6 +405,16 @@ Ordered by how much they cost to add *later* rather than now.
 ---
 
 ## 7. Migration plan
+
+> **Stages 1–5 and 7: DONE.** No deprecated delegates survived — `openPanel*` were deleted outright
+> rather than kept, and stage 3's medium risk did not materialise.
+>
+> **Stage 6 (split `Workbench`): NOT DONE, and superseded.** It was the one marked **High** risk, and
+> the reason for it — callers reaching the whole workbench — was removed by decoupling instead. What it
+> would still buy is the tool-window half, which is §12.4 Parts.
+>
+> **Stage 8: PARTLY.** `DockPane` carries per-pane view state, but `DocumentViewState` still exists and
+> `WorkbenchSession` still uses it. Retiring it is genuinely optional now rather than blocking.
 
 Staged so the suite stays green at every step. Each stage is independently revertable.
 
@@ -403,6 +454,14 @@ The current tests pin *behaviours*; the port needs tests that pin *contracts*.
 
 ## 9. Open decisions
 
+> **1 — SETTLED: wrap.** `DockInput` wraps `DockPanelRef`, and the stage-6 replacement never happened,
+> so the codec was never bumped for it. Two identity types remain and have not hurt.
+> **2 — SETTLED as recommended:** the uniform tree stayed, and no second class of bug appeared.
+> **3 — SETTLED by not splitting:** `Workbench` is still one object rather than a facade over four.
+> **4 — OPEN**, and now paired with badges: an `ActivityBar` that carries per-view state is most of
+> what a `ViewContainer` is, so the two are one piece of work.
+> **5 — OPEN.** Still untouched, still cheap-now/expensive-later.
+
 1. **Does `DockInput` replace `DockPanelRef` or wrap it?** Replacing is cleaner and breaks the session
    codec; wrapping keeps compatibility and leaves two identity types. *Recommendation: wrap for stages
    1–5, replace at stage 6 with a codec bump.*
@@ -420,6 +479,10 @@ The current tests pin *behaviours*; the port needs tests that pin *contracts*.
 ---
 
 ## 10. What is already correct and must not be lost
+
+> **All held.** Nothing in this list was discarded across steps 1–10. `DockLayout` is still pure data,
+> the central leaf is still uncloseable, and the widget-owns-its-own-commands rule got *stronger* — it is
+> now automatic through `UIElement.registerCommands`/`bindKeys` rather than something a host installs.
 
 Worth stating so the rewrite does not discard hard-won things:
 
@@ -451,6 +514,9 @@ each one is currently hand-rolled per call site.
 
 #### 0.1 `Disposer` — the disposal tree *(IntelliJ)*
 
+> **DONE** (step 1). GL-aware, with the disposal-protocol rule that a pooled resource *releases* rather
+> than deletes — see `CgPreviewPool`.
+
 Every IntelliJ object registers against a **parent `Disposable`**; disposing a parent cascades to
 children in reverse registration order. `Disposer.register(parent, child)`.
 
@@ -465,6 +531,10 @@ children in reverse registration order. `Disposer.register(parent, child)`.
 
 #### 0.2 Lifecycle phases and shutdown veto *(VS Code `ILifecycleService`)*
 
+> **NOT DONE.** `WorkbenchSession.tick`'s 600-frame retry is gone — it is driven by `onDidLoadListing`
+> now — so the *symptom* that motivated this is fixed, but there are still no phases and no shutdown
+> veto, and "unsaved changes, really quit?" still has nowhere to live.
+
 Phases `Starting → Ready → Restored → Eventually`, and `onBeforeShutdown` which can **veto**.
 IntelliJ: `ProjectManagerListener.canCloseProject`, `SaveAndSyncHandler`, `ShutDownTracker`.
 
@@ -478,6 +548,10 @@ IntelliJ: `ProjectManagerListener.canCloseProject`, `SaveAndSyncHandler`, `ShutD
 
 #### 0.3 `MessageBus` and typed topics *(IntelliJ)* — or VS Code's service events
 
+> **DONE** (step 3), and deliberately *not* as a `MessageBus`. Typed signals are public final fields on
+> the service that owns the fact — a topic is a global constant anything may publish to, so "who fires
+> this" becomes a repo-wide search. All four polls named below are deleted.
+
 `Topic<L>` plus `MessageBusConnection` whose subscription lifetime is tied to a `Disposable`.
 
 - **We have:** `Signal` — per-object, so a listener must already hold the emitter. There is no way to
@@ -487,6 +561,10 @@ IntelliJ: `ProjectManagerListener.canCloseProject`, `SaveAndSyncHandler`, `ShutD
   because there is nowhere to announce. §7 stage 7 cannot be done without this.
 
 #### 0.4 URI schemes and virtual filesystem providers *(both)*
+
+> **DONE** (step 4) as `Resource` + `ResourceRegistry`. The project scheme keeps `CgPath`'s exact text,
+> and a derived resource carries its origin in the text — which is what lets the generated-source tab
+> find its graph without a side map.
 
 VS Code: `IFileService.registerProvider(scheme, provider)` — `file:`, `untitled:`, `git:`, `output:`,
 `vscode-userdata:`. IntelliJ: `VirtualFileSystem` implementations, `NonPhysicalFileSystem`, and
@@ -504,6 +582,9 @@ VS Code: `IFileService.registerProvider(scheme, provider)` — `file:`, `untitle
 
 #### 0.5 A model registry with reference counting *(VS Code `ITextModelService`)*
 
+> **CUT** — see §13.4. Its motivating feature is the same document in two splits, which we do not have.
+> The half that was needed (content providers for virtual schemes) landed with step 4.
+
 `createModelReference(uri)` returns a ref-counted handle; `ITextModelContentProvider` supplies content
 for schemes that are not files. One model per URI, N editors.
 
@@ -513,6 +594,9 @@ for schemes that are not files. One model per URI, N editors.
   document. Closing one tab either disposing a model another still uses, or never disposing it.
 
 #### 0.6 Undo grouping across documents *(IntelliJ `CommandProcessor`)*
+
+> **NOT DONE**, and not currently painful: an `UndoStack` is per document, which is the invariant worth
+> keeping. Cross-document grouping only matters once one command edits two documents.
 
 `CommandProcessor.executeCommand` wraps a user gesture so everything it touched — possibly several
 documents — undoes as **one** step. `UndoManager` tracks the `DocumentReference`s involved.
@@ -524,6 +608,10 @@ documents — undoes as **one** step. `UndoManager` tracks the `DocumentReferenc
   undone.
 
 #### 0.7 Actions and menus as contributions with placement and conditions *(both)*
+
+> **DONE** (steps 2.5 and 9). Commands register globally and resolve their subject from `DataContext`;
+> `MenuId` + `Command.menu(group, order)` + `ContextMenu.of` place them, and `enabledWhen` /
+> `enabledWhereData` are the conditions. The `when`-**expression parser** stays cut — see §13.4.
 
 VS Code `IMenuService` + `MenuId` (`EditorTitle`, `EditorTitleContext`, `ExplorerContext`,
 `ViewTitle`, …) with `group`/`order` (`navigation@1`) and `when` clauses evaluated against
@@ -538,6 +626,8 @@ VS Code `IMenuService` + `MenuId` (`EditorTitle`, `EditorTitleContext`, `Explore
 
 #### 0.8 A scheduling seam *(both)*
 
+> **NOT DONE.** Still the prerequisite for the Progress service, and still nothing needs it.
+
 `invokeLater` with `ModalityState`, `Alarm` for debounce (IntelliJ); scheduler primitives behind
 `IProgressService` (VS Code).
 
@@ -546,6 +636,16 @@ VS Code `IMenuService` + `MenuId` (`EditorTitle`, `EditorTitleContext`, `Explore
   after the user stops typing" grows its own bespoke counter. Several already exist.
 
 ### Tier 1 — present but ad-hoc; these will fight the port
+
+> **One row is DONE: Status.** `onStatus` is deleted, replaced by `Notifications` (events, with severity,
+> actions and a bounded history) and `StatusBar` (ambient text, **keyed per writer**, so two writers no
+> longer overwrite each other). Priority and persistence are still absent.
+>
+> **Command context** moved without closing: keys are still not published, but `DataContext` means a
+> command resolves its own subject, so the practical need for `when` clauses is much smaller —
+> `enabledWhereData` states the condition in Java. See §13.4 for why the parser stays cut.
+>
+> The other six rows stand as written.
 
 | Concern | Reference | Ours | What is actually missing |
 |---|---|---|---|
@@ -586,6 +686,14 @@ tree, localisation, a PSI-equivalent language model, run/debug configurations, a
 beyond the decoration provider already ported.
 
 ### 11.1 The three that change the plan in §7
+
+> **All three DONE, and all three inserted where this said to.** `Disposer` went first; the generated
+> shader landed as a `Resource` with a scheme and a carried origin rather than a path state key — which
+> is exactly the mistake #2 warned about, avoided; and the polling replacement was scheduled as a
+> substrate rather than a refactor, which is why steps 5–6 were as smooth as predicted.
+>
+> The revised order was followed except for its last two entries: the workbench split did not happen
+> (§7), and view state came with `DockPane` rather than after it.
 
 Most of the above is additive and can land whenever. Three are not:
 
@@ -785,6 +893,27 @@ other subsystem needs**, and we built it once and did not generalise it.
 
 ### 12.7 The minimal spine, in build order
 
+> **1–7 DONE, 10 DONE, 8 CUT, 9 OPEN.**
+>
+> | # | Outcome |
+> |---|---|
+> | 1 `Disposer` | **DONE**, GL-aware |
+> | 2 `Resource` | **DONE** — `graphPaths` deleted as predicted |
+> | 3 `MessageBus` | **DONE as typed service signals**, not a bus — see §0.3's note. All four polls gone |
+> | 4 `DataContext` | **DONE** — and it turned out to matter more than expected: the Inspector's subject comes from it |
+> | 5 Context keys + `when` | **PARTLY** — `enabledWhen`/`enabledWhereData` are the conditions; keys are not published and the expression parser is cut (§13.4) |
+> | 6 `DockPane` | **DONE** — `assertOnlyChild` gone, and `UIElement.setOnlyChild` is the general form |
+> | 7 `open(input, placement)` | **DONE** as `Workbench.open`; `showCompiled` and all three overloads gone |
+> | 8 Model registry | **CUT** (§13.4) |
+> | 9 Parts + ViewContainers | **OPEN** — the only large item left, and the one §20.2 says to decide after living with phase one |
+> | 10 Menu contributions | **DONE** — cheaper than costed; the mechanism existed and only lacked users |
+>
+> The closing prediction held. A notification service and an editor banner were each about a day, and
+> each was "a small contribution registry plus a view" exactly as written — `Notifications`/`StatusBar`
+> and `DockBannerProvider`. Activity badges are the remaining one, and they are the case where the
+> skeleton is **not** enough on its own: they want per-view state on the rail, which is most of what
+> step 9 is.
+
 Not the full §11 catalogue — the smallest set that makes everything after it cheap. Each step is
 useful alone and unlocks the next.
 
@@ -971,6 +1100,10 @@ We currently pass **one** of these (3, partially — commands work, conditions d
 1–7 we would pass 1, 2, 3, 4, 5 and most of 6. That is the whole argument for the sequence.
 
 ### 13.7 What I would actually do, in order, if it were my call
+
+> **1–6 DONE, in exactly this order. 7 not done and no longer wanted** — see §7's note. The
+> "then reassess" happened: menu contributions turned out to be nearly built already, and the second
+> phase is now just Parts/ViewContainers plus activity badges, which are one piece of work.
 
 1. **`Disposable`/`Disposer`, GL-aware.** ~2 days. Highest value, lowest risk, immediately retires a
    real leak class. Nothing else depends on being done first, and everything is safer after it.
