@@ -416,7 +416,14 @@ public class DockArea extends UIElement implements UIFrameTicker {
     /** Groups whose leaf left the tree are dropped, or the map grows for the life of the window. */
     private void pruneStaleGroups() {
         List<DockLeaf> live = layout.leaves();
-        groups.keySet().removeIf(leaf -> !live.contains(leaf));
+        groups.entrySet().removeIf(entry -> {
+            if (live.contains(entry.getKey())) return false;
+            // A departing group takes its panes with it. Closing the LAST panel of a leaf removes the
+            // leaf, so this group never syncs again -- meaning the one case that most needs a release is
+            // the one a per-sync prune cannot reach.
+            entry.getValue().releaseAllPanes();
+            return true;
+        });
     }
 
     @Nullable

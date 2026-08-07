@@ -14,6 +14,9 @@ import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import java.util.ArrayList;
+import com.crystalgui.core.dispose.Disposer;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +53,9 @@ public class DockGroup extends UIElement {
      * it gets reported as one.</p>
      */
     public static final String EMPTY_CLASS = "__empty__";
+
+    /** The stable container a pane's view is moved into when its panel is the active one. */
+    public static final String PANE_HOST_CLASS = "__pane-host__";
 
     /** The caret between two tabs showing where a reorder would land. */
     public static final String INSERTION_CLASS = "__insertion__";
@@ -216,6 +222,8 @@ public class DockGroup extends UIElement {
             }
             Tab active = tabByPanel.get(leaf.activePanel());
             if (active != null && tabs.getSelectedTab() != active) tabs.selectTab(active);
+            prunePanes(wanted);
+            retargetPane(leaf.activePanel());
         } finally {
             // Restored rather than cleared, so a nested sync cannot re-open the door on the way out.
             syncing = wasSyncing;
@@ -279,24 +287,128 @@ public class DockGroup extends UIElement {
         tab.setPreIcon(slot);
     }
 
-    // The pane cache belongs here and is NOT wired yet -- deliberately, and the reason is worth keeping.
-    //
-    // A pane is one instance per (group, TYPE), retargeted by setInput. This group's `content` map is
-    // keyed per PANEL. So two tabs of one type would both resolve to the same view element, and
-    // rebuildStrip would parent one element into two tabs -- which is not a subtle failure, it is the
-    // "cannot add the same child twice" class of bug this package has already paid for twice.
-    //
-    // The fix is not a bigger map. It is that with panes, only the ACTIVE tab has a body at all (VS Code
-    // builds no DOM for an inactive editor), so the view has to be re-parented into the active tab on
-    // every activation -- and sync() runs during a tab click, which is exactly when this codebase's rule
-    // says a widget must not re-parent what is being clicked. Getting that ordering right needs the
-    // harness, not a unit test.
-    //
-    // DockInput, DockPane, DockPaneProvider and the registry half are shipped and tested; this is the
-    // remaining wiring. See plan.md §18.4.
+    /**
+     * One pane per panel <b>type</b> in this group — the retargeting cache.
+     *
+     * <p>Keyed by type rather than by panel, which is the point: two {@code file} tabs in one group share
+     * a pane and switching between them is a {@code setInput}, not a rebuild.</p>
+     */
+    private final Map<String, DockPane> panes = new LinkedHashMap<>();
+
+    /** What each pane is currently pointed at, so a re-activation is not mistaken for a retarget. */
+    private final Map<String, DockInput> paneInputs = new LinkedHashMap<>();
+
+    /** Per-input view state, keyed by the FRAMEWORK. A pane keying its own is the stacked-inspector bug. */
+    private final Map<DockPanelRef, StateMap<?>> viewStates = new LinkedHashMap<>();
+
+    /** Which input's pane is currently on screen here, so {@code onHidden}/{@code onVisible} fire once. */
+    @Nullable
+    private DockInput visibleInput;
+
+    /**
+     * Points the pane for the active panel's type at it, and puts its view in that panel's host.
+     *
+     * <h3>How this avoids putting one element in two tabs</h3>
+     *
+     * <p>A pane is one instance per <b>type</b> while {@link #content} is keyed per <b>panel</b>, so
+     * returning the pane's view from {@code contentFor} would hand the same element to two tabs and
+     * {@link #rebuildStrip} would parent it twice — the "cannot add the same child twice" bug this
+     * package has paid for before.</p>
+     *
+     * <p>So every pane-backed panel keeps its own stable <b>host</b>, and only the host of the
+     * <em>active</em> panel holds the view. {@code rebuildStrip} is untouched, nothing is ever shared,
+     * and moving the view is one {@code setOnlyChild} — which re-parents correctly, including out of an
+     * internal parent.</p>
+     *
+     * <h3>Why this is safe during a tab click</h3>
+     *
+     * <p>The rule is that a widget must not rebuild the elements it is being <em>clicked on</em>. The
+     * click target is the {@link Tab} in the strip; what moves here is the pane's view, which lives in
+     * the tab's content. The clicked element is never touched — which is exactly why this shape was
+     * chosen over re-parenting a shared view between tabs.</p>
+     *
+     * <p>Ordering is the contract: the outgoing input's view state is written and {@code onHidden} fires
+     * <em>before</em> {@link DockPane#setInput}, and the incoming input's state is read after it.</p>
+     */
+    private void retargetPane(@Nullable DockPanelRef active) {
+        DockInput incoming = active == null ? null : DockInput.of(active);
+
+        if (visibleInput != null && !visibleInput.matches(incoming)) {
+            DockPane leaving = panes.get(visibleInput.typeId());
+            if (leaving != null) {
+                StateMap<?> outgoing = new StateMap<>(PlainOps.INSTANCE, new LinkedHashMap<>());
+                leaving.writeViewState(outgoing);
+                viewStates.put(visibleInput.ref(), outgoing);
+                leaving.onHidden();
+            }
+            visibleInput = null;
+        }
+        if (incoming == null) return;
+
+        DockPaneProvider provider = area.registry().paneProviderFor(incoming);
+        if (provider == null) return;
+        String typeId = incoming.typeId();
+        DockPane pane = panes.computeIfAbsent(typeId, key -> provider.create());
+
+        if (!incoming.matches(paneInputs.get(typeId))) {
+            pane.setInput(incoming);
+            paneInputs.put(typeId, incoming);
+            StateMap<?> stored = viewStates.get(active);
+            if (stored != null) pane.readViewState(stored);
+        }
+        if (visibleInput == null) {
+            pane.onVisible();
+            visibleInput = incoming;
+        }
+
+        UIElement host = content.get(active);
+        if (host != null) host.setOnlyChild(pane.view());
+    }
+
+    /**
+     * Releases panes whose type no longer has a panel here.
+     *
+     * <p>{@code clearInput} then dispose, and only when the pane genuinely leaves the group — a pane
+     * whose tab merely stopped being active is still this group's and is reused the moment it comes
+     * forward again.</p>
+     */
+    /**
+     * Releases every pane here — this whole group is going away.
+     *
+     * <p>Closing the <b>last</b> panel of a leaf removes the leaf, so this group is discarded before any
+     * {@code sync} could prune its panes one at a time. Without this, the one case that most needs the
+     * release — the last tab closing — is the one that never gets it.</p>
+     */
+    void releaseAllPanes() {
+        prunePanes(List.of());
+    }
+
+    private void prunePanes(List<DockPanelRef> wanted) {
+        if (panes.isEmpty()) return;
+        Set<String> live = new LinkedHashSet<>();
+        for (DockPanelRef panel : wanted) live.add(panel.typeId());
+        panes.entrySet().removeIf(entry -> {
+            if (live.contains(entry.getKey())) return false;
+            DockPane pane = entry.getValue();
+            pane.clearInput();
+            Disposer.dispose(pane);
+            paneInputs.remove(entry.getKey());
+            if (visibleInput != null && visibleInput.typeId().equals(entry.getKey())) visibleInput = null;
+            return true;
+        });
+    }
 
     private UIElement contentFor(DockPanelRef panel) {
         return content.computeIfAbsent(panel, ref -> {
+            // A pane-backed panel gets a stable EMPTY host of its own. The pane's view moves into
+            // whichever host is active -- see retargetPane -- so no element is ever in two tabs.
+            if (area.registry().paneProviderFor(DockInput.of(ref)) != null) {
+                UIElement host = new UIElement();
+                host.addClass(PANE_HOST_CLASS);
+                StyleGroup.defaultPipeline(host.getStyle().getLayoutGroup(),
+                        l -> l.flexGrow(1f).flexBasis(0));
+                return host;
+            }
             UIElement built = area.registry().create(ref);
             if (built != null) return built;
             // An unbuildable panel is shown as an empty box rather than skipped: a tab with nothing
