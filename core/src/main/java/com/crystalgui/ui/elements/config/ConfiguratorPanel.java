@@ -142,10 +142,31 @@ public class ConfiguratorPanel extends ScrollerView {
     public void clearRows() {
         for (UIElement child : new java.util.ArrayList<>(getChildren())) {
             if (child instanceof Configurator || child instanceof ConfiguratorGroup) {
+                releaseControls(child);
                 removeInternalChild(child);
             }
         }
         controls.clear();
+    }
+
+    /**
+     * Disconnects every control in a removed subtree from whatever outlives it.
+     *
+     * <p>Removing the element is not enough. A bound control subscribes to its <b>store</b> so that an
+     * edit made elsewhere reaches the widget, and a store outlives the control by a long way — so a panel
+     * that dropped its rows without this left one listener per row attached to a live {@code Settings} or
+     * {@code GraphDocument} forever, each holding a widget that was no longer on screen. An inspector
+     * bound to a selection rebuilds on every click, so it accumulated for as long as the file was open.</p>
+     *
+     * <p>Recursive, and over <b>all</b> children rather than the public ones: a {@link Configurator} calls
+     * {@code markAsInternal()} and holds its control as an internal child, which is the same reason
+     * {@code clearAllChildren()} could not be used to empty this panel in the first place.</p>
+     *
+     * @see ConfigControl#connections()
+     */
+    private static void releaseControls(UIElement element) {
+        if (element instanceof ConfigControl control) control.connections().dispose();
+        for (UIElement child : element.getChildren()) releaseControls(child);
     }
 
     /**

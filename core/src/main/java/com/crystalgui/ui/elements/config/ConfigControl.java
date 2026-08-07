@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.config;
 
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.UIElement;
 
@@ -64,6 +65,41 @@ public abstract class ConfigControl extends UIElement {
      * no gesture to bracket. A listener that only ever sees {@code changed} keeps working unchanged.</p>
      */
     public final Signal.Value<Boolean> interacting = new Signal.Value<>();
+
+    /**
+     * Subscriptions that exist <b>to update this control</b>, released when the control is.
+     *
+     * <h3>Why the control owns them and not the host</h3>
+     *
+     * <p>A bound control follows its store — {@code settings.onChanged}, {@code document.onChanged} — so
+     * that an edit made anywhere else reaches the widget. Those stores <b>outlive the control by a long
+     * way</b>: a {@code Settings} lives as long as the application and a {@code GraphDocument} as long as
+     * the file is open, while the control is rebuilt every time the inspector's subject changes.</p>
+     *
+     * <p>Nothing disconnected them. Every rebuild added one listener per row to an object that never goes
+     * away, each holding a control that had already been removed from the tree — so the lists grew for as
+     * long as a graph stayed open, and every write walked all of them to update widgets nobody could see.
+     * It is invisible from either end: the host looks correct because it subscribed, and the store looks
+     * correct because it notified.</p>
+     *
+     * <p>Ownership sits here because the <em>reason</em> the subscription exists is this control, which is
+     * the general answer — a binder registers what it wires without needing to be handed a lifetime, and
+     * a control that is thrown away takes its subscriptions with it whatever built them.</p>
+     *
+     * @see ConfiguratorPanel#clearRows() where a panel releases the rows it is replacing
+     */
+    private final ConnectionGroup connections = new ConnectionGroup();
+
+    /**
+     * Where a binder registers anything it connects <b>to something outside this control</b>.
+     *
+     * <p>A connection to one of this control's own signals ({@link #changed}, {@link #interacting}) does
+     * not belong here — it dies with the control regardless. This is for the other direction: a store,
+     * a document, a registry, anything that will still be alive afterwards.</p>
+     */
+    public ConnectionGroup connections() {
+        return connections;
+    }
 
     private final ConfigDescriptor descriptor;
 

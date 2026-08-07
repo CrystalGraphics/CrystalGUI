@@ -146,14 +146,17 @@ public final class SettingsConfigurator {
             });
         }
 
-        settings.onChanged.connect(change -> {
+        // TRACKED. `settings` outlives this control by the life of the application, so an untracked
+        // connection here is permanent: every inspector rebuild left another listener holding a control
+        // that had already been removed from the tree. See ConfigControl.connections().
+        control.connections().add(settings.onChanged.connect(change -> {
             if (!change.affects(setting)) return;
             if (control.isInteracting()) return;
             String live = settings.layer(layer).get(setting.getId());
             if (java.util.Objects.equals(live, lastWritten[0])) return;
             lastWritten[0] = live;
             control.setValueObject(currentValue(settings, setting));
-        });
+        }));
     }
 
     /** Every declaration in a section, for a caller that wants to arrange them itself. */
