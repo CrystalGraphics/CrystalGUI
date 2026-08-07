@@ -26,6 +26,7 @@ import com.crystalgui.ui.elements.dock.DockLayout;
 import com.crystalgui.ui.elements.dock.DockLeaf;
 import com.crystalgui.ui.elements.dock.DockLayoutCodec;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
+import com.crystalgui.ui.elements.dock.DockPlacement;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.workbench.FileDocument;
 import com.crystalgui.ui.elements.workbench.Workbench;
@@ -429,8 +430,12 @@ public class CrystalEditor extends UIElement implements Disposable {
         DockPanelRef ref = new DockPanelRef(SHADER_SOURCE_TYPE)
                 .withState(Workbench.PATH_STATE, generated.toString())
                 .withState(DockPanelRef.TITLE, compiledTitleFor(generated));
+        // WHERE, as a request rather than a search. This used to be
+        // layout().leafContaining(refFor(parse(path))) -- an application reaching through the dock and
+        // the layout to answer a question the dock can answer about itself.
+        DockLeaf beside = DockPlacement.resolve(DockPlacement.with(graph), workbench.dock());
         DockPanelRef graphRef = workbench.refFor(origin.asPath());
-        if (workbench.dock().layout().leafContaining(graphRef) != null) {
+        if (beside != null || workbench.dock().layout().leafContaining(graphRef) != null) {
             workbench.openPanelWith(graphRef, ref);
             // openPanelWith deliberately restores the previous selection -- right for its original caller
             // and wrong here, since this tab is open because someone just asked to see it.

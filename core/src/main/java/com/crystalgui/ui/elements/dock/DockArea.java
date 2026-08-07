@@ -146,6 +146,34 @@ public class DockArea extends UIElement implements UIFrameTicker {
     }
 
     /**
+     * The group {@code element} is inside, or null when it is not in this dock at all.
+     *
+     * <h3>The "next to me" primitive</h3>
+     *
+     * <p>Without it, a widget that wants to open something beside itself has to find its own panel ref
+     * and ask the layout — {@code CrystalEditor.showCompiled} did precisely that, which is why "show the
+     * generated shader next to its graph" was application code instead of a dock capability.</p>
+     *
+     * <p>Walks {@code getParent()}, which returns the real parent <b>regardless of how a child was
+     * added</b>. That matters: a panel's content is often an internal child of a composite, so a walk
+     * that skipped internal parents would answer null for exactly the widgets that are built properly —
+     * the same rule {@code DataContext} follows and for the same reason.</p>
+     */
+    @Nullable
+    public DockGroup groupOf(@Nullable UIElement element) {
+        for (UIElement scope = element; scope != null; scope = scope.getParent()) {
+            if (scope instanceof DockGroup group && group.dockArea() == this) return group;
+        }
+        return null;
+    }
+
+    /** The leaf holding {@code input}, or null when nothing does. */
+    @Nullable
+    public DockLeaf leafOf(DockInput input) {
+        return input == null ? null : layout.leafContaining(input.ref());
+    }
+
+    /**
      * Tells the dock that a panel's presentation has changed, so its tab can catch up.
      *
      * <h3>Why an owner asks rather than reaching in</h3>
