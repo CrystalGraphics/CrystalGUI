@@ -1283,7 +1283,7 @@ The `when`-expression **parser** (`editorFocus && resourceExtname == .java`). Pr
 
 ---
 
-## 15b. Step 2.5 — Actions: global registration, context-resolved
+## 15b. Step 2.5 — Commands: global registration, context-resolved — **DONE**
 
 **Why here:** it is the completion of step 2, not a new idea. `DataContext` gave a widget the ability to
 *supply* a subject; this removes its obligation to *install* the commands that consume one. Doing it
@@ -1423,79 +1423,302 @@ the two widget-owned installers (`ShaderGraphEditor`, `BlackboardPanel`) — whi
 
 ## 16. Step 3 — Typed service events; delete the polling loops
 
-**Why third:** immediately reduces per-frame work, and every later step is easier to reason about when
-state changes announce themselves.
+**Why third:** it immediately reduces per-frame work, and every later step is easier to reason about when
+state changes announce themselves. Steps 4–6 all add services; adding them *after* the event convention
+exists means they are born with it rather than retrofitted.
 
-### 16.1 Decision, restated
+**Prerequisite met by step 2.5:** `UIElement.onWindowChanged` now exists, so "do this once the element has
+a window" is no longer a reason to own a ticker. Two of the loops below were exactly that and are already
+gone; what remains is the harder half — loops that poll for *change*.
 
-**Service-owned typed events, not a global topic bus** (§13.2). Each service exposes
-`onDidChangeX` signals; subscriptions are tied to a `Disposable` from step 1.
+---
 
-### 16.2 The four loops and what replaces each
+### 16.1 The decision, restated
 
-| Loop | Where | Replacement |
+**Service-owned typed signals, not a global topic bus** (§13.2).
+
+| | VS Code | IntelliJ | Ours |
+|---|---|---|---|
+| Shape | `Event<T>` + `Emitter<T>` on the service | `MessageBus` + `Topic<L>` | `Signal.Value<T>` field on the service |
+| Subscribe | `svc.onDidChangeX(fn, this, disposables)` | `bus.connect(disposable).subscribe(TOPIC, l)` | `svc.onDidChangeX.connect(fn)` |
+| Lifetime | returns `IDisposable` | connection registered on a `Disposable` | `Connection` → **must become** `Disposable` (16.4) |
+| Discovery | the field is on the service | a `Topic` constant, anywhere | the field is on the service |
+
+**Why not IntelliJ's bus.** A `Topic` is a global constant that any code may publish to, so "who fires
+this" is a repo-wide search and "what does this service announce" has no answer at all. It buys
+broadcast-direction semantics (`PARENT→CHILD`) we have no use for: we have no project/module hierarchy
+of buses. A field on the service is discoverable by autocomplete and impossible to publish to from
+outside, which is the property that keeps the announcement honest.
+
+**Why not one `EventBus` of our own.** Same objection, plus string or class keys and a cast at every
+listener. `Signal` is already typed, already tested, already used (`onStatus`, `onDocumentLoaded`,
+`onItemActivated`). This step is mostly *applying* it, not building it.
+
+**Naming: VS Code's, adopted wholesale.** `onDidChangeActivePanel` — past tense, "did", the change has
+already happened. `onWill…` is reserved for a pre-change signal a listener may veto; we have none yet and
+should not invent one speculatively. Existing names get corrected in the same commit: `onDocumentLoaded`
+→ `onDidOpenDocument`, `onStatus` stays (it is a message, not a change).
+
+---
+
+### 16.2 The real inventory
+
+The stub listed four loops. The audit finds **eight** things happening per frame, and three of them
+should not be touched. Line references are to the state at commit `fcdda57`.
+
+#### `Workbench.tick(delta)` — runs every frame while attached
+
+| # | What | Cost per frame | Verdict |
+|---|---|---|---|
+| 1 | `activityBar.sync(commands)` | walks every registered descriptor, map lookup each | **replace** — `panels().onDidRegister` |
+| 2 | `fileTree.source().indexStep(BUDGET)` | bounded background crawl | **keep** (16.3) |
+| 3 | `refreshDirtyMarkers()` | builds a `List<CgPath>` from every open document, then `equals` | **replace** — `onDidChangeDirty` |
+| 4 | `revealActiveFile()` | derives `activeFilePath()` from the dock | **replace** — `onDidChangeActivePanel` |
+| 5 | `fileTree.loadProjects()` | latched by `projectsRequested`, ~free | **move** to `onWindowChanged` |
+| 6 | `activeEditor()` + `problems.bindTo` | derives the active editor from the dock | **replace** — `onDidChangeActivePanel` |
+
+#### `CrystalEditor`'s ticker — registered from `onLayoutChanged`, latched by `ticking`
+
+| # | What | Verdict |
 |---|---|---|
-| `followActiveGraph()` every frame | `CrystalEditor.onLayoutChanged` ticker | `dock.onDidChangeActivePanel` |
-| `refreshDirtyMarkers()` recomputing `unsavedFiles()` | `Workbench.tick` | `workbench.onDidChangeDirty(path)` |
-| `ActivityBar.sync()/refresh()` | `Workbench.tick` | `dock.onDidChangeLayout` + `panels.onDidRegister` |
-| `WorkbenchSession.tick()` retrying expansion | `Workbench.tick` | `fileTree.source().onDidLoadListing` |
+| 7 | `followActiveGraph()` → `activeGraph()` + `show(followed)` | **replace** — `onDidChangeActivePanel` |
+| 8 | `session.tick()` (restore retry) | **replace** — `WorkspaceTreeSource.onDidLoadListing` |
 
-### 16.3 API additions
+Once 7 and 8 are gone this ticker disappears entirely, and with it the `onLayoutChanged` override and
+the `ticking` latch that exists only to register it.
+
+#### `ActivityBar.ItemButton`
+
+Each button polls `workbench.isPanelOpen(typeId)` against a `lastKnownOpen` field to drive its
+checked state. **Replace** — `onDidOpenPanel` / `onDidClosePanel`. The class javadoc already records why
+this matters: *"the work per refresh was building a drawable, which is not free, and the change had an
+owner who knew when."* That comment is a note-to-self that this step exists.
+
+> **Three of the six `Workbench.tick` entries derive their answer from the dock** (4, 6, and — in the
+> editor — 7). That is not three problems; it is one missing signal used three times. `onDidChangeActivePanel`
+> is the highest-value single addition in this step.
+
+---
+
+### 16.3 What must **not** become an event
+
+The distinction the migration has to keep straight, because the two look identical from inside `tick`:
+
+- **Polling for change** — recomputing a value every frame to notice it moved. Every entry above except
+  one. This is what step 3 deletes.
+- **Incremental work** — doing a bounded slice of a long job each frame. `indexStep` walks a few
+  directories per frame until the workspace is mapped. There is no "change" to announce; the frame *is*
+  the schedule. **Keep it, and keep the ticker it runs in.**
+
+`Workbench.tick` therefore survives step 3 with one line in it. Deleting the ticker outright is the
+mistake this paragraph exists to prevent — the crawl's own comment already warns that latching it broke
+the index once.
+
+---
+
+### 16.4 Infrastructure `Signal` needs first
+
+Three gaps, found by reading `SignalBase` rather than by assuming. All are small, and all are load-bearing
+for a step whose whole point is that events chain.
+
+#### (a) Re-entrant emit corrupts the iteration — **must fix before migrating**
+
+`SignalBase.emitting` is a **boolean**, and `endEmit()` unconditionally clears it and flushes
+`pendingDisconnect`:
 
 ```java
-// DockArea
-public final Signal.Value<DockPanelRef> onDidChangeActivePanel;
+protected final void beginEmit() { emitting = true; }
+protected final void endEmit() {
+    emitting = false;
+    if (!pendingDisconnect.isEmpty()) { /* slots.remove(...) */ }
+}
+```
+
+Every `emit` caches `int n = slots.size()` and indexes to `n`. So a listener that emits a *second* signal
+whose listener disconnects will have the inner `endEmit()` shrink `slots` while the outer loop still holds
+the old `n` → **`IndexOutOfBoundsException`**, in a listener, at a depth nobody was looking at.
+
+This does not fire today because signals are used as leaves. Step 3 makes them chain by design —
+`onDidChangeDirty` → tab title refresh → `onDidChangeLayout` is the intended shape. Fix:
+`emitting` becomes an `int depth`, `endEmit()` flushes only at zero.
+
+> Connect-*during*-emit is already safe and should be documented rather than changed: `n` is cached before
+> the loop, so a listener added during an emission simply does not receive that emission. That is VS Code's
+> behaviour too, and the alternative (a listener receiving the event that caused it to subscribe) is worse.
+
+#### (b) `Connection` is not `Disposable` — the step-1 payoff is unclaimed
+
+`Disposer` takes `Disposable`; `Signal.connect` returns `Connection`. Nothing bridges them, so every
+subscription in this step would be manually disconnected — which is exactly the bookkeeping step 1
+exists to remove, and exactly what leaks when a panel closes.
+
+```java
+public interface Connection extends Disposable {
+    void disconnect();
+    @Override default void dispose() { disconnect(); }
+}
+```
+
+One line, and `Disposer.register(this, signal.connect(...))` then works everywhere. `ConnectionGroup`
+becomes `Disposable` the same way.
+
+> Check the module direction before writing it: `core.signal` gaining a dependency on `core.dispose` is
+> fine (both are `core`, neither touches GL), but the reverse would not be.
+
+#### (c) `Signal.Value` does **not** suppress equal values
+
+The stub's trap list says it does, "(`Property.set` semantics)". It does not — `Property` suppresses;
+`Signal.Value.emit` forwards unconditionally. **The trap is real but points the other way:** every emitter
+in this step must decide for itself whether to fire on a no-op change, because nothing will do it for
+them. `refreshDirtyMarkers` already does this by hand (`if (!dirty.equals(lastDirty))`) and that guard has
+to survive into the emitter rather than being dropped as "the signal handles it".
+
+---
+
+### 16.5 The deferral rule — events are immediate, rebuilds are not
+
+**The single most likely way to break this step.** Replacing a poll with an event changes *when* the
+work runs: from "next frame" to "inside whatever call mutated the state". The engine has a hard rule
+against exactly that:
+
+> *A widget must never rebuild the elements it is being clicked or dragged on — update them in place.*
+> The table header froze this way: sort once and no header could be clicked or resized again.
+
+`DockArea` already obeys it (`rebuildPending` + tick), and `ProjectFileTree` already routes decoration
+changes through `pendingRefresh` *"because a provider may fire from inside a click handler on a row"*.
+
+So the shape is **not** `event → rebuild`. It is:
+
+```
+event  →  set a dirty flag  →  next frame's tick rebuilds once
+```
+
+That is still a complete win over polling — the flag is set O(changes) instead of the value being
+recomputed O(frames) — and it is what both references do (VS Code's `Emitter` + microtask-scheduled
+view updates, IntelliJ's `EditorNotifications.updateAllNotifications` posting to the EDT).
+
+**In-place updates may be immediate.** Setting a tab's title text or a button's checked class touches no
+tree structure and is safe from inside a listener. Only *structural* changes defer.
+
+---
+
+### 16.6 API additions
+
+```java
+// DockArea — the highest-value additions; three current polls collapse into the first
+public final Signal.Value<DockPanelRef> onDidChangeActivePanel;   // null when nothing is active
 public final Signal.Value<DockPanelRef> onDidOpenPanel;
 public final Signal.Value<DockPanelRef> onDidClosePanel;
-public final Signal.Action              onDidChangeLayout;   // structural only
 public final Signal.Value<DockGroup>    onDidChangeActiveGroup;
+public final Signal.Action              onDidChangeLayout;        // STRUCTURAL only — see traps
 
 // DockPanelRegistry
 public final Signal.Value<DockPanelDescriptor> onDidRegister;
 
 // Workbench
-public final Signal.Value<CgPath> onDidChangeDirty;
-public final Signal.Value<CgPath> onDidOpenDocument;
+public final Signal.Value<CgPath> onDidChangeDirty;               // one path, not the whole set
+public final Signal.Value<CgPath> onDidOpenDocument;              // renamed from onDocumentLoaded
 public final Signal.Value<CgPath> onDidCloseDocument;
 
 // WorkspaceTreeSource
 public final Signal.Value<CgPath> onDidLoadListing;
+
+// FileDocument (16.7)
+Signal.Action onDidChange();
 ```
 
-### 16.4 The hard one — dirty
+**`onDidChangeDirty` carries one path, not the set.** The set is what the poll computed; a path is what
+the change *is*. A listener that wants the set asks `unsavedFiles()`, which it can now do once per change
+instead of once per frame.
 
-A document goes dirty by being typed into, and `FileDocument` has no change signal. Two options:
+---
 
-- **A.** `FileDocument` gains `Signal.Action onDidChange`, fired by each implementation.
-  `TextFileDocument` forwards its editor's change event; `ShaderGraphEditor` forwards graph edits.
-- **B.** `Workbench` keeps polling `unsavedFiles()` but only when *something* changed, using a global
-  edit counter.
+### 16.7 The hard one — dirty
 
-**Recommend A.** B keeps the poll and adds a counter to hide it. A is the honest version and each
-document already knows when it changed — that is what `encode()` is called on.
+A document goes dirty by being typed into, and `FileDocument` has no change signal.
 
-### 16.5 Files
+- **A.** `FileDocument` gains `Signal.Action onDidChange()`. `TextFileDocument` forwards its editor's
+  change event; `ShaderGraphEditor` forwards graph edits.
+- **B.** Keep polling `unsavedFiles()`, but guard it with a modification counter so the walk only runs
+  when *something* edited anything.
 
-**Modified:** `DockArea`, `DockPanelRegistry`, `Workbench`, `WorkspaceTreeSource`, `FileDocument`,
-`TextFileDocument`, `ShaderGraphEditor`, `CrystalEditor`, `ActivityBar`, `WorkbenchSession`.
+**A, and B is not as illegitimate as the stub implied.** IntelliJ really does use
+`ModificationTracker`/`SimpleModificationTracker` with `CachedValue` — but for *derived caches*, where the
+consumer is already asking and the counter only decides whether the cached answer is stale. It is not how
+IntelliJ notices a document became dirty; that is `DocumentListener`. Our case is the second one: nobody
+is asking, the frame is asking on their behalf, and that is the poll.
 
-### 16.6 Tests (contract)
+The tell is that each document **already knows** — `isDirty()` is answered from its own state, and
+`encode()` is called on it. A is one signal per implementation; B is a counter, a cache field, and a
+staleness rule, to preserve a loop.
 
-1. **Assert the event fires**, not that a later frame shows the new value — this is the whole point.
-2. Each signal fires **exactly once** per change (no duplicate emission from a rebuild).
-3. No signal fires when nothing changed (the settled frame).
-4. A subscription registered against a `Disposable` stops firing after that disposable is disposed.
-5. `CrystalEditor` no longer registers a per-frame ticker for the inspector — assert the ticker count.
+---
 
-### 16.7 Traps
+### 16.8 Migration order
 
-- `Signal.Value` **suppresses equal values** (`Property.set` semantics). For "the active panel changed
-  to the same panel after a rebuild" this is correct; for a re-emit that consumers must see, it is not.
-  Check each one deliberately.
-- The dock **rebuilds** on many operations. `onDidChangeLayout` must fire on *structural* change only,
-  or it becomes the polling loop it replaced.
-- `Workbench.tick` also drives the workspace crawl (`indexStep`) which is legitimately per-frame.
-  Do not delete the ticker, only the polling inside it.
+Deliberately not "all signals, then all consumers" — each row lands and is green on its own.
+
+1. **`Signal` fixes** (16.4 a/b/c). No behaviour change; the depth-counter fix gets its own test.
+2. **`DockArea.onDidChangeActivePanel`** + the three consumers (`revealActiveFile`, `problems.bindTo`,
+   `followActiveGraph`). Biggest single reduction; also removes `CrystalEditor`'s ticker's first half.
+3. **`WorkspaceTreeSource.onDidLoadListing`** → `WorkbenchSession.tick` retry. `CrystalEditor`'s ticker
+   is now empty and the `onLayoutChanged` override goes with it.
+4. **`DockPanelRegistry.onDidRegister`** → `ActivityBar.sync` becomes `add one button`.
+5. **`onDidOpenPanel`/`onDidClosePanel`** → `ItemButton`'s `lastKnownOpen` poll.
+6. **`FileDocument.onDidChange`** → `onDidChangeDirty` → `refreshDirtyMarkers`. Last because it touches
+   every document implementation.
+7. **`loadProjects()`** moves to `onWindowChanged`. Trivial, and a good final check that `Workbench.tick`
+   is down to the crawl.
+
+---
+
+### 16.9 Tests (contract)
+
+1. **The event fires**, with the right payload — never "a later frame shows the new value". Asserting the
+   frame is asserting the poll we are deleting.
+2. **Exactly once per change.** The dock rebuilds on many operations; a signal that fires per rebuild is
+   the loop again, wearing a callback.
+3. **Nothing fires on a settled frame.** The direct inverse of the loops being deleted, and the assertion
+   that would have caught them.
+4. **A subscription registered on a `Disposable` stops firing after disposal** — 16.4(b)'s contract.
+5. **Re-entrant emit** — a listener that emits another signal whose listener disconnects. Fails today
+   with `IndexOutOfBoundsException`; this is the regression test for 16.4(a).
+6. **Ticker count.** `CrystalEditor` registers no ticker at all; `Workbench` registers one. Assert the
+   number, because "the poll came back" is otherwise invisible.
+7. **A structural rebuild triggered from a listener does not detach the element under the pointer** —
+   16.5. Drive it through a real press on a dock tab.
+
+---
+
+### 16.10 Traps
+
+- **`Signal.Value` does not suppress equal values.** Every emitter decides for itself. See 16.4(c) — the
+  earlier draft of this section had this backwards.
+- **`onDidChangeLayout` must fire on *structural* change only.** The dock rebuilds for reasons that are
+  not layout changes (a presentation refresh, a tab title). Fire it from the same place `requestRebuild`
+  decides something moved, not from the rebuild itself, or it is a per-frame callback.
+- **`onDidChangeActivePanel` legitimately emits `null`** — focusing chrome means no panel is active. The
+  `followed` latch in `CrystalEditor` exists precisely because of this and must be **kept**: the gesture
+  that reopens the Inspector is the one that reports no active graph. IntelliJ answers this the same way
+  (`selectionChanged` fires on editor selection, so clicking a tool window never clears it). Moving from a
+  poll to an event does not change this; it makes it easier to get wrong, because the latch now looks
+  redundant.
+- **Do not delete `Workbench.tick`** — the crawl lives there (16.3).
+- **Renaming `onDocumentLoaded`** touches `WorkbenchSession` and any harness scene; grep before renaming.
+- **Emitting during teardown.** `close(path)` disposes the document *and* should emit
+  `onDidCloseDocument`. Emit **before** disposing, or listeners receive a path whose document is already
+  dead — and one of them will ask it something.
+
+---
+
+### 16.11 What this step does not do
+
+- **No `Event.debounce`/`filter`/`any` combinators.** VS Code has them; we would be writing them for one
+  or two uses. Revisit when a third appears.
+- **No listener-leak detection.** VS Code warns past N listeners on one emitter. Worth having eventually;
+  `connectionCount()` already exposes what it would read.
+- **No cross-window events.** Every signal here is owned by an element or a service inside one window.
+- **No `onWill…` (vetoable) signals.** Nothing needs one yet; the shutdown-veto case is step 6's, if ever.
 
 ---
 
