@@ -136,39 +136,25 @@ public class CrystalEditor extends UIElement implements Disposable {
     private final UIElement content = new UIElement();
 
     /**
-     * The panels that follow whichever shader graph is in front.
+     * The one inspector, pointed at whichever shader graph is in front.
      *
-     * <p>Containers rather than the editors' own parts, because there is no longer <em>one</em> graph to
-     * bind them to — every graph is a file now, and several can be open. {@code DockArea} asks the
-     * registry for a panel's content on every rebuild and caches nothing, so a factory returning the
-     * active editor's own {@code source()} would hand back a different element each time the active tab
-     * changed, which the dock has no way to notice. A stable host whose child is swapped does.</p>
+     * <h3>One, retargeted — not one per graph swapped into a host</h3>
+     *
+     * <p>It was the latter: a {@code Map<ShaderGraphEditor, ShaderGraphInspector>} and a stable host
+     * element whose single child was replaced. Three things were wrong with that. The map was
+     * <b>never pruned</b>, so every graph opened in a session stayed reachable through it — and once
+     * closing a tab began releasing documents, it was the thing keeping a disposed editor alive. The
+     * host needed its own class and a comment explaining why a bare wrapper was required at all. And
+     * swapping whole inspectors lost which <em>tab</em> you were on, every time the front graph
+     * changed.</p>
+     *
+     * <p>Built lazily because it needs a graph to point at, and at construction there is none.</p>
      */
-    private final UIElement inspectorHost = fillingHost();
+    @Nullable
+    private ShaderGraphInspector inspector;
 
     /** Graph document path -> its editor, so a generated-source tab can find what it was derived from. */
 
-    /**
-     * A host that fills its panel and lets its one child fill it in turn.
-     *
-     * <p>Not decoration. The dock sizes the element the registry hands it, and it used to hand over the
-     * editor's own {@code source()} — which therefore got the panel's box directly. A bare wrapper in
-     * between takes that box and then gives its child <b>content height</b>, because Taffy's default
-     * {@code flex-shrink} is 0 and a column child with no basis keeps its own size: the panel looks
-     * empty, and nothing about the widget inside is wrong.</p>
-     */
-    private static UIElement fillingHost() {
-        return new UIElement().addClass(PANEL_HOST_CLASS);
-    }
-
-    /** @see #fillingHost() */
-    public static final String PANEL_HOST_CLASS = "__panel-host__";
-
-    /**
-     * One inspector per graph, kept because building it is not free and because it holds view state — the
-     * open tab, the fold states — that a user expects to still be there when they switch back.
-     */
-    private final Map<ShaderGraphEditor, ShaderGraphInspector> inspectors = new HashMap<>();
 
     /**
      * Every graph editor this editor has built, so {@link #delete()} can free all of their preview
@@ -309,7 +295,9 @@ public class CrystalEditor extends UIElement implements Disposable {
         // from the graph to read is a panel that is never read.
         workbench.registerPanel(DockPanelDescriptor.singleton(INSPECTOR_TYPE, "Inspector")
                         .icon("crystalgui:package").anchor(DockDropZone.SPLIT_RIGHT),
-                ref -> inspectorHost);
+                // The inspector IS the panel content. No wrapper: it fills its own box, and the
+                // one that used to sit between it and the dock existed only to be swapped into.
+                ref -> inspector == null ? new UIElement() : inspector);
         // The Inspector opens with the workbench; the generated source does not. It is now a document
         // opened on demand by showCompiled(), so putting one in the default layout would mean a tab for a
         // graph nobody has opened yet.
@@ -347,19 +335,15 @@ public class CrystalEditor extends UIElement implements Disposable {
      * re-emits the shader exactly as editing the same field on the node does. They are two bindings of
      * one field.</p>
      */
+    @Nullable
     public ShaderGraphInspector inspector() {
-        ShaderGraphEditor active = activeGraph();
-        return active == null ? null : inspectorFor(active);
+        return inspector;
     }
 
     /** The shader graph in front, or null when the active tab is not one (or nothing is open). */
     @Nullable
     public ShaderGraphEditor activeGraph() {
         return workbench.activeDocument() instanceof ShaderGraphEditor graph ? graph : null;
-    }
-
-    private ShaderGraphInspector inspectorFor(ShaderGraphEditor graph) {
-        return inspectors.computeIfAbsent(graph, ShaderGraphInspector::new);
     }
 
     // This widget registers NO per-frame ticker, and that is the point of step 3.
@@ -513,7 +497,11 @@ public class CrystalEditor extends UIElement implements Disposable {
         // poll pulled them back. Setting it here makes the two agree by construction rather than by both
         // happening to want the same thing.
         followed = graph;
-        inspectorHost.setOnlyChild(inspectorFor(graph));
+        if (inspector == null) {
+            inspector = new ShaderGraphInspector(graph);
+        } else {
+            inspector.setEditor(graph);
+        }
     }
 
     /**
