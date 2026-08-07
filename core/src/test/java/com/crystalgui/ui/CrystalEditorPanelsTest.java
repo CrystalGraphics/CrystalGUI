@@ -35,6 +35,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
+import com.crystalgui.fs.Resource;
 
 /**
  * Which panels the editor ships, and where they land.
@@ -144,13 +145,41 @@ public class CrystalEditorPanelsTest extends UiTestBase {
                 editor.workbench().panels().create(compiledRef("mymod.proj:two.shadergraph")));
     }
 
-    /** Named for its graph, so two of them are told apart on the strip. */
+    /**
+     * Named for its graph, so two of them are told apart on the strip.
+     *
+     * <p>The title is a rule over the <b>derived resource</b> now, not over a raw path string — and it
+     * reads the origin's name, which {@code Resource.name()} already answers with for a derived
+     * resource. That is the label half of what VS Code calls {@code ILabelService}.</p>
+     */
     @Test
     public void aGeneratedTabIsNamedForItsGraph() {
-        assertEquals("fire_compiled.shader",
-                CrystalEditor.compiledTitleFor("mymod.proj:shaders/fire.shadergraph"));
-        assertEquals("noext_compiled.shader",
-                CrystalEditor.compiledTitleFor("mymod.proj:noext"));
+        assertEquals("fire_compiled.shader", CrystalEditor.compiledTitleFor(
+                generatedFor("mymod.proj:shaders/fire.shadergraph")));
+        assertEquals("noext_compiled.shader", CrystalEditor.compiledTitleFor(
+                generatedFor("mymod.proj:noext")));
+    }
+
+    /**
+     * <b>A session saved before this tab's input became a derived resource still resolves.</b>
+     *
+     * <p>That state used to be the graph's bare path. It parses as a project resource with no origin, and
+     * reading it as the origin itself is one line — against invalidating every saved layout that had the
+     * tab open, which a version bump would have meant. The forms are unambiguous: a derived resource
+     * always has an origin, a bare path never does.</p>
+     */
+    @Test
+    public void anOldStyleGeneratedTabStateStillNamesItsGraph() {
+        Resource legacy = Resource.parse("mymod.proj:shaders/fire.shadergraph");
+        assertNull("a bare path must not look derived", legacy.origin());
+        assertTrue(legacy.isProject());
+
+        Resource current = generatedFor("mymod.proj:shaders/fire.shadergraph");
+        assertEquals("both forms name the same graph", legacy, current.origin());
+    }
+
+    private static Resource generatedFor(String graphPath) {
+        return Resource.derived(CrystalEditor.SHADER_SOURCE_SCHEME, Resource.parse(graphPath));
     }
 
     /**
@@ -168,9 +197,10 @@ public class CrystalEditorPanelsTest extends UiTestBase {
     }
 
     private static DockPanelRef compiledRef(String path) {
+        Resource generated = generatedFor(path);
         return new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE)
-                .withState(Workbench.PATH_STATE, path)
-                .withState(DockPanelRef.TITLE, CrystalEditor.compiledTitleFor(path));
+                .withState(Workbench.PATH_STATE, generated.toString())
+                .withState(DockPanelRef.TITLE, CrystalEditor.compiledTitleFor(generated));
     }
 
     private static DockLeaf leafOfRef(CrystalEditor editor, DockPanelRef ref) {

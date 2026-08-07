@@ -4,6 +4,7 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.graph.shader.ShaderGraphEditor;
 import com.crystalgui.graph.shader.ShaderGraphInspector;
@@ -26,6 +27,7 @@ import com.crystalgui.ui.elements.dock.DockLeaf;
 import com.crystalgui.ui.elements.dock.DockLayoutCodec;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.ui.elements.workbench.FileDocument;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import com.crystalgui.ui.input.FocusPolicy;
 
@@ -97,6 +99,15 @@ public class CrystalEditor extends UIElement implements Disposable {
      */
     public static final String SHADER_SOURCE_TYPE = "shadersource";
 
+    /**
+     * The scheme a generated shader lives under — {@code shader-generated://<the graph it came from>}.
+     *
+     * <p>The panel type says which widget draws it; the scheme says what it <b>is</b>, and is what
+     * carries the origin. Two names for what looks like one thing, and they are genuinely different
+     * questions: a diff view of the same generated source would share the scheme and not the type.</p>
+     */
+    public static final String SHADER_SOURCE_SCHEME = "shader-generated";
+
     /** The descriptor's fallback title. A real tab is named for its graph — see {@link #compiledTitleFor}. */
     public static final String SHADER_SOURCE_TITLE = "compiled_graph.shader";
 
@@ -133,7 +144,6 @@ public class CrystalEditor extends UIElement implements Disposable {
     private final UIElement inspectorHost = fillingHost();
 
     /** Graph document path -> its editor, so a generated-source tab can find what it was derived from. */
-    private final Map<String, ShaderGraphEditor> graphPaths = new HashMap<>();
 
     /**
      * A host that fills its panel and lets its one child fill it in turn.
@@ -251,7 +261,10 @@ public class CrystalEditor extends UIElement implements Disposable {
             editor.onLineOwnerChanged.connect(onStatus::emit);
             graphs.add(editor);
             own(editor);
-            graphPaths.put(path.toString(), editor);
+            // The graph knows its own address now. What used to be here -- graphPaths.put(...) -- was an
+            // application-side map from path to graph, plus a reverse linear scan over it, existing only
+            // because a document could not say what it was.
+            editor.setResource(Resource.of(path));
             // THE GRAPH ASKS, THE SHELL DECIDES. The graph knows it can emit GLSL and nothing about docks;
             // wiring it here is what keeps a graph usable outside an editor -- and testable without one.
             editor.onViewGeneratedRequested.connect(() -> showCompiled(editor));
@@ -282,7 +295,7 @@ public class CrystalEditor extends UIElement implements Disposable {
         // Being a document also takes it off the activity bar for free, since that lists singletons only.
         workbench.registerPanel(DockPanelDescriptor.document(SHADER_SOURCE_TYPE, SHADER_SOURCE_TITLE),
                 ref -> {
-                    ShaderGraphEditor graph = graphForPath(ref.state(Workbench.PATH_STATE, ""));
+                    ShaderGraphEditor graph = graphFor(ref.state(Workbench.PATH_STATE, ""));
                     // An empty box rather than null when the graph has since closed: a tab with nothing
                     // behind it is visible and reportable, a silently absent one looks like a failed
                     // restore. Same reasoning DockGroup.contentFor already uses.
@@ -407,14 +420,16 @@ public class CrystalEditor extends UIElement implements Disposable {
      * @return whether anything was opened -- false when the graph has no path, which is not a document
      */
     public boolean showCompiled(@Nullable ShaderGraphEditor graph) {
-        if (graph == null) return false;
-        String path = pathOf(graph);
-        if (path == null) return false;
+        if (graph == null || graph.resource() == null) return false;
+        Resource origin = graph.resource();
+        // The tab's input IS the derived resource -- "the generated source of that graph" -- rather than
+        // the graph's path plus a convention about what this panel type means by it.
+        Resource generated = Resource.derived(SHADER_SOURCE_SCHEME, origin);
 
         DockPanelRef ref = new DockPanelRef(SHADER_SOURCE_TYPE)
-                .withState(Workbench.PATH_STATE, path)
-                .withState(DockPanelRef.TITLE, compiledTitleFor(path));
-        DockPanelRef graphRef = workbench.refFor(CgPath.parse(path));
+                .withState(Workbench.PATH_STATE, generated.toString())
+                .withState(DockPanelRef.TITLE, compiledTitleFor(generated));
+        DockPanelRef graphRef = workbench.refFor(origin.asPath());
         if (workbench.dock().layout().leafContaining(graphRef) != null) {
             workbench.openPanelWith(graphRef, ref);
             // openPanelWith deliberately restores the previous selection -- right for its original caller
@@ -433,24 +448,44 @@ public class CrystalEditor extends UIElement implements Disposable {
         return showCompiled(activeGraph());
     }
 
-    /** {@code proj:shaders/fire.shadergraph} to {@code fire_compiled.shader}. */
-    public static String compiledTitleFor(String rawPath) {
-        String name = CgPath.parse(rawPath).name();
+    /**
+     * {@code shader-generated://proj:shaders/fire.shadergraph} to {@code fire_compiled.shader}.
+     *
+     * <p>A label rule over a resource, which is what VS Code's {@code ILabelService} is. It reads the
+     * <b>origin's</b> name because that is what the document is about — {@code Resource.name()} already
+     * answers with the origin for a derived resource, so this only has to strip the extension.</p>
+     */
+    public static String compiledTitleFor(Resource generated) {
+        String name = generated.name();
         int dot = name.lastIndexOf('.');
         return (dot < 0 ? name : name.substring(0, dot)) + "_compiled.shader";
     }
 
+    /**
+     * The graph a generated-source tab is showing, resolved from its own input.
+     *
+     * <p>{@code shader-generated://<graph path>} carries the origin, so this is a parse and a lookup in
+     * the document store rather than a map maintained beside it. A restored session therefore resolves
+     * with nothing having been rebuilt first, which the map could not promise.</p>
+     */
     @Nullable
-    private ShaderGraphEditor graphForPath(String rawPath) {
-        return rawPath.isEmpty() ? null : graphPaths.get(rawPath);
-    }
-
-    @Nullable
-    private String pathOf(ShaderGraphEditor graph) {
-        for (Map.Entry<String, ShaderGraphEditor> entry : graphPaths.entrySet()) {
-            if (entry.getValue() == graph) return entry.getKey();
+    private ShaderGraphEditor graphFor(String rawResource) {
+        if (rawResource.isEmpty()) return null;
+        Resource parsed;
+        try {
+            parsed = Resource.parse(rawResource);
+        } catch (RuntimeException unparseable) {
+            return null;
         }
-        return null;
+        // A session saved BEFORE this panel's state became a derived resource stored the graph's bare
+        // path. That parses as a project resource with no origin, and reading it as the origin itself
+        // costs one line -- against invalidating every saved layout that had this tab open, which is what
+        // a version bump would have meant. The two forms are unambiguous: a derived resource always has
+        // an origin and a bare path never does.
+        Resource origin = parsed.origin() != null ? parsed.origin() : parsed;
+        if (!origin.isProject()) return null;
+        FileDocument document = workbench.documentFor(origin.asPath());
+        return document instanceof ShaderGraphEditor graph ? graph : null;
     }
 
     /** Points both panels at {@code graph} — <b>by asserting the result, not by remembering the act</b>.

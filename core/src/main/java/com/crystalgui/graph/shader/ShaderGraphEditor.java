@@ -19,6 +19,7 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.signal.Connection;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
@@ -693,6 +694,27 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
     public static final String VIEW_ZOOM = "graph.view.zoom";
     public static final String VIEW_PAN_X = "graph.view.panX";
     public static final String VIEW_PAN_Y = "graph.view.panY";
+
+    /**
+     * What this graph is a document <em>of</em>. Null until the workbench builds it for a path.
+     *
+     * <p>Set rather than constructor-injected because a graph is a perfectly good widget with no file
+     * behind it — the gallery scene builds one directly — and requiring an address would make the
+     * standalone case the awkward one.</p>
+     */
+    @Nullable
+    private Resource resource;
+
+    public ShaderGraphEditor setResource(@Nullable Resource resource) {
+        this.resource = resource;
+        return this;
+    }
+
+    @Override
+    @Nullable
+    public Resource resource() {
+        return resource;
+    }
 
     /**
      * The graph's undo stack, which <b>is</b> its change log.
