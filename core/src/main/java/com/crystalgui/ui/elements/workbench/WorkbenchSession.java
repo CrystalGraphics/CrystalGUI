@@ -93,6 +93,27 @@ public final class WorkbenchSession {
      * <p>An old record is discarded rather than migrated, which is right here and would be wrong for
      * settings: the cost is one arrangement that the very next save rewrites, against panels landing
      * somewhere nobody asked for.</p>
+     *
+     * <h3>4 — the Parts model, and why it is also a discard</h3>
+     *
+     * <p><b>Decided in advance rather than discovered</b>, because this is the version where the question
+     * is genuinely arguable and skipping it would mean answering it by accident. See {@code plan.md} §23
+     * F4.</p>
+     *
+     * <p>Parts adds four persisted facts — region visibility, region size, container membership, and view
+     * order within a container — and takes tool windows <em>out of the dock tree</em>. So a record written
+     * at 3 stores a tool window as a position inside a layout tree, and a reader at 4 needs the region it
+     * belongs to.</p>
+     *
+     * <p><b>A migration is refused, and not for effort.</b> It cannot be faithful: a tree position does not
+     * carry a region, so translating one would mean inferring "this leaf was against the left wall,
+     * therefore sidebar" — and that inference is wrong for every tool window the user had nested
+     * mid-tree, which is the arrangement the four-tier restoration heuristic exists to support. Guessing
+     * is precisely what this version field exists to refuse; a migration here would be the guess wearing a
+     * function name.</p>
+     *
+     * <p>The cost is one lost arrangement per user, once, which the next save rewrites. Stated here so it
+     * reads as a decision rather than as a regression when somebody's layout comes back default.</p>
      */
     public static final int VERSION = 3;
 
