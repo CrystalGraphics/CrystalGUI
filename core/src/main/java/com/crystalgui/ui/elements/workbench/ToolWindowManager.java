@@ -199,10 +199,19 @@ public final class ToolWindowManager {
                 placed = candidate;
             }
         }
-        // 4. A WALL.
+        // 4. ITS REGION -- and after §23 step 7 this is the ONLY tier.
+        //
+        // Tiers 1-3 above exist entirely because a tool window lives in the dock tree: closing it collapses
+        // the branch that held it, so the position has to be reconstructed from whatever survived. A region
+        // is not a position and nothing about it is destroyed by a close, so once regions are real elements
+        // this becomes a lookup and the other three have nothing left to be about. They are transitional;
+        // do not add a fifth.
+        //
+        // Asked as a REGION rather than as an anchor, which is the same answer today and the durable way to
+        // say it -- see ToolWindowState.region().
         if (placed == null) {
             DockLeaf opened = new DockLeaf(ref);
-            dock.layout().dropOnOuterEdge(state.anchor(), opened);
+            dock.layout().dropOnOuterEdge(state.region().wall(), opened);
             // AFTER the drop, never before: dropOnOuterEdge assigns size(1f) itself, so a weight set on
             // the way in is overwritten -- and a weight of 1 against siblings summing to 1 is what made a
             // reopened Project take half the window.

@@ -19,7 +19,7 @@
 | 8 | The Inspector as a contribution surface (§22) | **DONE** — `Inspector` + `InspectorSection`/`InspectorRegistry`; `ShaderGraphInspector` deleted |
 | 9 | Notifications + status, and the last hand-written menu | **DONE** — `com.crystalgui.core.notify`; `register(workbench)` takes nothing else; `BlackboardPanel`'s row menu is a `MenuId` query |
 | 10 | Editor banners, and the last per-frame poll | **DONE** — `DockBannerProvider` (§11 Tier 2's one kept item); `GraphView.discoverPortEditors` is push-based |
-| 11 | The Parts model, and the six foundations it needs (§23) | **PLANNED** — audit, research and sequencing written; F3 (view identity) and F4 (session version) are decisions to settle before any code moves |
+| 11 | The Parts model, and the six foundations it needs (§23) | **IN PROGRESS** — F1, F3, F4, F5, F6 landed; F2 landed as shape only (see §23.6's correction: the deletion cannot precede step 7) |
 
 Steps 7 and 8 came from reading the result of 1–6: the six steps made the *framework* extensible and left
 `CrystalEditor` naming one application's file types, and left the Inspector a graph-shaped class. Neither
@@ -2799,3 +2799,18 @@ is wrong is answerable.
 
 **F3 and F4 are the two that must be shot down before anything else moves.** They are small, and both are
 decisions rather than code — which is exactly why they are easy to skip and expensive to revisit.
+
+#### Correction, found while implementing: F2 cannot fully precede step 7
+
+The table above puts F2 (delete the tree fields and the four-tier heuristic) at 5 and Parts proper at 7.
+**That is backwards for the deletion half**, and the mistake is worth keeping rather than quietly fixing:
+tiers 1–3 are a *fallback*, and a fallback cannot be deleted before the thing that replaces it exists.
+Regions are not elements until step 7, so deleting the tiers first would leave a tool window nested
+mid-tree reopening at a wall — a real regression, in exactly the arrangement the heuristic was written for.
+
+**What landed instead** is F2's *shape*: `ToolWindowState.region()` derived from the anchor, and tier 4
+asking for a region rather than a wall. Derived rather than stored on purpose — it is the same fact said
+the durable way, so it costs no persisted field and therefore no version bump. The field, the bump and the
+deletion all land together at step 7, which is when they stop being separable.
+
+**Revised:** F2 splits into **F2a — state it as a region** (done) and **F2b — delete the tiers** (step 7).
