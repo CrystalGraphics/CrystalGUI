@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.graph;
 
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.elements.inspector.InspectorRegistry;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
@@ -46,8 +47,26 @@ public final class GraphSelection {
     @Nullable
     private GraphConnection wire;
 
-    /** Fires after any change. One signal, because every consumer re-reads the whole selection. */
+    /**
+     * Fires after any change. One signal, because every consumer re-reads the whole selection.
+     *
+     * <p>Also announces to {@link InspectorRegistry} — see {@link #announce}.</p>
+     */
     public final Signal.Action onChanged = new Signal.Action();
+
+    {
+        // ANNOUNCED BY THE WIDGET, not by whoever built it.
+        //
+        // Every contribution used to wire `selection.onChanged -> InspectorRegistry::subjectChanged`
+        // itself, which is boilerplate that is not contribution-specific: a graph's selection changing is
+        // always a change to what an inspector would show. Forgetting the line produced a graph whose
+        // Node tab never appeared while an identical one beside it worked -- the failure is silent,
+        // remote from its cause, and every future graph feature had to remember it.
+        //
+        // Cheap by design: the inspector defers to the next frame and drops the rebuild entirely when its
+        // subject key has not moved, so an unobserved selection change costs one boolean.
+        onChanged.connect(InspectorRegistry::subjectChanged);
+    }
 
     // ── Reading ─────────────────────────────────────────────────────────────
 

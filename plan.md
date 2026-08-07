@@ -15,6 +15,13 @@
 | 5 | `DockPane`: retargetable views (§18) | **DONE** — wired into `DockGroup` via per-panel hosts; see the §18.4 note for why that shape sidesteps the re-parent hazard |
 | 6 | `DockService.open` + `DockPlacement` (§19) | **DONE** — `DockPlacement`, `groupOf`/`leafOf`, and `Workbench.open(input, placement, options)` replacing all three `openPanel*`. No `DockService` interface: the insertion logic lives with the workbench, and a second name for it would be indirection |
 
+| 7 | Editor-type resolution as a contribution (§21) | **DONE** — `DocumentType` + `Workbench.contribute`; `com.crystalgui.editor` imports one name from `com.crystalgui.graph` |
+| 8 | The Inspector as a contribution surface (§22) | **DONE** — `Inspector` + `InspectorSection`/`InspectorRegistry`; `ShaderGraphInspector` deleted |
+
+Steps 7 and 8 came from reading the result of 1–6: the six steps made the *framework* extensible and left
+`CrystalEditor` naming one application's file types, and left the Inspector a graph-shaped class. Neither
+needs new infrastructure — see §21.2 and §22.2.
+
 Phase two — Parts/ViewContainers, menu contributions, the `when` parser, the model registry, and §11
 Tier 2 — is deliberately unscheduled until phase one has been lived with (§20.2).
 
@@ -2142,3 +2149,263 @@ The seven tests in §13.6. After step 6 we should pass 1, 2, 3, 4, 5 and most of
 Parts and ViewContainers (§12.4), menu contributions, the `when`-expression parser, the ref-counted
 model registry, and everything in §11 Tier 2 except the editor-notification banner. Those are phase
 two, and the decision to do them should be taken after living with phase one.
+
+---
+
+## 21. Step 7 — Editor-type resolution as a contribution
+
+**The complaint.** `CrystalEditor` names `.shadergraph`, `ShaderGraphEditor` and `ShaderGraphInspector`.
+It is the *general* editor and it hardcodes one application's file types:
+
+```java
+workbench.registerDocumentType(SHADER_GRAPH_FILE_TYPE, "Shader Graph", path -> { … new ShaderGraphEditor() … });
+workbench.bindEditorExtensions(SHADER_GRAPH_FILE_TYPE, "shadergraph");
+workbench.registerPanel(DockPanelDescriptor.singleton(INSPECTOR_TYPE, "Inspector"), ref -> inspector);
+```
+
+This is §13's third principle stated as a defect: *"declaration over construction — the call site says what
+it wants, never which class renders it. This is the difference between a feature being **additive**
+(register a provider) and **invasive** (edit a switch, a factory, or an application class)."* Adding a
+`.material` editor today means editing `CrystalEditor`.
+
+### 21.1 What the references do
+
+**IntelliJ.** `FileEditorProvider` is an *extension point*. A plugin declares it in `plugin.xml`; the
+platform asks every registered provider `accept(project, file)` and builds with the winner, `getPolicy()`
+breaking ties. `FileEditorManager` never learns a file type — it asks.
+
+**VS Code.** `contributes.customEditors` in the extension manifest, resolved by
+`IEditorResolverService.registerEditor(glob, info, options, factories)`. Same shape: a glob and a factory,
+declared by whoever owns the type.
+
+**The shared property.** The registry is asked, never told. Neither platform has a class that enumerates
+file types, because the set is open by construction.
+
+### 21.2 The decision — the extension point already exists
+
+Step 5 shipped `DockPaneProvider.accepts(DockInput)` + `priority()`, which **is** `FileEditorProvider`'s
+`accept` + `FileEditorPolicy`. What is missing is not a mechanism but its use: the shader-graph package
+should register itself, and `CrystalEditor` should never name it.
+
+So this step adds no new concept. It moves three registrations across a package boundary and deletes the
+knowledge that made them possible.
+
+```java
+// com.crystalgui.graph.shader — the package that owns the type registers it.
+public final class ShaderGraphContribution {
+    public static void register(Workbench workbench) {
+        workbench.contribute(DocumentType.of(SHADER_GRAPH_TYPE, "Shader Graph")
+                .forExtensions("shadergraph")
+                .document(path -> new ShaderGraphEditor().setResource(Resource.of(path))));
+    }
+}
+```
+
+**One call, from one place, naming one package.** `CrystalEditor` keeps a list of contributions it
+enables — which *is* an application decision, and the only one it should be making about file types.
+
+> **`DocumentType` merges `registerDocumentType` + `bindEditor*`.** Today those are two calls that are
+> meaningless apart: a document factory with no binding never opens, and a binding with no factory throws
+> at open time (`"No document factory for panel type"`). Two calls that must both happen are one fact.
+
+### 21.3 What this deletes
+
+| Deleted from `CrystalEditor` | Replaced by |
+|---|---|
+| `registerDocumentType(SHADER_GRAPH_FILE_TYPE, …)` | `ShaderGraphContribution.register` |
+| `bindEditorExtensions(SHADER_GRAPH_FILE_TYPE, "shadergraph")` | `DocumentType.forExtensions` |
+| `SHADER_GRAPH_FILE_TYPE`, `SHADER_SOURCE_TYPE`, `SHADER_SOURCE_SCHEME` constants | the shader package's own |
+| the generated-source panel factory and `graphFor` | a provider in the shader package |
+| every `import com.crystalgui.graph.shader.*` | — |
+
+**The test of done: `com.crystalgui.editor` imports nothing from `com.crystalgui.graph`.** That is
+mechanically checkable and is the acceptance criterion.
+
+### 21.4 Traps
+
+- **A contribution must be idempotent and explicit**, like every registration here. No static
+  initialisers — a file type whose existence depends on class-loading order is worse than one hardcoded,
+  because it is hardcoded *and* unpredictable.
+- **The `Workbench` must stay type-agnostic too.** Moving the knowledge from `CrystalEditor` into
+  `Workbench` is not progress; `FilePatternMap` is already the matcher half and should stay generic.
+- **Ordering when two contributions claim one extension** is `priority()`, and it must be *stated* rather
+  than left to registration order — that is what `FileEditorPolicy` exists for.
+
+---
+
+## 22. Step 8 — The Inspector as a contribution surface
+
+**The complaint.** `ShaderGraphInspector` should not exist. An inspector is a *general* tool that any
+element can hook into and supply data for — Blender's Properties editor, DaVinci Resolve's Inspector.
+
+**This plan previously got it wrong**, and the record should say so plainly. §12.3 proposed:
+
+```java
+class ShaderInspectorPane implements DockPane {
+    public void setInput(DockInput input) { bindTo(resolveGraph(input)); }
+}
+```
+
+and §18.6 listed `graph/shader/ShaderInspectorPane.java` as a new file. That fixes the *retargeting* —
+which was the symptom — and never asks why a general tool has a graph-shaped type at all.
+
+### 22.1 How Blender actually does it
+
+The reason its Properties editor works for a mesh, a light, a camera, a material, a keyframe and an
+add-on's own datablock is **three mechanisms**, none of which is "an inspector per type":
+
+**1. One editor, many contributed panels.** A `Panel` is a registered class, not something the editor
+knows about. It declares where it belongs and when it applies:
+
+| Attribute | Meaning |
+|---|---|
+| `bl_space_type` / `bl_region_type` | which editor it appears in |
+| `bl_context` | which **tab** of the Properties editor (`object`, `modifier`, `material`, `data`, …) |
+| `poll(cls, context)` | **whether it applies at all right now** — the whole extensibility hinge |
+| `bl_order`, `bl_parent_id` | ordering, and nesting as a sub-panel |
+
+The editor draws every registered panel whose `poll(context)` returns true. A mesh object shows the
+Modifiers tab; a light does not — not because the editor knows what a light is, but because the modifier
+panels' `poll` returns false. **An add-on registering a panel is indistinguishable from a built-in one.**
+
+**2. The subject comes from `context`.** `poll` and `draw` both receive it, and read `context.object`,
+`context.material`, `context.active_pose_bone`. That is a `DataContext`: the editor supplies no subject
+of its own, it asks.
+
+**3. Properties are drawn reflectively, not hand-built.** `layout.prop(data, "location")` — RNA describes
+the property's type, range, subtype and units, and *Blender picks the widget*. This is what makes "every
+object" tractable: nobody writes a form per type, they declare properties and the UI is derived. RNA is
+described by Blender's own docs as "a reflection system and high-level data access at runtime", with much
+of the Python API auto-generated from it.
+
+> **The third is the one that is easy to miss and is doing most of the work.** With contributions but
+> without reflection you still hand-write a form per type — you have only moved where it lives. Blender
+> gets "works with everything" from *declared properties*, not from a big registry of forms.
+
+### 22.2 What we already have
+
+All three, unusually.
+
+| Blender | Ours | State |
+|---|---|---|
+| `context.object` etc. | `DataContext` + `DataKey` | **shipped** (step 2) |
+| `Panel.poll(context)` | a provider's `accepts(DataContext)` | the shape exists in `DockPaneProvider`; not yet for inspection |
+| `layout.prop(data, "x")` — RNA | `ConfigDescriptor` + `SettingsConfigurator.build(...)` | **shipped**, and already used by `ShaderGraphSettingsPanel` |
+| contribution registry, merged per field | `FileDecorations` | **shipped** — §12.6 already names it *"a faithful contribution registry — use it as the template for the others"* |
+
+`SettingsConfigurator` is our RNA-lite: it builds a form from `ShaderGraphSettings.all()` descriptors
+rather than from hand-placed widgets. The inspector's job is to find the descriptors, not to draw.
+
+### 22.3 The decision
+
+```java
+package com.crystalgui.ui.elements.inspector;
+
+/** Describes some subject to the inspector. Blender's Panel + poll(). */
+public interface InspectorSection {
+    /** Which tab this belongs in — Blender's bl_context. */
+    String tab();
+    /** Whether this applies to what is currently selected. Blender's poll(). */
+    boolean accepts(DataContext context);
+    /** Build the form. Prefer descriptors over hand-placed widgets. */
+    void build(InspectorForm form, DataContext context);
+    default int order() { return 0; }
+}
+
+public final class InspectorRegistry {
+    public static void register(InspectorSection section);
+    public static List<InspectorSection> sectionsFor(DataContext context);   // poll + order
+}
+```
+
+`Inspector` is then one widget with no knowledge of anything: it resolves the subject from
+`DataContext`, asks the registry which sections apply, and builds their forms into tabs.
+
+**`ShaderGraphInspector` becomes registrations**, in the shader package:
+
+| Was | Becomes |
+|---|---|
+| `ShaderNodeInspector` (the Node tab) | an `InspectorSection` accepting a `GraphNode` subject |
+| `ShaderGraphSettingsPanel` (the Graph tab) | an `InspectorSection` accepting a `GraphDocument` subject |
+
+And the property board, the file tree and the text editor can each contribute a section without the
+inspector changing — which is the actual test of the design.
+
+### 22.4 Why this also fixes the retargeting problem for free
+
+An inspector built this way **has no per-graph state to retarget**. It rebuilds its sections from the
+current `DataContext` whenever the subject changes, which is one code path rather than `setEditor`, a
+`shown` field, a subscription group and a latch. The whole apparatus of §18 exists because the inspector
+was bound to a graph; a section is bound to nothing.
+
+> This is the second time this shape has appeared. `Delete` works in the tree, the graph and the editor
+> because each supplies a different subject — §13.5 — not because Delete knows about three widgets. The
+> inspector is that sentence with the verb replaced by a form.
+
+### 22.5 Traps
+
+- **Sections must not hold their subject.** `build(form, context)` receives it; a section that caches one
+  is a per-type inspector again, with the same lifetime bug that made the old map leak.
+- **A section that applies to nothing must render nothing**, not an empty framed panel. Blender hides the
+  whole panel when `poll` fails; an empty box reads as a broken inspector.
+- **Ordering must be declared** (`order()`), not registration order, or two features interleave
+  differently depending on class-loading — the same rule `MenuId.Placement` already follows.
+- **Do not build the tab set from a fixed list.** Tabs come from the sections that applied; a hardcoded
+  `Node`/`Graph` pair is the current design wearing a registry.
+- **Reflection is the point, not the registry.** If sections end up hand-placing widgets, this has moved
+  the problem rather than solved it. Extending `ConfigDescriptor` coverage is part of this step, not a
+  follow-up.
+
+#### Found while living with it
+
+Four things the design above does not prevent, all of which shipped and all of which look correct in
+review. Each is one line to get wrong and produces no error.
+
+- **The panel must outlive the build that fills it.** `Inspector` keeps one `ConfiguratorPanel` per tab
+  and calls `clearRows()`; it must never construct a new one per rebuild. Everything a panel remembers is
+  *view state* — which foldouts are open, where it is scrolled — and `ConfiguratorPanel` already
+  implements both halves and documents them (`groupCollapsed` is written to outlive `clearRows()`, and
+  `clearRows()` exists "for a panel that is rebuilt rather than merely updated"). A panel discarded per
+  rebuild orphans both **while still looking correct**: the mechanism is there, it is called, and it
+  remembers nothing. Symptom was a group the user opened closing itself on the next click.
+
+- **Tab selection is `new > remembered > first`, not `remembered > first`.** The obvious two-case version
+  leaves you on the tab you were already on at exactly the moment a *new* one appears — so selecting a
+  node built the `Node` tab correctly and left you looking at `Graph`. A tab exists only because a section
+  polled true, so a new one is the engine's own evidence that the subject gained something it could not
+  describe a moment ago. Self-limiting: it can fire at most once per appearance, so switching between two
+  nodes never steals focus. Lives on `Inspector`, not in any section.
+
+- **Sections that are alternatives must arbitrate in one place.** Sections in a tab are *additive* — that
+  is the design, and it is what lets `Graph` stack Shader + Preview + Compile. But four sections answering
+  the one question "what is selected" are not additions to each other, and the engine cannot know that. Ours
+  each decided alone: three re-derived the same exclusion by hand and none looked at *how many* things were
+  selected, so a marquee catching a wire made two of them accept (two stacked panels) and a marquee catching
+  a property node demoted a ten-node selection to one property. Fix is one `subject(context)` returning the
+  kind, with **plural outranking singular** — the multi view is the only one that can describe more than
+  one thing. Adding a fifth kind is then a branch, not an audit of four polls kept exclusive by hand.
+
+- **Do not add a section to stop the panel looking empty.** Most focused things are not inspectable and
+  never will be — an inspector is for structured, non-linear data whose editing surface genuinely *is* a
+  property list (a graph node, a canvas item, a mesh, a scene object). A text buffer is edited in place,
+  and its metadata (encoding, line endings, language, indent) belongs in a **status bar** — VS Code puts
+  all four there and IntelliJ has no inspector at all. The engine's answer is the retention rule (keep the
+  last describable subject), and that is the permanent steady state, not a stopgap for missing sections.
+
+- **A bound control must own its subscription to the store.** A control follows `settings.onChanged` /
+  `document.onChanged` so an edit made elsewhere reaches the widget, and those stores outlive it by the
+  life of the application or the file — while an inspector rebuilds every control on every click. Nothing
+  disconnected them, so the store grew one dead listener per row per rebuild, each holding a widget that
+  had left the tree. **Invisible from both ends**: the host subscribed, the store notified, nothing failed.
+  Ownership sits on `ConfigControl.connections()` rather than on the binder's caller, so a binder registers
+  what it wires without being handed a lifetime; `ConfiguratorPanel.clearRows()` releases them. Pinned by
+  `ConfiguratorPanelLifetimeTest`, which asserts **both** halves — a fix that disconnects everything, or
+  never subscribes, passes the count assertion and silently stops the inspector reflecting outside edits.
+
+### 22.6 Sequencing
+
+7 before 8: once a package can contribute its own document type, contributing its own inspector sections
+is the same act against a second registry, and the two land in one commit per package.
+
+Neither step needs new infrastructure. `DataContext` (step 2), service events (step 3) and
+`DockPaneProvider` (step 5) are the substrate, and `FileDecorations` is the template.

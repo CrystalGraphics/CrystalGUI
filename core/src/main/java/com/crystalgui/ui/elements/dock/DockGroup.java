@@ -224,6 +224,15 @@ public class DockGroup extends UIElement {
             if (active != null && tabs.getSelectedTab() != active) tabs.selectTab(active);
             prunePanes(wanted);
             retargetPane(leaf.activePanel());
+            // AND ANNOUNCE. A sync is how a panel ADDED to an already-active group becomes the front one,
+            // and that path announced nothing: setActiveGroup early-returns because the group did not
+            // change, and rebuild() does not run because opening into an existing group is a selection
+            // change rather than a structural one. So "open a file into the pane you are already in" --
+            // which is what launching with a document open IS -- moved the active panel silently, and
+            // anything following it kept showing what was there before.
+            //
+            // Idempotent, so overlapping with the other announce sites costs nothing.
+            area.announceActivePanel();
         } finally {
             // Restored rather than cleared, so a nested sync cannot re-open the door on the way out.
             syncing = wasSyncing;
