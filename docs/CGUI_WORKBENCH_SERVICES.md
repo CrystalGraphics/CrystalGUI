@@ -24,6 +24,8 @@ looks like a needed helper is the symptom of one that does not — see
 | `Resource` — URI schemes, virtual documents | **shipped** | [Resources](#resources) |
 | `DockPane` — retargetable panel views | **shipped** | [Panes and placement](#panes-and-placement) |
 | `DockService` — `open(input, placement)` | **shipped** as `Workbench.open` | [Opening things](#opening-things) |
+| `DocumentType` — a file type, declared by its owner | **shipped** | [Contributions](#contributions) |
+| `Inspector` — one inspector, any subject | **shipped** | [Contributions](#contributions) |
 
 ---
 
@@ -146,15 +148,39 @@ behaves.
 | **Close the editor** | yes | `Disposer.dispose(editor)` — the root of the tree |
 | **Context destroyed** | yes | `CgGraphicsLifecycle`, which is where pooled GL objects are supposed to die |
 
+### Subscriptions belong to the thing they update
+
+A bound widget follows its **store** — `settings.onChanged`, `document.onChanged` — so that an edit made
+anywhere else reaches it. The store outlives the widget by a long way: a `Settings` lives as long as the
+application and a `GraphDocument` as long as the file is open, while an inspector rebuilds every control
+it shows on every click.
+
+So the connection needs an owner, and the owner is **the control**:
+
+```java
+control.connections().add(settings.onChanged.connect(...));   // ConfigControl.connections()
+```
+
+`ConfiguratorPanel.clearRows()` releases them, walking *all* children rather than the public ones — a
+`Configurator` is internal and holds its control as an internal child.
+
+Ownership is on the control rather than on whoever called the binder, because the reason the subscription
+exists *is* that control. A binder can then register what it wires without being handed a lifetime, and a
+control that is thrown away takes its subscriptions with it whatever built it.
+
+> **This is the failure mode the whole `Disposable` layer exists for, and it is invisible from both ends.**
+> The host looks correct because it subscribed; the store looks correct because it notified. Nothing
+> throws, nothing logs, and the only symptom is a session that gets slower the longer it is open. It went
+> unnoticed in both `SettingsConfigurator` and `NodeFieldBinder`. Pinned by
+> `ConfiguratorPanelLifetimeTest`, which asserts both that the count stops growing **and** that the
+> surviving rows still follow the store — a fix that disconnects everything passes the first alone.
+
 ### Known gap
 
-**Closing a tab still does not release its document.** `DockArea.closePanel` tells the content nothing,
-and `Workbench`'s `close(path)` is only reached on delete/move. The dock cannot fix this alone: panel
-content is *shared* — the registry hands back the same `fileTree`, `problems` and cached editors — so
-disposing on close would destroy the file tree the first time somebody closes the Project panel.
-
-The missing half is the dock announcing a close so the workbench can drop the document. That is
-`plan.md` step 3. Do not work around it locally.
+**Controls attached to a `GraphNode` are still never released.** `NodeFieldBinder.attach` registers its
+document subscription on the control exactly as above, but nothing disposes a node's controls when the
+node is deleted — only `ConfiguratorPanel.clearRows()` releases anything today. The mechanism is in the
+right place; the node needs a disposal path to call it.
 
 ---
 
@@ -453,6 +479,15 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 | `onDidLoadListing` | `WorkspaceTreeSource` | `WorkbenchSession.tick`'s per-frame restore retry |
 | `onDidChangeDirty` | `OpenDocuments` | `encode()` on every open document, every frame |
 | `onDidChange(Runnable)` | `FileDocument` (SPI) | — the source the above is built from |
+| `onDidChangeFocus` | `UIInputHandler` | the Inspector's application-supplied subject — see below |
+
+**`onDidChangeFocus` is the one that unlocked the Inspector.** `FocusEvent.Focus`/`Blur` are dispatched
+*at the element* and bubble, so they answer "did I gain focus"; they cannot answer "who holds focus now"
+for an observer that is not on the path — and a workbench has several (an inspector, a context-sensitive
+toolbar, a status line). Without it those observers can only poll, or be handed a subject the application
+picked, and the Inspector had the second: its subject was `workbench.activeDocument().view()`, so nothing
+outside a document could be inspected however many sections were registered. Deduplicated, so the
+blur-then-focus pair one click produces announces two real states and never the same one twice.
 
 ### Three rules that are easy to get wrong
 
@@ -685,3 +720,108 @@ incoming one underneath. That was "two inspectors in one tab", and it read as a 
 
 Removing through the **matching** API is the fix rather than un-marking the child: internal is the child's
 own statement about its parts, and it is right. The host was what assumed one kind of child.
+
+---
+
+## Contributions
+
+**A feature declares what it can do; nothing enumerates features.** This is the principle the six earlier
+steps kept running into and the two below finally apply — IntelliJ's extension points, VS Code's
+`contributes` manifest. The test of it is mechanical: **`com.crystalgui.editor` imports exactly one name
+from `com.crystalgui.graph`**, the contribution it enables.
+
+### `DocumentType` — which editor opens which file
+
+```java
+workbench.contribute(DocumentType.of("shadergraph.file", "Shader Graph")
+        .forExtensions("shadergraph")
+        .document(path -> new ShaderGraphEditor().setResource(Resource.of(path))));
+```
+
+Declared by the package that owns the type, not by the application. It replaced
+`registerDocumentType(id, title, factory)` **plus** `bindEditorExtensions(id, …)` — two calls that are
+meaningless apart: a factory with no binding never opens anything, and a binding with no factory threw
+`"No document factory for panel type"` *when a user opened a file*. Two calls that must both happen are
+one fact, and `contribute` refuses an incomplete type on the spot.
+
+### `Inspector` — one inspector, any subject
+
+```java
+InspectorRegistry.register(new InspectorSection() {
+    public String tab()                             { return "Node"; }
+    public boolean accepts(DataContext ctx)         { return ctx.has(SHADER_GRAPH); }   // Blender's poll()
+    public void build(InspectorForm form, DataContext ctx) { form.row(descriptor, value); }
+    public String subjectKey(DataContext ctx)       { return "node:" + …; }             // identity, for dedup
+});
+```
+
+There was a `ShaderGraphInspector` — a general tool with a graph in its name, its constructor and its
+fields. It is deleted; the shader package registers five sections instead, and `Inspector` knows nothing.
+
+**A section fills a form; it does not return a widget.** Two sections sharing a tab write into one panel,
+which is what sharing a tab should look like — returning an element each stacks two independently
+scrolling panels with two sets of group headers and a visible seam. It also keeps the engine owning the
+engine-shaped parts: the panel, its scrolling, its group collapse state, and when to clear it.
+
+#### The subject is the focus owner, and the engine resolves it
+
+A contributor declares *what* it can describe and *how to read it*. Everything else is the engine's:
+
+| Boilerplate | Who does it |
+|---|---|
+| Deciding what is being inspected | `Inspector`, from `UIInputHandler.onDidChangeFocus` |
+| Ignoring focus that lands **inside the inspector** | `Inspector` — asking to see something must not change what is shown |
+| Latching, so losing focus does not blank the panel | `Inspector` |
+| Keeping the last subject when **nothing can describe** the new one | `Inspector` |
+| Deferring the rebuild off the event that caused it | `Inspector` (a frame later — never rebuild what is being clicked) |
+| Skipping the rebuild when the subject has not moved | `Inspector`, via `subjectKey` |
+| Releasing a replaced panel's subscriptions | `ConfiguratorPanel.clearRows()` |
+| Announcing that a **selection** moved | the widget that owns it — `GraphSelection` does it itself |
+
+> **Nothing outside a document could be inspected** until this moved. The application resolved the
+> subject as `workbench.activeDocument().view()`, so a section describing a file-tree row or a timeline
+> key could register successfully and never once be asked. What remains in `CrystalEditor` is a *seed*:
+> a restored tab exists before anything has been focused, so the workbench states what it just opened and
+> focus supersedes it the moment there is one.
+
+> **A subject nothing can describe is not a subject.** Focusing a `.txt` beside a graph does not blank the
+> panel — no section accepted, so the last describable subject stays. Blender behaves identically and does
+> not treat it as a case: the Properties editor reads the scene's *active object*, which moving into the
+> Text Editor cannot change because that editor never contributed to it. IntelliJ lets a component that
+> provides no data fall through rather than answer null for everyone.
+>
+> **Most subjects are never describable, and that is permanent.** An inspector is for structured,
+> non-linear data whose editing surface genuinely is a property list — a graph node, a canvas item, a
+> mesh, a scene object. A text buffer is edited in place, and the metadata it has (encoding, line endings,
+> language, indent) belongs in a **status bar**: VS Code puts all four there, clickable, and IntelliJ has
+> no inspector at all. Do not give a document a section to stop the panel looking empty — the retention
+> rule is the answer, and it is the steady state rather than a stopgap.
+
+**Blender's Properties editor is the reference**, and it works for a mesh, a light, a camera, a material
+and an add-on's own datablock through three mechanisms:
+
+| Blender | Ours |
+|---|---|
+| a `Panel` declares `bl_context` (tab) and `poll(context)` | `InspectorSection.tab()` and `accepts(DataContext)` |
+| the subject comes from `context.object` etc., never from the editor | `DataContext` |
+| `layout.prop(data, "x")` draws **reflectively** from the declared property | `ConfigDescriptor` / `SettingsConfigurator` |
+
+> **The third is doing most of the work and is the easiest to miss.** With contributions but no
+> reflection you still hand-write a form per type — you have only moved where it lives. A section should
+> build from descriptors, not from hand-placed widgets.
+
+### Rules
+
+- **Tabs come from the sections that applied**, never a fixed list. A hardcoded pair is the old per-type
+  design wearing a registry.
+- **A section holds nothing.** It is handed the context and asked to build; one that caches its subject is
+  a per-type inspector again, with the lifetime bug that made the old per-graph map retain every graph.
+- **Ordering is declared** (`order()`), so two features cannot interleave by class-loading order.
+- **Nothing inspectable is an empty *state*** (`__inspector-empty__`), not a framed panel with nothing in
+  it — Blender hides a panel outright when its poll fails.
+- **Rebuild, do not retarget.** There is no `setInput` here: a section holds nothing, so pointing the
+  inspector elsewhere is one rebuild. The retarget protocol `DockPane` needs exists because a *pane* holds
+  per-input state.
+- **What counts as "the subject" is the application's policy.** `CrystalEditor` latches the active
+  document, because the gesture that opens the Inspector makes the Inspector's own group active — the same
+  reason Blender reads the scene's *active* object rather than focus.

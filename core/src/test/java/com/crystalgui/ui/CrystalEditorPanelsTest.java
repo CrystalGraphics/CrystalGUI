@@ -39,6 +39,8 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.elements.dock.DockInput;
 import com.crystalgui.ui.elements.dock.DockOpenOptions;
 import com.crystalgui.ui.elements.dock.DockPlacement;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.graph.shader.ShaderGraphContribution;
 
 /**
  * Which panels the editor ships, and where they land.
@@ -69,12 +71,46 @@ public class CrystalEditorPanelsTest extends UiTestBase {
         return editor.workbench().dock().layout().leafContaining(new DockPanelRef(typeId));
     }
 
+    // ── The Inspector fills itself, with nothing clicked ────────────────────
+
+    /**
+     * <b>The Inspector is a real element from construction, never a placeholder.</b>
+     *
+     * <p>The regression this exists for: the panel factory returned an empty box while the inspector did
+     * not exist yet, and {@code DockGroup} caches a factory's result <b>permanently</b> — so that box
+     * became the panel for the rest of the session. The real inspector, built a moment later, never
+     * reached the tree, and the panel was blank until something forced the group to be rebuilt. Reported
+     * as "the inspector opens blank, I need to click something first".</p>
+     *
+     * <p>Asserted as identity against {@code inspector()}, because a placeholder is also an element that
+     * lays out perfectly well — which is precisely why the bug was invisible to every other test.</p>
+     */
+    @Test
+    public void theInspectorPanelIsTheInspectorItself() {
+        CrystalEditor editor = new CrystalEditor(client());
+        UIElement content = editor.workbench().panels()
+                .create(new DockPanelRef(CrystalEditor.INSPECTOR_TYPE));
+        assertSame("the dock was handed something other than the inspector",
+                editor.inspector(), content);
+    }
+
+    // The startup follow -- "the inspector fills itself with nothing clicked" -- is deliberately NOT
+    // unit-tested here, and that is a statement about the fixture rather than about the behaviour.
+    //
+    // It needs the dock to have built its groups (the active FILE is derived from the active tab) and the
+    // workspace read to have landed over the transport. This class has neither, and a version of the test
+    // that stood up both got as far as openPaths=[] -- the read never completed -- which would have made
+    // it assert something about the harness pump rather than about the inspector.
+    //
+    // Verified in the running harness instead. What IS pinned here is the cause of the reported bug: the
+    // panel content being the inspector itself rather than a placeholder the dock would cache forever.
+
     /** The tab says what the file is. A generated shader still reads best as a file name. */
     @Test
     public void theSourceTabIsNamedForTheFileItIs() {
         CrystalEditor editor = new CrystalEditor(client());
         assertEquals("compiled_graph.shader", editor.workbench().panels()
-                .titleOf(new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE)));
+                .titleOf(new DockPanelRef(ShaderGraphContribution.SOURCE_TYPE)));
     }
 
     // ── The generated shader is a DOCUMENT, one per graph ────────────────────
@@ -103,8 +139,8 @@ public class CrystalEditorPanelsTest extends UiTestBase {
         editor.workbench().open(DockInput.of(editor.workbench().refFor(one)));
         editor.workbench().open(DockInput.of(editor.workbench().refFor(two)));
 
-        assertTrue("the first graph's generated source did not open", editor.showCompiled(first));
-        assertTrue("the second graph's generated source did not open", editor.showCompiled(second));
+        assertTrue("the first graph's generated source did not open", ShaderGraphContribution.showGenerated(editor.workbench(), first));
+        assertTrue("the second graph's generated source did not open", ShaderGraphContribution.showGenerated(editor.workbench(), second));
 
         DockPanelRef refOne = compiledRef("mymod.proj:one.shadergraph");
         DockPanelRef refTwo = compiledRef("mymod.proj:two.shadergraph");
@@ -125,10 +161,10 @@ public class CrystalEditorPanelsTest extends UiTestBase {
         CrystalEditor editor = new CrystalEditor(client());
         ShaderGraphEditor graph = (ShaderGraphEditor) editor.workbench()
                 .documentFor(CgPath.parse("mymod.proj:one.shadergraph"));
-        editor.showCompiled(graph);
+        ShaderGraphContribution.showGenerated(editor.workbench(), graph);
         int leaves = editor.workbench().dock().layout().leaves().size();
 
-        editor.showCompiled(graph);
+        ShaderGraphContribution.showGenerated(editor.workbench(), graph);
         assertEquals("a second request split the work area again",
                 leaves, editor.workbench().dock().layout().leaves().size());
     }
@@ -157,9 +193,9 @@ public class CrystalEditorPanelsTest extends UiTestBase {
      */
     @Test
     public void aGeneratedTabIsNamedForItsGraph() {
-        assertEquals("fire_compiled.shader", CrystalEditor.compiledTitleFor(
+        assertEquals("fire_compiled.shader", ShaderGraphContribution.titleFor(
                 generatedFor("mymod.proj:shaders/fire.shadergraph")));
-        assertEquals("noext_compiled.shader", CrystalEditor.compiledTitleFor(
+        assertEquals("noext_compiled.shader", ShaderGraphContribution.titleFor(
                 generatedFor("mymod.proj:noext")));
     }
 
@@ -182,7 +218,7 @@ public class CrystalEditorPanelsTest extends UiTestBase {
     }
 
     private static Resource generatedFor(String graphPath) {
-        return Resource.derived(CrystalEditor.SHADER_SOURCE_SCHEME, Resource.parse(graphPath));
+        return Resource.derived(ShaderGraphContribution.SOURCE_SCHEME, Resource.parse(graphPath));
     }
 
     /**
@@ -195,15 +231,15 @@ public class CrystalEditorPanelsTest extends UiTestBase {
     public void theGeneratedSourceIsNotInTheDefaultLayout() {
         CrystalEditor editor = new CrystalEditor(client());
         assertNull("a generated-source tab opened with no graph to generate from",
-                leafOf(editor, CrystalEditor.SHADER_SOURCE_TYPE));
+                leafOf(editor, ShaderGraphContribution.SOURCE_TYPE));
         assertNotNull("the inspector did not open", leafOf(editor, CrystalEditor.INSPECTOR_TYPE));
     }
 
     private static DockPanelRef compiledRef(String path) {
         Resource generated = generatedFor(path);
-        return new DockPanelRef(CrystalEditor.SHADER_SOURCE_TYPE)
+        return new DockPanelRef(ShaderGraphContribution.SOURCE_TYPE)
                 .withState(Workbench.PATH_STATE, generated.toString())
-                .withState(DockPanelRef.TITLE, CrystalEditor.compiledTitleFor(generated));
+                .withState(DockPanelRef.TITLE, ShaderGraphContribution.titleFor(generated));
     }
 
     private static DockLeaf leafOfRef(CrystalEditor editor, DockPanelRef ref) {
@@ -223,7 +259,7 @@ public class CrystalEditorPanelsTest extends UiTestBase {
     public void aShaderGraphFileOpensInTheGraphEditor() {
         CrystalEditor editor = new CrystalEditor(client());
 
-        assertEquals(CrystalEditor.SHADER_GRAPH_FILE_TYPE,
+        assertEquals(ShaderGraphContribution.GRAPH_TYPE,
                 editor.workbench().refFor(CgPath.parse("mymod.proj:fancy.shadergraph")).typeId());
         assertEquals("an ordinary file must still open in the text editor",
                 Workbench.FILE_TYPE,

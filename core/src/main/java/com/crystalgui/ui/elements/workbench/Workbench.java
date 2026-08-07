@@ -871,6 +871,34 @@ public class Workbench extends UIElement {
      * <p>Bind it to files with {@link #bindEditorExtensions} and friends. A type with no binding is
      * reachable only by opening its ref directly, which is what a panel that is not file-backed does.</p>
      */
+    /**
+     * Enables a contributed {@link DocumentType} — the whole registration, in one call.
+     *
+     * <p>What a package that owns a file type calls, and the only thing an application has to know about
+     * that package. Replaces a {@code registerDocumentType} plus one binding call per pattern kind, which
+     * could be — and were — half-done.</p>
+     *
+     * @throws IllegalArgumentException if the type declares no factory, because that is a registration
+     *         that would fail at the moment a user opens a file instead of here
+     */
+    public Workbench contribute(DocumentType type) {
+        if (type.factory() == null) {
+            throw new IllegalArgumentException(
+                    "DocumentType " + type.typeId() + " has no document factory — it could never open");
+        }
+        registerDocumentType(type.typeId(), type.title(), type.factory());
+        if (!type.extensions().isEmpty()) {
+            bindEditorExtensions(type.typeId(), type.extensions().toArray(new String[0]));
+        }
+        if (!type.fileNames().isEmpty()) {
+            bindEditorNames(type.typeId(), type.fileNames().toArray(new String[0]));
+        }
+        if (!type.globs().isEmpty()) {
+            bindEditorGlobs(type.typeId(), type.globs().toArray(new String[0]));
+        }
+        return this;
+    }
+
     public Workbench registerDocumentType(String typeId, String title,
                                           Function<CgPath, FileDocument> factory) {
         documentFactories.put(typeId, factory);

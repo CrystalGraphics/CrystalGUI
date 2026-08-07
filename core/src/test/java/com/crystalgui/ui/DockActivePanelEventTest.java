@@ -110,6 +110,29 @@ public class DockActivePanelEventTest extends UiTestBase {
     }
 
     /**
+     * <b>Opening a panel into the group that is already active announces it.</b>
+     *
+     * <p>The path that was missing, and it is the one launching with a document open takes.
+     * {@code setActiveGroup} early-returns because the group did not change, and no rebuild runs because
+     * adding to an existing group is a selection change rather than a structural one — so the active
+     * panel moved in silence and everything downstream kept showing what was there before. The symptom
+     * was an Inspector that stayed blank at startup while the document it should describe was on screen.</p>
+     */
+    @Test
+    public void addingAPanelToTheActiveGroupAnnouncesIt() {
+        DockLeaf leaf = layout.leaves().get(0);
+        area.setActiveGroup(area.groupFor(leaf));
+        announced.clear();
+
+        DockPanelRef added = new DockPanelRef("gamma");
+        leaf.add(added);
+        area.syncGroups();
+
+        assertEquals("opening into the active group announced nothing", 1, announced.size());
+        assertEquals(added, announced.get(0));
+    }
+
+    /**
      * <b>Exactly once per change, however many paths reached it.</b>
      *
      * <p>The announce is deliberately idempotent and called from several places — a group change, a tab
