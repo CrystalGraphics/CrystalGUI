@@ -20,7 +20,7 @@ looks like a needed helper is the symptom of one that does not — see
 |---|---|---|
 | `Disposer` — ownership and lifetime | **shipped** | [Disposal](#disposal) |
 | `DataContext` — "what am I acting on" | **shipped** | [Data context](#data-context) |
-| Typed service events — replacing polling | planned (plan §16) | — |
+| Typed service events — replacing polling | **shipped** | [Service events](#service-events) |
 | `Resource` — URI schemes, virtual documents | planned (plan §17) | — |
 | `DockPane` — retargetable panel views | planned (plan §18) | — |
 | `DockService` — `open(input, placement)` | planned (plan §19) | — |
