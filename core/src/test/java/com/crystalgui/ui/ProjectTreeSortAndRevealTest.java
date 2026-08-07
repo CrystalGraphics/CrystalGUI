@@ -781,11 +781,17 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
         UIElement label = ghost.querySelector("." + DragGhost.LABEL_CLASS);
         assertNotNull("the ghost has no label", label);
         float labelWidth = label.getRuntimeCache().getWidth();
-        assertTrue("the ghost's label measured zero, so the box is padding only and the text spills out "
-                        + "of it", labelWidth > 0f);
-        assertTrue("the ghost box (" + ghost.getRuntimeCache().getWidth() + ") is narrower than the text "
-                        + "inside it (" + labelWidth + ")",
-                ghost.getRuntimeCache().getWidth() >= labelWidth);
+        assertTrue("the ghost's label measured zero -- UIText latched its self-sizing from a first layout "
+                        + "in which the ghost was still in flow", labelWidth > 0f);
+
+        // NOT "the box is at least as wide as the text", which is what this asserted before and which now
+        // states the opposite of the design. The ghost's box IS the icon, deliberately: a box that grew
+        // with its label could not be GRAB-anchored at a window edge without sliding the icon out from
+        // under the cursor. The label floats OUTSIDE the box, so what is worth pinning is that it starts
+        // past the box's trailing edge rather than inside it.
+        assertTrue("the label is laid out inside the ghost's box, so the box will grow with the text again",
+                label.getRuntimeCache().getX() >= ghost.getRuntimeCache().getX()
+                        + ghost.getRuntimeCache().getWidth());
 
         // Down and to the right of the pointer, in logical units -- never offset by where in the row the
         // press landed, which is what GhostAnchor.CURSOR means.

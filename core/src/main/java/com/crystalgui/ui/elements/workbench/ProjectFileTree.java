@@ -9,8 +9,6 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.style.StyleGroup;
-import dev.vfyjxf.taffy.style.TaffyPosition;
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.core.data.DataKey;

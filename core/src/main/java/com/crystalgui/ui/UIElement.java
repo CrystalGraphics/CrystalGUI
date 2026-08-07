@@ -721,9 +721,17 @@ public class UIElement implements SettingsScope, DataProvider {
         }
     }
 
-    /** Inserts {@code child} at {@code index}, bypassing {@link #acceptsPublicChildren()}, then marks
-     * it internal — the indexed counterpart to {@link #addInternalChild}. */
-    protected final UIElement insertInternalChildAt(UIElement child, int index) {
+    /**
+     * Inserts {@code child} at {@code index}, bypassing {@link #acceptsPublicChildren()}, then marks it
+     * internal — the indexed counterpart to {@link #addInternalChild}.
+     *
+     * <p>Public, like {@link #addInternalChild} and {@link #removeInternalChild} beside it. It was
+     * {@code protected}, which reads as deliberate and was not: Java only grants protected access through
+     * a reference of the accessing subclass's own type, so a widget that parks itself in someone else's
+     * tree could add and remove but not insert. {@code InsertionMarker} needs exactly that to open a gap
+     * at an index.</p>
+     */
+    public final UIElement insertInternalChildAt(UIElement child, int index) {
         addChildAtInternal(child, index);
         child.markAsInternal();
         return this;
