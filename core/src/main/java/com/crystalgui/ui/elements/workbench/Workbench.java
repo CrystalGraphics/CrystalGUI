@@ -254,6 +254,12 @@ public class Workbench extends UIElement {
         // The rail's :checked state follows the dock's structure and nothing else, so it can subscribe
         // now. Its BUTTONS wait for a window -- see onWindowChanged.
         activityBar.listenToLayout(dock);
+        // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
+        // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
+        // moves when somebody types. The equality guard SURVIVES the move: the announcement means
+        // "content changed", which is not the same as "dirtiness flipped", and only the encode can tell
+        // the difference. It just runs once per edit now instead of once per frame.
+        open.onDidChangeDirty.connect(path -> refreshDirtyMarkers());
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         // The rail sits BESIDE the dock rather than inside it, which is what both originals do and is not
@@ -1210,7 +1216,17 @@ public class Workbench extends UIElement {
         // to be in flight -- and left it off when a folder appeared later. The step is O(budget) against a
         // queue, so asking every frame costs nothing once the queue is empty.
         fileTree.source().indexStep(WorkspaceTreeSource.DEFAULT_INDEX_BUDGET);
-        refreshDirtyMarkers();
+        // STAYS PER FRAME, and the attempt to move it to onWindowChanged is why this comment exists.
+        //
+        // It looks like a one-shot dressed as a loop -- ProjectFileTree.loadProjects latches on
+        // `projectsRequested`, so this is free after the first call. It is really a RETRY: a client's
+        // window id is not valid until its session has opened, and the server discards a packet addressed
+        // to another window, so a call made too early is thrown away with no error at all
+        // (WorkspaceTreeSource.loadProjects says exactly this). Attach happens before that, and because
+        // the latch is set on the ATTEMPT rather than on success, one early call poisons it permanently:
+        // twelve explorer tests came up with no project roots at all.
+        //
+        // Moving it needs a session-opened announcement, which is step 4's territory, not this one.
         fileTree.loadProjects();
         return true;
     }
