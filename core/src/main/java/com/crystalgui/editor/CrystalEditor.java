@@ -33,6 +33,7 @@ import com.crystalgui.ui.elements.dock.DockPlacement;
 import com.crystalgui.ui.elements.dock.DockInput;
 import com.crystalgui.ui.elements.dock.DockOpenOptions;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.workbench.FileDocument;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -195,7 +196,7 @@ public class CrystalEditor extends UIElement implements Disposable {
         // point of the emitted source is watching it change as you wire -- a panel you have to switch away
         // from the graph to read is a panel that is never read.
         workbench.registerPanel(DockPanelDescriptor.singleton(INSPECTOR_TYPE, "Inspector")
-                        .icon("crystalgui:package").anchor(DockDropZone.SPLIT_RIGHT),
+                        .icon("crystalgui:package").region(DockRegion.AUXILIARY),
                 // The inspector IS the panel content, and it exists from the start. No wrapper -- the
                 // one that used to sit between it and the dock existed only to be swapped into -- and no
                 // placeholder, which the dock would have cached in its place forever.
@@ -203,10 +204,10 @@ public class CrystalEditor extends UIElement implements Disposable {
         // The Inspector opens with the workbench; the generated source does not. It is now a document
         // opened on demand by showCompiled(), so putting one in the default layout would mean a tab for a
         // graph nobody has opened yet.
-        workbench.open(DockInput.of(new DockPanelRef(INSPECTOR_TYPE)),
-                DockPlacement.side(DockDropZone.SPLIT_RIGHT),
-                // Not activated: a companion pane should not take the work area's focus at startup.
-                DockOpenOptions.INACTIVE.withShare(SOURCE_SHARE));
+        // A TOOL WINDOW, not a document. It used to be opened into the dock tree with a SPLIT_RIGHT
+        // placement, which made it a leaf the layout could lose -- the whole reason regions exist. It has
+        // a home now: the auxiliary region, which is where IntelliJ and VS Code both put an inspector.
+        workbench.showPanel(INSPECTOR_TYPE);
 
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);

@@ -3609,6 +3609,54 @@ dockgroup .__missing__ {
  * that keeps its content size spills out of the pane instead of dividing it. The same rule the dock's
  * pane host and the inspector already carry, and the same failure without it -- the host measured to
  * nothing, so the file tree's rows existed and could not be clicked. */
+/* A container fills its region, and its content fills what the header leaves. Same column-fill idiom as
+ * every other pane child -- without it the header measures and the content does not, which shows up as a
+ * tool window whose rows exist and cannot be clicked. */
+.__view-container__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.__view-container__ .__header__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 2px 4px 2px 8px;
+    gap: 4px;
+}
+
+.__view-container__ .__header__ .__title__ {
+    flex-grow: 1;
+    font-size: 11px;
+    color: #A0A0A0;
+}
+
+.__view-container__ .__header__ .__hide__ {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.__view-container__ .__content__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+/* The rail's bottom-anchored group: the first one pushes itself and everything after it down. */
+.__activity-bar__ .__bottom-anchored__ {
+    margin-top: auto;
+}
+
+/* The count over a rail icon. */
+.__activity-bar__ .__badge__ {
+    font-size: 9px;
+    color: #FFFFFF;
+}
+
 .__region-host__ {
     flex-grow: 1;
     flex-shrink: 1;
