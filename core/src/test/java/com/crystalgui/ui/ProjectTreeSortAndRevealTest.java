@@ -19,6 +19,7 @@ import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.ui.elements.DragGhost;
 import com.crystalgui.ui.elements.workbench.ProjectFileTree;
 import com.crystalgui.ui.elements.workbench.WorkspaceTreeSource;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -770,12 +771,15 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
             window.updateWithoutPainting();
         }
 
-        UIElement ghost = tree.querySelector("." + ProjectFileTree.DRAG_GHOST_CLASS);
+        UIElement ghost = tree.querySelector("." + DragGhost.GHOST_CLASS);
         assertNotNull("no drag ghost in the tree", ghost);
         assertTrue("the ghost never appeared -- it is still hidden mid-drag",
                 ghost.getRuntimeCache().getWidth() > 0f);
 
-        UIElement label = ghost.getChildren().get(0);
+        // BY CLASS, not by index: the ghost carries an icon slot before its label now, so child 0 is the
+        // glyph and this assertion would have been measuring that instead.
+        UIElement label = ghost.querySelector("." + DragGhost.LABEL_CLASS);
+        assertNotNull("the ghost has no label", label);
         float labelWidth = label.getRuntimeCache().getWidth();
         assertTrue("the ghost's label measured zero, so the box is padding only and the text spills out "
                         + "of it", labelWidth > 0f);

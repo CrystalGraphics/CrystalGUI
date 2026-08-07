@@ -5,6 +5,7 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.DragGhost;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.tree.UITreeTraversal;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -128,13 +129,13 @@ public final class UIDragController {
      * re-registering on mouse-down.</p>
      */
     public void setGhost(@Nullable UIElement ghost) {
-        setGhost(ghost, GhostAnchor.GRAB);
+        setGhost(ghost, DragGhost.Anchor.GRAB);
     }
 
-    /** @see GhostAnchor */
-    public void setGhost(@Nullable UIElement ghost, GhostAnchor anchor) {
+    /** @see DragGhost.Anchor */
+    public void setGhost(@Nullable UIElement ghost, DragGhost.Anchor anchor) {
         this.ghost = ghost;
-        this.ghostAnchor = anchor == null ? GhostAnchor.GRAB : anchor;
+        this.anchor = anchor == null ? DragGhost.Anchor.GRAB : anchor;
         if (ghost == null) return;
         // A ghost sitting under the cursor would otherwise be the drop target for its own drag.
         ghost.setHitTest(false);
@@ -165,6 +166,23 @@ public final class UIDragController {
      * ghost sits exactly where the source visually was relative to the pointer. Grabbing a card by
      * its corner and having it jump to centre-on-cursor is the classic tell of a ghost positioned the
      * lazy way.</p>
+     *
+     * <h3>{@link DragGhost.Anchor#CURSOR} is kept inside the window; {@code GRAB} is not</h3>
+     *
+     * <p>A ghost extends right and down from wherever it is placed, so it leaves the window as soon as a
+     * drag reaches an edge. For a {@code CURSOR} ghost that is worth clamping: it is a loose stand-in
+     * parked beside the pointer, no part of it is registered to a particular pixel, and sliding it back
+     * on screen costs nothing.</p>
+     *
+     * <p><b>For a {@code GRAB} ghost clamping is not a refinement, it is a contradiction — and doing it
+     * was a real bug.</b> That anchor means "sit exactly where the source was relative to the pointer",
+     * so the one operation it cannot survive is being moved independently of the pointer. Dragging a tool
+     * window towards the right-hand rail slid the ghost left, out from under the cursor still holding it,
+     * which reads as having dropped the thing you are carrying.</p>
+     *
+     * <p>A {@code GRAB} ghost that would overflow is telling you its <em>contents</em> are laid out the
+     * wrong way round, not that its position is wrong. {@code DragGhost.flipped} is the answer: the label
+     * moves to the other side of the icon and the icon does not move at all.</p>
      */
     private void positionGhost(UIElement g, float mouseX, float mouseY, UIWindow window) {
         UIElement rootElement = window.ui.rootElement;
@@ -173,35 +191,34 @@ public final class UIDragController {
         // against for a promoted element (its Taffy node is reparented to the root).
         Vector2f inRoot = Transform2D.apply(rootCache.worldToLocal.get(), mouseX, mouseY);
 
-        float offsetX = ghostAnchor == GhostAnchor.GRAB ? grabOffsetX : -CURSOR_NUDGE_X;
-        float offsetY = ghostAnchor == GhostAnchor.GRAB ? grabOffsetY : -CURSOR_NUDGE_Y;
-        final float left = inRoot.x() - rootCache.getX() - offsetX;
-        final float top = inRoot.y() - rootCache.getY() - offsetY;
+        boolean grabbed = anchor == DragGhost.Anchor.GRAB;
+        float offsetX = grabbed ? grabOffsetX : -CURSOR_NUDGE_X;
+        float offsetY = grabbed ? grabOffsetY : -CURSOR_NUDGE_Y;
+        float rawLeft = inRoot.x() - rootCache.getX() - offsetX;
+        float rawTop = inRoot.y() - rootCache.getY() - offsetY;
+        final float left = grabbed ? rawLeft
+                : clampToRoot(rawLeft, g.getRuntimeCache().getWidth(), rootCache.getWidth());
+        final float top = grabbed ? rawTop
+                : clampToRoot(rawTop, g.getRuntimeCache().getHeight(), rootCache.getHeight());
         StyleGroup.importantPipeline(g.getStyle().getLayoutGroup(), l -> l.left(left).top(top));
     }
 
     /**
-     * How a ghost is placed relative to the pointer. Two genuinely different gestures, and neither
-     * placement is right for the other.
+     * Holds one axis of the ghost inside the root box.
+     *
+     * <p>A ghost wider than the window is pinned to the near edge rather than centred: {@code available}
+     * going negative would otherwise make the clamp fight itself, and showing the start of an overlong
+     * label beats showing its middle.</p>
+     *
+     * <p>A zero {@code size} is left alone, which is the first frame — the ghost has been promoted but not
+     * yet laid out, so its measurement is not available to clamp against. It self-corrects next frame, and
+     * guessing would be worse than a frame of the old behaviour.</p>
      */
-    public enum GhostAnchor {
-        /**
-         * Keep the grab offset — the ghost sits exactly where the source was relative to the pointer.
-         *
-         * <p>Right when the ghost <em>is</em> the thing being moved, at the same size: a pill, a card, a
-         * tab. Grabbing one by its corner and having it jump to centre-on-cursor is the classic tell of a
-         * ghost positioned the lazy way.</p>
-         */
-        GRAB,
-        /**
-         * Sit just below and right of the pointer, ignoring where the source was grabbed.
-         *
-         * <p>Right when the ghost is a small stand-in for something much larger or for several things at
-         * once — a full-width file row, or "3 items". Preserving the grab offset there places a two-inch
-         * label a whole row-width to the left of the cursor, which reads as the ghost being detached from
-         * the pointer rather than as fidelity to the grab. Every file manager anchors this way.</p>
-         */
-        CURSOR
+    private static float clampToRoot(float position, float size, float rootSize) {
+        if (size <= 0f || rootSize <= 0f) return position;
+        float available = rootSize - size;
+        if (available <= 0f) return 0f;
+        return Math.max(0f, Math.min(position, available));
     }
 
     /**
@@ -220,7 +237,7 @@ public final class UIDragController {
     private static final float CURSOR_NUDGE_X = 5f;
     private static final float CURSOR_NUDGE_Y = 5f;
 
-    private GhostAnchor ghostAnchor = GhostAnchor.GRAB;
+    private DragGhost.Anchor anchor = DragGhost.Anchor.GRAB;
 
     /** Positional drag — no payload, no drop targeting, activates immediately. What Slider,
      * Scroller and SplitView use, unchanged. */

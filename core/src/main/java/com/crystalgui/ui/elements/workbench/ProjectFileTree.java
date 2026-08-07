@@ -17,6 +17,7 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.ui.elements.DragGhost;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
 import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
@@ -191,7 +192,7 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         content.addChild(tree);
-        buildDragGhost();
+        dragGhost.parkIn(this);
         installTypeToFilter();
         installDropTarget();
     }
@@ -386,14 +387,12 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             // selected" is the common gesture, and a press that collapsed the selection breaks it.
             List<CgPath> dragged = selectedPaths().contains(item) ? selectedPaths() : List.of(item);
 
-            // RE-REGISTERED PER DRAG, which is what the controller expects: it drops its reference when
-            // the drag ends, so a ghost handed over once appears for the first drag and never again.
-            // The label is rebuilt here too, because what is being dragged changes every time.
-            ghostLabel.setText(dragged.size() == 1
-                    ? dragged.get(0).name()
-                    : dragged.size() + " items");
-            window.getInputHandler().getDragController().setGhost(dragGhost,
-                    UIDragController.GhostAnchor.CURSOR);
+            // NO ICON for a multi-selection: "3 items" has no one glyph, and picking the first file's
+            // would claim the drag is about that file.
+            dragGhost.follow(window, dragged.size() == 1
+                    ? FileIconTheme.getDefault().iconFor(dragged.get(0).name(), false, false)
+                    : null,
+                    dragged.size() == 1 ? dragged.get(0).name() : dragged.size() + " items");
 
             window.getInputHandler().getDragController().startDrag(row,
                     event.getPosition().x(), event.getPosition().y(), new DragPayload(dragged),
@@ -577,43 +576,16 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         return this;
     }
 
-    /** On the floating copy that follows the cursor during a drag. */
-    public static final String DRAG_GHOST_CLASS = "__drag-ghost__";
-
-    private final UIElement dragGhost = new UIElement();
-    private final UIText ghostLabel = new UIText("");
-
     /**
-     * Builds the floating copy that follows the cursor, <b>once</b>, at construction.
+     * The capsule that follows the cursor while files are being moved.
      *
-     * <p>It has to be IN THE TREE before a drag can show it: the controller promotes the ghost into the
-     * top layer, and promotion needs a window to promote from, so an unparented element handed to
-     * {@code setGhost} is silently never shown — no error, just no ghost. Same lesson the row menu learned
-     * about popovers, and {@code PropertyPill} records it too.</p>
-     *
-     * <p>One element reused for every drag, with only its text rewritten. The controller hides it at rest
-     * and on drag end, so nothing here has to manage its visibility.</p>
+     * <p>Was thirty-odd lines here — park it, write {@code position: absolute} and {@code display: none}
+     * at IMPORTANT from Java, keep a label field, re-register per drag — with a comment explaining each.
+     * {@code StripeView} then needed the same thirty, verbatim, which is the point at which a body stops
+     * being a call site and becomes a duplicated implementation. All three rules and all three
+     * explanations now live in {@link DragGhost}.</p>
      */
-    private void buildDragGhost() {
-        dragGhost.addClass(DRAG_GHOST_CLASS);
-        dragGhost.addChild(ghostLabel);
-        // OUT OF FLOW AND HIDDEN FROM JAVA, not from the stylesheet, and this is not a style choice.
-        //
-        // UIWindow.init() calls calculateLayout() with no style pass before it, so the FIRST layout of any
-        // tree runs before a single rule has matched. UIText latches once, on its first measurement,
-        // whether it sizes its own width -- and in that unstyled first pass the ghost is an ordinary
-        // in-flow child at the panel's full width, so the label concludes "my parent sizes me" and never
-        // asks again. The ghost then becomes absolutely positioned with auto width, the label asks a parent
-        // that is itself sizing to content, and the answer is zero: a box of pure padding with the glyphs
-        // painting straight out of it. That is the stray blue rectangle beside the name, and no stylesheet
-        // rule can prevent it because the damage is done before any stylesheet is consulted.
-        //
-        // IMPORTANT is the origin the controller itself writes display at, so showGhost/hideGhost still
-        // take over cleanly at each end of a drag.
-        StyleGroup.importantPipeline(dragGhost.getStyle().getLayoutGroup(),
-                l -> l.positionType(TaffyPosition.ABSOLUTE).display(TaffyDisplay.NONE));
-        addInternalChild(dragGhost);
-    }
+    private final DragGhost dragGhost = new DragGhost();
 
     /** Walks up from whatever was hit to the row element the tree knows about. */
     @Nullable
