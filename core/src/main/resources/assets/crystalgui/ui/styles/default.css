@@ -3585,8 +3585,28 @@ dockgroup .__drop-overlay__ {
 
 /* The caret between two tabs during a reorder. Deliberately brighter than the overlay: it marks a
  * single boundary rather than an area, so it has to read at 2px wide. */
-dockgroup .__insertion__ {
-    background: #7EB6FF;
+/* THE INSERTION PLACEHOLDER, shared by every list that can be reordered by dragging -- tab strips,
+ * tool-window stripes. One widget (InsertionMarker), so one rule: it used to be per-consumer, which is how
+ * the second one would have got a different colour for no reason anyone chose.
+ *
+ * A SLOT, not a hairline. It is sized to the item it would sit beside, so it says "a thing this size goes
+ * here" rather than only "here" -- which is the question you have while carrying something. Both references
+ * do this: IntelliJ opens a tab-width gap in a strip and a button-sized square in a stripe.
+ *
+ * Outlined and barely filled, so whatever it overlaps still reads through it. Sized and placed from Java,
+ * since it tracks a pointer; only the paint is here. */
+.__insertion__ {
+    background-color: #7EB6FF30;
+    outline: 1px #7EB6FF;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+/* In a rail the gap is an ordinary child, so it needs the same spacing the buttons carry -- otherwise the
+ * list closes up by two pixels the moment one opens, and every button below the gap shifts by that much
+ * more than the gap actually accounts for. */
+workbench .__activity-bar__ .__insertion__ {
+    margin-bottom: 2px;
 }
 
 /* Which group commands act on. An outline rather than a background, so a panel's own colour is not
@@ -3651,9 +3671,32 @@ dockgroup .__missing__ {
     flex-grow: 1;
 }
 
-/* The rail's bottom-anchored group: the first one pushes itself and everything after it down. */
-.__activity-bar__ .__bottom-anchored__ {
-    margin-top: auto;
+/* THE STRETCH BETWEEN THE TWO GROUPS, which is what pushes the bottom one to the foot of the rail.
+ *
+ * A spacer rather than `margin-top: auto`, after that spelling went wrong twice. Auto margins SHARE the
+ * free space with every other auto margin in the same container, so the answer depends on how many
+ * elements carry one -- and during a drag the insertion gap can lead the bottom group too, which made
+ * three of them split the rail into three gaps. One always-present element cannot do that.
+ *
+ * `height: 0` with `flex-grow: 1` is the fill idiom, and flex-shrink is deliberately untouched. */
+/* THE RULE BETWEEN AN ANCHOR'S TWO HALVES -- IntelliJ's StripeButtonSeparator.
+ *
+ * Structural, not decorative: the two halves are separate reorder units that happen to share a stripe, so
+ * without a visible boundary the rail looks like one list that refuses to be rearranged. See
+ * StripeView.SEPARATOR_CLASS. */
+workbench .__activity-bar__ .__stripe-separator__ {
+    width: 12px;
+    height: 1px;
+    flex-shrink: 0;
+    margin-top: 3px;
+    margin-bottom: 5px;
+    background-color: #4E5157;
+}
+
+.__activity-bar__ .__stripe-spacer__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
 }
 
 /* The count over a rail icon. */
@@ -4113,8 +4156,85 @@ workbench .__workbench-content__ {
     flex-direction: row;
 }
 
+/* ── Drag ghost ────────────────────────────────────────────────────────────────────────────────
+ * The floating stand-in that follows the cursor during any drag -- files, tool windows, anything.
+ * ONE rule set, unscoped, because DragGhost is one widget: it used to be a near-identical block per
+ * widget, which is how two of them ended up with different padding for no reason anyone chose.
+ *
+ * THE BOX IS THE ICON, and the label floats beside it out of flow. That is the whole geometry and it
+ * is what makes GhostAnchor.GRAB work at a window edge: the box never grows, so the icon stays exactly
+ * under the point you grabbed, and it is the LABEL that moves aside. Putting the label in flow and
+ * clamping the box was the first attempt -- it slid the icon out from under the cursor. */
+.__drag-ghost__ {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    background-color: #2F5F9EC0;
+    border-radius: 2px;
+}
+
+.__drag-ghost__ .__pre-icon__ {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+}
+
+/* OUT OF FLOW, to the right of the icon by default. `left: 100%` resolves against the ghost's own box,
+ * so the gap is stated once and holds whatever size the icon takes. */
+.__drag-ghost__ .__label__ {
+    position: absolute;
+    left: 100%;
+    margin-left: 6px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-left: 6px;
+    padding-right: 6px;
+    background-color: #3C3F41F0;
+    border-radius: 3px;
+    color: #FFFFFF;
+    white-space: nowrap;
+}
+
+/* Flipped to the LEFT of the icon on the right-hand half of the window, so the label never runs off
+ * the edge -- and the icon still does not move. RegionDropOverlay decides, by pointer position rather
+ * than by whether the text would fit: the text changes length as the destination changes, so a fit
+ * test flips and unflips while the pointer sits still. */
+.__drag-ghost__.__flipped__ .__label__ {
+    left: auto;
+    right: 100%;
+    margin-left: 0px;
+    margin-right: 6px;
+}
+
+/* NO DESTINATION means no label at all, not an empty capsule -- the middle of the window, where a drop
+ * is refused. An empty box would read as a name that failed to load. */
+.__drag-ghost__.__unlabelled__ .__label__ {
+    display: none;
+}
+
+/* ── Region drop overlay ───────────────────────────────────────────────────────────────────────
+ * Where a dragged tool window would land. The layer covers the whole workbench and is unhittable;
+ * only the preview rectangle inside it is ever visible, and it is shown by OPACITY rather than by
+ * `display` so the box it is measured from survives being hidden. Same idiom as the dock's own drop
+ * preview, and deliberately the same colour -- these are two halves of one gesture vocabulary. */
+.__region-drop-overlay__ {
+    background: none;
+}
+
+.__region-drop-preview__ {
+    background-color: #3574F055;
+    outline: 1px #3574F0;
+}
+
 /* ── Activity bar ──────────────────────────────────────────────────────────────────────────────
  * IntelliJ's tool window stripe / VS Code's Activity Bar: a narrow rail of icon-only toggles.
+ *
+ * TWO of them, left and right -- which of the four (rail, group) slots a button is in IS which region
+ * its tool window opens in. See StripeRail. They are ordinary flex children of the workbench row, so
+ * nothing here positions them: DOM order does, and both carry the same fixed width.
  *
  * Deliberately narrow and fixed. It is chrome that must never compete with the work area, and both
  * originals keep it under three characters wide. */
@@ -4126,6 +4246,7 @@ workbench .__activity-bar__ {
     padding-top: 2px;
     background: #2B2B2B;
 }
+
 
 /* WIDTH ZERO AS THE BASIS, not merely flex-grow. This engine defaults flex-shrink to 0, so a grown
  * child keeps its content size as a floor and overflows its parent rather than shrinking -- the trap
@@ -4335,45 +4456,6 @@ projectfiletree .__project-row__ .__badge__ {
  * Ordering could not fix it either: at equal specificity the later rule wins, so hover and selection
  * simply take turns being wrong. The answer is that a list with a selection does not need a hover state --
  * the cursor already says where the pointer is. */
-/* THE DRAG GHOST -- the floating copy that follows the cursor while files are being moved.
- *
- * Promoted to the top layer for the duration, so it needs no z-index of its own; the controller
- * writes `display` at IMPORTANT origin at both ends of the drag, which is what lets it be shown and
- * hidden without a rule here fighting it.
- *
- * Translucent rather than solid, which is the convention every file manager shares: the ghost is a
- * statement about what you are carrying, and it must not hide the folder you are aiming at. */
-projectfiletree .__drag-ghost__ {
-    /* OUT OF FLOW AND HIDDEN FROM THE FIRST FRAME, and both halves are load-bearing.
-     *
-     * The controller writes `display` at IMPORTANT at each end of a drag, so it can show and hide this
-     * freely -- but it only does so once a drag has STARTED. Until then the ghost was an ordinary
-     * in-flow child of the panel: a stray box parked under the file list.
-     *
-     * Worse, that first layout is what broke the box. UIText latches ONCE whether it self-sizes its
-     * width, from whether it had a content box the first time it measured. In flow it had the panel's
-     * full width, so it latched \"my parent sizes me\" -- and then the ghost became absolutely
-     * positioned with auto width, leaving the label asking a parent that is itself sizing to content.
-     * The answer is zero: a box ten pixels wide, padding and nothing else, with the glyphs painting
-     * straight out of it. That is the stray blue rectangle beside the name.
-     *
-     * Both are therefore written FROM JAVA at IMPORTANT origin -- see buildDragGhost, which
-     * explains why a rule here could never have won. This block is appearance only. */
-    flex-direction: row;
-    align-items: center;
-    padding-top: 1px;
-    padding-bottom: 1px;
-    padding-left: 5px;
-    padding-right: 5px;
-    background-color: #2F5F9EC0;
-    border-radius: 2px;
-    color: #FFFFFF;
-}
-/* One line however long -- a ghost that wrapped would be a paragraph following the cursor. */
-projectfiletree .__drag-ghost__ text {
-    white-space: nowrap;
-}
-
 projectfiletree .__project-row__.__selected__ {
     background-color: #2F5F9E;
     color: #FFFFFF;

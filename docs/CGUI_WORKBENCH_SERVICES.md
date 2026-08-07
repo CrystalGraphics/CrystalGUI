@@ -519,7 +519,7 @@ matching teardown path — the bookkeeping the ownership tree exists to remove, 
 closes: the widget goes, the subscription stays, and it keeps being called about a tree it is not in.
 
 **2. Subscribing is not catching up.** A signal only reports what happens *after* you subscribe. Anything
-registered before you subscribed is invisible, forever. `ActivityBar.listenToPanels` syncs first and
+registered before you subscribed is invisible, forever. `StripeView.listenToPanels` syncs first and
 subscribes second, because the workbench registers its own panel types in its constructor — subscribing
 alone left the rail permanently empty. **This is the failure mode of every poll-to-event change.**
 
@@ -777,6 +777,68 @@ Removing through the **matching** API is the fix rather than un-marking the chil
 own statement about its parts, and it is right. The host was what assumed one kind of child.
 
 ---
+
+## Tool windows, stripes and the drag between them
+
+The service layer under the two rails. Everything here is reached from `Workbench` —
+`toolWindowManager()`, `stripe(rail)`, `stripes()`, `dropOverlay()` — and nothing in it needs a
+`UIWindow`, which is why the geometry halves are testable headlessly.
+
+### Placement is `(region, side)`, and nothing else
+
+`ToolWindowState` stores a `DockRegion` and a `RegionSide`. That pair is IntelliJ's `anchor` +
+`isSplit`, and it is the **whole** of where a tool window lives — see `plan.md` §24.10, which quotes
+the platform source. An anchor's two halves share one stripe, separated by a rule.
+
+| Ask | Method |
+|---|---|
+| Where does it belong? | `regionOf(typeId)` / `sideOf(typeId)` |
+| Where in its stripe run? | `orderOf(typeId)` |
+| Who else is in that run? | `groupOf(region, side)` |
+| Move it | `moveTo(typeId, region, side)` / `moveTo(typeId, region, side, index)` |
+| Tell me when any of that changes | `onDidChangePlacement` |
+
+**`groupOf` walks the registry, not the stored placements.** A tool window has no `ToolWindowState`
+until something asks where it is, so a group read from the states alone omits every member nobody has
+touched — and a renumber would then skip them, leaving them on `Integer.MAX_VALUE` where they sort
+last for ever. That is not hypothetical: it made it impossible to drop anything *below* a button that
+had never itself been moved.
+
+**`moveTo` renumbers the whole group**, for the same reason both references do: orders are dense but
+arbitrary, so "between 3 and 4" has no integer to use.
+
+### The rail is derived; placement is primitive
+
+`StripeRail.of(region, side)` answers which of the two rails carries a button, and `topRegion()` /
+`bottomSide()` say what each rail's two groups hold. There is deliberately **no stored rail** — that
+would be a fifth statement of a fact `WorkbenchRegions`, `RegionHost` and `ToolWindowState` already
+make, free to disagree with all three and silently.
+
+### The drop target is the whole workbench
+
+`RegionDropZones` is pure arithmetic — six slots, a "no" over the editor, corners belonging to the
+bottom band — and `RegionDropOverlay` is the one element that consumes it. **One listener, on the
+workbench's content box, subscribed to the bubble phase**: `DragEvent.Over` is dispatched to whatever
+is geometrically under the pointer, so nothing higher up is ever the target and `(false, false)` —
+target-phase only — hears nothing at all.
+
+> This is a **deliberate divergence** from IntelliJ, which uses per-stripe drop areas and halves the
+> *stripe's* bounds. Ours bands the window. The "Move to …" wording is IntelliJ's around a target
+> computed differently; do not read it as a port.
+
+### Two widgets that came out of this, and are not workbench-specific
+
+- **`DragGhost`** (`ui.elements`) — the capsule under the cursor. `parkIn(host)` once, `follow(window,
+  icon, text)` per drag. It exists because `UIDragController.setGhost` takes any element by design, and
+  three rules are invisible in that signature: it must be in the tree before it can be promoted, it must
+  be `absolute`/`none` **from Java at IMPORTANT at construction** (the first layout runs before any rule
+  matches, and `UIText` latches its self-sizing there), and it must be registered per drag.
+- **`InsertionMarker`** (`ui.elements`) — the gap showing where a drop lands. `OVERLAY` floats over the
+  list; `IN_FLOW` opens a real gap and everything after it shifts. `DockGroup` uses the first because its
+  caret is not a sibling of the tabs; `StripeView` uses the second. It owns the two rules every reorder
+  needs: the first item whose **midpoint** is past the pointer, and an index range of `[0, size]` so the
+  far end stays reachable.
+
 
 ## Contributions
 
