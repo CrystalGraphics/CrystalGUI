@@ -140,59 +140,23 @@ public class ActivityBarTest extends UiTestBase {
         commands.run(command);
         settle();
         assertTrue("running the command did not open the panel", workbench.isPanelOpen(TOOL_TYPE));
-        assertNotNull("the panel opened in the model but no group was built for it",
-                groupFor(TOOL_TYPE));
+        assertEquals("the panel opened in the model but its region does not show it",
+                TOOL_TYPE, workbench.regions()
+                        .host(workbench.toolWindowManager().regionOf(TOOL_TYPE)).showing());
 
         commands.run(command);
         settle();
         assertFalse("running it again did not hide the panel", workbench.isPanelOpen(TOOL_TYPE));
-        assertNull("the panel closed in the model but its group is still on screen",
-                groupFor(TOOL_TYPE));
+        assertNull("the panel closed in the model but its region still shows it",
+                workbench.regions()
+                        .host(workbench.toolWindowManager().regionOf(TOOL_TYPE)).showing());
 
         // And back again, which is the reported bug: it closed and then would not reopen.
         commands.run(command);
         settle();
-        assertNotNull("the panel could not be reopened after being closed", groupFor(TOOL_TYPE));
-    }
-
-    /**
-     * <b>The reported bug, end to end: a nested tool window comes back nested.</b>
-     *
-     * <p>An Inspector dropped <em>below</em> another panel is against no wall, so an anchor cannot describe
-     * it — and hiding it collapses the branch that held it, so a structural path cannot either. What
-     * survives is the panel it sat under, and reopening replays the same drop against that. This is the
-     * case every earlier attempt got wrong, in three different ways.</p>
-     */
-    @Test
-    public void aNestedToolWindowComesBackNestedRatherThanAtAWall() {
-        register();
-        DockPanelRef console = new DockPanelRef(TOOL_TYPE);
-        // BELOW the problems panel, which is itself not against a wall -- so the console is nested twice.
-        var host = workbench.dock().layout().leafContaining(new DockPanelRef(Workbench.PROBLEMS_TYPE));
-        assertNotNull(host);
-        workbench.dock().layout().drop(host, DockDropZone.SPLIT_DOWN,
-                new DockLeaf(console));
-        workbench.dock().requestRebuild();
-        settle();
-
-        var before = workbench.dock().layout().leafContaining(console);
-        assertNotNull(before);
-        var beforeParentPanels = before.parent().leaves().stream()
-                .flatMap(leaf -> leaf.panels().stream()).map(DockPanelRef::typeId).toList();
-        assertTrue("setup failed: the console is not sharing a branch with problems",
-                beforeParentPanels.contains(Workbench.PROBLEMS_TYPE));
-
-        workbench.togglePanel(TOOL_TYPE);
-        settle();
-        workbench.togglePanel(TOOL_TYPE);
-        settle();
-
-        var after = workbench.dock().layout().leafContaining(console);
-        assertNotNull("the console did not reopen", after);
-        var afterParentPanels = after.parent().leaves().stream()
-                .flatMap(leaf -> leaf.panels().stream()).map(DockPanelRef::typeId).toList();
-        assertTrue("a nested tool window reopened away from the panel it was nested with, at "
-                        + afterParentPanels, afterParentPanels.contains(Workbench.PROBLEMS_TYPE));
+        assertEquals("the panel could not be reopened after being closed", TOOL_TYPE,
+                workbench.regions()
+                        .host(workbench.toolWindowManager().regionOf(TOOL_TYPE)).showing());
     }
 
     /** The built group showing a panel type, or null when nothing on screen holds it. */
@@ -212,19 +176,18 @@ public class ActivityBarTest extends UiTestBase {
     @Test
     public void aReopenedPanelKeepsTheSizeItHad() {
         register();
-        var leaf = workbench.dock().layout().leafContaining(new DockPanelRef(Workbench.PROJECT_TYPE));
-        assertNotNull(leaf);
-        leaf.size(0.13f);
+        var region = workbench.toolWindowManager().regionOf(Workbench.PROJECT_TYPE);
+        workbench.regions().setWeight(region, 0.13f);
 
         workbench.togglePanel(Workbench.PROJECT_TYPE);
         settle();
         workbench.togglePanel(Workbench.PROJECT_TYPE);
         settle();
 
-        var reopened = workbench.dock().layout().leafContaining(new DockPanelRef(Workbench.PROJECT_TYPE));
-        assertNotNull("the panel did not reopen at all", reopened);
-        assertEquals("a reopened panel lost the share it was hidden at",
-                0.13f, reopened.size(), 1e-4f);
+        assertEquals("the panel did not reopen at all",
+                Workbench.PROJECT_TYPE, workbench.regions().host(region).showing());
+        assertEquals("a reopened panel lost the share its region was hidden at",
+                0.13f, workbench.regions().weightOf(region), 1e-4f);
     }
 
     /**
@@ -274,59 +237,6 @@ public class ActivityBarTest extends UiTestBase {
                 == com.crystalgui.ui.elements.dock.DockOrientation.HORIZONTAL;
         if (horizontal) return after ? DockDropZone.SPLIT_RIGHT : DockDropZone.SPLIT_LEFT;
         return after ? DockDropZone.SPLIT_DOWN : DockDropZone.SPLIT_UP;
-    }
-
-    /**
-     * <b>A tool window that shared a strip rejoins it.</b>
-     *
-     * <p>The reported failure: the Inspector and the emitted source sat as two tabs in one pane, and
-     * reopening either put it at the outer edge as a pane of its own — because an anchor and a share
-     * describe a <em>wall</em> and a <em>width</em>, and neither can say "in that group, with those". This
-     * is the case where remembering the neighbours is the only thing that answers.</p>
-     */
-    @Test
-    public void aReopenedPanelRejoinsTheStripItSharedWith() {
-        register();
-        // Put the console in the SAME leaf as Problems, so they are two tabs in one pane.
-        DockPanelRef console = new DockPanelRef(TOOL_TYPE);
-        workbench.open(DockInput.of(console),
-                DockPlacement.with(workbench.problems()), DockOpenOptions.INACTIVE);
-        settle();
-        var shared = workbench.dock().layout().leafContaining(console);
-        assertNotNull(shared);
-        assertTrue("setup failed: the two panels are not sharing a leaf",
-                shared.panels().contains(new DockPanelRef(Workbench.PROBLEMS_TYPE)));
-
-        workbench.togglePanel(TOOL_TYPE);
-        settle();
-        workbench.togglePanel(TOOL_TYPE);
-        settle();
-
-        var rejoined = workbench.dock().layout().leafContaining(console);
-        assertNotNull("the console did not reopen", rejoined);
-        assertTrue("the console reopened in a pane of its own rather than rejoining Problems",
-                rejoined.panels().contains(new DockPanelRef(Workbench.PROBLEMS_TYPE)));
-
-        // AND IT IS THE SELECTED TAB. openPanelWith deliberately restores the previous selection, which is
-        // right for its original caller and wrong for a toggle: joining a strip behind another tab means
-        // the button did nothing visible, which is how this was reported -- "it opens silently".
-        assertEquals("the console rejoined the strip but behind another tab",
-                console, rejoined.activePanel());
-    }
-
-    /**
-     * <b>A panel reopens against its anchor, not into the middle.</b>
-     *
-     * <p>The reason the anchor exists at all: a closed panel is in no leaf, so the layout cannot say where
-     * it belongs, and dropping it centrally would bury whatever you were reading behind the file tree.</p>
-     */
-    @Test
-    public void aPanelReopensAgainstItsAnchorRatherThanCentrally() {
-        register();
-        workbench.togglePanel(TOOL_TYPE);
-
-        DockLeafAssert.assertNotCentral(workbench, TOOL_TYPE);
-        assertTrue(workbench.isPanelOpen(TOOL_TYPE));
     }
 
     /** A panel type registered after the bar was first synced still gets its button. */

@@ -166,16 +166,6 @@ public class ToolWindowPlacementTest {
 
     // ── ToolWindowState / ToolWindowLayout ──────────────────────────────────────────────────────
 
-    @Test
-    public void aFreshStateRemembersNothingButKnowsWhereToStart() {
-        ToolWindowState state = ToolWindowState.initial("project", DockDropZone.SPLIT_LEFT, 0);
-        assertFalse("a tool window nobody opened claims to be visible", state.visible());
-        assertNull("a tool window nobody placed claims a position", state.path());
-        assertEquals(DockDropZone.SPLIT_LEFT, state.anchor());
-        assertEquals(ToolWindowState.DEFAULT_WEIGHT, state.weight(), 1e-6f);
-        assertTrue(state.showStripeButton());
-    }
-
     /** Immutable: a wither must not mutate the record another caller is about to persist. */
     @Test
     public void withersDoNotMutateTheOriginal() {
@@ -185,41 +175,6 @@ public class ToolWindowPlacementTest {
         assertEquals(ToolWindowState.DEFAULT_WEIGHT, original.weight(), 1e-6f);
         assertEquals(DockDropZone.SPLIT_DOWN, moved.anchor());
         assertEquals(0.4f, moved.weight(), 1e-6f);
-    }
-
-    /** Everything a placement knows survives a write and a read — the point of persisting it at all. */
-    @Test
-    public void aLayoutRoundTripsThroughJson() {
-        ToolWindowLayout layout = new ToolWindowLayout();
-        layout.put(ToolWindowState.initial("project", DockDropZone.SPLIT_LEFT, 0)
-                .withVisible(true)
-                .withWeight(0.13f)
-                .withPlacement(DockPath.of(0, 1), 2)
-                .withGroupedWith(List.of(new DockPanelRef("problems")))
-                .withActive(false)
-                .withShowStripeButton(false));
-        layout.put(ToolWindowState.initial("inspector", DockDropZone.SPLIT_RIGHT, 1));
-
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
-        layout.encodeInto(out, "toolWindows");
-        ToolWindowLayout read = ToolWindowLayout.decodeFrom(
-                new StateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows");
-
-        ToolWindowState project = read.get("project");
-        assertNotNull("the placement did not survive the round trip", project);
-        assertTrue(project.visible());
-        assertEquals(0.13f, project.weight(), 1e-6f);
-        assertEquals(DockPath.of(0, 1), project.path());
-        assertEquals(2, project.indexInParent());
-        assertEquals(List.of(new DockPanelRef("problems")), project.groupedWith());
-        assertFalse(project.active());
-        assertFalse(project.showStripeButton());
-
-        ToolWindowState inspector = read.get("inspector");
-        assertNotNull(inspector);
-        assertEquals(DockDropZone.SPLIT_RIGHT, inspector.anchor());
-        assertNull("an unplaced tool window invented a position", inspector.path());
-        assertEquals(1, inspector.order());
     }
 
     /** Order is the activity bar's, and it survives independently of insertion order. */
@@ -273,23 +228,6 @@ public class ToolWindowPlacementTest {
         assertEquals(0.42f, state.weight(), 1e-6f);
         assertTrue(state.visible());
         assertEquals(3, state.order());
-    }
-
-    /** The relative position round-trips too — it is the tier that carries the common case. */
-    @Test
-    public void aRelativePositionSurvivesTheRoundTrip() {
-        ToolWindowLayout layout = new ToolWindowLayout();
-        layout.put(ToolWindowState.initial("inspector", DockDropZone.SPLIT_RIGHT, 0)
-                .withRelativeTo(new DockPanelRef("shadersource"), DockDropZone.SPLIT_DOWN));
-
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
-        layout.encodeInto(out, "toolWindows");
-        ToolWindowState read = ToolWindowLayout.decodeFrom(
-                new StateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows").get("inspector");
-
-        assertNotNull(read);
-        assertEquals(new DockPanelRef("shadersource"), read.relativeTo());
-        assertEquals(DockDropZone.SPLIT_DOWN, read.relativeZone());
     }
 
     /** A missing key is a first run, not a failure. */

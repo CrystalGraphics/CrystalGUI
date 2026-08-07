@@ -56,8 +56,7 @@ public final class ToolWindowState {
 
     /** What a tool window nobody has ever opened is worth: enough to place it, nothing remembered. */
     public static ToolWindowState initial(String typeId, DockDropZone anchor, int order) {
-        return new ToolWindowState(typeId, false, anchor, DEFAULT_WEIGHT, order,
-                null, -1, List.of(), true, true, null, DockDropZone.SPLIT_LEFT);
+        return new ToolWindowState(typeId, false, anchor, DEFAULT_WEIGHT, order, true, true);
     }
 
     /** The share of its axis a tool window takes when nothing has ever sized it. */
@@ -68,32 +67,18 @@ public final class ToolWindowState {
     private final DockDropZone anchor;
     private final float weight;
     private final int order;
-    @Nullable
-    private final DockPath path;
-    private final int indexInParent;
-    private final List<DockPanelRef> groupedWith;
     private final boolean active;
     private final boolean showStripeButton;
-    @Nullable
-    private final DockPanelRef relativeTo;
-    private final DockDropZone relativeZone;
 
     private ToolWindowState(String typeId, boolean visible, DockDropZone anchor, float weight, int order,
-                            @Nullable DockPath path, int indexInParent, List<DockPanelRef> groupedWith,
-                            boolean active, boolean showStripeButton,
-                            @Nullable DockPanelRef relativeTo, DockDropZone relativeZone) {
+                            boolean active, boolean showStripeButton) {
         this.typeId = Objects.requireNonNull(typeId, "typeId");
         this.visible = visible;
         this.anchor = Objects.requireNonNull(anchor, "anchor");
         this.weight = weight;
         this.order = order;
-        this.path = path;
-        this.indexInParent = indexInParent;
-        this.groupedWith = Collections.unmodifiableList(List.copyOf(groupedWith));
         this.active = active;
         this.showStripeButton = showStripeButton;
-        this.relativeTo = relativeTo;
-        this.relativeZone = relativeZone == null ? DockDropZone.SPLIT_LEFT : relativeZone;
     }
 
     public String typeId() {
@@ -135,53 +120,6 @@ public final class ToolWindowState {
         return order;
     }
 
-    /** Where its leaf sat in the tree, or null if it has never been placed. */
-    @Nullable
-    public DockPath path() {
-        return path;
-    }
-
-    /** Which child of {@link #path} its leaf was; -1 when unknown. */
-    public int indexInParent() {
-        return indexInParent;
-    }
-
-    /** The panels that shared its strip, so it can rejoin them rather than open in a pane of its own. */
-    public List<DockPanelRef> groupedWith() {
-        return groupedWith;
-    }
-
-    /**
-     * A panel that was <b>next to</b> this one, and which side of it this one was on.
-     *
-     * <h3>Why a relative position and not only a path</h3>
-     *
-     * <p>{@link #path} names a branch, and closing a panel usually <em>destroys</em> that branch: a leaf
-     * alone in a two-child branch leaves one sibling behind, and {@code normalise()} correctly dissolves
-     * the branch and splices the survivor upward. So the most common arrangement of all — a tool window in
-     * a pane of its own — is exactly the one whose path stops resolving the moment it is hidden.</p>
-     *
-     * <p>A neighbour survives that, because it is still on screen. Stating the position as "to the right
-     * of <em>that</em> panel" reproduces the arrangement with the same operation that created it, and it
-     * stays meaningful however the tree above it has been rearranged since.</p>
-     *
-     * <p>Null when the panel had no neighbour — a layout of one pane, which needs no relative anything.</p>
-     */
-    @Nullable
-    public DockPanelRef relativeTo() {
-        return relativeTo;
-    }
-
-    /** Which side of {@link #relativeTo} this panel was on. */
-    public DockDropZone relativeZone() {
-        return relativeZone;
-    }
-
-    public ToolWindowState withRelativeTo(@Nullable DockPanelRef neighbour, DockDropZone zone) {
-        return new ToolWindowState(typeId, visible, anchor, weight, order, path, indexInParent,
-                groupedWith, active, showStripeButton, neighbour, zone);
-    }
-
     /** Whether it was the selected tab in its strip. A restored tool window that is not comes back hidden. */
     public boolean active() {
         return active;
@@ -193,43 +131,27 @@ public final class ToolWindowState {
     }
 
     public ToolWindowState withVisible(boolean nowVisible) {
-        return new ToolWindowState(typeId, nowVisible, anchor, weight, order, path, indexInParent,
-                groupedWith, active, showStripeButton, relativeTo, relativeZone);
+        return new ToolWindowState(typeId, nowVisible, anchor, weight, order, active, showStripeButton);
     }
 
     public ToolWindowState withAnchor(DockDropZone nowAnchor) {
-        return new ToolWindowState(typeId, visible, nowAnchor, weight, order, path, indexInParent,
-                groupedWith, active, showStripeButton, relativeTo, relativeZone);
+        return new ToolWindowState(typeId, visible, nowAnchor, weight, order, active, showStripeButton);
     }
 
     public ToolWindowState withWeight(float nowWeight) {
-        return new ToolWindowState(typeId, visible, anchor, nowWeight, order, path, indexInParent,
-                groupedWith, active, showStripeButton, relativeTo, relativeZone);
+        return new ToolWindowState(typeId, visible, anchor, nowWeight, order, active, showStripeButton);
     }
 
     public ToolWindowState withOrder(int nowOrder) {
-        return new ToolWindowState(typeId, visible, anchor, weight, nowOrder, path, indexInParent,
-                groupedWith, active, showStripeButton, relativeTo, relativeZone);
-    }
-
-    public ToolWindowState withPlacement(@Nullable DockPath nowPath, int nowIndex) {
-        return new ToolWindowState(typeId, visible, anchor, weight, order, nowPath, nowIndex,
-                groupedWith, active, showStripeButton, relativeTo, relativeZone);
-    }
-
-    public ToolWindowState withGroupedWith(List<DockPanelRef> nowGrouped) {
-        return new ToolWindowState(typeId, visible, anchor, weight, order, path, indexInParent,
-                nowGrouped, active, showStripeButton, relativeTo, relativeZone);
+        return new ToolWindowState(typeId, visible, anchor, weight, nowOrder, active, showStripeButton);
     }
 
     public ToolWindowState withActive(boolean nowActive) {
-        return new ToolWindowState(typeId, visible, anchor, weight, order, path, indexInParent,
-                groupedWith, nowActive, showStripeButton, relativeTo, relativeZone);
+        return new ToolWindowState(typeId, visible, anchor, weight, order, nowActive, showStripeButton);
     }
 
     public ToolWindowState withShowStripeButton(boolean shown) {
-        return new ToolWindowState(typeId, visible, anchor, weight, order, path, indexInParent,
-                groupedWith, active, shown, relativeTo, relativeZone);
+        return new ToolWindowState(typeId, visible, anchor, weight, order, active, shown);
     }
 
     @Override
@@ -237,22 +159,19 @@ public final class ToolWindowState {
         if (this == o) return true;
         if (!(o instanceof ToolWindowState other)) return false;
         return visible == other.visible && Float.compare(weight, other.weight) == 0
-                && order == other.order && indexInParent == other.indexInParent
+                && order == other.order
                 && active == other.active && showStripeButton == other.showStripeButton
-                && typeId.equals(other.typeId) && anchor == other.anchor
-                && Objects.equals(path, other.path) && groupedWith.equals(other.groupedWith)
-                && Objects.equals(relativeTo, other.relativeTo) && relativeZone == other.relativeZone;
+                && typeId.equals(other.typeId) && anchor == other.anchor;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(typeId, visible, anchor, weight, order, path, indexInParent, groupedWith,
-                active, showStripeButton, relativeTo, relativeZone);
+        return Objects.hash(typeId, visible, anchor, weight, order, active, showStripeButton);
     }
 
     @Override
     public String toString() {
-        return "ToolWindowState[" + typeId + (visible ? " visible" : " hidden") + " " + anchor
-                + " w=" + weight + " at=" + path + ":" + indexInParent + "]";
+        return "ToolWindowState[" + typeId + (visible ? " visible" : " hidden") + " " + region()
+                + " w=" + weight + "]";
     }
 }
