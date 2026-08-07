@@ -353,6 +353,35 @@ public class DockArea extends UIElement implements UIFrameTicker {
         // restore all reach the front panel, and none of them announces on its own -- setActiveGroup
         // only fires when the GROUP moved, which a close within one group does not.
         announceActivePanel();
+        announceLayoutChange();
+    }
+
+    /**
+     * The arrangement changed <b>structurally</b> — a panel opened, closed or moved.
+     *
+     * <h3>Structural, not "a rebuild happened"</h3>
+     *
+     * <p>The dock rebuilds for reasons that are not layout changes: a resize, a presentation refresh. A
+     * signal fired from the rebuild itself would therefore be a per-frame callback wearing an event's
+     * name — the exact loop this replaces.</p>
+     *
+     * <p>So it compares the set of panels the last build produced against this one's. That is computed
+     * once per rebuild, and rebuilds are already deferred and rare.</p>
+     *
+     * <p>Its consumer is the activity bar, whose buttons' {@code :checked} state <b>is</b> whether their
+     * panel is open — derived from the layout, so it moves exactly when this does.</p>
+     */
+    public final Signal.Action onDidChangeLayout = new Signal.Action();
+
+    /** The panels the last build put on screen, for the comparison above. Never a source of truth. */
+    private List<DockPanelRef> builtPanels = new ArrayList<>();
+
+    private void announceLayoutChange() {
+        List<DockPanelRef> now = new ArrayList<>();
+        for (DockLeaf leaf : layout.leaves()) now.addAll(leaf.panels());
+        if (now.equals(builtPanels)) return;
+        builtPanels = now;
+        onDidChangeLayout.emit();
     }
 
 

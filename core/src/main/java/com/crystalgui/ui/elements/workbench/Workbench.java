@@ -160,7 +160,16 @@ public class Workbench extends UIElement {
     @Override
     protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
         if (previous != null) previous.removeDataProvider(this);
-        if (current != null) current.addDataProvider(this);
+        if (current == null) return;
+        current.addDataProvider(this);
+        // The rail's buttons, once there is a window to take a registry from.
+        //
+        // THE WINDOW'S registry, deliberately not the global one. A `view.<type>` command closes over
+        // THIS workbench, and a captured owner cannot be registered once for the application -- the
+        // second workbench would silently reuse the first's command and toggle a panel in a window
+        // nobody was looking at. That is the rule step 2.5 wrote down after the suite caught it, and
+        // routing these through the global registry walks straight back into it.
+        activityBar.listenToPanels(registry, current.getCommands());
     }
 
     /** The explorer's verbs come with the explorer. Global, so no window is needed. */
@@ -242,6 +251,9 @@ public class Workbench extends UIElement {
             revealActiveFile();
             rebindProblems();
         });
+        // The rail's :checked state follows the dock's structure and nothing else, so it can subscribe
+        // now. Its BUTTONS wait for a window -- see onWindowChanged.
+        activityBar.listenToLayout(dock);
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         // The rail sits BESIDE the dock rather than inside it, which is what both originals do and is not
@@ -1190,11 +1202,6 @@ public class Workbench extends UIElement {
             ticking = false;
             return false;
         }
-        // Re-synced every frame rather than once, because a host registers its own panels AFTER the
-        // workbench is built -- CrystalEditor adds its inspector and emitted source that way. sync() skips
-        // types it already has a button for, so the steady-state cost is one walk of a handful of
-        // descriptors, and a panel type that arrives late still gets a button.
-        activityBar.sync(getAttachedWindow().getCommands());
         // A few directories a frame, until the workspace is walked. Go to File searches what this has
         // reached, so warming it in the background is what makes the first Ctrl+P useful rather than
         // empty -- and it warms the tree's own listing cache, so there is no second index to keep in step.

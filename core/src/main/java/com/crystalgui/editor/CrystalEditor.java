@@ -229,6 +229,12 @@ public class CrystalEditor extends UIElement implements Disposable {
         // workbench does, and this editor owns the workbench -- there is nothing to wait for and nothing
         // that can outlive it.
         workbench.dock().onDidChangeActivePanel.connect(panel -> followActiveGraph());
+        // A restore waits on listings, which arrive over several frames -- a folder cannot be expanded
+        // before the listing revealing it lands. Retried per LISTING rather than per frame: fewer
+        // attempts, and every one of them at a moment when the answer may actually have changed.
+        workbench.fileTree().source().onDidLoadListing.connect(directory -> {
+            if (session != null) session.tick();
+        });
 
         // A .shadergraph FILE opens as a graph rather than as its own JSON. One editor per path, built by
         // the workbench and cached with the document, so two open graphs are two graphs.
@@ -338,29 +344,12 @@ public class CrystalEditor extends UIElement implements Disposable {
         return inspectors.computeIfAbsent(graph, ShaderGraphInspector::new);
     }
 
-    /**
-     * All that is left of this widget's ticker: the session restore's retry.
-     *
-     * <p>{@code followActiveGraph} used to run here every frame and is now driven by
-     * {@code DockArea.onDidChangeActivePanel}. What remains waits on listings that arrive over several
-     * frames — a folder cannot be expanded before the listing revealing it lands. {@code
-     * WorkbenchSession.tick} is a no-op once nothing is pending and gives up on its own rather than
-     * retrying for the rest of the session.</p>
-     *
-     * <p>It goes too, in the next landing, once {@code WorkspaceTreeSource} announces a listing.</p>
-     */
-    @Override
-    protected void onLayoutChanged() {
-        super.onLayoutChanged();
-        if (ticking || getAttachedWindow() == null) return;
-        ticking = true;
-        getAttachedWindow().registerTicker(delta -> {
-            if (session != null) session.tick();
-            return true;
-        });
-    }
-
-    private boolean ticking;
+    // This widget registers NO per-frame ticker, and that is the point of step 3.
+    //
+    // It used to own one, started from onLayoutChanged behind a `ticking` latch, doing two things:
+    // followActiveGraph() -- now driven by DockArea.onDidChangeActivePanel -- and WorkbenchSession.tick(),
+    // which re-attempted a restore that was waiting on listings. Both are subscriptions in the
+    // constructor now, and the latch, the override and the ticker went with them.
 
     /**
      * Points the source and inspector panels at whichever shader graph is in front.
