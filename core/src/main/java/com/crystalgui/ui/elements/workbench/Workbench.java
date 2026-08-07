@@ -22,6 +22,9 @@ import com.crystalgui.ui.elements.dock.DockLayout;
 import com.crystalgui.ui.elements.dock.DockLeaf;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.ui.elements.dock.DockInput;
+import com.crystalgui.ui.elements.dock.DockOpenOptions;
+import com.crystalgui.ui.elements.dock.DockPlacement;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockPath;
 import com.crystalgui.ui.elements.dock.DockPanelRegistry;
@@ -260,6 +263,11 @@ public class Workbench extends UIElement {
         // The rail's :checked state follows the dock's structure and nothing else, so it can subscribe
         // now. Its BUTTONS wait for a window -- see onWindowChanged.
         activityBar.listenToLayout(dock);
+        // A CLOSED TAB RELEASES ITS DOCUMENT. Until the dock could announce a close, nothing did: the
+        // document stayed open, its editor stayed reachable and anything it owned -- a preview pool, a
+        // renderer -- lived until the process did. Disposer could not help, because the thing that knew
+        // the tab was gone had no way to say so.
+        dock.onDidClosePanel.connect(this::releaseClosedPanel);
         // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
         // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
         // moves when somebody types. The equality guard SURVIVES the move: the announcement means
@@ -437,7 +445,7 @@ public class Workbench extends UIElement {
         for (DockPanelRef mate : state.groupedWith()) {
             DockLeaf strip = dock.layout().leafContaining(mate);
             if (strip == null) continue;
-            openPanelWith(mate, ref);
+            open(DockInput.of(ref), DockPlacement.leaf(strip), DockOpenOptions.INACTIVE);
             placed = dock.layout().leafContaining(ref);
             break;
         }
@@ -561,89 +569,72 @@ public class Workbench extends UIElement {
         return after ? DockDropZone.SPLIT_DOWN : DockDropZone.SPLIT_UP;
     }
 
-    /** Drops a panel into the central work area and selects it. */
-    public Workbench openPanel(DockPanelRef ref) {
-        DockLeaf target = centralLeaf();
-        if (target.indexOf(ref) < 0) target.add(ref);
-        target.activate(ref);
-        dock.syncGroups();
-        dock.setActiveGroup(dock.groupFor(target));
-        return this;
-    }
-
     /**
-     * Opens a panel as a tab in whichever leaf already holds {@code sibling}.
+     * Opens {@code input} <b>where</b> {@code placement} says and <b>how</b> {@code options} say.
      *
-     * <p>The third placement, and the one neither of the others can express: {@link #openPanel} always
-     * targets the central leaf, {@link #openPanelBeside} always makes a new pane. This puts two panels in
-     * one strip — right when they are alternatives rather than companions, so the pane's space is spent on
-     * whichever you are reading.</p>
+     * <h3>What this replaced</h3>
      *
-     * <p>Falls back to the central leaf when {@code sibling} is nowhere to be found, which is what happens
-     * after a layout restore that dropped it: a tab in the work area is a worse place than beside its
-     * sibling and a far better one than not being opened at all.</p>
+     * <p>Three overloads — {@code openPanel(ref)}, {@code openPanelWith(sibling, ref)} and
+     * {@code openPanelBeside(ref, zone, share)} — which read as three operations and were really one
+     * operation with two independent variables. Their genuine differences were buried in their bodies:
+     * one activated what it opened, one deliberately restored the previous selection, one set a size
+     * share. A caller wanting "beside, without stealing focus" had no overload and no way to ask.</p>
+     *
+     * <p>That is VS Code's {@code openEditor(input, options, group)}, and the reason it has that shape.</p>
+     *
+     * @return the leaf it landed in, so a caller can act on it without searching for it again
      */
-    public Workbench openPanelWith(DockPanelRef sibling, DockPanelRef ref) {
-        DockLeaf target = dock.layout().leafContaining(sibling);
-        if (target == null) return openPanel(ref);
-        if (target.indexOf(ref) >= 0) {
-            target.activate(ref);
-            dock.syncGroups();
-            return this;
-        }
+    public DockLeaf open(DockInput input, DockPlacement placement, DockOpenOptions options) {
+        DockPanelRef ref = input.ref();
 
-        // The selection is captured and PUT BACK, because DockLeaf.add activates what it inserts -- right
-        // for "open this file", wrong here. A panel that steals its sibling's tab on open is one that
-        // opens by hiding the thing you were looking at, and the source pane exists to be looked at.
-        DockPanelRef wasActive = target.activePanel();
-        target.add(ref);
-        if (wasActive != null) target.activate(wasActive);
-        dock.syncGroups();
-        return this;
-    }
-
-    /**
-     * Opens a panel in a pane of its <em>own</em>, beside the central work area.
-     *
-     * <p>{@link #openPanel} merges into the central strip, where a second panel <b>hides</b> the first —
-     * right for a second document, wrong for anything meant to be read <em>alongside</em> one. This splits
-     * instead, so both are on screen at once.</p>
-     *
-     * <p>Idempotent through the layout rather than through a flag: a panel already somewhere in the tree is
-     * activated where it is, so a host may call this freely and a pane the user has since dragged elsewhere
-     * stays where they put it.</p>
-     *
-     * @param share how much of the central area's slice the new pane takes, 0..1. Applied after the drop,
-     *              which halves the target — a split pane is a reading companion far more often than an
-     *              equal, and a caller that wanted half can say so.
-     */
-    public Workbench openPanelBeside(DockPanelRef ref, DockDropZone zone, float share) {
+        // ALREADY OPEN wins over placement, always. Re-opening a file that is on screen means "show me
+        // that one", never "make a second copy of it somewhere else" -- and a placement that ignored this
+        // would silently duplicate a document, which is the one outcome no caller wants.
         DockLeaf existing = dock.layout().leafContaining(ref);
         if (existing != null) {
             existing.activate(ref);
             dock.syncGroups();
-            dock.setActiveGroup(dock.groupFor(existing));
-            return this;
+            if (options.activates()) dock.setActiveGroup(dock.groupFor(existing));
+            return existing;
         }
 
-        DockLeaf central = centralLeaf();
-        float whole = central.size();
-        DockLeaf placed = dock.layout().drop(central, zone, new DockLeaf(ref));
-        // Ratios within a branch are all that matter, so this is correct whether drop inserted a sibling
-        // (the two weights still sum to the target's old share, leaving every other child untouched) or
-        // wrapped the target in a new branch (where the pair are the branch's only children).
-        central.size(whole * (1f - share));
-        placed.size(whole * share);
+        DockLeaf target = DockPlacement.resolve(placement, dock);
+        boolean splitting = placement instanceof DockPlacement.Side;
+        if (target == null) target = centralLeaf();
 
-        // requestRebuild, not syncGroups: the TREE changed, not just a selection. Safe here because
-        // nothing is being clicked -- this runs from a host's setup, never from inside an event on a tab.
+        if (!splitting) {
+            // The selection is captured and PUT BACK when the caller asked not to activate. DockLeaf.add
+            // activates what it inserts, which is right for a file and wrong for a companion panel.
+            DockPanelRef wasActive = target.activePanel();
+            target.add(ref);
+            if (!options.activates() && wasActive != null) target.activate(wasActive);
+            dock.syncGroups();
+            if (options.activates()) dock.setActiveGroup(dock.groupFor(target));
+            return target;
+        }
+
+        DockDropZone zone = ((DockPlacement.Side) placement).zone();
+        float whole = target.size();
+        DockLeaf placed = dock.layout().drop(target, zone, new DockLeaf(ref));
+        if (options.hasShare()) {
+            // Ratios within a branch are all that matter, so this is correct whether drop inserted a
+            // sibling (the two weights still sum to the target's old share, leaving every other child
+            // untouched) or wrapped the target in a new branch (where the pair are its only children).
+            target.size(whole * (1f - options.share()));
+            placed.size(whole * options.share());
+        }
+        // requestRebuild, not syncGroups: the TREE changed, not just a selection.
         //
-        // The new pane is deliberately NOT made active. It has no group yet -- the rebuild is deferred to
-        // the next frame -- so asking for one now yields null, and setting THAT sends rebuild() down its
-        // "nothing is active" path, which picks leaves.get(0): the file tree. A companion pane should not
-        // steal the work area's focus anyway.
+        // The new pane is deliberately NOT made active even when asked. It has no group yet -- the
+        // rebuild is deferred to the next frame -- so asking for one now yields null, and setting THAT
+        // sends rebuild() down its "nothing is active" path, which picks leaves.get(0): the file tree.
         dock.requestRebuild();
-        return this;
+        return placed;
+    }
+
+    /** Opens into the central work area and brings it forward — what opening a file means. */
+    public DockLeaf open(DockInput input) {
+        return open(input, DockPlacement.central(), DockOpenOptions.ACTIVATE);
     }
 
     // ── Files ───────────────────────────────────────────────────────────────────────────────────
@@ -731,7 +722,7 @@ public class Workbench extends UIElement {
         client.read(path, read -> {
             adoptInto(path, read.content());
             open.requestRead(path);
-            openPanel(ref);
+            open(DockInput.of(ref));
             onStatus.emit("opened " + path.name());
         }, failure -> onStatus.emit("open failed: " + failure.code()));
     }
@@ -1036,6 +1027,49 @@ public class Workbench extends UIElement {
      * The cost is one string comparison per open document per frame, and it is only when the answer changes
      * that any element is touched.</p>
      */
+    /**
+     * Releases the document behind a panel that has just been closed.
+     *
+     * <h3>Only when nothing else is showing it</h3>
+     *
+     * <p>A document can have more than one tab — a split showing the same file twice, or a derived view
+     * of it. Closing one must not release what the other is still drawing, so this asks the layout
+     * whether any panel still names this resource before letting go.</p>
+     *
+     * <p>Unsaved work is not a consideration here, deliberately: the dock's close <b>guard</b> already
+     * asked before anything got this far, and re-asking at release time would be a second prompt for one
+     * decision.</p>
+     */
+    private void releaseClosedPanel(DockPanelRef closed) {
+        String raw = closed.state(DockPanelRef.PATH, "");
+        if (raw.isEmpty()) return;
+        CgPath path;
+        try {
+            Resource resource = Resource.parse(raw);
+            // Only a project resource owns a document. A derived view is somebody else's business and
+            // releasing its ORIGIN because a generated tab closed would take the graph with it.
+            if (!resource.isProject()) return;
+            path = resource.asPath();
+        } catch (RuntimeException unparseable) {
+            return;
+        }
+        for (DockLeaf leaf : dock.layout().leaves()) {
+            for (DockPanelRef panel : leaf.panels()) {
+                if (path.toString().equals(panel.state(DockPanelRef.PATH, ""))) return;
+            }
+        }
+        open.close(path);
+        onDidCloseDocument.emit(path);
+    }
+
+    /**
+     * A document was released, because the last tab showing it closed.
+     *
+     * <p>The counterpart of {@link #onDocumentLoaded}, and the half that did not exist — which is why
+     * nothing could clean up after a close.</p>
+     */
+    public final Signal.Value<CgPath> onDidCloseDocument = new Signal.Value<>();
+
     private void refreshDirtyMarkers() {
         List<CgPath> dirty = unsavedFiles();
         if (!dirty.equals(lastDirty)) {

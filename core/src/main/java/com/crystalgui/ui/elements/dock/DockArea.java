@@ -600,8 +600,26 @@ public class DockArea extends UIElement implements UIFrameTicker {
      */
     public void closePanelDiscarding(DockPanelRef panel) {
         captureDividerPositions();
-        if (layout.closePanel(panel)) requestRebuild();
+        if (!layout.closePanel(panel)) return;
+        requestRebuild();
+        // ANNOUNCED, because until now closing a tab told nobody. Its document stayed open, its editor
+        // stayed reachable, and anything it owned -- a preview pool, a renderer -- lived until the
+        // process did. `Disposer` could not help, because the thing that knew the panel was gone had no
+        // way to say so. This is that way.
+        onDidClosePanel.emit(panel);
     }
+
+    /**
+     * A panel left the layout — by a close, not by a drag.
+     *
+     * <p>The seam that lets a document be released when its last tab goes. It is deliberately about the
+     * <b>panel</b> rather than the document: the dock does not know what a document is, and the workbench
+     * that does can decide whether this was the last tab showing it.</p>
+     *
+     * <p>Not fired by a drag between groups, which removes and re-adds the same panel: that is a move,
+     * and disposing there would destroy the thing being dragged mid-gesture.</p>
+     */
+    public final Signal.Value<DockPanelRef> onDidClosePanel = new Signal.Value<>();
 
     /** Maximizes a group, or restores when it is already the maximized one. */
     public void toggleMaximize(DockLeaf leaf) {
