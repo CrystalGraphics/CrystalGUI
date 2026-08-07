@@ -17,6 +17,7 @@
 
 | 7 | Editor-type resolution as a contribution (§21) | **DONE** — `DocumentType` + `Workbench.contribute`; `com.crystalgui.editor` imports one name from `com.crystalgui.graph` |
 | 8 | The Inspector as a contribution surface (§22) | **DONE** — `Inspector` + `InspectorSection`/`InspectorRegistry`; `ShaderGraphInspector` deleted |
+| 9 | Notifications + status, and the last hand-written menu | **DONE** — `com.crystalgui.core.notify`; `register(workbench)` takes nothing else; `BlackboardPanel`'s row menu is a `MenuId` query |
 
 Steps 7 and 8 came from reading the result of 1–6: the six steps made the *framework* extensible and left
 `CrystalEditor` naming one application's file types, and left the Inspector a graph-shaped class. Neither
@@ -907,10 +908,14 @@ the port, not a footnote.
   two splits. We do not have that, may never want it, and `OpenDocuments` keyed by path already gives
   one-model-per-resource. **Cut until something needs it.** What *is* needed from it — content
   providers for virtual schemes — is small and belongs with step 2.
-- **Menu contributions (step 10).** Genuinely valuable, not load-bearing. Our menus are built by hand
-  in two places; that is tolerable for a long time.
+- ~~**Menu contributions (step 10).**~~ **DONE, and cheaper than costed.** The mechanism (`MenuId`,
+  `Command.menu`, `ContextMenu.of`, submenus, dimmed-disabled) already existed and only lacked users; the
+  remaining work was migrating `BlackboardPanel`'s row menu, which was the last hand-written one. The
+  `when`-expression *parser* stays cut: `enabledWhen`/`enabledWhereData` already state the condition in
+  Java, and a string language buys nothing until keymaps and menus are authored outside Java.
 - **Everything in §11 Tier 2** except `EditorNotificationProvider` (the generated-shader banner is a
-  real, current need) and activity badges (a few lines once the bar exists).
+  real, current need), activity badges (a few lines once the bar exists), and **Notifications, now done** —
+  it was promoted because it is what a contribution needed in order to stop being handed a status sink.
 - **§11 Tier 3 entirely**, permanently.
 
 ### 13.5 The one thing I would add that neither reference needs
@@ -2397,10 +2402,14 @@ review. Each is one line to get wrong and produces no error.
   life of the application or the file — while an inspector rebuilds every control on every click. Nothing
   disconnected them, so the store grew one dead listener per row per rebuild, each holding a widget that
   had left the tree. **Invisible from both ends**: the host subscribed, the store notified, nothing failed.
-  Ownership sits on `ConfigControl.connections()` rather than on the binder's caller, so a binder registers
-  what it wires without being handed a lifetime; `ConfiguratorPanel.clearRows()` releases them. Pinned by
-  `ConfiguratorPanelLifetimeTest`, which asserts **both** halves — a fix that disconnects everything, or
-  never subscribes, passes the count assertion and silently stops the inspector reflecting outside edits.
+  **The engine owns when, not the owner.** `ConfigControl.follows(...)` takes a supplier and connects on
+  attach, disconnects on detach, re-establishes on re-attach. Having each *owner* release instead needs a
+  remembered call in four places that share no supertype — a panel replacing rows, a node being deleted, a
+  graph clearing nodes, a port editor unmounting — and a fifth owner would not know to. Release-on-detach
+  alone is also a trap: a control taken out and put back comes back permanently deaf, in exactly the cases
+  nobody tests. Pinned by `ConfiguratorPanelLifetimeTest`, which asserts all three halves — the count stops
+  growing, the live rows still hear the store, and a re-attached row re-reads a value that moved while it
+  was away.
 
 ### 22.6 Sequencing
 

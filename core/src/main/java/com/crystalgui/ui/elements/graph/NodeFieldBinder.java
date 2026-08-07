@@ -178,21 +178,23 @@ public final class NodeFieldBinder {
     private static void followDocument(@Nullable UIElement control, GraphDocument document, String nodeId,
                                        NodeField field, String[] lastWritten, @Nullable Runnable onChange) {
         if (control == null) return;
-        Connection following = document.onChanged.connect(() -> {
-            if (control instanceof ConfigControl config && config.isInteracting()) return;
-            String live = currentValue(document, nodeId, field);
-            if (java.util.Objects.equals(live, lastWritten[0])) return;
-            lastWritten[0] = live;
-            NodeFieldWidgets.applyValue(field, control, live);
-            // The other half: whatever recompiles or re-renders has to hear about it too, or the picture
-            // stays as stale as the widget did.
-            if (onChange != null) onChange.run();
+        if (!(control instanceof ConfigControl config)) return;
+        // DECLARED, not subscribed -- the document outlives every node in it, so the control decides when
+        // this is live. See ConfigControl.follows.
+        config.follows(() -> {
+            lastWritten[0] = currentValue(document, nodeId, field);
+            NodeFieldWidgets.applyValue(field, control, lastWritten[0]);
+            return document.onChanged.connect(() -> {
+                if (config.isInteracting()) return;
+                String live = currentValue(document, nodeId, field);
+                if (java.util.Objects.equals(live, lastWritten[0])) return;
+                lastWritten[0] = live;
+                NodeFieldWidgets.applyValue(field, control, live);
+                // The other half: whatever recompiles or re-renders has to hear about it too, or the
+                // picture stays as stale as the widget did.
+                if (onChange != null) onChange.run();
+            });
         });
-        // TRACKED, for the same reason SettingsConfigurator tracks its own: a GraphDocument lives as long
-        // as the file is open, and the inspector rebuilds this control on every selection change — so an
-        // untracked connection meant one dead listener per field per click, walked on every document
-        // write for the rest of the session.
-        if (control instanceof ConfigControl config) config.connections().add(following);
     }
 
     /**

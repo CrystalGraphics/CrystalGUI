@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.notify.Notifications;
+
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -100,8 +102,13 @@ public class Workbench extends UIElement {
      */
     public static final String FILE_EDITOR_CLASS = "__file-editor__";
 
-    /** Whatever a status line should say — an open, a save, or a refusal. */
-    public final Signal.Value<String> onStatus = new Signal.Value<>();
+    // `onStatus` is gone. It was one Signal.Value<String>, so every writer overwrote every other and the
+    // last one to speak won -- the shader graph's line-owner readout fires on every caret move and erased
+    // "created folder" milliseconds after it appeared, with neither writer able to tell. It also gave a
+    // caller no way to distinguish "saved" from "save failed", because both arrived as a String.
+    //
+    // Events go to Notifications (severity, actions, a bounded history); ambient text goes to StatusBar
+    // (keyed per writer, replaced rather than accumulated). See com.crystalgui.core.notify.
 
     private final WorkspaceClient<?> client;
     private final DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
@@ -716,15 +723,15 @@ public class Workbench extends UIElement {
             // click that asked for it -- a widget must never rebuild the elements it is being clicked on.
             dock.syncGroups();
             dock.setActiveGroup(dock.groupFor(leaf));
-            onStatus.emit("focused " + path.name());
+            Notifications.info("focused " + path.name());
             return;
         }
         client.read(path, read -> {
             adoptInto(path, read.content());
             open.requestRead(path);
             open(DockInput.of(ref));
-            onStatus.emit("opened " + path.name());
-        }, failure -> onStatus.emit("open failed: " + failure.code()));
+            Notifications.error("opened " + path.name());
+        }, failure -> Notifications.error("open failed: " + failure.code()));
     }
 
     /** The file behind the active tab, or null when the active tab is not a file. */
@@ -763,13 +770,13 @@ public class Workbench extends UIElement {
     public boolean saveActiveFile() {
         CgPath target = activeFilePath();
         if (target == null) {
-            onStatus.emit("no file tab active");
+            Notifications.error("no file tab active");
             return false;
         }
         FileDocument document = open.get(target);
         if (document == null) return false;
         if (!open.isSaveable(target)) {
-            onStatus.emit("refusing to save " + target.name() + " -- it never loaded");
+            Notifications.error("refusing to save " + target.name() + " -- it never loaded");
             return false;
         }
         byte[] written = document.encode();
@@ -780,9 +787,9 @@ public class Workbench extends UIElement {
                     // afterwards, and recording what it looks like NOW would call it clean.
                     open.markSaved(target, written);
                     refreshTabTitles();
-                    onStatus.emit("saved " + target.name());
+                    Notifications.info("saved " + target.name());
                 },
-                failure -> onStatus.emit(failure.isConflict()
+                failure -> Notifications.error(failure.isConflict()
                         ? "CONFLICT: " + target.name() + " changed on disk — reopen to take theirs"
                         : "save failed: " + failure.code()));
         return true;
@@ -910,7 +917,7 @@ public class Workbench extends UIElement {
             // re-read the file over whatever is unsaved in it.
             if (open.requestRead(path)) {
                 client.read(path, read -> adoptInto(path, read.content()),
-                        failure -> onStatus.emit("open failed: " + failure.code()));
+                        failure -> Notifications.error("open failed: " + failure.code()));
             }
             return document.view();
         });
@@ -969,10 +976,10 @@ public class Workbench extends UIElement {
             client.save(path, written, etag -> {
                 open.markSaved(path, written);
                 refreshTabTitles();
-                onStatus.emit("saved " + path.name());
-            }, failure -> onStatus.emit("save failed: " + path.name() + " -- " + failure.code()));
+                Notifications.error("saved " + path.name());
+            }, failure -> Notifications.error("save failed: " + path.name() + " -- " + failure.code()));
         }
-        if (issued == 0) onStatus.emit("nothing to save");
+        if (issued == 0) Notifications.error("nothing to save");
         return issued;
     }
 
@@ -1119,7 +1126,7 @@ public class Workbench extends UIElement {
     private void adoptInto(CgPath path, byte[] bytes) {
         documentFor(path);
         String refused = open.adopt(path, bytes);
-        if (refused != null) onStatus.emit("cannot open " + path.name() + ": " + refused);
+        if (refused != null) Notifications.error("cannot open " + path.name() + ": " + refused);
         // AFTER the bytes are in, which is the whole reason this signal exists rather than the panel
         // factory announcing the open. A document restoring a caret at line 400 into text that has not
         // landed yet clamps it to 0, and the failure looks like the caret never having been saved.
@@ -1234,7 +1241,7 @@ public class Workbench extends UIElement {
             // A folder dropped into itself or its own descendant would move a directory under itself,
             // which the filesystem refuses with a message about paths rather than about the gesture.
             if (source.equals(request.destination()) || source.contains(request.destination())) {
-                onStatus.emit("cannot move " + source.name() + " into itself");
+                Notifications.error("cannot move " + source.name() + " into itself");
                 continue;
             }
             CgPath target = request.destination().resolve(source.name());
@@ -1243,21 +1250,21 @@ public class Workbench extends UIElement {
             if (request.copy()) {
                 fileService.copyFile(source, target,
                         () -> {
-                            onStatus.emit("copied " + source.name());
+                            Notifications.error("copied " + source.name());
                             done.run();
                         },
                         failure -> {
-                            onStatus.emit("copy failed: " + source.name() + " -- " + failure.code());
+                            Notifications.error("copy failed: " + source.name() + " -- " + failure.code());
                             done.run();
                         });
             } else {
                 fileService.move(source, target, false,
                         () -> {
-                            onStatus.emit("moved " + source.name());
+                            Notifications.error("moved " + source.name());
                             done.run();
                         },
                         failure -> {
-                            onStatus.emit("move failed: " + source.name() + " -- " + failure.code());
+                            Notifications.error("move failed: " + source.name() + " -- " + failure.code());
                             done.run();
                         });
             }

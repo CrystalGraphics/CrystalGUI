@@ -20,6 +20,7 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
@@ -52,7 +53,7 @@ import javax.annotation.Nullable;
  * to copy all of it, and the copy is where the two start disagreeing about what a shader graph is.</p>
  *
  * <p>What stays with a scene is genuinely scene-shaped: buttons, hint text, and where the status line is
- * painted. Those are reported through {@link #onStatusChanged} rather than built here.</p>
+ * painted. Those are announced as {@link StatusBar} items rather than built here.</p>
  *
  * <h3>This widget IS the canvas; {@link #source()} is a panel it owns but does not contain</h3>
  *
@@ -84,16 +85,26 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      * rather than a descendant of {@code shadergrapheditor}. See the class note. */
     public static final String SOURCE_CLASS = "__shader-source__";
 
-    /** One compile's summary, or its first error — whatever a status line should say. */
-    public final Signal.Value<String> onStatusChanged = new Signal.Value<>();
+    /**
+     * One compile's summary, or its first error — a {@link StatusBar} item.
+     *
+     * <p>Was a {@code Signal.Value<String>} that the application had to be handed and asked to relay.
+     * Announcing it instead is what let {@code ShaderGraphContribution.register} stop taking a status
+     * sink, which is the whole of "a contribution needs nothing from the application".</p>
+     */
+    public static final String COMPILE_STATUS = "shadergraph.compile";
 
     /**
      * Which node emitted the line the caret is on, as {@code "line 12 emitted by cg:Math/Basic/multiply"}.
      *
      * <p>The payoff of the emitter's line map, and the reason it exists: a driver reports an error at a
      * line in code the user never wrote, and this turns that into somewhere to go and look.</p>
+     *
+     * <p>A <b>separate item</b> from {@link #COMPILE_STATUS} rather than the same slot, which is the
+     * point of keying them: this fires on every caret move in the generated source, and sharing one slot
+     * meant it erased the compile summary a few milliseconds after every compile.</p>
      */
-    public final Signal.Value<String> onLineOwnerChanged = new Signal.Value<>();
+    public static final String LINE_OWNER_STATUS = "shadergraph.lineOwner";
 
     private final CgShaderNodeRegistry shaderNodes = CgShaderNodeRegistry.builtins();
     private final CgMasterNode master = new CgMasterNode();
@@ -425,7 +436,13 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
                 ? "// nothing to compile yet\n" + String.join("\n", result.errors())
                 : result.source());
 
-        onStatusChanged.emit(result.ok()
+        // AMBIENT, not an event. A graph with an animated node recompiles every frame, so a compile
+        // RESULT is a description of how things are rather than something that happened -- routed
+        // through Notifications it would push a hundred entries a second into a history and bury
+        // everything else in it. StatusBar replaces its own item and keeps no history, which is exactly
+        // the difference. A compile FAILURE is still ambient for the same reason: it is true until the
+        // next edit fixes it, and it re-arrives on every frame while it lasts.
+        StatusBar.set(COMPILE_STATUS, result.ok()
                 ? String.format("compiled  %dn/%de  %d chars  %d varyings  %d mapped lines",
                         graph.getDocument().nodeCount(), graph.getDocument().edges().size(),
                         result.source().length(), result.varyings().size(), result.lineOwners().size())
@@ -438,7 +455,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         String owner = lastCompile.ownerOfLine(line);
         if (owner == null) return;
         var node = graph.getDocument().node(owner);
-        onLineOwnerChanged.emit("line " + line + " emitted by "
+        StatusBar.set(LINE_OWNER_STATUS, "line " + line + " emitted by "
                 + (node == null ? owner : node.typeId() + "  (" + owner + ")"));
     }
 
@@ -531,8 +548,8 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      * whole editor shell on the far side of every test that builds a graph, and would make a graph
      * unusable anywhere but inside one.</p>
      *
-     * <p>Same shape as {@link #onStatusChanged}, which already reports upward rather than writing to a
-     * status bar it would otherwise have to know about.</p>
+     * <p>Same shape as {@link #COMPILE_STATUS}, which announces rather than writing into a status bar it
+     * would otherwise have to be handed.</p>
      */
     public final Signal.Action onViewGeneratedRequested = new Signal.Action();
 
