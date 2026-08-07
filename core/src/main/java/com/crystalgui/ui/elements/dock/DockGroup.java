@@ -11,6 +11,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.elements.Tab;
+import com.crystalgui.ui.elements.InsertionMarker;
 import com.crystalgui.ui.elements.TabView;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -59,17 +60,19 @@ public class DockGroup extends UIElement {
     /** The stable container a pane's view is moved into when its panel is the active one. */
     public static final String PANE_HOST_CLASS = "__pane-host__";
 
-    /** The caret between two tabs showing where a reorder would land. */
-    public static final String INSERTION_CLASS = "__insertion__";
-
-    /** How wide the insertion caret is drawn, in logical pixels. */
-    private static final float INSERTION_WIDTH = 2f;
+    /**
+     * The caret between two tabs showing where a reorder would land.
+     *
+     * <p>An alias for {@link InsertionMarker#MARKER_CLASS} now — the class moved with the widget, and the
+     * thickness with it. Kept because this is the name every dock theme already selects on.</p>
+     */
+    public static final String INSERTION_CLASS = InsertionMarker.MARKER_CLASS;
 
     private final DockArea area;
     private final DockLeaf leaf;
     private final TabView tabs = new TabView();
     private final UIElement overlay = new UIElement();
-    private final UIElement insertion = new UIElement();
+    private final InsertionMarker insertion = new InsertionMarker(InsertionMarker.Axis.HORIZONTAL);
 
     /** Panel → its built content. Survives every rebuild of the tree above. */
     private final Map<DockPanelRef, UIElement> content = new LinkedHashMap<>();
@@ -91,10 +94,8 @@ public class DockGroup extends UIElement {
         hideDropPreview();
         addInternalChild(overlay);
 
-        insertion.addClass(INSERTION_CLASS);
-        insertion.setHitTest(false);
-        hideInsertionMarker();
-        addInternalChild(insertion);
+
+        insertion.parkIn(this);
 
         // A group is the unit commands resolve against, so it has to be able to hold focus. A container
         // that never sets a policy takes none, and every command that asks "which group is active" goes
@@ -504,54 +505,24 @@ public class DockGroup extends UIElement {
     /**
      * Where in the strip a drop at {@code screenX} would land.
      *
-     * <p>The first tab whose midpoint is past the pointer — the rule every tab strip uses, and the reason
-     * a tab dropped on the left half of its neighbour goes before it rather than after.</p>
+     * <p>Delegated to {@link InsertionMarker}, which is where the two rules now live: the first item whose
+     * midpoint is past the pointer, and an index range of {@code [0, size]} so the far end stays reachable.
+     * This was the original statement of both, and the stripes needing the same thing rotated ninety
+     * degrees is what made it worth having once.</p>
      */
     public int insertionIndexAt(float screenX) {
         List<Tab> strip = tabs.getTabs();
-        for (int i = 0; i < strip.size(); i++) {
-            var cache = strip.get(i).getRuntimeCache();
-            var local = screenToLocal(screenX, cache.getY());
-            if (local.x() < cache.getX() + cache.getWidth() / 2f) return i;
-        }
-        return strip.size();
+        float y = strip.isEmpty() ? 0f : strip.get(0).getRuntimeCache().getY();
+        return insertion.indexFor(this, strip, screenX, y);
     }
 
     /** Draws the caret at the boundary {@code index} would insert at. */
     void showInsertionMarker(int index) {
-        List<Tab> strip = tabs.getTabs();
-        if (strip.isEmpty()) {
-            hideInsertionMarker();
-            return;
-        }
-        float x;
-        float top;
-        float height;
-        if (index >= strip.size()) {
-            var last = strip.get(strip.size() - 1).getRuntimeCache();
-            x = last.getX() + last.getWidth();
-            top = last.getY();
-            height = last.getHeight();
-        } else {
-            var cache = strip.get(index).getRuntimeCache();
-            x = cache.getX();
-            top = cache.getY();
-            height = cache.getHeight();
-        }
-        var self = getRuntimeCache();
-        float left = x - self.getX() - INSERTION_WIDTH / 2f;
-        float y = top - self.getY();
-        StyleGroup.importantPipeline(insertion.getStyle().getLayoutGroup(), l -> l
-                .positionType(TaffyPosition.ABSOLUTE)
-                .left(left).top(y).width(INSERTION_WIDTH).height(height));
-        StyleGroup.importantPipeline(insertion.getStyle().getGeneralGroup(), g -> g.opacity(1f));
+        insertion.showAt(this, tabs.getTabs(), index);
     }
 
     void hideInsertionMarker() {
-        StyleGroup.importantPipeline(insertion.getStyle().getLayoutGroup(), l -> l
-                .positionType(TaffyPosition.ABSOLUTE)
-                .left(0f).top(0f).width(0f).height(0f));
-        StyleGroup.importantPipeline(insertion.getStyle().getGeneralGroup(), g -> g.opacity(0f));
+        insertion.hide();
     }
 
     // ── Drop preview ────────────────────────────────────────────────────────────────────────────

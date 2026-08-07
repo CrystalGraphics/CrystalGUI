@@ -19,7 +19,10 @@ import com.crystalgui.ui.elements.dock.DockDropZone;
 import com.crystalgui.ui.elements.dock.DockGroup;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
-import com.crystalgui.ui.elements.workbench.ActivityBar;
+import com.crystalgui.ui.elements.dock.DockRegion;
+import com.crystalgui.ui.elements.dock.RegionSide;
+import com.crystalgui.ui.elements.workbench.StripeRail;
+import com.crystalgui.ui.elements.workbench.StripeView;
 import com.crystalgui.ui.elements.workbench.Workbench;
 
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -40,22 +43,24 @@ import com.crystalgui.ui.elements.dock.DockPlacement;
 import com.crystalgui.ui.elements.dock.DockLeaf;
 
 /**
- * The tool-window rail — IntelliJ's stripe, VS Code's Activity Bar.
+ * The tool-window rails — IntelliJ's stripes, VS Code's Activity Bar.
  *
- * <p>What is worth pinning is not that buttons appear. It is the three rules both originals share and
- * that are each individually easy to lose:</p>
+ * <p>What is worth pinning is not that buttons appear. It is the rules both originals share and that are
+ * each individually easy to lose:</p>
  *
  * <ol>
- *   <li><b>Documents never appear on it.</b> The bar lists tool windows; a rail that listed open files
- *       would grow without bound and duplicate the tab strip.</li>
+ *   <li><b>Documents never appear on one.</b> A rail lists tool windows; one that listed open files would
+ *       grow without bound and duplicate the tab strip.</li>
  *   <li><b>Click toggles.</b> Clicking the visible panel's button hides it, in both editors. Open-only
  *       gives you a bar that can fill the screen and not clear it.</li>
  *   <li><b>The button and its command are one thing.</b> Running the command must do exactly what
  *       pressing the button does, because a keybinding will run the command — and "the button works but
  *       the shortcut doesn't" is what a second code path buys you.</li>
+ *   <li><b>Exactly one rail carries a given button.</b> Membership is derived from placement rather than
+ *       stored, so the two rails cannot disagree — and a move must therefore be seen by both.</li>
  * </ol>
  */
-public class ActivityBarTest extends UiTestBase {
+public class StripeViewTest extends UiTestBase {
 
     private static final String TOOL_TYPE = "console";
     private static final String DOC_TYPE = "sometext";
@@ -101,7 +106,7 @@ public class ActivityBarTest extends UiTestBase {
                         .icon("crystalgui:code").anchor(DockDropZone.SPLIT_DOWN),
                 ref -> new UIElement());
         workbench.registerPanel(DockPanelDescriptor.document(DOC_TYPE, "Doc"), ref -> new UIElement());
-        workbench.activityBar().sync(commands);
+        for (StripeView stripe : workbench.stripes()) stripe.sync(commands);
     }
 
     /** Rule 1 — and rule 3's registration half, which is what a keybinding would later bind to. */
@@ -109,13 +114,13 @@ public class ActivityBarTest extends UiTestBase {
     public void onlySingletonPanelsGetAButtonAndACommand() {
         register();
         assertTrue("a singleton panel got no command",
-                commands.contains(ActivityBar.commandIdFor(TOOL_TYPE)));
+                commands.contains(StripeView.commandIdFor(TOOL_TYPE)));
         assertFalse("a DOCUMENT type was given an activity bar entry",
-                commands.contains(ActivityBar.commandIdFor(DOC_TYPE)));
+                commands.contains(StripeView.commandIdFor(DOC_TYPE)));
 
         // The workbench's own two are singletons and must be there without anyone registering them here.
-        assertTrue(commands.contains(ActivityBar.commandIdFor(Workbench.PROJECT_TYPE)));
-        assertTrue(commands.contains(ActivityBar.commandIdFor(Workbench.PROBLEMS_TYPE)));
+        assertTrue(commands.contains(StripeView.commandIdFor(Workbench.PROJECT_TYPE)));
+        assertTrue(commands.contains(StripeView.commandIdFor(Workbench.PROBLEMS_TYPE)));
     }
 
     /**
@@ -134,7 +139,7 @@ public class ActivityBarTest extends UiTestBase {
     @Test
     public void runningTheCommandTogglesThePanelOnScreen() {
         register();
-        String command = ActivityBar.commandIdFor(TOOL_TYPE);
+        String command = StripeView.commandIdFor(TOOL_TYPE);
         assertFalse("the console started open", workbench.isPanelOpen(TOOL_TYPE));
 
         commands.run(command);
@@ -191,52 +196,94 @@ public class ActivityBarTest extends UiTestBase {
     }
 
     /**
-     * <b>A panel dragged to a different edge reopens there, not where its type was registered.</b>
+     * <b>The 2x2 — which rail and which end of it, derived from placement alone.</b>
      *
-     * <p>The descriptor's anchor answers "where does this open the <em>first</em> time". After that the
-     * user may have moved it, and reopening at the registered edge silently undoes a deliberate change —
-     * which is how this was reported: an Inspector moved to the bottom came back on the right, where it
-     * had been several opens earlier. IntelliJ treats the anchor as mutable for the same reason: dragging
-     * a tool window to another stripe changes it.</p>
+     * <p>Pure function, so it is pinned directly rather than through four widget arrangements. The row
+     * worth reading twice is the last pair: {@code PANEL} is the only region whose <em>side</em> changes
+     * which rail its button is in, because the New UI has no bottom stripe and the bottom region's two
+     * halves borrow the two rails' bottom groups.</p>
      */
     @Test
-    public void aPanelReopensWhereItWasMovedToRatherThanWhereItWasRegistered() {
-        register();
-        // Registered against the LEFT wall, then moved to the bottom -- the reported sequence.
-        assertEquals(DockDropZone.SPLIT_LEFT,
-                workbench.panels().descriptor(Workbench.PROJECT_TYPE).anchor());
-        workbench.togglePanel(Workbench.PROJECT_TYPE);
-        settle();
-        // Moved to the BOTTOM WALL, which is what a drag to the window edge produces. Deliberately not
-        // openPanelBeside: that nests the panel next to a leaf rather than against the root, and a nested
-        // panel is genuinely not "on an edge" -- see the limitation noted on Workbench.outerEdgeOf.
-        workbench.dock().layout().dropOnOuterEdge(DockDropZone.SPLIT_DOWN,
-                new DockLeaf(new DockPanelRef(Workbench.PROJECT_TYPE)));
-        workbench.dock().requestRebuild();
-        settle();
+    public void theRailAndGroupAreDerivedFromRegionAndSide() {
+        assertEquals(StripeRail.LEFT, StripeRail.of(DockRegion.SIDEBAR, RegionSide.PRIMARY));
+        assertEquals("a split sidebar moved its button to the other rail",
+                StripeRail.LEFT, StripeRail.of(DockRegion.SIDEBAR, RegionSide.SECONDARY));
+        assertEquals(StripeRail.RIGHT, StripeRail.of(DockRegion.AUXILIARY, RegionSide.PRIMARY));
+        assertEquals(StripeRail.LEFT, StripeRail.of(DockRegion.PANEL, RegionSide.PRIMARY));
+        assertEquals("the panel's right half did not borrow the right rail",
+                StripeRail.RIGHT, StripeRail.of(DockRegion.PANEL, RegionSide.SECONDARY));
 
-        workbench.togglePanel(Workbench.PROJECT_TYPE);
-        settle();
-        workbench.togglePanel(Workbench.PROJECT_TYPE);
-        settle();
+        assertTrue(StripeRail.isBottomGroup(DockRegion.PANEL));
+        assertFalse(StripeRail.isBottomGroup(DockRegion.SIDEBAR));
+        assertFalse(StripeRail.isBottomGroup(DockRegion.AUXILIARY));
 
-        var reopened = workbench.dock().layout().leafContaining(new DockPanelRef(Workbench.PROJECT_TYPE));
-        assertNotNull("the panel did not reopen", reopened);
-        assertEquals("a panel moved to the bottom came back at its registered edge",
-                DockDropZone.SPLIT_DOWN, edgeOf(reopened));
+        // And the inverse, which is what a drop onto a rail runs.
+        assertEquals(DockRegion.AUXILIARY, StripeRail.RIGHT.regionFor(false));
+        assertEquals(DockRegion.PANEL, StripeRail.RIGHT.regionFor(true));
+        assertEquals(RegionSide.SECONDARY, StripeRail.RIGHT.sideFor(true, RegionSide.PRIMARY));
+        assertEquals("a drop into a TOP group overwrote the half the tool window was in",
+                RegionSide.SECONDARY, StripeRail.RIGHT.sideFor(false, RegionSide.SECONDARY));
     }
 
-    /** Which outer edge a leaf sits against — the same rule {@code dropOnOuterEdge} inverts. */
-    private DockDropZone edgeOf(DockLeaf leaf) {
-        com.crystalgui.ui.elements.dock.DockNode node = leaf;
-        var root = workbench.dock().layout().root();
-        while (node.parent() != null && node.parent() != root) node = node.parent();
-        int index = root.children().indexOf(node);
-        boolean after = index == root.childCount() - 1;
-        boolean horizontal = root.orientation(workbench.dock().layout().rootOrientation())
-                == com.crystalgui.ui.elements.dock.DockOrientation.HORIZONTAL;
-        if (horizontal) return after ? DockDropZone.SPLIT_RIGHT : DockDropZone.SPLIT_LEFT;
-        return after ? DockDropZone.SPLIT_DOWN : DockDropZone.SPLIT_UP;
+    /**
+     * <b>A tool window moved to another rail opens there, and exactly one rail carries its button.</b>
+     *
+     * <p>Two failures in one assertion, and they look identical on screen until you count. A sync that only
+     * ever <em>added</em> leaves the button on both rails — two buttons for one container, each lighting up
+     * when it opens. A sync that only ever removed leaves it on neither.</p>
+     *
+     * <p>The reopen half is the older rule this replaced: a descriptor's region answers "where does this
+     * open the <em>first</em> time", and reopening there afterwards silently undoes a deliberate move —
+     * which is how it was reported, an Inspector moved to the bottom coming back on the right.</p>
+     */
+    @Test
+    public void movingAToolWindowMovesItsButtonToTheOtherRail() {
+        register();
+        assertEquals("Project did not start in the sidebar",
+                DockRegion.SIDEBAR, workbench.toolWindowManager().regionOf(Workbench.PROJECT_TYPE));
+        assertTrue(workbench.stripe(StripeRail.LEFT).holds(Workbench.PROJECT_TYPE));
+        assertFalse(workbench.stripe(StripeRail.RIGHT).holds(Workbench.PROJECT_TYPE));
+
+        workbench.toolWindowManager()
+                .moveTo(Workbench.PROJECT_TYPE, DockRegion.AUXILIARY, RegionSide.PRIMARY);
+        settle();
+
+        assertEquals(DockRegion.AUXILIARY, workbench.toolWindowManager().regionOf(Workbench.PROJECT_TYPE));
+        assertTrue("a moved tool window did not reopen in the region it moved to",
+                workbench.isPanelOpen(Workbench.PROJECT_TYPE));
+        assertEquals(Workbench.PROJECT_TYPE,
+                workbench.regions().host(DockRegion.AUXILIARY).showing());
+        assertNull("the region it left is still showing it",
+                workbench.regions().host(DockRegion.SIDEBAR).showing());
+
+        assertTrue("the gaining rail never got the button",
+                workbench.stripe(StripeRail.RIGHT).holds(Workbench.PROJECT_TYPE));
+        assertFalse("the losing rail kept its button, so the container has two",
+                workbench.stripe(StripeRail.LEFT).holds(Workbench.PROJECT_TYPE));
+    }
+
+    /**
+     * <b>A move is announced even when the tool window is closed.</b>
+     *
+     * <p>A closed tool window still has a button, and moving that button is the ordinary way to say where
+     * it should open next time. Announcing only on the visible case leaves both rails showing the placement
+     * they had before the drag — and the mistake survives a restart, because the model was right all
+     * along.</p>
+     */
+    @Test
+    public void aClosedToolWindowStillMovesItsButton() {
+        register();
+        workbench.togglePanel(Workbench.PROJECT_TYPE);
+        settle();
+        assertFalse("Project did not close", workbench.isPanelOpen(Workbench.PROJECT_TYPE));
+
+        workbench.toolWindowManager()
+                .moveTo(Workbench.PROJECT_TYPE, DockRegion.AUXILIARY, RegionSide.PRIMARY);
+        settle();
+
+        assertFalse("moving a closed tool window opened it", workbench.isPanelOpen(Workbench.PROJECT_TYPE));
+        assertTrue(workbench.stripe(StripeRail.RIGHT).holds(Workbench.PROJECT_TYPE));
+        assertFalse(workbench.stripe(StripeRail.LEFT).holds(Workbench.PROJECT_TYPE));
     }
 
     /** A panel type registered after the bar was first synced still gets its button. */
@@ -244,14 +291,14 @@ public class ActivityBarTest extends UiTestBase {
     public void aLateRegisteredPanelStillGetsAButton() {
         register();
         String late = "late";
-        assertFalse(commands.contains(ActivityBar.commandIdFor(late)));
+        assertFalse(commands.contains(StripeView.commandIdFor(late)));
 
         workbench.registerPanel(DockPanelDescriptor.singleton(late, "Late")
                 .icon("crystalgui:package"), ref -> new UIElement());
-        workbench.activityBar().sync(commands);
+        for (StripeView stripe : workbench.stripes()) stripe.sync(commands);
 
         assertTrue("a panel registered after the first sync never got a button",
-                commands.contains(ActivityBar.commandIdFor(late)));
+                commands.contains(StripeView.commandIdFor(late)));
     }
 
     /** Closing the last tool window must leave the rail — it is the only way back. */
@@ -263,12 +310,13 @@ public class ActivityBarTest extends UiTestBase {
         assertFalse(workbench.isPanelOpen(Workbench.PROJECT_TYPE));
         assertFalse(workbench.isPanelOpen(Workbench.PROBLEMS_TYPE));
 
-        assertNotNull("the activity bar went away with the panels", workbench.activityBar());
-        assertEquals("the rail left the workbench tree",
-                workbench.activityBar().getParent() != null, true);
+        for (StripeView stripe : workbench.stripes()) {
+            assertNotNull("a rail went away with the panels", stripe);
+            assertNotNull("a rail left the workbench tree", stripe.getParent());
+        }
 
         // And it can put one back, which is the whole point of it outliving them.
-        commands.run(ActivityBar.commandIdFor(Workbench.PROJECT_TYPE));
+        commands.run(StripeView.commandIdFor(Workbench.PROJECT_TYPE));
         assertTrue("the rail could not reopen a closed panel",
                 workbench.isPanelOpen(Workbench.PROJECT_TYPE));
     }
@@ -278,8 +326,8 @@ public class ActivityBarTest extends UiTestBase {
     public void aPanelWithoutAnIconStillGetsAButton() {
         commands = new CommandRegistry();
         workbench.registerPanel(DockPanelDescriptor.singleton("plain", "Plain"), ref -> new UIElement());
-        workbench.activityBar().sync(commands);
-        assertTrue(commands.contains(ActivityBar.commandIdFor("plain")));
+        for (StripeView stripe : workbench.stripes()) stripe.sync(commands);
+        assertTrue(commands.contains(StripeView.commandIdFor("plain")));
         assertNull("a descriptor with no icon invented one",
                 workbench.panels().descriptor("plain").icon());
     }
