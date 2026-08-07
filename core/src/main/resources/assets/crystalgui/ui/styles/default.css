@@ -3603,6 +3603,52 @@ dockgroup .__missing__ {
     background: #3A2B2B;
 }
 
+/* The banner column: a strip (or several) above a panel's own content. Only exists when a
+ * DockBannerProvider answered, so this rule reaches nothing on an ordinary tab. */
+.__dock-bannered__ {
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+/* IntelliJ's EditorNotificationPanel. A row, full width, sitting inside the tab rather than over it --
+ * a banner says what this tab IS, so it has to still be there tomorrow. */
+.__dock-banner__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    flex-shrink: 0;
+    border-bottom-width: 1px;
+    border-bottom-color: #00000040;
+}
+
+.__dock-banner__ .__message__ {
+    flex-grow: 1;
+    font-size: 11px;
+}
+
+.__dock-banner__ .__action__ {
+    padding: 2px 8px;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+/* Severity, as three classes rather than three colours in Java -- the project rule. */
+.__dock-banner__.__info__ {
+    background: #2D3A4A;
+    color: #C8D6E5;
+}
+
+.__dock-banner__.__warning__ {
+    background: #4A3F2D;
+    color: #E5D6A8;
+}
+
+.__dock-banner__.__error__ {
+    background: #4A2D2D;
+    color: #E5B4B4;
+}
+
 floatingdock {
     background: #1E1E1EF0;
     min-width: 160px;

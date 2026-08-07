@@ -421,7 +421,15 @@ public class GraphNode extends UIElement {
         // NodeData once at add time captured whatever ports existed at that instant, so a port declared
         // afterwards existed on screen, could be wired, and was absent from every save.
         GraphView view = graphView();
-        if (view != null) view.syncPorts(this);
+        if (view != null) {
+            view.syncPorts(this);
+            // AND the port's own floating default editor. This is the case that used to need a per-frame
+            // scan: a node built by a factory gains its ports before it joins anything, so graphView() is
+            // null throughout and the view cannot learn about them here -- it picks those up when the node
+            // is registered instead. This branch is the other half, a port arriving on a node that is
+            // already on the plane, which is what dynamic arity does.
+            view.watchPort(port);
+        }
         return port;
     }
 

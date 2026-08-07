@@ -26,6 +26,8 @@ looks like a needed helper is the symptom of one that does not — see
 | `DockService` — `open(input, placement)` | **shipped** as `Workbench.open` | [Opening things](#opening-things) |
 | `DocumentType` — a file type, declared by its owner | **shipped** | [Contributions](#contributions) |
 | `Inspector` — one inspector, any subject | **shipped** | [Contributions](#contributions) |
+| `Notifications` / `StatusBar` — events and ambient text | **shipped** | [Notifications and status](#notifications-and-status) |
+| `DockBannerProvider` — a strip above a panel | **shipped** | [Contributions](#contributions) |
 
 ---
 
@@ -815,6 +817,31 @@ fields. It is deleted; the shader package registers five sections instead, and `
 which is what sharing a tab should look like — returning an element each stacks two independently
 scrolling panels with two sets of group headers and a visible seam. It also keeps the engine owning the
 engine-shaped parts: the panel, its scrolling, its group collapse state, and when to clear it.
+
+### `DockBannerProvider` — why this tab is not an ordinary one
+
+```java
+DockBanners.register(panel -> SOURCE_TYPE.equals(panel.typeId())
+        ? Notification.info("Generated from the shader graph. Edit the graph, not this file.")
+                .withAction("Open Graph", () -> workbench.openFile(origin))
+        : null);
+```
+
+IntelliJ's `EditorNotificationProvider`. Facts about a tab that the tab cannot show itself — *generated*,
+*read-only*, *out of date*. The motivating case: `compiled_graph.shader` is `setReadOnly(true)`, so typing
+in it silently does nothing, which reads as a **broken editor** rather than as a generated file.
+
+- **Asked with the `DockPanelRef`, not a document** — deliberately. The generated source tab is *not* a
+  `FileDocument`; it is a panel type whose ref carries the derived `Resource` in its state. A
+  document-shaped question could not have been asked about the one tab that needed it.
+- **Wrapping happens in `DockGroup.contentFor`**, the single place every panel passes through — document
+  tabs, pane-backed panels and plain registry-built ones alike.
+- **Nothing is wrapped when nothing answered**, which is nearly always. A wrapper column per panel would
+  add a flex level between a pane and its content on *every* tab to serve the rare one. Pinned by
+  `DockBannerTest`, including the case where a provider is registered but declines.
+- Severity is a class (`__info__` / `__warning__` / `__error__`), never a colour in Java.
+- **Every provider that answers gets a strip**, not the first — a file that is both read-only and
+  generated has two things to say.
 
 #### The subject is the focus owner, and the engine resolves it
 

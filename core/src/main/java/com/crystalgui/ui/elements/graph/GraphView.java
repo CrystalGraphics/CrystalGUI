@@ -175,7 +175,7 @@ public class GraphView extends CanvasView implements UndoScope {
      */
     private final Map<NodePort, PortDefaultEditor> portEditors = new LinkedHashMap<>();
 
-    /** Ports {@link #discoverPortEditors} has already wired a listener onto — the discovery guard now
+    /** Ports {@link #watchPort} has already wired a listener onto — the once-only guard now
      * that discovery itself is push-based. See {@link #rebuildPortEditor}'s own javadoc for why a port is
      * watched from the moment it is first seen, not from the moment it first has a non-null editor. */
     private final Set<NodePort> watchedPorts = new LinkedHashSet<>();
@@ -338,8 +338,12 @@ public class GraphView extends CanvasView implements UndoScope {
     // ── Port default editors ────────────────────────────────────────────────
 
     /**
-     * Discovers newly bound port editors, mounts/repositions the ones currently on the plane, every
-     * frame.
+     * Repositions the mounted port editors, every frame.
+     *
+     * <p><b>Discovery is not here any more</b> — see {@link #watchPort}. What remains genuinely is
+     * per-frame: a floating editor is positioned in world space off its port's live layout, so it moves
+     * whenever the plane pans, zooms or reflows, and there is no single announcement for "the geometry
+     * under me settled". This is a position sync, not a scan for work.</p>
      *
      * <p>Always ticking, regardless of {@link #setCullingEnabled}: a floating editor still has to track
      * its port even in a huge graph where node culling is doing real work, so this cannot piggyback on
@@ -348,7 +352,6 @@ public class GraphView extends CanvasView implements UndoScope {
     @Override
     public boolean tickFrame(float deltaSeconds) {
         super.tickFrame(deltaSeconds);
-        discoverPortEditors();
         for (PortDefaultEditor editor : portEditors.values()) {
             if (editor.isMounted()) editor.reposition();
         }
@@ -404,17 +407,44 @@ public class GraphView extends CanvasView implements UndoScope {
      * deciding whether it has an editor worth keeping: {@link #rebuildPortEditor} owns that, and it is
      * reachable from {@code onDefaultEditorChanged} too, not just from this scan.</p>
      */
-    private void discoverPortEditors() {
-        for (GraphNode node : nodes()) {
-            for (NodePort port : node.getInputPorts()) {
-                if (!watchedPorts.add(port)) continue;
-                PortDefaultEditor editor = new PortDefaultEditor(port, this);
-                portEditors.put(port, editor);
-                port.onBlankChanged.connect(() -> refreshPortEditor(port));
-                port.onDefaultEditorChanged.connect(() -> refreshPortEditor(port));
-                refreshPortEditor(port);
-            }
-        }
+    /**
+     * Gives every input port on {@code node} an editor, once.
+     *
+     * <p>Called when a node <b>joins the view</b> — the two places a widget is registered — rather than
+     * from a frame. See {@link #watchPort}.</p>
+     */
+    private void watchPortsOf(GraphNode node) {
+        for (NodePort port : node.getInputPorts()) watchPort(port);
+    }
+
+    /**
+     * Gives one input port its {@link PortDefaultEditor}, once.
+     *
+     * <h3>Why this is not a per-frame scan any more</h3>
+     *
+     * <p>It was: {@code tickFrame} walked every node and every input port of every node, every frame,
+     * to notice the ones it had not seen — the same shape plan step 3 deleted five times over, and the
+     * last one left in the engine. The cost is not the {@code Set.add} but the walk itself, which is
+     * O(nodes × ports) on a graph where the answer changes a handful of times in a session.</p>
+     *
+     * <p>A port becomes visible to this view at exactly <b>two</b> moments, and both are already known
+     * here: a node is registered with ports already on it, or {@link GraphNode#addPort} adds one to a
+     * node that is already in a view — which was the reason for the scan, since a node built by a factory
+     * gains its ports before it joins anything and {@code graphView()} is null throughout. {@code addPort}
+     * already calls back into this view for {@code syncPorts}; it now says this too.</p>
+     *
+     * <p>Idempotent through {@code watchedPorts}, so overlapping calls cost a set lookup. Ports are never
+     * removed from a node — only whole nodes are, through {@code forgetPortEditor} — so the watch set
+     * needs no pruning beyond that.</p>
+     */
+    void watchPort(NodePort port) {
+        if (port == null || !port.getDirection().isInput()) return;
+        if (!watchedPorts.add(port)) return;
+        PortDefaultEditor editor = new PortDefaultEditor(port, this);
+        portEditors.put(port, editor);
+        port.onBlankChanged.connect(() -> refreshPortEditor(port));
+        port.onDefaultEditorChanged.connect(() -> refreshPortEditor(port));
+        refreshPortEditor(port);
     }
 
     /**
@@ -558,6 +588,7 @@ public class GraphView extends CanvasView implements UndoScope {
         widget.bindToDocument(data.id(), data.typeId());
         widgetsById.put(data.id(), widget);
         super.addNode(widget, data.x(), data.y());
+        watchPortsOf(widget);
         markSynced();
     }
 
@@ -737,6 +768,7 @@ public class GraphView extends CanvasView implements UndoScope {
             widget.bindToDocument(data.id(), data.typeId());
             widgetsById.put(id, widget);
             super.addNode(widget, data.x(), data.y());
+            watchPortsOf(widget);
             applied++;
         }
         for (String id : movedNodes) {
