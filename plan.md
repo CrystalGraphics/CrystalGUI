@@ -10,7 +10,7 @@
 | 1 | `Disposable` / `Disposer`, GL-aware (§14) | **DONE** |
 | 2 | `DataContext` + context keys (§15) | **DONE** |
 | 2.5 | Commands: global registration, context-resolved (§15b) | **DONE** — all three owner-capturing classes migrated; `install` is gone |
-| 3 | Typed service events; delete the polling loops (§16) | not started |
+| 3 | Typed service events; delete the polling loops (§16) | **DONE** — 6 of 7 landings; loadProjects deferred to step 4, see §16.8 |
 | 4 | `Resource`: schemes, virtual documents (§17) | not started |
 | 5 | `DockPane`: retargetable views (§18) | not started |
 | 6 | `DockService.open` + `DockPlacement` (§19) | not started |
@@ -1667,8 +1667,13 @@ Deliberately not "all signals, then all consumers" — each row lands and is gre
 5. **`onDidOpenPanel`/`onDidClosePanel`** → `ItemButton`'s `lastKnownOpen` poll.
 6. **`FileDocument.onDidChange`** → `onDidChangeDirty` → `refreshDirtyMarkers`. Last because it touches
    every document implementation.
-7. **`loadProjects()`** moves to `onWindowChanged`. Trivial, and a good final check that `Workbench.tick`
-   is down to the crawl.
+7. ~~**`loadProjects()`** moves to `onWindowChanged`.~~ **Attempted and reverted — it belongs to step 4.**
+   It looks like a one-shot dressed as a loop, since `ProjectFileTree` latches it on `projectsRequested`.
+   It is really a *retry*: a client's window id is not valid until its session has opened, and the server
+   discards a packet addressed to another window with no error at all — `WorkspaceTreeSource.loadProjects`
+   says exactly that. Attach happens earlier, and because the latch is set on the **attempt** rather than
+   on success, one early call poisons it permanently. Twelve explorer tests came up with no project roots.
+   Needs a session-opened announcement, which is step 4's territory.
 
 ---
 
