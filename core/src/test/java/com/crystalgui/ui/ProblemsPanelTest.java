@@ -202,6 +202,57 @@ public class ProblemsPanelTest extends UiTestBase {
         assertFalse("and it did not expand", panel.visibleProblems().isEmpty());
     }
 
+    /**
+     * <b>A file heading has a chevron, and it is the part that takes the click.</b>
+     *
+     * <p>The first pass of this panel grouped correctly and shipped with <em>nothing to press</em>: the
+     * template had no twisty, so there was no affordance and no state to draw. The tests passed because
+     * they toggled through {@code onRowActivated} directly, which is the one route a user does not take.
+     * What is pinned here is the affordance's existence, not the toggle.</p>
+     *
+     * <p>Every other slot refuses the pointer so a press lands on the row — click targeting takes the exact
+     * element hit and never walks up to a handler-bearing ancestor, which is why the chevron has to be its
+     * own hit target to fold on one click.</p>
+     */
+    @Test
+    public void aFileHeadingHasAChevronThatTakesThePointer() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
+        settle();
+
+        UIElement row = panel.tree().getElementsByClassName(ProblemsPanel.ROW_CLASS).get(0);
+        UIElement twisty = row.querySelector("." + ProblemsPanel.TWISTY_CLASS);
+        assertNotNull("a file heading with no chevron cannot be folded by anyone", twisty);
+        assertTrue("the chevron must keep the pointer to fold on one click", twisty.isHitTest());
+
+        UIElement label = row.querySelector("." + ProblemsPanel.MESSAGE_CLASS);
+        assertNotNull(label);
+        assertFalse("a slot that eats the press stops the row ever being chosen",
+                label.isHitTest());
+    }
+
+    /**
+     * The row carries the fold state as a class, which is the only thing the chevron's artwork keys off.
+     *
+     * <p>{@code TreeView} stamps it; what this pins is that a problem row is a <em>leaf</em> and a file is
+     * not, so the sheet can draw a chevron on one and blank the slot on the other.</p>
+     */
+    @Test
+    public void foldStateReachesTheRowAsAClass() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
+        settle();
+
+        UIElement heading = panel.tree().getElementsByClassName(ProblemsPanel.ROW_CLASS).get(0);
+        assertTrue("a collapsed file must say so",
+                heading.hasClass(com.crystalgui.ui.elements.tree.TreeView.COLLAPSED_CLASS));
+
+        expandEverything();
+        heading = panel.tree().getElementsByClassName(ProblemsPanel.ROW_CLASS).get(0);
+        assertTrue("an expanded file must say so",
+                heading.hasClass(com.crystalgui.ui.elements.tree.TreeView.EXPANDED_CLASS));
+    }
+
     /** The panel follows the index rather than being told: a later compile arrives on its own. */
     @Test
     public void aLaterChangeReachesThePanel() {

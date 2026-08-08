@@ -5448,9 +5448,25 @@ problemspanel .__problem__ .__problem-count__ {
     padding-left: 6px;
 }
 
-/* A FILE'S GLYPH. Not a severity — the heading says which file, and the worst thing in it is already
- * visible one row down. Kept as its own severity-* value so the swap in bind() has something to swap TO;
- * a row recycled from a problem to a heading would otherwise keep the old error icon. */
-problemspanel .__problem__ .__severity__.severity-file {
-    overlay: icon("crystalgui:filetypes/shader");
+
+/* THE CHEVRON, and it is its own hit target so a file folds on ONE click — IntelliJ's rule, and the
+ * affordance the first pass of this panel shipped without: the tree grouped correctly, and there was
+ * nothing to press. A problem row keeps the slot and draws nothing, so every message in the tree starts
+ * at the same x rather than stepping left of the headings above it. */
+problemspanel .__problem__ .__twisty__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+problemspanel .__problem__.__collapsed__ .__twisty__ {
+    overlay: shape("chevron-right");
+}
+
+problemspanel .__problem__.__expanded__ .__twisty__ {
+    overlay: shape("chevron-down");
+}
+
+problemspanel .__problem__.__leaf__ .__twisty__ {
+    overlay: none;
 }
