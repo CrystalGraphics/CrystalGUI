@@ -7,6 +7,7 @@ import com.crystalgui.core.notify.StatusBarEntry;
 import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 
@@ -150,18 +151,19 @@ public class StatusBarView extends UIElement {
      * <p>{@link StatusBar} is static and outlives every view of it, so a view that never unsubscribed would
      * be kept alive by the service — along with its elements and everything they reference — for the rest
      * of the process. The same leak {@code ListView} guards against by disposing when it leaves the tree.</p>
+     *
+     * <p><b>The window hook, not {@code onLayoutChanged}.</b> This was written against layout, which fires
+     * on every pass and therefore had to guard itself with "have I already subscribed?" — a poll wearing a
+     * callback, and the exact workaround {@link #onWindowChanged} was added to retire. Disconnecting
+     * unconditionally also covers a move <em>between</em> windows, where both arguments are non-null and
+     * the "am I attached?" question answers yes on the way in and out.</p>
      */
     @Override
-    protected void onLayoutChanged() {
-        super.onLayoutChanged();
-        if (getAttachedWindow() != null) {
-            if (subscriptions.size() == 0) {
-                subscriptions.add(StatusBar.onDidChange.connect(this::refresh));
-                refresh();
-            }
-        } else {
-            subscriptions.disconnectAll();
-        }
+    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        subscriptions.disconnectAll();
+        if (current == null) return;
+        subscriptions.add(StatusBar.onDidChange.connect(this::refresh));
+        refresh();
     }
 
     /** Brings the rendered slots in line with the service. Cheap when nothing changed. */

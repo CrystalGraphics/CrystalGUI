@@ -149,13 +149,27 @@ public class NotificationsViewTest extends UiTestBase {
         assertTrue(ran[0]);
     }
 
+    /**
+     * <b>An open panel is a panel being looked at, so nothing accumulates behind it.</b>
+     *
+     * <p>Reading is still not dismissing — the message stays until "Clear all". What is pinned here is
+     * that the bell does not tick up for something already on screen.</p>
+     *
+     * <p>This used to assert an unread count of 1 immediately after the arrival, dropping to 0 on the next
+     * frame. That gap was not a decision: the view marked read from {@code onLayoutChanged}, so "read"
+     * happened whenever the next layout pass ran. Moving to the window hook removed the frame of delay and
+     * with it the only thing that assertion was measuring.</p>
+     *
+     * <p><b>Known limitation, and it predates this:</b> "attached" is not "visible". This engine hides an
+     * unselected tab's pane rather than detaching it, so a panel sitting behind another tab still counts as
+     * open and still clears the bell. Marking read on a layout pass had exactly the same flaw, one frame
+     * later.</p>
+     */
     @Test
-    public void openingThePanelMarksEverythingRead() {
-        Notifications.info("arrived while you were elsewhere");
-        assertEquals(1, Notifications.unread());
+    public void anArrivalIntoAnOpenPanelIsAlreadyRead() {
+        Notifications.info("arrived while you were watching");
 
-        settle();
-        assertEquals("attaching the view is what counts as looking", 0, Notifications.unread());
+        assertEquals("the bell ticked for something on screen", 0, Notifications.unread());
         assertEquals("and it kept the message", 1, entries().size());
     }
 
