@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
@@ -277,7 +278,17 @@ public class StatusBarView extends UIElement {
                     label.onMouseDown.attachListener((element, event) -> {
                         if (command == null) return;
                         event.stopPropagation();
-                        CommandRegistry.global().run(command);
+                        // RUN FROM THE ELEMENT PRESSED, never contextless. `run(id)` builds an EMPTY data
+                        // context, so a command guarded by `enabledWhereData` — which every command that
+                        // acts on a workbench or a window is — evaluates its guard against nothing, fails
+                        // it, and returns false. The entry drew a pointer cursor and did nothing when
+                        // clicked, which is the exact "the command exists but nothing happens" failure
+                        // CommandRegistry.run already warns about one line further down.
+                        //
+                        // The element is what makes the walk work: a data context resolves by walking up
+                        // the tree and then asking the window, and the workbench registers itself as a
+                        // provider there.
+                        CommandRegistry.global().run(command, CommandContext.of(element));
                     }, false, true);
                 }
             } else {

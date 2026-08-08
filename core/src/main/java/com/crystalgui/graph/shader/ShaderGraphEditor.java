@@ -519,7 +519,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         int errors = problems.count(DiagnosticSeverity.ERROR);
         if (errors == 0) return;
         lastCompileFailed = true;
-        lastCompileStatus = describeErrors(errors);
+        lastCompileStatus = FAILED_STATUS;
         for (Diagnostic diagnostic : diagnostics) {
             if (diagnostic.severity() != DiagnosticSeverity.ERROR) continue;
             lastCompileTooltip = diagnostic.message();
@@ -528,10 +528,19 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         publishCompileStatus();
     }
 
-    /** {@code 1 error}, {@code 2 errors} — both references pluralise rather than writing "error(s)". */
-    private static String describeErrors(int count) {
-        return count == 1 ? "1 error" : count + " errors";
-    }
+    /**
+     * What this graph's readout says when it will not compile — <b>deliberately not a count</b>.
+     *
+     * <p>It used to say {@code "2 errors"}, which sat on the bar directly beside the workspace's own
+     * {@code "2 errors, 0 warnings"} and read as a contradiction: two numbers of different scopes,
+     * adjacent, with nothing saying which was which. Neither reference does that — VS Code shows only the
+     * workspace tally, IntelliJ only the current file's state.</p>
+     *
+     * <p>The count belongs to the workspace entry, which owns every file. This one says whether the thing
+     * you are looking at builds, which is the fact the workspace tally cannot give you, and its tooltip
+     * still carries the first error in full.</p>
+     */
+    private static final String FAILED_STATUS = "compile failed";
 
     /**
      * The driver's refusal of the generated source, mapped back to the node that wrote the line.
@@ -842,7 +851,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         lastCompileStatus = result.ok()
                 ? String.format("compiled  %dn/%de",
                         graph.getDocument().nodeCount(), graph.getDocument().edges().size())
-                : describeErrors(result.errors().size());
+                : FAILED_STATUS;
         lastCompileFailed = !result.ok();
         lastCompileTooltip = result.ok()
                 ? String.format("%d chars, %d varyings, %d mapped lines",
