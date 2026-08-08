@@ -8,6 +8,8 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -97,8 +99,6 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
 
     private final ConnectionGroup subscriptions = new ConnectionGroup();
 
-    private boolean ticking;
-
     public NotificationBalloons() {
         addClass(LAYER_CLASS);
         // NOT setHitTest(false): that applies to the whole subtree, so the balloons' own close buttons and
@@ -118,24 +118,20 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
      * only when {@code tickFrame} returns false, and this one always returned true, so a detached layer
      * went on being ticked by a window it was no longer in — and because the flag that recorded "already
      * registered" was never cleared, moving the layer to a second window left it registered with the first
-     * and ticking in neither. The frame callback now ends itself on detach, which is the only signal
-     * {@code UIWindow} offers.</p>
+     * and ticking in neither.</p>
+     *
+     * <p><b>A registration per window, which ends itself once the layer is elsewhere.</b> Registering
+     * {@code this} cannot express that: there is deliberately no {@code unregisterTicker}, so a ticker
+     * leaves only by returning false, and one shared callback has no way to say <em>which</em> window it is
+     * done with. A lambda that closes over the window it was registered with does — so a move leaves the
+     * old registration to expire on its next frame while the new one is already live.</p>
      */
     @Override
-    protected void onLayoutChanged() {
-        super.onLayoutChanged();
-        UIWindow window = getAttachedWindow();
-        if (window != null) {
-            if (subscriptions.size() == 0) {
-                subscriptions.add(Notifications.onDidChange.connect(this::apply));
-            }
-            if (!ticking) {
-                window.registerTicker(this);
-                ticking = true;
-            }
-        } else {
-            subscriptions.disconnectAll();
-        }
+    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        subscriptions.disconnectAll();
+        if (current == null) return;
+        subscriptions.add(Notifications.onDidChange.connect(this::apply));
+        current.registerTicker(delta -> getAttachedWindow() == current && tickFrame(delta));
     }
 
     /**
@@ -228,11 +224,6 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
 
     @Override
     public boolean tickFrame(float deltaSeconds) {
-        // ENDS ITSELF WHEN DETACHED. @see #onLayoutChanged
-        if (getAttachedWindow() == null) {
-            ticking = false;
-            return false;
-        }
         float deltaMs = deltaSeconds * 1000f;
         for (int i = live.size() - 1; i >= 0; i--) {
             Live entry = live.get(i);

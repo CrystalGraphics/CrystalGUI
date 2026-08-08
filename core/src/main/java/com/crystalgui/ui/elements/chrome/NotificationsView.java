@@ -5,9 +5,12 @@ import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
+
+import javax.annotation.Nullable;
 
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -129,17 +132,12 @@ public class NotificationsView extends UIElement {
      * threw away the thing you opened it for.</p>
      */
     @Override
-    protected void onLayoutChanged() {
-        super.onLayoutChanged();
-        if (getAttachedWindow() != null) {
-            if (subscriptions.size() == 0) {
-                subscriptions.add(Notifications.onDidChange.connect(this::apply));
-                rebuild();
-            }
-            Notifications.markAllRead();
-        } else {
-            subscriptions.disconnectAll();
-        }
+    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        subscriptions.disconnectAll();
+        if (current == null) return;
+        subscriptions.add(Notifications.onDidChange.connect(this::apply));
+        rebuild();
+        Notifications.markAllRead();
     }
 
     /** One change, applied where it landed. @see NotificationsView */
@@ -168,6 +166,11 @@ public class NotificationsView extends UIElement {
             case CLEARED -> rebuild();
         }
         refreshEmptyState();
+        // READ ON ARRIVAL TOO, not only on open. The panel is subscribed exactly while it is attached, so
+        // reaching here means it is on screen — and a bell that ticks up for a message sitting visible in
+        // front of the user is counting something they have already seen. This used to fall out of running
+        // on every layout pass; with the window hook it has to be said.
+        Notifications.markAllRead();
     }
 
     /** Builds the column from scratch. Only on open and on Clear all — see the class note. */
