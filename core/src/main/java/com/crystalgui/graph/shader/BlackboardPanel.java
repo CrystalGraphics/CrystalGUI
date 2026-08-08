@@ -100,9 +100,6 @@ public class BlackboardPanel extends UIElement {
     public static final String DUPLICATE_COMMAND = "blackboard.duplicateProperty";
     public static final String RENAME_COMMAND = "blackboard.renameProperty";
 
-    /** Pixels per wheel notch. One pill's height, so a notch moves the list by one row. */
-    private static final float WHEEL_STEP_PX = 14f;
-
     /** Shown in place of the list while nothing is declared. */
     public static final String EMPTY_MESSAGE = "No properties yet";
 
@@ -174,17 +171,23 @@ public class BlackboardPanel extends UIElement {
     private final UIText subtitle = new UIText("Shader Graphs");
     private final UIElement add = new UIElement();
     /**
-     * The list. A PLAIN box, not a {@link ScrollerView}, and that is forced rather than chosen.
+     * The list, and a real {@link ScrollerView}.
      *
-     * <p>{@code ScrollerView} writes its bars' {@code display} from Java at IMPORTANT origin and says so
-     * in its own javadoc — <em>"not expressible in CSS"</em> — so no stylesheet rule can hide them. A
-     * rule that tried was a guaranteed no-op, which is exactly what shipped once.</p>
+     * <p>It was a plain {@code overflow} box, to keep the bars out of a panel this small — a bare box has
+     * no bars because it has no bar widgets, and {@code ScrollerView}'s cannot be hidden from CSS (it
+     * writes their {@code display} at IMPORTANT and says so in its own javadoc).</p>
      *
-     * <p>The cost is that a bare {@code overflow} box scrolls by API and ignores the wheel, so the wheel
-     * is wired by hand below. That is five lines against a widget whose entire purpose is the bars we do
-     * not want.</p>
+     * <p><b>That was the wrong trade once a name could be wider than the panel.</b> A bare box scrolls by
+     * API only: it ignores the wheel entirely, so the vertical wheel had to be wired by hand here, and
+     * there was nothing at all for the horizontal axis — no bar, no wheel, no gesture. Content you cannot
+     * reach is worse than a bar you did not want.</p>
+     *
+     * <p>The stylesheet asks for {@code overflow: auto}, so a bar appears only on an axis that actually
+     * overflows. Both wheel behaviours come with the widget, including the two that are easy to miss:
+     * {@code Shift}+wheel scrolls sideways, and a plain wheel does too when sideways is the only axis
+     * that can move.</p>
      */
-    private final UIElement body = new UIElement();
+    private final ScrollerView body = new ScrollerView();
 
     private final List<PropertyPill> pills = new ArrayList<>();
 
@@ -320,15 +323,6 @@ public class BlackboardPanel extends UIElement {
         add.onMouseDown.attachListener((element, event) -> {
             openTypeMenu();
             event.stopPropagation();
-        }, false, true);
-
-        // A bare overflow box has no wheel handling of its own -- see the `body` field. A POSITIVE notch
-        // means the wheel rolled DOWN, which ScrollerView is the only other statement of; taking the sign
-        // at face value is how CanvasView shipped zooming the wrong way.
-        body.onMouseScroll.attachListener((element, event) -> {
-            float before = body.getScrollTop();
-            body.setScrollTop(before + event.getScroll() * WHEEL_STEP_PX);
-            if (body.getScrollTop() != before) event.stopPropagation();
         }, false, true);
 
         // A press anywhere on the panel focuses it, not only a press on a pill -- otherwise clicking the

@@ -3295,7 +3295,21 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     height: 0;
     flex-grow: 1;
     flex-direction: column;
-    overflow: scroll;
+    /* `auto`, so a bar appears only on the axis that actually overflows -- the list is usually short
+     * enough and the panel usually wide enough for neither to show. */
+    overflow: auto;
+    /* THE ROWS SIZE TO THEIR CONTENT, and this is what makes a long name scrollable rather than spilling.
+     *
+     * `stretch` (the default) sets every row to the body's width, and a row is measured for horizontal
+     * scroll by its OWN box -- getScrollWidth reads direct children only, deliberately. So a name wider
+     * than the panel overflowed its capsule, painted out over the canvas behind, and contributed nothing
+     * to scrollWidth: there was no way to reach it, by bar or by wheel, because nothing knew it was there.
+     *
+     * With `start` the row is fit-content, which is max(min-content, available) -- and the name is
+     * `nowrap`, so its min-content IS its full width. The row therefore grows past the body and the
+     * overflow becomes real. `min-width: 100%` on each row is the other half: without it a row shrinks to
+     * its content and the right-aligned type column loses the slack it aligns against. */
+    align-items: start;
     /* The list breathes: a gap between rows and an inset from the panel edge, so the capsules read as
      * separate chips rather than a stack pressed together. `gap-all` IS a real layout shorthand, unlike
      * the `border-radius-all` that silently did nothing above. */
@@ -3311,11 +3325,15 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * IMPORTANT origin and says so in its own javadoc. A rule here was a guaranteed no-op, which is what
  * shipped once -- the bars stayed and nothing explained why. The cost of a plain box is that `overflow`
  * alone ignores the wheel, so BlackboardPanel wires that by hand. */
+/* NOWRAP, like every other row. The body is `align-items: start`, so this sizes to its own text and
+ * scrolls with the rest -- without the nowrap it re-wraps at the panel's own width instead, which at the
+ * 80px minimum broke "No properties yet" over three lines. */
 .__blackboard__ .__empty__ {
     font-size: var(--cfg-font);
     color: #7A7A7A;
     padding-left: var(--cfg-pad-x);
     padding-top: 4px;
+    white-space: nowrap;
 }
 
 /* A CATEGORY HEADING. Drawn whenever the category field changes as the list is scanned -- there is no
@@ -3327,6 +3345,8 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     flex-direction: row;
     align-items: center;
     gap-all: 4px;
+    /* At least the full width, never less -- see the body's `align-items: start`. */
+    min-width: 100%;
     min-height: 16px;
     padding-left: 2px;
     padding-right: 6px;
@@ -3368,6 +3388,11 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     flex-direction: row;
     align-items: center;
     gap-all: var(--cfg-gap);
+    /* AT LEAST the full width of the list, and wider when its own content is. The body is
+     * `align-items: start` so a row is fit-content -- which is what lets a long name push the row past
+     * the panel and become scrollable. This is the floor that keeps a SHORT row full width, so the type
+     * column still has slack to right-align against and the rename field still has a row to fill. */
+    min-width: 100%;
     min-height: 18px;
     padding-left: 6px;
     padding-right: 6px;
@@ -3468,11 +3493,22 @@ projectfiletree .__project-row__.__drop-target__ {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* Right-aligned by taking the slack: the capsule does not grow, so this does. */
+/* Right-aligned by taking the slack: the capsule does not grow, so this does.
+ *
+ * NO `width: 0` basis, unlike every other "take the slack" column in this sheet. A UIText settles whether
+ * it sizes itself on its FIRST measurement, and a zero basis settles that as "no" -- after which it
+ * contributes zero to the row's content width forever. With the row now fit-content (see the body's
+ * `align-items: start`), that made the type label vanish outright the moment a long name used up the row,
+ * rather than scrolling into view with everything else. Growing still works from a content basis; that is
+ * what flex-grow does. */
 .__property-pill__ > .__type__ {
-    width: 0;
     flex-grow: 1;
-    flex-shrink: 1;
+    /* AND NO SHRINK. A shrinkable item contributes ZERO to its row's min-content width -- so with the row
+     * now sized to its content, the type column was the one part that did not widen it: the row grew to
+     * fit the capsule exactly, the type got whatever was left over (nothing), and `Vector 2` rendered as
+     * `Ve…` pinned against the panel edge, unreachable by the very scrollbar the long name had summoned.
+     * Growing into slack is a separate axis and still works. */
+    flex-shrink: 0;
     font-size: 8px;
     color: #8C8C8C;
     text-align: right;
@@ -3486,8 +3522,8 @@ projectfiletree .__project-row__.__drop-target__ {
     flex-direction: column;
     width: 180px;
     height: 196px;
-    min-width: 140px;
-    min-height: 160px;
+    min-width: 80px;
+    min-height: 100px;
     resize: both;
     /* Anchored to the VIEWPORT, which is where CanvasView.addOverlay puts these — so they hold station
      * while the graph pans underneath, exactly as Unity's do.
@@ -3646,10 +3682,16 @@ dockgroup .__missing__ {
     gap: 4px;
 }
 
+/* ONE LINE, ELLIPSIZED -- never wrapped. A header that wraps turns "Services" into "Servic / es" and
+ * doubles the height of every container in a narrow region, which is what a minimum width exists to stop
+ * you reaching in the first place. text-overflow does NOT inherit, so it has to sit on the UIText itself. */
 .__view-container__ .__header__ .__title__ {
     flex-grow: 1;
+    flex-shrink: 1;
     font-size: 11px;
     color: #A0A0A0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .__view-container__ .__header__ .__hide__ {
@@ -4156,6 +4198,30 @@ workbench .__workbench-content__ {
     flex-direction: row;
 }
 
+/* A REGION HAS A FLOOR, which is the whole reason the frame is a SplitView rather than a dock tree --
+ * "setPaneSizeLimits gives a real minimum in pixels, which is what 'the sidebar is at least 150px wide'
+ * means and what a flex weight is structurally unable to say".
+ *
+ * Without one a divider drags a region down to nothing in particular: names truncate to a single letter,
+ * a container's header wraps, and the panel is still nominally open while showing no information at all.
+ * The floor is what makes "narrow" bottom out at "narrow" instead of at "useless".
+ *
+ * On the CROSS axis of each region -- width for the columns, height for the strip -- because that is the
+ * axis its divider moves along. */
+workbench .__region-sidebar__, workbench .__region-auxiliary__ {
+    min-width: 120px;
+}
+
+workbench .__region-panel__ {
+    min-height: 60px;
+}
+
+/* And the same floor one level down, so a region's two halves cannot squeeze each other out either. */
+.__region-half__ {
+    min-width: 0px;
+    min-height: 40px;
+}
+
 /* A region's two halves and the split between them. Both are pane children, so both fill by height --
  * the fill idiom, and flex-shrink is deliberately untouched. See RegionHost. */
 .__region-split__, .__region-half__ {
@@ -4440,10 +4506,23 @@ projectfiletree .__project-row__ .__pre-icon__ {
     overlay-fit: contain;
 }
 
+/* THE LABEL IS WHAT GIVES WAY, and it needs BOTH halves to do it.
+ *
+ * `flex-shrink: 1` alone is not enough: a flex item will not shrink below its own content unless it is
+ * also allowed a minimum of zero, so a long name kept its natural width, overflowed the row and was
+ * hard-clipped by the panel -- a name cut mid-character with no ellipsis, which reads as broken rather
+ * than as truncated. The row is pinned to the panel's width for the same reason: an unconstrained row has
+ * nothing to shrink against. */
 projectfiletree .__project-row__ text {
     flex-shrink: 1;
+    min-width: 0px;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+projectfiletree .__project-row__ {
+    width: 100%;
+    min-width: 0px;
 }
 
 /* The badge is pushed to the trailing edge and never shrinks -- it is one or two characters and the

@@ -22,9 +22,11 @@ import javax.annotation.Nullable;
  * first press, before the pointer has moved at all. What {@code left} means is the offset within the
  * containing block, so that is what is measured.</p>
  *
- * <p><b>{@code resizeOriginLeft()} is not the answer either</b> for a panel the stylesheet anchors by
- * {@code right}/{@code bottom}: its {@code left} inset is unset and reads 0, which is the same teleport
- * wearing a different hat.</p>
+ * <p><b>{@code resizeOriginLeft()} used not to be the answer either</b> for a panel the stylesheet anchors
+ * by {@code right}/{@code bottom}: its {@code left} inset is {@code auto}, that method answered 0, and
+ * that was the same teleport wearing a different hat. It now measures the offset — the very thing this
+ * class does below — precisely because the warning here never reached {@code UIResizer}, which reads it
+ * as a leading-edge resize's origin and threw both floating panels into the corner on a press.</p>
  *
  * <p><b>Clamping only while dragging is not enough.</b> The position is written once and then stays, so
  * shrinking the container slides its edge past a panel that never moved — which looks like the panel

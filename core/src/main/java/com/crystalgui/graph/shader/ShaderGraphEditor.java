@@ -724,7 +724,20 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
 
     public ShaderGraphEditor setResource(@Nullable Resource resource) {
         this.resource = resource;
+        // The Blackboard is named after the DOCUMENT, which is Unity's reference and the reason the panel
+        // reads as part of the graph rather than as a tool inspecting it -- so it cannot be told at
+        // construction, when the widget has no file yet, and every board said "shader_graph" instead.
+        //
+        // Without the extension, like Unity's asset name and like the graph itself: the tab beside it
+        // already carries "new.shadergraph", so repeating the suffix here says nothing twice.
+        blackboard.setDocumentName(resource == null ? "" : stripExtension(resource.name()));
         return this;
+    }
+
+    private static String stripExtension(String name) {
+        int dot = name.lastIndexOf('.');
+        // A leading dot is the whole name of a dotfile, not an extension -- `.gitignore` must not become "".
+        return dot > 0 ? name.substring(0, dot) : name;
     }
 
     @Override
