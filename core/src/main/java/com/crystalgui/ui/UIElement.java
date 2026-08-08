@@ -1130,21 +1130,39 @@ public class UIElement implements SettingsScope, DataProvider {
      * and the first leading-edge drag teleported it to the container's corner. The inset is the same value
      * layout uses, so the answer cannot disagree with where the box actually is.</p>
      *
-     * <p>{@code auto} answers zero, which is the static position for the out-of-flow elements that can get
-     * here at all — the fallback is only reachable before anything has placed the element.</p>
+     * <h3>{@code auto} does NOT answer zero — it is measured</h3>
+     *
+     * <p>It used to, on the reasoning that {@code auto} means "wherever the static position put it" and
+     * that an element which had never been placed was therefore at its container's origin. That is only
+     * true of an element with <b>no</b> inset on the axis. A panel anchored by {@code right}/{@code bottom}
+     * — which is how the graph's floating panels are placed, and how a dialog pinned to a corner would be —
+     * has an {@code auto} {@code left} and is nowhere near zero.</p>
+     *
+     * <p>The cost was a teleport, and a nasty one because the gesture that triggered it does not look like
+     * a move: {@code UIResizer} reads this as the origin a <b>leading-edge</b> resize measures from, so a
+     * press on the top or left edge of such a panel wrote {@code left: 0; top: 0} and threw it into the
+     * corner — on the press, before the pointer had moved at all. {@code CanvasOverlayMove} carried a
+     * paragraph warning that this method "is not the answer" for exactly that reason and measured the
+     * offset itself; the warning did not reach the resize path, which had no such workaround.</p>
+     *
+     * <p>So the fallback measures the same thing that class did: the gap between this element's origin and
+     * its containing block's. That is what {@code left} means, it is available here, and it cannot
+     * disagree with where the box is.</p>
      */
     protected float resizeOriginLeft() {
-        return definiteInset(style.taffyBridge.style.inset.left);
+        LengthPercentageAuto inset = style.taffyBridge.style.inset.left;
+        if (inset != null && inset.getType() == LengthPercentageAuto.Type.LENGTH) return inset.getValue();
+        UIElement container = resizeContainingBlock();
+        return container == null ? 0f
+                : runtimeCache.getX() - container.getRuntimeCache().getX();
     }
 
     protected float resizeOriginTop() {
-        return definiteInset(style.taffyBridge.style.inset.top);
-    }
-
-    /** A definite inset in pixels, or 0. Percentages resolve against the containing block, which this
-     * layer does not have, so they are treated as unplaced rather than guessed at. */
-    private static float definiteInset(@Nullable LengthPercentageAuto inset) {
-        return inset != null && inset.getType() == LengthPercentageAuto.Type.LENGTH ? inset.getValue() : 0f;
+        LengthPercentageAuto inset = style.taffyBridge.style.inset.top;
+        if (inset != null && inset.getType() == LengthPercentageAuto.Type.LENGTH) return inset.getValue();
+        UIElement container = resizeContainingBlock();
+        return container == null ? 0f
+                : runtimeCache.getY() - container.getRuntimeCache().getY();
     }
 
     /**
@@ -1453,10 +1471,25 @@ public class UIElement implements SettingsScope, DataProvider {
         for (UIElement child : element.getChildren()) invalidateSubtreeTransforms(child);
     }
 
-    /** Re-applies the clamp against current content/box sizes. Call after the content changes, so a
-     * shrinking child can't leave the view scrolled past the end. Instant — a clamp is a correction,
-     * not a scroll the user asked for, so it shouldn't animate. */
+    /**
+     * Re-applies the clamp against current content/box sizes, so a shrinking child cannot leave the view
+     * scrolled past the end. Instant — a clamp is a correction, not a scroll the user asked for, so it
+     * should not animate.
+     *
+     * <p><b>Clamped, never scrolled to the top.</b> Collapsing a folder that made a tree scrollable used to
+     * leave the offset past the new end: a strip of the last rows against a screenful of nothing, with the
+     * scrollbar gone. Sending it home instead would fix the picture and lose the reader's place, which is
+     * why every tree and every browser clamps — the content simply comes to rest against the bottom of the
+     * viewport and the rows you were looking at stay on screen.</p>
+     *
+     * <p>Free when nothing is out of range, which is what lets {@link #onLayoutChanged} call it
+     * unconditionally: a non-scrolling element has a maximum of zero and an offset of zero, so it returns
+     * on the comparison without touching a transform.</p>
+     */
     public void clampScroll() {
+        float maxLeft = getMaxScrollLeft();
+        float maxTop = getMaxScrollTop();
+        if (scrollLeft >= 0f && scrollTop >= 0f && scrollLeft <= maxLeft && scrollTop <= maxTop) return;
         setScrollImmediate(scrollLeft, scrollTop);
     }
 
@@ -1780,6 +1813,13 @@ public class UIElement implements SettingsScope, DataProvider {
 
     protected void onLayoutChanged() {
         clearLayoutCache();
+        // THE CONTENT MAY HAVE SHRUNK UNDER A SCROLL OFFSET, and nothing else would notice. A scroll
+        // position is not layout -- it lives in the transform chain and Taffy never sees it -- so a subtree
+        // collapsing leaves the offset exactly where it was, pointing past the end of what is left.
+        //
+        // Browsers do this on every reflow for the same reason, and clampScroll is written to be free when
+        // there is nothing to correct, so this costs a comparison on elements that do not scroll.
+        clampScroll();
         // TODO: Fire DOM Events
     }
 

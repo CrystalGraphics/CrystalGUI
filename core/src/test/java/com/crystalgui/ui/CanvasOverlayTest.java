@@ -136,6 +136,47 @@ public class CanvasOverlayTest extends UiTestBase {
     }
 
     /**
+     * <b>A press on a leading resize edge must not move the panel.</b>
+     *
+     * <p>The Main Preview is anchored by {@code right}/{@code bottom}, so its {@code left} inset is
+     * {@code auto}. {@code UIResizer} reads {@code resizeOriginLeft()} as the origin a leading edge
+     * measures from, and that answered <b>0</b> for an {@code auto} inset — so pressing the top or left
+     * edge wrote {@code left: 0; top: 0} and threw the panel into the canvas's corner, on the press,
+     * before the pointer had moved.</p>
+     *
+     * <p>Reported as "clicking the main preview sometimes teleports it to the top left", and the
+     * "sometimes" is the tell: only the three leading handles do it, and they are a few pixels wide.</p>
+     *
+     * <p>Asserted with a <b>zero-delta</b> press rather than a real drag, because that is the shape of the
+     * bug: nothing about the resize arithmetic is wrong, the origin it starts from is.</p>
+     */
+    @Test
+    public void aPressOnALeadingResizeEdgeLeavesTheOverlayWhereItIs() {
+        var panel = new com.crystalgui.graph.shader.MainPreviewPanel(
+                new com.crystalgui.graph.GraphDocument(),
+                com.crystalgraphics.shadergraph.CgShaderNodeRegistry.builtins(),
+                new com.crystalgraphics.shadergraph.CgMasterNode());
+        graph.addOverlay(panel);
+        frame();
+
+        float beforeX = panel.getRuntimeCache().getX();
+        float beforeY = panel.getRuntimeCache().getY();
+        assertTrue("the panel must start away from the corner or this asserts nothing; x=" + beforeX,
+                beforeX > graph.getRuntimeCache().getX() + 10f);
+
+        UIElement topLeft = panel.getChildren().stream()
+                .filter(c -> c.hasClass("__resizer-top-left__"))
+                .findFirst().orElseThrow(() -> new AssertionError("no leading handle on a resizable panel"));
+        press(physicalCentreOf(topLeft));
+        frame();
+
+        assertEquals("a press with no movement moved the panel horizontally",
+                beforeX, panel.getRuntimeCache().getX(), 0.5f);
+        assertEquals("a press with no movement moved the panel vertically",
+                beforeY, panel.getRuntimeCache().getY(), 0.5f);
+    }
+
+    /**
      * An overlay cannot be dragged out of the canvas.
      *
      * <p>Worse than untidy: the viewport is {@code overflow: hidden}, so a panel dragged past the edge

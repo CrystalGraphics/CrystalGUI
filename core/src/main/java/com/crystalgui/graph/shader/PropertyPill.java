@@ -99,6 +99,16 @@ public class PropertyPill extends UIElement {
         name.addClass(NAME_CLASS);
         type = new UIText(BlackboardPanel.displayTypeOf(property));
         type.addClass(TYPE_CLASS);
+        // SELF-SIZING BY DECLARATION, not by the auto-detect, and this label is exactly the case that
+        // method exists for: it is the only column here that GROWS, so on the first layout pass it is
+        // handed whatever slack the row has and concludes it does not size itself -- correct-looking, and
+        // permanent, since the decision is taken once by design.
+        //
+        // The cost only appears once the row is sized to its content (the Blackboard body is
+        // `align-items: start`, so a long name can scroll rather than spill): a label contributing zero
+        // width leaves the row exactly as wide as the capsule, and `Vector 2` renders as `Ve…` jammed
+        // against the panel edge, outside the scrollable width instead of inside it.
+        type.forceSelfSizeWidth();
 
         // THE CAPSULE IS THE TARGET, not the row.
         //
