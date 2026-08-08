@@ -22,6 +22,9 @@ import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.core.notify.StatusBar;
+import com.crystalgui.core.notify.StatusBarAlignment;
+import com.crystalgui.core.notify.StatusBarEntry;
+import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
@@ -132,6 +135,24 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
 
     /** Whether the last compile failed, so restoring the item on activation restores its colour too. */
     private boolean lastCompileFailed;
+
+    /**
+     * The two entries this graph owns while its tab is in front.
+     *
+     * <p>Handles rather than string keys, so withdrawing them is disposing what was registered — see
+     * {@link StatusBarEntryAccessor}. Null while the tab is in the background, which is what makes
+     * "entitled to speak" a fact about whether the entry exists rather than a flag consulted at three
+     * separate write sites.</p>
+     */
+    @Nullable
+    private StatusBarEntryAccessor compileEntry;
+
+    @Nullable
+    private StatusBarEntryAccessor lineOwnerEntry;
+
+    /** Left group, compile summary ahead of the line-owner readout. @see StatusBar */
+    private static final int COMPILE_PRIORITY = 100;
+    private static final int LINE_OWNER_PRIORITY = 90;
 
     private final CgShaderNodeRegistry shaderNodes = CgShaderNodeRegistry.builtins();
     private final CgMasterNode master = new CgMasterNode();
@@ -395,13 +416,35 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
     public void setActive(boolean active) {
         statusActive = active;
         if (!active) {
-            StatusBar.clear(COMPILE_STATUS);
-            StatusBar.clear(LINE_OWNER_STATUS);
+            if (compileEntry != null) compileEntry.dispose();
+            compileEntry = null;
+            if (lineOwnerEntry != null) lineOwnerEntry.dispose();
+            lineOwnerEntry = null;
             return;
         }
-        if (lastCompileStatus != null) {
-            StatusBar.set(COMPILE_STATUS, lastCompileStatus, StatusBar.Align.LEFT, lastCompileTooltip,
-                    lastCompileFailed ? StatusBar.Severity.ERROR : StatusBar.Severity.NORMAL);
+        publishCompileStatus();
+    }
+
+    /**
+     * Puts the compile summary on the bar, or updates the one already there.
+     *
+     * <p><b>Only while this graph is the tab in front.</b> A graph recompiles whether or not you are
+     * looking at it — an animated node recompiles every frame — so writing unconditionally put a
+     * background document's summary on the bar underneath somebody else's file. @see #setActive</p>
+     *
+     * <p>One place rather than the three that each rebuilt the same entry by hand, which is how the
+     * failure colour came to be spelled out at every one of them.</p>
+     */
+    private void publishCompileStatus() {
+        if (!statusActive || lastCompileStatus == null) return;
+        StatusBarEntry entry = new StatusBarEntry("Shader graph compilation", lastCompileStatus,
+                lastCompileTooltip, null,
+                lastCompileFailed ? StatusBarEntry.Kind.ERROR : StatusBarEntry.Kind.STANDARD);
+        if (compileEntry == null) {
+            compileEntry = StatusBar.addEntry(entry, COMPILE_STATUS, StatusBarAlignment.LEFT,
+                    COMPILE_PRIORITY);
+        } else {
+            compileEntry.update(entry);
         }
     }
 
@@ -443,10 +486,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
             lastCompileFailed = true;
             lastCompileStatus = "1 error(s)";
             lastCompileTooltip = diagnostic.message();
-            if (statusActive) {
-                StatusBar.set(COMPILE_STATUS, lastCompileStatus, StatusBar.Align.LEFT, lastCompileTooltip,
-                        StatusBar.Severity.ERROR);
-            }
+            publishCompileStatus();
             break;
         }
     }
@@ -766,13 +806,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
                 ? String.format("%d chars, %d varyings, %d mapped lines",
                         result.source().length(), result.varyings().size(), result.lineOwners().size())
                 : result.errors().get(0);
-        // ONLY WHILE THIS GRAPH IS THE TAB IN FRONT. A graph recompiles whether or not you are looking at
-        // it -- an animated node recompiles every frame -- so writing unconditionally put a background
-        // document's summary on the bar underneath somebody else's file. @see #setActive
-        if (statusActive) {
-            StatusBar.set(COMPILE_STATUS, lastCompileStatus, StatusBar.Align.LEFT, lastCompileTooltip,
-                    lastCompileFailed ? StatusBar.Severity.ERROR : StatusBar.Severity.NORMAL);
-        }
+        publishCompileStatus();
         // UNCONDITIONALLY, unlike the status item above: a diagnostic set belongs to the document, so a
         // graph compiling in the background must keep its problems current for whenever its tab returns.
         // Only the STATUS BAR is a claim on the screen right now.
@@ -785,8 +819,14 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         String owner = lastCompile.ownerOfLine(line);
         if (owner == null) return;
         var node = graph.getDocument().node(owner);
-        StatusBar.set(LINE_OWNER_STATUS, "line " + line + " emitted by "
+        StatusBarEntry entry = StatusBarEntry.of("Emitting node", "line " + line + " emitted by "
                 + (node == null ? owner : node.typeId() + "  (" + owner + ")"));
+        if (lineOwnerEntry == null) {
+            lineOwnerEntry = StatusBar.addEntry(entry, LINE_OWNER_STATUS, StatusBarAlignment.LEFT,
+                    LINE_OWNER_PRIORITY);
+        } else {
+            lineOwnerEntry.update(entry);
+        }
     }
 
     // ── Content ─────────────────────────────────────────────────────────────────────────────────
