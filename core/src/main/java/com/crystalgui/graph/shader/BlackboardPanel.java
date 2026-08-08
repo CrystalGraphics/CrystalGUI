@@ -16,6 +16,7 @@ import com.crystalgui.graph.GraphIds;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.PropertyEdits;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Menu;
 import com.crystalgui.ui.elements.ScrollerView;
@@ -58,7 +59,7 @@ import com.crystalgui.ui.input.keymap.Keymap;
  * {@link #onPropertySelected} and the inspector listens; each source clears the other. Two sources, one
  * subject, and neither has to know what the other can hold.</p>
  */
-public class BlackboardPanel extends UIElement {
+public class BlackboardPanel extends UIElement implements UIFrameTicker {
 
     public static final String PANEL_CLASS = "__blackboard__";
     public static final String HEAD_CLASS = "__head__";
@@ -380,9 +381,53 @@ public class BlackboardPanel extends UIElement {
         if (window != null) window.getInputHandler().requestPointerFocus(this);
     }
 
-    /** Re-clamps after the canvas resized. Call per frame; cheap and idempotent. */
-    public void reclamp() {
+    /**
+     * Re-clamps after the canvas resized, every frame, forever.
+     *
+     * <p><b>Its own standing ticker, and that is the fix.</b> This call used to live in the editor's
+     * {@code attachPreviews}, which is a ticker that <em>drops itself</em> once the preview renderers are
+     * up — so the board tracked a resizing canvas for two frames after opening and then silently stopped.
+     * It read as "restore is broken", because a relaunch is the one time you watch a panel that has never
+     * been dragged.</p>
+     *
+     * <p>The click that appeared to fix it was a drag, and a drag calls {@code placeAt} directly: that
+     * writes the far-edge anchor, after which <b>Taffy</b> tracks the edge and no ticker is needed at all.
+     * So the panel started working the moment it was touched, which pointed at the restore path and was
+     * nowhere near it.</p>
+     *
+     * <p>The widget owns this, like its theme and its commands — a host that has to remember to drive
+     * another widget's geometry is a host that will forget, and this one did.</p>
+     */
+    @Override
+    public boolean tickFrame(float deltaSeconds) {
         move.reclampIfPlaced(resizeOriginLeft(), resizeOriginTop());
+        return true;
+    }
+
+    /**
+     * Starts the re-clamp ticker, once.
+     *
+     * <p>From here rather than the constructor because there is no window then. {@code registerTicker} is
+     * {@code HashSet}-backed and this registers {@code this}, so re-registering is genuinely idempotent —
+     * unlike a lambda, which would be a new object every layout pass.</p>
+     */
+    @Override
+    protected void onLayoutChanged() {
+        super.onLayoutChanged();
+        UIWindow window = getAttachedWindow();
+        if (window != null) window.registerTicker(this);
+    }
+
+    /**
+     * Marks this panel as deliberately positioned, for a rect restored from the document.
+     *
+     * <p>{@link #reclamp} does nothing until this is set, and only a drag used to set it — so a restored
+     * board ignored the canvas resizing until it had been clicked once, which is exactly how it was
+     * reported. The Main Preview had the same gate and was seeded on restore; this one was not, and the
+     * asymmetry is the entire bug. @see CanvasOverlayMove#markPlaced()</p>
+     */
+    public void markPlaced() {
+        move.markPlaced();
     }
 
     // ── The list ────────────────────────────────────────────────────────────
