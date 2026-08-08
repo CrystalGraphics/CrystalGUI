@@ -280,6 +280,113 @@ public class ProblemsPanelTest extends UiTestBase {
         assertEquals("and the headings went with them", 2, panel.visibleFiles().size());
     }
 
+    /**
+     * <b>The chevron's route works, not just the tree underneath it.</b>
+     *
+     * <p>Both of this panel's fold bugs lived in the route rather than in {@code TreeView}. The first
+     * refreshed synchronously from inside the press. The second parked the fold for "the next layout" —
+     * and layout only runs when geometry changes, which pressing a chevron does not, so the fold was never
+     * applied at all and turned up later when something unrelated disturbed the panel. Both tests I had
+     * called {@code setExpanded} directly and sailed past both.</p>
+     */
+    @Test
+    public void foldingThroughTheChevronRouteTakesEffect() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
+        settle();
+        assertTrue(panel.visibleProblems().isEmpty());
+
+        panel.requestFold(ProblemNode.file(shader));
+        settle();
+        assertEquals("a chevron press never reached the tree", 1, panel.visibleProblems().size());
+
+        panel.requestFold(ProblemNode.file(shader));
+        settle();
+        assertTrue("and it must fold back", panel.visibleProblems().isEmpty());
+    }
+
+    /**
+     * <b>What a row says about itself must match what is under it.</b>
+     *
+     * <p>The invariant both bugs broke, and the one worth asserting because it holds however the fold is
+     * reached: a row drawn as collapsed with its children still listed beneath it is the symptom either
+     * way. Screenshots showed exactly that — two headings with a chevron pointing right and their problems
+     * still on screen.</p>
+     */
+    @Test
+    public void aCollapsedRowNeverHasChildrenUnderIt() {
+        give(shader, error(4, "undefined variable"), error(9, "no output node"));
+        give(util, error(2, "broken include"));
+        panel.bindTo(markers);
+        settle();
+
+        panel.requestFold(ProblemNode.file(shader));
+        settle();
+        assertCollapsedRowsHaveNoChildren();
+
+        panel.requestFold(ProblemNode.file(util));
+        settle();
+        assertCollapsedRowsHaveNoChildren();
+
+        panel.requestFold(ProblemNode.file(shader));
+        settle();
+        assertCollapsedRowsHaveNoChildren();
+    }
+
+    /** Walks the flattened rows and checks every collapsed file is followed by another file, or nothing. */
+    private void assertCollapsedRowsHaveNoChildren() {
+        List<com.crystalgui.ui.elements.tree.TreeRow<ProblemNode>> rows = panel.tree().visibleRows();
+        for (int i = 0; i < rows.size(); i++) {
+            var row = rows.get(i);
+            if (!row.item().isFile() || row.expanded()) continue;
+            boolean followedByAChild = i + 1 < rows.size() && !rows.get(i + 1).item().isFile();
+            assertFalse("a collapsed " + row.item().resource().name() + " still lists its problems",
+                    followedByAChild);
+        }
+    }
+
+    /**
+     * <b>A panel closed and reopened still works.</b>
+     *
+     * <p>This is what actually broke, and it broke at the framework level rather than in this panel:
+     * {@code ListView.tickFrame} called {@code dispose()} when it found itself detached, and dispose is
+     * one-way — it drops the model subscription for good. Closing a dock panel detaches it; reopening
+     * re-attaches a view that is back on screen, ticking again, and no longer listening to its model. Rows
+     * went stale, folds stopped landing, and nothing reported it. <b>Every list and tree in the
+     * application had this</b>; it surfaced here because a Problems tree is the thing people close and
+     * reopen from the activity bar.</p>
+     *
+     * <p>A detach now releases the subscription and re-attach re-makes it. An explicit {@code dispose()}
+     * stays one-way, because "I am finished with this" must not be undone by the next reparent.</p>
+     */
+    @Test
+    public void aPanelSurvivesBeingClosedAndReopened() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
+        settle();
+
+        UIElement root = panel.getParent();
+        assertNotNull(root);
+
+        panel.removeSelf();
+        settle();
+        root.addChild(panel);
+        settle();
+
+        assertTrue("the tree stopped listening to its model",
+                panel.tree().isListeningToModel());
+
+        // The fold has to still land...
+        panel.requestFold(ProblemNode.file(shader));
+        settle();
+        assertEquals("a reopened panel's chevrons are dead", 1, panel.visibleProblems().size());
+
+        // ...and so does a change arriving from the index while it was away.
+        give(util, error(2, "broken include"));
+        settle();
+        assertEquals("a reopened panel stopped following the workspace", 2, panel.visibleFiles().size());
+    }
+
     /** The panel follows the index rather than being told: a later compile arrives on its own. */
     @Test
     public void aLaterChangeReachesThePanel() {
