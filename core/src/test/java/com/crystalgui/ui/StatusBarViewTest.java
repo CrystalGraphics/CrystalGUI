@@ -293,6 +293,43 @@ public class StatusBarViewTest extends UiTestBase {
     }
 
     /**
+     * <b>The hide menu lists entries by NAME and toggles them.</b>
+     *
+     * <p>Ported from VS Code's {@code statusbarPart.ts}, which builds one checkable
+     * {@code ToggleStatusbarEntryVisibilityAction} per entry labelled by {@code entry.name}. That is what
+     * the name/text split is for — you cannot offer "hide 51:39" as a checkbox, and the text it would name
+     * changes on every keystroke.</p>
+     *
+     * <p>Driven through the menu rather than through {@code StatusBar.setHidden}, because a surface that
+     * reaches the setter is the whole point of it existing.</p>
+     */
+    @Test
+    public void theHideMenuNamesEntriesAndTogglesThem() {
+        StatusBar.addEntry(StatusBarEntry.of("Cursor position", "51:39"), "caret",
+                StatusBarAlignment.RIGHT, 100);
+        StatusBar.addEntry(StatusBarEntry.of("File encoding", "UTF-8"), "encoding",
+                StatusBarAlignment.RIGHT, 98);
+        settle();
+        assertEquals(2, itemsIn(StatusBarView.RIGHT_CLASS).size());
+
+        var menu = bar.hideMenu();
+        List<String> labels = new java.util.ArrayList<>();
+        for (com.crystalgui.ui.elements.MenuItem item : menu.getItems()) labels.add(item.getText());
+        assertEquals("the menu should name what entries ARE, not what they show",
+                List.of("Cursor position", "File encoding"), labels);
+
+        for (com.crystalgui.ui.elements.MenuItem item : menu.getItems()) {
+            if ("File encoding".equals(item.getText())) menu.onItemActivated.emit(item);
+        }
+        settle();
+
+        assertEquals("the entry did not leave the bar", 1, itemsIn(StatusBarView.RIGHT_CLASS).size());
+        assertEquals("51:39", textOf(itemsIn(StatusBarView.RIGHT_CLASS).get(0)));
+        assertEquals("and a hidden entry must still be listed, or it cannot come back",
+                2, bar.hideMenu().getItems().size());
+    }
+
+    /**
      * <b>A slot's tooltip is attached once and re-texted, never re-attached.</b>
      *
      * <p>{@code Tooltip.attach} adds a hover listener pair per call and {@code detach} leaves them inert

@@ -9,6 +9,11 @@ import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.AnchoredPlacement;
+import com.crystalgui.ui.elements.Menu;
+import com.crystalgui.ui.elements.MenuItem;
+import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 
@@ -129,8 +134,63 @@ public class StatusBarView extends UIElement {
         addInternalChild(spacer);
         addInternalChild(rightGroup);
 
+        buildHideMenu();
         refresh();
     }
+
+    /**
+     * The right-click menu that hides entries — VS Code's status bar context menu.
+     *
+     * <p>Ported from {@code vs/workbench/browser/parts/statusbar/statusbarPart.ts}, which builds one
+     * checkable {@code ToggleStatusbarEntryVisibilityAction} per entry <b>labelled by
+     * {@code entry.name}</b>. That is what the name/text split exists for: you cannot offer "hide 51:39"
+     * as a checkbox, and the text it would name changes on every keystroke.</p>
+     *
+     * <p>Rebuilt on open rather than kept in step, because the set of entries changes constantly — a
+     * document activating registers four — and a menu is read at the moment it is opened and at no other.
+     * Dropped from the reference: {@code Hide Status Bar} (there is no command for it here) and the
+     * extension rows.</p>
+     */
+    private void buildHideMenu() {
+        addInternalChild(hideMenu);
+        hideMenu.onItemActivated.connect(item -> {
+            String id = menuIds.get(item);
+            if (id != null) StatusBar.setHidden(id, !StatusBar.isHidden(id));
+        });
+        events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
+            if (event.getButtonId() != CgMouseCodes.RIGHT_BUTTON) return;
+            UIWindow window = getAttachedWindow();
+            if (window == null) return;
+            event.stopPropagation();
+            populateHideMenu();
+            var at = AnchoredPlacement.pointerToRoot(window,
+                    event.getPosition().x(), event.getPosition().y());
+            hideMenu.showAt(at.x(), at.y(), null);
+        }, false, true);
+    }
+
+    /** One checkable row per registered entry, hidden ones included — or there is no way back. */
+    private void populateHideMenu() {
+        hideMenu.clearItems();
+        menuIds.clear();
+        for (StatusBarEntryAccessor accessor : StatusBar.allEntries()) {
+            String id = StatusBar.idOf(accessor);
+            MenuItem item = hideMenu.addCheckableItem(accessor.entry().name());
+            item.setSelected(!StatusBar.isHidden(id));
+            menuIds.put(item, id);
+        }
+    }
+
+    /** The hide menu, so a test can activate a row rather than calling StatusBar.setHidden directly. */
+    public Menu hideMenu() {
+        populateHideMenu();
+        return hideMenu;
+    }
+
+    private final Menu hideMenu = new Menu();
+
+    /** Which entry each row toggles. By identity, since two entries may share a name. */
+    private final Map<MenuItem, String> menuIds = new IdentityHashMap<>();
 
     /**
      * The path shown at the leading edge. The host sets the trail; this class never derives one.

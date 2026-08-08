@@ -159,19 +159,24 @@ public final class DiagnosticSet {
     /**
      * Replaces the {@link #DEFAULT_OWNER}'s contents — the single-producer spelling.
      *
-     * <p>Kept because most documents have exactly one producer, and making every one of them name an owner
-     * would be ceremony for a distinction they do not have.</p>
+     * <p><b>Kept, and the name is the reason it nearly was not.</b> It does not set <em>all</em>: it
+     * replaces one owner's slice and leaves every other owner untouched, which is precisely the thing a
+     * reader would assume it did not do. The case for deleting it was that one honest vocabulary beats a
+     * convenience that lies.</p>
+     *
+     * <p>It stays because the alternative is worse in the direction that matters. Deleting it makes every
+     * single-producer document write {@code changeOne(DEFAULT_OWNER, list)} — and a producer that has to
+     * name an owner it does not have will invent one, so instead of one shared default there would be a
+     * scattering of ad-hoc owner strings that never collide with each other and never merge either. The
+     * convenience is what keeps the single-producer case pointed at a <em>known</em> key.</p>
+     *
+     * <p>What is not kept is the ambiguity: this is documented as one owner's write, {@link #changeAll} is
+     * the one that means all of them, and the pair reads correctly beside each other. Deleting {@code add}
+     * — which appended to the default owner and was the genuinely misleading one, since "add" says nothing
+     * about replacing — is the other half of that decision.</p>
      */
     public DiagnosticSet setAll(@Nullable Collection<Diagnostic> incoming) {
         return changeOne(DEFAULT_OWNER, incoming);
-    }
-
-    /** Adds one to the {@link #DEFAULT_OWNER}'s contents. For building a set up before installing it. */
-    public DiagnosticSet add(Diagnostic diagnostic) {
-        if (diagnostic == null) return this;
-        List<Diagnostic> next = new ArrayList<>(byOwner.getOrDefault(DEFAULT_OWNER, List.of()));
-        next.add(diagnostic);
-        return changeOne(DEFAULT_OWNER, next);
     }
 
     /** Empties every owner. */

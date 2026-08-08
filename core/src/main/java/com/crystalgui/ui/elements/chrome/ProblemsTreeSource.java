@@ -72,10 +72,32 @@ public final class ProblemsTreeSource implements com.crystalgui.ui.elements.tree
         return text;
     }
 
-    /** Restricts the tree to one file, or to all of them when null. @see #only */
+    /**
+     * Restricts the tree to one file, or to all of them when null. @see #only
+     *
+     * <p>{@code null} here means <b>unrestricted</b>, which is why {@link #setScope} exists beside it:
+     * "the File tab with nothing open" is a restriction to nothing, and passing null for it would show the
+     * entire workspace under a tab claiming to show one file.</p>
+     */
     public void setOnlyResource(@Nullable Resource resource) {
-        this.only = resource;
+        setScope(resource != null, resource);
     }
+
+    /**
+     * Sets the scope explicitly — restricted to {@code file}, or the whole workspace.
+     *
+     * <p>The distinction {@code setOnlyResource} alone cannot draw: restricted with no file is <b>empty</b>,
+     * not unrestricted. Without it the File tab showed every problem in the workspace whenever nothing was
+     * open, which is the most misleading thing a scoped view can do — it does not look like a bug, it looks
+     * like the project having problems in files you are not in.</p>
+     */
+    public void setScope(boolean restricted, @Nullable Resource file) {
+        this.restricted = restricted;
+        this.only = file;
+    }
+
+    /** Whether the tree is scoped to one file at all. @see #setScope */
+    private boolean restricted;
 
     @Nullable
     public Resource onlyResource() {
@@ -85,8 +107,10 @@ public final class ProblemsTreeSource implements com.crystalgui.ui.elements.tree
     @Override
     public List<ProblemNode> roots() {
         List<ProblemNode> files = new ArrayList<>();
+        // RESTRICTED TO NOTHING IS EMPTY, not everything. @see #setScope
+        if (restricted && only == null) return files;
         for (Resource resource : markers.resources()) {
-            if (only != null && !only.equals(resource)) continue;
+            if (restricted && !only.equals(resource)) continue;
             // A FILE WITH NOTHING LEFT AFTER FILTERING IS NOT A ROW. Otherwise the panel offers a heading
             // that expands onto nothing, which reads as a broken tree rather than as an active filter.
             if (matching(resource).isEmpty()) continue;

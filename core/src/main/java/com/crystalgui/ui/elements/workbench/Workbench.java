@@ -1497,7 +1497,13 @@ public class Workbench extends UIElement {
      * rebuild the tree and throw away which files you had expanded.</p>
      */
     private void rebindProblems() {
-        if (problems.source() != null && problems.source().markers() == markers) return;
-        problems.bindTo(markers);
+        if (problems.source() == null || problems.source().markers() != markers) {
+            problems.bindTo(markers);
+        }
+        // WHICH FILE IS IN FRONT, told on every tab change whether or not the filter is on -- so switching
+        // "Show Active File Only" on narrows to what you are looking at now rather than to whatever
+        // happened to be in front when you last switched it off.
+        FileDocument active = activeDocument();
+        problems.setActiveResource(active == null ? null : active.resource());
     }
 }
