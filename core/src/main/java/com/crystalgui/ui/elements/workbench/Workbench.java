@@ -51,6 +51,7 @@ import java.util.function.Function;
 
 import javax.annotation.Nullable;
 import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.undo.UndoCommands;
 
@@ -261,7 +262,47 @@ public class Workbench extends UIElement {
         // file is undoable and reaches the workspace stack. Same ids the editor and the graph use, so
         // there is one Undo in the palette rather than one per widget.
         UndoCommands.register();
+        registerToolWindowCommands();
     }
+
+    /**
+     * Revealing a tool window, as a named command.
+     *
+     * <p>Here rather than nowhere because a status bar entry names a <b>command id</b>, not a callback —
+     * which is what keeps a clickable readout reachable from the palette and a keymap as well as from the
+     * bar. VS Code's error counter opens its Problems panel exactly this way; ours had the mechanism and
+     * nothing to point it at.</p>
+     *
+     * <p>Global, taking the workbench from the data context, for the reason {@link #WORKBENCH} exists: a
+     * captured workbench makes a second window's command toggle a panel in the first.</p>
+     */
+    private static void registerToolWindowCommands() {
+        CommandRegistry.global().contribute(Workbench.class, registry -> {
+            registry.register(Command.of(SHOW_PROBLEMS, "Show Problems")
+                    .runWithData(data -> {
+                        Workbench workbench = data.get(WORKBENCH);
+                        if (workbench != null) workbench.revealPanel(PROBLEMS_TYPE);
+                    })
+                    .enabledWhereData(data -> data.get(WORKBENCH) != null));
+            registry.register(Command.of(SHOW_NOTIFICATIONS, "Show Notifications")
+                    .runWithData(data -> {
+                        Workbench workbench = data.get(WORKBENCH);
+                        if (workbench != null) workbench.revealPanel(NOTIFICATIONS_TYPE);
+                    })
+                    .enabledWhereData(data -> data.get(WORKBENCH) != null));
+        });
+    }
+
+    /** Brings a tool window to the front, creating it if it is not open. */
+    public boolean revealPanel(String typeId) {
+        return toolWindowManager != null && toolWindowManager.showPanel(typeId);
+    }
+
+    /** Reveals the Problems panel. What a failing status readout points at. */
+    public static final String SHOW_PROBLEMS = "workbench.showProblems";
+
+    /** Reveals the Notifications panel. */
+    public static final String SHOW_NOTIFICATIONS = "workbench.showNotifications";
 
     public Workbench(WorkspaceClient<?> client) {
         if (client == null) throw new IllegalArgumentException("A Workbench needs a workspace client");

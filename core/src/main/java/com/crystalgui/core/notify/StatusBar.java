@@ -4,8 +4,10 @@ import com.crystalgui.core.signal.Signal;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Ambient text about how things are right now — VS Code's {@code IStatusbarService}, IntelliJ's status bar
@@ -60,6 +62,51 @@ public final class StatusBar {
     /** Registration order, which is the tiebreak when two entries share a priority. */
     private static int sequence;
 
+    /**
+     * Entry ids the user has switched off — VS Code's status bar context menu, IntelliJ's
+     * Settings → Appearance → Status Bar Widgets.
+     *
+     * <p><b>This is what {@link StatusBarEntry#name()} is for.</b> A hide menu lists entries by what they
+     * <em>are</em> and not by what they currently show — you cannot offer "hide 51:39" as a checkbox, and
+     * the text it would name changes on every keystroke. The name/text split looked like redundancy until
+     * something had to enumerate the bar.</p>
+     *
+     * <p>By id rather than by accessor, so the choice survives the entry: the caret readout is registered
+     * afresh every time a document is activated, and a preference that died with the tab would have to be
+     * made again on every file. Which is also why it is a set of ids and not a flag on the entry.</p>
+     *
+     * <p>Not persisted yet — the same honest limit as notification suppression, and for the same reason.</p>
+     */
+    private static final Set<String> HIDDEN = new LinkedHashSet<>();
+
+    /** Switches an entry id off, or back on. @see #HIDDEN */
+    public static void setHidden(String id, boolean hidden) {
+        if (id == null || id.isEmpty()) return;
+        boolean changed = hidden ? HIDDEN.add(id) : HIDDEN.remove(id);
+        if (changed) onDidChange.emit();
+    }
+
+    public static boolean isHidden(String id) {
+        return HIDDEN.contains(id);
+    }
+
+    /**
+     * Every registered entry, hidden ones included, in visual order — what a hide menu enumerates.
+     *
+     * <p>Distinct from {@link #entries()}, which is what a bar renders: a menu has to list what you have
+     * switched off, or there is no way to switch it back on.</p>
+     */
+    public static List<StatusBarEntryAccessor> allEntries() {
+        List<Live> all = new ArrayList<>(ENTRIES);
+        all.sort(BY_PRIORITY);
+        return new ArrayList<>(all);
+    }
+
+    /** The id an accessor was registered under. */
+    public static String idOf(StatusBarEntryAccessor accessor) {
+        return accessor instanceof Live ? ((Live) accessor).id : "";
+    }
+
     private static final List<Live> ENTRIES = new ArrayList<>();
 
     /** The separator between two entries in {@link #text()}. */
@@ -99,7 +146,7 @@ public final class StatusBar {
     public static List<StatusBarEntryAccessor> entries(StatusBarAlignment alignment) {
         List<Live> group = new ArrayList<>();
         for (Live live : ENTRIES) {
-            if (live.alignment == alignment) group.add(live);
+            if (live.alignment == alignment && !HIDDEN.contains(live.id)) group.add(live);
         }
         group.sort(BY_PRIORITY);
         return new ArrayList<>(group);
@@ -138,6 +185,7 @@ public final class StatusBar {
     /** Empties the bar. For tests that need isolation, never for production. */
     public static void resetForTesting() {
         ENTRIES.clear();
+        HIDDEN.clear();
         sequence = 0;
         onDidChange.disconnectAll();
     }
@@ -145,7 +193,7 @@ public final class StatusBar {
     /** One registered entry. Its own accessor, so the handle and the record cannot come apart. */
     private static final class Live implements StatusBarEntryAccessor {
 
-        private final String id;
+        final String id;
         private final StatusBarAlignment alignment;
         private final int priority;
         private final int sequence;
