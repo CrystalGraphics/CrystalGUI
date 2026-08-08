@@ -96,6 +96,15 @@ public class StripeView extends UIElement {
     /** The count over a rail icon. @see ItemButton#setBadge */
     public static final String BADGE_CLASS = "__badge__";
 
+    /**
+     * On the badge while it is a dot rather than a count — {@link ViewContainerRegistry#DOT}.
+     *
+     * <p>A class, so the dot's glyph and its position over the icon are the sheet's business. IntelliJ
+     * draws it in the icon's top-right corner, which is a placement decision and not something to hard-code
+     * beside the text it replaces.</p>
+     */
+    public static final String DOT_CLASS = "__dot__";
+
     /** One tool-window button. */
     public static final String ITEM_CLASS = "__activity-item__";
 
@@ -754,7 +763,12 @@ public class StripeView extends UIElement {
                 removeInternalChild(badge);
                 return;
             }
-            badge.setText(text);
+            // A DOT CARRIES NO TEXT. The class is what draws it, so the label is emptied rather than left
+            // holding the marker -- otherwise the glyph and the sheet's dot would both be on screen.
+            boolean dot = ViewContainerRegistry.DOT.equals(text);
+            badge.setText(dot ? "" : text);
+            if (dot) badge.addClass(DOT_CLASS);
+            else badge.removeClass(DOT_CLASS);
             if (badge.getParent() == null) addInternalChild(badge);
         }
 

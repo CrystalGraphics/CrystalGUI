@@ -2,6 +2,7 @@ package com.crystalgui.editor;
 
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
+import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.signal.Signal;
@@ -373,16 +374,15 @@ public class CrystalEditor extends UIElement implements Disposable {
     @SuppressWarnings("unchecked")
     public <T> boolean restoreLayout(DynamicOps<T> ops) {
         if (savedLayout == null) {
-            Notifications.info("nothing saved yet");
+            Notifications.show(Notification.info("No saved layout").withDetail("nothing to restore yet"));
             return false;
         }
         DockLayout restored = DockLayoutCodec.decode((T) savedLayout, ops, workbench.panels());
         if (restored == null) {
-            Notifications.error("saved layout refused");
+            Notifications.show(Notification.error("Layout refused").withDetail("the saved arrangement could not be applied"));
             return false;
         }
         workbench.dock().setLayout(restored);
-        Notifications.info("layout restored");
         return true;
     }
 

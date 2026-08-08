@@ -26,7 +26,7 @@ looks like a needed helper is the symptom of one that does not — see
 | `DockService` — `open(input, placement)` | **shipped** as `Workbench.open` | [Opening things](#opening-things) |
 | `DocumentType` — a file type, declared by its owner | **shipped** | [Contributions](#contributions) |
 | `Inspector` — one inspector, any subject | **shipped** | [Contributions](#contributions) |
-| `Notifications` / `StatusBar` — events and ambient text | **shipped** | [Notifications and status](#notifications-and-status) |
+| `Notifications` / `StatusBar` — events and ambient text, plus their views (`StatusBarView`, `NotificationsView`, `NotificationBalloons`) | **shipped** | [Notifications and status](#notifications-and-status) |
 | `DockBannerProvider` — a strip above a panel | **shipped** | [Contributions](#contributions) |
 
 ---
@@ -664,6 +664,69 @@ content to report.
 
 Pinned by `NotifyTest` headlessly — a dedicated server that creates a folder should be able to say so — and
 by `StatusBarViewTest` for the view half.
+
+### Notifications: the model, and the two surfaces
+
+```java
+Notifications.show(Notification.error("Open failed")
+        .withDetail(path.name() + " — " + failure.code())
+        .withAction("Retry", () -> openFile(path)));
+Notifications.clear();          // "Clear all"
+Notifications.markAllRead();    // the bell, without touching the history
+```
+
+`Notification` carries a severity, a **title**, an optional **detail** body, a wall-clock `timestamp`, a
+`groupId` and any number of `Action(label, Runnable)`. Two of those are worth the words:
+
+| Field | Why it exists |
+|---|---|
+| `timestamp` | Stamped at **construction**, with `currentTimeMillis` — never `nanoTime`, whose origin is arbitrary and may be negative. Read at render time instead and every message is stamped with the moment you opened the panel |
+| `groupId` | Carried although nothing reads it yet, because the two things it enables — per-group display settings and a "from" line — would otherwise force a model change later |
+
+**Title and detail, not one string.** The title is what you read going down a column; the detail is what you
+read when one of them stops you. A single string forces every producer to choose between a title too long to
+skim and a message too short to act on.
+
+`clear()` is separate from `resetForTesting()`, which also tears down every subscription — doing that in
+production leaves the panel that invoked it deaf. And **reading is not dismissing**: opening the history
+clears the bell and keeps the messages. Folding those together is how a panel you opened once quietly throws
+away the thing you opened it for.
+
+#### `NotificationsView` — the durable surface
+
+A tool window on the **auxiliary** rail, where IntelliJ keeps it: a history is something you consult, not
+something you work in. Newest first. Its unread count reaches the rail button through
+`ViewContainerRegistry.setBadge`, so a tool window dragged between stripes keeps its badge with no further
+wiring.
+
+#### `NotificationBalloons` — the transient surface
+
+Bottom-right, over the workbench content and **under** the drop overlay, so a message arriving mid-drag
+cannot cover where a panel is about to land.
+
+| Rule | Why |
+|---|---|
+| `INFO` fades; `WARNING` and `ERROR` stay | IntelliJ's `BALLOON` vs `STICKY_BALLOON`. A failure that removed itself while you read something else is a failure you were never told about |
+| **Two caps**, one per kind | One cap over both starves whichever kind is unlucky: four routine messages evict an unread error, and reversing the preference makes three unread failures block everything after them |
+| The cap counts entries **not already leaving** | `beginLeaving` only marks — the element stays mounted for its fade — so `while (live.size() > cap)` never terminates. It hung the harness on the fifth file opened in a row, and every test that built a workbench |
+| Opacity is a **CSS transition** | The balloon arrives carrying `__hidden__` and it is dropped on the *next* frame. Writing the opaque value from Java would not animate: the write is itself transitionable, so the engine eases toward it and the cleanup retargets it back |
+| `FADE_MS` must match the sheet | The layer waits that long before detaching; detaching early cuts the fade off. Stated in both places rather than parsed out of the cascade, where a theme change would break it silently |
+| No timestamp on a balloon | A balloon *is* now. It is the one thing copied from the list that says nothing here — and it cost a third of the text column, which is what kept forcing the balloon wider while short messages still wrapped |
+
+**One `NotificationCard` builds both.** The surfaces show the same object, and two builders would look
+identical the day they were written and drift on the first change to either. The only difference is the
+close button, which a balloon has because it has no "Clear all".
+
+#### Not built, deliberately
+
+Per-group display settings (needs a settings page; with three producers there is nothing to tune) and
+progress notifications (its own framework — indeterminate state and a cancel affordance are not expressible
+as a text item). Neither needs a model change to add. There is also **no de-duplication**: nothing produces
+from a per-frame path today — the shader graph deliberately uses `StatusBar` for exactly that reason — and
+the 100-cap bounds the damage, but it is the trap a future producer will fall into.
+
+Pinned by `NotificationsViewTest`, including the cap's termination and the sticky split, both verified
+against mutants.
 
 ---
 
