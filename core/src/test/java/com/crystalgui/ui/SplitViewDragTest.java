@@ -240,6 +240,44 @@ public class SplitViewDragTest extends UiTestBase {
     }
 
     /**
+     * <b>And the minimum on a pane's CONTENT bounds it too</b> — which is the case that actually occurs.
+     *
+     * <p>The test above styles {@code split.first()}, and {@code first()} is the {@code __split-pane__}
+     * wrapper SplitView makes for itself. Nothing else does that: a caller puts its own element
+     * <em>inside</em> the pane, so every real rule — {@code workbench .__region-sidebar__ {'{'} min-width:
+     * 120px {'}'}} — lands one level below where the clamp was looking. The clamp read correct and reached
+     * the wrong element, so it was as absent as before it was written.</p>
+     *
+     * <p>What it looks like is not a divider bug at all. Taffy still refuses to shrink the content, so the
+     * pane <b>overhangs the split</b> and whatever paints later covers the overhang — the sidebar ran on
+     * under the editor, and the file tree inside it sized its scroll viewport to the full overhanging
+     * width. Scrolling to the very end still left names cut off, because the last stretch of the viewport
+     * was underneath another region.</p>
+     */
+    @Test
+    public void aPaneContentsCssMinWidthBoundsTheDivider() {
+        setUp(2f, SplitView.Orientation.HORIZONTAL);
+        split.first().addChild(new UIElement().layout(l -> l.minWidth(150).heightPercent(100f)));
+        frame();
+
+        int[] c = dividerCentrePhys(2f);
+        mouseTo(c[0], c[1]);
+        frame();
+        press(c[0], c[1]);
+        mouseTo(0, c[1]);
+        frame();
+        release(0, c[1]);
+        frame();
+
+        float total = split.getRuntimeCache().getWidth();
+        float dividerWidth = split.divider().getRuntimeCache().getWidth();
+        float storedPx = split.getPercentage() / 100f * (total - dividerWidth);
+        assertTrue("the stored split fell to " + storedPx + "px, below the 150px minimum its CONTENT"
+                        + " declares -- so the pane overhangs the split and is painted over",
+                storedPx >= 150f - 1f);
+    }
+
+    /**
      * The flexbox trap this widget would otherwise ship with: items default to {@code min-size: auto},
      * which refuses to shrink one below its own content. A pane holding something large would jam the
      * split — and an empty-pane demo would look perfect. SplitView sets {@code min-width}/

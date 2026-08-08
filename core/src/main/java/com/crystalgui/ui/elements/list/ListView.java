@@ -202,6 +202,107 @@ public class ListView<T> extends ScrollerView {
         return sizeStrategy.totalSize(model.size());
     }
 
+    // ── Horizontal scrolling ────────────────────────────────────────────────
+
+    /**
+     * On the view whenever {@link #setHorizontalScrolling} is on.
+     *
+     * <p>It exists for the stylesheet, and the sheet's half is not optional: a row only overflows if its
+     * label is allowed to keep its natural width, so the rule that makes labels ellipsize has to be turned
+     * off by the same switch that turns scrolling on. The two are one decision and cannot be set
+     * separately without one of them being silently pointless.</p>
+     */
+    public static final String HORIZONTAL_CLASS = "__h-scroll__";
+
+    private boolean horizontalScrolling;
+
+    /**
+     * The widest content any realised row has reported, for this generation of the model.
+     *
+     * <p><b>A running maximum, deliberately, rather than the widest row on screen right now.</b> Only
+     * realised rows can be measured — an unrealised one has no element and no width — so a live maximum
+     * would fall the moment a long name scrolled out of view, taking the scroll range with it and yanking
+     * the thumb and the content sideways under the pointer. Growing-only means the range settles as you
+     * explore and never moves backwards under you. {@link #refresh} resets it, because a new model is a
+     * new set of names and holding a width from the old one is just wrong.</p>
+     *
+     * <p>The cost is that the range can overstate: collapse the folder with the long name and the bar
+     * stays until something reloads. VS Code's list behaves the same way and for the same reason.</p>
+     */
+    private float widestRealised;
+
+    /**
+     * Lets rows keep their natural width and scroll sideways, instead of ellipsizing — VS Code's
+     * {@code workbench.list.horizontalScrolling}.
+     *
+     * <p>Off by default, which is VS Code's default too. It is not free: with it on, a long name makes
+     * every row in the list wider, so a list that has no room to grow (a dropdown, a palette) is better
+     * off truncating.</p>
+     */
+    public ListView<T> setHorizontalScrolling(boolean enabled) {
+        if (horizontalScrolling == enabled) return this;
+        horizontalScrolling = enabled;
+        if (enabled) addClass(HORIZONTAL_CLASS);
+        else removeClass(HORIZONTAL_CLASS);
+        widestRealised = 0f;
+        applyRowWidths();
+        return this;
+    }
+
+    public boolean isHorizontalScrolling() {
+        return horizontalScrolling;
+    }
+
+    /**
+     * A <b>pure accessor</b>, exactly like {@code TextEditor.getScrollWidth} — the scan is
+     * {@link #measureWidestRealisedRow()} and runs once a frame.
+     *
+     * <p>The split is not tidiness. {@code getMaxScrollLeft} reads this, the bar's visibility reads that,
+     * the thumb's size reads that, and the wheel handler reads it again — so a dozen field-looking reads
+     * fan back into one loop over every realised row. The editor measured <b>54 such entries per settled
+     * frame</b> before the same split was made there.</p>
+     *
+     * <p>Floored at the client width so the rows always span the full scrollable area: a selection or
+     * hover fill that stopped at the viewport edge would leave a bare strip once scrolled.</p>
+     */
+    @Override
+    public float getScrollWidth() {
+        if (!horizontalScrolling) return super.getScrollWidth();
+        return Math.max(getClientWidth(), widestRealised);
+    }
+
+    /** @see #widestRealised */
+    private void measureWidestRealisedRow() {
+        if (!horizontalScrolling) return;
+        float widest = widestRealised;
+        // A ROW'S OWN getScrollWidth, which is the furthest right edge of its children -- so it reports
+        // the label's true extent even while the row itself is clamped narrower. Anything a row pins to
+        // its trailing edge must be setScrollExempt, or it sits at the row's right edge by construction
+        // and this measures the row instead of its content, forever.
+        for (UIElement row : realised.values()) widest = Math.max(widest, row.getScrollWidth());
+        if (widest <= widestRealised) return;
+        widestRealised = widest;
+        applyRowWidths();
+    }
+
+    private void applyRowWidths() {
+        for (UIElement row : realised.values()) applyRowWidth(row);
+    }
+
+    /**
+     * Writes one row's width — the full scrollable width when scrolling sideways, else the viewport's.
+     *
+     * <p>Every realised row is re-written when the maximum grows, not just newly realised ones:
+     * {@code realise} only runs for a row the window did not already hold, so rows already on screen
+     * would keep the width they were born with and the fills would end in a ragged edge.</p>
+     */
+    private void applyRowWidth(UIElement row) {
+        StyleGroup.importantPipeline(row.getStyle().getLayoutGroup(), l -> {
+            if (horizontalScrolling) l.width(getScrollWidth());
+            else l.widthPercent(100f);
+        });
+    }
+
     /** Scrolls so the row at {@code index} is visible. The element-based {@code scrollIntoView} cannot
      * serve here — the row may not exist yet, which is the whole point. */
     public ListView<T> scrollToIndex(int index) {
@@ -256,6 +357,9 @@ public class ListView<T> extends ScrollerView {
         realised.clear();
         firstRealised = -1;
         lastRealised = -1;
+        // A NEW MODEL IS A NEW SET OF NAMES. The running maximum only grows within one generation, so
+        // without this a collapsed folder's longest name would keep the horizontal range open forever.
+        widestRealised = 0f;
         markTreeDirty();
     }
 
@@ -309,6 +413,9 @@ public class ListView<T> extends ScrollerView {
             restoreFocusIfRealised();
         }
         updateWindow();
+        // AFTER updateWindow, so a row realised this frame is counted. Once a frame and no more -- see
+        // getScrollWidth on why the scan may not sit behind the query.
+        measureWidestRealisedRow();
         return true;
     }
 
@@ -457,7 +564,10 @@ public class ListView<T> extends ScrollerView {
         // A caller that wants a different row height says so with setItemHeight, which the strategy reads,
         // rather than through CSS the layout cannot see.
         StyleGroup.importantPipeline(row.getStyle().getLayoutGroup(),
-                l -> l.top(top).left(0).widthPercent(100f).height(height));
+                l -> l.top(top).left(0).height(height));
+        // WIDTH IS ITS OWN WRITE, because it is the one part of a row's geometry that is not a function of
+        // the index -- it depends on the widest row realised so far, which changes as you scroll.
+        applyRowWidth(row);
         // DISPLAY IS DEFAULT ORIGIN, and must stay at whatever origin `recycle` uses.
         //
         // It is lifecycle state -- realised or pooled -- written from TWO places, and the pair only works

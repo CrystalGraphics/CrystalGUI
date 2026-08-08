@@ -219,7 +219,54 @@ public class CanvasView extends UIElement implements UIFrameTicker {
                 l -> l.positionType(TaffyPosition.ABSOLUTE));
         overlays.add(panel);
         addInternalChild(panel);
+        raiseOnPress(panel);
         return this;
+    }
+
+    /**
+     * The next {@code z-index} a pressed overlay takes. Monotonic, so "most recently used is on top" is a
+     * total order and never needs the others rewritten.
+     */
+    private int nextOverlayZ = 1;
+
+    /**
+     * The overlay currently on top, so a repeated press on it is free.
+     *
+     * <p>The identity, not the number. Comparing the panel's {@code z-index} against the counter looks
+     * equivalent and is not: every overlay starts at the initial {@code z-index} of 0, so on the very
+     * first press <em>every</em> panel matches "already frontmost" and nothing is ever raised at all.</p>
+     */
+    @Nullable
+    private UIElement frontmostOverlay;
+
+    /**
+     * Clicking an overlay brings it to the front — every window manager's oldest rule, and the one thing
+     * two overlapping panels cannot be used without.
+     *
+     * <h3>Why this is here and not in each panel</h3>
+     *
+     * <p>Because it is a property of <em>being</em> an overlay, not of being a preview or a blackboard.
+     * Two panels each implementing it would need to agree on a shared counter, which is this class's to
+     * own — and a third overlay would silently not participate, which reads as the new panel being broken
+     * rather than as a rule it never opted into.</p>
+     *
+     * <h3>CAPTURE phase, deliberately</h3>
+     *
+     * <p>Capture runs root→target <b>before</b> the target's own handlers, so this sees the press whatever
+     * the panel does with it afterwards. Both current overlays call {@code stopPropagation()} — the Main
+     * Preview's surface starts an orbit drag, the title bars start a move — so a bubble-phase listener
+     * would be reached by exactly the presses that need it least: the ones on dead space.</p>
+     *
+     * <p>It also raises on a press rather than on a click, which is what makes a drag start on top instead
+     * of sliding under the other panel for the duration of the gesture.</p>
+     */
+    private void raiseOnPress(UIElement panel) {
+        panel.onMouseDown.attachListener((element, event) -> {
+            // Already frontmost: nothing to write, and writing anyway would burn a z-index per press.
+            if (frontmostOverlay == panel) return;
+            frontmostOverlay = panel;
+            StyleGroup.inlinePipeline(panel.getStyle().getGeneralGroup(), g -> g.zIndex(nextOverlayZ++));
+        }, true, false);
     }
 
     /**

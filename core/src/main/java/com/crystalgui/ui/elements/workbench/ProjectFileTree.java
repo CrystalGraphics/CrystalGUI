@@ -168,6 +168,10 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         // is configuration rather than code, and it is what every file command that acts on "the
         // selection" rather than "the selected path" needs.
         tree.setSelectionMode(SelectionMode.MULTIPLE);
+        // A DEEP TREE IS THE CASE horizontal scrolling exists for: every level of nesting spends indent
+        // the name then has to fit inside, so the panel width a name has to survive shrinks as you go
+        // down. Truncating alone left a name unreadable with no way to reach the rest of it.
+        tree.setHorizontalScrolling(true);
         // THE WRAPPER IS MARKED INTERNAL WHILE EMPTY; the tree is an ordinary child of it.
         //
         // addInternalChild(tree) is the obvious line and it is wrong, because markAsInternal() RECURSES.
@@ -694,6 +698,17 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             icon.setHitTest(false);
             label.setHitTest(false);
             badge.setHitTest(false);
+
+            // THE LABEL MUST REPORT ITS OWN WIDTH, or there is nothing for the row to overflow with and
+            // the horizontal range is always exactly the viewport. UIText latches whether it self-sizes
+            // from its FIRST measurement, which happens before any rule here has matched -- so it has to
+            // be told, in Java, at construction. Same call, same reason, as the Blackboard's type column.
+            label.forceSelfSizeWidth();
+            // The BADGE follows the name rather than the row's trailing edge while the list scrolls
+            // sideways -- see the stylesheet. `margin-left: auto` puts it at the row's right edge by
+            // construction, which is off-screen the moment the row is wider than the viewport: badges
+            // simply vanished until scrolled to, and the row's measured content width was its own width,
+            // so the label could never be seen to stick out past it at all.
 
             row.addChild(twisty);
             row.addChild(icon);

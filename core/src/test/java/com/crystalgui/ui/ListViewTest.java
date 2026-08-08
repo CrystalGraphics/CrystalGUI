@@ -747,4 +747,70 @@ public class ListViewTest extends UiTestBase {
         assertEquals("clamped to the model", 50, strategy.indexAt(99_999f, 50));
         assertEquals(0, strategy.indexAt(-5f, 50));
     }
+
+    // ── Horizontal scrolling ────────────────────────────────────────────────
+
+    /**
+     * <b>The horizontal range comes from the realised rows, and it only ever grows.</b>
+     *
+     * <p>Both halves are the design, and each fails in a way that looks like something else. Deriving the
+     * range from the children the way {@code UIElement} does reports the rows, which are written to the
+     * viewport's width — so the range is always exactly the viewport, the bar never appears, and a
+     * truncated name has no way to be reached. That is the bug this was added for.</p>
+     *
+     * <p>And a range that tracked only what is on screen right now would collapse the moment the long name
+     * scrolled out of the realised window, pulling the thumb and the content sideways under the pointer
+     * mid-scroll. Only realised rows can be measured at all, so growing-only is what makes the range
+     * usable rather than merely correct at one instant.</p>
+     */
+    @Test
+    public void horizontalScrollingMeasuresTheWidestRealisedRow() {
+        ObservableList<String> items = new ObservableList<>();
+        for (int i = 0; i < 1000; i++) items.add("item " + i);
+
+        ListView<String> wide = new ListView<>(items);
+        wide.setItemHeight(10f);
+        wide.setHorizontalScrolling(true);
+        wide.layout(l -> l.width(100).height(100));
+        wide.setRenderer(new ListRenderer<String>() {
+            @Override
+            public UIElement createTemplate() {
+                UIElement row = new UIElement();
+                row.addChild(new UIElement());
+                return row;
+            }
+
+            @Override
+            public void bind(String item, int index, UIElement template) {
+                // ONE long row, at the very top, so scrolling away from it leaves it unrealised.
+                float width = index == 0 ? 400f : 40f;
+                template.getChildren().get(0).layout(l -> l.width(width).height(10f));
+            }
+        });
+
+        UIElement root = new UIElement().layout(l -> l.width(100).height(100));
+        root.addChild(wide);
+        UIWindow host = new UIWindow(Ui.of(root));
+        host.init(200, 200);
+        for (int i = 0; i < 6; i++) host.updateWithoutPainting();
+
+        assertTrue("the long row sets the range, not the viewport: " + wide.getScrollWidth(),
+                wide.getScrollWidth() >= 400f);
+        assertTrue("so there is somewhere to scroll to", wide.getMaxScrollLeft() > 0f);
+
+        wide.setScrollImmediate(0f, 5_000f);
+        for (int i = 0; i < 6; i++) host.updateWithoutPainting();
+
+        assertTrue("the range survives the long row leaving the realised window: " + wide.getScrollWidth(),
+                wide.getScrollWidth() >= 400f);
+    }
+
+    /** Off by default — and off means the range is the viewport, whatever a row contains. */
+    @Test
+    public void withoutHorizontalScrollingRowsNeverOutgrowTheViewport() {
+        build(1_000);
+        assertFalse(list.isHorizontalScrolling());
+        assertEquals("rows are written to the viewport width, so there is nothing to scroll",
+                0f, list.getMaxScrollLeft(), 0.01f);
+    }
 }

@@ -4525,6 +4525,30 @@ projectfiletree .__project-row__ {
     min-width: 0px;
 }
 
+/* UNLESS THE LIST SCROLLS SIDEWAYS, in which case the label must NOT give way — it is the thing being
+ * scrolled to. `flex-shrink: 0` is the whole switch: a shrinkable item contributes ZERO to its row's
+ * min-content width, so with it on there is never any overflow to scroll, the range is always exactly the
+ * viewport, and the scrollbar can never appear no matter how long the name.
+ *
+ * `text-overflow` is left in place and is not contradictory — nothing clamps the label now, so it never
+ * fires, and it stays the correct behaviour for whatever does clamp one later.
+ *
+ * ListView writes the class, so the two halves cannot be set independently. They are one decision: rows
+ * that keep their width are the only rows there is anything to scroll. */
+projectfiletree .__h-scroll__ .__project-row__ text {
+    flex-shrink: 0;
+}
+
+/* AND THE BADGE FOLLOWS THE NAME rather than the row's trailing edge.
+ *
+ * `margin-left: auto` pins it to the row's right edge by construction, which stops being the right edge of
+ * anything you can see the moment the row is wider than the viewport — badges sat off-screen until scrolled
+ * to. It also made the row's measured content width equal to its own width, so the label could never be
+ * seen to stick out past it and there was nothing to scroll to in the first place. */
+projectfiletree .__h-scroll__ .__project-row__ .__badge__ {
+    margin-left: 4px;
+}
+
 /* The badge is pushed to the trailing edge and never shrinks -- it is one or two characters and the
  * label is what has room to give. */
 projectfiletree .__project-row__ .__badge__ {
