@@ -3,7 +3,9 @@ package com.crystalgui.core.notify;
 import com.crystalgui.core.signal.Signal;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Where anything says that something happened — VS Code's {@code INotificationService}, IntelliJ's
@@ -39,13 +41,23 @@ import java.util.List;
  * and fires on every caret move. Routed through one channel, the second buries the first within seconds.
  * VS Code separates them for this reason and so does every editor that has both.</p>
  *
- * <h3>Known gap: there is no handle</h3>
+ * <h3>A group decides how loudly this is said</h3>
  *
- * <p>VS Code's {@code notify()} returns an {@code INotificationHandle} carrying {@code close()},
- * {@code updateMessage()} and a progress sink, and IntelliJ's {@code Notification} has {@code expire()}.
- * Ours is fire-and-forget, so nothing can revise or withdraw what it said. Deliberately not added on
- * speculation: no producer here needs it yet, and an API with no consumer is the thing that has to be
- * kept working for years before anyone finds out whether it was the right shape.</p>
+ * <p>{@link NotificationGroups} carries IntelliJ's {@code NotificationDisplayType} per group, overridable
+ * by the user. It is what {@link Notification#getGroupId()} was always for, and until it existed the
+ * routing was hard-coded in the balloon layer — everything got a balloon, because the balloon layer was
+ * the thing subscribing.</p>
+ *
+ * <h3>Announcing is two-way</h3>
+ *
+ * <p>{@link #show} hands back a {@link NotificationHandle}, so a producer can revise or withdraw what it
+ * said rather than posting a correction beneath it.</p>
+ *
+ * <h3>Still missing: progress</h3>
+ *
+ * <p>VS Code's handle carries an {@code IProgress} sink, so a long operation reports into the notification
+ * it already posted. Not built, because nothing here runs a long enough operation to report on — the file
+ * service is synchronous and the compiler finishes within a frame.</p>
  */
 public final class Notifications {
 
@@ -88,6 +100,15 @@ public final class Notifications {
      */
     private static final List<Notification> HISTORY = new ArrayList<>();
 
+    /**
+     * The handle handed back for each held notification.
+     *
+     * <p>Kept beside the history rather than on the notification so that "is this still open" is one
+     * question with one answer — a flag on the object would have to be cleared by everything that can
+     * remove it, and an eviction is not a place anyone remembers to look.</p>
+     */
+    private static final Map<Notification, NotificationHandle> HANDLES = new IdentityHashMap<>();
+
     /** How many are kept. The oldest is dropped past this, announced as {@link NotificationEvent.Kind#REMOVED}. */
     public static final int HISTORY_LIMIT = 100;
 
@@ -117,25 +138,59 @@ public final class Notifications {
      * <p>A repeat does not bump the unread count either: the same message twice is not new information, and
      * a bell that ticks up while nothing new has been said is worse than one that stays put.</p>
      */
-    public static void show(Notification notification) {
-        if (notification == null) return;
+    public static NotificationHandle show(Notification notification) {
+        if (notification == null) return null;
+        // THE GROUP DECIDES WHETHER THIS IS SAID AT ALL. IntelliJ's NONE, and the only value that discards
+        // information -- which is why it is never a default and only ever a user's choice.
+        if (NotificationGroups.displayOf(notification.getGroupId()) == NotificationDisplay.NONE) {
+            return new NotificationHandle(notification);
+        }
         Notification newest = HISTORY.isEmpty() ? null : HISTORY.get(HISTORY.size() - 1);
         if (notification.saysTheSameAs(newest)) {
             newest.markRepeated();
             onDidChange.emit(NotificationEvent.changed(newest, HISTORY.size() - 1));
-            return;
+            return HANDLES.get(newest);
         }
         HISTORY.add(notification);
+        HANDLES.put(notification, new NotificationHandle(notification));
         // EVICTION IS ANNOUNCED. Silently dropping the oldest is what let the panel's column outgrow the
         // history it was showing -- see NotificationEvent. Emitted BEFORE the arrival so a view applies the
         // changes in the order they happened, and never briefly holds more than the model does.
         while (HISTORY.size() > HISTORY_LIMIT) {
             Notification dropped = HISTORY.remove(0);
             onDidChange.emit(NotificationEvent.removed(dropped, 0));
+            closeHandle(dropped);
         }
         unread++;
         onDidChange.emit(NotificationEvent.added(notification, HISTORY.size() - 1));
         onDidChangeUnread.emit(unread);
+        return HANDLES.get(notification);
+    }
+
+    /** Whether this is still held. @see NotificationHandle#isOpen */
+    static boolean holds(Notification notification) {
+        return HANDLES.containsKey(notification);
+    }
+
+    /** @see NotificationHandle#updateMessage */
+    static void announceChanged(Notification notification) {
+        int index = HISTORY.indexOf(notification);
+        if (index < 0) return;
+        onDidChange.emit(NotificationEvent.changed(notification, index));
+    }
+
+    /** @see NotificationHandle#close */
+    static void withdraw(Notification notification) {
+        int index = HISTORY.indexOf(notification);
+        if (index < 0) return;
+        HISTORY.remove(index);
+        onDidChange.emit(NotificationEvent.removed(notification, index));
+        closeHandle(notification);
+    }
+
+    private static void closeHandle(Notification notification) {
+        NotificationHandle handle = HANDLES.remove(notification);
+        if (handle != null) handle.notifyClosed();
     }
 
     /** @see #onDidChangeUnread */
@@ -164,6 +219,8 @@ public final class Notifications {
     public static void clear() {
         if (HISTORY.isEmpty() && unread == 0) return;
         HISTORY.clear();
+        for (NotificationHandle handle : new ArrayList<>(HANDLES.values())) handle.notifyClosed();
+        HANDLES.clear();
         unread = 0;
         onDidChange.emit(NotificationEvent.cleared());
         onDidChangeUnread.emit(0);
@@ -193,6 +250,8 @@ public final class Notifications {
     /** Empties the history. For tests that need isolation, never for production. */
     public static void resetForTesting() {
         HISTORY.clear();
+        for (NotificationHandle handle : new ArrayList<>(HANDLES.values())) handle.notifyClosed();
+        HANDLES.clear();
         unread = 0;
         onDidChange.disconnectAll();
         onDidChangeUnread.disconnectAll();

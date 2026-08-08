@@ -48,7 +48,9 @@ public final class Notification {
     public static final String DEFAULT_GROUP = "general";
 
     @Getter private final Severity severity;
-    @Getter private final String message;
+
+    /** Revisable through {@link NotificationHandle#updateMessage}, and only through it. */
+    @Getter private String message;
 
     /**
      * When it happened, as wall-clock milliseconds.
@@ -122,6 +124,11 @@ public final class Notification {
     public Notification inGroup(String id) {
         this.groupId = id == null || id.isEmpty() ? DEFAULT_GROUP : id;
         return this;
+    }
+
+    /** @see NotificationHandle#updateMessage */
+    void setMessage(String replacement) {
+        this.message = replacement == null ? "" : replacement;
     }
 
     /** Counts another arrival of the same message. @see Notifications#show */
