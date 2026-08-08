@@ -509,14 +509,25 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         // `result.ok()` is true while the shader does not exist. Reporting "compiled 10n/7e" in that state
         // is the most misleading thing the bar can say: a confident success beside a blank preview and a
         // red row in Problems.
+        // COUNTED, not assumed. This said "1 error(s)" unconditionally while walking to the FIRST error --
+        // so a graph with no output node AND a driver refusal reported one of them and claimed there was
+        // one, with two red rows visible in the Problems panel directly above it. The count is the whole
+        // information content of the readout; the first message is what the tooltip is for.
+        int errors = problems.count(DiagnosticSeverity.ERROR);
+        if (errors == 0) return;
+        lastCompileFailed = true;
+        lastCompileStatus = describeErrors(errors);
         for (Diagnostic diagnostic : diagnostics) {
             if (diagnostic.severity() != DiagnosticSeverity.ERROR) continue;
-            lastCompileFailed = true;
-            lastCompileStatus = "1 error(s)";
             lastCompileTooltip = diagnostic.message();
-            publishCompileStatus();
             break;
         }
+        publishCompileStatus();
+    }
+
+    /** {@code 1 error}, {@code 2 errors} — both references pluralise rather than writing "error(s)". */
+    private static String describeErrors(int count) {
+        return count == 1 ? "1 error" : count + " errors";
     }
 
     /**
@@ -828,7 +839,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         lastCompileStatus = result.ok()
                 ? String.format("compiled  %dn/%de",
                         graph.getDocument().nodeCount(), graph.getDocument().edges().size())
-                : result.errors().size() + " error(s)";
+                : describeErrors(result.errors().size());
         lastCompileFailed = !result.ok();
         lastCompileTooltip = result.ok()
                 ? String.format("%d chars, %d varyings, %d mapped lines",
