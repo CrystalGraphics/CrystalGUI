@@ -4,6 +4,9 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticTag;
@@ -61,6 +64,10 @@ public class ProblemsPanel extends UIElement {
     public static final String COUNT_CLASS = "__problem-count__";
     /** Severity, as a class. Same convention as the notification cards. */
     public static final String SEVERITY_PREFIX = "severity-";
+    /** The chevron. Its own hit target, so a file folds on one click. */
+    public static final String TWISTY_CLASS = "__twisty__";
+    /** The file heading's icon, from the same theme the project tree uses. */
+    public static final String FILETYPE_PREFIX = "filetype-";
     public static final String EMPTY_CLASS = "__problems-empty__";
     /** Rendering, not severity — @see DiagnosticTag */
     public static final String TAG_UNNECESSARY = "tag-unnecessary";
@@ -246,12 +253,34 @@ public class ProblemsPanel extends UIElement {
      * {@code createTemplate} and only shown or hidden in {@code bind}. Creating one during bind lands it
      * after that frame's layout pass, which this engine has paid for three times over.</p>
      */
-    private static final class ProblemRenderer implements TreeRenderer<ProblemNode> {
+    private final class ProblemRenderer implements TreeRenderer<ProblemNode> {
+
+        /**
+         * What each realised row is currently showing.
+         *
+         * <p>Read by the twisty <b>at press time</b>, never captured into its listener: rows recycle as the
+         * tree scrolls and a listener may only be attached once, so a captured node would keep folding
+         * whichever file its slot was first used for. The same trap the editor's gutter arrows document.</p>
+         */
+        private final java.util.Map<UIElement, ProblemNode> rowItems = new java.util.IdentityHashMap<>();
 
         @Override
         public UIElement createTemplate() {
             UIElement row = new UIElement();
             row.addClass(ROW_CLASS);
+
+            // THE ONE PART THAT KEEPS THE POINTER. Everything else refuses it so a press lands on the row —
+            // click targeting takes the exact element hit and never walks up to a handler-bearing ancestor.
+            // A chevron is a control in its own right, which is what lets a file fold on ONE click while
+            // choosing a problem still takes two.
+            UIElement twisty = new UIElement();
+            twisty.addClass(TWISTY_CLASS);
+            twisty.onMouseDown.attachListener((element, event) -> {
+                ProblemNode node = rowItems.get(row);
+                if (node == null || !node.isFile() || tree == null) return;
+                event.stopPropagation();
+                tree.setExpanded(node, !tree.isExpanded(node));
+            }, false, false);
 
             UIElement icon = new UIElement();
             icon.addClass(ICON_CLASS);
@@ -271,6 +300,7 @@ public class ProblemsPanel extends UIElement {
             count.setHitTest(false);
             count.forceSelfSizeWidth();
 
+            row.addChild(twisty);
             row.addChild(icon);
             row.addChild(label);
             row.addChild(detail);
@@ -280,23 +310,40 @@ public class ProblemsPanel extends UIElement {
 
         @Override
         public void bind(ProblemNode item, TreeRow<ProblemNode> row, int index, UIElement template) {
+            rowItems.put(template, item);
             List<UIElement> parts = template.getChildren();
-            UIElement icon = parts.get(0);
-            UIText label = (UIText) parts.get(1);
-            UIText detail = (UIText) parts.get(2);
-            UIText count = (UIText) parts.get(3);
+            UIElement icon = parts.get(1);
+            UIText label = (UIText) parts.get(2);
+            UIText detail = (UIText) parts.get(3);
+            UIText count = (UIText) parts.get(4);
 
             if (item.isFile()) {
                 template.addClass(FILE_CLASS);
+                // THE FILE'S OWN ICON, from the theme the project tree already uses -- a heading naming
+                // water.glsl should look like water.glsl does everywhere else. The severity slot is
+                // emptied rather than left, or a row recycled from a problem keeps its error glyph.
                 icon.swapPrefixedClass(SEVERITY_PREFIX, SEVERITY_PREFIX + "file");
+                String name = item.resource().name();
+                FileIconTheme theme = FileIconTheme.getDefault();
+                CgUiDrawable glyph = theme.drawableFor(name, false, false);
+                // DEFAULT origin, exactly as the project tree writes it: the theme's JSON is a default the
+                // cascade can beat, and writing it inline would make the icon the one part of a row a
+                // stylesheet cannot touch. It also means the severity rules — which are STYLESHEET origin —
+                // still win on a row recycled from a problem, so there is nothing to clear.
+                StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(),
+                        g -> g.overlay(glyph == null ? CgUiDrawable.EMPTY : glyph));
+                icon.swapPrefixedClass(FILETYPE_PREFIX, theme.classFor(name, false));
                 label.setText(item.resource().name());
                 detail.setText(folderOf(item.resource()));
                 count.setDisplayed(true);
-                count.setText("");
+                int problems = source == null ? 0 : source.matching(item.resource()).size();
+                count.setText(String.valueOf(problems));
                 setTag(template, TAG_UNNECESSARY, false);
                 setTag(template, TAG_DEPRECATED, false);
                 return;
             }
+            // The filetype class goes with the file row, or a problem row inherits its heading's glyph.
+            icon.swapPrefixedClass(FILETYPE_PREFIX, "");
             template.removeClass(FILE_CLASS);
             Diagnostic diagnostic = item.diagnostic();
             // SWAPPED, never added: a template is a different row every time the view recycles it, so
