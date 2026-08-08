@@ -10,6 +10,7 @@ import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelKind;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockRegion;
+import com.crystalgui.ui.elements.dock.RegionSide;
 import com.crystalgui.ui.elements.dock.DockPath;
 import com.crystalgui.ui.elements.dock.DockLayout;
 import com.crystalgui.ui.elements.dock.DockLayoutCodec;
@@ -275,21 +276,26 @@ public final class WorkbenchSession {
     }
 
     private void captureOpenToolWindows() {
-        // TOOL WINDOWS ARE NOT IN THE DOCK TREE. This used to walk every leaf looking for singletons and
-        // record the strip-mates and the structural path for the four-tier restoration heuristic to
-        // replay. A region cannot be collapsed away, so what is left to capture is whether it is showing
-        // and how wide its region is -- which is the whole of what a lookup needs.
-        for (DockRegion region : DockRegion.values()) {
+        // EVERY placement, not just the ones on screen, and visibility DERIVED from the hosts rather than
+        // trusted from the record. Walking only what is showing left two problems in the file:
+        //
+        //   * a tool window displaced from a half kept `visible: true`, so several claimed the same slot
+        //     and the restore showed them in turn, each undoing the last;
+        //   * a region's share was written per tool window at whatever moment each was last touched, so
+        //     one region carried several different weights and the restore applied them in list order --
+        //     the size that came back was simply the last entry's.
+        //
+        // A region's size is a property of the REGION. Writing the current one onto every member makes the
+        // copies agree, which is what stops the restore order from mattering.
+        for (ToolWindowState state : new ArrayList<>(workbench.toolWindows().all())) {
+            DockRegion region = state.region();
             if (region == DockRegion.EDITOR) continue;
             RegionHost host = workbench.regions().host(region);
-            if (host == null || host.showing() == null) continue;
-            // Only what is SHOWING is captured here -- a cleared host has forgotten what it held. A
-            // hidden region's entry is written by hidePanel instead, which is the moment its width is
-            // still known.
-            workbench.toolWindows().put(workbench.toolWindows()
-                    .getOrCreate(host.showing(), region)
-                    .withVisible(true)
-                    .withWeight(workbench.regions().weightOf(region)));
+            boolean showing = host != null && state.typeId().equals(host.showing(state.side()));
+            workbench.toolWindows().put(state
+                    .withVisible(showing)
+                    .withWeight(workbench.regions().weightOf(region))
+                    .withSideWeight(workbench.regions().sideWeightOf(region)));
         }
     }
 
@@ -369,6 +375,7 @@ public final class WorkbenchSession {
             // then calls hidePanel, which records the width it can currently see. That is the DEFAULT at
             // that moment, so reopening a region you had resized and closed always came back at 20%.
             workbench.regions().setWeight(state.region(), state.weight());
+            workbench.regions().setSideWeight(state.region(), state.sideWeight());
         }
         // AND PUT THEM BACK. One lookup per entry: the whole of what replaced replaying drops into a tree
         // and hoping the branches they named still existed.

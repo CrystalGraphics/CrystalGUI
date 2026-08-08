@@ -76,7 +76,10 @@ public final class ToolWindowManager {
     /** Whether this tool window is currently showing in its region. */
     public boolean isPanelOpen(String typeId) {
         RegionHost host = regions.host(regionOf(typeId));
-        return host != null && typeId.equals(host.showing());
+        // ITS OWN HALF, not the region's first occupant. Asking the region flatly made a split region
+        // report its neighbour: open Problems bottom-left and Services bottom-right, and whichever the
+        // host happened to answer with was "the" open panel while the other was reported shut.
+        return host != null && typeId.equals(host.showing(sideOf(typeId)));
     }
 
     /**
@@ -102,15 +105,20 @@ public final class ToolWindowManager {
      * @return false, always — it is closed after this
      */
     public boolean hidePanel(String typeId) {
-        RegionHost host = regions.host(regionOf(typeId));
-        if (host == null || !typeId.equals(host.showing())) return false;
-        // The WIDTH IS READ BEFORE the clear, because a region with nothing in it is about to leave the
-        // split and its share stops being readable. Same shape as the old hidePanel, which captured
-        // placement before a close for the same reason -- that part of it was always right.
-        float weight = regions.weightOf(regionOf(typeId));
-        host.clear();
+        DockRegion region = regionOf(typeId);
+        RegionSide side = sideOf(typeId);
+        RegionHost host = regions.host(region);
+        if (host == null || !typeId.equals(host.showing(side))) return false;
+        // BOTH SHARES ARE READ BEFORE the clear, because a region with nothing in it is about to leave the
+        // frame's split and a half that just emptied takes its divider with it -- neither share stays
+        // readable. Same shape as the old hidePanel, which captured placement before a close for the same
+        // reason; that part of it was always right.
+        float weight = regions.weightOf(region);
+        float sideWeight = regions.sideWeightOf(region);
+        host.clear(side);
         regions.sync();
-        toolWindows.put(placementOf(typeId).withVisible(false).withWeight(weight));
+        toolWindows.put(placementOf(typeId)
+                .withVisible(false).withWeight(weight).withSideWeight(sideWeight));
         return false;
     }
 
@@ -131,7 +139,20 @@ public final class ToolWindowManager {
         ViewContainer container = containers.computeIfAbsent(typeId, this::buildContainer);
         if (container == null) return false;
 
-        host.show(typeId, container);
+        // INTO ITS OWN HALF. A region holds two, so showing one no longer displaces the other -- which is
+        // the whole of "Problems bottom-left, Services bottom-right, both at once".
+        RegionSide side = sideOf(typeId);
+        // WHATEVER WAS IN THAT HALF IS NOW CLOSED, and it has to be told. A half holds one container, so
+        // showing this one displaced the last -- and the displaced record still said `visible`, so a
+        // session save wrote several tool windows as visible in the same half and the restore showed them
+        // all, each displacing the one before. The arrangement that came back was whichever happened to be
+        // applied last.
+        String displaced = host.showing(side);
+        if (displaced != null && !displaced.equals(typeId)) {
+            toolWindows.put(placementOf(displaced).withVisible(false));
+        }
+        host.setSideWeight(placementOf(typeId).sideWeight());
+        host.show(side, typeId, container);
         regions.sync();
         toolWindows.put(placementOf(typeId).withVisible(true));
         return true;

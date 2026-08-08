@@ -25,6 +25,8 @@ import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.dock.RegionSide;
 import com.crystalgui.ui.elements.workbench.RegionDropOverlay;
+import com.crystalgui.ui.elements.workbench.RegionHost;
+import com.crystalgui.ui.elements.workbench.ToolWindowState;
 import com.crystalgui.ui.elements.workbench.StripeRail;
 import com.crystalgui.ui.elements.workbench.StripeView;
 import com.crystalgui.ui.elements.workbench.Workbench;
@@ -612,6 +614,223 @@ public class StripeViewTest extends UiTestBase {
         settle();
         assertNull("the rule outlived the half it was separating",
                 left.querySelector("." + StripeView.SEPARATOR_CLASS));
+    }
+
+    /**
+     * <b>Dragging a button does not also open its tool window.</b>
+     *
+     * <p>A stripe button is both a control and a handle, and one release ends both gestures — so a drag to
+     * another rail was opening the panel on arrival. Neither reference does that, and the gesture did not
+     * mean it.</p>
+     */
+    @Test
+    public void draggingAButtonDoesNotToggleItsPanel() {
+        register();
+        settle();
+        assertFalse("setup: the console should start closed", workbench.isPanelOpen(TOOL_TYPE));
+        workbench.togglePanel(TOOL_TYPE);
+        settle();
+        assertTrue(workbench.isPanelOpen(TOOL_TYPE));
+
+        UIElement button = workbench.stripe(StripeRail.LEFT).buttonFor(TOOL_TYPE);
+        assertNotNull(button);
+        int[] start = centreOf(button);
+        move(start[0], start[1]);
+        press(start[0], start[1]);
+        for (int i = 0; i < 3; i++) move(1200 - 6, 400);
+        release(1200 - 6, 400);
+        settle();
+
+        assertEquals("the drag did not move it", DockRegion.AUXILIARY,
+                workbench.toolWindowManager().regionOf(TOOL_TYPE));
+        assertTrue("the drag's release toggled the panel shut as well as moving it",
+                workbench.isPanelOpen(TOOL_TYPE));
+    }
+
+    /** And a press that never became a drag still toggles, which is the whole point of the button. */
+    @Test
+    public void aPlainClickStillTogglesThePanel() {
+        register();
+        settle();
+        UIElement button = workbench.stripe(StripeRail.LEFT).buttonFor(Workbench.PROJECT_TYPE);
+        assertNotNull(button);
+        assertTrue(workbench.isPanelOpen(Workbench.PROJECT_TYPE));
+
+        int[] at = centreOf(button);
+        move(at[0], at[1]);
+        press(at[0], at[1]);
+        release(at[0], at[1]);
+        settle();
+
+        assertFalse("a click on a stripe button stopped toggling its panel",
+                workbench.isPanelOpen(Workbench.PROJECT_TYPE));
+    }
+
+    /**
+     * <b>A region holds both its halves at once — Problems bottom-left, Services bottom-right.</b>
+     *
+     * <p>It used to be either-or: a region showed one container, so opening the second replaced the first
+     * and the rail read as a set of radio buttons. Two halves, split along the region's <em>cross</em>
+     * axis, is IntelliJ's {@code isSplit}.</p>
+     */
+    @Test
+    public void aRegionShowsBothOfItsHalvesAtOnce() {
+        register();
+        // Console shares PANEL with Problems, in the other half.
+        workbench.toolWindowManager().moveTo(TOOL_TYPE, DockRegion.PANEL, RegionSide.SECONDARY);
+        settle();
+        workbench.showPanel(Workbench.PROBLEMS_TYPE);
+        workbench.showPanel(TOOL_TYPE);
+        settle();
+
+        RegionHost panel = workbench.regions().host(DockRegion.PANEL);
+        assertEquals("the primary half lost its occupant",
+                Workbench.PROBLEMS_TYPE, panel.showing(RegionSide.PRIMARY));
+        assertEquals("the secondary half never got one",
+                TOOL_TYPE, panel.showing(RegionSide.SECONDARY));
+        assertTrue("Problems reports closed while it is on screen",
+                workbench.isPanelOpen(Workbench.PROBLEMS_TYPE));
+        assertTrue("the second half's tool window reports closed", workbench.isPanelOpen(TOOL_TYPE));
+
+        // Closing one leaves the other, and the region stays.
+        workbench.hidePanel(Workbench.PROBLEMS_TYPE);
+        settle();
+        assertNull(panel.showing(RegionSide.PRIMARY));
+        assertEquals(TOOL_TYPE, panel.showing(RegionSide.SECONDARY));
+        assertTrue("closing one half took the region with it", workbench.isPanelOpen(TOOL_TYPE));
+        assertTrue("the region left the frame while a half was still occupied",
+                workbench.regions().isVisible(DockRegion.PANEL));
+    }
+
+    /**
+     * <b>The divider between two halves survives a hide, like the region's own share does.</b>
+     *
+     * <p>{@code sideWeight} is a different number from {@code weight} and the pair is easy to conflate:
+     * one is the region's share of the window, the other is the split inside it. Capturing only the first
+     * loses the arrangement the moment either half is closed.</p>
+     */
+    @Test
+    public void theSplitBetweenTwoHalvesSurvivesAHide() {
+        register();
+        workbench.toolWindowManager().moveTo(TOOL_TYPE, DockRegion.PANEL, RegionSide.SECONDARY);
+        workbench.showPanel(Workbench.PROBLEMS_TYPE);
+        workbench.showPanel(TOOL_TYPE);
+        settle();
+
+        workbench.regions().setSideWeight(DockRegion.PANEL, 0.3f);
+        settle();
+        workbench.hidePanel(TOOL_TYPE);
+        settle();
+        workbench.showPanel(TOOL_TYPE);
+        settle();
+
+        assertEquals("the split between the halves reset when one was closed",
+                0.3f, workbench.regions().sideWeightOf(DockRegion.PANEL), 1e-4f);
+    }
+
+    /**
+     * <b>Dropping into a CLOSED region opens it; dropping into an open one does not.</b>
+     *
+     * <p>The one exception to "a drag does not toggle". Honouring that rule literally over an empty region
+     * does nothing you can see — an invisible panel moved into an invisible region, the only evidence being
+     * a button that changed rails.</p>
+     */
+    @Test
+    public void aDropIntoAClosedRegionOpensIt() {
+        register();
+        settle();
+        assertFalse("setup: the console should start closed", workbench.isPanelOpen(TOOL_TYPE));
+        assertFalse("setup: the auxiliary region should start empty",
+                workbench.regions().isVisible(DockRegion.AUXILIARY));
+
+        UIElement button = workbench.stripe(StripeRail.LEFT).buttonFor(TOOL_TYPE);
+        assertNotNull(button);
+        int[] start = centreOf(button);
+        move(start[0], start[1]);
+        press(start[0], start[1]);
+        for (int i = 0; i < 3; i++) move(1200 - 6, 400);
+        release(1200 - 6, 400);
+        settle();
+
+        assertEquals(DockRegion.AUXILIARY, workbench.toolWindowManager().regionOf(TOOL_TYPE));
+        assertTrue("a drop into a closed region left it closed", workbench.isPanelOpen(TOOL_TYPE));
+    }
+
+    /**
+     * <b>And an empty HALF of an occupied region counts as closed.</b>
+     *
+     * <p>The two differ exactly when a region is split, which is the ordinary case now. Dropping into the
+     * sidebar's empty lower half while Project holds the upper one is a drop into something closed, and
+     * asking the region flatly answers "occupied" and leaves the drop invisible — which is how this was
+     * reported: it moved, and nothing appeared.</p>
+     */
+    @Test
+    public void aDropIntoTheEmptyHalfOfAnOpenRegionOpensIt() {
+        register();
+        settle();
+        assertTrue("setup: Project should hold the sidebar's upper half",
+                workbench.isPanelOpen(Workbench.PROJECT_TYPE));
+        assertFalse(workbench.isPanelOpen(TOOL_TYPE));
+
+        // Into the sidebar's LOWER half -- the region is occupied, the half is not.
+        workbench.toolWindowManager().moveTo(TOOL_TYPE, DockRegion.SIDEBAR, RegionSide.SECONDARY);
+        settle();
+        RegionHost sidebar = workbench.regions().host(DockRegion.SIDEBAR);
+        assertNull("setup: the lower half should still be empty",
+                sidebar.showing(RegionSide.SECONDARY));
+
+        UIElement button = workbench.stripe(StripeRail.LEFT).buttonFor(TOOL_TYPE);
+        assertNotNull(button);
+        int[] start = centreOf(button);
+        move(start[0], start[1]);
+        press(start[0], start[1]);
+        // In the left band, BELOW the halfway line but ABOVE the bottom band -- the sidebar's lower half.
+        // Lower than this and the corner rule hands it to the panel, which is correct and not what is
+        // under test here.
+        for (int i = 0; i < 3; i++) move(10, 500);
+        release(10, 500);
+        settle();
+
+        assertEquals(DockRegion.SIDEBAR, workbench.toolWindowManager().regionOf(TOOL_TYPE));
+        assertEquals(RegionSide.SECONDARY, workbench.toolWindowManager().sideOf(TOOL_TYPE));
+        assertEquals("the empty half stayed empty after a drop into it",
+                TOOL_TYPE, sidebar.showing(RegionSide.SECONDARY));
+        assertTrue("Project lost its half to a drop aimed at the other one",
+                workbench.isPanelOpen(Workbench.PROJECT_TYPE));
+    }
+
+    /**
+     * <b>Only one tool window per half is ever recorded visible.</b>
+     *
+     * <p>Showing a container displaces whatever held that half, and the displaced record used to keep
+     * {@code visible: true}. A real session file had three halves each claiming two visible tool windows —
+     * so the restore showed them in turn, each undoing the last, and what came back was whichever the list
+     * order happened to apply last.</p>
+     */
+    @Test
+    public void aDisplacedToolWindowIsRecordedAsClosed() {
+        register();
+        settle();
+        assertTrue(workbench.isPanelOpen(Workbench.PROJECT_TYPE));
+
+        // Console into the SAME half Project holds, which displaces it.
+        workbench.toolWindowManager().moveTo(TOOL_TYPE, DockRegion.SIDEBAR, RegionSide.PRIMARY);
+        workbench.showPanel(TOOL_TYPE);
+        settle();
+
+        assertEquals(TOOL_TYPE,
+                workbench.regions().host(DockRegion.SIDEBAR).showing(RegionSide.PRIMARY));
+        assertFalse("the displaced tool window still reports itself open",
+                workbench.isPanelOpen(Workbench.PROJECT_TYPE));
+        assertFalse("the displaced tool window is still recorded visible",
+                workbench.toolWindows().get(Workbench.PROJECT_TYPE).visible());
+
+        long visibleInThatHalf = workbench.toolWindows().all().stream()
+                .filter(state -> state.region() == DockRegion.SIDEBAR)
+                .filter(state -> state.side() == RegionSide.PRIMARY)
+                .filter(ToolWindowState::visible)
+                .count();
+        assertEquals("more than one tool window claims the same half", 1, visibleInThatHalf);
     }
 
     /**

@@ -43,6 +43,7 @@ public final class ToolWindowLayout {
     private static final String KEY_REGION = "region";
     private static final String KEY_SIDE = "side";
     private static final String KEY_WEIGHT = "weight";
+    private static final String KEY_SIDE_WEIGHT = "sideWeight";
     private static final String KEY_ORDER = "order";
     private static final String KEY_ACTIVE = "active";
     private static final String KEY_STRIPE = "stripe";
@@ -113,6 +114,7 @@ public final class ToolWindowLayout {
             entry.putString(KEY_REGION, state.region().name());
             entry.putString(KEY_SIDE, state.side().name());
             entry.putFloat(KEY_WEIGHT, state.weight());
+            entry.putFloat(KEY_SIDE_WEIGHT, state.sideWeight());
             entry.putInt(KEY_ORDER, state.order());
             entry.putBool(KEY_ACTIVE, state.active());
             entry.putBool(KEY_STRIPE, state.showStripeButton());
@@ -154,6 +156,7 @@ public final class ToolWindowLayout {
                 .withSide(RegionSide.ofName(entry.getString(KEY_SIDE, "")))
                 .withVisible(entry.getBool(KEY_VISIBLE, false))
                 .withWeight(entry.getFloat(KEY_WEIGHT, ToolWindowState.DEFAULT_WEIGHT))
+                .withSideWeight(entry.getFloat(KEY_SIDE_WEIGHT, ToolWindowState.DEFAULT_SIDE_WEIGHT))
                 .withActive(entry.getBool(KEY_ACTIVE, true))
                 .withShowStripeButton(entry.getBool(KEY_STRIPE, true));
         // A record written earlier still carries anchor/path/grouped/relative keys. They are simply not

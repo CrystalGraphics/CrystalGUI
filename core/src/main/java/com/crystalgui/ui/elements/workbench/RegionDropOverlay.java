@@ -5,7 +5,9 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.dock.DockRegion;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.event.DragEvent;
+import com.crystalgui.ui.tree.UITreeTraversal;
 
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -157,8 +159,26 @@ public class RegionDropOverlay extends UIElement {
             // position. They are the same point in every ordinary case and differ in the one that matters:
             // a drop event arriving after a layout change would resolve against the new geometry, and the
             // tool window would land somewhere the user was never shown.
+            // A DROP INTO AN EMPTY HALF OPENS IT; a drop into an occupied one does not.
+            //
+            // Dragging a button deliberately does not toggle its tool window -- a drag means "put it
+            // there", not "show it" -- but an empty destination is the one case where honouring that
+            // literally does nothing you can see: an invisible panel moved into an invisible slot, with
+            // the only evidence being a button that changed rails.
+            //
+            // THE HALF, not the region. The two differ exactly when a region is split, which is now the
+            // ordinary case: dropping into the sidebar's empty lower half while Project holds the upper
+            // one is a drop into something closed, and asking the region flatly answers "occupied" and
+            // leaves the drop invisible. That is the report this came from.
+            //
+            // Asked BEFORE the move, because moveTo reopens a tool window that was already showing -- ask
+            // afterwards and the answer is "occupied" precisely when we put something there.
+            RegionHost target = workbench.regions().host(resolved.region());
+            boolean halfWasEmpty = target == null || target.showing(resolved.side()) == null;
+
             workbench.toolWindowManager()
                     .moveTo(dragged.typeId(), resolved.region(), resolved.side(), index);
+            if (halfWasEmpty) openAndFocus(dragged.typeId());
         }, false, true);   // Drop bubbles too -- see the Over handler.
 
         // Leaving the workbench entirely -- the drag went to the title bar, or off the window.
@@ -231,6 +251,23 @@ public class RegionDropOverlay extends UIElement {
     private RegionHost visible(DockRegion region) {
         RegionHost host = workbench.regions().host(region);
         return host == null || host.isEmpty() ? null : host;
+    }
+
+    /**
+     * Opens a tool window in the region it was just dropped into, and puts focus inside it.
+     *
+     * <p><b>{@code requestPointerFocus}, never {@code requestFocus}.</b> The two differ in exactly one way
+     * that matters here: the programmatic one <em>rings</em>, because {@code :focus-visible} exists to
+     * outline keyboard focus and not clicks. This focus is the end of a mouse gesture, so ringing the
+     * panel's first control would be the noise that pseudo-class was added to remove.</p>
+     */
+    private void openAndFocus(String typeId) {
+        workbench.showPanel(typeId);
+        ViewContainer container = workbench.toolWindowManager().containerOf(typeId);
+        UIWindow window = getAttachedWindow();
+        if (container == null || window == null) return;
+        UIElement focusable = UITreeTraversal.firstFocusableIn(container);
+        if (focusable != null) window.getInputHandler().requestPointerFocus(focusable);
     }
 
     /** Lights the rectangle {@code slot} would occupy, or clears it when there is none. */
