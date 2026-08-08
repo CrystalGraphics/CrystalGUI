@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.dock;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.input.keymap.Keymap;
@@ -61,16 +62,21 @@ public final class DockCommands {
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(SPLIT_RIGHT, "Split Right")
                 .binding("Mod+Backslash")
+                .menu(MenuId.MAIN_WINDOW, "1_panes", 10)
                 .run(context -> splitActive(context, DockDropZone.SPLIT_RIGHT))
                 .enabledWhen(DockCommands::hasActivePanel));
 
         registry.register(Command.of(SPLIT_DOWN, "Split Down")
                 .binding("Mod+Shift+Backslash")
+                .menu(MenuId.MAIN_WINDOW, "1_panes", 20)
                 .run(context -> splitActive(context, DockDropZone.SPLIT_DOWN))
                 .enabledWhen(DockCommands::hasActivePanel));
 
         registry.register(Command.of(CLOSE_PANEL, "Close Panel")
                 .binding("Mod+W")
+                // FILE, not Window: closing the thing you are looking at is a file action in both
+                // references, and a command may declare as many placements as it has meanings.
+                .menu(MenuId.MAIN_FILE, "4_close", 10)
                 .run(context -> withArea(context, area -> {
                     DockGroup group = area.activeGroup();
                     if (group == null) return;
@@ -81,6 +87,7 @@ public final class DockCommands {
 
         registry.register(Command.of(TOGGLE_MAXIMIZE, "Toggle Maximize Group")
                 .binding("Mod+M")
+                .menu(MenuId.MAIN_WINDOW, "1_panes", 30)
                 .run(context -> withArea(context, area -> {
                     DockGroup group = area.activeGroup();
                     if (group != null) area.toggleMaximize(group.leaf());
@@ -94,6 +101,7 @@ public final class DockCommands {
 
         registry.register(Command.of(FOCUS_NEXT_GROUP, "Focus Next Group")
                 .binding("Mod+K")
+                .menu(MenuId.MAIN_WINDOW, "2_editors", 30)
                 .run(context -> cycleGroup(context, 1))
                 .enabledWhen(context -> {
                     DockArea area = areaFor(context);
@@ -102,6 +110,7 @@ public final class DockCommands {
 
         registry.register(Command.of(FOCUS_PREVIOUS_GROUP, "Focus Previous Group")
                 .binding("Mod+Shift+K")
+                .menu(MenuId.MAIN_WINDOW, "2_editors", 40)
                 .run(context -> cycleGroup(context, -1))
                 .enabledWhen(context -> {
                     DockArea area = areaFor(context);
@@ -110,11 +119,13 @@ public final class DockCommands {
 
         registry.register(Command.of(NEXT_TAB, "Next Tab")
                 .binding("Mod+PageDown")
+                .menu(MenuId.MAIN_WINDOW, "2_editors", 10)
                 .run(context -> cycleTab(context, 1))
                 .enabledWhen(DockCommands::hasSeveralTabs));
 
         registry.register(Command.of(PREVIOUS_TAB, "Previous Tab")
                 .binding("Mod+PageUp")
+                .menu(MenuId.MAIN_WINDOW, "2_editors", 20)
                 .run(context -> cycleTab(context, -1))
                 .enabledWhen(DockCommands::hasSeveralTabs));
     }

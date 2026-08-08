@@ -57,6 +57,22 @@ public final class DataKey<T> {
         return (DataKey<T>) existing;
     }
 
+    /**
+     * The key already declared as {@code name}, or null.
+     *
+     * <p><b>Never creates one</b>, which is the difference from {@link #create} and the reason this is
+     * safe to call with a name that came from outside Java — a {@code when} expression, a serialised
+     * menu. Interning an unknown name would leave a key nothing can ever answer, and it would then be
+     * indistinguishable from a real one that simply has no provider here.</p>
+     *
+     * <p>Untyped on purpose: a caller resolving by name has no type to assert, and
+     * {@link DataContext#get} narrows through {@link #cast} anyway.</p>
+     */
+    @javax.annotation.Nullable
+    public static DataKey<?> find(String name) {
+        return name == null ? null : INTERNED.get(name);
+    }
+
     public String name() {
         return name;
     }

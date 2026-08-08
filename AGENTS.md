@@ -979,6 +979,12 @@ The things that are invisible from any single class and expensive to rediscover.
 | **A `SplitView` cannot go below two panes, and a surplus pane cannot be made to occupy nothing** | `removePane` refuses and returns `false` — looping on it never terminates, which killed a test worker outright. And neither escape works: `applySplit` writes `flex-grow`, which only divides *free* space, while `setPaneSizeLimits` clamps *dragging*. The answer is to not use a split for one part — see `WorkbenchRegions.single` |
 | **`flex-grow` summing to less than 1 leaves the remainder undistributed** | Not a bug, the flexbox rule. Weights authored as fractions of the whole sum to 1 only while every one of them is present, so it looks correct until one is hidden — then that fraction of the row is simply blank. Normalise before applying |
 | **Never name a class `__content__` in a descendant selector** | Already stated on `CrystalEditor.CONTENT_CLASS` and `ProjectFileTree.CONTENT_CLASS` and broken a third time anyway. `ConfiguratorGroup` names its body that too, so `.__view-container__ .__content__` reached every group in every panel below it and zeroed their heights — chevrons open, content a sliver |
+| **A menu bar must REMEMBER the focus owner, never read it when the menu opens** — the press that opens the menu has already destroyed it | `emitMouseDown` calls `emitAndLoseFocus` **before** it dispatches, and a bar title is `FocusPolicy.NONE`, so nothing takes the focus it just gave up. Falling back to the bar looks harmless and is not: the bar sits *above* the workbench content, so a context resolved from it sees `CrystalEditor` and not the dock, the editor, the graph or the explorer. The symptom is precise and misleading — File ▸ Save stayed enabled (it resolves against an ancestor of the bar) while Split Right, Next Tab, Close Panel and every Graph and Edit entry greyed out, reading as those commands being broken. IntelliJ records the focus owner at invoke time for exactly this. **And a test through `sendInputEvent` cannot see it** — that skips `emitMouseDown` entirely, which is how sixteen passing tests shipped the bug |
+| **A menu bar resolves commands against the FOCUSED element; a context menu against the element that was CLICKED** | Opposite rules, and both are right: a right-click *names* its subject, a menu bar does not — File ▸ Save saves the active editor. Resolve the bar against itself and every `enabledWhen` in the application answers no, so the whole menu greys out and looks broken rather than empty |
+| **The registry carries `enabled`; it never filters. Both menu renderers DIM rather than hide** | The palette copied VS Code's hide-disabled behaviour once and listed **1 of 9** commands, because every `enabledWhen` resolves outward from focus and "nothing focused" answers no to everything. A menu whose rows appear and vanish is also a menu whose rows are never in the same place twice. `CommandRegistry.menu()` is the deprecated version that filtered, and only a test ever called it |
+| **`MenuBuilder` is the only thing that turns commands into menu rows** — `ContextMenu` and `MenuBarView` are both callers | Six rules live there and every one was learned from a bug: separators between sections but never leading/trailing/doubled, an unregistered command still gets a (disabled) row, enablement re-checked at activation, the command re-resolved through the registry when it runs, accelerators read live, an empty submenu dropped but a disabled one kept. A second builder gets some subset right and the two drift within a release |
+| **A `MenuId.submenu` declaration is PERMANENT** — it lives on the interned id, not on any registry, so `CommandRegistry.resetForTesting()` cannot undo it | Correct (a submenu is a structural fact about a menu, like a class declaration) and a trap for tests: one test nesting a child left every later test seeing a stray section. Use a fresh `MenuId.of(name + counter)` per test rather than a shared constant |
+| **`font-size` does not inherit, whatever `setInheritable(true)` says** — `default.css` opens with `* { font-size: 10 }`, which is a candidate at STYLESHEET origin on *every* element, and inheritance only applies where there is no candidate at any origin | A rule on a wrapper computes correctly on the wrapper and the label inside it still renders at 10. `statusbarview .__status-item__` works only because the status item **is** its `UIText`; any widget that wraps its label — for padding, a hover fill, an icon slot — must put the declaration on the text element itself. Cost a probe on the menu bar, where `height: 22px` on the same selector applied and the `font-size` beside it silently did not |
 | CSS text belongs in `test`, never `headlessTest` | `StyleSheet` class-init reads `default.css` via `CgIO` → unloadable headlessly |
 | JOML + Taffy must stay on the headless classpath | Field descriptors resolve at class load; `UIElement`/`ElementStyle` have fields of those types |
 | CrystalGraphics `platform` must stay on the headless classpath too — the excluded module is CG **core** | `UIInputHandler` *implements* `CgSystemInput`; a supertype resolves at class load, so stripping it fails every input test with `NoClassDefFoundError` |
@@ -1197,7 +1203,13 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
   .property                    Property<T> (binding, equality-suppressing set), ObservableList<T>
   .signal                      Signal.Action/Value/Pair, SignalBase, Connection, ConnectionGroup
   .command                     Command (a named invocable action), CommandContext, CommandRegistry —
-                               what a key binding, a menu item and the palette all point at
+                               what a key binding, a menu item and the palette all point at. Plus the
+                               MENU MODEL: MenuId (a named place a menu is drawn, interned, with nested
+                               submenus), MenuSection (a group + its rows — what a separator is drawn
+                               from), MenuEntry (Item/Submenu, sealed; an Item carries enabled/checkable/
+                               checked so the RENDERER decides), MenuContributor (rows computed at open
+                               time — the Window menu's editor list). CommandRegistry.sections() is the
+                               one query every menu renderer reads; menu() is its deprecated flat view
   .undo                        Edit (one undoable change), CompositeEdit, UndoStack — one history per
                                DOCUMENT, never per window
 
@@ -1261,6 +1273,13 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
   .elements                    Button, Checkbox, CheckboxGroup, Dialog, DialogManager, DragGhost,
                                Dropdown, Menu, MenuItem, Popover, Scroller, ScrollerView, Slider,
                                SplitView, Switch, Tab, TabView, TextField, Tooltip, UIText
+    .chrome                    The shell's own widgets, none of them general-purpose: MenuBarView (the
+                               main menu bar), MenuBuilder (sections -> rows; the ONE place a Menu is
+                               populated from commands, and ContextMenu is a caller of it), ContextMenu,
+                               MainMenuCommands, CommandPalette + QuickPick*, StatusBarView,
+                               NotificationsView/Balloons/Card, ProblemsPanel + ProblemNode +
+                               ProblemsTreeSource, Breadcrumbs, NavigatorView, Preferences, PageStack,
+                               InputDialog, ChromeCommands
     .editor                    TextEditor (the widget), EditorCommands (its named actions), plus VS
                                Code's VIEW-PART decomposition: EditorViewPart (the base + Monaco's
                                shouldRender protocol), DecorationPool (the pool/hide idiom), and one

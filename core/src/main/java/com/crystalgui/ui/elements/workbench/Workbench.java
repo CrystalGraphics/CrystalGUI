@@ -60,6 +60,10 @@ import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
+import com.crystalgui.ui.elements.chrome.MainMenuCommands;
+import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.elements.chrome.MenuBarView;
 import com.crystalgui.core.undo.UndoCommands;
 
 /**
@@ -186,6 +190,27 @@ public class Workbench extends UIElement {
     private final UIElement content = new UIElement();
 
     /**
+     * The line along the top — File, Edit, View, Graph, Window, Help.
+     *
+     * <p>Chrome, like the status bar and the rails, and sitting <em>above</em> {@link #content} for the
+     * same reason the status bar sits below it: the workbench is a column and content is what grows, so
+     * order alone places both and neither is positioned.</p>
+     *
+     * <p>It holds no items. Every row in every one of its menus is a {@code .menu(...)} declaration on a
+     * command that already existed for the keyboard and the palette. @see MenuBarView</p>
+     */
+    private final MenuBarView menuBar = new MenuBarView(CommandRegistry.global());
+
+    /**
+     * Files opened most recently — what {@code File ▸ Open Recent} lists.
+     *
+     * <p>Recorded at {@link #openFile}, which is the ONE place a file becomes a tab, so nothing else has
+     * to remember to call it. Recording at the call sites instead is how a recent list ends up missing
+     * the paths opened by the palette, by a problem row, or by a session restore.</p>
+     */
+    private final RecentFiles recentFiles = new RecentFiles();
+
+    /**
      * The line along the bottom — Parts step 6.
      *
      * <p>Chrome, like the rails and for the same reason: it is not something the layout can lose. It sits
@@ -236,6 +261,10 @@ public class Workbench extends UIElement {
     @Override
     public Object getData(DataKey<?> key) {
         if (key == WORKBENCH) return this;
+        // ANSWERED HERE, NOT BY THE BAR. The walk only finds ancestors, and the menu bar is a SIBLING of
+        // the content everything is focused inside -- so a command resolving outward from a focused editor
+        // would never reach it. The workbench is the nearest thing that is an ancestor of both.
+        if (key == UiDataKeys.MENU_BAR) return menuBar;
         return super.getData(key);
     }
 
@@ -444,6 +473,14 @@ public class Workbench extends UIElement {
         Notifications.onDidChangeUnread.connect(count -> toolWindowManager.viewContainers().setBadge(
                 NOTIFICATIONS_TYPE, count == null || count <= 0 ? null : ViewContainerRegistry.DOT));
 
+        // BEFORE content, which is the whole of what puts it at the top -- see the field.
+        addInternalChild(menuBar);
+        MainMenuCommands.install(menuBar);
+        // The two menu sections that cannot be registered ahead of time. Wired here because this is where
+        // the workbench's parts are introduced to each other, and because neither the View menu nor the
+        // Window menu may go looking for a workbench itself -- both read it from the data context.
+        WorkbenchMenus.register(CommandRegistry.global());
+
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         // AFTER content, which is the whole of what puts it at the bottom: a workbench is a column and
@@ -524,6 +561,16 @@ public class Workbench extends UIElement {
     }
 
     /** The status line along the bottom. @see StatusBarView */
+    /** The main menu bar. @see MenuBarView */
+    public MenuBarView menuBar() {
+        return menuBar;
+    }
+
+    /** The recently-opened files. @see RecentFiles */
+    public RecentFiles recentFiles() {
+        return recentFiles;
+    }
+
     public StatusBarView statusBar() {
         return statusBar;
     }
@@ -728,6 +775,10 @@ public class Workbench extends UIElement {
      * blank editor with no explanation.</p>
      */
     public void openFile(CgPath path) {
+        // BEFORE the already-open early return below, so re-activating a tab still promotes the file.
+        // "Recent" means recently used, not recently created -- and the branch that returns early is the
+        // common one once a session has been running for a while.
+        recentFiles.record(path);
         DockPanelRef ref = refFor(path);
         for (DockLeaf leaf : dock.layout().leaves()) {
             if (leaf.indexOf(ref) < 0) continue;

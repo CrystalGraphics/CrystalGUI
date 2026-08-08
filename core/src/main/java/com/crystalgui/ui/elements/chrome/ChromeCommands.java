@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.chrome;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.UiDataKeys;
 
 /**
@@ -46,6 +47,9 @@ public final class ChromeCommands {
         CommandRegistry.global().contribute(ChromeCommands.class, registry ->
                 registry.register(Command.of(SHOW_COMMANDS, "Show All Commands")
                         .binding("Mod+Shift+P", "Mod+Shift+A")
+                        // VIEW, which is where VS Code keeps it too -- the palette is a way of looking
+                        // at the command set rather than an edit.
+                        .menu(MenuId.MAIN_VIEW, "1_appearance", 10)
                         .run(context -> CommandPalette.open(context.data().get(UiDataKeys.WINDOW)))
                         .enabledWhen(context -> context.data().get(UiDataKeys.WINDOW) != null)));
     }

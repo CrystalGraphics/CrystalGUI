@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
@@ -107,6 +108,7 @@ public class Menu extends Popover {
 
         this.events.getGroup(KeyboardEvent.Down.class).attachListener((el, event) -> {
             if (!isOpen() || itemList.isEmpty()) return;
+            boolean handled = true;
             switch (event.getKeyCode()) {
                 case CgKeyCodes.KEY_UP -> moveFocus(-1);
                 case CgKeyCodes.KEY_DOWN -> moveFocus(1);
@@ -115,17 +117,23 @@ public class Menu extends Popover {
                 // Right opens a submenu immediately — the delay exists to filter out an accidental mouse
                 // sweep, and a deliberate keypress is never accidental. Left closes this menu and hands
                 // focus back to the row that opened it, which Popover.hide()'s focus restore already does.
-                case CgKeyCodes.KEY_RIGHT -> openFocusedSubmenu();
+                //
+                // CONSUMED ONLY IF IT OPENED SOMETHING. A Right press on a row with no submenu used to be
+                // swallowed anyway, which left a menu bar with no way to hear it — and moving to the next
+                // top-level menu is exactly what Right means there. The same asymmetry Left already had,
+                // where a root menu returns without consuming because it has nothing to close back into.
+                case CgKeyCodes.KEY_RIGHT -> handled = openFocusedSubmenu();
                 case CgKeyCodes.KEY_LEFT -> {
-                    if (parentPopover() == null) return; // a root menu has nothing to close back into
-                    hide();
+                    if (parentPopover() == null) {
+                        handled = false;   // a root menu has nothing to close back into
+                    } else {
+                        hide();
+                    }
                 }
-                default -> {
-                    return;
-                }
+                default -> handled = focusByTypedLetter(event);
             }
-            // Only reached for a key we actually handled, so arrows keep working elsewhere.
-            event.stopPropagation();
+            // Only for a key we actually handled, so arrows keep working elsewhere.
+            if (handled) event.stopPropagation();
         }, false, true);
     }
 
@@ -186,6 +194,27 @@ public class Menu extends Popover {
         separator.setHitTest(false);
         items.addChild(separator);
         return separator;
+    }
+
+    /**
+     * Drops a trailing {@link #addSeparator} again, if the last thing added was one.
+     *
+     * <p>For a builder that has to emit a separator <em>before</em> knowing whether anything will follow
+     * it — which is any builder splicing in a contributed section, since a section whose only entry is an
+     * empty submenu adds nothing. Adding speculatively and retracting is the only order available: a
+     * separator goes before its section, and whether the section exists is answered by building it.</p>
+     *
+     * <p>Safe to call when the last child is a real item; it removes nothing.</p>
+     *
+     * @return whether a separator was removed
+     */
+    public boolean removeLastSeparator() {
+        List<UIElement> children = items.getChildren();
+        if (children.isEmpty()) return false;
+        UIElement last = children.get(children.size() - 1);
+        if (!last.hasClass(SEPARATOR_CLASS)) return false;
+        items.removeChild(last);
+        return true;
     }
 
     public MenuItem addItemAt(MenuItem item, int index) {
@@ -276,16 +305,23 @@ public class Menu extends Popover {
 
     // ── Submenu opening ─────────────────────────────────────────────────────
 
-    /** Opens the focused row's submenu now, ignoring the hover delay. Used by the Right arrow key. */
-    private void openFocusedSubmenu() {
+    /**
+     * Opens the focused row's submenu now, ignoring the hover delay. Used by the Right arrow key.
+     *
+     * @return whether there was one to open
+     */
+    private boolean openFocusedSubmenu() {
         int index = focusedIndex();
-        if (index < 0) return;
+        if (index < 0) return false;
         MenuItem item = itemList.get(index);
         Menu child = item.getSubmenu();
-        if (child != null) {
-            cancelPendingSubmenu();
-            child.showFor(item, item);
-        }
+        if (child == null) return false;
+        cancelPendingSubmenu();
+        // INHERITED, so a drag that crosses into a submenu can still release on one of its rows. Set
+        // before showFor, because showFor is what moves focus into the child.
+        child.armedForRelease = armedForRelease;
+        child.showFor(item, item);
+        return true;
     }
 
     private void scheduleSubmenu(MenuItem item) {
@@ -408,6 +444,90 @@ public class Menu extends Popover {
         UIWindow window = getAttachedWindow();
         if (window != null) window.getInputHandler().requestFocus(this);
     }
+
+    /**
+     * Type-to-select — the letter keys every native menu answers to.
+     *
+     * <h3>Activate when unique, cycle when not</h3>
+     *
+     * <p>Windows' rule, and both references follow it: if exactly one row begins with the typed letter it
+     * is <b>chosen</b>, and if several the focus steps to the next of them so repeated presses cycle. That
+     * asymmetry is what makes the common case one keystroke instead of two, and it is why this is not
+     * simply "move focus to the first match".</p>
+     *
+     * <p><b>Disabled rows are skipped entirely</b> — not merely un-activatable. Counting them would let a
+     * greyed row make a unique match look ambiguous, so a letter that plainly identifies one usable row
+     * would stop choosing it.</p>
+     *
+     * <p>Bare letters only. A modified chord belongs to the keymap, and swallowing {@code Mod+S} here
+     * because some row starts with "S" would make an open menu eat the application's shortcuts.</p>
+     */
+    private boolean focusByTypedLetter(KeyboardEvent event) {
+        if (CgModifiers.hasCtrl(event.getModifiers()) || CgModifiers.hasAlt(event.getModifiers())
+                || CgModifiers.hasSuper(event.getModifiers())) {
+            return false;
+        }
+        char typed = Character.toLowerCase(event.getCharacter());
+        if (!Character.isLetterOrDigit(typed)) return false;
+
+        List<Integer> matches = new ArrayList<>();
+        for (int i = 0; i < itemList.size(); i++) {
+            MenuItem item = itemList.get(i);
+            if (!item.isEnabled()) continue;
+            String label = item.getText();
+            if (!label.isEmpty() && Character.toLowerCase(label.charAt(0)) == typed) matches.add(i);
+        }
+        if (matches.isEmpty()) return false;
+
+        if (matches.size() == 1) {
+            int only = matches.get(0);
+            focusItem(only);
+            itemList.get(only).onPressed.emit();
+            return true;
+        }
+        // Cycles from wherever focus is, so holding the letter walks the group and wraps.
+        int current = focusedIndex();
+        for (int index : matches) {
+            if (index > current) {
+                focusItem(index);
+                return true;
+            }
+        }
+        focusItem(matches.get(0));
+        return true;
+    }
+
+    /**
+     * Lets a release activate a row even though the press landed elsewhere — press-drag-release.
+     *
+     * <h3>Why it cannot just work</h3>
+     *
+     * <p>{@link MenuItem} inherits {@link com.crystalgui.ui.elements.Button}'s {@code isWasPressTarget()}
+     * guard, which is exactly right for a button — releasing off a button you pressed must not activate it
+     * — and exactly wrong for a menu opened by a press that is still held. Every native menu bar supports
+     * press, drag onto an entry, release; without this the gesture leaves the menu open and chooses
+     * nothing.</p>
+     *
+     * <p>Armed by whoever opened the menu from a live press, and disarmed on the first release, so it can
+     * never turn an ordinary later click into a stray activation. Propagates into submenus as they open,
+     * because a drag routinely crosses into one.</p>
+     */
+    public Menu armForRelease() {
+        this.armedForRelease = true;
+        return this;
+    }
+
+    /** @see #armForRelease */
+    public boolean isArmedForRelease() {
+        return armedForRelease;
+    }
+
+    /** One-shot: cleared by the first release, wherever it lands. @see #armForRelease */
+    public void disarmForRelease() {
+        this.armedForRelease = false;
+    }
+
+    private boolean armedForRelease;
 
     private void moveFocus(int step) {
         int current = focusedIndex();

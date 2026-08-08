@@ -20,7 +20,7 @@
 | 9 | Notifications + status, and the last hand-written menu | **DONE** — `com.crystalgui.core.notify`; `register(workbench)` takes nothing else; `BlackboardPanel`'s row menu is a `MenuId` query |
 | 10 | Editor banners, and the last per-frame poll | **DONE** — `DockBannerProvider` (§11 Tier 2's one kept item); `GraphView.discoverPortEditors` is push-based |
 | 11 | The Parts model, and the six foundations it needs (§23) | **DONE** — F1, F3–F6 landed; **F2b landed with §24.3's region shell**, not after it. `ToolWindowState` is now `{typeId, visible, region, side, weight, sideWeight, order, active, showStripeButton}` — `path` and `groupedWith` are gone and `showPanel` is a lookup. The §23.6 correction was right that the deletion had to follow the regions; it then happened *in the same step* rather than a later one, and this table was left saying otherwise for several sessions |
-| 12 | The Parts stack — regions, containers, stripes, toolbar, status bar (§24) | **IN PROGRESS** — §24.3 regions, §24.4 `ViewContainer`/`View`, §24.5 stripes and §24.7 status bar are in. **§24.6 — the main toolbar and burger menu — is the only unbuilt part**, and §25 below is its research |
+| 12 | The Parts stack — regions, containers, stripes, toolbar, status bar (§24) | **IN PROGRESS** — §24.3 regions, §24.4 `ViewContainer`/`View`, §24.5 stripes and §24.7 status bar are in. **§24.6's menu-bar half is now built — see §28.7.** What is left of §24.6 is the toolbar row itself (project/branch/run widgets) and the burger collapse |
 
 Steps 7 and 8 came from reading the result of 1–6: the six steps made the *framework* extensible and left
 `CrystalEditor` naming one application's file types, and left the Inspector a graph-shaped class. Neither
@@ -3261,9 +3261,13 @@ Engine-level, each invisible from every direction except the one that found it.
 
 # Part IV — §28. The menu bar: research and substrate plan
 
-> **Status: RESEARCHED, NOT STARTED.** This is §24.6's other half. The toolbar is a row of buttons; the
-> menu bar is a *contribution surface*, and almost all of the work is in the substrate rather than the
-> widget. Read §28.3 before writing any UI.
+> **Status: BUILT.** §28.1–28.5 are the research it was built from and are kept as written; **§28.7 below
+> records what actually landed, where it deviated, and what is left.** Five of the six gaps are closed;
+> G5 stays parked, as planned.
+>
+> This is §24.6's other half. The toolbar is a row of buttons; the menu bar is a *contribution surface*,
+> and almost all of the work was in the substrate rather than the widget — which the outcome bears out:
+> the widget is one file and the six menus have no list anywhere.
 
 ## 28.1 The thesis
 
@@ -3415,3 +3419,116 @@ every node feature, and it is contributed from `com.crystalgui.graph`, which the
 
 **G5 (`when` parser) stays parked.** Nothing above needs it, and it only pays for itself once menus are
 declared outside Java.
+
+## 28.7 What landed
+
+Built 2026-08-09. Five of the six gaps are closed; the sixth (G5, the `when` parser) stays parked as the
+research said it should. **2761 tests, 0 failures** — 28 new, split between the model and the widget.
+
+### The files
+
+| Layer | What | Where |
+|---|---|---|
+| Model | `MenuSection` (a group + its rows), `MenuEntry` (`Item` / `Submenu`, sealed), `MenuContributor` | `core.command` |
+| Model | `CommandRegistry.sections(MenuId, CommandContext)` — **the one query every renderer uses** | `core.command` |
+| Model | `Command.toggledWhen` / `toggledWhereData` / `isCheckable` / `isToggled` | `core.command` |
+| Model | `MenuId.MAIN_FILE`, `MAIN_EDIT`, `MAIN_VIEW`, `MAIN_GRAPH`, `MAIN_WINDOW`, `MAIN_HELP`, plus `MAIN_FILE_NEW`, `MAIN_FILE_RECENT`, `MAIN_VIEW_TOOLWINDOWS` | `core.command` |
+| View | `MenuBuilder` — sections → rows, plus `present`/`discard`/`isInsideAny` for putting a chain on screen | `ui.elements.chrome` |
+| View | `MenuBarView` — titles, hover-switching, mnemonics | `ui.elements.chrome` |
+| View | `MainMenuCommands` — Help's two commands, and `install(bar)` for the six titles | `ui.elements.chrome` |
+| Wiring | `WorkbenchMenus` — the two computed sections (tool windows, open editors) | `ui.elements.workbench` |
+
+`ContextMenu` lost ~120 lines and is now a caller of `MenuBuilder`, which was the plan's step 4 and the
+thing most worth not skipping: `contributionsOf`, `addCommand`, `collect`, `isInsideAny` and `discard`
+all moved, so there is exactly one implementation of the six row-rendering rules.
+
+### The thesis holds, and it is measurable
+
+**`MainMenuCommands` is 70 lines and declares two commands.** Everything else in File, Edit, View, Graph
+and Window is a `.menu(...)` on a command that already existed for the keyboard and the palette:
+
+| Menu | Contributed from | Imports the bar? |
+|---|---|---|
+| File | `CrystalEditorCommands`, `DockCommands`, `ExplorerCommands` | no |
+| Edit | `UndoCommands`, `EditorCommands` | no |
+| View | `ChromeCommands`, `EditorCommands`, `WorkbenchMenus` | no |
+| **Graph** | `GraphCommands`, in `com.crystalgui.ui.elements.graph` | no |
+| Window | `DockCommands`, `CrystalEditorCommands`, `WorkbenchMenus` | no |
+| Help | `MainMenuCommands` | it is the bar's own |
+
+The counter-test the research named — *can a contribution add a File-menu item without the menu bar
+knowing it exists?* — is now `aCommandRegisteredLaterAppearsWithoutTheBarKnowing`, and it passes.
+
+### Where it deviated from the plan
+
+- **G2 came out differently, and the research had it half wrong.** §28.3 said "a context menu keeps
+  filtering, the bar greys". `ContextMenu`'s own javadoc already argued the opposite and had a paid-for
+  reason: the palette copied VS Code's hide-disabled behaviour and listed **1 of 9** commands, because
+  every `enabledWhen` resolves outward from focus and "nothing focused" answers no to everything. So
+  **both** renderers dim. What the registry does is carry `enabled` rather than act on it, which is the
+  part that mattered — the decision is the renderer's, and it happens that both renderers make the same
+  one. `CommandRegistry.menu()` is deprecated rather than deleted; only a test called it.
+- **G6 covers more than Recent Files.** `View ▸ Tool Windows` turned out to be the same problem — one
+  checkable row per *registered* tool window, which is IntelliJ's own generated-action-per-tool-window —
+  so it is a contributor too, and `SHOW_PROBLEMS`/`SHOW_NOTIFICATIONS` stayed reveal-only for the status
+  bar. **Recent Files itself is not built**: `MAIN_FILE_RECENT` exists and is empty, because nothing in
+  this application records a recent-file list yet. An empty submenu is dropped, so it simply does not
+  appear.
+- **Mnemonics are drawn with `::highlight()`.** §28.3 called G4 "polish" with "a rendering half" and did
+  not say how. The answer was already in the engine: a `TextRange` over one character, styled by
+  `::highlight(mnemonic) { text-decoration-line: underline }`. Splitting the label into three elements
+  would reflow the bar on every Alt press *and* re-shape across two span boundaries — the invariant
+  `UIText` already records about highlights not being spans.
+- **No burger collapse.** §24.6 wanted the bar to collapse into a burger when narrow. Not built: it needs
+  the toolbar row it would share, and the bar is useful without it.
+
+### One engine bug found on the way
+
+**`font-size` does not inherit, whatever `setInheritable(true)` says.** `default.css` opens with
+`* { font-size: 10 }`, which is a candidate at STYLESHEET origin on *every* element — and inheritance
+only applies where there is no candidate at any origin. A rule on a wrapper computes correctly on the
+wrapper and the label inside it still renders at 10. `statusbarview .__status-item__` works only because
+the status item **is** its `UIText`. Recorded in `AGENTS.md`'s invariant table; found by probing the bar
+after `height: 22px` on the same selector applied and the `font-size` beside it silently did not.
+
+### What is left
+
+| | Why it is not built |
+|---|---|
+| **G5 — the `when` expression parser** | Parked, as the research said. Nothing above needs it; it only pays for itself once menus are declared outside Java |
+| **Recent Files** | No recent-file list exists to read. `MAIN_FILE_RECENT` is declared and empty |
+| **The burger collapse** | Needs §24.6's toolbar row |
+| **Mnemonics inside an open menu** | Alt reaches the bar; typing a letter with a menu down does not select a row. Both references do this, and `Menu` would own it, not the bar |
+| **`File ▸ Open`** | There is no open-a-file command — the explorer opens files by clicking them, and a file dialog is a platform service this engine does not have |
+
+### Two bugs found by using it, and what they cost
+
+Both were reported from the running harness within minutes of the bar being usable, and neither was
+visible to the 20 tests that already covered it.
+
+**1. Every command that resolves below the bar greyed out.** `contextSource` read
+`getFocusedElement()` when the menu opened — and the press that opens it has already cleared focus:
+`emitMouseDown` calls `emitAndLoseFocus` *before* dispatching, and a title is `FocusPolicy.NONE`, so
+nothing takes what was given up. The fallback to `this` then resolved from a bar that sits *above* the
+workbench content, so `CrystalEditor` was reachable and the dock, editor, graph and explorer were not.
+
+The symptom was precise and misleading: **File ▸ Save stayed enabled** — it resolves against an ancestor
+of the bar — while Split Right, Next Tab, Close Panel, every Graph entry and every Edit entry greyed out.
+That reads as those commands being broken, not as the context being wrong.
+
+The bar now tracks focus itself through a capture-phase `FocusEvent.Focus` listener on the root, rejecting
+anything inside the bar or inside a live `Menu` (a menu takes focus for its own rows the instant it
+opens, and would otherwise overwrite the very answer being kept). This is what IntelliJ does — its
+actions resolve against the focus owner recorded when the menu was invoked.
+
+> **The lesson is the one this project keeps re-learning, one level lower than last time.** Every test
+> drove the press through `sendInputEvent`, which is the real three-phase dispatch — but **not** the real
+> *entry point*. `emitMouseDown` is where click-focus, light dismiss and hit-testing live, and skipping it
+> meant sixteen green tests over a bar whose menus were half dead. `aMenuResolvesAgainstWhatWasFocusedBeforeThePress`
+> now goes through `consumeMouseEvent` at real coordinates, and it fails against the old code.
+
+**2. Accelerators were not right-aligned.** They followed their label, so `Ctrl+\` and `Ctrl+Shift+K`
+began at different places on every row and there was no column to read down. Fixed with
+`margin-left: auto` on `.__accelerator__` — and the 24px gap had to move to `padding-left`, because an
+auto margin contributes nothing to min-content, so as a margin it stopped reserving the gap while the menu
+was being measured and the widest row would have had its label touching its shortcut.

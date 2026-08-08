@@ -3,6 +3,7 @@ package com.crystalgui.editor;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.ui.UIWindow;
@@ -59,6 +60,7 @@ public final class CrystalEditorCommands {
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(SAVE_FILE, "Save File")
                 .binding("Mod+S")
+                .menu(MenuId.MAIN_FILE, "3_save", 10)
                 .run(context -> editorFor(context).workbench().saveActiveFile())
                 // Greyed when the active tab is not a file, so the palette says so rather than offering a
                 // command that would report "no file tab active" after the fact.
@@ -69,6 +71,7 @@ public final class CrystalEditorCommands {
 
         registry.register(Command.of(SAVE_LAYOUT, "Save Window Layout")
                 .binding("Mod+Shift+S")
+                .menu(MenuId.MAIN_WINDOW, "3_layout", 10)
                 .run(context -> {
                     UIWindow window = context.data().get(UiDataKeys.WINDOW);
                     editorFor(context).saveLayout(PlainOps.INSTANCE,
@@ -79,6 +82,7 @@ public final class CrystalEditorCommands {
 
         registry.register(Command.of(RESTORE_LAYOUT, "Restore Window Layout")
                 .binding("Mod+O")
+                .menu(MenuId.MAIN_WINDOW, "3_layout", 20)
                 .run(context -> editorFor(context).restoreLayout(PlainOps.INSTANCE))
                 .enabledWhen(context -> editorFor(context) != null));
     }
