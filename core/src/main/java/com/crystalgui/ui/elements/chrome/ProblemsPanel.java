@@ -13,10 +13,15 @@ import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.AnchoredPlacement;
+import com.crystalgui.ui.elements.Menu;
+import com.crystalgui.ui.elements.MenuItem;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
 import com.crystalgui.ui.elements.tree.TreeRow;
 import com.crystalgui.ui.elements.tree.TreeView;
+import com.crystalgui.ui.elements.workbench.HeaderContributor;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -46,7 +51,14 @@ import java.util.List;
  * <p>Because it changes the tree's shape rather than its paint — see {@link ProblemsTreeSource}. A file
  * whose only error is filtered out has to stop being a row.</p>
  */
-public class ProblemsPanel extends UIElement {
+public class ProblemsPanel extends UIElement implements HeaderContributor {
+
+    /** The scope tabs, placed on the container's title line rather than inside this panel. */
+    @Override
+    public UIElement headerContent() {
+        return tabs;
+    }
+
 
     public static final String PANEL_CLASS = "__problems__";
     public static final String CONTENT_CLASS = "__content__";
@@ -92,6 +104,174 @@ public class ProblemsPanel extends UIElement {
     private final ConnectionGroup binding = new ConnectionGroup();
 
     /**
+     * The view-options strip and its menu.
+     *
+     * <p>Built eagerly rather than on first press, for the reason {@code MainPreviewPanel} records about
+     * its own: a toggle whose state lives in a menu that does not exist yet is a toggle nothing can
+     * inspect without simulating a click.</p>
+     */
+    private void buildHead() {
+        viewOptions.addClass(VIEW_OPTIONS_CLASS);
+        viewOptions.setFocusPolicy(FocusPolicy.CLICK);
+        viewOptions.onMouseDown.attachListener((element, event) -> {
+            event.stopPropagation();
+            openViewMenu(event.getPosition().x(), event.getPosition().y());
+        }, false, true);
+        // THE DROPDOWN CORNER, as its own element rather than a second overlay: `overlay` is one drawable,
+        // and IntelliJ's gutter mark sits in the icon's bottom-right corner rather than replacing it. It is
+        // what says the eye opens a menu instead of toggling something.
+        gutterMark.addClass(GUTTER_MARK_CLASS);
+        gutterMark.setHitTest(false);
+        viewOptions.addChild(gutterMark);
+
+        head.addClass(HEAD_CLASS);
+        head.addChild(viewOptions);
+        // A COLUMN OF [tabs, [gutter | tree]] -- the tabs span the panel and the gutter runs beside the
+        // tree only, which is IntelliJ's arrangement. The body exists because those two axes cannot be one
+        // element.
+        body.addClass(BODY_CLASS);
+        body.addChild(head);
+        buildTabs();
+        addInternalChild(body);
+
+        // CHECKABLE through the MENU rather than the item, which is what reserves the mark gutter for
+        // every row -- an item that made itself checkable would sit indented against its neighbours.
+        errorsItem = viewMenu.addCheckableItem(SHOW_ERRORS);
+        warningsItem = viewMenu.addCheckableItem(SHOW_WARNINGS);
+        infosItem = viewMenu.addCheckableItem(SHOW_INFOS);
+        // NO "Show Active File Only" ROW. Scope is the tab strip -- see FILE_TAB. Leaving it here as well
+        // would be two controls for one piece of state, which is the arrangement where they disagree.
+        viewMenu.onItemActivated.connect(item -> applyViewChoice(item.getText()));
+        // Must be IN the tree to be promoted to the top layer — a Menu is a Popover, and an unparented one
+        // has nothing to promote from.
+        addInternalChild(viewMenu);
+        syncViewMenu();
+    }
+
+    /**
+     * IntelliJ's scope tabs: {@code File} with a count, and {@code Project Errors}.
+     *
+     * <p>Plain elements rather than a {@code TabView}: that widget owns panes and switches between them,
+     * and there is one tree here shown two ways. A tab strip that swapped content would mean two trees and
+     * two expansion states for one question.</p>
+     */
+    private void buildTabs() {
+        tabs.addClass(TABS_CLASS);
+        buildTab(fileTab, FILE_TAB, true).addChild(fileCount);
+        fileCount.addClass(TAB_COUNT_CLASS);
+        fileCount.setHitTest(false);
+        fileCount.forceSelfSizeWidth();
+        buildTab(projectTab, PROJECT_TAB, false);
+        tabs.addChild(fileTab);
+        tabs.addChild(projectTab);
+        // NOT added here: the container puts these on its title line. @see HeaderContributor
+        syncTabs();
+    }
+
+    private UIElement buildTab(UIElement tab, String label, boolean fileScope) {
+        tab.addClass(TAB_CLASS);
+        tab.setFocusPolicy(FocusPolicy.CLICK);
+        UIText text = new UIText(label);
+        text.setHitTest(false);
+        text.forceSelfSizeWidth();
+        tab.addChild(text);
+        tab.onMouseDown.attachListener((element, event) -> {
+            event.stopPropagation();
+            setFileScope(fileScope);
+        }, false, true);
+        return tab;
+    }
+
+    /** The view menu, so a test can activate a row rather than reaching past it to the setter it calls.
+     * Both of this panel's earlier bugs lived in a route that its tests stepped over. */
+    public Menu viewMenu() {
+        return viewMenu;
+    }
+
+    private void openViewMenu(float screenX, float screenY) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        // ROOT space, not physical pixels: a promoted menu's containing block is the root, so a raw
+        // pointer position lands wherever that number falls in root coordinates.
+        var at = AnchoredPlacement.pointerToRoot(window, screenX, screenY);
+        viewMenu.showAt(at.x(), at.y(), null);
+    }
+
+    /** Resolved by label at activation time rather than captured per item — one listener, and a row added
+     * later cannot be forgotten. */
+    private void applyViewChoice(String label) {
+        switch (label) {
+            case SHOW_ERRORS -> setSeverityShown(DiagnosticSeverity.ERROR, !isShown(DiagnosticSeverity.ERROR));
+            case SHOW_WARNINGS ->
+                    setSeverityShown(DiagnosticSeverity.WARNING, !isShown(DiagnosticSeverity.WARNING));
+            case SHOW_INFOS -> {
+                // ONE ROW, TWO SEVERITIES. LSP separates INFORMATION from HINT and VS Code shows them
+                // under one switch, because the distinction is about how they are drawn in the text
+                // rather than about whether you want to see the list of them.
+                boolean shown = !isShown(DiagnosticSeverity.INFORMATION);
+                setSeverityShown(DiagnosticSeverity.INFORMATION, shown);
+                setSeverityShown(DiagnosticSeverity.HINT, shown);
+            }
+            default -> { }
+        }
+        syncViewMenu();
+    }
+
+    private boolean isShown(DiagnosticSeverity severity) {
+        return source == null || source.isShown(severity);
+    }
+
+    /** Writes the live filter state onto the menu, so opening it shows what is actually in force. */
+    private void syncViewMenu() {
+        errorsItem.setSelected(isShown(DiagnosticSeverity.ERROR));
+        warningsItem.setSelected(isShown(DiagnosticSeverity.WARNING));
+        infosItem.setSelected(isShown(DiagnosticSeverity.INFORMATION));
+    }
+
+    /**
+     * Chooses the scope — IntelliJ's two tabs. {@code true} is {@link #FILE_TAB}.
+     *
+     * <p>Default is the file, which is IntelliJ's: the panel opens describing what you are looking at, and
+     * the project tab is one click away. The empty state names the scope, so an empty {@code File} tab
+     * cannot be misread as a clean project.</p>
+     */
+    public ProblemsPanel setFileScope(boolean fileOnly) {
+        if (activeFileOnly == fileOnly) return this;
+        activeFileOnly = fileOnly;
+        showOnly(fileOnly ? activeResource : null);
+        syncTabs();
+        return this;
+    }
+
+    public boolean isFileScope() {
+        return activeFileOnly;
+    }
+
+    /** Marks the tab in force and re-counts the file one. */
+    private void syncTabs() {
+        fileTab.swapPrefixedClass(TAB_SELECTED_CLASS, activeFileOnly ? TAB_SELECTED_CLASS : "");
+        projectTab.swapPrefixedClass(TAB_SELECTED_CLASS, activeFileOnly ? "" : TAB_SELECTED_CLASS);
+        // ONLY THE FILE TAB IS BADGED, which is IntelliJ's choice and the right one: the count that helps
+        // is the one for the thing you are working on. A project total is what the status bar already says.
+        int inFile = source == null || activeResource == null
+                ? 0 : source.matching(activeResource).size();
+        fileCount.setText(inFile == 0 ? "" : String.valueOf(inFile));
+    }
+
+    /**
+     * Tells the panel which file is in front.
+     *
+     * <p>Held whether or not the filter is on, so switching it on narrows to what you are looking at now
+     * rather than to whatever was in front when you last switched it off.</p>
+     */
+    public ProblemsPanel setActiveResource(@Nullable Resource resource) {
+        if (java.util.Objects.equals(activeResource, resource)) return this;
+        activeResource = resource;
+        if (activeFileOnly) showOnly(resource);
+        return this;
+    }
+
+    /**
      * Folds or unfolds a file — what the chevron asks for.
      *
      * <p>Straight through to {@link TreeView#requestToggle}, which owns the deferral: folding from inside
@@ -102,13 +282,77 @@ public class ProblemsPanel extends UIElement {
         if (file != null && file.isFile() && tree != null) tree.requestToggle(file);
     }
 
+    /** The strip holding the view-options button. */
+    public static final String HEAD_CLASS = "__problems-head__";
+    /** IntelliJ's eye — opens {@link #viewMenu}. */
+    public static final String VIEW_OPTIONS_CLASS = "__view-options__";
+    /** The row holding the gutter and the tree, below the tabs. */
+    public static final String BODY_CLASS = "__problems-body__";
+    /** IntelliJ's little corner mark saying the eye opens a menu. */
+    public static final String GUTTER_MARK_CLASS = "__dropdown-gutter__";
+
+    /**
+     * The view menu's rows, verbatim from VS Code's {@code markersViewActions.ts} — same wording, same
+     * order, minus the one that would be inert.
+     *
+     * <p>{@code Hide Excluded Files} is deliberately absent: it filters against the workspace's exclude
+     * globs, and this engine has none, so the row would be a switch that does nothing. The rest map one
+     * to one onto filters the source already applies.</p>
+     */
+    private static final String SHOW_ERRORS = "Show Errors";
+    private static final String SHOW_WARNINGS = "Show Warnings";
+    /** One row for both {@code INFORMATION} and {@code HINT} — "Infos" is VS Code's single bucket. */
+    private static final String SHOW_INFOS = "Show Infos";
+
+    /**
+     * The two scopes, as IntelliJ's tabs rather than VS Code's menu item.
+     *
+     * <p>VS Code spells this {@code Show Active File Only} inside the filter menu; IntelliJ makes it two
+     * tabs across the top, and the tabs are better for the same reason a tab is better than a checkbox
+     * anywhere — <b>the current scope is readable without opening anything</b>. A filter hidden in a menu
+     * is a mode you can be in without knowing, and "the Problems panel is empty" means two very different
+     * things depending on which one you are in.</p>
+     */
+    public static final String FILE_TAB = "File";
+    public static final String PROJECT_TAB = "Project Errors";
+
+    public static final String TABS_CLASS = "__problem-tabs__";
+    public static final String TAB_CLASS = "__problem-tab__";
+    /** On the tab in force. The selector engine has no {@code :checked} for a plain element. */
+    public static final String TAB_SELECTED_CLASS = "__selected__";
+    /** The count beside {@code File}, which is the only tab IntelliJ badges. */
+    public static final String TAB_COUNT_CLASS = "__tab-count__";
+
+    private final UIElement body = new UIElement();
+    private final UIElement head = new UIElement();
+    private final UIElement gutterMark = new UIElement();
+    private final UIElement viewOptions = new UIElement();
+    private final Menu viewMenu = new Menu();
+    private MenuItem errorsItem;
+    private MenuItem warningsItem;
+    private MenuItem infosItem;
+
+    private final UIElement tabs = new UIElement();
+    private final UIElement fileTab = new UIElement();
+    private final UIElement projectTab = new UIElement();
+    private final UIText fileCount = new UIText("");
+
+    /** The file in front, so {@link #ACTIVE_FILE_ONLY} has something to narrow to. */
+    @Nullable
+    private Resource activeResource;
+
+    /** IntelliJ opens on the File tab, describing what you are looking at. */
+    private boolean activeFileOnly = true;
+
     public ProblemsPanel() {
         addClass(PANEL_CLASS);
         content.addClass(CONTENT_CLASS);
-        // Marked internal exactly ONCE, while empty. markAsInternal() RECURSES, and the tree adds and
-        // recycles its own rows -- stamping a populated subtree marks those internal too, after which
-        // removeChild silently refuses them.
-        addInternalChild(content);
+        buildHead();
+        // Into the BODY, beside the gutter — not straight onto the panel, which is now a column of
+        // [tabs, body]. Added while empty: markAsInternal() RECURSES, and the tree adds and recycles its
+        // own rows, so stamping a populated subtree marks those internal too and removeChild then silently
+        // refuses them.
+        body.addChild(content);
 
         empty.addClass(EMPTY_CLASS);
         empty.setHitTest(false);
@@ -151,6 +395,9 @@ public class ProblemsPanel extends UIElement {
             return this;
         }
         source = new ProblemsTreeSource(markers);
+        // THE SCOPE SURVIVES A REBIND. A fresh source defaults to the whole workspace, so without this the
+        // File tab would stay lit while the tree quietly showed everything.
+        source.setOnlyResource(activeFileOnly ? activeResource : null);
         // REBUILT RATHER THAN RE-POINTED: a TreeView takes its source at construction and offers no way to
         // swap one. Rebinding is a rare, deliberate act — a workspace opening or closing — so the cost is a
         // tree that is thrown away roughly never, and the alternative is a setter on TreeView whose only
@@ -241,15 +488,32 @@ public class ProblemsPanel extends UIElement {
             tree.setDisplayed(anything);
         }
         empty.setDisplayed(!anything);
-        // A FILTERED-TO-NOTHING TREE IS NOT AN EMPTY WORKSPACE, and saying so is what stops a filter
-        // reading as "everything got fixed".
-        empty.setText(source != null && isFiltering(source)
-                ? "No problems match the current filter"
-                : "No problems have been detected in the workspace");
+        empty.setText(emptyMessage());
+        syncTabs();
     }
 
-    private static boolean isFiltering(ProblemsTreeSource source) {
-        if (!source.textFilter().isEmpty() || source.onlyResource() != null) return true;
+    /**
+     * Which kind of empty this is — and there are now three.
+     *
+     * <p>An empty tree in the {@code File} tab, an empty tree in {@code Project Errors}, and a tree
+     * filtered to nothing are the same picture and completely different news; only one of them is worth
+     * celebrating. Saying which is what stops a scope or a filter reading as "everything got fixed", and
+     * it is the reason the scope is a visible tab rather than a checkbox in a menu.</p>
+     */
+    private String emptyMessage() {
+        if (source == null) return "No problems have been detected in the workspace";
+        if (isNarrowed(source)) return "No problems match the current filter";
+        if (activeFileOnly) {
+            return activeResource == null
+                    ? "No file is open"
+                    : "No problems in " + activeResource.name();
+        }
+        return "No problems have been detected in the workspace";
+    }
+
+    /** Whether anything BUT the scope is narrowing the tree — the scope has its own wording. */
+    private static boolean isNarrowed(ProblemsTreeSource source) {
+        if (!source.textFilter().isEmpty()) return true;
         for (DiagnosticSeverity severity : DiagnosticSeverity.values()) {
             if (!source.isShown(severity)) return true;
         }

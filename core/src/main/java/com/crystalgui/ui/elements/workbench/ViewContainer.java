@@ -98,10 +98,19 @@ public class ViewContainer extends UIElement {
     public void setViews(List<ViewContainerRegistry.ViewEntry> views) {
         content.setOnlyChild(null);
         tabs.clearTabs();
+        clearContributedHeader();
         if (views.isEmpty()) return;
 
         if (views.size() == 1) {
-            content.setOnlyChild(views.get(0).build());
+            UIElement only = views.get(0).build();
+            content.setOnlyChild(only);
+            // ITS CONTROLS GO ON THE TITLE LINE — IntelliJ's tool window title actions. @see
+            // HeaderContributor. Only for a lone view: with two sharing a container the header names the
+            // container, and one view's controls sitting beside it would look like they governed both.
+            if (only instanceof HeaderContributor contributor) {
+                contributed = contributor.headerContent();
+                if (contributed != null) header.addChildAt(contributed, 1);
+            }
             return;
         }
         for (ViewContainerRegistry.ViewEntry view : views) {
@@ -110,6 +119,17 @@ public class ViewContainer extends UIElement {
         }
         content.setOnlyChild(tabs);
     }
+
+    /** Takes the previous view's header controls off, so a container that swaps views does not keep them. */
+    private void clearContributedHeader() {
+        if (contributed == null) return;
+        contributed.removeSelf();
+        contributed = null;
+    }
+
+    /** The mounted view's header controls, if it offered any. @see HeaderContributor */
+    @javax.annotation.Nullable
+    private UIElement contributed;
 
     @Override
     public boolean acceptsPublicChildren() {

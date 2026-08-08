@@ -3699,9 +3699,15 @@ dockgroup .__missing__ {
 /* ONE LINE, ELLIPSIZED -- never wrapped. A header that wraps turns "Services" into "Servic / es" and
  * doubles the height of every container in a narrow region, which is what a minimum width exists to stop
  * you reaching in the first place. text-overflow does NOT inherit, so it has to sit on the UIText itself. */
+/* NO LONGER GROWS. The hide button is pushed to the trailing edge by its own auto margin instead, which
+ * leaves the space after the title free for a view's contributed controls -- IntelliJ reads
+ * "Problems  [File 65]  [Project Errors]" on one line, and a growing title would strand them at the far
+ * right. One auto margin means one claimant, so it takes all the slack rather than sharing it. */
 .__view-container__ .__header__ .__title__ {
-    flex-grow: 1;
-    flex-shrink: 1;
+    flex-grow: 0;
+    /* NEVER SHRINKS. With the title growing, ellipsis was its own protection; once it stopped growing it
+     * became the first thing flex took space from, and "Problems" rendered as "Pr" beside its own tabs. */
+    flex-shrink: 0;
     font-size: 11px;
     color: #A0A0A0;
     white-space: nowrap;
@@ -3709,6 +3715,7 @@ dockgroup .__missing__ {
 }
 
 .__view-container__ .__header__ .__hide__ {
+    margin-left: auto;
     width: 16px;
     height: 16px;
     flex-shrink: 0;
@@ -4115,13 +4122,126 @@ quickpick ::highlight(quickpick-match) {
 }
 
 /* The Problems panel. Sized by its dock pane, so it only has to fill it. */
+/* A COLUMN OF [tabs, body], where the body is [gutter | tree]. The tabs span the panel and the gutter
+ * runs beside the tree only, which is IntelliJ's arrangement — the two axes cannot be one element. */
 problemspanel {
     flex-grow: 1;
     background: #1E1E1E;
 }
 
-/* Child combinator, for the reason given on the quickpick rule above. */
-problemspanel > .__content__ {
+problemspanel .__problems-body__ {
+    flex-direction: row;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+/* THE SCOPE TABS. Two tabs rather than VS Code's `Show Active File Only` menu row, because the current
+ * scope has to be readable without opening anything: a filter hidden in a menu is a mode you can be in
+ * without knowing, and an empty Problems panel means two different things depending which one you are in. */
+/* Scoped to the CLASS, not to problemspanel: these now live on the container's title line, so they are
+ * no longer descendants of the panel that owns them. @see HeaderContributor */
+.__problem-tabs__ {
+    flex-direction: row;
+    flex-shrink: 0;
+    align-items: center;
+    padding-left: 6px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    gap-all: 4px;
+}
+
+.__problem-tab__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    gap-all: 4px;
+    padding-left: 5px;
+    padding-right: 5px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    border-radius-all: 3px;
+    /* SIZED LIKE THE ROWS BELOW, not like the title. A scope tab is a control on a header, and at the
+     * title's weight it competes with the name of the panel it sits on. */
+    font-size: 7px;
+    color: #9DA0A8;
+    cursor: pointer;
+}
+
+.__problem-tab__:hover {
+    background: #2F3133;
+}
+
+/* THE TAB IN FORCE, as a filled pill — IntelliJ's selected tab, and the reason the tabs exist at all. */
+.__problem-tab__.__selected__ {
+    background: #2F5C8F;
+    color: #DFE1E5;
+}
+
+.__problem-tab__ .__tab-count__ {
+    font-size: 7px;
+    color: #7A7D85;
+    flex-shrink: 0;
+}
+
+.__problem-tab__.__selected__ .__tab-count__ {
+    color: #B6C6DA;
+}
+
+/* PADDED TO MEET THE FIRST ROW. The gutter's icon and the tree's first row are read as a pair, and four
+ * pixels of difference between them reads as one of the two being misplaced. */
+problemspanel .__problems-head__ {
+    width: 24px;
+    flex-shrink: 0;
+    align-items: center;
+    padding-top: 4px;
+    gap-all: 6px;
+}
+
+/* THE EYE. Opens the view menu — Show Errors / Warnings / Infos, then Show Active File Only, which is
+ * VS Code's filter menu in IntelliJ's affordance. Quiet at rest and lit on hover, because it is chrome
+ * that is used rarely and sits beside content that is read constantly. */
+problemspanel .__view-options__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    cursor: pointer;
+    overlay: icon("crystalgui:general/show");
+    color: #8A8D94;
+}
+
+problemspanel .__view-options__:hover {
+    color: #D5D7DB;
+}
+
+/* THE CORNER MARK that says the eye opens a menu rather than toggling something. Its own element because
+ * `overlay` is one drawable and IntelliJ draws this BESIDE the glyph, in the bottom-right, not instead of
+ * it. Out of flow so it cannot push the eye off centre. */
+problemspanel .__view-options__ .__dropdown-gutter__ {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 14px;
+    height: 14px;
+    overlay: icon("crystalgui:general/dropdownGutter");
+    color: #8A8D94;
+}
+
+problemspanel .__view-options__:hover .__dropdown-gutter__ {
+    color: #D5D7DB;
+}
+
+/* THE ROWS START LEVEL WITH THE EYE. The tree is absolutely positioned inside the content box, so the
+ * offset goes here rather than as padding on a parent it does not measure against. */
+problemspanel .__problem-list__ {
+    padding-top: 4px;
+}
+
+/* STILL A CHILD COMBINATOR, just one level lower: the content moved inside `__problems-body__` when the
+ * gutter arrived, and `problemspanel > .__content__` silently stopped matching — so the tree lost its
+ * flex-grow, collapsed to nothing, and the panel rendered empty with a correct count on the tab above it.
+ * The combinator itself is deliberate and stays: `.__content__` is a name three widgets use, and a
+ * descendant selector for it has broken this codebase three times. */
+problemspanel .__problems-body__ > .__content__ {
     flex-grow: 1;
     flex-basis: 0;
 }

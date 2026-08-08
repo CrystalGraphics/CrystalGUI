@@ -387,6 +387,107 @@ public class ProblemsPanelTest extends UiTestBase {
         assertEquals("a reopened panel stopped following the workspace", 2, panel.visibleFiles().size());
     }
 
+    /** Activates a view-menu row by its label — the route a user takes, not the setter behind it. */
+    private void chooseViewOption(String label) {
+        for (com.crystalgui.ui.elements.MenuItem item : panel.viewMenu().getItems()) {
+            if (label.equals(item.getText())) {
+                panel.viewMenu().onItemActivated.emit(item);
+                settle();
+                return;
+            }
+        }
+        throw new AssertionError("no view-menu row labelled " + label);
+    }
+
+    /**
+     * <b>The view menu filters, and its rows carry VS Code's wording.</b>
+     *
+     * <p>{@code Show Errors} / {@code Show Warnings} / {@code Show Infos}, then {@code Show Active File
+     * Only} below a separator — the labels and the order are {@code markersViewActions.ts}'s, checked
+     * against it rather than remembered. {@code Hide Excluded Files} is deliberately absent: it filters
+     * against workspace exclude globs, which this engine does not have, so the row would be inert.</p>
+     */
+    @Test
+    public void theViewMenuTurnsSeveritiesOffAndOn() {
+        give(shader, error(4, "undefined variable"));
+        give(util, at(2, DiagnosticSeverity.WARNING, "unused uniform"));
+        panel.bindTo(markers);
+        settle();
+        assertEquals(2, panel.visibleFiles().size());
+
+        chooseViewOption("Show Warnings");
+        assertEquals("the warning-only file survived", List.of(shader), panel.visibleFiles());
+
+        chooseViewOption("Show Warnings");
+        assertEquals("and it must come back", 2, panel.visibleFiles().size());
+
+        chooseViewOption("Show Errors");
+        assertEquals("errors are filterable too", List.of(util), panel.visibleFiles());
+    }
+
+    /**
+     * <b>The File tab narrows to the document in front, and follows it.</b>
+     *
+     * <p>IntelliJ's two tabs rather than VS Code's {@code Show Active File Only} menu row, because the
+     * scope has to be readable without opening anything — an empty Problems panel means two different
+     * things depending which scope you are in, and a mode hidden in a menu is one you can be in without
+     * knowing.</p>
+     *
+     * <p>The active file is told to the panel on every tab change whether or not the File scope is in
+     * force, so switching to it narrows to what you are looking at <em>now</em> rather than to whatever
+     * was in front last time.</p>
+     */
+    @Test
+    public void theFileTabFollowsTheDocumentInFront() {
+        give(shader, error(4, "undefined variable"));
+        give(util, error(2, "broken include"));
+        panel.bindTo(markers);
+        panel.setActiveResource(shader);
+        settle();
+
+        assertTrue("IntelliJ opens on the File tab", panel.isFileScope());
+        assertEquals(List.of(shader), panel.visibleFiles());
+
+        // The document in front changed while the File scope was in force.
+        panel.setActiveResource(util);
+        settle();
+        assertEquals("the scope did not follow the document", List.of(util), panel.visibleFiles());
+
+        panel.setFileScope(false);
+        settle();
+        assertEquals("Project Errors must show the whole workspace", 2, panel.visibleFiles().size());
+
+        panel.setFileScope(true);
+        settle();
+        assertEquals(List.of(util), panel.visibleFiles());
+    }
+
+    /**
+     * <b>An empty tree says which kind of empty it is — and there are three.</b>
+     *
+     * <p>An empty File tab, an empty workspace and a tree filtered to nothing are the same picture and
+     * completely different news; only one is worth celebrating. This is the reason the scope is a visible
+     * tab rather than a checkbox.</p>
+     */
+    @Test
+    public void theEmptyStateNamesTheScope() {
+        give(util, error(2, "broken include"));
+        panel.bindTo(markers);
+        panel.setActiveResource(shader);
+        settle();
+
+        UIElement empty = panel.querySelector("." + ProblemsPanel.EMPTY_CLASS);
+        assertNotNull(empty);
+        String inFileScope = ((com.crystalgui.ui.elements.UIText) empty).getText();
+        assertTrue("a clean FILE read as a clean workspace: " + inFileScope,
+                inFileScope.contains(shader.name()));
+
+        panel.setFileScope(false);
+        settle();
+        assertFalse("the workspace is not clean — util has a problem",
+                panel.visibleFiles().isEmpty());
+    }
+
     /** The panel follows the index rather than being told: a later compile arrives on its own. */
     @Test
     public void aLaterChangeReachesThePanel() {
