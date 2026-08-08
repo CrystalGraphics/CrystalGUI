@@ -5406,3 +5406,15 @@ problemspanel .__problem__ .__line__ {
     color: #6E7076;
     flex-shrink: 0;
 }
+
+/* A TAGGED PROBLEM IS DRAWN DIFFERENTLY, not ranked differently — LSP's DiagnosticTag, VS Code's
+ * MarkerTag. Unused code fades and deprecated code is struck through, and both keep whatever severity
+ * their producer gave them; folding these into the severity ladder would force a choice between showing a
+ * squiggle you cannot act on and losing the rendering entirely. */
+.__problem__.tag-unnecessary .__message__ {
+    color: #6B6E76;
+}
+
+.__problem__.tag-deprecated .__message__ {
+    text-decoration-line: line-through;
+}

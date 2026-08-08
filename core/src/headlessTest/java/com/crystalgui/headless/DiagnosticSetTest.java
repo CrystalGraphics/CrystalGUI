@@ -4,6 +4,8 @@ import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
+import com.crystalgui.text.diagnostic.RelatedInformation;
 import org.junit.Test;
 
 import java.util.List;
@@ -183,6 +185,60 @@ public class DiagnosticSetTest {
 
         set.changeOne("driver", List.of(error(9)));
         assertEquals("a second owner does not disturb the first", 2, set.size());
+    }
+
+    // ── Tags and related information ────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A tag changes how a diagnostic is drawn, not how bad it is.</b>
+     *
+     * <p>LSP's {@code DiagnosticTag}. "Never read" is not a lesser warning, it is a different kind of
+     * statement — so an unused symbol keeps its severity and renders faded. Folding these into the severity
+     * ladder would force a choice between showing a squiggle you cannot act on and losing the rendering.</p>
+     */
+    @Test
+    public void aTagTravelsWithoutChangingSeverity() {
+        Diagnostic tagged = at(3, 0, DiagnosticSeverity.WARNING, "never read")
+                .withTags(DiagnosticTag.UNNECESSARY);
+
+        assertEquals("the tag moved the severity", DiagnosticSeverity.WARNING, tagged.severity());
+        assertTrue(tagged.hasTag(DiagnosticTag.UNNECESSARY));
+        assertFalse(tagged.hasTag(DiagnosticTag.DEPRECATED));
+        assertTrue("an untagged diagnostic carries none", at(1, 0, DiagnosticSeverity.ERROR, "x")
+                .tags().isEmpty());
+    }
+
+    /**
+     * <b>Most interesting failures are about two places.</b>
+     *
+     * <p>"Two properties are named 'Color'" is about the duplicate and the original. With one position a
+     * producer has to pick which to point at and describe the other in prose — which is what our
+     * duplicate-property warning does today, because it had nowhere else to put it.</p>
+     */
+    @Test
+    public void relatedInformationCarriesTheOtherPlace() {
+        Diagnostic duplicate = at(9, 4, DiagnosticSeverity.WARNING, "'Color' is already declared")
+                .withRelated(RelatedInformation.onRow(2, "the first one is here"));
+
+        assertEquals(1, duplicate.related().size());
+        assertEquals(2, duplicate.related().get(0).start().row());
+        assertEquals("the first one is here", duplicate.related().get(0).message());
+    }
+
+    /** Both are part of the record, so an unchanged recompile that also re-tags is still a change. */
+    @Test
+    public void tagsCountAsContent() {
+        DiagnosticSet set = new DiagnosticSet();
+        AtomicInteger changes = new AtomicInteger();
+        set.onChanged.connect(changes::incrementAndGet);
+
+        Diagnostic plain = at(3, 0, DiagnosticSeverity.WARNING, "never read");
+        set.setAll(List.of(plain));
+        set.setAll(List.of(plain));
+        assertEquals("an identical recompile repainted", 1, changes.get());
+
+        set.setAll(List.of(plain.withTags(DiagnosticTag.UNNECESSARY)));
+        assertEquals("the tag was invisible to the diff", 2, changes.get());
     }
 
     // ── Queries ─────────────────────────────────────────────────────────────────────────────────
