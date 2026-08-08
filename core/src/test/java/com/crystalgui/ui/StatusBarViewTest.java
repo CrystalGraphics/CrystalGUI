@@ -203,6 +203,62 @@ public class StatusBarViewTest extends UiTestBase {
     }
 
     /**
+     * <b>A hidden entry leaves the bar and stays enumerable.</b>
+     *
+     * <p>VS Code's status bar context menu and IntelliJ's Status Bar Widgets settings both work this way,
+     * and both need {@link StatusBarEntry#name()} to do it: a menu lists entries by what they <em>are</em>,
+     * because you cannot offer "hide 51:39" as a checkbox and the text it names changes on every
+     * keystroke. The name/text split looked like redundancy until something had to enumerate the bar.</p>
+     *
+     * <p>{@code allEntries()} keeps listing the hidden one, or there would be no way to switch it back on.</p>
+     */
+    @Test
+    public void aHiddenEntryLeavesTheBarButNotTheList() {
+        add("caret", "51:39", StatusBarAlignment.RIGHT);
+        add("encoding", "UTF-8", StatusBarAlignment.RIGHT);
+        settle();
+        assertEquals(2, itemsIn(StatusBarView.RIGHT_CLASS).size());
+
+        StatusBar.setHidden("encoding", true);
+        settle();
+        assertEquals("the hidden entry is still rendered", 1, itemsIn(StatusBarView.RIGHT_CLASS).size());
+        assertEquals("51:39", textOf(itemsIn(StatusBarView.RIGHT_CLASS).get(0)));
+        assertEquals("a menu could not offer it back", 2, StatusBar.allEntries().size());
+        assertTrue(StatusBar.isHidden("encoding"));
+
+        StatusBar.setHidden("encoding", false);
+        settle();
+        assertEquals(2, itemsIn(StatusBarView.RIGHT_CLASS).size());
+    }
+
+    /**
+     * <b>An entry naming a command is clickable, and says so.</b>
+     *
+     * <p>Both references make most of the bar actionable — VS Code's encoding entry runs
+     * {@code changeEncoding}, IntelliJ's line-separator widget opens a popup. The entry names a command
+     * <em>id</em> rather than holding a callback, which is what keeps the same verb reachable from the
+     * palette and a keymap.</p>
+     */
+    @Test
+    public void anEntryWithACommandIsMarkedClickable() {
+        StatusBarEntryAccessor accessor = StatusBar.addEntry(
+                new StatusBarEntry("Shader graph compilation", "2 errors", null,
+                        "workbench.showProblems", StatusBarEntry.Kind.ERROR),
+                "compile", StatusBarAlignment.LEFT);
+        settle();
+
+        UIElement item = itemsIn(StatusBarView.LEFT_CLASS).get(0);
+        assertTrue("nothing said it could be pressed",
+                item.hasClass(StatusBarView.CLICKABLE_CLASS));
+
+        // A SUCCEEDING COMPILE HAS NOTHING TO SHOW YOU, so the mark has to come off again.
+        accessor.update(accessor.entry().withCommand(null).withText("compiled 12n/9e"));
+        settle();
+        assertFalse("it stayed clickable with nowhere to go",
+                itemsIn(StatusBarView.LEFT_CLASS).get(0).hasClass(StatusBarView.CLICKABLE_CLASS));
+    }
+
+    /**
      * <b>A slot's tooltip is attached once and re-texted, never re-attached.</b>
      *
      * <p>{@code Tooltip.attach} adds a hover listener pair per call and {@code detach} leaves them inert

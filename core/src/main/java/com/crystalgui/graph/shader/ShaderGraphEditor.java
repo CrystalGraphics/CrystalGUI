@@ -451,8 +451,11 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      */
     private void publishCompileStatus() {
         if (!statusActive || lastCompileStatus == null) return;
+        // A FAILING READOUT IS A WAY IN. VS Code's error counter opens its Problems panel; a count you
+        // cannot click is a number you then have to go and find the panel for. Only when it failed --
+        // "compiled 12n/9e" has nothing to show you.
         StatusBarEntry entry = new StatusBarEntry("Shader graph compilation", lastCompileStatus,
-                lastCompileTooltip, null,
+                lastCompileTooltip, lastCompileFailed ? "workbench.showProblems" : null,
                 lastCompileFailed ? StatusBarEntry.Kind.ERROR : StatusBarEntry.Kind.STANDARD);
         if (compileEntry == null) {
             compileEntry = StatusBar.addEntry(entry, COMPILE_STATUS, StatusBarAlignment.LEFT,
