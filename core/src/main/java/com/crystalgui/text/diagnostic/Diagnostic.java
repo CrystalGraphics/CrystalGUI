@@ -2,6 +2,8 @@ package com.crystalgui.text.diagnostic;
 
 import com.crystalgui.text.TextPoint;
 
+import java.util.regex.Pattern;
+
 import javax.annotation.Nullable;
 
 /**
@@ -54,8 +56,7 @@ public record Diagnostic(TextPoint start, TextPoint end, DiagnosticSeverity seve
      * the collapse and was removed by the {@code trim()} beside it, which made the bug look fixed while an
      * interior break still shaped a second line.</p>
      */
-    private static final java.util.regex.Pattern COLLAPSE_WHITESPACE =
-            java.util.regex.Pattern.compile("\\s+");
+    private static final Pattern COLLAPSE_WHITESPACE = Pattern.compile("\\s+");
 
     /**
      * The range for a diagnostic that is not about a place in text.

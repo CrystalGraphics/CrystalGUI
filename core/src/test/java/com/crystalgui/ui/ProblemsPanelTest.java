@@ -145,7 +145,7 @@ public class ProblemsPanelTest extends UiTestBase {
         List<Diagnostic> chosen = new ArrayList<>();
         panel.onProblemChosen.connect(chosen::add);
 
-        panel.table().onRowActivated.emit(1);
+        panel.list().onRowActivated.emit(1);
 
         assertEquals(1, chosen.size());
         assertEquals("second", chosen.get(0).message());
@@ -164,7 +164,7 @@ public class ProblemsPanelTest extends UiTestBase {
         List<Diagnostic> chosen = new ArrayList<>();
         panel.onProblemChosen.connect(chosen::add);
 
-        panel.table().onRowActivated.emit(7);
+        panel.list().onRowActivated.emit(7);
 
         assertTrue(chosen.isEmpty());
     }
