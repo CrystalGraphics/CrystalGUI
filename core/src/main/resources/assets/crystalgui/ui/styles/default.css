@@ -5470,3 +5470,10 @@ problemspanel .__problem__.__expanded__ .__twisty__ {
 problemspanel .__problem__.__leaf__ .__twisty__ {
     overlay: none;
 }
+
+/* THE COUNT FOLLOWS THE FILENAME, not the row's trailing edge. Growing the label pushes it to the far
+ * right of a wide panel, where it reads as a column of its own rather than as a fact about the file
+ * beside it -- and at this panel's width that is most of a screen away from the name it belongs to. */
+problemspanel .__problem__.__problem-file__ .__message__ {
+    flex-grow: 0;
+}

@@ -283,7 +283,7 @@ public class Workbench extends UIElement {
         // file is undoable and reaches the workspace stack. Same ids the editor and the graph use, so
         // there is one Undo in the palette rather than one per widget.
         UndoCommands.register();
-        registerToolWindowCommands();
+        registerToolWindowCommands(registry);
     }
 
     /**
@@ -297,21 +297,26 @@ public class Workbench extends UIElement {
      * <p>Global, taking the workbench from the data context, for the reason {@link #WORKBENCH} exists: a
      * captured workbench makes a second window's command toggle a panel in the first.</p>
      */
-    private static void registerToolWindowCommands() {
-        CommandRegistry.global().contribute(Workbench.class, registry -> {
-            registry.register(Command.of(SHOW_PROBLEMS, "Show Problems")
-                    .runWithData(data -> {
-                        Workbench workbench = data.get(WORKBENCH);
-                        if (workbench != null) workbench.revealPanel(PROBLEMS_TYPE);
-                    })
-                    .enabledWhereData(data -> data.get(WORKBENCH) != null));
-            registry.register(Command.of(SHOW_NOTIFICATIONS, "Show Notifications")
-                    .runWithData(data -> {
-                        Workbench workbench = data.get(WORKBENCH);
-                        if (workbench != null) workbench.revealPanel(NOTIFICATIONS_TYPE);
-                    })
-                    .enabledWhereData(data -> data.get(WORKBENCH) != null));
-        });
+    private static void registerToolWindowCommands(CommandRegistry registry) {
+        // REGISTERED ON THE REGISTRY WE WERE HANDED, never through a nested contribute(Workbench.class).
+        // UIElement already calls contribute(getClass(), this::registerCommands) to get here, so
+        // Workbench.class is ALREADY in the contributor set by the time this runs -- a second contribute
+        // under the same key adds nothing and returns, silently, and the commands were never registered
+        // at all. The status entries drew a pointer cursor and did nothing, which is precisely the failure
+        // CommandRegistry.resetForTesting warns about: "a missing command only shows up as a key that
+        // does nothing".
+        registry.register(Command.of(SHOW_PROBLEMS, "Show Problems")
+                .runWithData(data -> {
+                    Workbench workbench = data.get(WORKBENCH);
+                    if (workbench != null) workbench.revealPanel(PROBLEMS_TYPE);
+                })
+                .enabledWhereData(data -> data.get(WORKBENCH) != null));
+        registry.register(Command.of(SHOW_NOTIFICATIONS, "Show Notifications")
+                .runWithData(data -> {
+                    Workbench workbench = data.get(WORKBENCH);
+                    if (workbench != null) workbench.revealPanel(NOTIFICATIONS_TYPE);
+                })
+                .enabledWhereData(data -> data.get(WORKBENCH) != null));
     }
 
     /** Brings a tool window to the front, creating it if it is not open. */

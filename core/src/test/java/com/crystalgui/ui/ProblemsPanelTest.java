@@ -253,6 +253,33 @@ public class ProblemsPanelTest extends UiTestBase {
                 heading.hasClass(com.crystalgui.ui.elements.tree.TreeView.EXPANDED_CLASS));
     }
 
+    /**
+     * <b>Collapsing takes the children with it.</b>
+     *
+     * <p>It did not: the chevron folded from inside its own mouse-down, and {@code setExpanded} refreshes
+     * synchronously — so the refresh recycled every realised row <em>including the one under the pointer</em>,
+     * from inside that row's own listener. Two files showed as collapsed with their problems still listed
+     * beneath them, one of them drawn twice. <b>Expanding looked perfectly fine</b>, which is how it
+     * survived a screenshot, and why this test folds as well as unfolds.</p>
+     */
+    @Test
+    public void collapsingRemovesTheRowsItOpened() {
+        give(shader, error(4, "undefined variable"));
+        give(util, error(2, "broken include"));
+        panel.bindTo(markers);
+        settle();
+
+        expandEverything();
+        assertEquals(2, panel.visibleProblems().size());
+
+        panel.tree().setExpanded(ProblemNode.file(shader), false);
+        panel.tree().setExpanded(ProblemNode.file(util), false);
+        settle();
+
+        assertTrue("the children outlived the fold", panel.visibleProblems().isEmpty());
+        assertEquals("and the headings went with them", 2, panel.visibleFiles().size());
+    }
+
     /** The panel follows the index rather than being told: a later compile arrives on its own. */
     @Test
     public void aLaterChangeReachesThePanel() {
