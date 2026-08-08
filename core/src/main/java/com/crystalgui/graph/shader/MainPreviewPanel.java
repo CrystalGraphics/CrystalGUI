@@ -335,6 +335,21 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
         UIElement block = resizeContainingBlock();
         if (block == null) return;
 
+        // NOT AGAINST AN UNMEASURED BLOCK, and this is the whole of the bug it fixes.
+        //
+        // Opening, closing or resizing a region relayouts the canvas, and for one frame the containing
+        // block measures zero -- so the clamp below computes max = 0 - width, floors it at 0, and writes
+        // left: 0; top: 0. The write is at INLINE origin and permanent, so the panel does not drift back:
+        // it goes to the graph's top-left corner and stays there. Every absolutely positioned thing in the
+        // graph flashes to the origin on that frame; the ones re-placed every frame recover and this one,
+        // placed once, did not.
+        //
+        // A zero box carries no information about where anything belongs, so the only correct response is
+        // to leave the position alone until there is a box to clamp against.
+        var blockBox = block.getRuntimeCache();
+        if (blockBox.getWidth() <= 0f || blockBox.getHeight() <= 0f) return;
+        if (getRuntimeCache().getWidth() <= 0f || getRuntimeCache().getHeight() <= 0f) return;
+
         float maxLeft = Math.max(0f, block.getRuntimeCache().getWidth() - getRuntimeCache().getWidth());
         float maxTop = Math.max(0f, block.getRuntimeCache().getHeight() - getRuntimeCache().getHeight());
         float left = Math.max(0f, Math.min(maxLeft, wantedLeft));
@@ -456,7 +471,10 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
     public boolean tickFrame(float delta) {
         reclampIfPlaced();
         CgShaderGraph graph = ShaderGraphBridge.toShaderGraph(document, shaderNodes, master);
-        renderer.render(graph, master, mesh, yaw, pitch, zoom, lit);
+        // The camera is framed for the panel, so the picture fills it rather than sitting letterboxed in
+        // the middle of it. Read from the SURFACE, not from the panel: the header takes a strip off the
+        // top, and framing to the outer box would crop the mesh by exactly that much.
+        renderer.render(graph, master, mesh, yaw, pitch, zoom, lit, surfaceAspect());
         return true;
     }
 
@@ -481,6 +499,20 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
         return renderer;
     }
 
+    /**
+     * The picture area's width over its height, or {@code 1} before it has been laid out.
+     *
+     * <p>Square is the right answer for an unlaid-out panel rather than a guess: it is what the renderer
+     * did unconditionally before, so a frame taken too early frames the mesh exactly as it always used to
+     * and the next frame corrects it — as opposed to a zero, which collapses the orthographic box and
+     * draws nothing at all.</p>
+     */
+    private float surfaceAspect() {
+        float w = surface.getRuntimeCache().getWidth();
+        float h = surface.getRuntimeCache().getHeight();
+        return w > 0f && h > 0f ? w / h : 1f;
+    }
+
     /** The rectangle the picture is painted into — its own element so a theme can frame it. */
     private final class Surface extends UIElement {
 
@@ -499,14 +531,17 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
             float h = getRuntimeCache().getHeight();
             if (w <= 0f || h <= 0f) return;
 
-            // Square, centred: the target is square and the shape is drawn through a square orthographic
-            // box, so filling a non-square panel would stretch a sphere into an ellipse — the one
-            // silhouette everyone knows, and the case ShaderNodePreview already letterboxes for.
-            float side = Math.min(w, h);
-            float ox = x + (w - side) * 0.5f;
-            float oy = y + (h - side) * 0.5f;
+            // THE WHOLE SURFACE, stretched — which is only correct because the renderer was handed this
+            // panel's aspect and squashed the picture by exactly the same factor on its way in. Drawing a
+            // square target this way without that would turn a sphere into an ellipse.
+            //
+            // It used to letterboxed to `min(w, h)`, which was right when the camera was always square and
+            // wrong in two visible ways: most of a wide panel was empty backdrop, and zooming in far enough
+            // ran the mesh into the target's own square boundary — a sphere became a rounded square, which
+            // reads as the shader being broken rather than as a frame.
+            //
             // v1 and v0 swapped: GL's framebuffer origin is bottom-left and the UI's is top-left.
-            ctx.drawImage((CgTexture2D) texture, ox, oy, side, side, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+            ctx.drawImage((CgTexture2D) texture, x, y, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
         }
     }
 }
