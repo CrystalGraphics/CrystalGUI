@@ -25,12 +25,14 @@ public class NotifyTest {
     public void setUp() {
         StatusBar.resetForTesting();
         Notifications.resetForTesting();
+        NotificationGroups.resetForTesting();
     }
 
     @After
     public void tearDown() {
         StatusBar.resetForTesting();
         Notifications.resetForTesting();
+        NotificationGroups.resetForTesting();
     }
 
     private static StatusBarEntryAccessor add(String name, String text) {
@@ -303,6 +305,99 @@ public class NotifyTest {
         for (Notification each : Notifications.history()) {
             assertEquals("nothing should have collapsed", 1, each.getRepeats());
         }
+    }
+
+    // ── Groups and handles ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A group's display type is what {@code groupId} was always for.</b>
+     *
+     * <p>The field was carried for a long time and read by exactly one thing — {@code saysTheSameAs} — so
+     * it scoped deduplication and nothing else. IntelliJ hangs the whole balloon-versus-log decision off
+     * it, overridable by the user, which is how a chatty producer stops owning the screen without its
+     * author having to agree.</p>
+     */
+    @Test
+    public void aGroupDecidesHowLoudlyItSpeaks() {
+        assertEquals("an unregistered group must still be heard",
+                NotificationDisplay.BALLOON, NotificationGroups.displayOf("never.registered"));
+
+        NotificationGroups.register("compiler", "Shader compilation", NotificationDisplay.LOG_ONLY);
+        assertEquals(NotificationDisplay.LOG_ONLY, NotificationGroups.displayOf("compiler"));
+
+        NotificationGroups.setDisplay("compiler", NotificationDisplay.BALLOON);
+        assertEquals("the user outranks the declaration",
+                NotificationDisplay.BALLOON, NotificationGroups.displayOf("compiler"));
+        assertTrue(NotificationGroups.isOverridden("compiler"));
+
+        NotificationGroups.setDisplay("compiler", null);
+        assertEquals("and clearing the override restores the declared default",
+                NotificationDisplay.LOG_ONLY, NotificationGroups.displayOf("compiler"));
+    }
+
+    /**
+     * <b>{@code NONE} is the one value that discards.</b>
+     *
+     * <p>Not shown, not logged, not counted — which is why it is never a default and only ever something a
+     * user chooses when a producer is wrong rather than merely noisy.</p>
+     */
+    @Test
+    public void aSilencedGroupIsNotEvenHeld() {
+        NotificationGroups.register("chatty", "Chatty", NotificationDisplay.NONE);
+
+        Notifications.show(Notification.info("tick").inGroup("chatty"));
+        Notifications.info("something else");
+
+        assertEquals(1, Notifications.size());
+        assertEquals("something else", Notifications.history().get(0).getMessage());
+        assertEquals("a silenced message must not ring the bell", 1, Notifications.unread());
+    }
+
+    /**
+     * <b>A producer can take back what it said.</b>
+     *
+     * <p>Announcing was one-way, so a message stood until it aged out whether or not it was still true.
+     * The alternative producers reach for is a second notification saying the first no longer applies,
+     * which is how a history fills with corrections.</p>
+     */
+    @Test
+    public void aHandleCanWithdrawAndReviseWhatItSaid() {
+        NotificationHandle handle = Notifications.show(Notification.error("Disconnected"));
+        assertNotNull(handle);
+        assertTrue(handle.isOpen());
+
+        List<NotificationEvent.Kind> kinds = new ArrayList<>();
+        Notifications.onDidChange.connect(event -> kinds.add(event.kind()));
+        int[] closed = { 0 };
+        handle.onDidClose.connect(() -> closed[0]++);
+
+        handle.updateMessage("Reconnecting");
+        assertEquals("a revision is not a new event", List.of(NotificationEvent.Kind.CHANGED), kinds);
+        assertEquals("Reconnecting", Notifications.history().get(0).getMessage());
+        assertEquals("and it does not re-ring the bell", 1, Notifications.unread());
+
+        handle.close();
+        assertFalse(handle.isOpen());
+        assertTrue(Notifications.isEmpty());
+        assertEquals("a withdrawal reaches views as the kind they already handle",
+                List.of(NotificationEvent.Kind.CHANGED, NotificationEvent.Kind.REMOVED), kinds);
+        assertEquals(1, closed[0]);
+
+        handle.close();
+        assertEquals("closing twice says nothing", 1, closed[0]);
+    }
+
+    /** Ageing out closes the handle too — otherwise isOpen() would answer for an entry nobody holds. */
+    @Test
+    public void ageingOutClosesTheHandle() {
+        NotificationHandle first = Notifications.show(Notification.info("message 0"));
+        int[] closed = { 0 };
+        first.onDidClose.connect(() -> closed[0]++);
+
+        for (int i = 1; i <= Notifications.HISTORY_LIMIT; i++) Notifications.info("message " + i);
+
+        assertFalse("it left the history without saying so", first.isOpen());
+        assertEquals(1, closed[0]);
     }
 
     /** Severity and detail are part of sameness; the timestamp and the actions deliberately are not. */

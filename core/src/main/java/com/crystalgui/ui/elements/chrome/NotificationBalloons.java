@@ -1,7 +1,9 @@
 package com.crystalgui.ui.elements.chrome;
 
 import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.NotificationDisplay;
 import com.crystalgui.core.notify.NotificationEvent;
+import com.crystalgui.core.notify.NotificationGroups;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.UIElement;
@@ -23,12 +25,18 @@ import java.util.List;
  * flashed past cannot be gone back to. Both references show the same notification twice for that reason,
  * and this draws the {@link NotificationCard} the history draws, from the same model.</p>
  *
- * <h3>Everything fades, errors included</h3>
+ * <h3>Everything fades, errors included — unless a group says otherwise</h3>
  *
  * <p>Every balloon leaves on its own after {@link #LINGER_MS}, and is held open while the pointer is on it.
  * An earlier pass made {@code WARNING} and {@code ERROR} sticky on the grounds that a failure removing
  * itself unseen is a failure never told about — see {@link #LINGER_MS} for why that reasoning does not hold
  * once there is a history and an unread mark to carry it.</p>
+ *
+ * <p><b>Which notifications appear here at all is the group's decision, not this layer's.</b> Everything
+ * used to get a balloon for a purely structural reason — the balloon layer was the thing subscribing, so
+ * there was no way to say "log this one" short of not sending it. {@link NotificationGroups} carries
+ * IntelliJ's per-group display type, overridable by the user, and sticky is one of its values: reachable
+ * for a group whose messages must be acknowledged, rather than a property of being an error.</p>
  *
  * <h3>Fading, and where the timing lives</h3>
  *
@@ -137,18 +145,53 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
     /**
      * One model change.
      *
-     * <p>Only arrivals and repeats reach the screen here. An <b>eviction is deliberately ignored</b>: a
-     * balloon's lifetime is its own linger, and a notification aging out of a hundred-deep history says
-     * nothing about whether the toast for it is still worth reading. A clear is ignored for the same
-     * reason — "Clear all" empties the log, and the balloons already on screen are on their way out.</p>
+     * <p>A {@link NotificationEvent.Kind#REMOVED} takes the balloon with it. That covers two things which
+     * arrive identically and deserve the same answer: a producer <em>withdrawing</em> what it said through
+     * {@code NotificationHandle.close()}, where leaving the toast up would be showing a retracted message;
+     * and an entry ageing out of the history, which at a hundred deep means a storm violent enough that the
+     * toast is stale too.</p>
+     *
+     * <p>A clear is ignored — "Clear all" empties the log, and the balloons on screen are already leaving
+     * on their own.</p>
      */
     private void apply(NotificationEvent event) {
         Notification notification = event.notification();
         if (notification == null) return;
         switch (event.kind()) {
-            case ADDED -> show(notification);
-            case CHANGED -> restate(notification);
+            case ADDED -> {
+                // THE GROUP DECIDES, not this layer. Everything used to get a balloon for the structural
+                // reason that the balloon layer was the thing subscribing -- there was no way to say "log
+                // this one" short of not sending it. @see NotificationGroups
+                if (showsABalloon(notification)) show(notification);
+            }
+            case CHANGED -> {
+                if (showsABalloon(notification)) restate(notification);
+            }
+            // A WITHDRAWN NOTIFICATION TAKES ITS BALLOON WITH IT. The producer has said it no longer
+            // applies, so leaving the toast up would be showing a message the model has retracted -- the
+            // one case where a balloon outliving its entry is wrong rather than merely transient.
+            case REMOVED -> dismiss(notification);
             default -> { }
+        }
+    }
+
+    private static boolean showsABalloon(Notification notification) {
+        NotificationDisplay display = NotificationGroups.displayOf(notification.getGroupId());
+        return display == NotificationDisplay.BALLOON || display == NotificationDisplay.STICKY_BALLOON;
+    }
+
+    /** Whether this one waits to be dismissed rather than leaving on its own. @see NotificationDisplay */
+    private static boolean isSticky(Notification notification) {
+        return NotificationGroups.displayOf(notification.getGroupId())
+                == NotificationDisplay.STICKY_BALLOON;
+    }
+
+    private void dismiss(Notification notification) {
+        for (Live entry : live) {
+            if (entry.card.notification() == notification) {
+                beginLeaving(entry);
+                return;
+            }
         }
     }
 
@@ -244,6 +287,10 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
             // precisely the moment it matters. A leaving balloon is deliberately not reprieved: it is
             // already fading and reversing that would need the transition retargeted mid-flight.
             if (!entry.leaving && entry.card.isHovered()) continue;
+            // A STICKY GROUP WAITS TO BE DISMISSED. It still counts against the cap, so a producer that
+            // sets it cannot fill the screen -- the oldest is sent away to make room and is still in the
+            // history. @see NotificationDisplay#STICKY_BALLOON
+            if (!entry.leaving && isSticky(entry.card.notification())) continue;
 
             entry.remaining -= deltaMs;
             if (entry.remaining > 0f) continue;

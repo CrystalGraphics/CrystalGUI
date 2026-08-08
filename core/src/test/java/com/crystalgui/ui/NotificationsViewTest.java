@@ -1,6 +1,8 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.NotificationDisplay;
+import com.crystalgui.core.notify.NotificationGroups;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
@@ -28,6 +30,7 @@ public class NotificationsViewTest extends UiTestBase {
     @Before
     public void setUp() {
         Notifications.resetForTesting();
+        NotificationGroups.resetForTesting();
         view = new NotificationsView();
         UIElement root = new UIElement().layout(l -> l.width(300).height(400));
         root.addChild(view);
@@ -45,6 +48,7 @@ public class NotificationsViewTest extends UiTestBase {
     @After
     public void tearDown() {
         Notifications.resetForTesting();
+        NotificationGroups.resetForTesting();
     }
 
     private void settle() {
@@ -171,6 +175,43 @@ public class NotificationsViewTest extends UiTestBase {
 
         assertEquals("the bell ticked for something on screen", 0, Notifications.unread());
         assertEquals("and it kept the message", 1, entries().size());
+    }
+
+    /**
+     * <b>A LOG_ONLY group reaches the history and not the screen.</b>
+     *
+     * <p>This is the routing the balloon layer could not express: everything got a balloon because the
+     * balloon layer was the thing subscribing, so "log this one" meant not sending it at all. The group
+     * decides, and the user can change the group.</p>
+     */
+    @Test
+    public void aLogOnlyGroupIsHeldWithoutABalloon() {
+        NotificationGroups.register("indexing", "Indexing", NotificationDisplay.LOG_ONLY);
+        NotificationBalloons balloons = balloonLayer();
+
+        Notifications.show(Notification.info("Indexed 4,010 files").inGroup("indexing"));
+        balloons.tickFrame(0.016f);
+
+        assertEquals("it interrupted anyway", 0, balloons.liveCount());
+        assertEquals("and it was not kept", 1, Notifications.size());
+
+        NotificationGroups.setDisplay("indexing", NotificationDisplay.BALLOON);
+        Notifications.show(Notification.info("Indexed 4,011 files").inGroup("indexing"));
+        balloons.tickFrame(0.016f);
+        assertEquals("the user's override did not take", 1, balloons.liveCount());
+    }
+
+    /** A withdrawn notification takes its balloon with it — a retracted message must not stay on screen. */
+    @Test
+    public void withdrawingANotificationDismissesItsBalloon() {
+        NotificationBalloons balloons = balloonLayer();
+        var handle = Notifications.show(Notification.error("Disconnected"));
+        balloons.tickFrame(0.016f);
+        assertEquals(1, balloons.liveCount());
+
+        handle.close();
+        balloons.tickFrame(NotificationBalloons.FADE_MS / 1000f + 0.1f);
+        assertEquals("the toast outlived what it was about", 0, balloons.liveCount());
     }
 
     /**
