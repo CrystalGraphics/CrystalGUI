@@ -4128,7 +4128,7 @@ problemspanel > .__content__ {
 
 /* Stacked, not swapped: the table and the empty state occupy the same box and cross-fade on opacity, so
  * neither one's arrival resizes the panel. */
-problemspanel .__problems-table__ {
+problemspanel .__problem-list__ {
     position: absolute;
     left: 0;
     top: 0;

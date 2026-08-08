@@ -7,6 +7,7 @@ import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
@@ -104,6 +105,84 @@ public class DiagnosticSetTest {
         set.setAll(List.of(error(4), error(1)));
 
         assertEquals(0, changes.get());
+    }
+
+    // ── Owners ──────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>An owner replaces only itself.</b>
+     *
+     * <p>The reason the set is keyed at all — VS Code's {@code (owner, resource)}, IntelliJ's per-inspection
+     * highlights. A flat list means the last writer wins, which is the failure {@code Workbench.onStatus}
+     * had before the status bar was keyed, arriving a second time in a different package.</p>
+     *
+     * <p>It was already binding: {@code ShaderGraphEditor} has four independent producers — the emitter, the
+     * GLSL driver, the preview and graph-level warnings — and had to merge all four by hand on every
+     * compile, because any of them writing alone would have erased the other three.</p>
+     */
+    @Test
+    public void anOwnerReplacesOnlyItsOwnFindings() {
+        DiagnosticSet set = new DiagnosticSet();
+        set.changeOne("emitter", List.of(error(2)));
+        set.changeOne("driver", List.of(error(7)));
+
+        assertEquals(2, set.size());
+
+        set.changeOne("emitter", List.of(error(3), error(4)));
+        assertEquals("the driver's finding was erased", 3, set.size());
+        assertEquals(List.of(3, 4, 7), set.all().stream().map(d -> d.start().row()).toList());
+        assertEquals(List.of(7), set.read("driver").stream().map(d -> d.start().row()).toList());
+    }
+
+    /** An owner reporting nothing is an owner with nothing to say, not an owner that never spoke. */
+    @Test
+    public void anOwnerThatFindsNothingClearsItself() {
+        DiagnosticSet set = new DiagnosticSet();
+        set.changeOne("emitter", List.of(error(2)));
+        set.changeOne("driver", List.of(error(7)));
+
+        set.changeOne("driver", List.of());
+        assertEquals(1, set.size());
+        assertTrue(set.read("driver").isEmpty());
+        assertFalse("and it stops being listed", set.owners().contains("driver"));
+
+        set.remove("emitter");
+        assertTrue(set.isEmpty());
+    }
+
+    /**
+     * <b>{@code changeAll} announces once, and drops an owner it does not mention.</b>
+     *
+     * <p>The shader graph writes four owners on every compile. One announcement per owner would rebuild a
+     * bound Problems panel four times for one compile — and an owner left behind because this run had
+     * nothing to say about it would keep showing last compile's errors beside this compile's.</p>
+     */
+    @Test
+    public void changeAllReplacesEveryOwnerAndAnnouncesOnce() {
+        DiagnosticSet set = new DiagnosticSet();
+        set.changeOne("stale", List.of(error(1)));
+
+        AtomicInteger changes = new AtomicInteger();
+        set.onChanged.connect(changes::incrementAndGet);
+
+        set.changeAll(Map.of("emitter", List.of(error(2)), "driver", List.of(error(3))));
+
+        assertEquals("one compile, one repaint", 1, changes.get());
+        assertEquals(2, set.size());
+        assertFalse("an owner it did not mention survived", set.owners().contains("stale"));
+    }
+
+    /** The default owner is what the single-producer spelling writes to — one owner, not a special case. */
+    @Test
+    public void setAllIsTheDefaultOwner() {
+        DiagnosticSet set = new DiagnosticSet();
+        set.setAll(List.of(error(4)));
+
+        assertEquals(List.of(DiagnosticSet.DEFAULT_OWNER), List.copyOf(set.owners()));
+        assertEquals(1, set.read(DiagnosticSet.DEFAULT_OWNER).size());
+
+        set.changeOne("driver", List.of(error(9)));
+        assertEquals("a second owner does not disturb the first", 2, set.size());
     }
 
     // ── Queries ─────────────────────────────────────────────────────────────────────────────────

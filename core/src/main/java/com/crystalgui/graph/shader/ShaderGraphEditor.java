@@ -50,6 +50,8 @@ import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
@@ -153,6 +155,18 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
     /** Left group, compile summary ahead of the line-owner readout. @see StatusBar */
     private static final int COMPILE_PRIORITY = 100;
     private static final int LINE_OWNER_PRIORITY = 90;
+
+    /**
+     * The four independent producers of an opinion about this graph — {@code DiagnosticSet} owners.
+     *
+     * <p>They are the {@code source} each diagnostic already carried, promoted to the thing that decides
+     * what a write replaces. Four producers into one flat list meant whichever wrote last erased the rest,
+     * which is why they had to be merged by hand on every compile. @see #publishProblems</p>
+     */
+    private static final String OWNER_EMITTER = "shadergraph";
+    private static final String OWNER_DRIVER = "glsl";
+    private static final String OWNER_PREVIEW = "shadergraph.preview";
+    private static final String OWNER_GRAPH = "shadergraph.graph";
 
     private final CgShaderNodeRegistry shaderNodes = CgShaderNodeRegistry.builtins();
     private final CgMasterNode master = new CgMasterNode();
@@ -465,16 +479,30 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      * problems moved.</p>
      */
     private void publishProblems(CgShaderEmitter.Result result) {
-        List<Diagnostic> diagnostics = new ArrayList<>();
+        List<Diagnostic> emitter = new ArrayList<>();
         for (CgShaderProblem problem : result.problems()) {
-            diagnostics.add(new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION,
+            emitter.add(new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION,
                     problem.isError() ? DiagnosticSeverity.ERROR : DiagnosticSeverity.WARNING,
-                    problem.message(), "shadergraph", problem.nodeId()));
+                    problem.message(), OWNER_EMITTER, problem.nodeId()));
         }
-        addDriverProblems(diagnostics, result);
-        addPreviewProblems(diagnostics);
-        addGraphWarnings(diagnostics);
-        problems.setAll(diagnostics);
+        List<Diagnostic> driver = new ArrayList<>();
+        addDriverProblems(driver, result);
+        List<Diagnostic> preview = new ArrayList<>();
+        addPreviewProblems(preview);
+        List<Diagnostic> graphWarnings = new ArrayList<>();
+        addGraphWarnings(graphWarnings);
+
+        // FOUR OWNERS, ONE ANNOUNCEMENT. These are four independent producers of an opinion about the same
+        // document, and they used to be merged into one list by hand because the set could only hold one --
+        // so any of them writing alone would have erased the other three. `changeAll` is what keeps a
+        // Problems panel bound to this from rebuilding once per producer on every compile.
+        Map<String, List<Diagnostic>> byOwner = new LinkedHashMap<>();
+        byOwner.put(OWNER_EMITTER, emitter);
+        byOwner.put(OWNER_DRIVER, driver);
+        byOwner.put(OWNER_PREVIEW, preview);
+        byOwner.put(OWNER_GRAPH, graphWarnings);
+        problems.changeAll(byOwner);
+        List<Diagnostic> diagnostics = problems.all();
 
         // THE STATUS ITEM FOLLOWS THE DIAGNOSTICS, not just the emit. A driver refusal arrives AFTER a
         // successful emit -- the graph produced GLSL it believed in and the hardware refused it -- so
@@ -559,7 +587,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
             for (CgShaderProblem reason : reasons) {
                 into.add(new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION,
                         DiagnosticSeverity.WARNING,
-                        "Preview unavailable: " + reason.message(), "shadergraph.preview", nodeId));
+                        "Preview unavailable: " + reason.message(), OWNER_PREVIEW, nodeId));
             }
         });
     }
@@ -613,13 +641,13 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
                     DiagnosticSeverity.ERROR,
                     "No definition for node type '" + typeId + "' in this build — it is kept in the"
                             + " document but left out of the compiled shader",
-                    "shadergraph", data.id()));
+                    OWNER_GRAPH, data.id()));
         }
     }
 
     private static Diagnostic warning(String message, String code) {
         return new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION,
-                DiagnosticSeverity.WARNING, message, "shadergraph", code);
+                DiagnosticSeverity.WARNING, message, OWNER_GRAPH, code);
     }
 
     /**

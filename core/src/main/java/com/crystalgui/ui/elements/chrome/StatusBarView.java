@@ -11,10 +11,12 @@ import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -176,8 +178,7 @@ public class StatusBarView extends UIElement {
 
     private void dropSlotsNotIn(List<StatusBarEntryAccessor> left, List<StatusBarEntryAccessor> right) {
         if (slots.isEmpty()) return;
-        java.util.Set<StatusBarEntryAccessor> living =
-                java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<StatusBarEntryAccessor> living = Collections.newSetFromMap(new IdentityHashMap<>());
         living.addAll(left);
         living.addAll(right);
         for (StatusBarEntryAccessor accessor : new ArrayList<>(slots.keySet())) {
