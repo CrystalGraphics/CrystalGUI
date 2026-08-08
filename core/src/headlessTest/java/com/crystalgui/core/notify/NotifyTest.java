@@ -107,4 +107,34 @@ public class NotifyTest {
         assertEquals("and it keeps the NEWEST", "message 499",
                 history.get(history.size() - 1).getMessage());
     }
+
+    /**
+     * <b>Alignment is the writer's, and it is part of what "changed" means.</b>
+     *
+     * <p>Only the writer knows which end an item belongs to — "Ln 51, Col 39" is glanced at in a fixed
+     * place, "created notes.txt" is read as prose — so a view guessing from the id or the text would be
+     * inventing an answer that already exists. And moving an item between ends has to announce: comparing
+     * the text alone drops the move exactly when the words stay the same, which is when a bar that never
+     * redrew is hardest to spot.</p>
+     */
+    @Test
+    public void anItemCarriesItsAlignmentAndMovingItAnnounces() {
+        StatusBar.set("explorer", "created notes.txt");
+        StatusBar.set("caret", "Ln 51, Col 39", StatusBar.Align.RIGHT);
+
+        assertEquals(StatusBar.Align.LEFT, StatusBar.items().get(0).align());
+        assertEquals("the two-argument form chooses LEFT",
+                StatusBar.Align.RIGHT, StatusBar.items().get(1).align());
+        assertTrue("text() still composes every item, whatever end it sits at",
+                StatusBar.text().contains("created notes.txt") && StatusBar.text().contains("Ln 51"));
+
+        List<String> announced = new ArrayList<>();
+        StatusBar.onDidChange.connect(announced::add);
+
+        StatusBar.set("caret", "Ln 51, Col 39", StatusBar.Align.RIGHT);
+        assertTrue("an identical rewrite is silent", announced.isEmpty());
+
+        StatusBar.set("caret", "Ln 51, Col 39", StatusBar.Align.LEFT);
+        assertEquals("the same words at the other end is a change", 1, announced.size());
+    }
 }

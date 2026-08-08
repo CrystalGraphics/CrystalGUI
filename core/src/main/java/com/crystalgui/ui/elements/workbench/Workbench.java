@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.core.notify.Notifications;
 
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -11,6 +12,8 @@ import com.crystalgui.fs.WorkingCopies;
 import com.crystalgui.fs.WorkspaceFileService;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.chrome.Breadcrumbs;
+import com.crystalgui.ui.elements.chrome.StatusBarView;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.InputDialog;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
@@ -162,6 +165,18 @@ public class Workbench extends UIElement {
     private final UIElement content = new UIElement();
 
     /**
+     * The line along the bottom — Parts step 6.
+     *
+     * <p>Chrome, like the rails and for the same reason: it is not something the layout can lose. It sits
+     * <em>below</em> {@link #content} because the workbench is a column and content grows, so the bar keeps
+     * its declared height at every window size without being positioned.</p>
+     *
+     * <p>It reads {@code StatusBar} itself rather than being fed. Anything on it is an item some writer
+     * keyed, which is what the keying was for; nothing needs to route a string through here.</p>
+     */
+    private final StatusBarView statusBar = new StatusBarView();
+
+    /**
      * The two tool-window rails. Chrome, not panels — see where they are added.
      *
      * <p><b>Two, because a region is not spellable with one.</b> IntelliJ's New UI has a left stripe and a
@@ -304,6 +319,7 @@ public class Workbench extends UIElement {
         dock.onDidChangeActivePanel.connect(panel -> {
             revealActiveFile();
             rebindProblems();
+            bindStatusToActiveTab();
         });
         // The rails' :checked state follows the dock's structure and nothing else, so they can subscribe
         // now. Their BUTTONS wait for a window -- see onWindowChanged.
@@ -321,6 +337,9 @@ public class Workbench extends UIElement {
         open.onDidChangeDirty.connect(path -> refreshDirtyMarkers());
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
+        // AFTER content, which is the whole of what puts it at the bottom: a workbench is a column and
+        // content is the growing child, so order alone decides this and nothing is positioned.
+        addInternalChild(statusBar);
         // The rails sit BESIDE the dock rather than inside it, which is what both originals do and is not
         // merely cosmetic: a stripe inside the dock would be a panel, and therefore droppable onto,
         // draggable and closable. It is chrome -- the thing that gets you back when everything else is
@@ -385,6 +404,11 @@ public class Workbench extends UIElement {
     @Override
     public boolean acceptsPublicChildren() {
         return false;
+    }
+
+    /** The status line along the bottom. @see StatusBarView */
+    public StatusBarView statusBar() {
+        return statusBar;
     }
 
     public DockArea dock() {
@@ -636,6 +660,68 @@ public class Workbench extends UIElement {
     @Nullable
     public TextEditor activeEditor() {
         return activeDocument() instanceof TextFileDocument text ? text.editor() : null;
+    }
+
+    /** The document currently told it is active, so the previous one can be told it is not. */
+    @Nullable
+    private FileDocument activeStatusDocument;
+
+    /**
+     * Announces which tab is in front, and sets the trail. <b>That is all it does.</b>
+     *
+     * <h3>What the workbench is and is not entitled to know</h3>
+     *
+     * <p>This used to write the caret position, line ending, encoding and indent width itself. It worked,
+     * and it does not scale: those are a <em>text file's</em> facts, so a shader graph, a diff or an image
+     * would each need another branch here — in a codebase whose whole direction is that a document type is
+     * a contribution rather than a case in a switch.</p>
+     *
+     * <p>The one thing no document can work out for itself is which tab is active. So that is what is said,
+     * through {@link FileDocument#setActive}, and each document publishes and withdraws its own items. Both
+     * references draw the line in the same place; see that method.</p>
+     *
+     * <p>The breadcrumb trail stays here, and is not the same kind of thing: it describes the tab's
+     * <em>identity</em> — where the thing you are looking at lives — which is the dock's business and is
+     * answerable for a document that has no content to report at all.</p>
+     */
+    private void bindStatusToActiveTab() {
+        statusBar.breadcrumbs().setCrumbs(trailFor(activeFilePath()));
+
+        FileDocument active = activeDocument();
+        if (active == activeStatusDocument) return;
+        // DEACTIVATE FIRST. Both halves write status items, and a document that publishes before the
+        // previous one has withdrawn would have its keys cleared a moment later by the tab it replaced.
+        if (activeStatusDocument != null) activeStatusDocument.setActive(false);
+        activeStatusDocument = active;
+        if (active != null) active.setActive(true);
+    }
+
+    /**
+     * The project, then the path within it — which is what IntelliJ shows and what a bare path cannot say.
+     *
+     * <p>{@code segments()} is project-<em>relative</em>, so a file at the project root produced a
+     * one-segment trail reading just {@code manifest.mf}: true, and useless, because the one thing a
+     * breadcrumb is for is saying where among several places you are.</p>
+     */
+    private static List<Breadcrumbs.Crumb> trailFor(@Nullable CgPath path) {
+        if (path == null) return List.of();
+        List<Breadcrumbs.Crumb> trail = new ArrayList<>();
+        trail.add(Breadcrumbs.Crumb.of(path.project()));
+        List<String> segments = path.segments();
+        for (int i = 0; i < segments.size(); i++) {
+            String name = segments.get(i);
+            // THE FILE GETS AN ICON; THE FOLDERS ABOVE IT DO NOT. IntelliJ draws a folder glyph on every
+            // directory crumb, and in a 22px bar that is four near-identical marks competing with the one
+            // that carries information -- the file's type is the thing you cannot read off the text.
+            if (i < segments.size() - 1) {
+                trail.add(Breadcrumbs.Crumb.of(name));
+                continue;
+            }
+            FileIconTheme theme = FileIconTheme.getDefault();
+            trail.add(new Breadcrumbs.Crumb(name, theme.drawableFor(name, false, false),
+                    theme.classFor(name, false)));
+        }
+        return trail;
     }
 
     /** Writes the active tab back. A stale write is reported distinctly — it has a recovery path. */

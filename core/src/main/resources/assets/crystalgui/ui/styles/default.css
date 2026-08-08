@@ -4786,6 +4786,28 @@ navigatorview .__nav-header__ breadcrumbs {
     flex-grow: 1;
 }
 
+/* A TRAIL IS A ROW, and this rule was missing entirely — the only breadcrumbs in the engine lived in a
+ * navigator header, which set the direction itself, so the widget had never been asked to stand alone.
+ * The engine's flex-direction default is COLUMN (see TaffyBridge), so the status bar's trail came out
+ * stacked vertically: `harness:scratch` over `>` over `README.md`, clipped by a 22px bar. A widget's own
+ * axis is not a host's decision. */
+breadcrumbs {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 3px;
+}
+
+/* The glyph in front of a crumb. Sized like the file tree's, and `contain` rather than a fixed scale so
+ * a 16px source icon lands in a 10px slot without being cropped. Hidden when the crumb supplied none, so
+ * a settings trail pays nothing for the slot existing. */
+breadcrumbs .__crumb-icon__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+    margin-right: 1px;
+}
+
 breadcrumbs .__crumb__ {
     color: #7CB7E8;
     flex-shrink: 0;
@@ -4797,9 +4819,14 @@ breadcrumbs .__crumb__.__crumb-current__ {
     color: #DDDDDD;
 }
 
+/* The chevron between two crumbs. A shape rather than a character — see Breadcrumbs for why a glyph in
+ * Java is both unthemeable and at the mercy of the font having the codepoint. */
 breadcrumbs .__crumb-sep__ {
-    color: #7A7A7A;
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
+    color: #7A7A7A;
+    overlay: shape("chevron-right");
 }
 
 navigatorview pagestack {
@@ -4869,4 +4896,85 @@ navigatorview treeview .__row__:hover {
 
 navigatorview treeview .__row__.__selected__ {
     background-color: #04395E;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────────────────────────────────────
+ *
+ * The line along the bottom of the workbench. GEOMETRY ONLY, like everything else in the user-agent
+ * sheet: a theme gives it a colour.
+ *
+ * A fixed height, and it is load-bearing rather than cosmetic — the bar sits in the shell's column above
+ * nothing, so a height that varied with its content would re-measure every region above it whenever a
+ * status item appeared. The same rule the plan states for the main toolbar's two states. */
+statusbarview {
+    flex-direction: row;
+    align-items: center;
+    height: 22px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    padding-left: 8px;
+    padding-right: 8px;
+    gap-all: 8px;
+    overflow: hidden;
+    /* THE SAME SURFACE AS THE RAILS, which is what makes it read as chrome rather than as the bottom of
+     * whichever panel happens to sit above it. Without a band of its own the line looked like loose text
+     * lying on the panel -- which is exactly how it first shipped. */
+    background: #2B2B2B;
+    color: #9DA0A8;
+    border-width-top: 1px;
+    border-top-color: #1E1E1E;
+}
+
+statusbarview .__left__,
+statusbarview .__right__ {
+    flex-direction: row;
+    align-items: center;
+    /* The ITEM carries its own leading space, so the gap only has to keep the divider off its neighbour;
+     * 12px in both would put 24px between every pair. */
+    gap-all: 12px;
+    flex-shrink: 0;
+}
+
+/* THE SPACER IS WHAT PUTS THE RIGHT GROUP AT THE TRAILING EDGE, rather than either group being
+ * positioned. `margin-left: auto` on the right group would do it with one item and not with two: auto
+ * margins SHARE the free space between every auto margin in the row, which is the trap the activity
+ * bar's groups already spent a session on. One growing spacer has exactly one claimant. */
+statusbarview .__spacer__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+}
+
+/* A DIVIDER BEFORE EVERY ITEM BUT THE FIRST, which is what makes four readouts read as four things
+ * rather than one run-on line: at 12px of gap alone, `6:1 UTF-8 LF 4 spaces` scanned as a single phrase.
+ * The divider itself is an element -- see `.__status-sep__` below for why it cannot be a border. */
+statusbarview .__status-item__ {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: 7px;
+    color: #9DA0A8;
+}
+
+/* The rule between two readouts. An ELEMENT, because a border cannot be asymmetric here: the paint path
+ * takes border().left as the width and strokes a uniform box, so `border-width-left` drew a rectangle
+ * around every item instead of a line between two. Breadcrumbs spells its separators the same way. */
+statusbarview .__status-sep__ {
+    width: 1px;
+    height: 12px;
+    flex-shrink: 0;
+    background-color: #3C3F41;
+}
+
+/* The trail is quieter than the readouts: it says where you are, which you already know, while the
+ * right-hand items are what you look down to check. IntelliJ draws the same difference. */
+statusbarview .__left__ breadcrumbs .__crumb__ {
+    font-size: 7px;
+    color: #8A8D94;
+}
+
+/* The trail gives way before the readouts do: a path is the one thing here that has a sensible short
+ * form, and Breadcrumbs already elides its own middle. */
+statusbarview .__left__ breadcrumbs {
+    flex-shrink: 1;
+    min-width: 0px;
 }

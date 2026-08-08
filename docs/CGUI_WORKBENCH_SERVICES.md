@@ -599,7 +599,71 @@ one. It now takes only the workbench.
 | The history is **bounded** | It is a convenience, not a log. Its value is that a message which arrived while you were looking elsewhere is still findable |
 | Nothing is displayed by default | A core that drew its own toast would be deciding application layout, and there is no window here to draw it in. `CrystalEditor` subscribes to both and flattens them into one line for the harness |
 
-Pinned by `NotifyTest`, headlessly — a dedicated server that creates a folder should be able to say so.
+### Alignment — which end of the bar an item sits at
+
+```java
+StatusBar.set("explorer", "created notes.txt");                            // LEFT, the default
+StatusBar.set("caret", "Ln 51, Col 39", StatusBar.Align.RIGHT);            // RIGHT
+StatusBar.items();                                                          // what a view renders
+```
+
+**The writer chooses, not the view.** Only the writer knows: "Ln 51, Col 39" belongs on the right because
+it is *about the thing you are looking at* and is glanced at in a fixed place, while "created notes.txt"
+belongs on the left because it is about what just happened and is read as prose. A view sorting by id
+prefix, or guessing from the text, would be inventing an answer that already exists.
+
+An item may also carry a **tooltip** — `set(id, text, align, tooltip)`. It is part of the item rather than
+decoration a view adds, because only the writer knows what the short text left out: a status bar is glanced
+at, so `compiled 12n/9e` is the item and `996 chars, 1 varyings, 6 mapped lines` is what it left behind.
+Both references explain every widget on hover for the same reason. A changed tooltip counts as a change, or
+re-stating one silently keeps the old text.
+
+`Align.LEFT` is the default and the two-argument `set` still means exactly what it meant, so every existing
+writer is untouched. `text()` is unchanged too — it flattens every item into one line and ignores alignment,
+because a line has no ends; it is what a log, a headless assertion or a single-label host wants.
+
+**Moving an item counts as a change.** The silence rule compares the alignment as well as the text, or a
+move between ends is dropped precisely when the words stay the same — which is when a bar that never
+redrew is hardest to notice.
+
+### The view is `StatusBarView`, and it renders rather than computes
+
+`ui.elements.chrome.StatusBarView` — the model/view split is in the names, because two classes called
+`StatusBar` in two packages compile and read as a mistake forever after. `Workbench` mounts one below its
+content, where the column layout alone puts it at the bottom.
+
+| Rule | Why |
+|---|---|
+| It shows **only** what a writer keyed | Anything it computed itself would be a fact with no owner, and the keying would be pointless |
+| Slots are updated **in place**, never rebuilt | Status items are written from per-frame paths, so a rebuild per change discards and recreates the tree continuously — invisible in any screenshot. The engine's standing "never rebuild what is being clicked on" rule |
+| The removal pass runs **before** placement | An id that changed ends would otherwise be a child of both groups for an instant, and `addChild` throws on a second parent |
+| A spacer takes the slack, not `margin-left: auto` | Auto margins *share* free space between every auto margin in the row — the trap the activity bar's groups already cost a session |
+| It subscribes only while attached | `StatusBar` is static and outlives every view of it, so a view that never unsubscribed keeps itself and its elements alive for the rest of the process |
+| A slot's tooltip is attached **once** and re-texted | `Tooltip.attach` adds a hover listener pair per call and `detach` leaves them inert rather than removing them, so attach/detach cycling accumulates listeners — and the compile summary rewrites its tooltip on every recompile |
+| Separators are **elements**, not borders | The paint path takes `border().left` as *the* border width and strokes a uniform box, so `border-width-left` drew a rectangle around every readout instead of a rule between two. `Breadcrumbs` spells its separators the same way |
+| `breadcrumbs()` is the one widget, not an item | A trail is clickable and structured. The host sets it; the view still derives nothing |
+
+**A document publishes its own items, through `FileDocument.setActive(boolean)`.** The workbench knows
+exactly one thing no document can work out for itself — which tab is in front — and that is all it says.
+`TextFileDocument` answers with caret, line ending, encoding and indent; a shader graph answers with a
+compile summary; an image answers with neither.
+
+The first cut had `Workbench` writing the text readouts directly. It worked, and it does not scale: every
+new document type would be another branch there, in a codebase whose direction is that a document type is a
+*contribution*. Both references draw the line at the document — IntelliJ's `StatusBarWidgetFactory` is asked
+per file, VS Code's extensions show and hide their own items on `onDidChangeActiveTextEditor`.
+
+Two rules fall out. **Whatever a document sets on activation, it clears on deactivation** — a status item
+describes what is true right now, so one that is published and never withdrawn sits under somebody else's
+tab. And the caret is stated by the *document*, not the editor: a `TextEditor` is reusable, so three on one
+page would write one key with the last to move winning, whereas a document is exactly one tab.
+
+The breadcrumb trail stays with the workbench, and is a different kind of fact: it describes the tab's
+*identity* — where the thing you are looking at lives — which is answerable even for a document with no
+content to report.
+
+Pinned by `NotifyTest` headlessly — a dedicated server that creates a folder should be able to say so — and
+by `StatusBarViewTest` for the view half.
 
 ---
 
