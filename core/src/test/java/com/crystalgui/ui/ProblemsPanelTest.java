@@ -1,227 +1,238 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.fs.Resource;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
-import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.Markers;
+import com.crystalgui.ui.elements.chrome.ProblemNode;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
-import com.crystalgui.ui.elements.UIText;
+
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The Problems panel — a table over a {@link DiagnosticSet}, reporting what the user chose.
+ * The Problems panel — VS Code's markers view, grouped by file over the workspace index.
+ *
+ * <p>What these pin is the seam: the panel shows what {@link Markers} holds, grouped, filtered, and it
+ * <em>reports</em> a choice rather than navigating. Nothing here asserts a pixel.</p>
  */
 public class ProblemsPanelTest extends UiTestBase {
 
     private UIWindow window;
     private ProblemsPanel panel;
+    private Markers markers;
 
-    private ProblemsPanel build() {
+    private final Resource shader = Resource.of("project", "shaders/water.glsl");
+    private final Resource util = Resource.of("project", "lib/util.glsl");
+
+    @Before
+    public void setUp() {
+        markers = new Markers();
         panel = new ProblemsPanel();
-        panel.layout(l -> l.width(320).height(200));
-
-        UIElement root = new UIElement().layout(l -> l.width(320).height(220));
+        panel.layout(l -> l.width(360).height(240));
+        UIElement root = new UIElement().layout(l -> l.width(360).height(240));
         root.addChild(panel);
         window = new UIWindow(Ui.of(root));
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
-        window.init(640, 440);
+        window.init(360, 240);
+        window.setUiScale(1f);
         settle();
-        return panel;
     }
 
     private void settle() {
         for (int i = 0; i < 4; i++) window.updateWithoutPainting();
     }
 
-    private static Diagnostic errorOn(int row, String message) {
-        return Diagnostic.error(new TextPoint(row, 0), new TextPoint(row, 3), message);
+    private DiagnosticSet give(Resource resource, Diagnostic... problems) {
+        DiagnosticSet set = markers.forResource(resource);
+        if (set == null) set = markers.attach(resource, new DiagnosticSet());
+        set.setAll(List.of(problems));
+        return set;
     }
 
-    @Test
-    public void anUnboundPanelShowsNothing() {
-        build();
-        assertTrue(panel.visibleProblems().isEmpty());
+    private static Diagnostic error(int row, String message) {
+        return at(row, DiagnosticSeverity.ERROR, message);
     }
 
-    @Test
-    public void bindingShowsTheSetsContents() {
-        build();
-        DiagnosticSet set = new DiagnosticSet();
-        set.setAll(List.of(errorOn(1, "first"), errorOn(4, "second")));
-
-        panel.bindTo(set);
-        settle();
-
-        assertEquals(2, panel.visibleProblems().size());
+    private static Diagnostic at(int row, DiagnosticSeverity severity, String message) {
+        return new Diagnostic(new TextPoint(row, 0), new TextPoint(row, 1), severity, message, null, null);
     }
 
-    /** The panel follows its set: a recompile that changes the problems changes the table with no
-     * further call from the caller. */
-    @Test
-    public void theTableFollowsLaterChangesToTheBoundSet() {
-        build();
-        DiagnosticSet set = new DiagnosticSet();
-        panel.bindTo(set);
+    private void expandEverything() {
+        for (Resource resource : List.of(shader, util)) {
+            if (markers.forResource(resource) != null) {
+                panel.tree().setExpanded(ProblemNode.file(resource), true);
+            }
+        }
         settle();
-        assertTrue(panel.visibleProblems().isEmpty());
-
-        set.setAll(List.of(errorOn(2, "appeared")));
-        settle();
-        assertEquals(1, panel.visibleProblems().size());
-
-        set.clear();
-        settle();
-        assertTrue(panel.visibleProblems().isEmpty());
     }
 
     /**
-     * After a rebind the panel shows the new set and nothing from the old one.
+     * <b>Grouped by file, which is the whole reason the resource index exists.</b>
      *
-     * <p><b>This does not test that the old listener was disconnected</b>, and an earlier version of it
-     * claimed to. It cannot: {@code refresh()} always reads the currently bound set, so a leaked listener
-     * firing rebuilds from the right source and the contents come out identical either way — the
-     * assertion passed with {@code binding.disconnect()} deleted. The disconnect's real cost is retention
-     * and duplicated work, neither visible from out here. What is left is still worth pinning: that
-     * re-pointing works at all, and that the old set's <em>contents</em> never leak into the view.</p>
+     * <p>The panel used to bind to the active document's set, so it could only ever show the file already
+     * on screen — the one case where the editor's error stripe already tells you everything.</p>
      */
     @Test
-    public void rebindingShowsTheNewSetAndNothingFromTheOld() {
-        build();
-        DiagnosticSet first = new DiagnosticSet();
-        DiagnosticSet second = new DiagnosticSet();
-        first.setAll(List.of(errorOn(1, "from the abandoned document")));
-        panel.bindTo(first);
+    public void problemsAreGroupedByTheFileTheyAreIn() {
+        give(shader, error(4, "undefined variable"), error(9, "no output node"));
+        give(util, at(2, DiagnosticSeverity.WARNING, "unused uniform"));
+        panel.bindTo(markers);
         settle();
-        assertEquals(1, panel.visibleProblems().size());
 
-        panel.bindTo(second);
-        settle();
-        assertTrue("the old set's contents survived the rebind", panel.visibleProblems().isEmpty());
+        assertEquals("both files should head the tree", List.of(shader, util), panel.visibleFiles());
+        assertTrue("a collapsed file must not spill its problems", panel.visibleProblems().isEmpty());
 
-        second.setAll(List.of(errorOn(3, "from the live one")));
-        settle();
-        assertEquals(1, panel.visibleProblems().size());
-        assertEquals("from the live one", panel.visibleProblems().get(0).message());
+        expandEverything();
+        assertEquals(3, panel.visibleProblems().size());
     }
 
+    /** A file with nothing left after filtering stops being a row, rather than expanding onto nothing. */
     @Test
-    public void bindingToNullClearsAndDetaches() {
-        build();
-        DiagnosticSet set = new DiagnosticSet();
-        set.setAll(List.of(errorOn(1, "x")));
-        panel.bindTo(set);
+    public void aFileFilteredToNothingLeavesTheTree() {
+        give(shader, error(4, "undefined variable"));
+        give(util, at(2, DiagnosticSeverity.WARNING, "unused uniform"));
+        panel.bindTo(markers);
         settle();
-        assertFalse(panel.visibleProblems().isEmpty());
+        assertEquals(2, panel.visibleFiles().size());
 
-        panel.bindTo(null);
+        panel.setSeverityShown(DiagnosticSeverity.WARNING, false);
         settle();
-        assertTrue(panel.visibleProblems().isEmpty());
 
-        set.setAll(List.of(errorOn(2, "y")));
-        settle();
-        assertTrue("a detached panel must not follow its old set", panel.visibleProblems().isEmpty());
+        assertEquals("the warning-only file should have gone", List.of(shader), panel.visibleFiles());
     }
 
-    /** Activating a row reports it. The panel deliberately does not navigate — in a real workspace the
-     * problem may be in a file that is not open, which is a workspace-level act. */
+    /** The text filter matches the message, and takes its file with it when nothing survives. */
     @Test
-    public void activatingARowReportsThatProblem() {
-        build();
-        DiagnosticSet set = new DiagnosticSet();
-        set.setAll(List.of(errorOn(1, "first"), errorOn(4, "second")));
-        panel.bindTo(set);
+    public void theTextFilterNarrowsToMatchingMessages() {
+        give(shader, error(4, "undefined variable"), error(9, "no output node"));
+        panel.bindTo(markers);
         settle();
 
-        List<Diagnostic> chosen = new ArrayList<>();
+        panel.setTextFilter("output");
+        expandEverything();
+
+        assertEquals(1, panel.visibleProblems().size());
+        assertEquals("no output node", panel.visibleProblems().get(0).message());
+
+        panel.setTextFilter("nothing matches this");
+        settle();
+        assertTrue(panel.visibleFiles().isEmpty());
+    }
+
+    /** "Show active file only" is the same list asked a narrower question, not a second panel. */
+    @Test
+    public void showingOnlyOneFileHidesTheRest() {
+        give(shader, error(4, "undefined variable"));
+        give(util, error(2, "broken include"));
+        panel.bindTo(markers);
+        settle();
+
+        panel.showOnly(util);
+        settle();
+        assertEquals(List.of(util), panel.visibleFiles());
+
+        panel.showOnly(null);
+        settle();
+        assertEquals(2, panel.visibleFiles().size());
+    }
+
+    /**
+     * <b>Choosing a problem names its file.</b>
+     *
+     * <p>The panel deliberately cannot navigate: the problem clicked is routinely in a file that is not
+     * open, so going there means opening the document first — a workspace-level act. The node carries the
+     * resource for exactly that reason.</p>
+     */
+    @Test
+    public void choosingAProblemReportsItWithItsFile() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
+        settle();
+        expandEverything();
+
+        List<ProblemNode> chosen = new ArrayList<>();
         panel.onProblemChosen.connect(chosen::add);
 
-        panel.list().onRowActivated.emit(1);
+        int problemRow = -1;
+        for (int i = 0; i < panel.tree().visibleRows().size(); i++) {
+            if (!panel.tree().rowAt(i).item().isFile()) {
+                problemRow = i;
+                break;
+            }
+        }
+        assertTrue("no problem row was realised", problemRow >= 0);
+        panel.tree().onRowActivated.emit(problemRow);
 
         assertEquals(1, chosen.size());
-        assertEquals("second", chosen.get(0).message());
+        assertEquals(shader, chosen.get(0).resource());
+        assertEquals("undefined variable", chosen.get(0).diagnostic().message());
     }
 
-    /** An out-of-range activation must not throw — the table's index and the model can disagree for a
-     * frame after a recompile shrinks the set. */
+    /**
+     * Activating a file heading expands it rather than reporting a choice.
+     *
+     * <p>A heading is not a destination, and emitting for one would make "open this problem" mean
+     * something different depending on which row you hit.</p>
+     */
     @Test
-    public void anOutOfRangeActivationIsIgnored() {
-        build();
-        DiagnosticSet set = new DiagnosticSet();
-        set.setAll(List.of(errorOn(1, "only one")));
-        panel.bindTo(set);
+    public void activatingAFileHeadingIsNotAChoice() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
         settle();
 
-        List<Diagnostic> chosen = new ArrayList<>();
+        List<ProblemNode> chosen = new ArrayList<>();
         panel.onProblemChosen.connect(chosen::add);
+        panel.tree().onRowActivated.emit(0);
+        settle();
 
-        panel.list().onRowActivated.emit(7);
+        assertTrue("a heading reported itself as a destination", chosen.isEmpty());
+        assertFalse("and it did not expand", panel.visibleProblems().isEmpty());
+    }
 
-        assertTrue(chosen.isEmpty());
+    /** The panel follows the index rather than being told: a later compile arrives on its own. */
+    @Test
+    public void aLaterChangeReachesThePanel() {
+        panel.bindTo(markers);
+        settle();
+        assertTrue(panel.visibleFiles().isEmpty());
+
+        give(shader, error(4, "undefined variable"));
+        settle();
+
+        assertEquals(List.of(shader), panel.visibleFiles());
     }
 
     /**
-     * <b>A row is severity, message and line — packed, not columned.</b>
+     * <b>Filtered to nothing does not read as "everything is fixed".</b>
      *
-     * <p>The panel used to be a three-column table with a header. IntelliJ packs the same information into
-     * one line, and it is the better shape here: the Line column spent its width on a four-character
-     * number, and the Severity column existed to label an icon. The two tests that pinned those columns
-     * went with them — they described a design that was deliberately replaced.</p>
-     *
-     * <p>The severity reaches the sheet as a <b>class</b>, never a colour from Java, which is what lets one
-     * palette serve these rows and the notification cards.</p>
+     * <p>A clean workspace and an over-narrow filter are the same empty tree and completely different
+     * news, and only one of them is worth celebrating.</p>
      */
     @Test
-    public void aRowCarriesSeverityMessageAndLine() {
-        build();
-        DiagnosticSet set = new DiagnosticSet();
-        set.setAll(List.of(
-                new Diagnostic(new TextPoint(142, 0), new TextPoint(142, 0), DiagnosticSeverity.WARNING,
-                        "Field can be converted to a local variable", "java", null)));
-        panel.bindTo(set);
+    public void anEmptyTreeSaysWhichKindOfEmptyItIs() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
         settle();
 
-        List<UIElement> rows = panel.getElementsByClassName(ProblemsPanel.ROW_CLASS);
-        assertFalse("no row was realised", rows.isEmpty());
-        UIElement row = rows.get(0);
+        UIElement empty = panel.querySelector("." + ProblemsPanel.EMPTY_CLASS);
+        assertNotNull(empty);
 
-        UIElement icon = row.querySelector("." + ProblemsPanel.ICON_CLASS);
-        assertNotNull(icon);
-        assertTrue("severity must reach the sheet as a class: " + icon.getClasses(),
-                icon.hasClass(ProblemsPanel.SEVERITY_PREFIX + "warning"));
-        assertEquals("Field can be converted to a local variable",
-                ((UIText) row.querySelector("." + ProblemsPanel.MESSAGE_CLASS)).getText());
-        assertEquals("one-based, like every editor and compiler",
-                ":143", ((UIText) row.querySelector("." + ProblemsPanel.LINE_CLASS)).getText());
-    }
-
-    /**
-     * A problem with nowhere to point renders no line at all.
-     *
-     * <p>A shader graph reports about a node, not a row. With the Line column gone there is no empty cell
-     * to fill, so the row simply ends after the message — which is better than the {@code —} the column
-     * needed.</p>
-     */
-    @Test
-    public void aProblemWithNoPositionShowsNoLine() {
-        build();
-        DiagnosticSet set = new DiagnosticSet();
-        set.setAll(List.of(
-                new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION, DiagnosticSeverity.ERROR,
-                        "The graph has no Output node", "shadergraph", "node-1")));
-        panel.bindTo(set);
+        panel.setTextFilter("nothing matches this");
         settle();
-
-        UIElement row = panel.getElementsByClassName(ProblemsPanel.ROW_CLASS).get(0);
-        assertEquals("", ((UIText) row.querySelector("." + ProblemsPanel.LINE_CLASS)).getText());
+        assertTrue("a filtered-out tree claimed the workspace was clean",
+                ((com.crystalgui.ui.elements.UIText) empty).getText().toLowerCase().contains("filter"));
     }
 }

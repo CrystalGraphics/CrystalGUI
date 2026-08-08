@@ -1,112 +1,100 @@
 package com.crystalgui.ui.elements.chrome;
 
-import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Connection;
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.text.diagnostic.Diagnostic;
-import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticTag;
+import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.list.ListRenderer;
-import com.crystalgui.ui.elements.list.ListView;
+import com.crystalgui.ui.elements.tree.TreeRenderer;
+import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.ui.elements.tree.TreeView;
 
 import javax.annotation.Nullable;
 import java.util.List;
 
 /**
- * Every problem in a document, one per line — the Problems panel.
+ * Every problem in the workspace, grouped by file — the Problems panel.
  *
- * <p>A dock panel by construction rather than by inheritance: {@code DockPanelRegistry} takes a factory
- * producing any {@link UIElement}, so this needs to know nothing about docking to live in one.</p>
+ * <p>VS Code's {@code vs/workbench/contrib/markers} view, over our {@link Markers} index.</p>
  *
- * <h3>It reports a choice; it does not navigate</h3>
+ * <h3>Workspace-wide, which is what the resource index was for</h3>
  *
- * <p>{@link #onProblemChosen} fires and that is all. The panel has no editor reference and deliberately
- * cannot get one: in a real workspace the problem you clicked may be in a file that is not open, so
- * "navigate" means <em>open the document, then reveal the row</em> — a workspace-level act. A panel that
- * held an editor would be able to serve only the file already on screen, which is the one case where the
- * error stripe already tells you everything.</p>
+ * <p>This used to bind to a single {@code DiagnosticSet} — the active document's — so it could only ever
+ * show the file already on screen, which is the one case where the editor's own error stripe already tells
+ * you everything. Its own javadoc said as much while it had no way to do better. {@link Markers} gives it
+ * the list of every file with something to report, so the panel is now the thing you consult to find out
+ * <em>where</em> the problems are rather than a second opinion about the file you are looking at.</p>
  *
- * <h3>Binding is re-pointable, and the old connection is dropped</h3>
+ * <h3>It reports a choice; it still does not navigate</h3>
  *
- * <p>{@link #bindTo} disconnects the previous set's listener. <b>This is hygiene, not correctness, and the
- * distinction is worth stating because it is easy to overclaim.</b> {@link #refresh} always reads from
- * {@link #bound}, so a leaked listener firing rebuilds the list from the <em>current</em> set and the
- * contents stay right. What it actually costs is retention — an abandoned {@link DiagnosticSet} keeps this
- * panel reachable — and work: every bind without a disconnect adds another listener, so a panel re-pointed
- * n times does n full rebuilds on every change to any set it has ever been shown.</p>
+ * <p>{@link #onProblemChosen} fires with a {@link ProblemNode} and that is all. The panel has no editor and
+ * deliberately cannot get one: the problem you clicked is now routinely in a file that is <b>not open</b>,
+ * so "navigate" means <em>open the document, then reveal the row</em> — a workspace-level act. The node
+ * carries its resource for exactly that reason.</p>
  *
- * <p>Neither effect is observable from outside without a test-only seam, so this line is deliberately
- * <b>not</b> covered by a test. An earlier one claimed to cover it by asserting the panel showed the wrong
- * contents after a rebind — which cannot happen, and the assertion passed with the disconnect deleted.</p>
+ * <h3>Filtering lives in the source</h3>
+ *
+ * <p>Because it changes the tree's shape rather than its paint — see {@link ProblemsTreeSource}. A file
+ * whose only error is filtered out has to stop being a row.</p>
  */
 public class ProblemsPanel extends UIElement {
 
     public static final String PANEL_CLASS = "__problems__";
     public static final String CONTENT_CLASS = "__content__";
     public static final String LIST_CLASS = "__problem-list__";
-    /** One problem. @see #ProblemsPanel */
+    /** One row — a file heading or a problem under it. */
     public static final String ROW_CLASS = "__problem__";
-    /** The severity glyph — a class the sheet turns into an icon and a colour. */
+    /** On a file heading, so the sheet can weight it against the problems beneath. */
+    public static final String FILE_CLASS = "__problem-file__";
+    /** The severity glyph, or the file's icon — a class the sheet turns into a drawable. */
     public static final String ICON_CLASS = "__severity__";
     public static final String MESSAGE_CLASS = "__message__";
-    /** The trailing {@code :591}. Dimmer, because it is where to look rather than what is wrong. */
+    /** The trailing {@code :591}, or a file's folder. Dimmer: where to look, not what is wrong. */
     public static final String LINE_CLASS = "__line__";
+    /** How many problems are in a file, on its heading. */
+    public static final String COUNT_CLASS = "__problem-count__";
     /** Severity, as a class. Same convention as the notification cards. */
     public static final String SEVERITY_PREFIX = "severity-";
     public static final String EMPTY_CLASS = "__problems-empty__";
-    /** Rendering, not severity — @see com.crystalgui.text.diagnostic.DiagnosticTag */
+    /** Rendering, not severity — @see DiagnosticTag */
     public static final String TAG_UNNECESSARY = "tag-unnecessary";
     public static final String TAG_DEPRECATED = "tag-deprecated";
 
-    /** The row a user chose — a double click, or Enter on the selection. Never fired for a mere
-     * selection change: arrowing through a list is not a decision to go somewhere. */
-    public final Signal.Value<Diagnostic> onProblemChosen = new Signal.Value<>();
+    /**
+     * The row a user chose — a double click, or Enter on the selection.
+     *
+     * <p>Never fired for a mere selection change: arrowing through a list is not a decision to go
+     * somewhere. Carries the node rather than the diagnostic, so a listener knows which file to open.</p>
+     */
+    public final Signal.Value<ProblemNode> onProblemChosen = new Signal.Value<>();
 
     private final UIElement content = new UIElement();
-    private final ObservableList<Diagnostic> rows = new ObservableList<>();
-    private final ListView<Diagnostic> list = new ListView<>(rows);
-    private final UIText empty = new UIText("No problems");
+    private final UIText empty = new UIText("No problems have been detected in the workspace");
 
     @Nullable
-    private DiagnosticSet bound;
+    private ProblemsTreeSource source;
     @Nullable
-    private Connection binding;
+    private TreeView<ProblemNode> tree;
+
+    private final ConnectionGroup binding = new ConnectionGroup();
 
     public ProblemsPanel() {
         addClass(PANEL_CLASS);
-
         content.addClass(CONTENT_CLASS);
-        // Marked internal exactly ONCE, while empty. markAsInternal() RECURSES, and ListView adds and
+        // Marked internal exactly ONCE, while empty. markAsInternal() RECURSES, and the tree adds and
         // recycles its own rows -- stamping a populated subtree marks those internal too, after which
-        // removeChild silently refuses them. That is the bug that put duplicate unclickable tabs in the
-        // dock, and the wrapper is the same fix.
+        // removeChild silently refuses them.
         addInternalChild(content);
-
-        list.addClass(LIST_CLASS);
-        // ONE ROW PER PROBLEM, not three columns — IntelliJ's shape, and the columns were overhead for
-        // what is really one line: the severity is an icon, the message is the line, and the row it is on
-        // is a dim suffix. A header over three sortable columns is a lot of chrome to say "warning, line
-        // 143", and the Line column spent most of its width on a number four characters long.
-        list.setItemHeight(16f);
-        // A PROBLEM IS NOT WORTH HALF-READING. A driver's message names a line, a symbol and a reason, and
-        // the part that gets truncated in a narrow panel is the end -- which is the part that says what is
-        // wrong. Scrolling sideways is the same answer the project tree already gives a long filename.
-        list.setHorizontalScrolling(true);
-        list.setRenderer(new ProblemRenderer());
-        content.addChild(list);
 
         empty.addClass(EMPTY_CLASS);
         empty.setHitTest(false);
         content.addChild(empty);
-
-        list.onRowActivated.connect(index -> {
-            if (index >= 0 && index < rows.size()) onProblemChosen.emit(rows.get(index));
-        });
-
-        refresh();
     }
 
     @Override
@@ -114,53 +102,151 @@ public class ProblemsPanel extends UIElement {
         return false;
     }
 
-    public ListView<Diagnostic> list() {
-        return list;
+    /** The tree, once something has been bound. Null before that. */
+    @Nullable
+    public TreeView<ProblemNode> tree() {
+        return tree;
     }
 
-    /** The rows currently shown, in list order. The surface a test asserts on. */
-    public List<Diagnostic> visibleProblems() {
-        return rows.asUnmodifiableList();
+    /** The filter this panel is showing through, or null before binding. */
+    @Nullable
+    public ProblemsTreeSource source() {
+        return source;
     }
 
-    /** Points the panel at a document's problems, or at nothing. Safe to call repeatedly. */
-    public ProblemsPanel bindTo(@Nullable DiagnosticSet set) {
-        if (binding != null) {
-            binding.disconnect();
-            binding = null;
+    /**
+     * Points the panel at a workspace's problems. Safe to call repeatedly.
+     *
+     * <p>The previous index's listener is dropped — hygiene rather than correctness, since a refresh reads
+     * from the current source either way, but a leaked one retains an abandoned workspace and does a full
+     * rebuild per bind on every change to any index this panel has ever shown.</p>
+     */
+    public ProblemsPanel bindTo(@Nullable Markers markers) {
+        binding.disconnectAll();
+        if (markers == null) {
+            source = null;
+            if (tree != null) {
+                tree.removeSelf();
+                tree = null;
+            }
+            refresh();
+            return this;
         }
-        bound = set;
-        if (set != null) binding = set.onChanged.connect(this::refresh);
+        source = new ProblemsTreeSource(markers);
+        // REBUILT RATHER THAN RE-POINTED: a TreeView takes its source at construction and offers no way to
+        // swap one. Rebinding is a rare, deliberate act — a workspace opening or closing — so the cost is a
+        // tree that is thrown away roughly never, and the alternative is a setter on TreeView whose only
+        // caller would be this line.
+        if (tree != null) tree.removeSelf();
+        tree = new TreeView<>(source);
+        tree.addClass(LIST_CLASS);
+        tree.setItemHeight(16f);
+        // A PROBLEM IS NOT WORTH HALF-READING. A driver's message names a line, a symbol and a reason,
+        // and the part truncated in a narrow panel is the end -- which is the part that says what is
+        // wrong. The project tree gives a long filename the same answer.
+        tree.setHorizontalScrolling(true);
+        tree.setRenderer(new ProblemRenderer());
+        tree.onRowActivated.connect(this::chooseRow);
+        content.addChild(tree);
+        binding.add(markers.onDidChange.connect(resource -> refresh()));
         refresh();
         return this;
     }
 
-    /** Drops the listener on whatever this was bound to. A panel discarded without this keeps its
-     * document's set alive through the connection. */
+    /** Restricts the tree to one file — VS Code's "Show Active File Only". Null shows the workspace. */
+    public ProblemsPanel showOnly(@Nullable Resource resource) {
+        if (source == null) return this;
+        if (java.util.Objects.equals(source.onlyResource(), resource)) return this;
+        source.setOnlyResource(resource);
+        refresh();
+        return this;
+    }
+
+    /** Shows or hides one severity across the whole tree. */
+    public ProblemsPanel setSeverityShown(DiagnosticSeverity severity, boolean shown) {
+        if (source == null || source.isShown(severity) == shown) return this;
+        source.setShown(severity, shown);
+        refresh();
+        return this;
+    }
+
+    /** Substring filter against every message. */
+    public ProblemsPanel setTextFilter(@Nullable String text) {
+        if (source == null) return this;
+        source.setTextFilter(text);
+        refresh();
+        return this;
+    }
+
+    /** Every problem currently shown, in tree order. The surface a test asserts on. */
+    public List<Diagnostic> visibleProblems() {
+        List<Diagnostic> shown = new java.util.ArrayList<>();
+        if (tree == null) return shown;
+        for (TreeRow<ProblemNode> row : tree.visibleRows()) {
+            if (!row.item().isFile()) shown.add(row.item().diagnostic());
+        }
+        return shown;
+    }
+
+    /** Every file currently shown, in tree order. */
+    public List<Resource> visibleFiles() {
+        List<Resource> shown = new java.util.ArrayList<>();
+        if (tree == null) return shown;
+        for (TreeRow<ProblemNode> row : tree.visibleRows()) {
+            if (row.item().isFile()) shown.add(row.item().resource());
+        }
+        return shown;
+    }
+
+    /** Drops the listener on whatever this was bound to. */
     public void dispose() {
         bindTo(null);
-        list.dispose();
+    }
+
+    private void chooseRow(int index) {
+        if (tree == null || index < 0) return;
+        TreeRow<ProblemNode> row = tree.rowAt(index);
+        if (row == null) return;
+        // A FILE HEADING IS NOT A DESTINATION. Activating one opens it, which is what a tree already does
+        // with a twisty -- so choosing it would be a second way to spell "expand".
+        if (row.item().isFile()) {
+            tree.toggleExpanded(row.item());
+            return;
+        }
+        onProblemChosen.emit(row.item());
     }
 
     private void refresh() {
-        // ONE ANNOUNCEMENT, not one per row. This was clear() followed by add() per diagnostic, so a set of
-        // n problems emitted n+1 changes and the ListView rebuilt its realised window n+1 times for a
-        // single compile. The same fix TreeView needed, for the same reason.
-        rows.setAll(bound == null ? List.of() : bound.all());
-        // The empty state and the list swap, rather than the list simply being blank. An empty viewport
-        // reads as "loading" or "broken"; a sentence reads as "there is nothing wrong".
-        boolean anything = !rows.isEmpty();
-        list.generalStyle(g -> g.opacity(anything ? 1f : 0f));
-        empty.generalStyle(g -> g.opacity(anything ? 0f : 1f));
+        boolean anything = source != null && source.shownCount() > 0;
+        if (tree != null) {
+            tree.refresh();
+            tree.setDisplayed(anything);
+        }
+        empty.setDisplayed(!anything);
+        // A FILTERED-TO-NOTHING TREE IS NOT AN EMPTY WORKSPACE, and saying so is what stops a filter
+        // reading as "everything got fixed".
+        empty.setText(source != null && isFiltering(source)
+                ? "No problems match the current filter"
+                : "No problems have been detected in the workspace");
+    }
+
+    private static boolean isFiltering(ProblemsTreeSource source) {
+        if (!source.textFilter().isEmpty() || source.onlyResource() != null) return true;
+        for (DiagnosticSeverity severity : DiagnosticSeverity.values()) {
+            if (!source.isShown(severity)) return true;
+        }
+        return false;
     }
 
     /**
-     * The row: severity glyph, message, and the line it is on.
+     * One row, serving both levels.
      *
-     * <p>Built in {@code createTemplate} and only written into by {@code bind} — an element created during
-     * bind lands after that frame's layout pass, which this engine has paid for three times over.</p>
+     * <p><b>One template, not two.</b> The view pools and recycles a single element per slot, so a row is a
+     * file heading one frame and a problem the next — which means every slot a row can ever need is built in
+     * {@code createTemplate} and only shown or hidden in {@code bind}. Creating one during bind lands it
+     * after that frame's layout pass, which this engine has paid for three times over.</p>
      */
-    private static final class ProblemRenderer implements ListRenderer<Diagnostic> {
+    private static final class ProblemRenderer implements TreeRenderer<ProblemNode> {
 
         @Override
         public UIElement createTemplate() {
@@ -171,45 +257,72 @@ public class ProblemsPanel extends UIElement {
             icon.addClass(ICON_CLASS);
             icon.setHitTest(false);
 
-            UIText message = new UIText("");
-            message.addClass(MESSAGE_CLASS);
-            message.setHitTest(false);
+            UIText label = new UIText("");
+            label.addClass(MESSAGE_CLASS);
+            label.setHitTest(false);
 
-            UIText line = new UIText("");
-            line.addClass(LINE_CLASS);
-            line.setHitTest(false);
-            line.forceSelfSizeWidth();
+            UIText detail = new UIText("");
+            detail.addClass(LINE_CLASS);
+            detail.setHitTest(false);
+            detail.forceSelfSizeWidth();
+
+            UIText count = new UIText("");
+            count.addClass(COUNT_CLASS);
+            count.setHitTest(false);
+            count.forceSelfSizeWidth();
 
             row.addChild(icon);
-            row.addChild(message);
-            row.addChild(line);
+            row.addChild(label);
+            row.addChild(detail);
+            row.addChild(count);
             return row;
         }
 
         @Override
-        public void bind(Diagnostic diagnostic, int index, UIElement template) {
+        public void bind(ProblemNode item, TreeRow<ProblemNode> row, int index, UIElement template) {
             List<UIElement> parts = template.getChildren();
-            // SWAPPED, never added: a template is a different problem every time the view recycles it, so
-            // adding `severity-error` without removing `severity-warning` leaves both on the element and
-            // the cascade resolves whichever happens to win — a random colour rather than a wrong one.
-            parts.get(0).swapPrefixedClass(SEVERITY_PREFIX, SEVERITY_PREFIX + severityClass(diagnostic));
-            // TAGS CHANGE HOW IT IS DRAWN, not how bad it is — faded for unused, struck through for
-            // deprecated, whatever severity the producer gave it. Set explicitly both ways rather than
-            // added, for the same reason the severity is swapped: a template is a different problem every
-            // time the view recycles it.
-            applyTag(template, TAG_UNNECESSARY, diagnostic.hasTag(DiagnosticTag.UNNECESSARY));
-            applyTag(template, TAG_DEPRECATED, diagnostic.hasTag(DiagnosticTag.DEPRECATED));
-            ((UIText) parts.get(1)).setText(diagnostic.message());
-            // OMITTED, not dashed, when there is nothing to point at. With the column gone there is no
-            // empty cell to fill, so a graph's node-level problem simply ends after its message.
-            ((UIText) parts.get(2)).setText(
-                    diagnostic.hasPosition() ? ":" + (diagnostic.start().row() + 1) : "");
+            UIElement icon = parts.get(0);
+            UIText label = (UIText) parts.get(1);
+            UIText detail = (UIText) parts.get(2);
+            UIText count = (UIText) parts.get(3);
+
+            if (item.isFile()) {
+                template.addClass(FILE_CLASS);
+                icon.swapPrefixedClass(SEVERITY_PREFIX, SEVERITY_PREFIX + "file");
+                label.setText(item.resource().name());
+                detail.setText(folderOf(item.resource()));
+                count.setDisplayed(true);
+                count.setText("");
+                setTag(template, TAG_UNNECESSARY, false);
+                setTag(template, TAG_DEPRECATED, false);
+                return;
+            }
+            template.removeClass(FILE_CLASS);
+            Diagnostic diagnostic = item.diagnostic();
+            // SWAPPED, never added: a template is a different row every time the view recycles it, so
+            // adding `severity-error` without removing `severity-file` leaves both on the element and the
+            // cascade resolves whichever happens to win.
+            icon.swapPrefixedClass(SEVERITY_PREFIX, SEVERITY_PREFIX + severityClass(diagnostic));
+            label.setText(diagnostic.message());
+            // OMITTED, not dashed, when there is nothing to point at: a graph's node-level problem simply
+            // ends after its message.
+            detail.setText(diagnostic.hasPosition() ? ":" + (diagnostic.start().row() + 1) : "");
+            count.setDisplayed(false);
+            setTag(template, TAG_UNNECESSARY, diagnostic.hasTag(DiagnosticTag.UNNECESSARY));
+            setTag(template, TAG_DEPRECATED, diagnostic.hasTag(DiagnosticTag.DEPRECATED));
         }
     }
 
-    private static void applyTag(UIElement row, String cls, boolean present) {
+    private static void setTag(UIElement row, String cls, boolean present) {
         if (present) row.addClass(cls);
         else row.removeClass(cls);
+    }
+
+    /** The folder a file sits in, shown dim beside its name — VS Code's second column. */
+    private static String folderOf(Resource resource) {
+        String path = resource.path();
+        int slash = path.lastIndexOf('/');
+        return slash <= 0 ? "" : path.substring(0, slash);
     }
 
     /** The class the sheet keys the glyph and the colour off. */

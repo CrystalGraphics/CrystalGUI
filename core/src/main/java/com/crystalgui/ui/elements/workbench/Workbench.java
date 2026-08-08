@@ -480,10 +480,14 @@ public class Workbench extends UIElement {
         toolWindowManager.showPanel(PROJECT_TYPE);
         toolWindowManager.showPanel(PROBLEMS_TYPE);
 
-        problems.onProblemChosen.connect(diagnostic -> {
+        problems.onProblemChosen.connect(node -> {
+            // OPEN FIRST, THEN REVEAL. The panel is workspace-wide now, so the problem you clicked is
+            // routinely in a file that is not on screen — which is the case the panel's javadoc always
+            // described and could not produce until the index existed.
+            if (node.resource() != null && node.resource().isProject()) openFile(node.resource().asPath());
             TextEditor editor = activeEditor();
-            if (editor == null) return;
-            editor.setCaret(editor.buffer().pointToOffset(diagnostic.start()));
+            if (editor == null || node.diagnostic() == null) return;
+            editor.setCaret(editor.buffer().pointToOffset(node.diagnostic().start()));
             UIWindow window = getAttachedWindow();
             if (window != null) window.getInputHandler().requestFocus(editor);
         });
@@ -1479,11 +1483,16 @@ public class Workbench extends UIElement {
         }
     }
 
+    /**
+     * Keeps the panel pointed at this workspace's index.
+     *
+     * <p>Bound <b>once</b>, not per tab. It used to re-point at the active document's set on every tab
+     * change, which is what made it a second opinion about the file already on screen; the index is the
+     * whole workspace, so switching tabs changes nothing about what it should show. Re-binding would also
+     * rebuild the tree and throw away which files you had expanded.</p>
+     */
     private void rebindProblems() {
-        FileDocument active = activeDocument();
-        DiagnosticSet reported = active == null ? null : active.diagnostics();
-        if (reported == boundTo) return;
-        boundTo = reported;
-        problems.bindTo(reported);
+        if (problems.source() != null && problems.source().markers() == markers) return;
+        problems.bindTo(markers);
     }
 }

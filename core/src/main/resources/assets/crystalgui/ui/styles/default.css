@@ -5418,3 +5418,39 @@ problemspanel .__problem__ .__line__ {
 .__problem__.tag-deprecated .__message__ {
     text-decoration-line: line-through;
 }
+
+/* ── The Problems tree ──────────────────────────────────────────────────────────────────────────
+ * Two row kinds through one pooled template — a file heading and the problems under it. The heading
+ * carries `__problem-file__`, which is the only thing distinguishing them to the cascade. */
+
+/* A FILE HEADING READS AS A GROUP, not as a louder problem: brighter than the rows beneath, because it
+ * is what you scan down when looking for a file, and the messages are what you read once you have found
+ * it. VS Code and IntelliJ both weight the heading and quieten the children. */
+problemspanel .__problem__.__problem-file__ .__message__ {
+    color: #DFE1E5;
+}
+
+/* THE FOLDER, beside the filename — VS Code's second column, dim because it disambiguates rather than
+ * identifies. The same slot carries `:591` on a problem row, which is why one rule serves both. */
+problemspanel .__problem__ .__line__ {
+    font-size: 7px;
+    color: #6B6E76;
+    flex-shrink: 0;
+    padding-left: 4px;
+}
+
+/* HOW MANY PROBLEMS ARE IN THIS FILE. Trailing, so it sits at a fixed place down the column rather than
+ * after a filename of unpredictable length. */
+problemspanel .__problem__ .__problem-count__ {
+    font-size: 7px;
+    color: #6B6E76;
+    flex-shrink: 0;
+    padding-left: 6px;
+}
+
+/* A FILE'S GLYPH. Not a severity — the heading says which file, and the worst thing in it is already
+ * visible one row down. Kept as its own severity-* value so the swap in bind() has something to swap TO;
+ * a row recycled from a problem to a heading would otherwise keep the old error icon. */
+problemspanel .__problem__ .__severity__.severity-file {
+    overlay: icon("crystalgui:filetypes/shader");
+}
