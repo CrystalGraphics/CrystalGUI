@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 
 import com.crystalgui.core.signal.Connection;
@@ -16,6 +17,8 @@ import com.crystalgui.ui.elements.chrome.Breadcrumbs;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.InputDialog;
+import com.crystalgui.ui.elements.chrome.NotificationBalloons;
+import com.crystalgui.ui.elements.chrome.NotificationsView;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
 import com.crystalgui.ui.elements.dock.DockArea;
 import com.crystalgui.ui.elements.dock.DockBranch;
@@ -32,6 +35,7 @@ import com.crystalgui.ui.elements.dock.DockOpenOptions;
 import com.crystalgui.ui.elements.dock.DockPlacement;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockRegion;
+import com.crystalgui.ui.elements.dock.RegionSide;
 import com.crystalgui.ui.elements.dock.DockPath;
 import com.crystalgui.ui.elements.dock.DockPanelRegistry;
 import com.crystalgui.ui.elements.editor.EditorCommands;
@@ -76,6 +80,8 @@ public class Workbench extends UIElement {
     public static final String FILE_TYPE = "file";
     public static final String PROJECT_TYPE = "project";
     public static final String PROBLEMS_TYPE = "problems";
+    /** The notification history — IntelliJ's own tool window, on the auxiliary rail beside the bell. */
+    public static final String NOTIFICATIONS_TYPE = "notifications";
 
     /**
      * The state key carrying which file a {@link #FILE_TYPE} panel shows.
@@ -118,6 +124,12 @@ public class Workbench extends UIElement {
     private final DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
     private final ProjectFileTree fileTree;
     private final ProblemsPanel problems = new ProblemsPanel();
+
+    /** The notification history. @see #NOTIFICATIONS_TYPE */
+    private final NotificationsView notificationsView = new NotificationsView();
+
+    /** The transient half — balloons over the bottom-right corner. @see NotificationBalloons */
+    private final NotificationBalloons balloons = new NotificationBalloons();
     private final DockArea dock;
 
     /** The fixed region frame — sidebar, editor, panel, auxiliary. @see WorkbenchRegions */
@@ -289,7 +301,13 @@ public class Workbench extends UIElement {
         registry.register(DockPanelDescriptor.singleton(PROJECT_TYPE, "Project")
                 .icon("crystalgui:folder").anchor(DockDropZone.SPLIT_LEFT), ref -> fileTree);
         registry.register(DockPanelDescriptor.singleton(PROBLEMS_TYPE, "Problems")
-                .icon("crystalgui:file-text").anchor(DockDropZone.SPLIT_DOWN), ref -> problems);
+                .icon("crystalgui:toolwindows/problems").anchor(DockDropZone.SPLIT_DOWN), ref -> problems);
+        // THE AUXILIARY RAIL, which is where IntelliJ keeps it and is not an arbitrary choice: the
+        // notification history is something you consult, not something you work in, so it belongs on the
+        // side that holds the things you glance at rather than beside the project tree.
+        registry.register(DockPanelDescriptor.singleton(NOTIFICATIONS_TYPE, "Notifications")
+                .icon("crystalgui:toolwindows/notifications").region(DockRegion.AUXILIARY).side(RegionSide.PRIMARY),
+                ref -> notificationsView);
         registerDocumentType(FILE_TYPE, "File", path -> {
             TextEditor created = new TextEditor("");
             created.addClass(FILE_EDITOR_CLASS);
@@ -335,6 +353,29 @@ public class Workbench extends UIElement {
         // "content changed", which is not the same as "dirtiness flipped", and only the encode can tell
         // the difference. It just runs once per edit now instead of once per frame.
         open.onDidChangeDirty.connect(path -> refreshDirtyMarkers());
+        // EVERY FILE FAILURE IS REPORTED FROM ONE PLACE, and this is the whole of the change that made it
+        // so. WorkspaceFileService already announced each one through onDidFail, carrying the operation --
+        // and nothing listened, so all eleven call sites wrote their own `failure -> Notifications.show(...)`
+        // instead. That copy is where "created X" and "moved X" ended up on the ERROR channel: the lambda
+        // was pasted from the failure branch into the success one with a word changed.
+        //
+        // Wired here because this is where the workbench's parts are introduced to each other, and because
+        // WorkspaceFileService must not reach for Notifications itself: it already has an announcement
+        // channel, and a service with two would leave a listener unable to tell which was authoritative.
+        files().onDidFail.connect((operation, failure) -> Notifications.show(
+                Notification.error(failedVerb(operation)).withDetail(failureDetail(operation, failure))));
+
+        // THE BELL'S BADGE. Routed through the container registry rather than reaching for a rail button,
+        // because a badge is a fact about a CONTAINER and both rails already listen for it -- so a tool
+        // window dragged from one stripe to the other keeps its count with no further wiring.
+        //
+        // Written whether or not the panel has ever been opened: the count is what tells you to open it.
+        // A DOT, NOT A COUNT. IntelliJ marks the bell and does not say how many, which is the right call:
+        // the number is not actionable -- you open the panel either way -- and a two-digit count over a
+        // 20px rail icon is unreadable. The exact figure is a scroll away in the history.
+        Notifications.onDidChangeUnread.connect(count -> toolWindowManager.viewContainers().setBadge(
+                NOTIFICATIONS_TYPE, count == null || count <= 0 ? null : ViewContainerRegistry.DOT));
+
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
         // AFTER content, which is the whole of what puts it at the bottom: a workbench is a column and
@@ -358,6 +399,10 @@ public class Workbench extends UIElement {
         // thing that puts the right-hand stripe on the right: it is an ordinary flex child, not something
         // positioned, and both rails carry the same fixed width.
         content.addChild(rightStripe);
+        // AFTER the regions and BEFORE the drop overlay. Balloons must float over the workbench, but not
+        // over a live drag: the overlay is what tells you where a panel will land, and a message arriving
+        // mid-drag must not cover the answer.
+        content.addInternalChild(balloons);
         // LAST, so it draws over everything it covers, and listening on `content` so it hears a drag
         // anywhere in the workbench -- DragEvent.Over bubbles, which is what makes one listener enough.
         content.addInternalChild(dropOverlay);
@@ -619,15 +664,17 @@ public class Workbench extends UIElement {
             // click that asked for it -- a widget must never rebuild the elements it is being clicked on.
             dock.syncGroups();
             dock.setActiveGroup(dock.groupFor(leaf));
-            Notifications.info("focused " + path.name());
             return;
         }
         client.read(path, read -> {
             adoptInto(path, read.content());
             open.requestRead(path);
             open(DockInput.of(ref));
-            Notifications.error("opened " + path.name());
-        }, failure -> Notifications.error("open failed: " + failure.code()));
+        }, failure -> Notifications.show(openFailed(path, failure)
+                // AN ACTION, because a read failure is the case actions exist for: it is usually transient
+                // (a server round trip), the recovery is exactly what was just attempted, and without one
+                // the message names a problem and leaves the user to find the verb again.
+                .withAction("Retry", () -> openFile(path))));
     }
 
     /** The file behind the active tab, or null when the active tab is not a file. */
@@ -728,13 +775,14 @@ public class Workbench extends UIElement {
     public boolean saveActiveFile() {
         CgPath target = activeFilePath();
         if (target == null) {
-            Notifications.error("no file tab active");
+            Notifications.show(Notification.warning("No file tab active"));
             return false;
         }
         FileDocument document = open.get(target);
         if (document == null) return false;
         if (!open.isSaveable(target)) {
-            Notifications.error("refusing to save " + target.name() + " -- it never loaded");
+            Notifications.show(Notification.error("Refusing to save")
+                    .withDetail(target.name() + " never loaded"));
             return false;
         }
         byte[] written = document.encode();
@@ -745,12 +793,70 @@ public class Workbench extends UIElement {
                     // afterwards, and recording what it looks like NOW would call it clean.
                     open.markSaved(target, written);
                     refreshTabTitles();
-                    Notifications.info("saved " + target.name());
                 },
-                failure -> Notifications.error(failure.isConflict()
-                        ? "CONFLICT: " + target.name() + " changed on disk — reopen to take theirs"
-                        : "save failed: " + failure.code()));
+                failure -> Notifications.show(failure.isConflict()
+                        // THE PROSE ALREADY NAMED THE FIX -- "reopen to take theirs" -- which is exactly
+                        // the case for making it a button instead of an instruction.
+                        ? Notification.error("Conflict")
+                                .withDetail(target.name() + " changed on disk")
+                                .withAction("Reopen to take theirs", () -> openFile(target))
+                        : saveFailed(target, failure).withAction("Retry", this::saveActiveFile)));
         return true;
+    }
+
+    /**
+     * The two failures that come from the CLIENT rather than the file service, phrased once.
+     *
+     * <p>{@code WorkspaceClient} deliberately reports nothing — it is the transport, it has no business
+     * deciding UI, and it is the layer a dedicated server also runs. So these two cannot be centralised the
+     * way file operations were, through {@code onDidFail}; what they can be is stated in one place here,
+     * which is what stops "Open failed" drifting between the two sites that raise it.</p>
+     *
+     * <p>Returned rather than shown, so a caller can add the action it knows about — retrying an open means
+     * something different from retrying a save.</p>
+     */
+    private static Notification openFailed(CgPath path, WorkspaceClient.Failure failure) {
+        return Notification.error("Open failed").withDetail(path.name() + " — " + failure.code());
+    }
+
+    /** @see #openFailed */
+    private static Notification saveFailed(CgPath path, WorkspaceClient.Failure failure) {
+        return Notification.error("Save failed").withDetail(path.name() + " — " + failure.code());
+    }
+
+    /**
+     * How a failed operation is titled — "Move failed", "Delete failed".
+     *
+     * <p>Derived from the {@code Kind} rather than passed in, which is the point of reporting centrally: the
+     * verb was the only thing that differed between the eleven copies, and it is something the operation
+     * already knows.</p>
+     *
+     * <p>A null operation is the undo path — {@code WorkspaceFileService.report} emits one when an
+     * <em>inverse</em> fails, where there is no user-initiated operation to name. That is worth reporting
+     * with less precision rather than not reporting: an undo that silently did not happen is the worst case
+     * here, because the tree still shows the state the user was trying to leave.</p>
+     */
+    private static String failedVerb(@Nullable WorkspaceFileService.Operation operation) {
+        if (operation == null) return "Undo failed";
+        switch (operation.kind()) {
+            case CREATE:
+            case CREATE_FOLDER: return "Create failed";
+            case MOVE:          return "Move failed";
+            case COPY:          return "Copy failed";
+            case DELETE:        return "Delete failed";
+            default:            return "Operation failed";
+        }
+    }
+
+    /** The name it was about, and what the server said. */
+    private static String failureDetail(@Nullable WorkspaceFileService.Operation operation,
+                                        WorkspaceClient.Failure failure) {
+        String code = failure == null ? "unknown" : failure.code();
+        if (operation == null) return code;
+        // The SOURCE for a move or a copy: "Move failed / notes.txt" is what the user asked about, whereas
+        // the target is a name they have never seen if the operation is what created it.
+        CgPath named = operation.source() != null ? operation.source() : operation.target();
+        return named.name() + " — " + code;
     }
 
     /** Every file operation, with the open editors accounted for. */
@@ -875,7 +981,7 @@ public class Workbench extends UIElement {
             // re-read the file over whatever is unsaved in it.
             if (open.requestRead(path)) {
                 client.read(path, read -> adoptInto(path, read.content()),
-                        failure -> Notifications.error("open failed: " + failure.code()));
+                        failure -> Notifications.show(openFailed(path, failure)));
             }
             return document.view();
         });
@@ -934,10 +1040,9 @@ public class Workbench extends UIElement {
             client.save(path, written, etag -> {
                 open.markSaved(path, written);
                 refreshTabTitles();
-                Notifications.error("saved " + path.name());
-            }, failure -> Notifications.error("save failed: " + path.name() + " -- " + failure.code()));
+            }, failure -> Notifications.show(saveFailed(path, failure)));
         }
-        if (issued == 0) Notifications.error("nothing to save");
+        if (issued == 0) Notifications.show(Notification.info("Nothing to save"));
         return issued;
     }
 
@@ -1084,7 +1189,7 @@ public class Workbench extends UIElement {
     private void adoptInto(CgPath path, byte[] bytes) {
         documentFor(path);
         String refused = open.adopt(path, bytes);
-        if (refused != null) Notifications.error("cannot open " + path.name() + ": " + refused);
+        if (refused != null) Notifications.show(Notification.error("Cannot open").withDetail(path.name() + " — " + refused));
         // AFTER the bytes are in, which is the whole reason this signal exists rather than the panel
         // factory announcing the open. A document restoring a caret at line 400 into text that has not
         // landed yet clamps it to 0, and the failure looks like the caret never having been saved.
@@ -1199,33 +1304,17 @@ public class Workbench extends UIElement {
             // A folder dropped into itself or its own descendant would move a directory under itself,
             // which the filesystem refuses with a message about paths rather than about the gesture.
             if (source.equals(request.destination()) || source.contains(request.destination())) {
-                Notifications.error("cannot move " + source.name() + " into itself");
+                Notifications.show(Notification.error("Cannot move").withDetail(source.name() + " into itself"));
                 continue;
             }
             CgPath target = request.destination().resolve(source.name());
             if (target.equals(source)) continue;   // dropped back where it already is
             Runnable done = batch.track();
-            if (request.copy()) {
-                fileService.copyFile(source, target,
-                        () -> {
-                            Notifications.error("copied " + source.name());
-                            done.run();
-                        },
-                        failure -> {
-                            Notifications.error("copy failed: " + source.name() + " -- " + failure.code());
-                            done.run();
-                        });
-            } else {
-                fileService.move(source, target, false,
-                        () -> {
-                            Notifications.error("moved " + source.name());
-                            done.run();
-                        },
-                        failure -> {
-                            Notifications.error("move failed: " + source.name() + " -- " + failure.code());
-                            done.run();
-                        });
-            }
+            // ONE completion hook per operation. This was `done` in the success lambda and `done.run()`
+            // again in the failure one, plus a copy of the reporting -- and the batch has to be told either
+            // way or its transaction never closes, silently.
+            if (request.copy()) fileService.copyFile(source, target, done);
+            else fileService.move(source, target, false, done);
         }
         batch.sealed();
     }

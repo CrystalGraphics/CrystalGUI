@@ -165,6 +165,56 @@ public class WorkspaceFileService {
 
     // ── Operations ──────────────────────────────────────────────────────────────────────────────
 
+    // Overloads without the callbacks, which is now the ORDINARY case.
+    //
+    // Both were mandatory, so every call site passed something -- and after the confirmation notifications
+    // were removed most success callbacks became `() -> { }`, while every failure callback was the same
+    // eleven-times-copied lambda turning a Failure into a notification. That copy is what miswired half of
+    // them to the error channel for successes.
+    //
+    // Reporting now happens ONCE, off onDidFail (see Workbench), so a caller says nothing unless it has
+    // something of its own to do. `succeed` and `fail` already tolerate nulls, so these add no behaviour --
+    // they remove a parameter that had exactly one sensible value.
+
+    public void create(CgPath path, String content) {
+        create(path, content, null, null);
+    }
+
+    public void createFolder(CgPath path) {
+        createFolder(path, null, null);
+    }
+
+    public void move(CgPath from, CgPath to, boolean overwrite) {
+        move(from, to, overwrite, null, null);
+    }
+
+    public void delete(CgPath path, boolean recursive) {
+        delete(path, recursive, null, null);
+    }
+
+    public void copyFile(CgPath from, CgPath to) {
+        copyFile(from, to, null, null);
+    }
+
+    /**
+     * Runs {@code whenSettled} on success <b>and</b> on failure — for a caller counting operations.
+     *
+     * <h3>The asymmetry this removes</h3>
+     *
+     * <p>A batch has to decrement its counter however each operation turns out, so every batched call site
+     * wrote {@code done.run()} twice: once in the success lambda and once in the failure one. Two copies of
+     * "this one finished" is the shape most likely to be got wrong when a fifth call is added — and getting
+     * it wrong means a transaction that never closes, which is silent.</p>
+     */
+    public void move(CgPath from, CgPath to, boolean overwrite, Runnable whenSettled) {
+        move(from, to, overwrite, whenSettled, failure -> whenSettled.run());
+    }
+
+    /** @see #move(CgPath, CgPath, boolean, Runnable) */
+    public void copyFile(CgPath from, CgPath to, Runnable whenSettled) {
+        copyFile(from, to, whenSettled, failure -> whenSettled.run());
+    }
+
     /** Creates a file that is not there. Refuses rather than clobbering — see {@code fs.create}. */
     public void create(CgPath path, String content, Runnable onDone, Consumer<WorkspaceClient.Failure> onError) {
         Operation op = Operation.of(Kind.CREATE, path);

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 
 import com.crystalgraphics.platform.CgPlatform;
@@ -289,7 +290,7 @@ public final class ExplorerCommands {
             // itself -- which the filesystem refuses with a message about paths rather than about the
             // gesture. Refusing here says the useful thing.
             if (source.equals(destination) || source.contains(destination)) {
-                Notifications.error("cannot paste " + source.name() + " into itself");
+                Notifications.show(Notification.error("Cannot paste").withDetail(source.name() + " into itself"));
                 continue;
             }
             CgPath into = destination.resolve(source.name());
@@ -302,15 +303,10 @@ public final class ExplorerCommands {
             CgPath finalTarget = into;
             Runnable done = batch.track();
             if (moving) {
-                workbench.files().move(source, finalTarget, false,
-                        () -> { Notifications.error("moved " + finalTarget.name()); done.run(); },
-                        failure -> { Notifications.error(
-                                "move failed: " + source.name() + " -- " + failure.code()); done.run(); });
+                // ONE completion hook, not two copies of it -- the batch has to be told either way.
+                workbench.files().move(source, finalTarget, false, done);
             } else {
-                workbench.files().copyFile(source, finalTarget,
-                        () -> { Notifications.error("copied " + finalTarget.name()); done.run(); },
-                        failure -> { Notifications.error(
-                                "copy failed: " + source.name() + " -- " + failure.code()); done.run(); });
+                workbench.files().copyFile(source, finalTarget, done);
             }
         }
         batch.sealed();
@@ -368,8 +364,7 @@ public final class ExplorerCommands {
         InputDialog.ask(context.source(), folder ? "New Folder" : "New File", "Name", "", name -> {
             CgPath path = parent.resolve(name);
             if (folder) {
-                workbench.files().createFolder(path, () -> Notifications.error("created " + name),
-                        failure -> Notifications.error("create failed: " + failure.code()));
+                workbench.files().createFolder(path);
             } else {
                 // OPENED, not merely created. Making a file is a statement of intent to edit it, and every
                 // editor that has a New File treats it that way -- VS Code, IntelliJ and Visual Studio all
@@ -379,10 +374,7 @@ public final class ExplorerCommands {
                 //
                 // A FOLDER is deliberately not opened: there is nothing to edit, and revealing it would
                 // fight the selection the user is about to make inside it.
-                workbench.files().create(path, "", () -> {
-                    Notifications.error("created " + name);
-                    workbench.openFile(path);
-                }, failure -> Notifications.error("create failed: " + failure.code()));
+                workbench.files().create(path, "", () -> workbench.openFile(path), null);
             }
         });
     }
@@ -394,9 +386,7 @@ public final class ExplorerCommands {
 
         InputDialog.ask(context.source(), "Rename", "New name", path.name(), name -> {
             if (name.equals(path.name())) return;
-            workbench.files().move(path, parent.resolve(name), false,
-                    () -> Notifications.error("renamed to " + name),
-                    failure -> Notifications.error("rename failed: " + failure.code()));
+            workbench.files().move(path, parent.resolve(name), false);
         });
     }
 
@@ -415,18 +405,14 @@ public final class ExplorerCommands {
         if (!workbench.resolve(WorkbenchSettings.CONFIRM_DELETE)) {
             // Turned off deliberately, so it deletes. Still routed through the same file service, so undo
             // and the trash behave identically -- the setting removes the question, not the safety net.
-            workbench.files().delete(path, directory,
-                    () -> Notifications.error("deleted " + path.name()),
-                    failure -> Notifications.error("delete failed: " + failure.code()));
+            workbench.files().delete(path, directory);
             return;
         }
 
         InputDialog.confirm(context.source(), "Delete",
                 directory ? "Delete '" + path.name() + "' and everything in it?"
                         : "Delete '" + path.name() + "'?",
-                () -> workbench.files().delete(path, directory,
-                        () -> Notifications.error("deleted " + path.name()),
-                        failure -> Notifications.error("delete failed: " + failure.code())));
+                () -> workbench.files().delete(path, directory));
     }
 
     /**
@@ -440,7 +426,7 @@ public final class ExplorerCommands {
         if (path == null) return;
         String text = relative ? path.path() : path.toString();
         CgPlatform.input().setClipboard(text);
-        Notifications.info("copied " + text);
+        Notifications.show(Notification.info("Copied").withDetail(text));
     }
 
     /** Every command id this set owns, for a host building its own menus. */

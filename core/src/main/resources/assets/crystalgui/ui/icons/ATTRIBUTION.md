@@ -4,7 +4,7 @@ Two sets ship here, under two licences. Both are **verbatim** — no file has be
 re-exported. That is worth stating plainly because Apache 2.0 requires modifications to be declared, and
 "we changed nothing" is the cheapest possible way to satisfy it.
 
-## `filetypes/` — IntelliJ Platform icons
+## `filetypes/` and `toolwindows/` — IntelliJ Platform icons
 
 **Copyright © 2000–2023 JetBrains s.r.o. and contributors — Apache License 2.0.**
 
@@ -19,6 +19,12 @@ a second copy of a fact that `ls filetypes/` already states, which is the copy t
 below covers everything in that directory.
 
 **Unmodified.** Only the directory they sit in has changed.
+
+`toolwindows/` holds the same set's tool-window marks — `notifications.svg` and `problems.svg`, each with a
+`_dark` companion, drawn by the rail buttons for the Notifications and Problems panels. Same copyright, same
+licence, same "unmodified" statement, and reached through the same `FileIconTheme.withVariant` suffix
+convention as the file types; it is a separate directory only because a tool-window mark is not a file type
+and `default.json` should not have to say so.
 
 > An earlier revision of this file described a 2021 set of 47 icons pulled from `platform/icons/src/` in
 > the `intellij-community` repository. That set was **replaced wholesale**, not extended: the 2023 icons
@@ -62,9 +68,14 @@ one file tree is the cost.
 
 <https://github.com/feathericons/feather>
 
-`folder.svg`, `file-text.svg`, `image.svg`, `code.svg`, `package.svg`. Stroked, 24×24, authored as
-`stroke="currentColor"` — which is what makes them theme from the cascade for free, and why they are kept
-around as chrome marks even though the file tree now uses the IntelliJ set.
+`folder.svg`, `file-text.svg`, `image.svg`, `code.svg`, `package.svg`, `x.svg`, and the three severity
+marks the notification cards draw — `info.svg`, `alert-triangle.svg`, `alert-circle.svg`. Stroked, 24×24,
+authored as `stroke="currentColor"` — which is what makes them theme from the cascade for free, and why
+they are kept around as chrome marks even though the file tree now uses the IntelliJ set.
+
+The severity three are drawn to Feather's own geometry and stroke conventions rather than copied byte for
+byte, which changes nothing about the obligation: the notice travels with the distribution either way, and
+guessing at where the line falls is a worse bet than naming the source.
 
 > Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 > associated documentation files (the "Software"), to deal in the Software without restriction, including

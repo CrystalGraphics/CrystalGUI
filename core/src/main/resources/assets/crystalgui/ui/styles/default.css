@@ -3747,6 +3747,30 @@ workbench .__activity-bar__ .__stripe-separator__ {
     color: #FFFFFF;
 }
 
+/* THE DOT FORM — IntelliJ's unread mark on the bell, in the icon's top-right corner.
+ *
+ * Absolutely positioned so it OVERLAPS the icon rather than taking a slot beside it: the rail is 20px wide
+ * and a badge in flow would push the glyph out of the button. Taffy resolves an absolute child against its
+ * parent, which is the rail button itself, so `right`/`top` are the corner of the button.
+ *
+ * The drawing is JetBrains' own `general/modified` — a filled blue circle, which is exactly this mark. It
+ * carries its own colour, so nothing here tints it; the size is what makes a 16px source read as a dot.
+ *
+ * The `_dark` variant is deliberately NOT selected here: `icon()` in a stylesheet has no variant machinery
+ * (only FileIconTheme.withVariant does, from Java), and the two drawings of a blue dot do not differ. */
+.__activity-bar__ .__badge__.__dot__ {
+    position: absolute;
+    right: -0px;
+    /* NEGATIVE, so it sits against the glyph's top-right rather than inside the button's box. IntelliJ's
+     * mark overhangs the icon slightly, and the rail button is a couple of pixels taller than the 16px
+     * drawing it centres — so a `top` of 0 still lands below the bell's shoulder. */
+    top: -2px;
+    width: 10px;
+    height: 10px;
+    overlay: icon("crystalgui:general/modified");
+    overlay-fit: contain;
+}
+
 .__region-host__ {
     flex-grow: 1;
     overflow: hidden;
@@ -4977,4 +5001,280 @@ statusbarview .__left__ breadcrumbs .__crumb__ {
 statusbarview .__left__ breadcrumbs {
     flex-shrink: 1;
     min-width: 0px;
+}
+
+/* ── Notifications ───────────────────────────────────────────────────────────────────────────────────
+ *
+ * IntelliJ's Notifications tool window: a section head with Clear all, then a column of cards. */
+notificationsview {
+    flex-direction: column;
+    flex-grow: 1;
+    background: #1E1E1E;
+    padding-all: 6px;
+}
+
+notificationsview > .__head__ {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 0;
+    flex-shrink: 0;
+    padding-bottom: 6px;
+}
+
+notificationsview > .__head__ > .__title__ {
+    font-size: 7px;
+    color: #9DA0A8;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+}
+
+/* A LINK, not a button — matching the entries' own actions, which is what IntelliJ does throughout this
+ * panel. A button here would out-weigh the actions on the notifications themselves. */
+notificationsview .__clear__ {
+    font-size: 7px;
+    color: #4A88C7;
+    flex-shrink: 0;
+}
+
+notificationsview .__clear__:hover {
+    color: #6BA5DE;
+}
+
+notificationsview > .__notification-list__ {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+    flex-direction: column;
+    gap-all: 4px;
+}
+
+/* One card, WHEREVER IT IS DRAWN. Scoped to the card and not to the panel, because the history and the
+ * balloons share it: rules written as `notificationsview .__x__` reached the list and silently missed
+ * every balloon, which then fell back to the engine's COLUMN default and stacked its title, its timestamp
+ * and its close button one above the other. A shared widget's own look cannot be keyed to one of its
+ * hosts. */
+.__notification__ {
+    flex-direction: column;
+    width: 100%;
+    flex-shrink: 0;
+    background: #2B2B2B;
+    border-radius: 4px;
+    padding-all: 8px;
+    gap-all: 4px;
+}
+
+/* HOVER HIGHLIGHTS THE WHOLE CARD, which is what tells you the entry is a thing rather than a paragraph
+ * — IntelliJ lifts the row the pointer is over. It works from anywhere inside the card because :hover is
+ * evaluated over the entered chain, not only the exact element hit, so the labels staying untargetable
+ * costs nothing here. */
+.__notification__:hover {
+    background: #323232;
+}
+
+/* Title and timestamp at opposite ends, with the title taking the slack. `min-width: 0` is what lets a
+ * long title give way rather than pushing the time off the card. */
+.__notification__ .__entry-head__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 6px;
+    width: 100%;
+}
+
+.__notification__ .__message__ {
+    font-size: 7px;
+    color: #DFE1E5;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.__notification__ .__time__ {
+    font-size: 6px;
+    color: #787A80;
+    flex-shrink: 0;
+    padding-right: 4px;
+}
+
+.__notification__ .__detail__ {
+    font-size: 7px;
+    color: #9DA0A8;
+    width: 100%;
+}
+
+.__notification__ .__actions__ {
+    flex-direction: row;
+    gap-all: 12px;
+    flex-shrink: 0;
+}
+
+/* PADDING IS LOAD-BEARING, not spacing. A UIText has no MeasureFunc, so it is sized by its own
+ * post-layout recompute -- which only runs from onLayoutChanged, which only fires on a GENUINE geometry
+ * change. A link with no width, no padding and no content size computes 0x0, never changes, and therefore
+ * never gets measured at all: invisible, unhittable, and permanent. The sibling labels escape it only
+ * because `width: 100%` and `flex-grow: 1` hand them a box to start from. The dock banner's own action
+ * links carry padding for the same reason. */
+.__notification__ .__action__ {
+    font-size: 7px;
+    color: #4A88C7;
+    flex-shrink: 0;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+.__notification__ .__action__:hover {
+    color: #6BA5DE;
+}
+
+/* THE SEVERITY GLYPH COMES FROM THE CLASS, never from Java — the same split graph.css makes for port
+ * types and filetypes.css for file icons. A dozen producers share three glyphs and each needs its own
+ * colour, which is the thing keying colour to the drawable cannot express. */
+.__notification__ .__severity__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+}
+
+.__notification__ .__severity__.severity-info {
+    overlay: icon("crystalgui:general/informationDialog");
+    color: #4A88C7;
+}
+
+.__notification__ .__severity__.severity-warning {
+    overlay: icon("crystalgui:general/warningDialog");
+    color: #C7A54A;
+}
+
+.__notification__ .__severity__.severity-error {
+    overlay: icon("crystalgui:general/errorDialog");
+    color: #C75450;
+}
+
+notificationsview .__notifications-empty__ {
+    font-size: 7px;
+    color: #6E7076;
+    padding-all: 8px;
+}
+
+/* ── Notification balloons ───────────────────────────────────────────────────────────────────────────
+ *
+ * The transient half. Anchored to the bottom-right corner of the workbench's content, above the status
+ * bar, which is where both references put them.
+ *
+ * SIZED TO ITS CONTENT, never to the corner it sits in: the layer is hit-testable (its balloons carry
+ * close buttons and action links, and setHitTest(false) would disable those too, since it applies to the
+ * whole subtree), so a layer stretched across the workbench would swallow every click in it. */
+.__balloons__ {
+    position: absolute;
+    /* INTO THE CORNER between the status bar and the right rail.
+     *
+     * The containing block is the workbench's CONTENT box, which spans the whole width — the right rail
+     * is a child of it, not something outside it — so anchoring to `right: 2px` puts the balloon
+     * underneath the rail. 22px is the rail's own 20px plus the 2px gap. The coupling is real and lives
+     * in this file twice; if `.__activity-bar__` ever changes width, this moves with it.
+     *
+     * `bottom: 2px` needs no such arithmetic: content's bottom edge already IS the status bar's top,
+     * because the workbench is a column with the bar below the content. */
+    right: 22px;
+    bottom: 2px;
+    flex-direction: column;
+    /* GROWS UP AND LEFT, NEVER DOWN OR RIGHT.
+     *
+     * Up is free: only `bottom` is anchored, so a taller stack extends away from the corner. Left is what
+     * `align-items: flex-end` buys — a balloon narrower than this layer sits against its trailing edge, so
+     * widening one moves its LEFT edge and leaves the corner where it is. Setting `top` or `left` here
+     * would pin the opposite edge and make a long message push out of the window instead. */
+    align-items: flex-end;
+    gap-all: 6px;
+    /* The cap a balloon may grow to, not the width it takes -- see the balloon rule. Sized against this
+     * sheet's own 7px text rather than a pixel count read off an IntelliJ screenshot, since the two are
+     * nowhere near the same scale.
+     *
+     * WIDE ENOUGH THAT SHORT MESSAGES DO NOT WRAP, and no wider. The text column is what is left after
+     * the icon and the close button, so the balloon's width and the length it can hold are not the same
+     * number — at 170 a three-word message broke across two lines, and at 240 the same message left half
+     * the card empty. Dropping the timestamp (below) is what made a sensible width possible at all.
+     *
+     * The binding case is the DETAIL line, not the title: titles here are one or two words ("Opened",
+     * "Save failed") while the detail is a filename, which is the longest thing a balloon routinely
+     * carries. 155 leaves that line about 110px, which covers an ordinary name and wraps a very long one
+     * — the right way round, since a wrapped balloon grows upward and costs nothing. */
+    width: 155px;
+}
+
+/* THE RESTING VALUE LIVES HERE, and that is what makes the fade work at all. A balloon arrives carrying
+ * `__hidden__`, and dropping that class on the next frame leaves the cascade easing from 0 to this 1.
+ *
+ * Writing the opaque value from Java instead would not animate: the write is itself transitionable, so
+ * the engine eases toward it and the cleanup retargets it back — an invariant this project already
+ * records, and one that fails silently with no test able to see it. */
+.__balloons__ > .__balloon__ {
+    /* SIZED TO ITS CONTENT, capped by the layer. `width: 100%` would make every balloon the full 170
+     * whatever it says, and a long one would then wrap rather than widen — which is the opposite of
+     * growing leftwards. `max-width` is what stops it growing past the layer and out of the corner. */
+    max-width: 100%;
+    min-width: 90px;
+    flex-shrink: 0;
+    opacity: 1;
+    background: #3C3F41;
+    outline-width: 1px;
+    outline-color: #4E5254;
+    /* MUST MATCH NotificationBalloons.FADE_MS, which is how long it waits before detaching the element.
+     * Detaching early cuts the fade off part-way through. */
+    transition: opacity 150ms;
+}
+
+/* A BALLOON WRAPS; A LIST ROW ELLIPSIZES. The shared rule truncates, which is right in the panel — rows
+ * there are scanned down a fixed-width column and a wrapped one breaks that rhythm. A balloon has no
+ * column and no neighbours to line up with, so truncating just loses the message: "opened gradle...."
+ * told you nothing about which file. Wrapping is also what makes it grow UPWARD, away from the corner,
+ * which is the only direction it is allowed to grow. */
+.__balloons__ .__message__ {
+    white-space: normal;
+    text-overflow: clip;
+}
+
+/* NO TIMESTAMP ON A BALLOON. It is the one thing copied from the list that does not belong here: a
+ * balloon IS now — you are watching it arrive — so the time says nothing, while in the history "when" is
+ * the entire reason the column exists. Both references agree; IntelliJ's balloons carry a title, a body
+ * and actions, and no clock.
+ *
+ * It also cost about a third of the text column, which is what forced the balloon wider and wider while
+ * short messages still wrapped. */
+.__balloons__ .__time__ {
+    display: none;
+}
+
+/* HOVER LIFTS THE WHOLE BALLOON. It needs its own rule rather than inheriting `.__notification__:hover`:
+ * that rule and the balloon's own background rule have equal specificity (two class-weight components
+ * each), so the later one in this file wins outright and the balloon would never highlight at all. */
+.__balloons__ > .__balloon__:hover {
+    background: #4A4E50;
+}
+
+/* And the dismiss button lights on its own, so it reads as a control rather than as part of the text. */
+.__notification__ .__close__:hover {
+    color: #FFFFFF;
+    background-color: #5A5F62;
+    border-radius: 2px;
+}
+
+.__balloons__ > .__balloon__.__hidden__ {
+    opacity: 0;
+}
+
+/* The dismiss cross. Only balloons draw one — the list dismisses with Clear all. */
+.__notification__ .__close__ {
+    /* A SHAPE, not the character U+2715. The bundled MinecraftRegular.otf has no such glyph and drew
+     * tofu -- the same trap the breadcrumb chevron was just moved off, and the reason UIText carries a
+     * whole ellipsis fallback path. */
+    overlay: shape("cross");
+    width: 12px;
+    height: 12px;
+    color: #787A80;
+    flex-shrink: 0;
+    margin-left: 4px;
 }

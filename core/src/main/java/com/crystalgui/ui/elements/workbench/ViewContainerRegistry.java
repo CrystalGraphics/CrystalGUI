@@ -76,7 +76,23 @@ public final class ViewContainerRegistry {
         return registered != null && !registered.isEmpty();
     }
 
-    /** What the stripe button should show — a count, a dot, anything short. Null clears it. */
+    /**
+     * The badge meaning "there is something here, and the count is not worth saying".
+     *
+     * <h3>A value rather than a second channel</h3>
+     *
+     * <p>A dot is not a different kind of thing from a count — this registry's own note says a badge
+     * answers <em>"is there something here"</em>, which makes the dot the purest form of one. A parallel
+     * {@code setDot}/{@code onDidChangeDot} pair would duplicate the map, the signal and both rails'
+     * subscriptions to express that.</p>
+     *
+     * <p>It is {@code "•"} rather than a private marker so that it degrades into something sensible: a
+     * stripe whose sheet has no dot rule draws a bullet over the icon, which is approximately right,
+     * instead of the literal word "dot".</p>
+     */
+    public static final String DOT = "•";
+
+    /** What the stripe button should show — a count, {@link #DOT}, anything short. Null clears it. */
     public void setBadge(String containerId, @Nullable String text) {
         if (containerId == null) return;
         String previous = badges.get(containerId);

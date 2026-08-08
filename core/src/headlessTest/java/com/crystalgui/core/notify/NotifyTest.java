@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -136,5 +137,118 @@ public class NotifyTest {
 
         StatusBar.set("caret", "Ln 51, Col 39", StatusBar.Align.LEFT);
         assertEquals("the same words at the other end is a change", 1, announced.size());
+    }
+
+    /**
+     * <b>Reading is not dismissing.</b>
+     *
+     * <p>Two verbs, deliberately: opening the panel clears the bell, and the messages stay until "Clear
+     * all". Folding them together is how a panel you opened once quietly throws away the message you
+     * opened it for — and it is invisible, because the badge going away looks like the feature working.</p>
+     */
+    @Test
+    public void markingReadKeepsTheHistoryAndClearingDoesNot() {
+        Notifications.info("one");
+        Notifications.warning("two");
+        assertEquals(2, Notifications.unread());
+        assertEquals(2, Notifications.history().size());
+
+        Notifications.markAllRead();
+        assertEquals("the badge is gone", 0, Notifications.unread());
+        assertEquals("but the messages are not", 2, Notifications.history().size());
+
+        Notifications.clear();
+        assertEquals(0, Notifications.history().size());
+    }
+
+    /**
+     * A cleared history announces on its own channel, because nothing arrived to announce it with.
+     *
+     * <p>A view watching only {@code onDidNotify} would go on showing a list the user has just
+     * dismissed — there is no notification to hand it, which is exactly why the second signal exists.</p>
+     */
+    @Test
+    public void clearingAnnouncesOnItsOwnChannel() {
+        List<String> seen = new ArrayList<>();
+        Notifications.onDidClear.connect(() -> seen.add("cleared"));
+
+        Notifications.info("something");
+        assertTrue("an arrival is not a clear", seen.isEmpty());
+
+        Notifications.clear();
+        assertEquals(1, seen.size());
+
+        Notifications.clear();
+        assertEquals("clearing an empty history says nothing", 1, seen.size());
+    }
+
+    /** A notification is stamped when it happens, not when something gets round to showing it. */
+    @Test
+    public void aNotificationCarriesWhenItHappened() {
+        long before = System.currentTimeMillis();
+        Notification made = Notification.error("boom").withDetail("the detail").inGroup("compiler");
+        long after = System.currentTimeMillis();
+
+        assertTrue("stamped at construction: " + made.getTimestamp(),
+                made.getTimestamp() >= before && made.getTimestamp() <= after);
+        assertEquals("the detail", made.getDetail());
+        assertEquals("compiler", made.getGroupId());
+        assertEquals("an unnamed group is the default",
+                Notification.DEFAULT_GROUP, Notification.info("x").getGroupId());
+    }
+
+    /**
+     * <b>An immediate repeat collapses into the message it repeats.</b>
+     *
+     * <p>The case worth catching is a producer reached from a path that fires more than once — a retry loop,
+     * a recompile — where the same sentence lands several times in a row and buries everything else in a
+     * hundred-deep history. It counts on the entry instead, and announces on its own channel so a view
+     * updates the card it is already showing rather than adding another.</p>
+     *
+     * <p>A repeat also leaves the unread count alone: the same message twice is not new information, and a
+     * bell that ticks up while nothing new has been said is worse than one that stays put.</p>
+     */
+    @Test
+    public void animmediateRepeatCollapses() {
+        List<Notification> repeated = new ArrayList<>();
+        Notifications.onDidRepeat.connect(repeated::add);
+
+        Notifications.error("Save failed");
+        Notifications.error("Save failed");
+        Notifications.error("Save failed");
+
+        assertEquals("three arrivals became one entry", 1, Notifications.history().size());
+        assertEquals(3, Notifications.history().get(0).getRepeats());
+        assertEquals("each repeat announced once", 2, repeated.size());
+        assertEquals("a repeat is not news", 1, Notifications.unread());
+    }
+
+    /**
+     * Only against the NEWEST entry — two failures either side of something else are two things that
+     * happened, and folding them would make "arrived just now" unanswerable.
+     */
+    @Test
+    public void aRepeatMustBeImmediateToCollapse() {
+        Notifications.error("Save failed");
+        Notifications.info("Something else");
+        Notifications.error("Save failed");
+
+        assertEquals("the older one was folded into the newer", 3, Notifications.history().size());
+        for (Notification each : Notifications.history()) {
+            assertEquals("nothing should have collapsed", 1, each.getRepeats());
+        }
+    }
+
+    /** Severity and detail are part of sameness; the timestamp and the actions deliberately are not. */
+    @Test
+    public void whatCountsAsTheSameMessage() {
+        Notification base = Notification.error("Save failed").withDetail("notes.txt");
+        assertTrue(base.saysTheSameAs(
+                Notification.error("Save failed").withDetail("notes.txt").withAction("Retry", () -> { })));
+        assertFalse("a different detail is a different message",
+                base.saysTheSameAs(Notification.error("Save failed").withDetail("other.txt")));
+        assertFalse("a different severity is a different message",
+                base.saysTheSameAs(Notification.warning("Save failed").withDetail("notes.txt")));
+        assertFalse(base.saysTheSameAs(null));
     }
 }
