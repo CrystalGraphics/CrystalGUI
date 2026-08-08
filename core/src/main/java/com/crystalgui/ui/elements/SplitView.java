@@ -2,6 +2,8 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
+
+import javax.annotation.Nullable;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -593,16 +595,58 @@ public class SplitView extends UIElement {
         return Math.min(pane.maxPx, cssLimitPx(pane, pairPx, vertical, false, Float.MAX_VALUE));
     }
 
+    /**
+     * The limit layout will actually enforce for this pane — <b>the pane's own, folded with its
+     * content's.</b>
+     *
+     * <h3>Reading only the pane was the whole of the remaining bug</h3>
+     *
+     * <p>A pane is not the element a caller styles. {@code addPaneInternal} makes its own
+     * {@code __split-pane__} wrapper and the caller's element goes <em>inside</em> it, so a rule like
+     * {@code workbench .__region-sidebar__ { min-width: 120px }} lands one level below what this was
+     * asking. The wrapper declares nothing, this answered "no limit", and the clamp was exactly as absent
+     * as before the CSS half was written — the code above read correct and reached the wrong element.</p>
+     *
+     * <p>What that looks like is nothing to do with a divider. Taffy still refuses to shrink the content
+     * past its minimum, so the pane <b>overhangs the split</b> and whatever is painted later covers the
+     * overhang: the sidebar ran on underneath the editor, and the file tree inside it sized its viewport to
+     * the full overhanging width. Its horizontal scroll range was therefore computed against a viewport
+     * ~50px wider than the visible strip, so scrolling to the very end still left names cut off, with no
+     * way to reach them. Reported as a scrollbar bug, two widgets away from the cause.</p>
+     *
+     * <p>One level down, not a subtree walk. The pane's content is a pane's content — a definite thing —
+     * whereas a deep descendant's minimum does not necessarily force its ancestor to grow at all, so
+     * folding one in would invent constraints that layout is not enforcing.</p>
+     */
     private static float cssLimitPx(Pane pane, float pairPx, boolean vertical,
                                     boolean minimum, float absent) {
         StyleProperty<TaffyDimension> property = minimum
                 ? (vertical ? LayoutProperties.MIN_HEIGHT : LayoutProperties.MIN_WIDTH)
                 : (vertical ? LayoutProperties.MAX_HEIGHT : LayoutProperties.MAX_WIDTH);
-        TaffyDimension dimension = pane.element.getStyle().getLayoutGroup().getValueSave(property);
-        if (dimension == null) return absent;
+        float folded = absent;
+        Float own = resolveLimit(pane.element, property, pairPx);
+        if (own != null) folded = own;
+        // FOLDED, not "the wrapper otherwise the content": a pane has to satisfy both at once, so the
+        // binding minimum is the larger and the binding maximum the smaller.
+        for (UIElement child : pane.element.getChildren()) {
+            Float value = resolveLimit(child, property, pairPx);
+            if (value == null) continue;
+            folded = minimum ? Math.max(folded, value) : Math.min(folded, value);
+        }
+        return folded;
+    }
+
+    /** One element's limit in pixels, or null when it declares none this class can resolve. */
+    @Nullable
+    private static Float resolveLimit(UIElement element, StyleProperty<TaffyDimension> property,
+                                      float pairPx) {
+        TaffyDimension dimension = element.getStyle().getLayoutGroup().getValueSave(property);
+        if (dimension == null) return null;
         if (dimension.isLength()) return dimension.getValue();
         if (dimension.isPercent()) return dimension.getValue() * pairPx;
-        return absent;
+        // Intrinsic keywords (min-content, fit-content) cannot be resolved without asking Taffy to
+        // measure, so they are treated as no limit -- a wrong number would be worse than none.
+        return null;
     }
 
     private float clampPercentage(int index, float value) {

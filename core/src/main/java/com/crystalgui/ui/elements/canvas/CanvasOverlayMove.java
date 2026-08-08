@@ -131,8 +131,19 @@ public final class CanvasOverlayMove {
         float containerHeight = container.getRuntimeCache().getHeight();
         float panelWidth = panel.getRuntimeCache().getWidth();
         float panelHeight = panel.getRuntimeCache().getHeight();
-        // Nothing to place against yet -- see MainPreviewPanel: a zero box writes 0,0 permanently.
+
+        // NEITHER BOX MAY BE ZERO, and this is the whole of the bug it fixes.
+        //
+        // Opening, closing or resizing a region relayouts the canvas, and for one frame a box measures
+        // zero -- so the clamp below computes max = 0 - width, floors it at 0, and writes left: 0; top: 0.
+        // The write is at INLINE origin and permanent, so the panel does not drift back: it goes to the
+        // canvas's top-left corner and stays there. Everything absolutely positioned in the graph flashes
+        // to the origin on that frame; the ones re-placed every frame recover, and one placed once did not.
+        //
+        // A zero box carries no information about where anything belongs, so the only correct response is
+        // to leave the position alone until there is something to clamp against.
         if (containerWidth <= 0f || containerHeight <= 0f) return;
+        if (panelWidth <= 0f || panelHeight <= 0f) return;
 
         float left = Math.max(0f, Math.min(Math.max(0f, containerWidth - panelWidth), wantedLeft));
         float top = Math.max(0f, Math.min(Math.max(0f, containerHeight - panelHeight), wantedTop));
