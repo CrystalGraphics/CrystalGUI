@@ -97,6 +97,33 @@ public final class Notification {
 
     private final List<Action> actions = new ArrayList<>();
 
+    /**
+     * Actions that are worth offering and not worth leading with — VS Code's {@code actions.secondary}.
+     *
+     * <p>Its split, and the reason for it is that a card has one line of room and more than one useful
+     * verb. "Retry" and "Open the log" are not equals: the first is what you almost always want and the
+     * second is what you want when the first has stopped working. Rendered in the same row but quieter, so
+     * the primary is the one the eye lands on.</p>
+     *
+     * <p>VS Code hides its secondaries behind a {@code ...} menu. Not copied: that costs a click to
+     * discover a verb that fits on the card, and these cards are wider than its toasts.</p>
+     */
+    private final List<Action> secondaryActions = new ArrayList<>();
+
+    /**
+     * The key under which the user can silence this message for good — IntelliJ's per-notification
+     * "Don't show again", VS Code's {@code neverShowAgain}.
+     *
+     * <p><b>An id rather than a flag</b>, because what is silenced is the <em>kind</em> of message and not
+     * this instance of it: the instance is gone the moment it fades, so a flag on it would suppress
+     * nothing. It is deliberately separate from {@link #groupId}, which is a whole producer — silencing
+     * "this particular warning" and silencing "everything the compiler says" are different requests, and a
+     * user offered only the second will take it and lose the first.</p>
+     */
+    @Getter
+    @Nullable
+    private String neverShowAgainId;
+
     private Notification(Severity severity, String message) {
         this.severity = severity;
         this.message = message == null ? "" : message;
@@ -158,8 +185,24 @@ public final class Notification {
         return this;
     }
 
+    /** A quieter action, offered beside the primary ones. @see #secondaryActions */
+    public Notification withSecondaryAction(String label, Runnable run) {
+        if (label != null && run != null) secondaryActions.add(new Action(label, run));
+        return this;
+    }
+
+    /** Lets the user silence this kind of message for good. @see #neverShowAgainId */
+    public Notification withNeverShowAgain(String id) {
+        this.neverShowAgainId = id == null || id.isEmpty() ? null : id;
+        return this;
+    }
+
     public List<Action> actions() {
         return Collections.unmodifiableList(actions);
+    }
+
+    public List<Action> secondaryActions() {
+        return Collections.unmodifiableList(secondaryActions);
     }
 
     @Override

@@ -5142,6 +5142,17 @@ notificationsview > .__notification-list__ {
     color: #6BA5DE;
 }
 
+/* A SECONDARY ACTION, and "Don't show again". Quieter rather than hidden: VS Code puts its secondaries
+ * behind a `...` menu, which costs a click to discover a verb that already fits on the card. Grey rather
+ * than blue, so the row reads as one primary verb with alternatives beside it rather than three equals. */
+.__notification__ .__action__.__action-secondary__ {
+    color: #8A8D94;
+}
+
+.__notification__ .__action__.__action-secondary__:hover {
+    color: #B4B7BE;
+}
+
 /* THE SEVERITY GLYPH COMES FROM THE CLASS, never from Java — the same split graph.css makes for port
  * types and filetypes.css for file icons. A dozen producers share three glyphs and each needs its own
  * colour, which is the thing keying colour to the drawable cannot express. */

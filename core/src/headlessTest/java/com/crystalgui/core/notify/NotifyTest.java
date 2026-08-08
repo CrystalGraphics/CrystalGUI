@@ -400,6 +400,54 @@ public class NotifyTest {
         assertEquals(1, closed[0]);
     }
 
+    /**
+     * <b>"Don't show again" silences a KIND of message, not an instance of it.</b>
+     *
+     * <p>An instance is gone the moment it fades, so a flag on it would suppress nothing. The id is also
+     * deliberately not the group: silencing "this particular warning" and silencing "everything the
+     * compiler says" are different requests, and a user offered only the second will take it and lose the
+     * first.</p>
+     */
+    @Test
+    public void silencingAKindOfMessageOutlivesTheMessage() {
+        Notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
+        assertEquals(1, Notifications.size());
+
+        Notifications.suppress("preview.off");
+        Notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
+        Notifications.show(Notification.warning("Preview unavailable for another node")
+                .withNeverShowAgain("preview.off"));
+        assertEquals("a silenced kind got through", 1, Notifications.size());
+
+        Notifications.info("something unrelated");
+        assertEquals("it silenced more than it was asked to", 2, Notifications.size());
+
+        assertEquals(List.of("preview.off"), Notifications.suppressed());
+
+        // CLEARING THE LIST IS NOT UN-SILENCING. "Clear all" empties a list; it is not a request to start
+        // being interrupted again by everything the user has already dismissed for good.
+        Notifications.clear();
+        Notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
+        assertTrue("clearing the history un-silenced it", Notifications.isEmpty());
+
+        Notifications.unsuppress("preview.off");
+        Notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
+        assertEquals(1, Notifications.size());
+    }
+
+    /** Secondary actions travel separately, so a card knows which verb to lead with. */
+    @Test
+    public void secondaryActionsAreKeptApartFromPrimaryOnes() {
+        Notification notification = Notification.error("Save failed")
+                .withAction("Retry", () -> { })
+                .withSecondaryAction("Open the log", () -> { });
+
+        assertEquals(1, notification.actions().size());
+        assertEquals("Retry", notification.actions().get(0).label());
+        assertEquals(1, notification.secondaryActions().size());
+        assertEquals("Open the log", notification.secondaryActions().get(0).label());
+    }
+
     /** Severity and detail are part of sameness; the timestamp and the actions deliberately are not. */
     @Test
     public void whatCountsAsTheSameMessage() {

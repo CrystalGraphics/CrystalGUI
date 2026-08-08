@@ -62,6 +62,8 @@ public class NotificationsView extends UIElement {
     public static final String DETAIL_CLASS = "__detail__";
     public static final String ACTIONS_CLASS = "__actions__";
     public static final String ACTION_CLASS = "__action__";
+    /** A quieter action, and the "Don't show again" link. @see com.crystalgui.core.notify.Notification */
+    public static final String ACTION_SECONDARY_CLASS = "__action-secondary__";
     /** The line holding the title and the timestamp, which sit at opposite ends. */
     public static final String ENTRY_HEAD_CLASS = "__entry-head__";
     /** Shown only while there is nothing to show. */

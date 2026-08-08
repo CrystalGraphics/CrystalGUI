@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.chrome;
 
 import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -81,22 +82,41 @@ class NotificationCard extends UIElement {
             addChild(detail);
         }
 
-        if (!notification.actions().isEmpty()) {
+        boolean silenceable = notification.getNeverShowAgainId() != null;
+        if (!notification.actions().isEmpty() || !notification.secondaryActions().isEmpty()
+                || silenceable) {
             UIElement actions = new UIElement();
             actions.addClass(NotificationsView.ACTIONS_CLASS);
             for (Notification.Action action : notification.actions()) {
-                UIText link = new UIText(action.label());
-                link.addClass(NotificationsView.ACTION_CLASS);
-                link.forceSelfSizeWidth();   // @see the timestamp above
-                link.setFocusPolicy(FocusPolicy.CLICK);
-                link.onMouseDown.attachListener((element, event) -> {
-                    event.stopPropagation();
-                    action.run().run();
-                }, false, true);
-                actions.addChild(link);
+                actions.addChild(link(action.label(), action.run(), false));
+            }
+            // QUIETER, not hidden. VS Code puts its secondaries behind a `...` menu, which costs a click
+            // to discover a verb that already fits on the card -- and these cards are wider than its
+            // toasts. @see Notification#secondaryActions
+            for (Notification.Action action : notification.secondaryActions()) {
+                actions.addChild(link(action.label(), action.run(), true));
+            }
+            if (silenceable) {
+                // LAST, and secondary. It is the one link that acts on every FUTURE message rather than on
+                // this one, so it must not sit where "Retry" is expected.
+                actions.addChild(link("Don't show again",
+                        () -> Notifications.suppress(notification.getNeverShowAgainId()), true));
             }
             addChild(actions);
         }
+    }
+
+    private static UIText link(String label, Runnable run, boolean secondary) {
+        UIText link = new UIText(label);
+        link.addClass(NotificationsView.ACTION_CLASS);
+        if (secondary) link.addClass(NotificationsView.ACTION_SECONDARY_CLASS);
+        link.forceSelfSizeWidth();   // @see the timestamp above
+        link.setFocusPolicy(FocusPolicy.CLICK);
+        link.onMouseDown.attachListener((element, event) -> {
+            event.stopPropagation();
+            run.run();
+        }, false, true);
+        return link;
     }
 
     /**

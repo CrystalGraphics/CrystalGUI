@@ -4,8 +4,10 @@ import com.crystalgui.core.signal.Signal;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Where anything says that something happened — VS Code's {@code INotificationService}, IntelliJ's
@@ -112,6 +114,34 @@ public final class Notifications {
     /** How many are kept. The oldest is dropped past this, announced as {@link NotificationEvent.Kind#REMOVED}. */
     public static final int HISTORY_LIMIT = 100;
 
+    /**
+     * Kinds of message the user has silenced — {@link Notification#getNeverShowAgainId()}.
+     *
+     * <p>Held here rather than in a settings file <em>for now</em>, and that is the honest limit of it:
+     * silencing survives the session and not the process. Persisting it needs a settings layer decision
+     * about where per-user UI state lives, which is a question this class should not answer alone.</p>
+     */
+    private static final Set<String> SUPPRESSED = new LinkedHashSet<>();
+
+    /** Silences this kind of message. @see Notification#withNeverShowAgain */
+    public static void suppress(String neverShowAgainId) {
+        if (neverShowAgainId != null && !neverShowAgainId.isEmpty()) SUPPRESSED.add(neverShowAgainId);
+    }
+
+    /** Un-silences it. */
+    public static void unsuppress(String neverShowAgainId) {
+        SUPPRESSED.remove(neverShowAgainId);
+    }
+
+    public static boolean isSuppressed(String neverShowAgainId) {
+        return SUPPRESSED.contains(neverShowAgainId);
+    }
+
+    /** Everything the user has silenced — what a settings panel lists so it can be undone. */
+    public static List<String> suppressed() {
+        return List.copyOf(SUPPRESSED);
+    }
+
     public static void info(String message) {
         show(Notification.info(message));
     }
@@ -143,6 +173,11 @@ public final class Notifications {
         // THE GROUP DECIDES WHETHER THIS IS SAID AT ALL. IntelliJ's NONE, and the only value that discards
         // information -- which is why it is never a default and only ever a user's choice.
         if (NotificationGroups.displayOf(notification.getGroupId()) == NotificationDisplay.NONE) {
+            return new NotificationHandle(notification);
+        }
+        // SILENCED BY THE USER, for this kind of message rather than this instance of it.
+        String silenced = notification.getNeverShowAgainId();
+        if (silenced != null && SUPPRESSED.contains(silenced)) {
             return new NotificationHandle(notification);
         }
         Notification newest = HISTORY.isEmpty() ? null : HISTORY.get(HISTORY.size() - 1);
@@ -221,6 +256,8 @@ public final class Notifications {
         HISTORY.clear();
         for (NotificationHandle handle : new ArrayList<>(HANDLES.values())) handle.notifyClosed();
         HANDLES.clear();
+        // SUPPRESSED IS NOT TOUCHED. "Clear all" empties a list; it is not a request to start being
+        // interrupted again by everything the user has already said they never want to see.
         unread = 0;
         onDidChange.emit(NotificationEvent.cleared());
         onDidChangeUnread.emit(0);
@@ -252,6 +289,7 @@ public final class Notifications {
         HISTORY.clear();
         for (NotificationHandle handle : new ArrayList<>(HANDLES.values())) handle.notifyClosed();
         HANDLES.clear();
+        SUPPRESSED.clear();
         unread = 0;
         onDidChange.disconnectAll();
         onDidChangeUnread.disconnectAll();
