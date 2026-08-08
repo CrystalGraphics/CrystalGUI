@@ -4156,6 +4156,14 @@ workbench .__workbench-content__ {
     flex-direction: row;
 }
 
+/* A region's two halves and the split between them. Both are pane children, so both fill by height --
+ * the fill idiom, and flex-shrink is deliberately untouched. See RegionHost. */
+.__region-split__, .__region-half__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
 /* ── Drag ghost ────────────────────────────────────────────────────────────────────────────────
  * The floating stand-in that follows the cursor during any drag -- files, tool windows, anything.
  * ONE rule set, unscoped, because DragGhost is one widget: it used to be a near-identical block per

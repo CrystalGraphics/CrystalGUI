@@ -165,6 +165,20 @@ public class StripeView extends UIElement {
     @Nullable
     private String dragging;
 
+    /**
+     * Set while a press turned into a drag, so the release does not also toggle the panel.
+     *
+     * <p>A stripe button is both a control and a handle, and the release ends both gestures — so without
+     * this, dragging a tool window to another rail also <em>opened</em> it, which is not what either
+     * reference does and not what the gesture meant.</p>
+     *
+     * <p>A latch rather than a test of {@link #dragging}, deliberately: whether the click arrives before or
+     * after the controller clears the drag is an ordering detail of the input handler, and a guard that
+     * depends on it is a guard that breaks when that ordering is tuned. Armed when the drag activates,
+     * disarmed by the release it suppresses, and reset by the next press.</p>
+     */
+    private boolean suppressActivation;
+
     // ── Subscriptions and deferred work ─────────────────────────────────────────────────────────
 
     @Nullable
@@ -391,7 +405,13 @@ public class StripeView extends UIElement {
                 .setSide(rail == StripeRail.RIGHT ? AnchoredPlacement.Side.LEFT
                                                   : AnchoredPlacement.Side.RIGHT)
                 .setGap(TOOLTIP_GAP);
-        button.attachListener(() -> commands.run(commandId));
+        button.attachListener(() -> {
+            if (suppressActivation) {
+                suppressActivation = false;
+                return;
+            }
+            commands.run(commandId);
+        });
         installButtonDrag(button, descriptor.icon());
         addInternalChild(button);
         return button;
@@ -529,6 +549,7 @@ public class StripeView extends UIElement {
                 slotButtons(toolWindows.regionOf(button.typeId), toolWindows.sideOf(button.typeId));
         int wasAt = group.indexOf(button);
         dragging = button.typeId;
+        suppressActivation = true;
         StyleGroup.importantPipeline(button.getStyle().getLayoutGroup(),
                 l -> l.display(TaffyDisplay.NONE));
 
@@ -615,6 +636,9 @@ public class StripeView extends UIElement {
             // the keyboard would start a drag anchored wherever the mouse happened to be resting, and one
             // that can never end, because capture is released by a real button-up that is not coming.
             if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+            // A FRESH PRESS RE-ARMS the button. The latch is disarmed by the release it suppresses, but a
+            // drag that ended anywhere other than on this button never reaches that release.
+            suppressActivation = false;
             UIWindow window = getAttachedWindow();
             if (window == null) return;
 

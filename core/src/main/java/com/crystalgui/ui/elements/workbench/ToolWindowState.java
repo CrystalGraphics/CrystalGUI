@@ -49,29 +49,34 @@ public final class ToolWindowState {
 
     /** What a tool window nobody has ever opened is worth: enough to place it, nothing remembered. */
     public static ToolWindowState initial(String typeId, DockRegion region, int order) {
-        return new ToolWindowState(typeId, false, region, RegionSide.PRIMARY, DEFAULT_WEIGHT, order,
-                true, true);
+        return new ToolWindowState(typeId, false, region, RegionSide.PRIMARY, DEFAULT_WEIGHT,
+                DEFAULT_SIDE_WEIGHT, order, true, true);
     }
 
     /** The share of its axis a tool window takes when nothing has ever sized it. */
     public static final float DEFAULT_WEIGHT = 0.20f;
+
+    /** Half and half, until a divider between two halves is dragged. IntelliJ's own default. */
+    public static final float DEFAULT_SIDE_WEIGHT = 0.5f;
 
     private final String typeId;
     private final boolean visible;
     private final DockRegion region;
     private final RegionSide side;
     private final float weight;
+    private final float sideWeight;
     private final int order;
     private final boolean active;
     private final boolean showStripeButton;
 
     private ToolWindowState(String typeId, boolean visible, DockRegion region, RegionSide side, float weight,
-                            int order, boolean active, boolean showStripeButton) {
+                            float sideWeight, int order, boolean active, boolean showStripeButton) {
         this.typeId = Objects.requireNonNull(typeId, "typeId");
         this.visible = visible;
         this.region = Objects.requireNonNull(region, "region");
         this.side = Objects.requireNonNull(side, "side");
         this.weight = weight;
+        this.sideWeight = sideWeight;
         this.order = order;
         this.active = active;
         this.showStripeButton = showStripeButton;
@@ -111,6 +116,17 @@ public final class ToolWindowState {
         return weight;
     }
 
+    /**
+     * How the region's two halves divide it — IntelliJ's {@code sideWeight}.
+     *
+     * <p>Distinct from {@link #weight()}, and the pair is easy to conflate: {@code weight} is the region's
+     * share of the <em>whole window</em> along its own axis, while this is the divider <em>inside</em> the
+     * region, along its cross axis. Opening a second tool window in a region moves this and not that.</p>
+     */
+    public float sideWeight() {
+        return sideWeight;
+    }
+
     /** Its position on the stripe. */
     public int order() {
         return order;
@@ -127,31 +143,36 @@ public final class ToolWindowState {
     }
 
     public ToolWindowState withVisible(boolean nowVisible) {
-        return new ToolWindowState(typeId, nowVisible, region, side, weight, order, active, showStripeButton);
+        return new ToolWindowState(typeId, nowVisible, region, side, weight, sideWeight, order, active, showStripeButton);
     }
 
     public ToolWindowState withRegion(DockRegion nowRegion) {
-        return new ToolWindowState(typeId, visible, nowRegion, side, weight, order, active, showStripeButton);
+        return new ToolWindowState(typeId, visible, nowRegion, side, weight, sideWeight, order, active, showStripeButton);
     }
 
     public ToolWindowState withSide(RegionSide nowSide) {
-        return new ToolWindowState(typeId, visible, region, nowSide, weight, order, active, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, nowSide, weight, sideWeight, order, active, showStripeButton);
+    }
+
+    public ToolWindowState withSideWeight(float nowSideWeight) {
+        return new ToolWindowState(typeId, visible, region, side, weight, nowSideWeight, order, active,
+                showStripeButton);
     }
 
     public ToolWindowState withWeight(float nowWeight) {
-        return new ToolWindowState(typeId, visible, region, side, nowWeight, order, active, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, side, nowWeight, sideWeight, order, active, showStripeButton);
     }
 
     public ToolWindowState withOrder(int nowOrder) {
-        return new ToolWindowState(typeId, visible, region, side, weight, nowOrder, active, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, nowOrder, active, showStripeButton);
     }
 
     public ToolWindowState withActive(boolean nowActive) {
-        return new ToolWindowState(typeId, visible, region, side, weight, order, nowActive, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, order, nowActive, showStripeButton);
     }
 
     public ToolWindowState withShowStripeButton(boolean shown) {
-        return new ToolWindowState(typeId, visible, region, side, weight, order, active, shown);
+        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, order, active, shown);
     }
 
     @Override
@@ -159,6 +180,7 @@ public final class ToolWindowState {
         if (this == o) return true;
         if (!(o instanceof ToolWindowState other)) return false;
         return visible == other.visible && Float.compare(weight, other.weight) == 0
+                && Float.compare(sideWeight, other.sideWeight) == 0
                 && order == other.order
                 && active == other.active && showStripeButton == other.showStripeButton
                 && typeId.equals(other.typeId) && region == other.region && side == other.side;
@@ -166,7 +188,8 @@ public final class ToolWindowState {
 
     @Override
     public int hashCode() {
-        return Objects.hash(typeId, visible, region, side, weight, order, active, showStripeButton);
+        return Objects.hash(typeId, visible, region, side, weight, sideWeight, order, active,
+                showStripeButton);
     }
 
     @Override

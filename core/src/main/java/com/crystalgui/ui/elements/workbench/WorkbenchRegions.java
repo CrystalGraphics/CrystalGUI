@@ -145,6 +145,18 @@ public final class WorkbenchRegions {
         return weight == null ? 0.25f : weight;
     }
 
+    /** How a region's two halves divide it — see {@link RegionHost#sideWeight()}. */
+    public float sideWeightOf(DockRegion region) {
+        RegionHost host = hosts.get(region);
+        return host == null ? RegionHost.DEFAULT_SIDE_WEIGHT : host.sideWeight();
+    }
+
+    /** @see #sideWeightOf */
+    public void setSideWeight(DockRegion region, float weight) {
+        RegionHost host = hosts.get(region);
+        if (host != null) host.setSideWeight(weight);
+    }
+
     /** @see #weightOf */
     public void setWeight(DockRegion region, float weight) {
         if (region == DockRegion.EDITOR || weight <= 0f) return;
@@ -173,7 +185,7 @@ public final class WorkbenchRegions {
             rowParts.add(hosts.get(DockRegion.AUXILIARY));
             rowWeights.add(weightOf(DockRegion.AUXILIARY));
         }
-        UIElement rowContent = single(centre, rowParts, rowWeights);
+        UIElement rowContent = SplitFill.mount(centre, rowParts, rowWeights);
 
         // THE COLUMN: that whole row, over the bottom panel.
         List<UIElement> columnParts = new ArrayList<>();
@@ -184,7 +196,7 @@ public final class WorkbenchRegions {
             columnParts.add(hosts.get(DockRegion.PANEL));
             columnWeights.add(weightOf(DockRegion.PANEL));
         }
-        rootBox.setOnlyChild(single(frame, columnParts, columnWeights));
+        rootBox.setOnlyChild(SplitFill.mount(frame, columnParts, columnWeights));
     }
 
     /**
@@ -216,66 +228,4 @@ public final class WorkbenchRegions {
     }
 
     private boolean capturing;
-
-    /**
-     * The element that shows {@code parts} — the split when there are several, the part itself when one.
-     *
-     * @return what the caller should mount
-     */
-    private static UIElement single(SplitView split, List<UIElement> parts, List<Float> weights) {
-        if (parts.size() == 1) {
-            // Taken OUT of the split, so the split holds nothing that could keep measuring.
-            parts.get(0).removeSelf();
-            return parts.get(0);
-        }
-        fill(split, parts, weights);
-        return split;
-    }
-
-    /**
-     * Brings a split's panes into line with {@code parts}, adding and removing as needed.
-     *
-     * <h3>A {@link SplitView} never drops below two panes, and this must not loop on that</h3>
-     *
-     * <p>{@code removePane} refuses when two are left — <em>"a split view with one pane is a container with
-     * a divider in it, and every caller would have to check for that shape"</em> — and returns
-     * {@code false} rather than throwing. Looping while {@code paneCount() > parts.size()} therefore
-     * <b>never terminates</b> in the ordinary case where only the centre is visible, which is the state the
-     * workbench starts in. It killed the test worker outright.</p>
-     *
-     * <p>So the floor is respected, and a surplus pane is emptied at near-zero weight instead. Which is
-     * also why {@link RegionHost} is not marked internal: {@code paneContent} clears through
-     * {@code clearAllChildren}, and that deliberately skips internal children — a host marked internal
-     * would never leave the pane it was first put in, and content would accumulate behind it.</p>
-     */
-    private static void fill(SplitView split, List<UIElement> parts, List<Float> weights) {
-        while (split.paneCount() > parts.size()) {
-            if (!split.removePane(split.paneCount() - 1)) break;
-        }
-        while (split.paneCount() < parts.size()) split.addPane();
-
-        for (int i = 0; i < parts.size(); i++) {
-            split.paneContent(i, parts.get(i));
-        }
-
-        // NORMALISED, and this is a flexbox rule rather than anything about panes.
-        //
-        // applySplit writes the weight straight into flex-grow, and when the total flex-grow across items
-        // is LESS THAN ONE, only that fraction of the free space is distributed -- the rest is simply left
-        // empty. A region's share is authored as a fraction of the whole (0.20 sidebar, 0.22 auxiliary),
-        // so with everything open they happen to sum to 1 and it looks correct; hide one and they sum to
-        // 0.78, leaving 22% of the row blank. That was the band down the right-hand side.
-        //
-        // Scaling to sum to 1 keeps every visible region's share of what is left exactly as authored.
-        float[] resolved = new float[Math.min(split.paneCount(), weights.size())];
-        float total = 0f;
-        for (int i = 0; i < resolved.length; i++) {
-            resolved[i] = Math.max(0.02f, weights.get(i));
-            total += resolved[i];
-        }
-        if (total > 0f) {
-            for (int i = 0; i < resolved.length; i++) resolved[i] /= total;
-        }
-        if (resolved.length > 0) split.setWeights(resolved);
-    }
 }
