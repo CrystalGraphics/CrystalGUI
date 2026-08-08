@@ -1,5 +1,8 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.command.Command;
+import com.crystalgui.core.command.CommandContext;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
@@ -256,6 +259,37 @@ public class StatusBarViewTest extends UiTestBase {
         settle();
         assertFalse("it stayed clickable with nowhere to go",
                 itemsIn(StatusBarView.LEFT_CLASS).get(0).hasClass(StatusBarView.CLICKABLE_CLASS));
+    }
+
+    /**
+     * <b>A clickable entry has to run its command FROM the element pressed.</b>
+     *
+     * <p>{@code CommandRegistry.run(id)} builds an <em>empty</em> data context, so any command guarded by
+     * {@code enabledWhereData} — which every command acting on a window or a workbench is — evaluates its
+     * guard against nothing, fails it, and returns false. The entry drew a pointer cursor and did nothing
+     * when clicked: the exact "the command exists but nothing happens" failure {@code CommandRegistry.run}
+     * warns about in its own body.</p>
+     *
+     * <p>The element is what makes it work, because a data context resolves by walking up the tree and then
+     * asking the window — which is where a workbench registers itself as a provider.</p>
+     */
+    @Test
+    public void aCommandNeedsTheElementItWasRunFrom() {
+        boolean[] ran = { false };
+        CommandRegistry.global().register(Command.of("test.needsWindow", "Needs A Window")
+                .runWithData(data -> ran[0] = true)
+                .enabledWhereData(data -> data.get(UiDataKeys.WINDOW) != null));
+        try {
+            assertFalse("a contextless run must not silently appear to work",
+                    CommandRegistry.global().run("test.needsWindow"));
+            assertFalse(ran[0]);
+
+            assertTrue("running from the pressed element should resolve the window",
+                    CommandRegistry.global().run("test.needsWindow", CommandContext.of(bar)));
+            assertTrue(ran[0]);
+        } finally {
+            CommandRegistry.global().unregister("test.needsWindow");
+        }
     }
 
     /**
