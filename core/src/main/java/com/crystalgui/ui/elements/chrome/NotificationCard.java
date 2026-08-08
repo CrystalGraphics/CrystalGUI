@@ -12,6 +12,9 @@ import java.util.Locale;
 /**
  * How a notification looks, in one place — the card the history and the balloons both draw.
  *
+ * <p>The renderer half of VS Code's {@code NotificationsList}, whose {@code NotificationRenderer} is
+ * likewise shared by its toasts and its notification centre.</p>
+ *
  * <h3>Extracted because the second consumer arrived</h3>
  *
  * <p>The two surfaces show the <b>same</b> thing: both references draw a message once transiently and
@@ -22,15 +25,24 @@ import java.util.Locale;
  *
  * <p>The only difference is the close button, which a balloon has and a list entry does not: in a list,
  * "Clear all" is the dismissal and a per-row close would be a second way to say it.</p>
+ *
+ * <h3>An element that owns its parts, not a builder that returns a tree</h3>
+ *
+ * <p>This was a static {@code build()} handing back an opaque {@link UIElement}, which meant a consumer
+ * wanting to update a card had to <b>find its way back in through the selector engine</b> — a
+ * {@code querySelector(".__message__")} per repeat, matching on a CSS class as though from outside. Both
+ * consumers did it, and both then had to cope with it returning null. Holding the label in a field makes
+ * a repeat a {@code setText} and makes the class name a styling detail again rather than a lookup key.</p>
  */
-final class NotificationCard {
+class NotificationCard extends UIElement {
 
-    private NotificationCard() {
-    }
+    private final Notification notification;
+    private final UIText message;
+    private final UIElement head;
 
-    static UIElement build(Notification notification, @Nullable Runnable onClose) {
-        UIElement entry = new UIElement();
-        entry.addClass(NotificationsView.ENTRY_CLASS);
+    NotificationCard(Notification notification) {
+        this.notification = notification;
+        addClass(NotificationsView.ENTRY_CLASS);
 
         UIElement icon = new UIElement();
         icon.addClass(NotificationsView.ICON_CLASS);
@@ -41,7 +53,7 @@ final class NotificationCard {
                 + notification.getSeverity().name().toLowerCase(Locale.ROOT));
         icon.setHitTest(false);
 
-        UIText message = new UIText(titleOf(notification));
+        message = new UIText(titleOf(notification));
         message.addClass(NotificationsView.MESSAGE_CLASS);
         message.setHitTest(false);
 
@@ -60,26 +72,14 @@ final class NotificationCard {
         head.addChild(icon);
         head.addChild(message);
         head.addChild(time);
-        if (onClose != null) {
-            // AN ELEMENT WITH A SHAPE, not a UIText carrying "✕". The bundled font has no U+2715 and drew
-            // tofu -- the same reason the breadcrumb separator is a shape and UIText carries an ellipsis
-            // fallback. A glyph in Java is also a look the cascade cannot reach.
-            UIElement close = new UIElement();
-            close.addClass(NotificationsView.CLOSE_CLASS);
-            close.setFocusPolicy(FocusPolicy.CLICK);
-            close.onMouseDown.attachListener((element, event) -> {
-                event.stopPropagation();
-                onClose.run();
-            }, false, true);
-            head.addChild(close);
-        }
-        entry.addChild(head);
+        addChild(head);
+        this.head = head;
 
         if (!notification.getDetail().isEmpty()) {
             UIText detail = new UIText(notification.getDetail());
             detail.addClass(NotificationsView.DETAIL_CLASS);
             detail.setHitTest(false);
-            entry.addChild(detail);
+            addChild(detail);
         }
 
         if (!notification.actions().isEmpty()) {
@@ -96,9 +96,39 @@ final class NotificationCard {
                 }, false, true);
                 actions.addChild(link);
             }
-            entry.addChild(actions);
+            addChild(actions);
         }
-        return entry;
+    }
+
+    /**
+     * Adds the dismiss button. Balloons only — see the class note.
+     *
+     * <p>Separate from the constructor because the handler usually needs the card itself, and a callback
+     * passed in at construction cannot refer to something that does not exist yet. The balloon layer used
+     * to work around that with a one-element array.</p>
+     */
+    NotificationCard withClose(Runnable onClose) {
+        // AN ELEMENT WITH A SHAPE, not a UIText carrying "✕". The bundled font has no U+2715 and drew
+        // tofu -- the same reason the breadcrumb separator is a shape and UIText carries an ellipsis
+        // fallback. A glyph in Java is also a look the cascade cannot reach.
+        UIElement close = new UIElement();
+        close.addClass(NotificationsView.CLOSE_CLASS);
+        close.setFocusPolicy(FocusPolicy.CLICK);
+        close.onMouseDown.attachListener((element, event) -> {
+            event.stopPropagation();
+            onClose.run();
+        }, false, true);
+        head.addChild(close);
+        return this;
+    }
+
+    Notification notification() {
+        return notification;
+    }
+
+    /** Re-reads the notification this card is about — today, its repeat count. @see #titleOf */
+    void restate() {
+        message.setText(titleOf(notification));
     }
 
     /**
@@ -111,13 +141,6 @@ final class NotificationCard {
     static String titleOf(Notification notification) {
         int repeats = notification.getRepeats();
         return repeats > 1 ? notification.getMessage() + "  ×" + repeats : notification.getMessage();
-    }
-
-    /** The title label of a card built here, so a repeat can re-text it in place. */
-    @Nullable
-    static UIText titleLabelOf(UIElement card) {
-        UIElement found = card.querySelector("." + NotificationsView.MESSAGE_CLASS);
-        return found instanceof UIText ? (UIText) found : null;
     }
 
     /**

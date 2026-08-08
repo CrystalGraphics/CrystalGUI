@@ -1,5 +1,6 @@
 package com.crystalgui.core.notify;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -8,63 +9,134 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
  * <b>The two channels that replaced {@code onStatus}.</b>
  *
- * <p>Headless on purpose: neither of these has a widget, a window or a GL context in it, and a dedicated
- * server that creates a folder should be able to say so. That they load here is the assertion.</p>
+ * <p>Headless, because neither of them needs a window: a dedicated server that never renders anything can
+ * still say that something happened, and that is the point of both living in {@code core}.</p>
  */
 public class NotifyTest {
 
     @Before
-    public void reset() {
-        Notifications.resetForTesting();
+    public void setUp() {
         StatusBar.resetForTesting();
+        Notifications.resetForTesting();
     }
+
+    @After
+    public void tearDown() {
+        StatusBar.resetForTesting();
+        Notifications.resetForTesting();
+    }
+
+    private static StatusBarEntryAccessor add(String name, String text) {
+        return StatusBar.addEntry(StatusBarEntry.of(name, text), name, StatusBarAlignment.LEFT);
+    }
+
+    // ── Status bar ──────────────────────────────────────────────────────────────────────────────
 
     /**
      * <b>Two writers do not clobber each other.</b>
      *
-     * <p>The whole reason status items are keyed. {@code onStatus} was one slot, so the shader graph's
-     * line-owner readout — which fires on every caret move — erased the explorer's "created folder" a few
-     * milliseconds after it appeared, and neither writer could tell it had happened.</p>
+     * <p>{@code onStatus} was one slot, so the shader graph's line-owner readout — which fires on every
+     * caret move — erased the explorer's "created folder" a few milliseconds after it appeared, and
+     * neither writer could tell it had happened.</p>
+     *
+     * <p><b>Not even when they choose the same id.</b> Keying by string only narrowed the collision from
+     * "one slot for everyone" to "one slot per string"; the handle is what removes it, because two
+     * registrations are two entries whatever they are called.</p>
      */
     @Test
-    public void twoWritersKeepSeparateSlots() {
-        StatusBar.set("explorer", "created notes.txt");
-        StatusBar.set("shadergraph.lineOwner", "line 12 emitted by multiply");
+    public void twoWritersKeepSeparateEntries() {
+        add("explorer", "created notes.txt");
+        StatusBarEntryAccessor owner = add("shadergraph.lineOwner", "line 12 emitted by multiply");
 
         assertTrue(StatusBar.text().contains("created notes.txt"));
         assertTrue(StatusBar.text().contains("line 12 emitted by multiply"));
 
-        StatusBar.set("shadergraph.lineOwner", "line 13 emitted by combine");
-        assertTrue("its own slot updates in place", StatusBar.text().contains("line 13"));
+        owner.update(owner.entry().withText("line 13 emitted by combine"));
+        assertTrue("its own entry updates in place", StatusBar.text().contains("line 13"));
         assertTrue("and the other writer is untouched", StatusBar.text().contains("created notes.txt"));
 
-        StatusBar.clear("shadergraph.lineOwner");
+        owner.dispose();
         assertEquals("created notes.txt", StatusBar.text());
+
+        StatusBar.addEntry(StatusBarEntry.of("Build", "compiling"), "same", StatusBarAlignment.LEFT);
+        StatusBar.addEntry(StatusBarEntry.of("Index", "indexing"), "same", StatusBarAlignment.LEFT);
+        assertEquals("an id is not an identity", 3, StatusBar.size());
     }
 
     /**
-     * <b>Re-stating the same text is silent.</b>
+     * <b>Re-stating the same entry is silent.</b>
      *
      * <p>Not an optimisation: the compile summary is written from a recompile, and a graph with an
      * animated node recompiles every frame. An announcement per frame is a poll wearing a callback, and
      * anything bound to it would rebuild forever.</p>
+     *
+     * <p>The guard is the record's own {@code equals}, which is what makes it total. It used to be a
+     * hand-written comparison of every field, so a field added to the entry was silently left out of
+     * "changed" — and an entry whose <em>only</em> difference was that field announced nothing at all.</p>
      */
     @Test
-    public void restatingAnUnchangedItemAnnouncesNothing() {
-        List<String> announced = new ArrayList<>();
-        StatusBar.onDidChange.connect(announced::add);
+    public void restatingAnUnchangedEntryAnnouncesNothing() {
+        StatusBarEntryAccessor compile = add("compile", "compiled 9n/8e");
 
-        StatusBar.set("compile", "compiled 9n/8e");
-        assertEquals(1, announced.size());
+        int[] announced = { 0 };
+        StatusBar.onDidChange.connect(() -> announced[0]++);
 
-        for (int i = 0; i < 10; i++) StatusBar.set("compile", "compiled 9n/8e");
-        assertEquals("an unchanged item announced " + announced.size() + " times", 1, announced.size());
+        for (int i = 0; i < 10; i++) compile.update(StatusBarEntry.of("compile", "compiled 9n/8e"));
+        assertEquals("an unchanged entry announced " + announced[0] + " times", 0, announced[0]);
+
+        compile.update(compile.entry().withText("compiled 10n/9e"));
+        assertEquals("a real change must still announce", 1, announced[0]);
+
+        compile.update(compile.entry().withTooltip("996 chars"));
+        assertEquals("a tooltip-only change is a change", 2, announced[0]);
     }
+
+    /**
+     * <b>Alignment and priority are the writer's, and they decide the order.</b>
+     *
+     * <p>Only the writer knows which end an entry belongs to — "Ln 51, Col 39" is glanced at in a fixed
+     * place, "created notes.txt" is read as prose. Order used to be "whoever registered first", so the
+     * right-hand group's layout was an implementation detail of {@code TextFileDocument.setActive}.
+     * Higher priority is further left, which is VS Code's rule in both groups.</p>
+     */
+    @Test
+    public void entriesReportTheirWritersAlignmentAndOrder() {
+        StatusBar.addEntry(StatusBarEntry.of("explorer", "created notes.txt"), "explorer",
+                StatusBarAlignment.LEFT);
+        StatusBar.addEntry(StatusBarEntry.of("Encoding", "UTF-8"), "encoding",
+                StatusBarAlignment.RIGHT, 98);
+        StatusBar.addEntry(StatusBarEntry.of("Cursor position", "51:39"), "caret",
+                StatusBarAlignment.RIGHT, 100);
+
+        assertEquals(1, StatusBar.entries(StatusBarAlignment.LEFT).size());
+        List<StatusBarEntryAccessor> right = StatusBar.entries(StatusBarAlignment.RIGHT);
+        assertEquals("51:39", right.get(0).entry().text());
+        assertEquals("the lower priority follows it", "UTF-8", right.get(1).entry().text());
+
+        assertTrue("text() composes every entry, whatever end it sits at",
+                StatusBar.text().contains("created notes.txt") && StatusBar.text().contains("51:39"));
+    }
+
+    /** An entry says what it is as well as what it shows — the split a hide menu needs. */
+    @Test
+    public void anEntryCarriesWhatItIsAsWellAsWhatItShows() {
+        StatusBarEntry entry = new StatusBarEntry("Cursor position", "51:39", null, "editor.gotoLine",
+                StatusBarEntry.Kind.STANDARD);
+
+        assertEquals("Cursor position", entry.name());
+        assertEquals("with no tooltip, hovering says what it is", "Cursor position", entry.hoverText());
+        assertEquals("Line and column", entry.withTooltip("Line and column").hoverText());
+        assertEquals("editor.gotoLine", entry.command());
+    }
+
+    // ── Notifications ───────────────────────────────────────────────────────────────────────────
 
     /**
      * <b>Severity survives, which a String could not carry.</b>
@@ -75,7 +147,9 @@ public class NotifyTest {
     @Test
     public void severityReachesTheListener() {
         List<Notification> seen = new ArrayList<>();
-        Notifications.onDidNotify.connect(seen::add);
+        Notifications.onDidChange.connect(event -> {
+            if (event.kind() == NotificationEvent.Kind.ADDED) seen.add(event.notification());
+        });
 
         Notifications.info("saved notes.txt");
         Notifications.error("save failed: notes.txt");
@@ -98,45 +172,32 @@ public class NotifyTest {
         assertTrue(retried[0]);
     }
 
-    /** The history is a convenience, not a log — it must not grow without bound. */
-    @Test
-    public void theHistoryIsBounded() {
-        for (int i = 0; i < 500; i++) Notifications.info("message " + i);
-
-        List<Notification> history = Notifications.history();
-        assertTrue("unbounded at " + history.size(), history.size() <= 100);
-        assertEquals("and it keeps the NEWEST", "message 499",
-                history.get(history.size() - 1).getMessage());
-    }
-
     /**
-     * <b>Alignment is the writer's, and it is part of what "changed" means.</b>
+     * <b>The history is bounded, and an eviction is announced.</b>
      *
-     * <p>Only the writer knows which end an item belongs to — "Ln 51, Col 39" is glanced at in a fixed
-     * place, "created notes.txt" is read as prose — so a view guessing from the id or the text would be
-     * inventing an answer that already exists. And moving an item between ends has to announce: comparing
-     * the text alone drops the move exactly when the words stay the same, which is when a bar that never
-     * redrew is hardest to spot.</p>
+     * <p>The bound is what stops a convenience becoming a log. The <em>announcement</em> is what stops the
+     * panel showing what the model has thrown away: with only "something arrived" and "everything went" to
+     * emit, {@code NotificationsView} could only ever append, so past the limit its column outgrew the
+     * history without bound and nothing could have told it. @see NotificationEvent</p>
      */
     @Test
-    public void anItemCarriesItsAlignmentAndMovingItAnnounces() {
-        StatusBar.set("explorer", "created notes.txt");
-        StatusBar.set("caret", "Ln 51, Col 39", StatusBar.Align.RIGHT);
+    public void theHistoryIsBoundedAndSaysWhatItDropped() {
+        List<Notification> evicted = new ArrayList<>();
+        Notifications.onDidChange.connect(event -> {
+            if (event.kind() == NotificationEvent.Kind.REMOVED) evicted.add(event.notification());
+        });
 
-        assertEquals(StatusBar.Align.LEFT, StatusBar.items().get(0).align());
-        assertEquals("the two-argument form chooses LEFT",
-                StatusBar.Align.RIGHT, StatusBar.items().get(1).align());
-        assertTrue("text() still composes every item, whatever end it sits at",
-                StatusBar.text().contains("created notes.txt") && StatusBar.text().contains("Ln 51"));
+        for (int i = 0; i < Notifications.HISTORY_LIMIT + 5; i++) Notifications.info("message " + i);
 
-        List<String> announced = new ArrayList<>();
-        StatusBar.onDidChange.connect(announced::add);
+        List<Notification> history = Notifications.history();
+        assertEquals("unbounded at " + history.size(), Notifications.HISTORY_LIMIT, history.size());
+        assertEquals("and it keeps the NEWEST", "message " + (Notifications.HISTORY_LIMIT + 4),
+                history.get(history.size() - 1).getMessage());
 
-        StatusBar.set("caret", "Ln 51, Col 39", StatusBar.Align.RIGHT);
-        assertTrue("an identical rewrite is silent", announced.isEmpty());
-
-        StatusBar.set("caret", "Ln 51, Col 39", StatusBar.Align.LEFT);
-        assertEquals("the same words at the other end is a change", 1, announced.size());
+        assertEquals("one eviction per overflow", 5, evicted.size());
+        assertEquals("the OLDEST went first", "message 0", evicted.get(0).getMessage());
+        assertEquals("a view can only splice what it is handed",
+                Notifications.HISTORY_LIMIT, Notifications.size());
     }
 
     /**
@@ -151,35 +212,36 @@ public class NotifyTest {
         Notifications.info("one");
         Notifications.warning("two");
         assertEquals(2, Notifications.unread());
-        assertEquals(2, Notifications.history().size());
+        assertEquals(2, Notifications.size());
 
         Notifications.markAllRead();
         assertEquals("the badge is gone", 0, Notifications.unread());
-        assertEquals("but the messages are not", 2, Notifications.history().size());
+        assertEquals("but the messages are not", 2, Notifications.size());
 
         Notifications.clear();
-        assertEquals(0, Notifications.history().size());
+        assertTrue(Notifications.isEmpty());
     }
 
     /**
-     * A cleared history announces on its own channel, because nothing arrived to announce it with.
+     * A cleared history is its own kind of change, because nothing arrived to carry it.
      *
-     * <p>A view watching only {@code onDidNotify} would go on showing a list the user has just
-     * dismissed — there is no notification to hand it, which is exactly why the second signal exists.</p>
+     * <p>And it is one event rather than a hundred removals: a view can rebuild an empty column once
+     * instead of splicing every card out of it individually.</p>
      */
     @Test
-    public void clearingAnnouncesOnItsOwnChannel() {
-        List<String> seen = new ArrayList<>();
-        Notifications.onDidClear.connect(() -> seen.add("cleared"));
+    public void clearingIsItsOwnKindOfChange() {
+        List<NotificationEvent.Kind> seen = new ArrayList<>();
+        Notifications.onDidChange.connect(event -> seen.add(event.kind()));
 
         Notifications.info("something");
-        assertTrue("an arrival is not a clear", seen.isEmpty());
+        assertEquals(List.of(NotificationEvent.Kind.ADDED), seen);
 
         Notifications.clear();
-        assertEquals(1, seen.size());
+        assertEquals("one event, not one per entry",
+                List.of(NotificationEvent.Kind.ADDED, NotificationEvent.Kind.CLEARED), seen);
 
         Notifications.clear();
-        assertEquals("clearing an empty history says nothing", 1, seen.size());
+        assertEquals("clearing an empty history says nothing", 2, seen.size());
     }
 
     /** A notification is stamped when it happens, not when something gets round to showing it. */
@@ -202,24 +264,28 @@ public class NotifyTest {
      *
      * <p>The case worth catching is a producer reached from a path that fires more than once — a retry loop,
      * a recompile — where the same sentence lands several times in a row and buries everything else in a
-     * hundred-deep history. It counts on the entry instead, and announces on its own channel so a view
+     * hundred-deep history. It counts on the entry instead, and arrives as {@code CHANGED} so a view
      * updates the card it is already showing rather than adding another.</p>
      *
      * <p>A repeat also leaves the unread count alone: the same message twice is not new information, and a
      * bell that ticks up while nothing new has been said is worse than one that stays put.</p>
      */
     @Test
-    public void animmediateRepeatCollapses() {
-        List<Notification> repeated = new ArrayList<>();
-        Notifications.onDidRepeat.connect(repeated::add);
+    public void anImmediateRepeatCollapses() {
+        List<NotificationEvent> changes = new ArrayList<>();
+        Notifications.onDidChange.connect(event -> {
+            if (event.kind() == NotificationEvent.Kind.CHANGED) changes.add(event);
+        });
 
         Notifications.error("Save failed");
         Notifications.error("Save failed");
         Notifications.error("Save failed");
 
-        assertEquals("three arrivals became one entry", 1, Notifications.history().size());
+        assertEquals("three arrivals became one entry", 1, Notifications.size());
         assertEquals(3, Notifications.history().get(0).getRepeats());
-        assertEquals("each repeat announced once", 2, repeated.size());
+        assertEquals("each repeat announced once", 2, changes.size());
+        assertSame("and it names the entry already on screen",
+                Notifications.history().get(0), changes.get(0).notification());
         assertEquals("a repeat is not news", 1, Notifications.unread());
     }
 
@@ -233,7 +299,7 @@ public class NotifyTest {
         Notifications.info("Something else");
         Notifications.error("Save failed");
 
-        assertEquals("the older one was folded into the newer", 3, Notifications.history().size());
+        assertEquals("the older one was folded into the newer", 3, Notifications.size());
         for (Notification each : Notifications.history()) {
             assertEquals("nothing should have collapsed", 1, each.getRepeats());
         }
@@ -249,6 +315,10 @@ public class NotifyTest {
                 base.saysTheSameAs(Notification.error("Save failed").withDetail("other.txt")));
         assertFalse("a different severity is a different message",
                 base.saysTheSameAs(Notification.warning("Save failed").withDetail("notes.txt")));
+        assertFalse("and a different group is too — what a group scopes today",
+                base.saysTheSameAs(Notification.error("Save failed").withDetail("notes.txt")
+                        .inGroup("compiler")));
         assertFalse(base.saysTheSameAs(null));
+        assertNotNull(Notification.info("x").toString());
     }
 }

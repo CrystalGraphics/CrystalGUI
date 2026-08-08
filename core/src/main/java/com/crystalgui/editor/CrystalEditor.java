@@ -3,6 +3,7 @@ package com.crystalgui.editor;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.signal.Signal;
@@ -161,8 +162,17 @@ public class CrystalEditor extends UIElement implements Disposable {
         // BOTH CHANNELS INTO ONE LINE. A notification is an event and wins the line when it arrives; the
         // ambient text is what is left showing between them. Flattening is this application's choice --
         // a host with room for a toast area would connect them separately instead.
-        Notifications.onDidNotify.connect(notification -> onStatus.emit(notification.getMessage()));
-        StatusBar.onDidChange.connect(text -> { if (!text.isEmpty()) onStatus.emit(text); });
+        Notifications.onDidChange.connect(event -> {
+            if (event.kind() == NotificationEvent.Kind.ADDED && event.notification() != null) {
+                onStatus.emit(event.notification().getMessage());
+            }
+        });
+        // READ ON DEMAND, never carried by the signal: composing the line walks every entry, and the caret
+        // readout writes on every selection change.
+        StatusBar.onDidChange.connect(() -> {
+            String text = StatusBar.text();
+            if (!text.isEmpty()) onStatus.emit(text);
+        });
         // The inspector and the generated source follow the front tab. Was a per-frame poll; the dock
         // announces it now. Subscribed here rather than on attach because the dock exists as soon as the
         // workbench does, and this editor owns the workbench -- there is nothing to wait for and nothing

@@ -1,43 +1,45 @@
 package com.crystalgui.ui.elements.chrome;
 
 import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.core.signal.Connection;
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
 
-import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * The notification history, as a tool window — IntelliJ's <b>Notifications</b> (formerly its Event Log).
+ * The notification history, as a tool window — IntelliJ's <b>Notifications</b> (formerly its Event Log),
+ * VS Code's {@code NotificationsCenter}.
  *
  * <h3>The durable half of a two-surface idea</h3>
  *
  * <p>Both references show a message twice: once transiently, where you cannot miss it, and once in a list
- * you can go back to. Only the second is built here, and it is the half that matters — a balloon you were
- * not looking at is indistinguishable from no message at all, which is the single most common complaint
- * about a status line and the reason IntelliJ's event log exists. Balloons are a second surface and a
- * placement problem; they can be added over this model without changing it.</p>
+ * you can go back to. This is the second, {@link NotificationBalloons} is the first, and both read the
+ * same {@link Notifications} model through the same {@link NotificationEvent} — which is exactly how VS
+ * Code hangs its toasts and its centre off one {@code NotificationsModel}.</p>
  *
- * <h3>Appended, never rebuilt</h3>
+ * <h3>Spliced, never rebuilt</h3>
  *
  * <p>Entries carry <b>action links</b>, so the list is something the user clicks on — and a notification
  * can arrive at any moment, including from a handler running inside one of those clicks. Rebuilding the
  * column on every arrival would detach the element being clicked, which this engine has paid for three
- * times over (the table header, the palette's key chips, the editor's gutter arrows). So an arrival
- * appends one card and touches nothing else; only "Clear all" empties the column.</p>
+ * times over (the table header, the palette's key chips, the editor's gutter arrows). So each event moves
+ * exactly what it names: an arrival adds one card, an eviction removes one, a repeat re-texts one. Only
+ * {@link NotificationEvent.Kind#CLEARED} empties the column, and only because everything went at once.</p>
  *
  * <h3>Not a {@code ListView}</h3>
  *
  * <p>Virtualisation here would buy nothing and cost correctness: {@code ListView} sizes rows through a
  * strategy that must know a row's height, and these are variable — a title, any number of detail lines,
  * and an optional row of actions. With a history bounded at a hundred short cards, a plain scroller is
- * both simpler and honest about what it is.</p>
+ * both simpler and honest about what it is. (VS Code does virtualise its centre, because its history is
+ * unbounded.)</p>
  */
 public class NotificationsView extends UIElement {
 
@@ -61,7 +63,7 @@ public class NotificationsView extends UIElement {
     public static final String ENTRY_HEAD_CLASS = "__entry-head__";
     /** Shown only while there is nothing to show. */
     public static final String EMPTY_CLASS = "__notifications-empty__";
-    /** A balloon's dismiss button. Not drawn in the list — see {@link #entryFor}. */
+    /** A balloon's dismiss button. Not drawn in the list — see the class note. */
     public static final String CLOSE_CLASS = "__close__";
 
     /** Severity, as a class the sheet colours — never a colour written from here. */
@@ -73,17 +75,15 @@ public class NotificationsView extends UIElement {
     private final ScrollerView list = new ScrollerView();
     private final UIText empty = new UIText("No notifications");
 
-    private Connection arrivals;
-    private Connection cleared;
-    private Connection repeats;
+    private final ConnectionGroup subscriptions = new ConnectionGroup();
 
     /**
-     * The card showing each notification, so a repeat can update the one already on screen.
+     * The card showing each notification, so a repeat or an eviction can reach the one already on screen.
      *
      * <p>Keyed by identity — the service hands back the very object it is holding — and cleared with the
      * column, so it cannot outlive the elements it points at.</p>
      */
-    private final Map<Notification, UIElement> cards = new IdentityHashMap<>();
+    private final Map<Notification, NotificationCard> cards = new IdentityHashMap<>();
 
     public NotificationsView() {
         addClass(PANEL_CLASS);
@@ -92,7 +92,7 @@ public class NotificationsView extends UIElement {
         title.addClass(TITLE_CLASS);
         title.setHitTest(false);
         clearAll.addClass(CLEAR_CLASS);
-        clearAll.forceSelfSizeWidth();   // @see entryFor's timestamp
+        clearAll.forceSelfSizeWidth();   // @see NotificationCard's timestamp
         clearAll.setFocusPolicy(FocusPolicy.CLICK);
         clearAll.onMouseDown.attachListener((element, event) -> {
             event.stopPropagation();
@@ -132,71 +132,64 @@ public class NotificationsView extends UIElement {
     protected void onLayoutChanged() {
         super.onLayoutChanged();
         if (getAttachedWindow() != null) {
-            if (arrivals == null) {
-                arrivals = Notifications.onDidNotify.connect(this::append);
-                cleared = Notifications.onDidClear.connect(this::rebuild);
-                repeats = Notifications.onDidRepeat.connect(this::restate);
+            if (subscriptions.size() == 0) {
+                subscriptions.add(Notifications.onDidChange.connect(this::apply));
                 rebuild();
             }
             Notifications.markAllRead();
-        } else if (arrivals != null) {
-            arrivals.disconnect();
-            arrivals = null;
-            if (cleared != null) cleared.disconnect();
-            cleared = null;
-            if (repeats != null) repeats.disconnect();
-            repeats = null;
+        } else {
+            subscriptions.disconnectAll();
         }
+    }
+
+    /** One change, applied where it landed. @see NotificationsView */
+    private void apply(NotificationEvent event) {
+        switch (event.kind()) {
+            case ADDED -> {
+                Notification notification = event.notification();
+                if (notification == null) return;
+                NotificationCard card = new NotificationCard(notification);
+                cards.put(notification, card);
+                // NEWEST FIRST, which is the opposite of the history's own order -- see rebuild().
+                list.addChildAt(card, 0);
+            }
+            case CHANGED -> {
+                NotificationCard card = cards.get(event.notification());
+                if (card != null) {
+                    // LEFT WHERE IT IS. Collapsing exists so a repeated message stops burying the rest of
+                    // the list, and moving it back to the top on every repeat would undo half of that.
+                    card.restate();
+                }
+            }
+            case REMOVED -> {
+                NotificationCard card = cards.remove(event.notification());
+                if (card != null) card.removeSelf();
+            }
+            case CLEARED -> rebuild();
+        }
+        refreshEmptyState();
     }
 
     /** Builds the column from scratch. Only on open and on Clear all — see the class note. */
     private void rebuild() {
         list.clearAllChildren();
         cards.clear();
-        List<Notification> history = new ArrayList<>(Notifications.history());
+        List<Notification> history = Notifications.history();
         // NEWEST FIRST, which is the opposite of the history's own order. What you want on opening the
         // panel is what just happened, and a list that grows downwards puts it off the bottom of a full
         // one -- the reason both references lead with the most recent.
         for (int i = history.size() - 1; i >= 0; i--) {
             Notification notification = history.get(i);
-            UIElement card = entryFor(notification);
+            NotificationCard card = new NotificationCard(notification);
             cards.put(notification, card);
             list.addChild(card);
         }
         refreshEmptyState();
     }
 
-    /** One arrival, on top, leaving every other card alone. @see NotificationsView */
-    private void append(Notification notification) {
-        UIElement card = entryFor(notification);
-        cards.put(notification, card);
-        list.addChildAt(card, 0);
-        refreshEmptyState();
-    }
-
-    /**
-     * A repeat re-texts the card already on screen — it does not add one, and it does not move it.
-     *
-     * <p>Leaving it in place is the point: collapsing exists so a repeated message stops burying the rest
-     * of the list, and re-ordering on every repeat would put it back to the top and undo half of that.</p>
-     */
-    private void restate(Notification notification) {
-        UIElement card = cards.get(notification);
-        if (card == null) return;
-        UIText label = NotificationCard.titleLabelOf(card);
-        if (label != null) label.setText(NotificationCard.titleOf(notification));
-    }
-
     private void refreshEmptyState() {
-        boolean nothing = Notifications.history().isEmpty();
+        boolean nothing = Notifications.isEmpty();
         empty.setDisplayed(nothing);
         list.setDisplayed(!nothing);
-    }
-
-    /** @see NotificationCard */
-    private UIElement entryFor(Notification notification) {
-        // NO CLOSE BUTTON in the list: "Clear all" is the dismissal here, and a per-row close would be a
-        // second way to say the same thing. A balloon passes one, because it has no Clear all.
-        return NotificationCard.build(notification, null);
     }
 }
