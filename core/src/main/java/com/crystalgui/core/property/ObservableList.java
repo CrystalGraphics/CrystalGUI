@@ -3,11 +3,7 @@ package com.crystalgui.core.property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * Observable list with synchronous structural change notification — the collection counterpart to
@@ -135,6 +131,16 @@ public final class ObservableList<T> implements Iterable<T> {
     public void clear() {
         if (items.isEmpty()) return;
         items.clear();
+        changed.emit(Change.clear());
+    }
+
+    /**
+     * Replaces every element, announcing <b>once</b>.
+     */
+    public void setAll(Collection<? extends T> incoming) {
+       List<T> next = incoming == null ? List.of() : new ArrayList<>(incoming);
+        items.clear();
+        items.addAll(next);
         changed.emit(Change.clear());
     }
 
