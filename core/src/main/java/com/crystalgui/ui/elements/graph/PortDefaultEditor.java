@@ -116,7 +116,7 @@ final class PortDefaultEditor {
         this.port = port;
         this.view = view;
 
-        box = new UIElement();
+        box = new Placed();
         box.addClass(NodePort.EDITOR_CLASS);
 
         core = new UIElement();
@@ -126,7 +126,7 @@ final class PortDefaultEditor {
         ring.addClass(NodePort.EDITOR_DOT_RING_CLASS);
         ring.setHitTest(false);
         ring.addInternalChild(core);
-        dot = new UIElement();
+        dot = new Placed();
         dot.addClass(NodePort.EDITOR_DOT_CLASS);
         dot.setHitTest(false);
         dot.addInternalChild(ring);
@@ -311,6 +311,26 @@ final class PortDefaultEditor {
      * written test would place its node — and pushes the editor an entire panel-width off to the side
      * the moment a real graph node sits anywhere else.</p>
      */
+    /**
+     * The frame, which places the whole widget the moment it learns its own width.
+     *
+     * <h3>Why the position cannot simply be set at creation</h3>
+     * <p>{@link #reposition} anchors the box by its RIGHT edge — the left it writes is
+     * {@code portDot - GAP - width}. That width is Taffy's answer, and on the frame the box is created
+     * there is no answer yet: it is registered during {@code tickAnimations} and does not get a box until
+     * that same frame's {@code calculateLayout}. So the mounting call reads zero, and its result is the
+     * port's own dot minus the gap — the widget lands <em>on the node</em> rather than beside it.</p>
+     */
+    private final class Placed extends UIElement {
+        @Override
+        protected void onLayoutChanged() {
+            super.onLayoutChanged();
+            // Mounted only: an unmounted box has no plane to be positioned on, and moveNode would write
+            // world coordinates onto an element that is not in the world.
+            if (mounted) reposition();
+        }
+    }
+
     void reposition() {
         var contentCache = view.content().getRuntimeCache();
         Vector2f portDot = port.dotCenter();

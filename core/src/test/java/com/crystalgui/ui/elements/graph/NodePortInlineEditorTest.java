@@ -77,6 +77,62 @@ public class NodePortInlineEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>The editor's FIRST drawn position is its final one.</b>
+     *
+     * <p>Reported as the fields flying in from across the screen when a node is created. The cause is an
+     * ordering one, and the flicker's size is the giveaway: {@link PortDefaultEditor#reposition} anchors
+     * the box by its RIGHT edge, so the left it writes is {@code portDot - GAP - width}. A width of zero
+     * therefore does not put the box near where it belongs — it puts it <em>on the port</em>, a whole box
+     * width to the right, and every intermediate width on the way to the real one draws somewhere in
+     * between.</p>
+     *
+     * <p>Zero was what it read, because {@code GraphView}'s tick runs during {@code tickAnimations} —
+     * <b>before</b> {@code calculateLayout}. So every position it computed was one layout behind by
+     * construction, and a control whose {@code UIText} settles its own width over two or three passes was
+     * drawn once at each stale value.</p>
+     *
+     * <p>Asserted by recording the position on every frame from the first one the widget is mounted, and
+     * requiring them all to agree. A test that only checked the settled position passes against the
+     * unfixed code — the flicker is entirely in the frames before it.</p>
+     */
+    @Test
+    public void theEditorIsNeverDrawnAtAnUnsettledPosition() {
+        openWindow();
+        GraphDocument document = new GraphDocument();
+        NodeType type = numberPortType();
+        GraphNode node = buildNode(type, document);
+        // Away from the world origin, where an off-by-a-box-width is indistinguishable from correct.
+        view.moveNode(node, 240f, 160f);
+        NodeFieldBinder.attach(node, type, document, null, null);
+
+        NodePort port = node.portNamed("Value");
+        java.util.List<Float> drawnAt = new java.util.ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            window.updateWithoutPainting();
+            PortDefaultEditor editor = view.portEditorFor(port);
+            // Only frames that would actually PAINT the widget count -- before it is mounted there is
+            // nothing on screen to be in the wrong place.
+            if (editor == null || !editor.isMounted() || editor.control() == null) continue;
+            drawnAt.add(editor.control().getParent().getRuntimeCache().getX());
+        }
+
+        assertFalse("the editor never mounted, so this asserts nothing", drawnAt.isEmpty());
+        float settled = drawnAt.get(drawnAt.size() - 1);
+        UIElement box = view.portEditorFor(port).control().getParent();
+        // The claim below is "every frame agrees", which a widget stuck at 0x0 would satisfy trivially.
+        assertTrue("the box must have a real width by the end; got " + box.getRuntimeCache().getWidth(),
+                box.getRuntimeCache().getWidth() > 0f);
+        assertTrue("...and must sit LEFT of the port it belongs to; box=" + settled
+                        + " port=" + port.dotCenter().x(),
+                settled + box.getRuntimeCache().getWidth() < port.dotCenter().x());
+        for (int i = 0; i < drawnAt.size(); i++) {
+            assertEquals("frame " + i + " drew the editor at " + drawnAt.get(i)
+                            + ", which is not where it settles (" + settled + "): " + drawnAt,
+                    settled, drawnAt.get(i), 0.5f);
+        }
+    }
+
+    /**
      * The whole point of the mechanism: the port field's control becomes the port's
      * {@link NodePort#getDefaultEditor()}, and the body field's lands in the node's controls row —
      * never crossed. Neither assertion here needs the view to have ticked; the binding is synchronous.
