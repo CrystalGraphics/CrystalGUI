@@ -11,6 +11,7 @@ import com.crystalgui.fs.FilePatternMap;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.fs.WorkingCopies;
 import com.crystalgui.fs.WorkspaceFileService;
+import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
@@ -1256,7 +1257,7 @@ public class Workbench extends UIElement {
     private boolean ticking;
 
     @Nullable
-    private TextEditor boundTo;
+    private DiagnosticSet boundTo;
 
     /**
      * Whether the tree follows the active tab — VS Code's {@code explorer.autoReveal}, default on.
@@ -1362,10 +1363,20 @@ public class Workbench extends UIElement {
      * active <em>editor</em> moving: switching between two non-file panels changes the panel and leaves
      * this alone.</p>
      */
+    /**
+     * Points the Problems panel at whatever the active DOCUMENT has to report.
+     *
+     * <p>This asked {@code activeEditor()} — the active {@code TextEditor}. A shader graph has no text
+     * editor, so the panel was empty by construction for the whole time a graph was in front, while its
+     * compiler was producing attributed errors with nowhere to go. Same correction as
+     * {@code FileDocument.setActive}: the workbench knows which tab is in front and nothing else about it,
+     * so what a document has to say is the document's to answer.</p>
+     */
     private void rebindProblems() {
-        TextEditor active = activeEditor();
-        if (active == boundTo) return;
-        boundTo = active;
-        problems.bindTo(active == null ? null : active.diagnostics());
+        FileDocument active = activeDocument();
+        DiagnosticSet reported = active == null ? null : active.diagnostics();
+        if (reported == boundTo) return;
+        boundTo = reported;
+        problems.bindTo(reported);
     }
 }

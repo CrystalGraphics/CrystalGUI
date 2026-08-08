@@ -380,6 +380,12 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
      * the mesh and the camera and returns the existing texture untouched. The compile is the only cost
      * paid unconditionally, and it is the same one the node thumbnails already pay.</p>
      */
+    /** What the driver said about the last generated source, or null. @see CgMainPreviewRenderer */
+    @Nullable
+    public String lastDriverError() {
+        return renderer.lastDriverError();
+    }
+
     @Override
     public boolean tickFrame(float delta) {
         move.reclampIfPlaced(resizeOriginLeft(), resizeOriginTop());

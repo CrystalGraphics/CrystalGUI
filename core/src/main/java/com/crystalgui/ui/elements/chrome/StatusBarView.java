@@ -66,6 +66,9 @@ public class StatusBarView extends UIElement {
      */
     public static final String FIRST_CLASS = "__first__";
 
+    /** Severity, as a class — the same convention the Problems rows and notification cards use. */
+    public static final String SEVERITY_PREFIX = "severity-";
+
     /**
      * The rule drawn before every item but the leading one.
      *
@@ -208,6 +211,10 @@ public class StatusBarView extends UIElement {
                 }
             }
             applyTooltip(item, slot);
+            // SWAPPED, never added: an item's severity changes in place — a compile that failed and then
+            // succeeded rewrites the same slot — so adding would leave both classes on it.
+            slot.swapPrefixedClass(SEVERITY_PREFIX,
+                    SEVERITY_PREFIX + item.severity().name().toLowerCase(java.util.Locale.ROOT));
         }
         markLeadingItems();
     }

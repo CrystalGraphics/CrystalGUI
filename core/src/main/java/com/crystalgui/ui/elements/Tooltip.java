@@ -89,6 +89,15 @@ public class Tooltip extends UIElement {
     public Tooltip(String text) {
         this.label = new UIText(text == null ? "" : text);
         this.label.addClass(LABEL_CLASS);
+        // SELF-SIZING, forced rather than detected. The wrap bound in UIText.selfMaxWidthForWrap is only
+        // consulted for a label that sizes ITSELF; one that latched "takes what it is handed" wraps against
+        // its own content box instead — which the sheet's max-width has already clamped, so the box comes
+        // out at the maximum while the glyphs run on past it unwrapped. That is exactly what a long tooltip
+        // over a short anchor looked like: a background two thirds the length of its own text.
+        //
+        // The latch is decided by the FIRST measurement, which happens here with the label empty and its
+        // ancestors unmeasured — the racy case forceSelfSizeWidth exists for.
+        this.label.forceSelfSizeWidth();
         this.label.setHitTest(false);
         addInternalChild(this.label);
 

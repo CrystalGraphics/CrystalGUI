@@ -1,6 +1,9 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.ui.UIElement;
+
+import javax.annotation.Nullable;
 
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.CgPath;
@@ -83,6 +86,28 @@ public interface FileDocument {
      * declare that it has nothing to say.</p>
      */
     default void setActive(boolean active) {
+    }
+
+    /**
+     * What is wrong with this document, or null when it has nothing to report.
+     *
+     * <h3>Asked of the DOCUMENT, not of an editor</h3>
+     *
+     * <p>{@code Workbench} used to bind its Problems panel to {@code activeEditor().diagnostics()} — the
+     * active {@code TextEditor}. A shader graph has no {@code TextEditor}, so the panel was empty by
+     * construction the whole time a graph was in front, while its compiler was producing a dozen
+     * attributed errors that had nowhere to go.</p>
+     *
+     * <p>Same correction as {@link #setActive}: the workbench knows which tab is in front and nothing else
+     * about it, so what a document has to say is the document's to answer. A text file forwards its
+     * editor's set; a graph owns one it fills from each compile; an image returns null.</p>
+     *
+     * <p><b>The same instance every time.</b> A view binds to it and listens for changes, so a fresh set
+     * per call would leave the panel watching one nobody writes to.</p>
+     */
+    @Nullable
+    default DiagnosticSet diagnostics() {
+        return null;
     }
 
     /** The element the dock shows for this file. */
