@@ -5163,6 +5163,18 @@ notificationsview > .__notification-list__ {
     color: #C7A54A;
 }
 
+/* AN ENTRY THAT RUNS A COMMAND. Both references make most of the bar clickable — VS Code's encoding entry
+ * runs `changeEncoding`, IntelliJ's line-separator widget opens a popup — so an entry carrying a command
+ * has to look different from the readouts beside it, which do nothing. Only the hover says so: a status
+ * bar that highlighted every actionable entry at rest would be louder than what it sits under. */
+.__status-bar__ .__status-item__.__clickable__ {
+    cursor: pointer;
+}
+
+.__status-bar__ .__status-item__.__clickable__:hover {
+    color: #D5D7DB;
+}
+
 .__notification__ .__severity__.severity-info {
     overlay: icon("crystalgui:general/informationDialog");
 }

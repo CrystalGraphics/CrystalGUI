@@ -1,6 +1,9 @@
 package com.crystalgui.ui.elements.workbench.document;
 
 import com.crystalgui.core.notify.StatusBar;
+import com.crystalgui.core.notify.StatusBarAlignment;
+import com.crystalgui.core.notify.StatusBarEntry;
+import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.text.LineEnding;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
@@ -14,6 +17,8 @@ import com.crystalgui.ui.elements.workbench.DocumentViewState;
 import com.crystalgui.ui.elements.workbench.FileDocument;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A {@link FileDocument} backed by a {@link TextEditor} — what every file opened before the seam existed.
@@ -36,11 +41,36 @@ public record TextFileDocument(TextEditor editor, Resource resource)
     private static final String SCROLL = "scroll";
     private static final String FOLDS = "folds";
 
-    /** Status-bar ids. Public so a host can clear or re-key one it renders differently. */
+    /** Status-bar entry ids — what a "hide this entry" menu would name them by. */
     public static final String CARET_STATUS = "editor.caret";
     public static final String EOL_STATUS = "editor.lineEnding";
     public static final String ENCODING_STATUS = "editor.encoding";
     public static final String INDENT_STATUS = "editor.indent";
+
+    /**
+     * Where these four sit among each other, taken from VS Code's {@code editorStatus.ts}.
+     *
+     * <p>Higher is further left, so the right-hand group reads {@code 51:39  4 spaces  UTF-8  LF} — the
+     * reference's own sequence. They used to render in whatever order the lines below happened to run in,
+     * which is a layout decided by an implementation detail of this method.</p>
+     */
+    private static final int CARET_PRIORITY = 100;
+    private static final int INDENT_PRIORITY = 99;
+    private static final int ENCODING_PRIORITY = 98;
+    private static final int EOL_PRIORITY = 97;
+
+    /**
+     * The active document's status entries — <b>static, for the same reason the caret subscription is.</b>
+     *
+     * <p>Held rather than looked up by id because an entry's lifetime is now its accessor: withdrawing is
+     * {@code dispose()} on the handle, not a second call naming the string again. A missed
+     * {@code setActive(false)} can only replace these, never leak them.</p>
+     */
+    private static final List<StatusBarEntryAccessor> ACTIVE_ENTRIES = new ArrayList<>();
+
+    /** The one entry that is rewritten while the document stays active. */
+    @Nullable
+    private static StatusBarEntryAccessor caretEntry;
 
     /**
      * The active document's caret subscription — <b>static, because "active" is singular.</b>
@@ -70,30 +100,44 @@ public record TextFileDocument(TextEditor editor, Resource resource)
             caretSubscription.disconnect();
             caretSubscription = null;
         }
-        if (!active) {
-            StatusBar.clear(CARET_STATUS);
-            StatusBar.clear(EOL_STATUS);
-            StatusBar.clear(ENCODING_STATUS);
-            StatusBar.clear(INDENT_STATUS);
-            return;
-        }
+        for (StatusBarEntryAccessor entry : ACTIVE_ENTRIES) entry.dispose();
+        ACTIVE_ENTRIES.clear();
+        caretEntry = null;
+        if (!active) return;
+
         caretSubscription = editor.onSelectionChanged.connect(this::writeCaret);
-        writeCaret();
+        caretEntry = add(caretEntry(), CARET_STATUS, CARET_PRIORITY);
+        add(new StatusBarEntry("Indentation", editor.getTabSize() + " spaces",
+                "Indentation: " + editor.getTabSize() + " spaces per level", null,
+                StatusBarEntry.Kind.STANDARD), INDENT_STATUS, INDENT_PRIORITY);
         // UTF-8 is not a guess: this document reads and writes through it and nothing else, so naming any
         // other encoding would be reporting a setting that does not exist.
-        StatusBar.set(ENCODING_STATUS, "UTF-8", StatusBar.Align.RIGHT, "File encoding");
+        add(new StatusBarEntry("File encoding", "UTF-8", "File encoding", null,
+                StatusBarEntry.Kind.STANDARD), ENCODING_STATUS, ENCODING_PRIORITY);
         LineEnding ending = LineEnding.detect(editor.getText());
-        StatusBar.set(EOL_STATUS, ending.name(), StatusBar.Align.RIGHT,
-                "Line separator: " + describe(ending));
-        StatusBar.set(INDENT_STATUS, editor.getTabSize() + " spaces", StatusBar.Align.RIGHT,
-                "Indentation: " + editor.getTabSize() + " spaces per level");
+        add(new StatusBarEntry("Line separator", ending.name(),
+                "Line separator: " + describe(ending), null,
+                StatusBarEntry.Kind.STANDARD), EOL_STATUS, EOL_PRIORITY);
+    }
+
+    /** Registers one entry on the right-hand group and keeps it for withdrawal. */
+    private static StatusBarEntryAccessor add(StatusBarEntry entry, String id, int priority) {
+        StatusBarEntryAccessor accessor =
+                StatusBar.addEntry(entry, id, StatusBarAlignment.RIGHT, priority);
+        ACTIVE_ENTRIES.add(accessor);
+        return accessor;
     }
 
     /** IntelliJ's {@code 111:32} — one-based, as every gutter and every error message already is. */
     private void writeCaret() {
+        if (caretEntry != null) caretEntry.update(caretEntry());
+    }
+
+    private StatusBarEntry caretEntry() {
         TextPoint caret = editor.caretPoint();
-        StatusBar.set(CARET_STATUS, (caret.row() + 1) + ":" + (caret.column() + 1),
-                StatusBar.Align.RIGHT, "Line and column of the caret");
+        return new StatusBarEntry("Cursor position",
+                (caret.row() + 1) + ":" + (caret.column() + 1),
+                "Line and column of the caret", null, StatusBarEntry.Kind.STANDARD);
     }
 
     /** The name is the readout; this is the thing the letters stand for. */
