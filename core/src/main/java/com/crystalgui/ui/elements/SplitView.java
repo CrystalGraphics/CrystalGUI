@@ -234,8 +234,29 @@ public class SplitView extends UIElement {
         return paneContent(1, content);
     }
 
+    /**
+     * Puts {@code content} in a pane, replacing whatever was there.
+     *
+     * <h3>Idempotent, and that is not an optimisation</h3>
+     *
+     * <p>Re-mounting content that is already mounted <b>detaches and re-attaches its whole subtree</b>, and
+     * a detached element measures nothing. Everything derived from a measured box is then recomputed from
+     * zero: a {@code ListView} drops its realised window and its horizontal scroll extent, a canvas reports
+     * no width so anything sized against it collapses for a frame, and a widget with an
+     * {@code onWindowChanged} hook runs it again.</p>
+     *
+     * <p>This is reached from {@code WorkbenchRegions.sync}, which runs on <em>every</em> tool-window
+     * toggle and re-fills every region — so opening one panel re-mounted the project tree and the graph
+     * editor along with it. The visible result was the file tree's scrollbar and the shader preview's mesh
+     * flickering while nothing about either had changed.</p>
+     *
+     * <p>The guard is exact identity, not equality: two different elements with the same content are still
+     * a real replacement.</p>
+     */
     public SplitView paneContent(int index, UIElement content) {
         UIElement pane = pane(index);
+        List<UIElement> existing = pane.getChildren();
+        if (existing.size() == 1 && existing.get(0) == content) return this;
         pane.clearAllChildren();
         pane.addChild(content);
         return this;

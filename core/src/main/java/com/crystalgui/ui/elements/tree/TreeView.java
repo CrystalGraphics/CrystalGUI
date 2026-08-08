@@ -227,9 +227,11 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
             if (row != null) selectedItems.add(row.item());
         }
 
-        ObservableList<TreeRow<T>> model = getModel();
-        model.clear();
-        for (TreeRow<T> row : flattened) model.add(row);
+        // ONE announcement, not one per row. A ListView rebuilds its realised window on every change, so
+        // adding a flattened tree row by row rebuilt it once per row -- and each rebuild discarded the
+        // horizontal scroll extent and re-measured it, which is what made the scrollbar flicker on every
+        // refresh.
+        getModel().setAll(flattened);
 
         if (selectedItems.isEmpty()) return;
         for (int index = 0; index < flattened.size(); index++) {
