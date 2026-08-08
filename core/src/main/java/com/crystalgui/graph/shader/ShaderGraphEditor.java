@@ -2,6 +2,7 @@ package com.crystalgui.graph.shader;
 import java.util.Arrays;
 import java.nio.charset.StandardCharsets;
 
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.elements.workbench.FileDocument;
 import com.google.gson.JsonParser;
 import com.crystalgui.serialization.JsonOps;
@@ -364,6 +365,65 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         settings.setRaw(SettingsLayer.DOCUMENT, VIEW_ZOOM, String.valueOf(graph.getZoom()));
         settings.setRaw(SettingsLayer.DOCUMENT, VIEW_PAN_X, String.valueOf(graph.getPanX()));
         settings.setRaw(SettingsLayer.DOCUMENT, VIEW_PAN_Y, String.valueOf(graph.getPanY()));
+        // ONLY WHEN THERE IS A BOX TO RECORD. An unmeasured panel yields "", and writing that would both
+        // erase a good rect from the file and churn the settings layer on frames where nothing moved.
+        String preview = rectOf(mainPreview);
+        if (!preview.isEmpty()) settings.setRaw(SettingsLayer.DOCUMENT, VIEW_PREVIEW_RECT, preview);
+        String board = rectOf(blackboard);
+        if (!board.isEmpty()) settings.setRaw(SettingsLayer.DOCUMENT, VIEW_BLACKBOARD_RECT, board);
+    }
+
+    /**
+     * A panel's box as {@code left,top,width,height}, in its containing block's space.
+     *
+     * <p>Empty while the panel has not been laid out, and {@link #applyRect} refuses an empty string —
+     * writing a zero box would persist the same "measured before layout" corruption that sent the preview
+     * to the graph's origin, except into the file where a relaunch cannot recover from it.</p>
+     *
+     * <h3>A panel bigger than the box it sits in is a squeeze, not a placement</h3>
+     *
+     * <p>The zero check alone was not enough, and the way it failed is worth keeping. This runs from
+     * {@link #encode()} — a <b>save</b> — and a save does not require the editor to be on screen: a
+     * background tab is {@code display: none}, so every box in it measures 0. The panels do not measure 0
+     * with it, because they carry {@code min-width}/{@code min-height}; they measure exactly their
+     * <em>minimum</em>, at the canvas origin. Both numbers are positive, both passed, and the file was
+     * written with both panels at {@code 0,0,80,100}.</p>
+     *
+     * <p>It then restored perfectly, which is what made it read as a restore bug: every {@code .shadergraph}
+     * opened with two tiny panels stacked in the corner, no matter where they had been left.</p>
+     *
+     * <p>So the test is against the container, not against zero. A panel that does not fit inside its own
+     * containing block is being clamped by something that is not the user, and a measurement taken then
+     * describes the clamp. Refusing leaves the last good rect in the settings — {@link #captureView} only
+     * writes a non-empty one — which is exactly right for a tab that was never opened this session.</p>
+     */
+    private static String rectOf(UIElement panel) {
+        UIElement block = panel.getParent();
+        if (block == null) return "";
+        var box = panel.getRuntimeCache();
+        var blockBox = block.getRuntimeCache();
+        if (box.getWidth() <= 0f || box.getHeight() <= 0f) return "";
+        if (blockBox.getWidth() < box.getWidth() || blockBox.getHeight() < box.getHeight()) return "";
+        return (box.getX() - blockBox.getX()) + "," + (box.getY() - blockBox.getY())
+                + "," + box.getWidth() + "," + box.getHeight();
+    }
+
+    /** @see #rectOf */
+    private static boolean applyRect(UIElement panel, @Nullable String raw) {
+        if (raw == null || raw.isEmpty()) return false;
+        String[] parts = raw.split(",");
+        if (parts.length != 4) return false;
+        Float left = readFloat(parts[0]);
+        Float top = readFloat(parts[1]);
+        Float width = readFloat(parts[2]);
+        Float height = readFloat(parts[3]);
+        if (left == null || top == null || width == null || height == null) return false;
+        if (width <= 0f || height <= 0f) return false;
+        // INLINE, which is the origin the resizer and the drag both write at -- so a restored box is
+        // exactly a box the user could have dragged to, and moving it afterwards simply replaces this.
+        StyleGroup.inlinePipeline(panel.getStyle().getLayoutGroup(),
+                l -> l.left(left).top(top).width(width).height(height));
+        return true;
     }
 
     /** Puts the canvas back where the file says it was. A file without them is left at the default. */
@@ -374,6 +434,15 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         Float panY = readFloat(settings.raw(VIEW_PAN_Y));
         if (zoom != null) graph.setZoom(zoom);
         if (panX != null && panY != null) graph.setPan(panX, panY);
+        // A RESTORED POSITION IS A DELIBERATE ONE, and each panel has to be TOLD: the re-clamp that tracks
+        // a resizing canvas is gated on having been placed, which only a drag used to set.
+        //
+        // BOTH PANELS, and the missing half is worth naming because it read as an unrelated bug. Only the
+        // preview was marked, so a restored Blackboard ignored the canvas shrinking until it had been
+        // grabbed once -- at which point it started tracking correctly and looked like a redraw problem
+        // rather than a flag that nothing but a drag ever set.
+        if (applyRect(mainPreview, settings.raw(VIEW_PREVIEW_RECT))) mainPreview.markPlaced();
+        if (applyRect(blackboard, settings.raw(VIEW_BLACKBOARD_RECT))) blackboard.markPlaced();
     }
 
     @Nullable
@@ -621,7 +690,9 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
             mainPreviewAttached = mainPreview.attach();
             if (mainPreviewAttached) ownGlParts();
         }
-        blackboard.reclamp();
+        // NOTHING PER-FRAME BELONGS HERE. This ticker drops itself the moment both previews are up, so a
+        // standing job parked in it runs for two frames and then stops -- which is exactly what happened to
+        // the Blackboard's re-clamp. It ticks itself now; see BlackboardPanel.tickFrame.
         return !(previewsAttached && mainPreviewAttached);
     }
 
@@ -709,6 +780,19 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      * and is already content-hashed with the rest of the graph.</p>
      */
     public static final String VIEW_ZOOM = "graph.view.zoom";
+
+    /**
+     * Where the two floating panels sit and how big they are.
+     *
+     * <p>Same argument as pan and zoom, and stored beside them for the same reason: a shader graph is an
+     * asset you <em>arrange</em>, and a Main Preview you widened to look at a sphere properly is work that
+     * reopening should not throw away. Unity keeps both in its {@code .shadergraph} too.</p>
+     *
+     * <p>Also the same cost, accepted the same way: dragging a panel makes the file modified, because the
+     * bytes genuinely changed.</p>
+     */
+    public static final String VIEW_PREVIEW_RECT = "graph.view.previewRect";
+    public static final String VIEW_BLACKBOARD_RECT = "graph.view.blackboardRect";
     public static final String VIEW_PAN_X = "graph.view.panX";
     public static final String VIEW_PAN_Y = "graph.view.panY";
 

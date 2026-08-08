@@ -102,6 +102,21 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
     private float dragTop;
 
     /** True once the panel has been dragged, so its position is its own rather than the stylesheet's. */
+
+    /**
+     * How far across the container a panel's centre must sit before it anchors to the FAR edge.
+     *
+     * <p>Not the midpoint, which is the obvious value and is wrong in practice: a panel sitting anywhere
+     * past halfway — including squarely in the middle of the graph — would latch to the right or bottom and
+     * then travel with an edge it is nowhere near. Anchoring should mean "this belongs to that edge", and
+     * at 50%% a panel qualifies for it by a pixel.</p>
+     *
+     * <p>Biased towards the start edge, so the far anchor is something a panel opts into by genuinely being
+     * over there. A panel in the middle stays put when the container grows, which is what it looks like it
+     * should do.</p>
+     */
+    private static final float FAR_EDGE_FRACTION = 0.7f;
+
     private boolean placed;
 
     /** The one entry that is deliberately inert. @see #openMeshMenu */
@@ -312,13 +327,21 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
     }
 
     /**
-     * Places the panel from where it began plus the drag's own delta.
+     * Marks this panel as deliberately positioned, without moving it.
      *
-     * <p>The stylesheet's {@code right}/{@code bottom} are left in place rather than cleared. Both insets
-     * on an axis is well-defined when the size is definite — Taffy resolves in favour of the start edge —
-     * so writing {@code left} is what takes over, and the panel keeps a sensible corner anchor if it is
-     * never moved at all.</p>
+     * <p>For a rect restored from the file. {@code placed} gates the re-clamp that runs when the canvas
+     * changes size, and it was only ever set by a drag — so a panel whose position came from the document
+     * sat outside the graph after a relaunch and stayed there until it was nudged once, which is precisely
+     * how it was reported. A position read from the file is every bit as deliberate as one dragged to.</p>
+     *
+     * <p>Takes no coordinates. It once had a {@code markPlacedAt(left, top)} twin that seeded a remembered
+     * position, from when the re-clamp worked off one; it measures now, so the seed was a number nothing
+     * read. @see CanvasOverlayMove#markPlaced()</p>
      */
+    public void markPlaced() {
+        placed = true;
+    }
+
     private void moveTo(float deltaX, float deltaY) {
         placed = true;
         placeAt(dragLeft + deltaX, dragTop + deltaY);
@@ -350,14 +373,40 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
         if (blockBox.getWidth() <= 0f || blockBox.getHeight() <= 0f) return;
         if (getRuntimeCache().getWidth() <= 0f || getRuntimeCache().getHeight() <= 0f) return;
 
-        float maxLeft = Math.max(0f, block.getRuntimeCache().getWidth() - getRuntimeCache().getWidth());
-        float maxTop = Math.max(0f, block.getRuntimeCache().getHeight() - getRuntimeCache().getHeight());
-        float left = Math.max(0f, Math.min(maxLeft, wantedLeft));
-        float top = Math.max(0f, Math.min(maxTop, wantedTop));
+float containerWidth = blockBox.getWidth();
+        float containerHeight = blockBox.getHeight();
+        float panelWidth = getRuntimeCache().getWidth();
+        float panelHeight = getRuntimeCache().getHeight();
+        float left = Math.max(0f, Math.min(Math.max(0f, containerWidth - panelWidth), wantedLeft));
+        float top = Math.max(0f, Math.min(Math.max(0f, containerHeight - panelHeight), wantedTop));
 
-        // No-ops when unchanged: `replaceOrPutCandidate` drops an identical value, which is what lets this
+        // ANCHORED TO THE NEARER EDGE ON EACH AXIS, which is what makes a panel track a resizing
+        // container in BOTH directions. A clamp only ever REDUCES, so shrinking pushes the panel in and
+        // expanding gives the space back with nothing to pull it out again -- `left` is the stored number
+        // and it genuinely has not changed.
+        //
+        // ONE INSET PER AXIS, the other explicitly `auto`. With both set and a definite size Taffy
+        // resolves in favour of the START edge, so a stale `left` silently wins and the anchor does
+        // nothing -- the same rule this code already relies on for a panel that is never dragged.
+        //
+        // Derived from position rather than stored: the anchor is whichever edge the panel's centre is
+        // nearer, recomputed for free after a drag or a restore.
+        boolean toRight = left + panelWidth / 2f > containerWidth * FAR_EDGE_FRACTION;
+        boolean toBottom = top + panelHeight / 2f > containerHeight * FAR_EDGE_FRACTION;
+        float right = Math.max(0f, containerWidth - (left + panelWidth));
+        float bottom = Math.max(0f, containerHeight - (top + panelHeight));
+
+        // No-ops when unchanged: replaceOrPutCandidate drops an identical value, which is what lets this
         // run every frame without re-dirtying layout forever.
-        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.left(left).top(top));
+        StyleGroup.inlinePipeline(this.getStyle().getLayoutGroup(), l -> {
+            if (toRight) l.leftAuto().right(right);
+            else l.rightAuto().left(left);
+            if (toBottom) l.topAuto().bottom(bottom);
+            else l.bottomAuto().top(top);
+        });
+        // STILL ITS OWN COPY of what CanvasOverlayMove does for the Blackboard, which is the duplication
+        // that class was extracted to end and this panel never migrated onto. Worth doing; not worth doing
+        // in the same change as the anchoring fix, or a regression in either is indistinguishable.
     }
 
     /**
@@ -373,7 +422,18 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
      */
     private void reclampIfPlaced() {
         if (!placed) return;
-        placeAt(resizeOriginLeft(), resizeOriginTop());
+        // NOT WHILE A DRAG IS LIVE. The clamp reads the panel's MEASURED box, which lags the drag by a
+        // frame -- so running both writes last frame's position back over the one the pointer just asked
+        // for, and the panel simply will not move. The clamp exists for a container that resized, and a
+        // drag is not that.
+        UIWindow dragWindow = getAttachedWindow();
+        if (dragWindow != null && dragWindow.getInputHandler().getDragController().isDragging()) return;
+        // MEASURED, never remembered and never from an inset -- see CanvasOverlayMove.reclampIfPlaced,
+        // which records why both of the other readings oscillate under a changing anchor.
+        UIElement block = resizeContainingBlock();
+        if (block == null) return;
+        placeAt(getRuntimeCache().getX() - block.getRuntimeCache().getX(),
+                getRuntimeCache().getY() - block.getRuntimeCache().getY());
     }
 
     /**

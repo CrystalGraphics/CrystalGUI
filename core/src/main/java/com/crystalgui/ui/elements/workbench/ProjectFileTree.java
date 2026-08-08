@@ -237,6 +237,27 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         getAttachedWindow().registerTicker(this::drain);
     }
 
+    /**
+     * Re-binds the rows when the panel comes back into a window.
+     *
+     * <p>A tool window is <b>hidden and reshown, not rebuilt</b> — the container is cached per type, so
+     * closing the explorer detaches this exact element and reopening re-parents it. The rows survive that;
+     * what does not is their <em>binding</em>, and every listener on a pooled row reads its item out of
+     * {@code rowItems} rather than capturing it, precisely so recycling cannot freeze a row on stale data.
+     * An unbound row therefore answers null and every handler returns early: the tree looks completely
+     * normal and does nothing at all, which is how this was reported — "close the explorer, reopen it, and
+     * double-clicking a folder stops working".</p>
+     *
+     * <p>Through {@code pendingRefresh} rather than refreshing here, for the reason {@link #activate}
+     * gives: a refresh re-flattens the model and recycles every realised row, which must not happen inside
+     * an attach.</p>
+     */
+    @Override
+    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        super.onWindowChanged(previous, current);
+        if (current != null) pendingRefresh = true;
+    }
+
     private boolean drain(float deltaSeconds) {
         UIWindow window = getAttachedWindow();
         if (window == null) {
@@ -622,7 +643,7 @@ public class ProjectFileTree extends UIElement implements UndoScope {
      * index is one insertion away from silently writing the badge into the label, and the indices would
      * live at the call site where nothing explains them.</p>
      */
-    private record RowParts(UIElement icon, UIText label, UIText badge) {
+    private record RowParts(UIElement twisty, UIElement icon, UIText label, UIText badge) {
     }
 
     private final java.util.Map<UIElement, RowParts> rowParts = new java.util.HashMap<>();
@@ -665,7 +686,11 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             // Every part refuses the click so the press lands on the row. Click targeting takes the exact
             // element hit and never walks up to a handler-bearing ancestor, which is why every composite
             // in this engine does this.
-            twisty.setHitTest(false);
+            // THE TWISTY IS THE ONE PART THAT KEEPS THE POINTER. Everything else refuses it so the press
+            // lands on the row -- click targeting takes the exact element hit and never walks up to a
+            // handler-bearing ancestor. The chevron is a control in its own right, which is what lets a
+            // folder fold on ONE click while the row still needs two. bind() turns it off again for a
+            // file, where there is nothing to fold.
             icon.setHitTest(false);
             label.setHitTest(false);
             badge.setHitTest(false);
@@ -674,7 +699,7 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             row.addChild(icon);
             row.addChild(label);
             row.addChild(badge);
-            rowParts.put(row, new RowParts(icon, label, badge));
+            rowParts.put(row, new RowParts(twisty, icon, label, badge));
             // A FOLDER TOGGLES ON ONE CLICK; A FILE OPENS ON TWO. Not one rule for both, and the
             // difference is not a compromise -- the two rows mean different things.
             //
@@ -687,6 +712,23 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             // VS Code's explorer draws the line in the same place. IntelliJ wants the chevron for a single
             // click, which is only better once the chevron is its own hit target; ours is still part of
             // the label's text.
+            // ONE CLICK ON THE CHEVRON FOLDS, which is IntelliJ's rule and the half this panel was
+            // missing -- its own comment said so: "IntelliJ wants the chevron for a single click, which is
+            // only better once the chevron is its own hit target". It is one now.
+            //
+            // Deliberately does NOT select. A chevron press is about the fold and nothing else, so it
+            // leaves the selection alone -- and because the row's own listeners are target-phase only, a
+            // press that lands here reaches neither the row's double-click nor its drag.
+            twisty.onMouseDown.attachListener((element, event) -> {
+                if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+                CgPath item = rowItems.get(row);
+                if (item == null || !source.isDirectory(item)) return;
+                tree.setExpanded(item, !tree.isExpanded(item));
+                // Deferred, for the reason activate() spells out: this runs from the press that folded
+                // the row, and refreshing recycles every realised row including the one under the pointer.
+                pendingRefresh = true;
+            }, false, false);
+
             installRowDrag(row);
             row.onMouseDown.attachListener((element, event) -> {
                 CgPath item = rowItems.get(row);
@@ -722,6 +764,10 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             // Icon and filetype class are read from the theme PER BIND, never captured, because a template
             // is a different row every time it is recycled.
             boolean directory = row.expandable();
+            // A FILE HAS NO CHEVRON TO PRESS, so its twisty gives the pointer back to the row -- otherwise
+            // a click that happened to land in the leading slot would do nothing at all, which reads as a
+            // dead strip down the left of the panel.
+            parts.twisty().setHitTest(directory);
             FileIconTheme theme = FileIconTheme.getDefault();
             CgUiDrawable glyph = theme.drawableFor(name, directory, row.expanded());
             // EMPTY, never null: null is how the cascade spells "nobody set this", so writing it would

@@ -184,6 +184,7 @@ public final class ShaderGraphPreviews implements UIFrameTicker {
 
     @Override
     public boolean tickFrame(float deltaSeconds) {
+        if (deleted) return false;
         // The debounce. Fires once the changes stop arriving, never per keystroke, and always fires —
         // a pane left showing a stale shader is worse than one that updates a beat late.
         if (recompilePending) {
@@ -228,8 +229,19 @@ public final class ShaderGraphPreviews implements UIFrameTicker {
         return true;
     }
 
-    /** Frees every target and mesh. Must run before the GL context goes away. */
+    /**
+     * Frees every target and mesh. Must run before the GL context goes away.
+     *
+     * <p>Idempotent, and it sets the flag {@link #tickFrame} reads. Deleting the renderer without saying
+     * so leaves a ticker calling into it every frame, which is a throw rather than a no-op — see the note
+     * at the top of {@code tickFrame}.</p>
+     */
     public void delete() {
+        if (deleted) return;
+        deleted = true;
         renderer.delete();
     }
+
+    /** @see #delete() */
+    private boolean deleted;
 }
