@@ -9,7 +9,6 @@ import com.crystalgraphics.shadergraph.CgShaderGraph;
 import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.ui.UIElement;
@@ -17,6 +16,7 @@ import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Menu;
+import com.crystalgui.ui.elements.canvas.CanvasOverlayMove;
 import com.crystalgui.ui.elements.MenuItem;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.UIDragController;
@@ -97,27 +97,17 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
     private float dragYaw;
     private float dragPitch;
 
-    /** Panel origin at the moment a move began, in the canvas viewport's own space. */
-    private float dragLeft;
-    private float dragTop;
-
-    /** True once the panel has been dragged, so its position is its own rather than the stylesheet's. */
-
     /**
-     * How far across the container a panel's centre must sit before it anchors to the FAR edge.
+     * Moving this panel and keeping it inside the canvas — shared with the Blackboard.
      *
-     * <p>Not the midpoint, which is the obvious value and is wrong in practice: a panel sitting anywhere
-     * past halfway — including squarely in the middle of the graph — would latch to the right or bottom and
-     * then travel with an edge it is nowhere near. Anchoring should mean "this belongs to that edge", and
-     * at 50%% a panel qualifies for it by a pixel.</p>
-     *
-     * <p>Biased towards the start edge, so the far anchor is something a panel opts into by genuinely being
-     * over there. A panel in the middle stays put when the container grows, which is what it looks like it
-     * should do.</p>
+     * <p><b>This class used to carry its own copy</b>, right down to the paragraph explaining why
+     * {@code getX()} is not in the same space as {@code left}. {@link CanvasOverlayMove} was extracted
+     * <em>from here</em> when the Blackboard needed the same behaviour, and this panel was never migrated
+     * onto it — so every fix to the anchoring had to be written twice, in parallel, and got four rounds
+     * each. Anchoring to the far edge, the measured re-clamp, the drag guard and the zero-box guard were
+     * all landed in both files by hand before this move.</p>
      */
-    private static final float FAR_EDGE_FRACTION = 0.7f;
-
-    private boolean placed;
+    private final CanvasOverlayMove move = CanvasOverlayMove.install(this, head, this::resizeContainingBlock);
 
     /** The one entry that is deliberately inert. @see #openMeshMenu */
     public static final String CUSTOM_MESH_LABEL = "Custom Mesh";
@@ -230,7 +220,8 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
     // ── Gestures ────────────────────────────────────────────────────────────
 
     private void installGestures() {
-        installMoveGesture();
+        // The MOVE gesture is not here: CanvasOverlayMove installs it from the field initializer, which is
+        // the whole of what this panel needs to say about dragging its own title bar now.
         surface.onMouseDown.attachListener((element, event) -> {
             float rawX = event.getPosition().x(), rawY = event.getPosition().y();
             if (!surface.containsScreenPoint(rawX, rawY)) return;
@@ -287,154 +278,16 @@ public class MainPreviewPanel extends UIElement implements UIFrameTicker, Dispos
     }
 
     /**
-     * Dragging the title bar moves the panel, which is what a title bar is for.
+     * Marks this panel as deliberately positioned, without moving it — for a rect restored from the file.
      *
-     * <p>The move writes {@code left}/{@code top} at INLINE. The panel starts anchored by
-     * {@code right}/{@code bottom} from the stylesheet — Unity's corner — and a definite width with both
-     * insets set resolves to the start edge, so writing {@code left} is what takes over. Reading the
-     * origin from the live layout rather than from a field is the same rule {@code UIResizer} follows:
-     * a field only knows the positions this code wrote, so a panel placed by a stylesheet would report
-     * 0 and teleport to the corner on the first drag.</p>
-     */
-    private void installMoveGesture() {
-        head.onMouseDown.attachListener((element, event) -> {
-            float rawX = event.getPosition().x(), rawY = event.getPosition().y();
-            if (!head.containsScreenPoint(rawX, rawY)) return;
-
-            UIWindow window = getAttachedWindow();
-            if (window == null) return;
-
-            UIElement block = resizeContainingBlock();
-            if (block == null) return;
-            // getX() is NOT in the same space as `left`. It is expressed in the frame screenToLocal maps
-            // into — which carries the root transform, and reported x = -100 for a box at the top-left in
-            // an earlier session — whereas `left` is an inset inside the containing block. Assigning one
-            // to the other teleported the panel by the difference on the first press, before the pointer
-            // had moved at all.
-            //
-            // Nor is resizeOriginLeft() the answer here: this panel is anchored by right/bottom from the
-            // stylesheet, so its `left` inset is unset and reads 0 — which is the same teleport wearing a
-            // different hat, and the exact failure that method's own doc warns about for a
-            // stylesheet-placed element.
-            //
-            // The offset within the containing block is what `left` means, so that is what is measured.
-            dragLeft = getRuntimeCache().getX() - block.getRuntimeCache().getX();
-            dragTop = getRuntimeCache().getY() - block.getRuntimeCache().getY();
-            window.getInputHandler().getDragController().startDrag(head, rawX, rawY,
-                    (mouseX, mouseY, startX, startY, deltaX, deltaY) -> moveTo(deltaX, deltaY));
-            event.stopPropagation();
-        }, false, true);
-    }
-
-    /**
-     * Marks this panel as deliberately positioned, without moving it.
-     *
-     * <p>For a rect restored from the file. {@code placed} gates the re-clamp that runs when the canvas
-     * changes size, and it was only ever set by a drag — so a panel whose position came from the document
-     * sat outside the graph after a relaunch and stayed there until it was nudged once, which is precisely
-     * how it was reported. A position read from the file is every bit as deliberate as one dragged to.</p>
-     *
-     * <p>Takes no coordinates. It once had a {@code markPlacedAt(left, top)} twin that seeded a remembered
-     * position, from when the re-clamp worked off one; it measures now, so the seed was a number nothing
-     * read. @see CanvasOverlayMove#markPlaced()</p>
+     * <p>The re-clamp is gated on it, and it was only ever set by a drag, so a panel whose position came
+     * from the document ignored the canvas resizing until it had been nudged once. @see
+     * CanvasOverlayMove#markPlaced()</p>
      */
     public void markPlaced() {
-        placed = true;
+        move.markPlaced();
     }
 
-    private void moveTo(float deltaX, float deltaY) {
-        placed = true;
-        placeAt(dragLeft + deltaX, dragTop + deltaY);
-    }
-
-    /**
-     * Writes a position, clamped to the containing block.
-     *
-     * <p>The same clamp {@code UIResizer} applies to a resize. Without it the panel goes straight out of
-     * the canvas — and since the viewport is {@code overflow: hidden} it does not end up somewhere
-     * awkward, it is simply <b>gone</b>, with no edge left to grab it back by.</p>
-     */
-    private void placeAt(float wantedLeft, float wantedTop) {
-        UIElement block = resizeContainingBlock();
-        if (block == null) return;
-
-        // NOT AGAINST AN UNMEASURED BLOCK, and this is the whole of the bug it fixes.
-        //
-        // Opening, closing or resizing a region relayouts the canvas, and for one frame the containing
-        // block measures zero -- so the clamp below computes max = 0 - width, floors it at 0, and writes
-        // left: 0; top: 0. The write is at INLINE origin and permanent, so the panel does not drift back:
-        // it goes to the graph's top-left corner and stays there. Every absolutely positioned thing in the
-        // graph flashes to the origin on that frame; the ones re-placed every frame recover and this one,
-        // placed once, did not.
-        //
-        // A zero box carries no information about where anything belongs, so the only correct response is
-        // to leave the position alone until there is a box to clamp against.
-        var blockBox = block.getRuntimeCache();
-        if (blockBox.getWidth() <= 0f || blockBox.getHeight() <= 0f) return;
-        if (getRuntimeCache().getWidth() <= 0f || getRuntimeCache().getHeight() <= 0f) return;
-
-float containerWidth = blockBox.getWidth();
-        float containerHeight = blockBox.getHeight();
-        float panelWidth = getRuntimeCache().getWidth();
-        float panelHeight = getRuntimeCache().getHeight();
-        float left = Math.max(0f, Math.min(Math.max(0f, containerWidth - panelWidth), wantedLeft));
-        float top = Math.max(0f, Math.min(Math.max(0f, containerHeight - panelHeight), wantedTop));
-
-        // ANCHORED TO THE NEARER EDGE ON EACH AXIS, which is what makes a panel track a resizing
-        // container in BOTH directions. A clamp only ever REDUCES, so shrinking pushes the panel in and
-        // expanding gives the space back with nothing to pull it out again -- `left` is the stored number
-        // and it genuinely has not changed.
-        //
-        // ONE INSET PER AXIS, the other explicitly `auto`. With both set and a definite size Taffy
-        // resolves in favour of the START edge, so a stale `left` silently wins and the anchor does
-        // nothing -- the same rule this code already relies on for a panel that is never dragged.
-        //
-        // Derived from position rather than stored: the anchor is whichever edge the panel's centre is
-        // nearer, recomputed for free after a drag or a restore.
-        boolean toRight = left + panelWidth / 2f > containerWidth * FAR_EDGE_FRACTION;
-        boolean toBottom = top + panelHeight / 2f > containerHeight * FAR_EDGE_FRACTION;
-        float right = Math.max(0f, containerWidth - (left + panelWidth));
-        float bottom = Math.max(0f, containerHeight - (top + panelHeight));
-
-        // No-ops when unchanged: replaceOrPutCandidate drops an identical value, which is what lets this
-        // run every frame without re-dirtying layout forever.
-        StyleGroup.inlinePipeline(this.getStyle().getLayoutGroup(), l -> {
-            if (toRight) l.leftAuto().right(right);
-            else l.rightAuto().left(left);
-            if (toBottom) l.topAuto().bottom(bottom);
-            else l.bottomAuto().top(top);
-        });
-        // STILL ITS OWN COPY of what CanvasOverlayMove does for the Blackboard, which is the duplication
-        // that class was extracted to end and this panel never migrated onto. Worth doing; not worth doing
-        // in the same change as the anchoring fix, or a regression in either is indistinguishable.
-    }
-
-    /**
-     * Re-clamps after the canvas itself changed size.
-     *
-     * <p>Clamping only while dragging is not enough: the position is written once and then <b>stays</b>,
-     * so dragging the split view narrower slides the viewport's edge past a panel that never moved. It
-     * looked like the panel sinking under the border, which points at z-order and is nowhere near it.</p>
-     *
-     * <p>Only once the panel has actually been moved. Before that it is anchored by the stylesheet's
-     * {@code right}/{@code bottom}, which already tracks a resizing viewport correctly — writing
-     * {@code left}/{@code top} would take that over and pin it to a corner it was never dragged to.</p>
-     */
-    private void reclampIfPlaced() {
-        if (!placed) return;
-        // NOT WHILE A DRAG IS LIVE. The clamp reads the panel's MEASURED box, which lags the drag by a
-        // frame -- so running both writes last frame's position back over the one the pointer just asked
-        // for, and the panel simply will not move. The clamp exists for a container that resized, and a
-        // drag is not that.
-        UIWindow dragWindow = getAttachedWindow();
-        if (dragWindow != null && dragWindow.getInputHandler().getDragController().isDragging()) return;
-        // MEASURED, never remembered and never from an inset -- see CanvasOverlayMove.reclampIfPlaced,
-        // which records why both of the other readings oscillate under a changing anchor.
-        UIElement block = resizeContainingBlock();
-        if (block == null) return;
-        placeAt(getRuntimeCache().getX() - block.getRuntimeCache().getX(),
-                getRuntimeCache().getY() - block.getRuntimeCache().getY());
-    }
 
     /**
      * Applies a drag delta to the orbit.
@@ -529,7 +382,7 @@ float containerWidth = blockBox.getWidth();
      */
     @Override
     public boolean tickFrame(float delta) {
-        reclampIfPlaced();
+        move.reclampIfPlaced(resizeOriginLeft(), resizeOriginTop());
         CgShaderGraph graph = ShaderGraphBridge.toShaderGraph(document, shaderNodes, master);
         // The camera is framed for the panel, so the picture fills it rather than sitting letterboxed in
         // the middle of it. Read from the SURFACE, not from the panel: the header takes a strip off the
