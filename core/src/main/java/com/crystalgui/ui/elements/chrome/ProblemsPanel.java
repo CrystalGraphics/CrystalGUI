@@ -6,6 +6,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.list.ListRenderer;
@@ -56,6 +57,9 @@ public class ProblemsPanel extends UIElement {
     /** Severity, as a class. Same convention as the notification cards. */
     public static final String SEVERITY_PREFIX = "severity-";
     public static final String EMPTY_CLASS = "__problems-empty__";
+    /** Rendering, not severity — @see com.crystalgui.text.diagnostic.DiagnosticTag */
+    public static final String TAG_UNNECESSARY = "tag-unnecessary";
+    public static final String TAG_DEPRECATED = "tag-deprecated";
 
     /** The row a user chose — a double click, or Enter on the selection. Never fired for a mere
      * selection change: arrowing through a list is not a decision to go somewhere. */
@@ -189,12 +193,23 @@ public class ProblemsPanel extends UIElement {
             // adding `severity-error` without removing `severity-warning` leaves both on the element and
             // the cascade resolves whichever happens to win — a random colour rather than a wrong one.
             parts.get(0).swapPrefixedClass(SEVERITY_PREFIX, SEVERITY_PREFIX + severityClass(diagnostic));
+            // TAGS CHANGE HOW IT IS DRAWN, not how bad it is — faded for unused, struck through for
+            // deprecated, whatever severity the producer gave it. Set explicitly both ways rather than
+            // added, for the same reason the severity is swapped: a template is a different problem every
+            // time the view recycles it.
+            applyTag(template, TAG_UNNECESSARY, diagnostic.hasTag(DiagnosticTag.UNNECESSARY));
+            applyTag(template, TAG_DEPRECATED, diagnostic.hasTag(DiagnosticTag.DEPRECATED));
             ((UIText) parts.get(1)).setText(diagnostic.message());
             // OMITTED, not dashed, when there is nothing to point at. With the column gone there is no
             // empty cell to fill, so a graph's node-level problem simply ends after its message.
             ((UIText) parts.get(2)).setText(
                     diagnostic.hasPosition() ? ":" + (diagnostic.start().row() + 1) : "");
         }
+    }
+
+    private static void applyTag(UIElement row, String cls, boolean present) {
+        if (present) row.addClass(cls);
+        else row.removeClass(cls);
     }
 
     /** The class the sheet keys the glyph and the colour off. */

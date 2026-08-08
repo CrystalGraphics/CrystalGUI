@@ -2,6 +2,8 @@ package com.crystalgui.text.diagnostic;
 
 import com.crystalgui.text.TextPoint;
 
+import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import javax.annotation.Nullable;
@@ -45,7 +47,22 @@ import javax.annotation.Nullable;
  * @param code     the reporter's identifier for this class of problem, or null
  */
 public record Diagnostic(TextPoint start, TextPoint end, DiagnosticSeverity severity, String message,
-                         @Nullable String source, @Nullable String code) implements Comparable<Diagnostic> {
+                         @Nullable String source, @Nullable String code,
+                         Set<DiagnosticTag> tags, List<RelatedInformation> related)
+        implements Comparable<Diagnostic> {
+
+    /**
+     * The common shape: a range, a severity, something to say, and who said it.
+     *
+     * <p>Kept as a constructor of its own rather than making every producer pass two empty collections.
+     * {@link DiagnosticTag} and {@link RelatedInformation} are genuinely optional — most diagnostics are
+     * about one place and are drawn like every other one — and a six-argument call reads as the normal
+     * case because it is.</p>
+     */
+    public Diagnostic(TextPoint start, TextPoint end, DiagnosticSeverity severity, String message,
+                      @Nullable String source, @Nullable String code) {
+        this(start, end, severity, message, source, code, Set.of(), List.of());
+    }
 
     /**
      * Any run of whitespace, newlines included.
@@ -82,6 +99,8 @@ public record Diagnostic(TextPoint start, TextPoint end, DiagnosticSeverity seve
         }
         if (severity == null) throw new IllegalArgumentException("A diagnostic needs a severity");
         if (message == null) message = "";
+        tags = tags == null || tags.isEmpty() ? Set.of() : Set.copyOf(tags);
+        related = related == null || related.isEmpty() ? List.of() : List.copyOf(related);
         // ONE LINE, ALWAYS. A diagnostic is rendered as a row in a list, a line in a tooltip, or a hover
         // over a squiggle — every consumer draws it on one line, and none of them asked for the newline a
         // producer happened to include.
@@ -123,7 +142,23 @@ public record Diagnostic(TextPoint start, TextPoint end, DiagnosticSeverity seve
     }
 
     public Diagnostic withSource(@Nullable String source, @Nullable String code) {
-        return new Diagnostic(start, end, severity, message, source, code);
+        return new Diagnostic(start, end, severity, message, source, code, tags, related);
+    }
+
+    /** How this should be drawn, beyond its severity. @see DiagnosticTag */
+    public Diagnostic withTags(DiagnosticTag... added) {
+        return new Diagnostic(start, end, severity, message, source, code,
+                added == null ? Set.of() : Set.of(added), related);
+    }
+
+    /** Other places worth looking at. @see RelatedInformation */
+    public Diagnostic withRelated(RelatedInformation... others) {
+        return new Diagnostic(start, end, severity, message, source, code, tags,
+                others == null ? List.of() : List.of(others));
+    }
+
+    public boolean hasTag(DiagnosticTag tag) {
+        return tags.contains(tag);
     }
 
     /** Whether this covers any part of {@code row} — the query a per-line renderer makes. */
