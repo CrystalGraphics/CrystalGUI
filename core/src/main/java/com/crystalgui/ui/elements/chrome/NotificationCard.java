@@ -5,7 +5,6 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
 
-import javax.annotation.Nullable;
 import java.util.Calendar;
 import java.util.Locale;
 
