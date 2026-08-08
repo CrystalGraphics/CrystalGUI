@@ -54,6 +54,51 @@ public final class MenuId {
     /** Right-click inside a text editor. */
     public static final MenuId EDITOR_CONTEXT = of("editor/context");
 
+    // ── The main menu bar ───────────────────────────────────────────────────────────────────────
+    //
+    // SIX, not VS Code's twelve. Terminal, Debug, Go, Selection, Refactor and Build have no subject in
+    // this application, and a menu that opens onto two items reads as something broken rather than as
+    // something small -- so their few relevant entries are folded into the six that do have a subject.
+    //
+    // GRAPH is the one that is not in either reference, and it is the reason a menu bar is worth having
+    // here at all: it is contributed entirely from com.crystalgui.graph, which the shell must not import.
+
+    /** File — new, open, save, close. */
+    public static final MenuId MAIN_FILE = of("main/file");
+
+    /**
+     * {@code File ▸ New}.
+     *
+     * <p>A second "New" submenu beside {@link #EXPLORER_NEW} rather than the same one, because the two
+     * genuinely differ: the explorer's acts on the right-clicked folder and this one acts on the project
+     * root. A command that suits both simply declares both placements.</p>
+     */
+    public static final MenuId MAIN_FILE_NEW =
+            of("main/file/new").nestedIn(MAIN_FILE, "New", "1_new", 0);
+
+    /** {@code File ▸ Open Recent} — populated by a {@link MenuContributor}, never by registration. */
+    public static final MenuId MAIN_FILE_RECENT =
+            of("main/file/recent").nestedIn(MAIN_FILE, "Open Recent", "2_open", 20);
+
+    /** Edit — undo, clipboard, find. */
+    public static final MenuId MAIN_EDIT = of("main/edit");
+
+    /** View — appearance, tool windows, editor layout. Where most of the toggles live. */
+    public static final MenuId MAIN_VIEW = of("main/view");
+
+    /** {@code View ▸ Tool Windows} — one checkable row per registered tool window. */
+    public static final MenuId MAIN_VIEW_TOOLWINDOWS =
+            of("main/view/toolwindows").nestedIn(MAIN_VIEW, "Tool Windows", "2_toolwindows", 0);
+
+    /** Graph — this application's own menu, contributed from the graph package. */
+    public static final MenuId MAIN_GRAPH = of("main/graph");
+
+    /** Window — panes, and the computed list of open editors. */
+    public static final MenuId MAIN_WINDOW = of("main/window");
+
+    /** Help — about, documentation. Thin, and honest about it. */
+    public static final MenuId MAIN_HELP = of("main/help");
+
     private final String name;
 
     private MenuId(String name) {

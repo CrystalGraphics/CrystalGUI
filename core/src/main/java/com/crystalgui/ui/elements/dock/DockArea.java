@@ -243,6 +243,41 @@ public class DockArea extends UIElement implements UIFrameTicker {
     }
 
     /**
+     * Brings {@code panel} to the front and focuses its group.
+     *
+     * <p>The three-step sequence — activate in the leaf, sync, make its group active — appeared inline at
+     * four call sites in {@code Workbench}, and dropping any one of them fails quietly in a different way:
+     * without {@code syncGroups} the tab strip still shows the old selection, and without
+     * {@code setActiveGroup} the panel is in front of a group that is not the active one, so every command
+     * resolving through {@link #activePanel()} still answers with the previous file.</p>
+     *
+     * @return whether the panel was found
+     */
+    public boolean activatePanel(DockPanelRef panel) {
+        DockLeaf leaf = layout().leafContaining(panel);
+        if (leaf == null) return false;
+        leaf.activate(panel);
+        // syncGroups, not requestRebuild: only the selection changed, and a rebuild would detach and
+        // recreate the very element a click may still be dispatching through.
+        syncGroups();
+        setActiveGroup(groupFor(leaf));
+        return true;
+    }
+
+    /**
+     * Every panel in the dock, leaf by leaf.
+     *
+     * <p>{@link DockLayout} has no such list on purpose — a panel belongs to a leaf, and a flat view would
+     * invite treating the dock as a bag of tabs. This is for the callers that legitimately want one: the
+     * Window menu's list of open editors, and anything auditing what is open.</p>
+     */
+    public List<DockPanelRef> allPanels() {
+        List<DockPanelRef> out = new ArrayList<>();
+        for (DockLeaf leaf : layout().leaves()) out.addAll(leaf.panels());
+        return out;
+    }
+
+    /**
      * The front panel changed — the single most-used signal in the dock.
      *
      * <h3>What it replaced</h3>

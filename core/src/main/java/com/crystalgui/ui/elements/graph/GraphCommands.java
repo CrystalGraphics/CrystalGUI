@@ -4,6 +4,7 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -100,6 +101,7 @@ public final class GraphCommands {
 
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(DELETE, "Delete")
+                .menu(MenuId.MAIN_GRAPH, "1_nodes", 20)
                 .run(context -> withGraph(context, GraphView::deleteSelection))
                 .enabledWhen(context -> {
                     GraphView graph = graphFor(context);
@@ -107,10 +109,12 @@ public final class GraphCommands {
                 }));
 
         registry.register(Command.of(SELECT_ALL, "Select All")
+                .menu(MenuId.MAIN_GRAPH, "3_select", 10)
                 .run(context -> withGraph(context, GraphView::selectAll))
                 .enabledWhen(context -> graphFor(context) != null));
 
         registry.register(Command.of(CLEAR_SELECTION, "Deselect")
+                .menu(MenuId.MAIN_GRAPH, "3_select", 20)
                 .run(context -> withGraph(context, GraphView::clearSelection))
                 .enabledWhen(context -> {
                     GraphView graph = graphFor(context);
@@ -118,10 +122,15 @@ public final class GraphCommands {
                 }));
 
         registry.register(Command.of(FRAME_SELECTION, "Frame Selection")
+                .menu(MenuId.MAIN_GRAPH, "4_layout", 10)
                 .run(context -> withGraph(context, graph -> graph.frameSelection(FRAME_PADDING)))
                 .enabledWhen(context -> graphFor(context) != null));
 
         registry.register(Command.of(CREATE_NODE, "Create Node")
+                // THE ONE MENU THIS APPLICATION HAS THAT NEITHER REFERENCE DOES, and it is contributed
+                // from com.crystalgui.ui.elements.graph -- which the shell does not import and must not.
+                // That direction is the whole argument for a registry over a hard-coded bar.
+                .menu(MenuId.MAIN_GRAPH, "1_nodes", 10)
                 // At the POINTER, as Unity does. An earlier version opened at the middle of the view on
                 // the reasoning that a command knows who invoked it rather than where the mouse is --
                 // which is wrong: the input handler holds the live pointer position, and a command can
@@ -146,6 +155,7 @@ public final class GraphCommands {
                 }));
 
         registry.register(Command.of(COPY, "Copy")
+                .menu(MenuId.MAIN_GRAPH, "2_clipboard", 20)
                 .run(context -> withGraph(context, graph -> {
                     // Left ALONE when nothing is selected -- see GraphView.copySelection. Copying
                     // nothing must not throw away what was copied a minute ago.
@@ -155,6 +165,7 @@ public final class GraphCommands {
                 .enabledWhen(context -> hasNodes(graphFor(context))));
 
         registry.register(Command.of(CUT, "Cut")
+                .menu(MenuId.MAIN_GRAPH, "2_clipboard", 10)
                 .run(context -> withGraph(context, graph -> {
                     GraphDocument copied = graph.copySelection();
                     if (copied == null) return;
@@ -164,6 +175,7 @@ public final class GraphCommands {
                 .enabledWhen(context -> hasNodes(graphFor(context))));
 
         registry.register(Command.of(PASTE, "Paste")
+                .menu(MenuId.MAIN_GRAPH, "2_clipboard", 30)
                 .run(context -> withGraph(context, graph -> pasteInto(graph, clipboard)))
                 // Disabled with an empty clipboard, so the key falls through rather than doing nothing
                 // visible -- and the palette and any menu grey it, which is the same answer.
@@ -171,10 +183,12 @@ public final class GraphCommands {
                         && clipboard != null && clipboard.nodeCount() > 0));
 
         registry.register(Command.of(DUPLICATE, "Duplicate")
+                .menu(MenuId.MAIN_GRAPH, "1_nodes", 30)
                 .run(context -> withGraph(context, graph -> pasteInto(graph, graph.copySelection())))
                 .enabledWhen(context -> hasNodes(graphFor(context))));
 
         registry.register(Command.of(FRAME_ALL, "Frame All")
+                .menu(MenuId.MAIN_GRAPH, "4_layout", 20)
                 .run(context -> withGraph(context, graph -> graph.fitToContent(FRAME_PADDING)))
                 .enabledWhen(context -> graphFor(context) != null));
     }

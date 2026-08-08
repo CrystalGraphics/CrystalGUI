@@ -4756,9 +4756,23 @@ crystaleditor > .__editor-content__ {
  * Dimmer than the label and deliberately so: it is a footnote to the item, not a second thing to read.
  * IntelliJ, VS Code and every native menu do exactly this. `margin-left: auto` is what pushes it to the
  * right edge, which is what makes a column of chords scannable rather than ragged against the labels. */
+/* FLUSH RIGHT, via an auto margin rather than a fixed gap.
+ *
+ * Every native menu right-aligns its shortcuts -- IntelliJ, VS Code, Windows -- and it is not decoration:
+ * with the accelerator following its label, `Ctrl+\` and `Ctrl+Shift+K` start at different places on
+ * every row, so there is no column to read down and the longest one decides how wide the menu is anyway.
+ *
+ * `margin-left: auto` claims the row's free space. Exactly ONE auto margin in the row, which is what makes
+ * it a right-align rather than a centring -- auto margins SHARE free space between every claimant, the trap
+ * the activity bar's groups already spent a session on.
+ *
+ * The 24px moved to PADDING because an auto margin contributes nothing to min-content: as a margin it
+ * stopped reserving the gap while the menu was being measured, so the widest row -- the one with no free
+ * space left to push with -- would have had its label touching its shortcut. */
 menuitem .__accelerator__ {
     color: #8A8A8A;
-    margin-left: 24px;
+    margin-left: auto;
+    padding-left: 24px;
     white-space: nowrap;
 }
 
@@ -5596,4 +5610,88 @@ problemspanel .__problem__.__leaf__ .__twisty__ {
  * beside it -- and at this panel's width that is most of a screen away from the name it belongs to. */
 problemspanel .__problem__.__problem-file__ .__message__ {
     flex-grow: 0;
+}
+
+/* ── The main menu bar ──────────────────────────────────────────────────────────────────────────
+ *
+ * A row of titles above everything, and — like the status bar — it must keep its height at every
+ * window size, or opening a menu would reflow every region below it. `flex-shrink: 0` is what states
+ * that; nothing here is positioned. */
+.__menu-bar__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    height: 22px;
+    padding-left: 4px;
+    background-color: #3C3F41;
+}
+
+.__menu-bar__ .__menu-title__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    height: 22px;
+    padding-left: 8px;
+    padding-right: 8px;
+    color: #BBBBBB;
+    cursor: pointer;
+}
+
+/* THE SIZE GOES ON THE TEXT ELEMENT, NEVER ON THE TITLE, and this is not a style preference.
+ *
+ * `* { font-size: 10 }` at the top of this file gives EVERY element a candidate at STYLESHEET origin --
+ * and inheritance only applies where there is no candidate at any origin. So font-size does not
+ * inherit anywhere in this engine, whatever `setInheritable(true)` says on the property. Declared on
+ * the title it computes correctly on the title and the label beside it still renders at 10.
+ *
+ * `statusbarview .__status-item__` works only because the status item IS its text element; a widget that
+ * wraps its label -- as this one does, to give the title padding and a hover fill -- has to say it twice
+ * or say it here. 10 to match `menuitem`, which is what these open. */
+.__menu-bar__ .__menu-title__ text {
+    font-size: 10;
+}
+
+.__menu-bar__ .__menu-title__:hover {
+    background-color: #4C5052;
+}
+
+/* THE OPEN TITLE STAYS LIT while its menu is down, which is the only thing on screen tying the popup
+ * to the word it came from. A class rather than `:active`, which means "pressed" and would go out the
+ * moment the button came up. */
+.__menu-bar__ .__menu-title__.__open__ {
+    background-color: #4C5052;
+    color: #FFFFFF;
+}
+
+/* THE MNEMONIC UNDERLINE, drawn only while Alt is held. A text range rather than three elements: a
+ * split label would reflow the bar on every Alt press, and — worse — would re-shape across two span
+ * boundaries, so every title would shift by a fraction of a pixel. `::highlight()` exists precisely so
+ * a range can be styled without being wrapped. */
+::highlight(mnemonic) {
+    text-decoration-line: underline;
+}
+
+/* THE BURGER — the collapsed bar. Three boxes rather than a ☰ glyph: the bundled Minecraft fonts have
+ * no U+2630 and it renders as tofu, the same trap UIText records for U+2026 and ViewContainer for its
+ * close mark. Geometry, so it works with no theme loaded, and every part is still themeable. */
+.__menu-bar__ .__burger__ {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    gap-all: 3px;
+    cursor: pointer;
+}
+
+.__menu-bar__ .__burger__:hover {
+    background-color: #4C5052;
+}
+
+.__menu-bar__ .__burger-bar__ {
+    width: 12px;
+    height: 2px;
+    flex-shrink: 0;
+    background-color: #BBBBBB;
 }

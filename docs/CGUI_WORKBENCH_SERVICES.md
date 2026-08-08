@@ -1201,3 +1201,138 @@ whether it is alone in one, sharing it, or in a container at all. `ViewContainer
 the title, and **only for a lone view** — with two sharing a container the header names the container, and
 one view's controls beside it would look like they governed both. The element must be one the view *owns*
 rather than built per call, or the container ends up holding a previous one.
+
+---
+
+## Menus, and the menu bar
+
+**A menu is a query, not a list.** `MenuId` names a place a menu is drawn; a command declares that it
+belongs there; a renderer asks the registry what is there *right now*. Nothing enumerates menu items —
+which is what lets `com.crystalgui.ui.elements.graph` own the entire Graph menu without the shell
+importing it, and what makes `MainMenuCommands` 70 lines that declare two commands.
+
+### Putting an item in a menu
+
+One line, on the command itself, at the place it is already registered:
+
+```java
+registry.register(Command.of("edit.save", "Save File")
+        .binding("Mod+S")
+        .menu(MenuId.MAIN_FILE, "3_save", 10)          // ← the whole of "add it to the File menu"
+        .enabledWhen(...)
+        .run(...));
+```
+
+| Argument | Meaning |
+|---|---|
+| `MenuId` | Where. The main-menu ids are `MAIN_FILE`, `MAIN_EDIT`, `MAIN_VIEW`, `MAIN_GRAPH`, `MAIN_WINDOW`, `MAIN_HELP`, plus the nested `MAIN_FILE_NEW`, `MAIN_FILE_RECENT`, `MAIN_VIEW_TOOLWINDOWS` |
+| `group` | The **section**, and the sort key. VS Code's `N_name` convention: `1_new`, `2_open`. **Separators are drawn between groups and never declared** — so adding to an existing section cannot produce a stray rule, and starting a new one cannot fail to |
+| `order` | Position within the section |
+
+A command may declare **several** placements — `explorer.newFile` is in both `EXPLORER_NEW` and
+`MAIN_FILE_NEW`, because the difference between them is already inside its own `enabledWhen`.
+
+### Toggles
+
+A checkmark is a fact about the application, so the **command** states it. The row is built by a menu
+that has never heard of soft wrap:
+
+```java
+Command.of("editor.toggleSoftWrap", "Toggle Soft Wrap")
+        .menu(MenuId.MAIN_VIEW, "3_editor", 40)
+        .toggledWhen(when(TextEditor::isSoftWrap))     // or toggledWhereData(...) over the DataContext
+        .run(...)
+```
+
+Read when the menu is built, never stored. There is no `setToggled`: the command *reports* the state, it
+does not own it. `isCheckable()` (is there a mark column at all) is deliberately distinct from
+`isToggled()` (which way it points) — an unchecked toggle still reserves its column, which is what stops
+a menu's labels shifting sideways as its toggles change.
+
+### Computed rows — `MenuContributor`
+
+For a list whose **length is not known until the menu opens**: the open editors, a Recent Files list, one
+row per registered tool window. There is no id to register a command against, because the thing being
+offered is the *list*. IntelliJ's `ActionGroup.getChildren`, computed per invocation.
+
+```java
+registry.contributeMenu(MenuId.MAIN_WINDOW, (menu, context) -> {
+    Workbench workbench = context.data().get(Workbench.WORKBENCH);
+    if (workbench == null) return List.of();
+    List<MenuEntry> rows = new ArrayList<>();
+    int order = 0;
+    for (DockPanelRef panel : workbench.dock().allPanels()) {
+        rows.add(new MenuEntry.Item(
+                Command.of("workbench.editor." + …, workbench.panels().titleOf(panel))
+                        .run(() -> workbench.dock().activatePanel(panel)),
+                "9_editors", order += 10,
+                /* enabled */ true, /* checkable */ true, panel == active));
+    }
+    return rows;
+});
+```
+
+- **The command need not be registered anywhere.** `MenuBuilder` runs the held command when the registry
+  does not know the id, which is what lets "open this specific recent file" exist without one palette
+  entry per file.
+- **Called on every open.** That is what "computed" means; keep it cheap. Reading a list somebody else
+  maintains is the intended cost, going to disk is not.
+- Keyed per menu, so opening File does not ask the Window menu's contributor anything.
+
+### Reading a menu — `CommandRegistry.sections`
+
+```java
+List<MenuSection> sections = registry.sections(MenuId.MAIN_FILE, CommandContext.of(source));
+```
+
+Returns the rows **grouped**, in group-then-order, each `MenuEntry.Item` carrying `enabled`, `checkable`
+and `checked`, with `MenuEntry.Submenu` listed but **not expanded** (expanding would resolve the whole
+tree to draw one row).
+
+> **Disabled rows are included, marked.** The registry states the answer and does not act on it. Both
+> current renderers dim rather than hide — see `MenuBuilder`'s class note for why, and for the 1-of-9
+> palette this repo already paid for. `CommandRegistry.menu()` is the deprecated flat, filtered view.
+
+### Rendering — `MenuBuilder`
+
+**Never build menu rows against `Menu` directly.** Six rules live here, each learned from a bug:
+separators between sections but never leading, trailing or doubled; an unregistered command still gets a
+row (disabled); enablement re-checked at activation; the command re-resolved through the registry when it
+runs; accelerators read live from the keymap; an empty submenu dropped but a disabled one kept.
+
+```java
+Menu menu = MenuBuilder.build(MenuId.MAIN_FILE, registry, source);   // a whole menu
+MenuBuilder.appendSections(menu, id, registry, source);              // splice into one you own
+MenuBuilder.row(menu, registry, source, "edit.save", null);          // one named row
+
+List<Menu> live = MenuBuilder.present(menu, attachmentSite, window); // attach the whole chain
+MenuBuilder.discard(live);                                           // close, then detach
+```
+
+`ContextMenu` is a caller of this, not a parallel implementation. If you are about to write a second one,
+that is the thing the plan warned about: two builders disagree about separators and greying within a
+release.
+
+### The bar — `MenuBarView`
+
+```java
+MenuBarView bar = new MenuBarView(CommandRegistry.global());
+MainMenuCommands.install(bar);      // the six standard titles, or call addMenu yourself
+workbench.addInternalChild(bar);    // above content; the workbench is a column
+```
+
+| | |
+|---|---|
+| `addMenu(MenuId, "&File")` | `&` marks the mnemonic and is stripped; `&&` is a literal ampersand |
+| `open(id)` / `close()` / `openMenu()` | The bar owns **which** menu is open, because hover-switching is a fact about the bar and no title could decide it alone |
+| `onDidChangeOpenMenu` | Fires with the open id, or null |
+| Alt+letter | Opens from anywhere — a capture-phase listener on the window root, since a bar is never focused |
+| Alt held | Underlines the mnemonics, via `::highlight(mnemonic)` |
+
+Commands resolve against the **focused** element, not the bar — File ▸ Save saves the active editor. That
+is the opposite of `ContextMenu`'s rule and for the opposite reason: a right-click names its subject, a
+menu bar does not.
+
+> **Styling a title's text**: the size must go on the `text` element, not on `.__menu-title__`.
+> `* { font-size: 10 }` in `default.css` gives every element a candidate, so font-size does not inherit
+> anywhere in this engine. See the invariant table in `AGENTS.md`.

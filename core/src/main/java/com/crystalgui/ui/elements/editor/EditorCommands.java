@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.input.keymap.Keymap;
@@ -144,17 +145,33 @@ public final class EditorCommands {
 
         // ── Comments ────────────────────────────────────────────────────────────────────────────
         registry.register(Command.of(PREFIX + "toggleLineComment", "Toggle Line Comment")
+                .menu(MenuId.MAIN_EDIT, "5_comment", 10)
                 .run(on(TextEditor::toggleLineComment)).enabledWhen(whenEditable()));
         registry.register(Command.of(PREFIX + "toggleBlockComment", "Toggle Block Comment")
+                .menu(MenuId.MAIN_EDIT, "5_comment", 20)
                 .run(on(TextEditor::toggleBlockComment)).enabledWhen(whenEditable()));
 
         // ── Selection and clipboard ─────────────────────────────────────────────────────────────
+        //
+        // THE EDIT MENU IS THESE PLACEMENTS AND NOTHING ELSE. There is no list of Edit's contents
+        // anywhere: each command says which section it belongs to, MenuBarView asks the registry, and the
+        // separators fall out of the section boundaries. Adding one here is the entire act of adding it to
+        // the menu -- which is the property the whole MenuId design exists to buy.
         registry.register(Command.of(PREFIX + "selectAll", "Select All")
+                .menu(MenuId.MAIN_EDIT, "3_select", 10)
+                // GUARDED, though it takes no state of its own. Every other command here resolves an
+                // editor and so greys without one; this had no enabledWhen at all, which made it the one
+                // white row in an Edit menu opened over the file tree -- and pressing it did nothing,
+                // because `on` returns when there is no editor. "A command that does nothing visible is
+                // worse than one that is greyed out" is already stated on DockCommands.TOGGLE_MAXIMIZE.
+                .enabledWhen(when(editor -> true))
                 .run(on(editor -> editor.setSelection(0, editor.getText().length()))));
         registry.register(Command.of(PREFIX + "copy", "Copy")
+                .menu(MenuId.MAIN_EDIT, "2_clipboard", 20)
                 .run(on(editor -> CgPlatform.input().setClipboard(editor.getSelectedText())))
                 .enabledWhen(when(TextEditor::hasSelection)));
         registry.register(Command.of(PREFIX + "cut", "Cut")
+                .menu(MenuId.MAIN_EDIT, "2_clipboard", 10)
                 .run(on(editor -> {
                     CgPlatform.input().setClipboard(editor.getSelectedText());
                     editor.deleteSelections();
@@ -162,6 +179,7 @@ public final class EditorCommands {
                 // Two conditions, and both matter: nothing to cut, or nowhere to cut from.
                 .enabledWhen(when(editor -> editor.hasSelection() && !editor.isReadOnly())));
         registry.register(Command.of(PREFIX + "paste", "Paste")
+                .menu(MenuId.MAIN_EDIT, "2_clipboard", 30)
                 .run(on(editor -> {
                     String pasted = CgPlatform.input().getClipboard();
                     if (pasted != null && !pasted.isEmpty()) editor.insertAtCaret(pasted);
@@ -170,8 +188,10 @@ public final class EditorCommands {
 
         // ── Search ──────────────────────────────────────────────────────────────────────────────
         registry.register(Command.of(PREFIX + "findNext", "Find Next")
+                .menu(MenuId.MAIN_EDIT, "4_find", 10)
                 .run(on(TextEditor::findNext)).enabledWhen(when(editor -> editor.matchCount() > 0)));
         registry.register(Command.of(PREFIX + "findPrevious", "Find Previous")
+                .menu(MenuId.MAIN_EDIT, "4_find", 20)
                 .run(on(TextEditor::findPrevious)).enabledWhen(when(editor -> editor.matchCount() > 0)));
         registry.register(Command.of(PREFIX + "findWordUnderCaret", "Find Word Under Caret")
                 .run(on(TextEditor::findWordUnderCaret)));
@@ -191,15 +211,23 @@ public final class EditorCommands {
 
         // ── View ────────────────────────────────────────────────────────────────────────────────
         registry.register(Command.of(PREFIX + "zoomIn", "Zoom In")
+                .menu(MenuId.MAIN_VIEW, "3_editor", 10)
                 .run(on(editor -> editor.zoomBy(1)))
                 .enabledWhen(when(editor -> editor.getFontSize() < TextEditor.MAX_FONT_SIZE)));
         registry.register(Command.of(PREFIX + "zoomOut", "Zoom Out")
+                .menu(MenuId.MAIN_VIEW, "3_editor", 20)
                 .run(on(editor -> editor.zoomBy(-1)))
                 .enabledWhen(when(editor -> editor.getFontSize() > TextEditor.MIN_FONT_SIZE)));
         registry.register(Command.of(PREFIX + "zoomReset", "Reset Zoom")
+                .menu(MenuId.MAIN_VIEW, "3_editor", 30)
                 .run(on(TextEditor::resetZoom)));
 
         registry.register(Command.of(PREFIX + "toggleSoftWrap", "Toggle Soft Wrap")
+                .menu(MenuId.MAIN_VIEW, "3_editor", 40)
+                // A CHECKMARK, stated by the command rather than by whoever draws the row. The renderer
+                // asks; nothing about the View menu knows what soft wrap is. Read live, so the tick is
+                // right for the editor that happens to be focused when the menu opens.
+                .toggledWhen(when(TextEditor::isSoftWrap))
                 // Not undoable, and it must not be: wrapping is a view setting and the document is
                 // byte-identical either way. See the boundary note on UndoStack.
                 .run(on(editor -> editor.setSoftWrap(!editor.isSoftWrap()))));
@@ -213,8 +241,10 @@ public final class EditorCommands {
         registry.register(Command.of(PREFIX + "foldRecursively", "Fold Recursively")
                 .run(on(TextEditor::foldRecursively)));
         registry.register(Command.of(PREFIX + "foldAll", "Fold All")
+                .menu(MenuId.MAIN_VIEW, "4_folding", 10)
                 .run(on(TextEditor::foldAll)));
         registry.register(Command.of(PREFIX + "unfoldAll", "Unfold All")
+                .menu(MenuId.MAIN_VIEW, "4_folding", 20)
                 .run(on(TextEditor::unfoldAll)));
         for (int level = 1; level <= 7; level++) {
             final int foldLevel = level;

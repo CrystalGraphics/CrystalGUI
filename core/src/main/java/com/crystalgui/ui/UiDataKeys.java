@@ -2,6 +2,7 @@ package com.crystalgui.ui;
 
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.ui.elements.chrome.MenuBarView;
 
 import java.util.List;
 
@@ -63,6 +64,17 @@ public final class UiDataKeys {
      * registry keyed by nothing but id then handed every later invocation to whichever window was built
      * first.</p>
      */
+    /**
+     * The main menu bar, offered by whatever chrome owns one.
+     *
+     * <p>Reached through the ordinary outward walk, so a command that toggles the bar's presentation does
+     * not have to be handed the widget — the same reason {@code WORKBENCH} exists. The <b>workbench</b>
+     * answers this rather than the bar itself: the walk only finds ancestors, and a menu bar is a sibling
+     * of the content everything else is focused inside.</p>
+     */
+    public static final DataKey<MenuBarView> MENU_BAR =
+            DataKey.create("menuBar", MenuBarView.class);
+
     public static final DataKey<UIWindow> WINDOW =
             DataKey.create("window", UIWindow.class);
 }

@@ -1,7 +1,10 @@
 package com.crystalgui.core.command;
 
+import com.crystalgui.core.command.when.WhenExpression;
 import com.crystalgui.core.data.DataContext;
 import lombok.Getter;
+
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -77,6 +80,28 @@ public final class Command {
         return enabledWhen(context -> predicate.test(context.data()));
     }
 
+    /**
+     * Enablement written as a {@code when} expression — {@code "undoStack && !readOnly"}.
+     *
+     * <h3>When to use this instead of a lambda</h3>
+     *
+     * <p>Almost never, for a command declared in Java: {@link #enabledWhereData} is clearer, typed, and
+     * cannot be misspelled. This exists because a lambda is <b>not data</b>, and a serialised
+     * contribution — a menu shipped in a resource pack, a command sent from a server — has no way to
+     * carry one. Same argument {@link #binding} makes about naming a {@code String} id.</p>
+     *
+     * <p>Throws on a malformed expression, at declaration time rather than at use. See
+     * {@link WhenExpression} for why this refuses where a stylesheet would degrade.</p>
+     */
+    public Command when(String expression) {
+        return enabledWhereData(WhenExpression.parse(expression).asPredicate());
+    }
+
+    /** {@link #toggledWhen} written as a {@code when} expression. @see #when */
+    public Command toggledWhenExpression(String expression) {
+        return toggledWhereData(WhenExpression.parse(expression).asPredicate());
+    }
+
     /** As {@link #run(Consumer)}, but handed the data context directly. */
     public Command runWithData(Consumer<DataContext> handler) {
         return run(context -> handler.accept(context.data()));
@@ -120,8 +145,58 @@ public final class Command {
         return Collections.unmodifiableList(menus);
     }
 
+    /**
+     * Declares this a <b>toggle</b>, and how to read its current state — VS Code's {@code toggled},
+     * IntelliJ's {@code ToggleAction}.
+     *
+     * <h3>Why the command and not the menu item</h3>
+     *
+     * <p>{@code MenuItem.setCheckable}/{@code setSelected} have always existed, so a checkmark was
+     * expressible — <b>by whoever built the row</b>. That is the wrong owner: "Show Problems is currently
+     * on" is a fact about the application, and a contributed command whose row is built by a menu it has
+     * never heard of has no way to state it. The result was that every toggle in a menu had to be
+     * hand-built outside the contribution system, which is precisely the coupling {@link MenuId} exists to
+     * remove.</p>
+     *
+     * <p>Read at build time by whatever renders the row, and — like {@link #isEnabled} — resolved against
+     * the context rather than stored, so a toggle cannot go stale between the state changing and the menu
+     * next opening. There is no {@code setToggled}: the command does not own the state, it reports it.</p>
+     *
+     * <p>The handler is unchanged and still does the toggling. A toggle command is an ordinary command
+     * that happens to be able to describe itself.</p>
+     */
+    public Command toggledWhen(Predicate<CommandContext> predicate) {
+        this.toggled = predicate;
+        return this;
+    }
+
+    /** {@link #toggledWhen} stated over the {@link DataContext}. @see #enabledWhereData */
+    public Command toggledWhereData(Predicate<DataContext> predicate) {
+        return toggledWhen(context -> predicate.test(context.data()));
+    }
+
+    /**
+     * Whether this renders with a checkmark column at all.
+     *
+     * <p>Distinct from {@link #isToggled} being false: an unchecked toggle reserves the column and an
+     * ordinary command does not, which is what stops a menu's labels shifting sideways as its toggles
+     * change.</p>
+     */
+    public boolean isCheckable() {
+        return toggled != null;
+    }
+
+    /** This toggle's current state, or false when it is not a toggle. */
+    public boolean isToggled(CommandContext context) {
+        return toggled != null && toggled.test(context);
+    }
+
     private final List<String> bindings = new ArrayList<>();
     private final List<MenuId.Placement> menus = new ArrayList<>();
+
+    /** Null means "not a toggle" — the distinction {@link #isCheckable} rests on. */
+    @Nullable
+    private Predicate<CommandContext> toggled;
 
     public boolean isEnabled(CommandContext context) {
         return enabled.test(context);

@@ -1,20 +1,13 @@
 package com.crystalgui.ui.elements.chrome;
 
-import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Menu;
-import com.crystalgui.ui.elements.Popover;
-import com.crystalgui.ui.elements.MenuItem;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.ui.input.keymap.KeyChord;
-import com.crystalgui.ui.input.keymap.Keymap;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -26,7 +19,7 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
  *
  * <h3>Commands, not handlers — and this is the whole design</h3>
  *
- * <p>An item names a {@link Command} id and nothing else. Its label, whether it is enabled, what it does
+ * <p>An item names a {@code Command} id and nothing else. Its label, whether it is enabled, what it does
  * and which keystroke it advertises all come from the registry, so <b>the menu, the palette and the
  * keyboard cannot disagree</b> — they are three views of one list. A menu built from lambdas is a fourth
  * place to keep in sync, and it is the one that goes stale, because nothing enumerates it.</p>
@@ -151,109 +144,37 @@ public final class ContextMenu {
         boolean pendingSeparator = false;
         boolean anyItem = false;
 
-        for (Entry entry : resolve(registry, source)) {
+        for (Entry entry : entries) {
             if (entry instanceof SeparatorEntry) {
                 // Deferred rather than added: a separator is only real once something follows it, which is
                 // what makes leading and doubled ones disappear without the caller tracking groups.
                 pendingSeparator = anyItem;
                 continue;
             }
+            boolean added;
             if (pendingSeparator) {
+                // Speculative for a ContributedEntry, which may turn out to add nothing at all -- so the
+                // rule is removed again below rather than left hanging. MenuBuilder does not have this
+                // problem because it resolves before it emits; here the declared and contributed entries
+                // are interleaved by the caller, so the decision cannot be made up front.
                 menu.addSeparator();
-                pendingSeparator = false;
             }
-            if (entry instanceof SubmenuEntry sub) {
+            if (entry instanceof ContributedEntry contributed) {
+                added = MenuBuilder.appendSections(menu, contributed.menu(), registry, source);
+                if (pendingSeparator && !added) menu.removeLastSeparator();
+            } else if (entry instanceof SubmenuEntry sub) {
                 menu.addSubmenu(sub.label(), sub.menu().build(registry, source));
-            } else if (entry instanceof CommandEntry command) {
-                addCommand(menu, registry, source, command);
+                added = true;
+            } else {
+                CommandEntry command = (CommandEntry) entry;
+                MenuBuilder.row(menu, registry, source, command.commandId(), command.labelOverride());
+                added = true;
             }
+            if (!added) continue;
+            pendingSeparator = false;
             anyItem = true;
         }
         return menu;
-    }
-
-    /** Declared entries, with every {@link ContributedEntry} replaced by what is registered for it. */
-    private List<Entry> resolve(CommandRegistry registry, UIElement source) {
-        List<Entry> out = new ArrayList<>();
-        for (Entry entry : entries) {
-            if (entry instanceof ContributedEntry contributed) {
-                out.addAll(contributionsOf(contributed.menu(), registry, source));
-            } else {
-                out.add(entry);
-            }
-        }
-        return out;
-    }
-
-    /**
-     * What is registered for {@code menu}, in group-then-order, separated between groups.
-     *
-     * <p>Commands and submenus are interleaved by the same {@code (group, order)} pair, so a submenu is
-     * an ordinary participant rather than something pinned to one end.</p>
-     *
-     * <p><b>A submenu with nothing contributed to it at all is dropped</b> — not one whose items are
-     * merely disabled, which still opens and shows them dimmed. An empty submenu is a registration that
-     * never happened; a disabled one is an answer.</p>
-     */
-    private static List<Entry> contributionsOf(MenuId menu, CommandRegistry registry, UIElement source) {
-        record Row(String group, int order, Entry entry) {
-        }
-        List<Row> rows = new ArrayList<>();
-
-        for (Command command : registry.all()) {
-            for (MenuId.Placement placement : command.menus()) {
-                if (placement.menu() != menu) continue;
-                rows.add(new Row(placement.group(), placement.order(),
-                        new CommandEntry(command.getId(), null)));
-                break;
-            }
-        }
-
-        for (MenuId.Submenu nested : menu.submenus()) {
-            ContextMenu built = ContextMenu.of(nested.menu());
-            if (built.resolve(registry, source).isEmpty()) continue;
-            rows.add(new Row(nested.group(), nested.order(),
-                    new SubmenuEntry(nested.title(), built)));
-        }
-
-        rows.sort(Comparator.comparing(Row::group).thenComparingInt(Row::order));
-
-        List<Entry> out = new ArrayList<>();
-        String previousGroup = null;
-        for (Row row : rows) {
-            // Emitted freely between groups: build() drops leading, trailing and doubled separators, so
-            // there is nothing to count here.
-            if (previousGroup != null && !previousGroup.equals(row.group())) out.add(new SeparatorEntry());
-            out.add(row.entry());
-            previousGroup = row.group();
-        }
-        return out;
-    }
-
-    private static void addCommand(Menu menu, CommandRegistry registry, UIElement source,
-                                   CommandEntry entry) {
-        Command command = registry.get(entry.commandId());
-        CommandContext context = CommandContext.of(source);
-        // A command that is not registered still gets a row, disabled. Silently dropping it would make a
-        // menu that is missing an item look exactly like a menu that never listed one -- and the reason it
-        // is absent is always the same bug, an install that never happened. GraphCommands twice.
-        String label = entry.labelOverride() != null ? entry.labelOverride()
-                : command != null ? command.getLabel() : entry.commandId();
-
-        MenuItem item = menu.addItem(label);
-        item.setEnabled(command != null && command.isEnabled(context));
-
-        KeyChord chord = Keymap.acceleratorFor(source, entry.commandId());
-        item.setAccelerator(chord == null ? null : chord.toString());
-
-        if (command != null) {
-            item.attachListener(() -> {
-                // RE-CHECKED at activation, and run THROUGH THE REGISTRY. The menu may have been open
-                // while something changed under it, and going through the registry is what a rebind or a
-                // replaced command needs -- holding the Command found at build time would run the old one.
-                if (command.isEnabled(context)) registry.run(entry.commandId(), context);
-            });
-        }
     }
 
     // ── Attaching ───────────────────────────────────────────────────────────────────────────────
@@ -296,27 +217,22 @@ public final class ContextMenu {
             // the second right-click resolved its target inside the popup that discard() was about to
             // detach -- so both the command context and the host were computed from an element no longer
             // in the tree, and Popover.show refused it as unattached.
-            if (!live.isEmpty() && isInsideAny(target, live)) target = on;
+            if (!live.isEmpty() && MenuBuilder.isInsideAny(target, live)) target = on;
 
-            discard(live);
+            MenuBuilder.discard(live);
 
             ContextMenu spec = builder.apply(target);
             if (spec == null) return;
 
             Menu menu = spec.build(registry, target);
-            // The nearest ancestor that ACCEPTS children, not the root -- the root may itself be a
-            // composite that refuses them, which is exactly how right-clicking the Project panel threw
-            // out of the mouse-down dispatch. See Popover.hostFor.
-            // Resolved from the ATTACHMENT SITE, not the clicked element: `on` is always in the tree,
-            // while a target can be anything the pointer happened to be over.
-            UIElement host = window.overlayHost(on);
-            collect(menu, live);
-            for (Menu open : live) host.addChild(open);
+            // Attached from the ATTACHMENT SITE, not the clicked element: `on` is always in the tree,
+            // while a target can be anything the pointer happened to be over. @see MenuBuilder#present
+            live.addAll(MenuBuilder.present(menu, on, window));
             // Dropped from the tree when the ROOT closes by any route -- light dismiss, Escape, or
             // choosing an item. Left in place they are invisible display:none elements accumulating one
             // set per press.
             menu.onClosed.connect(() -> {
-                discard(live);
+                MenuBuilder.discard(live);
                 // FOCUS GOES BACK TO WHAT WAS RIGHT-CLICKED, and this is not cosmetic.
                 //
                 // A menu takes focus for its rows, and a right-click is often the ONLY thing that happened
@@ -357,37 +273,4 @@ public final class ContextMenu {
         return on;
     }
 
-    /**
-     * Closes and detaches the live menu, if there is one.
-     *
-     * <p><b>Close before remove, never the other way round.</b> Closing demotes it, which restores its
-     * Taffy node to its DOM parent — removing it while still promoted leaves the engine reconciling a node
-     * that has been parented to the root against a DOM parent that no longer lists it.</p>
-     */
-    /** Every menu in a chain, root first — a submenu needs attaching exactly as its parent does. */
-    private static void collect(Menu menu, List<Menu> out) {
-        out.add(menu);
-        for (MenuItem item : menu.getItems()) {
-            Menu sub = item.getSubmenu();
-            if (sub != null) collect(sub, out);
-        }
-    }
-
-    /** Whether {@code element} is any of {@code menus} or sits beneath one. */
-    private static boolean isInsideAny(@Nullable UIElement element, List<Menu> menus) {
-        for (UIElement walk = element; walk != null; walk = walk.getParent()) {
-            if (menus.contains(walk)) return true;
-        }
-        return false;
-    }
-
-    private static void discard(List<Menu> live) {
-        if (live.isEmpty()) return;
-        List<Menu> going = new ArrayList<>(live);
-        live.clear();                         // FIRST, so the onClosed hook below does not recurse
-        for (Menu menu : going) {
-            if (menu.isOpen()) menu.hide();
-            if (menu.getParent() != null) menu.getParent().removeChild(menu);
-        }
-    }
 }

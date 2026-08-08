@@ -106,6 +106,11 @@ public final class ExplorerCommands {
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(NEW_FILE, "New File…")
                 .menu(MenuId.EXPLORER_NEW, "1_new", 10)
+                // TWO PLACEMENTS, ONE COMMAND. The explorer's New acts on the right-clicked folder and
+                // the main menu's on the project root, but that difference is already inside
+                // destinationFor -- so the same command legitimately appears in both, which is exactly
+                // what a list of placements is for.
+                .menu(MenuId.MAIN_FILE_NEW, "1_new", 10)
                 .binding("Mod+N")
                 .run(context -> promptNew(workbenchFor(context), context, false))
                 .enabledWhen(context -> workbenchFor(context) != null
@@ -113,6 +118,7 @@ public final class ExplorerCommands {
 
         registry.register(Command.of(NEW_FOLDER, "New Folder…")
                 .menu(MenuId.EXPLORER_NEW, "1_new", 20)
+                .menu(MenuId.MAIN_FILE_NEW, "1_new", 20)
                 .run(context -> promptNew(workbenchFor(context), context, true))
                 .enabledWhen(context -> workbenchFor(context) != null
                         && destinationFor(workbenchFor(context), context) != null));
@@ -185,6 +191,12 @@ public final class ExplorerCommands {
 
         registry.register(Command.of(GO_TO_FILE, "Go to File…")
                 .binding("Mod+P")
+                // FILE ▸ OPEN, and this is the honest version of it. There is no native file dialog to
+                // reach -- that is a platform service this engine deliberately does not have -- and a
+                // workspace-scoped quick-open is what both references put on Ctrl+P anyway. Naming it
+                // "Open" in the menu and "Go to File…" in the palette is the label-override case
+                // ContextMenu.item(id, label) already exists for.
+                .menu(MenuId.MAIN_FILE, "2_open", 10)
                 .run(context -> {
                     Workbench workbench = workbenchFor(context);
                     UIWindow window = workbench == null ? null : workbench.getAttachedWindow();

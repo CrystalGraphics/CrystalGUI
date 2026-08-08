@@ -69,6 +69,30 @@ public class MenuItem extends Button {
         mark.addClass(MARK_CLASS);
         mark.setHitTest(false);
         setPreIcon(mark);
+
+        // PRESS-DRAG-RELEASE. Button already fires on a release whose press landed here; this adds the
+        // release whose press landed on the MENU BAR TITLE that opened the menu, which is the gesture
+        // every native menu bar has and the one isWasPressTarget() would otherwise refuse.
+        //
+        // Guarded on !isWasPressTarget() so an ordinary click cannot activate twice, and the arming is
+        // one-shot so a later click on a menu that happens to still be open is unaffected. @see
+        // Menu#armForRelease
+        attachDefaultListener(onMouseUp, (element, event) -> {
+            if (event.isWasPressTarget() || !isEnabled()) return;
+            Menu owner = owningMenu();
+            if (owner == null || !owner.isArmedForRelease()) return;
+            owner.disarmForRelease();
+            onPressed.emit();
+        });
+    }
+
+    /** The menu this row belongs to, or null while it is unparented. */
+    @Nullable
+    private Menu owningMenu() {
+        for (UIElement element = getParent(); element != null; element = element.getParent()) {
+            if (element instanceof Menu menu) return menu;
+        }
+        return null;
     }
 
     /** On the trailing label showing this item's keystroke, so a theme can dim it. */

@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 /**
@@ -102,34 +103,110 @@ public final class CommandRegistry {
     }
 
     /**
-     * What belongs in {@code menu} here, in group then order.
+     * Everything in {@code menu} right now, <b>grouped</b>, in group then order.
      *
-     * <p><b>Disabled commands are omitted, not greyed.</b> A context menu is built for one position and
-     * an entry that cannot apply there is noise; a palette wants the opposite and asks {@link #all()},
-     * rendering enablement itself. Two callers, two needs, so the filtering lives at the call.</p>
+     * <h3>The one query every menu renderer should use</h3>
+     *
+     * <p>It answers all four questions a row needs — where it sits, whether it applies, whether it is a
+     * checkmark and which way it points — and it keeps the grouping, which is the fact a separator is
+     * drawn from. {@link #menu} kept none of it, so {@code ContextMenu} re-derived the lot by walking
+     * {@link #all()} itself, and a menu bar would have been a third derivation of the same thing. See
+     * {@link MenuSection}.</p>
+     *
+     * <h3>Disabled rows are INCLUDED, carrying {@code enabled}</h3>
+     *
+     * <p>The registry states the answer and does not act on it. That is the difference between the two
+     * renderers this feeds: a context menu is built for one position and dims what cannot apply, a menu
+     * bar must keep a stable shape so File ▸ Save is always the fourth row whether or not there is
+     * anything to save, and a palette hides. Filtering here would force two of the three to work around
+     * it — as {@link #menu} did, which is why nothing but a test ever called it.</p>
+     *
+     * <p>Submenus are listed but <b>not expanded</b>; see {@link MenuEntry.Submenu} for why. Contributed
+     * rows from {@link #contributeMenu} are merged in and sort by the same {@code (group, order)} pair, so
+     * a computed row is an ordinary participant rather than something pinned to one end.</p>
      */
-    public List<Command> menu(MenuId menu, CommandContext context) {
-        List<Command> found = new ArrayList<>();
+    public List<MenuSection> sections(MenuId menu, CommandContext context) {
+        List<MenuEntry> entries = new ArrayList<>();
+
         for (Command command : all()) {
-            if (!command.isEnabled(context)) continue;
             for (MenuId.Placement placement : command.menus()) {
-                if (placement.menu() == menu) {
-                    found.add(command);
-                    break;
-                }
+                if (placement.menu() != menu) continue;
+                entries.add(new MenuEntry.Item(command, placement.group(), placement.order(),
+                        command.isEnabled(context), command.isCheckable(), command.isToggled(context)));
+                break;
             }
         }
-        found.sort(Comparator
-                .comparing((Command command) -> placementIn(command, menu).group())
-                .thenComparingInt(command -> placementIn(command, menu).order()));
-        return Collections.unmodifiableList(found);
+
+        for (MenuId.Submenu nested : menu.submenus()) {
+            entries.add(new MenuEntry.Submenu(nested.menu(), nested.title(), nested.group(), nested.order()));
+        }
+
+        for (MenuContributor contributor : contributorsFor(menu)) {
+            List<MenuEntry> computed = contributor.itemsFor(menu, context);
+            if (computed != null) entries.addAll(computed);
+        }
+
+        // STABLE within a group: sort() is stable and `all()` is insertion-ordered, so two contributors
+        // that pick the same (group, order) come out in registration order rather than arbitrarily. That
+        // is weaker than picking distinct orders and stronger than nothing, which is what a menu needs.
+        entries.sort(Comparator.comparing(MenuEntry::group).thenComparingInt(MenuEntry::order));
+
+        List<MenuSection> sections = new ArrayList<>();
+        String group = null;
+        List<MenuEntry> current = null;
+        for (MenuEntry entry : entries) {
+            if (current == null || !group.equals(entry.group())) {
+                group = entry.group();
+                current = new ArrayList<>();
+                sections.add(new MenuSection(group, current));
+            }
+            current.add(entry);
+        }
+        return Collections.unmodifiableList(sections);
     }
 
-    private static MenuId.Placement placementIn(Command command, MenuId menu) {
-        for (MenuId.Placement placement : command.menus()) {
-            if (placement.menu() == menu) return placement;
+    /**
+     * Registers rows to be computed whenever {@code menu} opens. @see MenuContributor
+     *
+     * <p>Keyed by menu rather than kept in one list, so opening the File menu does not ask the Window
+     * menu's contributor whether it has anything to say. Additive: several contributors may serve one
+     * menu, and they merge by {@code (group, order)} like everything else.</p>
+     */
+    public CommandRegistry contributeMenu(MenuId menu, MenuContributor contributor) {
+        menuContributors.computeIfAbsent(menu, key -> new CopyOnWriteArrayList<>()).add(contributor);
+        return this;
+    }
+
+    /** Local contributors, then global ones — the same fall-through {@link #all()} makes. */
+    private List<MenuContributor> contributorsFor(MenuId menu) {
+        List<MenuContributor> local = menuContributors.get(menu);
+        if (this == GLOBAL) return local == null ? List.of() : local;
+        List<MenuContributor> shared = GLOBAL.menuContributors.get(menu);
+        if (local == null) return shared == null ? List.of() : shared;
+        if (shared == null) return local;
+        List<MenuContributor> merged = new ArrayList<>(local);
+        merged.addAll(shared);
+        return merged;
+    }
+
+    private final Map<MenuId, List<MenuContributor>> menuContributors = new ConcurrentHashMap<>();
+
+    /**
+     * The flat, enabled-only view of {@code menu}.
+     *
+     * @deprecated {@link #sections} instead — this drops the grouping a separator is drawn from and
+     * filters out disabled rows, and both of those are the renderer's call. Kept only because the shape
+     * is occasionally what a caller assembling a list from scratch wants.
+     */
+    @Deprecated
+    public List<Command> menu(MenuId menu, CommandContext context) {
+        List<Command> found = new ArrayList<>();
+        for (MenuSection section : sections(menu, context)) {
+            for (MenuEntry entry : section.entries()) {
+                if (entry instanceof MenuEntry.Item item && item.enabled()) found.add(item.command());
+            }
         }
-        throw new IllegalStateException(command.getId() + " is not in " + menu);
+        return Collections.unmodifiableList(found);
     }
 
     /**
@@ -197,6 +274,9 @@ public final class CommandRegistry {
         // that class registers nothing -- silently, since a missing command only shows up as a key that
         // does nothing.
         contributors.clear();
+        // Same argument one level out: a computed menu row survives a reset unless this is cleared, and it
+        // survives holding a lambda that closes over the PREVIOUS test's widgets.
+        menuContributors.clear();
         version++;
     }
 
