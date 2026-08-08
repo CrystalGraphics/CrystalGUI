@@ -1,19 +1,18 @@
 package com.crystalgui.ui.elements.chrome;
 
 import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.core.signal.Connection;
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.UIText;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The transient half of a notification — IntelliJ's balloons, VS Code's toasts.
+ * The transient half of a notification — IntelliJ's balloons, VS Code's {@code NotificationsToasts}.
  *
  * <h3>Why both surfaces exist</h3>
  *
@@ -82,28 +81,22 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
      */
     public static final int MAX_VISIBLE = 4;
 
-
     /** One balloon on screen, and what it is waiting for. */
     private static final class Live {
-        final Notification notification;
-        final UIElement element;
+        final NotificationCard card;
         float remaining;
         boolean leaving;
 
-        Live(Notification notification, UIElement element) {
-            this.notification = notification;
-            this.element = element;
+        Live(NotificationCard card) {
+            this.card = card;
             this.remaining = LINGER_MS;
         }
     }
 
     private final List<Live> live = new ArrayList<>();
 
-    @Nullable
-    private Connection arrivals;
+    private final ConnectionGroup subscriptions = new ConnectionGroup();
 
-    @Nullable
-    private Connection repeats;
     private boolean ticking;
 
     public NotificationBalloons() {
@@ -118,43 +111,63 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
         return false;
     }
 
-    /** Subscribes while attached. @see NotificationsView#onLayoutChanged */
+    /**
+     * Subscribes and starts ticking while attached, and stops on both counts when detached.
+     *
+     * <p><b>The ticker used to be registered once and never given up.</b> {@code UIWindow} drops a ticker
+     * only when {@code tickFrame} returns false, and this one always returned true, so a detached layer
+     * went on being ticked by a window it was no longer in — and because the flag that recorded "already
+     * registered" was never cleared, moving the layer to a second window left it registered with the first
+     * and ticking in neither. The frame callback now ends itself on detach, which is the only signal
+     * {@code UIWindow} offers.</p>
+     */
     @Override
     protected void onLayoutChanged() {
         super.onLayoutChanged();
         UIWindow window = getAttachedWindow();
         if (window != null) {
-            if (arrivals == null) arrivals = Notifications.onDidNotify.connect(this::show);
-            if (repeats == null) repeats = Notifications.onDidRepeat.connect(this::restate);
+            if (subscriptions.size() == 0) {
+                subscriptions.add(Notifications.onDidChange.connect(this::apply));
+            }
             if (!ticking) {
                 window.registerTicker(this);
                 ticking = true;
             }
-        } else if (arrivals != null) {
-            arrivals.disconnect();
-            arrivals = null;
-            if (repeats != null) repeats.disconnect();
-            repeats = null;
+        } else {
+            subscriptions.disconnectAll();
+        }
+    }
+
+    /**
+     * One model change.
+     *
+     * <p>Only arrivals and repeats reach the screen here. An <b>eviction is deliberately ignored</b>: a
+     * balloon's lifetime is its own linger, and a notification aging out of a hundred-deep history says
+     * nothing about whether the toast for it is still worth reading. A clear is ignored for the same
+     * reason — "Clear all" empties the log, and the balloons already on screen are on their way out.</p>
+     */
+    private void apply(NotificationEvent event) {
+        Notification notification = event.notification();
+        if (notification == null) return;
+        switch (event.kind()) {
+            case ADDED -> show(notification);
+            case CHANGED -> restate(notification);
+            default -> { }
         }
     }
 
     /** Puts one up. Newest at the bottom, which is where the eye already is after the last one. */
     private void show(Notification notification) {
-        // The close button needs the entry the card is about to go into, so the handler is given a holder
-        // rather than the value -- the alternative is a second lookup by element every time it is pressed.
-        Live[] holder = new Live[1];
-        UIElement balloon = NotificationCard.build(notification,
-                () -> { if (holder[0] != null) beginLeaving(holder[0]); });
-        Live entry = new Live(notification, balloon);
-        holder[0] = entry;
-        balloon.addClass(BALLOON_CLASS);
+        NotificationCard card = new NotificationCard(notification);
+        Live entry = new Live(card);
+        card.withClose(() -> beginLeaving(entry));
+        card.addClass(BALLOON_CLASS);
         // TRANSPARENT ON ARRIVAL, revealed on the next frame -- see the class note on why the resting
         // value has to come from the sheet.
-        balloon.addClass(HIDDEN_CLASS);
-        addInternalChild(balloon);
+        card.addClass(HIDDEN_CLASS);
+        addInternalChild(card);
         live.add(entry);
-
-        enforceCap();
+        evictOldest();
     }
 
     /**
@@ -163,26 +176,7 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
      * <h3>Counts what is STILL ARRIVING, not what is on the list</h3>
      *
      * <p>This was {@code while (live.size() > MAX_VISIBLE) beginLeaving(live.get(0))}, and it is an
-     * <b>infinite loop</b>: {@code beginLeaving} only marks an entry, because the element has to stay
-     * mounted for the length of its fade — so the list does not shrink, the next pass finds the same
-     * already-leaving entry at index 0, {@code beginLeaving} returns immediately, and the size never
-     * changes. The window stops responding the moment a fifth balloon arrives.</p>
-     *
-     * <p>So the cap counts entries that are not already on their way out, and each pass marks one of them,
-     * which is what makes it terminate. Cheap to state and impossible to get wrong by re-reading the size:
-     * "how many are staying" is the question the cap was always asking.</p>
-     */
-    private void enforceCap() {
-        evictOldest();
-    }
-
-    /**
-     * Sends the oldest balloons of one kind away until that kind is within its cap.
-     *
-     * <h3>Counts what is STILL ARRIVING, not what is on the list</h3>
-     *
-     * <p>This was {@code while (live.size() > MAX_VISIBLE) beginLeaving(live.get(0))}, and it is an
-     * <b>infinite loop</b>: {@code beginLeaving} only marks an entry, because the element has to stay
+     * <b>infinite loop</b>: {@link #beginLeaving} only marks an entry, because the element has to stay
      * mounted for the length of its fade — so the list does not shrink, the next pass finds the same
      * already-leaving entry at index 0, {@code beginLeaving} returns immediately, and the size never
      * changes. The window stopped responding on the fifth file opened in a row.</p>
@@ -216,9 +210,8 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
      */
     private void restate(Notification notification) {
         for (Live entry : live) {
-            if (entry.notification != notification || entry.leaving) continue;
-            UIText label = NotificationCard.titleLabelOf(entry.element);
-            if (label != null) label.setText(NotificationCard.titleOf(notification));
+            if (entry.card.notification() != notification || entry.leaving) continue;
+            entry.card.restate();
             entry.remaining = LINGER_MS;
             return;
         }
@@ -230,22 +223,27 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
         if (entry.leaving) return;
         entry.leaving = true;
         entry.remaining = FADE_MS;
-        entry.element.addClass(HIDDEN_CLASS);
+        entry.card.addClass(HIDDEN_CLASS);
     }
 
     @Override
     public boolean tickFrame(float deltaSeconds) {
+        // ENDS ITSELF WHEN DETACHED. @see #onLayoutChanged
+        if (getAttachedWindow() == null) {
+            ticking = false;
+            return false;
+        }
         float deltaMs = deltaSeconds * 1000f;
         for (int i = live.size() - 1; i >= 0; i--) {
             Live entry = live.get(i);
             // REVEALED ON THE FRAME AFTER IT WAS ADDED, never in the same one. Adding the element and
             // removing the class together is a single style pass, so the cascade never sees the
             // transparent state and there is nothing to ease from -- the balloon simply appears.
-            if (!entry.leaving && entry.element.hasClass(HIDDEN_CLASS)) {
-                entry.element.removeClass(HIDDEN_CLASS);
+            if (!entry.leaving && entry.card.hasClass(HIDDEN_CLASS)) {
+                entry.card.removeClass(HIDDEN_CLASS);
                 continue;
             }
-            // NOT WHILE THE POINTER IS ON IT. Six seconds is enough to read a title and not always enough
+            // NOT WHILE THE POINTER IS ON IT. Ten seconds is enough to read a title and not always enough
             // to read a detail and reach for an action, so a balloon that kept counting down could vanish
             // out from under the cursor of someone about to click "Retry" — the oldest complaint about
             // toasts, and one both references answer by holding while hovered.
@@ -254,7 +252,7 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
             // true for the pointer anywhere inside the card — including over its own action links, which is
             // precisely the moment it matters. A leaving balloon is deliberately not reprieved: it is
             // already fading and reversing that would need the transition retargeted mid-flight.
-            if (!entry.leaving && entry.element.isHovered()) continue;
+            if (!entry.leaving && entry.card.isHovered()) continue;
 
             entry.remaining -= deltaMs;
             if (entry.remaining > 0f) continue;
@@ -263,11 +261,11 @@ public class NotificationBalloons extends UIElement implements UIFrameTicker {
                 continue;
             }
             // The fade has run its course; only now is the element safe to detach.
-            removeInternalChild(entry.element);
+            removeInternalChild(entry.card);
             live.remove(i);
         }
-        // NEVER DROPPED. The layer has to be listening on the frame a notification arrives, and there is
-        // no signal that says one is about to.
+        // NEVER DROPPED WHILE ATTACHED. The layer has to be listening on the frame a notification arrives,
+        // and there is no signal that says one is about to.
         return true;
     }
 
