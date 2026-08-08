@@ -5,6 +5,9 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.diagnostic.Markers;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -66,6 +69,29 @@ final class OpenDocuments {
     private final Map<CgPath, Entry> byPath = new HashMap<>();
 
     /**
+     * Where a document's problems are indexed for the workspace, or null when nobody is indexing.
+     *
+     * <p>Handed in rather than reached for, because the index belongs to one workspace — see
+     * {@link Markers}. A process-wide one holds a listener on every set it has ever seen and therefore
+     * never lets a document go.</p>
+     */
+    @Nullable
+    private Markers markers;
+
+    void indexInto(@Nullable Markers into) {
+        this.markers = into;
+        if (into == null) return;
+        for (Entry entry : byPath.values()) index(entry);
+    }
+
+    private void index(Entry entry) {
+        if (markers == null) return;
+        DiagnosticSet problems = entry.document.diagnostics();
+        Resource resource = entry.document.resource();
+        if (problems != null && resource != null) markers.attach(resource, problems);
+    }
+
+    /**
      * The document for a path, built on first use.
      *
      * <p>A newly built document is subscribed to immediately, so {@link #onDidChangeDirty} can announce
@@ -79,6 +105,9 @@ final class OpenDocuments {
         entry = new Entry(factory.apply(path));
         byPath.put(path, entry);
         entry.changes = entry.document.onDidChange(() -> onDidChangeDirty.emit(path));
+        // INDEXED WHILE OPEN. This is the one place a document enters, so it is the one place that can
+        // answer "how many problems are there in the workspace" -- a question no per-document set can.
+        index(entry);
         return entry.document;
     }
 
@@ -205,6 +234,11 @@ final class OpenDocuments {
     void close(CgPath path) {
         Entry entry = byPath.remove(path);
         if (entry == null) return;
+        // A CLOSED FILE'S PROBLEMS ARE NOT THE WORKSPACE'S, and the index holds a listener on every set in
+        // it — so skipping this keeps the document, its diagnostics and the listener alive.
+        if (markers != null && entry.document.resource() != null) {
+            markers.detach(entry.document.resource());
+        }
         // BEFORE disposing. A listener told about a document whose dispose() has already run will ask it
         // something -- and encode() on a released graph is exactly the question dirtiness asks.
         if (entry.changes != null) entry.changes.disconnect();

@@ -1,8 +1,10 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.diagnostic.RelatedInformation;
@@ -239,6 +241,77 @@ public class DiagnosticSetTest {
 
         set.setAll(List.of(plain.withTags(DiagnosticTag.UNNECESSARY)));
         assertEquals("the tag was invisible to the diff", 2, changes.get());
+    }
+
+    // ── The resource index ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>The question no per-document set can answer.</b>
+     *
+     * <p>{@link Markers} carries VS Code's <em>resource</em> dimension the way {@link DiagnosticSet}
+     * carries its owner one. It indexes sets that already exist rather than owning a second copy, because
+     * a {@code TextEditor} has no resource — it is reusable and the harness runs it with no file at all —
+     * so making the resource mandatory would mean inventing an identity for editors that have none.</p>
+     */
+    @Test
+    public void theIndexAnswersForTheWholeWorkspace() {
+        Markers markers = new Markers();
+        Resource one = Resource.of("project", "a.glsl");
+        Resource two = Resource.of("project", "b.glsl");
+
+        DiagnosticSet first = markers.attach(one, new DiagnosticSet());
+        DiagnosticSet second = markers.attach(two, new DiagnosticSet());
+
+        first.setAll(List.of(error(1), error(4)));
+        second.setAll(List.of(at(2, 0, DiagnosticSeverity.WARNING, "odd")));
+
+        assertEquals(2, markers.count(DiagnosticSeverity.ERROR));
+        assertEquals(1, markers.count(DiagnosticSeverity.WARNING));
+        assertEquals(DiagnosticSeverity.ERROR, markers.worst());
+        assertEquals(3, markers.all().size());
+        assertEquals(List.of(one, two), markers.resourcesWithProblems());
+    }
+
+    /**
+     * <b>A closed document leaves, and that is the half that leaks.</b>
+     *
+     * <p>The index holds a listener on every set in it, so anything it indexes is reachable for as long as
+     * the index is. As a <em>static</em> that was forever: the suite opens files without closing them, and
+     * the accumulated documents killed the test worker on memory rather than failing an assertion. An
+     * instance dies with the workspace that owns it; detach is what makes it correct before then.</p>
+     */
+    @Test
+    public void detachingStopsWatchingAndStopsCounting() {
+        Markers markers = new Markers();
+        Resource resource = Resource.of("project", "a.glsl");
+        DiagnosticSet set = markers.attach(resource, new DiagnosticSet());
+        set.setAll(List.of(error(1)));
+        assertEquals(1, markers.count(DiagnosticSeverity.ERROR));
+
+        AtomicInteger changes = new AtomicInteger();
+        markers.onDidChange.connect(r -> changes.incrementAndGet());
+
+        markers.detach(resource);
+        assertEquals(0, markers.count(DiagnosticSeverity.ERROR));
+        assertTrue(markers.resources().isEmpty());
+
+        int afterDetach = changes.get();
+        set.setAll(List.of(error(1), error(9)));
+        assertEquals("a detached set was still being watched", afterDetach, changes.get());
+    }
+
+    /** A change anywhere names the resource it happened to, so a listener need not re-read every file. */
+    @Test
+    public void theIndexNamesWhatChanged() {
+        Markers markers = new Markers();
+        Resource one = Resource.of("project", "a.glsl");
+        DiagnosticSet set = markers.attach(one, new DiagnosticSet());
+
+        List<Resource> announced = new java.util.ArrayList<>();
+        markers.onDidChange.connect(announced::add);
+
+        set.setAll(List.of(error(3)));
+        assertEquals(List.of(one), announced);
     }
 
     // ── Queries ─────────────────────────────────────────────────────────────────────────────────

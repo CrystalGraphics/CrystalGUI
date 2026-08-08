@@ -52,6 +52,13 @@ import java.util.function.Function;
 import javax.annotation.Nullable;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.command.Command;
+import com.crystalgui.core.signal.ConnectionGroup;
+import com.crystalgui.core.notify.StatusBar;
+import com.crystalgui.core.notify.StatusBarAlignment;
+import com.crystalgui.core.notify.StatusBarEntry;
+import com.crystalgui.core.notify.StatusBarEntryAccessor;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.undo.UndoCommands;
 
@@ -242,7 +249,21 @@ public class Workbench extends UIElement {
     @Override
     protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
         if (previous != null) previous.removeDataProvider(this);
-        if (current == null) return;
+        // THE WORKSPACE'S PROBLEM COUNT IS A CLAIM ON A SCREEN, so it belongs to an ATTACHED workbench.
+        // Subscribed from the constructor instead, every workbench ever built stayed subscribed and kept
+        // writing its own entry into the one static bar -- one per test in the suite, so the entries
+        // accumulated and every later change did O(entries) work in every live view.
+        markerWatch.disconnectAll();
+        if (current == null) {
+            if (problemCountEntry != null) problemCountEntry.dispose();
+            problemCountEntry = null;
+            return;
+        }
+        // Idempotent, and here rather than in a field initialiser because the index is declared after the
+        // document map -- a forward reference the compiler rejects outright.
+        open.indexInto(markers);
+        markerWatch.add(markers.onDidChange.connect(resource -> refreshProblemCount()));
+        refreshProblemCount();
         current.addDataProvider(this);
         // The rail's buttons, once there is a window to take a registry from.
         //
@@ -1413,6 +1434,51 @@ public class Workbench extends UIElement {
      * {@code FileDocument.setActive}: the workbench knows which tab is in front and nothing else about it,
      * so what a document has to say is the document's to answer.</p>
      */
+    /**
+     * Every open document's problems, indexed by resource — this workspace's, and nobody else's.
+     *
+     * <p>An instance rather than a static for the reason on {@link Markers}: the index holds a listener on
+     * every set in it, so a process-wide one can never let a document go.</p>
+     */
+    private final Markers markers = new Markers();
+
+    /** @see #markers */
+    public Markers markers() {
+        return markers;
+    }
+
+    private final ConnectionGroup markerWatch = new ConnectionGroup();
+
+    @Nullable
+    private StatusBarEntryAccessor problemCountEntry;
+
+    /** Ahead of the shader graph's own readouts, which are about one document. */
+    private static final int PROBLEM_COUNT_PRIORITY = 200;
+
+    /** The workspace's error and warning totals, as one status entry. @see Markers */
+    private void refreshProblemCount() {
+        int errors = markers.count(DiagnosticSeverity.ERROR);
+        int warnings = markers.count(DiagnosticSeverity.WARNING);
+        // WITHDRAWN WHEN THERE IS NOTHING TO SAY, rather than reading "0 errors, 0 warnings". A clean
+        // workspace is the normal state, and a permanent zero is a readout you learn to stop seeing.
+        if (errors == 0 && warnings == 0) {
+            if (problemCountEntry != null) problemCountEntry.dispose();
+            problemCountEntry = null;
+            return;
+        }
+        StatusBarEntry entry = new StatusBarEntry("Problems",
+                errors + " " + (errors == 1 ? "error" : "errors")
+                        + ", " + warnings + " " + (warnings == 1 ? "warning" : "warnings"),
+                "Problems in the workspace", SHOW_PROBLEMS,
+                errors > 0 ? StatusBarEntry.Kind.ERROR : StatusBarEntry.Kind.WARNING);
+        if (problemCountEntry == null) {
+            problemCountEntry = StatusBar.addEntry(entry, "workbench.problems",
+                    StatusBarAlignment.LEFT, PROBLEM_COUNT_PRIORITY);
+        } else {
+            problemCountEntry.update(entry);
+        }
+    }
+
     private void rebindProblems() {
         FileDocument active = activeDocument();
         DiagnosticSet reported = active == null ? null : active.diagnostics();
