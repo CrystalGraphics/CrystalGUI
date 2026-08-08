@@ -19,8 +19,8 @@
 | 8 | The Inspector as a contribution surface (§22) | **DONE** — `Inspector` + `InspectorSection`/`InspectorRegistry`; `ShaderGraphInspector` deleted |
 | 9 | Notifications + status, and the last hand-written menu | **DONE** — `com.crystalgui.core.notify`; `register(workbench)` takes nothing else; `BlackboardPanel`'s row menu is a `MenuId` query |
 | 10 | Editor banners, and the last per-frame poll | **DONE** — `DockBannerProvider` (§11 Tier 2's one kept item); `GraphView.discoverPortEditors` is push-based |
-| 11 | The Parts model, and the six foundations it needs (§23) | **IN PROGRESS** — F1, F3, F4, F5, F6 landed; F2 landed as shape only (see §23.6's correction: the deletion cannot precede step 7) |
-| 12 | The Parts stack — regions, containers, stripes, toolbar, status bar (§24) | **PLANNED** — full audit and design; three genuinely new mechanisms, everything else is composition over what steps 1–11 built |
+| 11 | The Parts model, and the six foundations it needs (§23) | **DONE** — F1, F3–F6 landed; **F2b landed with §24.3's region shell**, not after it. `ToolWindowState` is now `{typeId, visible, region, side, weight, sideWeight, order, active, showStripeButton}` — `path` and `groupedWith` are gone and `showPanel` is a lookup. The §23.6 correction was right that the deletion had to follow the regions; it then happened *in the same step* rather than a later one, and this table was left saying otherwise for several sessions |
+| 12 | The Parts stack — regions, containers, stripes, toolbar, status bar (§24) | **IN PROGRESS** — §24.3 regions, §24.4 `ViewContainer`/`View`, §24.5 stripes and §24.7 status bar are in. **§24.6 — the main toolbar and burger menu — is the only unbuilt part**, and §25 below is its research |
 
 Steps 7 and 8 came from reading the result of 1–6: the six steps made the *framework* extensible and left
 `CrystalEditor` naming one application's file types, and left the Inspector a graph-shaped class. Neither
@@ -3121,3 +3121,297 @@ the proportion between them.
 
 Steps 1–2 are the risky pair, because they move persisted state and layout together. Everything after is
 additive and independently revertable.
+
+---
+
+# Part III — The chrome stacks, as ported
+
+> Added after the status bar / notifications / diagnostics overhaul. Steps 9 and 10 marked these "DONE"
+> when the *seams* existed; this part records what the substrate actually became once it was ported
+> properly against the references, and — more usefully — what is still missing and why.
+
+## 25. Status bar, notifications, diagnostics — the ports that landed
+
+### 25.1 Status bar — VS Code's IStatusbarService
+
+Ported from `vs/workbench/services/statusbar/browser/statusbar.ts` and `statusbarModel.ts`.
+
+| Piece | Shape |
+|---|---|
+| `StatusBar.addEntry(entry, id, alignment, priority)` | returns a `StatusBarEntryAccessor` — the entry's identity **and** its lifetime |
+| `StatusBarEntryAccessor` | `update(entry)`, `entry()`, `dispose()`; a `Disposable` |
+| `StatusBarEntry` | record: `name`, `text`, `tooltip`, `command`, `kind` |
+| `StatusBarAlignment` | `LEFT` / `RIGHT` |
+| `StatusBar.setHidden(id, boolean)` / `allEntries()` / `idOf(accessor)` | the hide menu's model |
+
+**The three rules that are easy to get backwards.**
+
+1. **A handle, not a string key.** `set(id, text)` made withdrawal etiquette a writer had to remember and
+   made two writers on one id a silent collision — the same failure `Workbench.onStatus` had, narrowed
+   from "one slot for everyone" to "one slot per string". Two registrations are two entries whatever they
+   are called.
+2. **Higher priority is further LEFT, in both groups.** Not "closer to the outer edge", which sounds right
+   and gets the right-hand group backwards. VS Code's own entries are selection 100, indentation 99,
+   encoding 98, eol 97 and render in that sequence left to right.
+3. **`name` is not `text`.** `text` is what the bar shows and changes constantly; `name` is what the entry
+   *is*. A hide menu lists entries by `name`, because you cannot offer "hide 51:39" as a checkbox. The
+   split looks redundant until something enumerates the bar.
+
+`onDidChange` carries **nothing**: it used to carry the composed line, so `text()` walked every entry on
+every write — including the caret readout on every selection change.
+
+### 25.2 Notifications — VS Code's NotificationsModel plus IntelliJ's groups
+
+| Piece | Shape |
+|---|---|
+| `Notifications.onDidChange` | one `Signal.Value<NotificationEvent>`, replacing four ad-hoc signals |
+| `NotificationEvent.Kind` | ADDED / CHANGED / REMOVED / CLEARED |
+| `Notifications.show(n)` | returns a `NotificationHandle` (`close`, `updateMessage`, `isOpen`, `onDidClose`) |
+| `NotificationGroups` + `NotificationDisplay` | IntelliJ's per-group BALLOON / STICKY_BALLOON / LOG_ONLY / NONE, user-overridable |
+| `Notification.withNeverShowAgain(id)` | keyed by *kind* of message, not instance |
+| `Notification.withSecondaryAction` | VS Code's secondary actions, rendered quieter rather than hidden |
+
+**The kind that was missing was REMOVED, and its absence was a live bug.** The history is bounded, so the
+oldest is dropped once it is full — but with only "something arrived" and "everything went" to announce,
+an eviction was *unannouncable*, and the panel's column grew past the history it was showing with no way
+to find out. **Any new list-shaped model here should be checked against that: can it express every way an
+entry can leave?**
+
+CLEARED is one event rather than N REMOVEDs so a view rebuilds once instead of splicing a hundred times.
+
+### 25.3 Diagnostics — VS Code's IMarkerService, both dimensions
+
+| Piece | Shape |
+|---|---|
+| `DiagnosticSet.changeOne(owner, list)` | the **owner** dimension: an owner replaces only itself |
+| `DiagnosticSet.changeAll(map)` | every owner at once, announcing once |
+| `DiagnosticSet.remove(owner)` / `read(owner)` / `owners()` | |
+| `Markers` | the **resource** dimension: `attach` / `detach` / `read` / `count` / `worst` / `resourcesWithProblems` |
+| `Diagnostic.tags` / `related` | LSP's DiagnosticTag and DiagnosticRelatedInformation |
+
+**Two things a future agent will be tempted to undo.**
+
+- **`Markers` is an instance, never static.** It holds a listener on every set it indexes, so nothing it
+  indexes can be collected; as a process global that is forever, and a suite that opens files without
+  closing them accumulates every document it ever opened — it killed the test worker with a non-zero exit
+  and no failing assertion. VS Code injects its marker service per window for the same reason.
+- **`setAll` is kept and `add` was deleted**, deliberately. `setAll` replaces the *default owner's* slice,
+  which its name understates; it stays because deleting it makes every single-producer document write
+  `changeOne(DEFAULT_OWNER, ...)`, and a producer forced to name an owner it does not have will invent
+  one — scattering keys that never collide and never merge. `add` went because "add" said nothing about
+  replacing and it had no callers.
+
+### 25.4 The Problems view — VS Code's markers view over the index
+
+Two-level tree (file then problems) via `ProblemsTreeSource implements TreeDataSource<ProblemNode>`.
+**Filtering lives in the source, not the view**, because it changes the tree's *shape*: a file whose only
+error is filtered out has to stop being a row, and a view hiding rows afterwards would need to know that a
+parent's visibility depends on its children's.
+
+Scope is **IntelliJ's two tabs** (File with a count, Project Errors), not VS Code's Show Active File Only
+menu row — the current scope has to be readable without opening anything, since an empty Problems panel
+means two different things depending which scope you are in. The tabs sit on the container's title line
+through a new seam:
+
+    public interface HeaderContributor {   // com.crystalgui.ui.elements.workbench
+        UIElement headerContent();          // asked once when mounted, for a LONE view only
+    }
+
+`ViewContainer` places it after the title. A view cannot reach its container and should not: it does not
+know whether it is alone in one, sharing it, or in a container at all.
+
+## 26. Bugs this overhaul found that outlive it
+
+Engine-level, each invisible from every direction except the one that found it.
+
+| Fault | Where | Why it matters beyond its fix |
+|---|---|---|
+| **`ListView` disposed its model subscription on detach**, and dispose is one-way | `ListView.tickFrame` | Every list and tree came back **deaf** after a dock panel was closed and reopened. A detach must be reversible; an explicit `dispose()` must not be |
+| **`font-size: 7px` computed to null** | `FloatValue.doCompute` | A thrown parse is caught, logged and turned into null, so a declaration *degrades to nothing rather than failing*. **31 declarations across the shipped sheets were dead.** Check any new `StyleValue` against the units the sheets actually use |
+| **A nested `contribute(getClass(), ...)` registers nothing** | `Workbench.registerCommands` | `UIElement` already reaches `registerCommands` through it, so the class is *already* in the contributor set. Register on the handed registry |
+| **`CommandRegistry.run(id)` builds an EMPTY context** | any command with `enabledWhereData` | The guard evaluates against nothing and returns false. Always `run(id, CommandContext.of(element))` |
+| **Folding from inside a press recycles the row being pressed** | `TreeView` | Now a **queue drained from the tick `ListView` already owns** (`requestToggle`). Three hand-rolled deferrals got it wrong three ways: a single-slot field drops a second click, `onLayoutChanged` never fires for a press that moves no geometry, and a private ticker's flag stops re-registering after a detach |
+| **A child combinator silently stops matching when you nest** | `problemspanel > .__content__` | The tree lost flex-grow and the panel rendered empty *with a correct count above it*. The combinator is still deliberate — `.__content__` is a name three widgets share |
+
+## 27. What is deliberately NOT built, and why
+
+**Missing surfaces — the mechanism works and nothing reaches it.** This is the honest debt.
+
+| Gap | API that exists | What it needs |
+|---|---|---|
+| **Problems text filter** | `ProblemsPanel.setTextFilter`, `ProblemsTreeSource.textFilter()` | a filter box in the view |
+| **Notification group settings** | `NotificationGroups.register` / `setDisplay` / `registered()` | **zero production callers** — no group is declared, so every group silently takes the BALLOON default and the user override that justifies the design is unreachable. IntelliJ's Settings → Appearance → Notifications; `Preferences` is the natural host |
+| **Un-silencing** | `Notifications.unsuppress` / `isSuppressed` / `suppressed()` | "Don't show again" calls `suppress` and **nothing calls the inverse** — a user can silence a message permanently with no way back. Ship this before more polish: one-way suppression is a trap |
+
+**Decided against, with reasons — do not "fix" these without reading them.**
+
+- **Persistence** for suppression and hidden entries. Session-only, by the user's decision.
+- **Progress notifications** — nothing here runs long enough to report on: the file service is synchronous
+  and the compiler finishes within a frame.
+- **code-as-link** (LSP's codeDescription.href) — needs something that can open a URL; the engine has none,
+  so the field would be data nothing could act on.
+- **Debounced marker change** — VS Code debounces because its service is global and written from many
+  places. `changeAll` already coalesces where it matters, and a *time-based* debounce needs a scheduler
+  `core` deliberately does not have (`DiagnosticSet` is headless; a frame ticker needs a window).
+- **Hide Excluded Files** in the view menu — filters against workspace exclude globs, which do not exist.
+- **Sort By / Group by Inspection** from IntelliJ's eye menu — VS Code's filter set was ported instead.
+  A knowing divergence, recorded so it reads as a choice.
+
+---
+
+# Part IV — §28. The menu bar: research and substrate plan
+
+> **Status: RESEARCHED, NOT STARTED.** This is §24.6's other half. The toolbar is a row of buttons; the
+> menu bar is a *contribution surface*, and almost all of the work is in the substrate rather than the
+> widget. Read §28.3 before writing any UI.
+
+## 28.1 The thesis
+
+**A menu bar is not a widget with a list in it.** In both references it is a *query over a registry*: a
+menu id is a well-known location, anything may contribute to it, and the bar is a renderer that asks
+"what is in `MenubarFileMenu` right now, for this context?" The widget is the last and smallest part.
+
+That matters here because the engine already has most of the registry. Building the bar as a widget with
+a hard-coded item list would work, look identical on day one, and be the thing every future contribution
+has to be threaded through by hand — which is precisely what steps 7–10 were spent undoing for editor
+types, the Inspector and notifications.
+
+**The test for "seamless rather than parallel": can a contribution add a File-menu item without the menu
+bar knowing it exists?** Today: partly. See §28.3.
+
+## 28.2 Reference research
+
+### VS Code — `vs/platform/actions/common/actions.ts`
+
+The menubar is `MenuId` constants queried through `MenuRegistry`:
+
+`MenubarMainMenu`, `MenubarFileMenu`, `MenubarEditMenu`, `MenubarViewMenu`, `MenubarGoMenu`,
+`MenubarSelectionMenu`, `MenubarTerminalMenu`, `MenubarDebugMenu`, `MenubarHelpMenu`,
+`MenubarAppearanceMenu`, `MenubarLayoutMenu`, `MenubarPreferencesMenu`.
+
+`MenuRegistry.appendMenuItem(MenuId, IMenuItem | ISubmenuItem)` appends to a linked list per id.
+
+- `IMenuItem`: `command`, `alt` (the Alt-key variant), `when` (a context-key expression), `group`,
+  `order`, `isHiddenByDefault`.
+- `ISubmenuItem`: references another `MenuId` via `submenu`, wrapped by `SubmenuItemAction`.
+- Sorted by **group first, then `order`** within it.
+- **Group names carry their own sort key**: `1_new`, `2_open`, … The number is the section's position and
+  the word is what the section means. Separators are drawn *between groups*, never declared.
+
+### IntelliJ — `ActionManager` / `ActionGroup`
+
+Same idea, different vocabulary: actions are registered against group ids (`MainMenu`, `EditMenu`,
+`ViewMenu`…) with `<add-to-group group-id="…" anchor="after" relative-to-action="…"/>`. A `DefaultActionGroup`
+holds children and `Separator` is an actual action. `ActionGroup.getChildren` may be **computed per
+invocation**, which is how Recent Files and the Window list exist at all.
+
+**In the New UI the bar collapses to a burger** when the window is narrow or the toolbar is in compact
+mode — the same menus, a different presentation. That is the target the plan names.
+
+## 28.3 What CrystalGUI already has — and the six gaps
+
+**Already present, and genuinely the hard part:**
+
+| Piece | Where |
+|---|---|
+| `MenuId` — interned, well-known locations | `core.command.MenuId` |
+| `MenuId.Placement` with `group` + `order` | contributed via `Command.menu(menu, group, order)` |
+| **Contributed submenus** | `MenuId.submenu(child, title, group, order)` and `nestedIn(parent, …)` |
+| Group-then-order sorting | `CommandRegistry.menu(MenuId, CommandContext)` |
+| Context-resolved enablement | `Command.enabledWhen` / `enabledWhereData` over `DataContext` |
+| A real menu widget with checkable rows and submenus | `ui.elements.Menu` / `MenuItem` (`addCheckableItem`, `addSubmenu`) |
+| Keymap + accelerator display | `Command.binding`, `MenuItem.setAccelerator` |
+| Popover placement, light dismiss, Escape, focus trap | `Popover` / `AnchoredPlacement` |
+
+**The gaps, in the order they will bite:**
+
+- **G1 — `CommandRegistry.menu()` returns a flat `List<Command>`, so group boundaries are lost.**
+  It sorts by group then order and then throws the grouping away, so a builder cannot draw a separator
+  between `1_new` and `2_open`. Every menu in the app is currently one undivided run of rows.
+  *Fix:* return a grouped structure (`List<MenuSection>` or `Map<String, List<Command>>` in sorted order).
+  This is the single most load-bearing change and everything else composes over it.
+
+- **G2 — a disabled command is OMITTED from a menu, not greyed.**
+  `menu()` skips `!command.isEnabled(context)`. That is right for a context menu — both references hide
+  inapplicable rows there — and **wrong for a menu bar**, where File → Save must be present and grey so
+  the menu has a stable shape. A menu whose rows appear and vanish cannot be learned.
+  *Fix:* return the placement with an `enabled` flag and let the renderer decide; a context menu keeps
+  filtering, a menu bar greys.
+
+- **G3 — a contributed command cannot declare that it is a TOGGLE.**
+  `MenuItem.setCheckable`/`setSelected` exist on the widget, but nothing on `Command` says "this is
+  checkable and here is its current state". VS Code has `toggled` on the command; IntelliJ has
+  `ToggleAction`. Without it, View → Show Problems cannot show a checkmark, and every toggle in the bar
+  has to be built by hand outside the contribution system.
+  *Fix:* `Command.toggledWhen(Predicate<DataContext>)`, read by the renderer.
+
+- **G4 — no mnemonics.** Alt+F opening File, and `F` underlined in the label. `KeyChord` handles chords;
+  a mnemonic is a different thing (a letter within a label, active only while the bar has focus or Alt is
+  held). Needs a mnemonic notion on the menu title and an Alt-driven focus mode.
+
+- **G5 — no `when` expression parser.** Visibility is a Java lambda, which is fine for in-repo
+  contributions and impossible for a *serialised* one. Already named as phase-two work in §11/§20.2. Not
+  a blocker for the bar; it is the blocker for a data-driven bar.
+
+- **G6 — no dynamic / computed groups.** Recent Files, and a Window list of open editors, are N rows
+  generated at open time. `MenuId` placements are static per command. IntelliJ's `ActionGroup.getChildren`
+  is computed per invocation for exactly this.
+  *Fix:* a `MenuContributor` SPI — `List<Command> itemsFor(MenuId, DataContext)` — queried alongside the
+  static registry. Also closes `ContextMenu`'s ad-hoc-item gap (§27) for free.
+
+**A note on what is NOT missing:** the `Menu` widget, popover behaviour, submenu opening, accelerators and
+checkable rows are all done. It is tempting to read "no menu bar" as "no menu machinery"; the opposite is
+true, and the work is almost entirely in `core.command`.
+
+## 28.4 The shape to build
+
+```
+MenuBarView (a Part, mounted in the toolbar row — §24.6)
+  └── one MenuBarTitle per top-level MenuId       "File"  "Edit"  "View"  ...
+        └── opens a Menu built by MenuBuilder.build(menuId, context)
+              └── sections from CommandRegistry.sections(menuId, context)   [G1]
+                    ├── rows: enabled or greyed                            [G2]
+                    ├── checkable rows                                     [G3]
+                    ├── submenu rows (already expressible)
+                    └── rows from MenuContributor                          [G6]
+```
+
+`MenuBuilder` is the piece worth extracting: **`ContextMenu` should become one caller of it**, not a
+parallel implementation. Today `ContextMenu` builds rows from `MenuId` itself; if the bar grows a second
+builder, the two will disagree about separators and greying within a release.
+
+**Hover-switching**: with one menu open, hovering another title switches to it without a click. This needs
+the bar to own "which title is open" rather than each title owning its own popover — the same reason
+`Menu` owns submenu opening rather than each `MenuItem`.
+
+## 28.5 The menus this project actually needs
+
+Six top-level menus. Not VS Code's twelve: Terminal, Debug and Go have no subject here, and folding their
+few relevant items into others is better than shipping empty menus.
+
+| Menu | Sections (group ids follow VS Code's `N_name` convention) | Items available *today* |
+|---|---|---|
+| **File** | `1_new`, `2_open`, `3_save`, `4_close`, `9_exit` | New File / New Folder (`explorer.*`), Open, Save, Save All, Close Tab (`dock.closePanel`), Recent Files **[G6]** |
+| **Edit** | `1_undo`, `2_clipboard`, `3_find` | Undo / Redo (`UndoCommands`), Cut / Copy / Paste, Find, Find Next / Previous (`editor.*`), Copy Path (`explorer.*`) |
+| **View** | `1_appearance`, `2_toolwindows`, `3_editor` | Show Problems / Notifications (`workbench.show*`) **needs [G3] for checkmarks**, Project, Toggle Maximize (`dock.toggleMaximize`), Split Right / Down (`dock.split*`), Command Palette (`workbench.showCommands`) |
+| **Graph** | `1_nodes`, `2_layout`, `3_compile` | Add Node, Frame Selection, Delete, Group (`GraphCommands`), Recompile. The one menu specific to this application, and the reason a menu bar is worth having |
+| **Window** | `1_panes`, `2_editors` | Next / Previous Tab, Focus Next / Previous Group (`dock.*`), then a **computed list of open editors** **[G6]** |
+| **Help** | `1_about` | About, Documentation. Thin, and honest about it |
+
+**Sizing:** ~35–40 items across six menus. That is small enough that the temptation to hard-code it is
+real, and large enough that hard-coding it would be the wrong call — the Graph menu alone will grow with
+every node feature, and it is contributed from `com.crystalgui.graph`, which the shell must not import.
+
+## 28.6 Sequencing
+
+1. **G1 — sections** (`CommandRegistry.sections`). Pure model, testable headlessly, unblocks everything.
+2. **G2 — greying** (placement carries `enabled`; `ContextMenu` keeps filtering, the bar greys).
+3. **G3 — `Command.toggledWhen`**, so View's toggles are contributions rather than special cases.
+4. **`MenuBuilder`**, with `ContextMenu` refactored to call it. **Do this before the bar exists**, or there
+   will be two builders.
+5. **`MenuBarView`** + hover-switching, mounted per §24.6.
+6. **G6 — `MenuContributor`** for Recent Files and the Window list; also closes §27's ad-hoc-item gap.
+7. **G4 — mnemonics.** Last: it is polish, and it needs the bar to have focus behaviour first.
+
+**G5 (`when` parser) stays parked.** Nothing above needs it, and it only pays for itself once menus are
+declared outside Java.

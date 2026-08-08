@@ -575,9 +575,19 @@ no project roots. It needs a session-opened announcement.
 `com.crystalgui.core.notify` — `Notification`, `Notifications`, `StatusBar`.
 
 ```java
-Notifications.error("copy failed: " + name).withAction("Retry", again);   // an EVENT
-StatusBar.set(ShaderGraphEditor.COMPILE_STATUS, "compiled 9n/8e");        // AMBIENT
+// an EVENT — happened once, may deserve an action, belongs in a history
+Notifications.show(Notification.error("copy failed: " + name).withAction("Retry", again));
+
+// AMBIENT — how things are right now. addEntry hands back the handle that OWNS the entry.
+StatusBarEntryAccessor compile = StatusBar.addEntry(
+        new StatusBarEntry("Shader graph compilation", "compiled 9n/8e", "996 chars", null,
+                StatusBarEntry.Kind.STANDARD),
+        "shadergraph.compile", StatusBarAlignment.LEFT, 100);
+compile.update(compile.entry().withText("compile failed").withKind(StatusBarEntry.Kind.ERROR));
+compile.dispose();   // withdrawal IS disposing the handle — there is no clear(id)
 ```
+
+> **`StatusBar.set(id, text, …)` is gone.** See *Status bar entries* below for why a handle replaced it.
 
 **Two channels, deliberately.** A notification *happened once*, may deserve an action, and belongs in a
 history. A status item describes *how things are right now*, is replaced rather than accumulated, and has
@@ -602,9 +612,12 @@ one. It now takes only the workbench.
 ### Alignment — which end of the bar an item sits at
 
 ```java
-StatusBar.set("explorer", "created notes.txt");                            // LEFT, the default
-StatusBar.set("caret", "Ln 51, Col 39", StatusBar.Align.RIGHT);            // RIGHT
-StatusBar.items();                                                          // what a view renders
+StatusBar.addEntry(StatusBarEntry.of("Explorer", "created notes.txt"),
+                   "explorer", StatusBarAlignment.LEFT);
+StatusBar.addEntry(StatusBarEntry.of("Cursor position", "Ln 51, Col 39"),
+                   "editor.caret", StatusBarAlignment.RIGHT, 100);
+StatusBar.entries(StatusBarAlignment.RIGHT);   // what a view renders, in left-to-right order
+StatusBar.allEntries();                        // what a hide menu enumerates — includes hidden ones
 ```
 
 **The writer chooses, not the view.** Only the writer knows: "Ln 51, Col 39" belongs on the right because
@@ -612,19 +625,20 @@ it is *about the thing you are looking at* and is glanced at in a fixed place, w
 belongs on the left because it is about what just happened and is read as prose. A view sorting by id
 prefix, or guessing from the text, would be inventing an answer that already exists.
 
-An item may also carry a **tooltip** — `set(id, text, align, tooltip)`. It is part of the item rather than
+An entry may also carry a **tooltip** — `new StatusBarEntry(name, text, tooltip, command, kind)`. It is part of the entry rather than
 decoration a view adds, because only the writer knows what the short text left out: a status bar is glanced
 at, so `compiled 12n/9e` is the item and `996 chars, 1 varyings, 6 mapped lines` is what it left behind.
 Both references explain every widget on hover for the same reason. A changed tooltip counts as a change, or
 re-stating one silently keeps the old text.
 
-`Align.LEFT` is the default and the two-argument `set` still means exactly what it meant, so every existing
-writer is untouched. `text()` is unchanged too — it flattens every item into one line and ignores alignment,
-because a line has no ends; it is what a log, a headless assertion or a single-label host wants.
+Order within a group is **priority**, higher first — see *Status bar entries*. `text()` still flattens
+every entry into one line and ignores alignment, because a line has no ends; it is what a log, a headless
+assertion or a single-label host wants.
 
-**Moving an item counts as a change.** The silence rule compares the alignment as well as the text, or a
-move between ends is dropped precisely when the words stay the same — which is when a bar that never
-redrew is hardest to notice.
+**Alignment is fixed at registration.** Moving an entry between ends means disposing the handle and
+registering a new one, which is VS Code's arrangement too — an accessor names a place as well as an entry.
+The view's removal pass therefore runs before its placement pass, or an element that changed ends would
+briefly be a child of both groups and `addChild` throws on a second parent.
 
 ### The view is `StatusBarView`, and it renders rather than computes
 
@@ -1094,3 +1108,96 @@ and an add-on's own datablock through three mechanisms:
 - **What counts as "the subject" is the application's policy.** `CrystalEditor` latches the active
   document, because the gesture that opens the Inspector makes the Inspector's own group active — the same
   reason Blender reads the scene's *active* object rather than focus.
+
+---
+
+## Status bar entries
+
+`com.crystalgui.core.notify` — `StatusBar`, `StatusBarEntry`, `StatusBarEntryAccessor`,
+`StatusBarAlignment`. Ported from VS Code's `IStatusbarService`.
+
+```java
+StatusBarEntryAccessor caret = StatusBar.addEntry(
+        new StatusBarEntry("Cursor position", "51:39", "Line and column of the caret",
+                           "editor.gotoLine", StatusBarEntry.Kind.STANDARD),
+        "editor.caret", StatusBarAlignment.RIGHT, 100);
+```
+
+| Rule | Why |
+|---|---|
+| **`addEntry` returns a handle; the handle is the identity and the lifetime** | A string key made withdrawal etiquette a writer had to remember, and made two writers on one id a silent collision — the same failure `onStatus` had, narrowed from one slot for everyone to one slot per string. Two registrations are two entries whatever they are called. Register it on a `Disposer` and it dies with its owner |
+| **Higher priority is further LEFT, in BOTH groups** | Not "closer to the outer edge", which sounds right and gets the right-hand group backwards. VS Code's own are selection 100, indentation 99, encoding 98, eol 97 |
+| **`name` is what the entry IS; `text` is what it shows** | A hide menu lists entries by `name` — you cannot offer "hide 51:39" as a checkbox, and the text changes on every keystroke. The split looks redundant until something enumerates the bar |
+| **`command` is a command ID, never a callback** | Keeps a clickable readout reachable from the palette and a keymap too. The view runs it as `CommandRegistry.global().run(id, CommandContext.of(element))` — **contextless `run(id)` builds an EMPTY DataContext**, so any command with `enabledWhereData` fails its guard and silently does nothing |
+| **`update` is silent when the entry is equal** | The record's own `equals`, not a hand-written field comparison — which is how adding a field to `StatusBarEntry` would otherwise silently skip the guard. The caret readout writes on every selection change |
+| **`onDidChange` carries nothing** | It carried the composed line, so `text()` walked every entry on every write whether or not anything wanted a string |
+| **`setHidden(id, …)` hides; `allEntries()` still lists it** | Or there is no way to switch it back on. `entries(alignment)` is what a bar renders; `allEntries()` is what a menu enumerates |
+
+## The notification model
+
+`Notifications` is one observable collection emitting typed changes — VS Code's `NotificationsModel`.
+
+```java
+Notifications.onDidChange.connect(event -> {
+    switch (event.kind()) {
+        case ADDED   -> add(event.notification());
+        case CHANGED -> restate(event.notification());   // a repeat, or a handle's updateMessage
+        case REMOVED -> remove(event.notification());    // aged out, or withdrawn
+        case CLEARED -> rebuild();                       // one event, not N removals
+    }
+});
+NotificationHandle handle = Notifications.show(Notification.error("Disconnected"));
+handle.updateMessage("Reconnecting");   // arrives as CHANGED — not a new event, does not re-ring the bell
+handle.close();                          // arrives as REMOVED
+```
+
+| Rule | Why |
+|---|---|
+| **A view must handle REMOVED** | The history is bounded, so entries age out. With no REMOVED kind an eviction was unannouncable and the panel's column grew past the history it was showing. **Ask of any new list-shaped model: can it express every way an entry can leave?** |
+| **CLEARED is one event** | A view rebuilds an empty column once rather than splicing a hundred rows out individually |
+| **A group decides how loud a notification is** | `NotificationGroups.displayOf(groupId)` → BALLOON / STICKY_BALLOON / LOG_ONLY / NONE, user-overridable via `setDisplay`. IntelliJ's model. An **unregistered group gets BALLOON**, because a producer that forgot to register must not go silent |
+| **Never-show-again is keyed by a message KIND** | `withNeverShowAgain(id)`; the instance is gone the moment it fades, so a flag on it would suppress nothing. Deliberately not the group — silencing one warning and silencing a whole producer are different requests |
+| **A repeat is CHANGED, and does not move the card** | Collapsing exists so a repeated message stops burying the list; re-ordering on every repeat would undo half of that |
+
+## Diagnostics — owners and resources
+
+`com.crystalgui.text.diagnostic` — `Diagnostic`, `DiagnosticSet`, `Markers`, `DiagnosticTag`,
+`RelatedInformation`. Ported from VS Code's `IMarkerService`, whose key is `(owner, resource)`.
+
+```java
+// OWNER: one document, several independent producers. Each replaces only itself.
+set.changeAll(Map.of("shadergraph", emitterProblems,
+                     "glsl",        driverProblems,
+                     "preview",     previewProblems));   // announces ONCE
+
+// RESOURCE: the workspace index. One per workspace, owned by the Workbench.
+markers.attach(document.resource(), document.diagnostics());
+markers.count(DiagnosticSeverity.ERROR);
+markers.resourcesWithProblems();
+markers.detach(resource);   // closing a document
+```
+
+| Rule | Why |
+|---|---|
+| **A producer names itself** | A flat list means the last writer wins — the failure `onStatus` had, in a different package. `ShaderGraphEditor` has four producers and had to merge them by hand because the model could not hold them apart |
+| **`changeAll` for a producer that writes several owners** | Otherwise a bound Problems panel rebuilds once per owner for one compile, and an owner left unmentioned keeps last compile's errors beside this one's |
+| **`Markers` is an INSTANCE, never static** | It holds a listener on every set it indexes, so nothing indexed can be collected. As a global that is forever: it killed the test worker with a non-zero exit and no failing assertion. VS Code injects its marker service per window |
+| **`detach` on close is the half that leaks** | A closed file's problems are not the workspace's, and the listener keeps the document alive |
+| **`setAll` writes the DEFAULT owner's slice** | Not all of them. Kept because forcing every single-producer document to name an owner makes it invent one, scattering keys that never collide and never merge |
+| **Tags change how a diagnostic is DRAWN, not how bad it is** | UNNECESSARY fades, DEPRECATED strikes through, and both keep their severity |
+
+## Contributing to a view's header
+
+`HeaderContributor` — a view offers controls; the container decides placement.
+
+```java
+public class ProblemsPanel extends UIElement implements HeaderContributor {
+    @Override public UIElement headerContent() { return tabs; }   // asked ONCE, when mounted
+}
+```
+
+IntelliJ's tool-window title actions. A view cannot reach its container and should not: it does not know
+whether it is alone in one, sharing it, or in a container at all. `ViewContainer` places the element after
+the title, and **only for a lone view** — with two sharing a container the header names the container, and
+one view's controls beside it would look like they governed both. The element must be one the view *owns*
+rather than built per call, or the container ends up holding a previous one.
