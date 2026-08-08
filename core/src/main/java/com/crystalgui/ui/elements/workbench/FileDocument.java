@@ -58,6 +58,33 @@ public interface FileDocument {
      */
     Resource resource();
 
+    /**
+     * Told when this document becomes, or stops being, the one in front.
+     *
+     * <h3>This is where status-bar contributions belong</h3>
+     *
+     * <p>The workbench knows exactly one thing no document can work out for itself — <b>which tab is
+     * active</b> — and that is all it should be saying. What a document then chooses to publish is its
+     * own: a text file reports a caret position, a line ending and an encoding; a shader graph reports a
+     * compile summary; a diff or an image would report neither and something else instead.</p>
+     *
+     * <p>The first cut had the workbench writing the text readouts directly, which works and does not
+     * scale: every new document type would mean editing {@code Workbench}, in a codebase whose whole
+     * direction is that a document type is a <em>contribution</em>. Both references draw the line here —
+     * IntelliJ's {@code StatusBarWidgetFactory} is asked per file, VS Code's extensions show and hide
+     * their own items on {@code onDidChangeActiveTextEditor}.</p>
+     *
+     * <p><b>Deactivation is not optional.</b> A status item describes what is true right now, so a
+     * document that publishes on activation and never withdraws leaves its numbers on screen underneath
+     * somebody else's tab — the shader graph's compile summary sat over a plain text file exactly that
+     * way. Whatever a document sets here, it clears here.</p>
+     *
+     * <p>Defaults to nothing, so a document with no ambient state says nothing rather than being made to
+     * declare that it has nothing to say.</p>
+     */
+    default void setActive(boolean active) {
+    }
+
     /** The element the dock shows for this file. */
     UIElement view();
 

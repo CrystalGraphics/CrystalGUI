@@ -107,6 +107,22 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      */
     public static final String LINE_OWNER_STATUS = "shadergraph.lineOwner";
 
+    /** Whether this graph is the tab in front, and therefore entitled to speak. @see #setActive */
+    private boolean statusActive;
+
+    /**
+     * The last summary this graph produced, so activating its tab restores it without a recompile.
+     *
+     * <p>Kept rather than recomputed because a compile is not free and the answer has not changed: the
+     * document is exactly as it was when the tab lost focus.</p>
+     */
+    @Nullable
+    private String lastCompileStatus;
+
+    /** The detail the item has no room for — the character count, or the first error in full. */
+    @Nullable
+    private String lastCompileTooltip;
+
     private final CgShaderNodeRegistry shaderNodes = CgShaderNodeRegistry.builtins();
     private final CgMasterNode master = new CgMasterNode();
 
@@ -355,6 +371,31 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
     }
 
     /**
+     * Publishes this graph's ambient state while its tab is in front, and withdraws it when it is not.
+     *
+     * <p>The bug this fixes was visible and easy to misread: the compile summary sat on the status bar
+     * while a plain text file was open, because a status item is written once and stays until somebody
+     * takes it away. Nobody did — a graph goes on compiling in the background, so it kept re-asserting a
+     * fact about a document you were not looking at.</p>
+     *
+     * <p>The line-owner readout is not restored on activation, deliberately: it describes where the caret
+     * is in the generated source, and there is no caret in it until you look at it again.</p>
+     */
+    @Override
+    public void setActive(boolean active) {
+        statusActive = active;
+        if (!active) {
+            StatusBar.clear(COMPILE_STATUS);
+            StatusBar.clear(LINE_OWNER_STATUS);
+            return;
+        }
+        if (lastCompileStatus != null) {
+            StatusBar.set(COMPILE_STATUS, lastCompileStatus, StatusBar.Align.LEFT, lastCompileTooltip);
+        }
+    }
+
+
+    /**
      * Writes the canvas's pan and zoom onto the document, so {@link #encode()} carries them.
      *
      * <p>Written RAW rather than through {@code SetSettingEdit}: looking around a graph is not an edit and
@@ -511,11 +552,24 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         // everything else in it. StatusBar replaces its own item and keeps no history, which is exactly
         // the difference. A compile FAILURE is still ambient for the same reason: it is true until the
         // next edit fixes it, and it re-arrives on every frame while it lasts.
-        StatusBar.set(COMPILE_STATUS, result.ok()
-                ? String.format("compiled  %dn/%de  %d chars  %d varyings  %d mapped lines",
-                        graph.getDocument().nodeCount(), graph.getDocument().edges().size(),
+        // SHORT ENOUGH TO GLANCE AT, with the rest on hover. This was one item carrying five facts --
+        // "compiled 12n/9e 996 chars 1 varyings 6 mapped lines" -- which is a sentence, and a status bar
+        // is read without stopping. Both references keep the bar to a readout and put the detail behind
+        // it; the numbers are not lost, they are one hover away.
+        lastCompileStatus = result.ok()
+                ? String.format("compiled  %dn/%de",
+                        graph.getDocument().nodeCount(), graph.getDocument().edges().size())
+                : result.errors().size() + " error(s)";
+        lastCompileTooltip = result.ok()
+                ? String.format("%d chars, %d varyings, %d mapped lines",
                         result.source().length(), result.varyings().size(), result.lineOwners().size())
-                : result.errors().size() + " error(s): " + result.errors().get(0));
+                : result.errors().get(0);
+        // ONLY WHILE THIS GRAPH IS THE TAB IN FRONT. A graph recompiles whether or not you are looking at
+        // it -- an animated node recompiles every frame -- so writing unconditionally put a background
+        // document's summary on the bar underneath somebody else's file. @see #setActive
+        if (statusActive) {
+            StatusBar.set(COMPILE_STATUS, lastCompileStatus, StatusBar.Align.LEFT, lastCompileTooltip);
+        }
     }
 
     private void reportLineOwner() {

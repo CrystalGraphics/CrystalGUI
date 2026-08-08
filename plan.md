@@ -3116,7 +3116,7 @@ the proportion between them.
 | 3 | **`ViewContainer` + header + tab strip**; `ProblemsPanel` becomes the first container with its views | Where F6 stops being a type and becomes visible |
 | 4 | **`StripeView`** — containers, two groups, drag between stripes; **badges** | The `ActivityBar` rewrite | ✅ **DONE** |
 | 5 | **Stripe splitting** — two containers per region | The `sideWeight` reversal, once regions and containers both exist | *model landed in step 4* |
-| 6 | **`StatusBarView`** | Cheap, self-contained, retires the harness's hand-drawn line |
+| 6 | **`StatusBarView`** | Cheap, self-contained, retires the harness's hand-drawn line | ✅ **DONE** — plus `StatusBar.Align`, the one thing the service was missing: the plan wanted a left half and a right half and `text()` composed a single flat line |
 | 7 | **Main toolbar** — widgets first, then the burger bar, then mnemonics and hover-switching | Largest, least structural, and every button is a command that already exists |
 
 Steps 1–2 are the risky pair, because they move persisted state and layout together. Everything after is
