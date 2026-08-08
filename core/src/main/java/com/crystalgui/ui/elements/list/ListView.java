@@ -107,7 +107,18 @@ public class ListView<T> extends ScrollerView {
      * moment it leaves the window, and the index is the only stable identity a row has. */
     private int focusedIndex = -1;
 
-    private final Connection modelConnection;
+    /**
+     * The model subscription — dropped while detached, re-made on re-attach.
+     *
+     * <p><b>Not final, and that is the whole fix.</b> It was, so releasing it was permanent — and a detach
+     * released it automatically. A dock panel that is closed and reopened detaches and re-attaches, after
+     * which the view was back on screen, ticking again, and no longer listening to its model: rows went
+     * stale, folds stopped landing, and nothing said so. Every list and tree in the application had this.
+     * It surfaced as a Problems tree whose chevrons worked until the panel was reopened from the activity
+     * bar and then did nothing.</p>
+     */
+    @Nullable
+    private Connection modelConnection;
 
     // ── Selection ───────────────────────────────────────────────────────────
 
@@ -146,12 +157,7 @@ public class ListView<T> extends ScrollerView {
         // NOT markAsInternal() — that marks THIS element internal, which would hide the whole list from
         // public traversal and from UIDescriptionCodec. Rows are made internal individually by
         // addInternalChild, which is the correct half of that pair.
-        modelConnection = model.onChange(change -> {
-            // A model that shrank can leave selections pointing past the end. Clamping here rather than
-            // at read time means every consumer sees a valid set, instead of each having to defend.
-            selected.removeIf(index -> index >= model.size());
-            invalidateWindow();
-        });
+        subscribeToModel();
 
         // Arrow keys on the view itself, matching TabView's idiom rather than the keymap: a keymap
         // binding names a command id, and command ids are global to the window — two lists on one screen
@@ -397,12 +403,15 @@ public class ListView<T> extends ScrollerView {
         // scroll offset might have moved — so its result is deliberately discarded and true returned.
         super.tickFrame(deltaSeconds);
         if (getAttachedWindow() == null) {
-            // Left the tree. Detach from the model here rather than on a removal event, because an
-            // ObservableList outlives the views onto it — a file list survives the panel showing it — so
-            // a listener held by a discarded view keeps that view, its pooled elements and every item
-            // they reference alive for as long as the model does. dispose() stays public for callers who
-            // want it immediate; relying on them to remember is how this leaks in practice.
-            dispose();
+            // Left the tree. Release the model subscription here rather than on a removal event, because
+            // an ObservableList outlives the views onto it — a file list survives the panel showing it —
+            // so a listener held by an off-screen view keeps that view, its pooled elements and every item
+            // they reference alive for as long as the model does.
+            //
+            // RELEASED, NOT DISPOSED. This called dispose(), which is one-way, so a view could not survive
+            // being detached: a dock panel closed and reopened came back on screen and ticking with no
+            // model subscription at all. @see #modelConnection
+            unsubscribeFromModel();
             return false;
         }
         // BEFORE updateWindow, so it acts on the layout that settled last frame. A ticker runs ahead of
@@ -421,10 +430,18 @@ public class ListView<T> extends ScrollerView {
 
     private boolean ticking;
 
-    private void ensureTicking() {
+    /** Starts the per-frame tick if it is not already running. Protected so a subclass with deferred
+     * work of its own can drive it from the ticker this class already owns, rather than registering a
+     * second one -- two tickers means two lifecycles, and the second is always the one that leaks. */
+    protected void ensureTicking() {
         if (ticking) return;
         var window = getAttachedWindow();
         if (window == null) return;
+        // BACK ON SCREEN. A detach released the model subscription; this is the moment it comes back, and
+        // the window is invalidated because the model may have moved on entirely while nobody was
+        // listening. @see #modelConnection
+        subscribeToModel();
+        invalidateWindow();
         window.registerTicker(this);
         ticking = true;
     }
@@ -1000,13 +1017,50 @@ public class ListView<T> extends ScrollerView {
         return false;
     }
 
-    /** Detaching from the model matters: an {@code ObservableList} outlives the views onto it, and a
-     * listener held by a discarded view keeps the whole view alive with it. */
+    /**
+     * Subscribes to the model, unless this view has been explicitly disposed.
+     *
+     * <p>Idempotent, so re-attaching twice costs one comparison.</p>
+     */
+    private void subscribeToModel() {
+        if (disposed || modelConnection != null) return;
+        modelConnection = model.onChange(change -> {
+            // A model that shrank can leave selections pointing past the end. Clamping here rather than
+            // at read time means every consumer sees a valid set, instead of each having to defend.
+            selected.removeIf(index -> index >= model.size());
+            invalidateWindow();
+        });
+    }
+
+    /**
+     * Drops the model subscription without ending this view.
+     *
+     * <p>What a <b>detach</b> does. An {@code ObservableList} outlives the views onto it, so a listener
+     * held by an off-screen view keeps that view, its pooled elements and every item they reference alive
+     * — which is why detaching has to release it. What it must <em>not</em> do is make that permanent:
+     * a dock panel is detached every time it is closed and re-attached when it is reopened, and a view
+     * that treated the first as death came back deaf. @see #modelConnection</p>
+     */
+    private void unsubscribeFromModel() {
+        if (modelConnection != null) {
+            modelConnection.disconnect();
+            modelConnection = null;
+        }
+        ticking = false;
+    }
+
+    /**
+     * Ends this view for good — for a caller discarding it outright rather than merely hiding it.
+     *
+     * <p>One-way, unlike a detach: {@link #isListeningToModel} stays false and re-attaching will not bring
+     * it back. That distinction is the point — automatic release on detach has to be reversible, and an
+     * explicit {@code dispose()} has to not be, or "I am finished with this" would be undone by the next
+     * thing that reparented it.</p>
+     */
     public void dispose() {
         if (disposed) return;
         disposed = true;
-        modelConnection.disconnect();
-        ticking = false;
+        unsubscribeFromModel();
     }
 
     /** Whether this view is still listening to its model.
@@ -1015,7 +1069,11 @@ public class ListView<T> extends ScrollerView {
      * defaults to {@code true} unless the concrete signal overrides it — so reading it would have
      * reported "still connected" forever and made this leak unobservable. */
     public boolean isListeningToModel() {
-        return !disposed;
+        // THE CONNECTION, not the disposed flag. Once a detach became reversible the two stopped agreeing:
+        // a detached view is not disposed and is not listening either, and reading the flag would have
+        // reported it as still subscribed — which is exactly the leak this method exists to make visible.
+        // Caught by removalFromTheTreeDetachesFromTheModel, which is the assertion that already said so.
+        return modelConnection != null;
     }
 
     private boolean disposed;

@@ -145,6 +145,64 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         return setExpanded(item, !isExpanded(item));
     }
 
+    /**
+     * Asks for a fold, applied on the next frame — <b>what a chevron press must use</b>.
+     *
+     * <h3>Why folding from inside an event is not safe, and why every caller got it wrong</h3>
+     *
+     * <p>{@link #setExpanded} re-flattens immediately, and a re-flatten replaces the model — so
+     * {@code ListView} recycles every realised row, <em>including the one whose listener is currently
+     * running</em>. Called straight from a chevron's {@code onMouseDown}, a fold pulls the element out
+     * from under the event still being dispatched through it.</p>
+     *
+     * <p>Both consumers reached the same conclusion and each hand-rolled the deferral: a {@code pending}
+     * field drained from somewhere. That is three chances to get it wrong and all three were taken — a
+     * single-slot field drops a second click in the same frame, {@code onLayoutChanged} never fires for a
+     * press that moves no geometry, and a private ticker guarded by a {@code ticking} flag stops
+     * re-registering the moment its panel is detached and re-attached, which a dock does routinely. The
+     * result is a chevron that works sometimes.</p>
+     *
+     * <p>So the deferral belongs here, once: a <b>queue</b>, so rapid clicks all land, drained from the
+     * tick {@code ListView} already owns and already keeps alive, so there is no second ticker lifecycle
+     * to get wrong. One refresh per frame however many folds arrived.</p>
+     */
+    public TreeView<T> requestToggle(T item) {
+        if (item == null) return this;
+        pendingToggles.add(item);
+        // The tick is what applies it, so a tree that is idle must be woken -- otherwise the first fold
+        // after a quiet period waits for something else to start the ticker.
+        ensureTicking();
+        return this;
+    }
+
+    /** Folds asked for during event dispatch, applied on the next frame. @see #requestToggle */
+    private final List<T> pendingToggles = new ArrayList<>();
+
+    @Override
+    public boolean tickFrame(float deltaSeconds) {
+        drainPendingToggles();
+        return super.tickFrame(deltaSeconds);
+    }
+
+    /** @see #requestToggle */
+    private void drainPendingToggles() {
+        if (pendingToggles.isEmpty()) return;
+        List<T> asked = new ArrayList<>(pendingToggles);
+        pendingToggles.clear();
+        boolean moved = false;
+        for (T item : asked) {
+            if (!source.hasChildren(item)) continue;
+            boolean open = !expanded.contains(item);
+            if (open) expanded.add(item);
+            else expanded.remove(item);
+            onExpandChanged.emit(item, open);
+            moved = true;
+        }
+        // ONE re-flatten however many folds arrived, which is the point of queueing them rather than
+        // applying each as it lands.
+        if (moved) refresh();
+    }
+
     /** By flattened row index — what a renderer's own twisty listener calls, since a row knows its index
      * long before it knows anything about the tree. */
     public TreeView<T> toggleExpandedAt(int index) {

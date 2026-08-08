@@ -91,23 +91,15 @@ public class ProblemsPanel extends UIElement {
 
     private final ConnectionGroup binding = new ConnectionGroup();
 
-    /** A fold asked for by a chevron press, applied on the next frame. @see ProblemRenderer */
-    @Nullable
-    private ProblemNode pendingExpand;
-
     /**
-     * Applies a deferred fold.
+     * Folds or unfolds a file — what the chevron asks for.
      *
-     * <p>Layout is the earliest safe moment: the press has been delivered and dispatch is over, so
-     * recycling the row it landed on can no longer pull the tree out from under an event in flight.</p>
+     * <p>Straight through to {@link TreeView#requestToggle}, which owns the deferral: folding from inside
+     * a press recycles the row the press landed on, and this panel hand-rolled that deferral twice and got
+     * it wrong twice before it moved where it belonged.</p>
      */
-    @Override
-    protected void onLayoutChanged() {
-        super.onLayoutChanged();
-        if (pendingExpand == null || tree == null) return;
-        ProblemNode node = pendingExpand;
-        pendingExpand = null;
-        tree.setExpanded(node, !tree.isExpanded(node));
+    public void requestFold(ProblemNode file) {
+        if (file != null && file.isFile() && tree != null) tree.requestToggle(file);
     }
 
     public ProblemsPanel() {
@@ -304,7 +296,7 @@ public class ProblemsPanel extends UIElement {
                 // children on screen while the heading claimed to be shut: two files collapsed with three
                 // problem rows still under them, one of them drawn twice. Expanding looked fine, which is
                 // why it survived a screenshot. ProjectFileTree defers its chevron for the same reason.
-                pendingExpand = node;
+                requestFold(node);
             }, false, false);
 
             UIElement icon = new UIElement();
