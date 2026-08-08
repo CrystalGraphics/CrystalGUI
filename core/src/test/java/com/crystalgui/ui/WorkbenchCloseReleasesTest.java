@@ -37,6 +37,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
 
 /**
  * <b>Closing a tab releases what it was showing.</b>
@@ -150,6 +151,27 @@ public class WorkbenchCloseReleasesTest extends UiTestBase {
             if (candidate.resource().toString().equals(path)) return candidate;
         }
         throw new AssertionError("no document built for " + path + " -- fixture wrong");
+    }
+
+    /**
+     * <b>A workbench registers its tool-window commands.</b>
+     *
+     * <p>It did not. {@code UIElement} reaches {@code registerCommands} through
+     * {@code CommandRegistry.contribute(getClass(), ...)}, so {@code Workbench.class} is already in the
+     * contributor set by the time the override runs — and a second {@code contribute} under the same key
+     * adds nothing and returns. The commands were never registered, and a status entry naming one drew a
+     * pointer cursor and did nothing when pressed. Exactly the failure {@code resetForTesting} warns
+     * about: "a missing command only shows up as a key that does nothing".</p>
+     *
+     * <p>Which is why this asserts <em>registration</em> rather than the click: a dead key is invisible
+     * from every direction except this one.</p>
+     */
+    @Test
+    public void aWorkbenchRegistersItsToolWindowCommands() {
+        assertNotNull("nothing would open the Problems panel",
+                com.crystalgui.core.command.CommandRegistry.global().get(Workbench.SHOW_PROBLEMS));
+        assertNotNull("nothing would open the Notifications panel",
+                com.crystalgui.core.command.CommandRegistry.global().get(Workbench.SHOW_NOTIFICATIONS));
     }
 
     @Test

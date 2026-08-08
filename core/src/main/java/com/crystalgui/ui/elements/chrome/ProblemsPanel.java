@@ -91,6 +91,25 @@ public class ProblemsPanel extends UIElement {
 
     private final ConnectionGroup binding = new ConnectionGroup();
 
+    /** A fold asked for by a chevron press, applied on the next frame. @see ProblemRenderer */
+    @Nullable
+    private ProblemNode pendingExpand;
+
+    /**
+     * Applies a deferred fold.
+     *
+     * <p>Layout is the earliest safe moment: the press has been delivered and dispatch is over, so
+     * recycling the row it landed on can no longer pull the tree out from under an event in flight.</p>
+     */
+    @Override
+    protected void onLayoutChanged() {
+        super.onLayoutChanged();
+        if (pendingExpand == null || tree == null) return;
+        ProblemNode node = pendingExpand;
+        pendingExpand = null;
+        tree.setExpanded(node, !tree.isExpanded(node));
+    }
+
     public ProblemsPanel() {
         addClass(PANEL_CLASS);
         content.addClass(CONTENT_CLASS);
@@ -279,7 +298,13 @@ public class ProblemsPanel extends UIElement {
                 ProblemNode node = rowItems.get(row);
                 if (node == null || !node.isFile() || tree == null) return;
                 event.stopPropagation();
-                tree.setExpanded(node, !tree.isExpanded(node));
+                // DEFERRED TO THE NEXT FRAME, because setExpanded refreshes synchronously and this runs
+                // from the press that folded the row -- so the refresh recycles every realised row
+                // INCLUDING the one under the pointer, from inside its own listener. Collapsing left the
+                // children on screen while the heading claimed to be shut: two files collapsed with three
+                // problem rows still under them, one of them drawn twice. Expanding looked fine, which is
+                // why it survived a screenshot. ProjectFileTree defers its chevron for the same reason.
+                pendingExpand = node;
             }, false, false);
 
             UIElement icon = new UIElement();
@@ -289,6 +314,13 @@ public class ProblemsPanel extends UIElement {
             UIText label = new UIText("");
             label.addClass(MESSAGE_CLASS);
             label.setHitTest(false);
+            // MUST REPORT ITS OWN WIDTH, or there is nothing for the row to overflow with and the
+            // horizontal range is always exactly the viewport -- so the bar never appears and a driver's
+            // message is simply cut off, which is the one thing this panel scrolls sideways to avoid.
+            // UIText latches whether it self-sizes from its FIRST measurement, before any rule here has
+            // matched, so it has to be told in Java at construction. Same call, same reason, as the
+            // project tree's label and the Blackboard's type column.
+            label.forceSelfSizeWidth();
 
             UIText detail = new UIText("");
             detail.addClass(LINE_CLASS);
