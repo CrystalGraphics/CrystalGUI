@@ -157,7 +157,10 @@ public class MainPreviewPanelTest extends UiTestBase {
 
         // The document is empty, which is exactly the state deleting Output leaves behind: no master, so
         // the bridge has nothing to compile toward and hands back null.
-        assertNull("this fixture depends on the bridge returning null for a masterless document",
+        // The bridge now RETURNS a masterless graph rather than null — node thumbnails need one and only
+        // the full emit needs the master. So the path this guards is no longer "graph is null" but "graph
+        // has no output", which the renderer must survive just as quietly.
+        assertNotNull("a masterless document still yields a graph, for the node previews",
                 com.crystalgui.graph.shader.ShaderGraphBridge.toShaderGraph(
                         document, CgShaderNodeRegistry.builtins(), new CgMasterNode()));
 

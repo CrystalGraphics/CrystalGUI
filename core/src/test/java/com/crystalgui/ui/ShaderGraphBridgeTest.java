@@ -189,7 +189,12 @@ public class ShaderGraphBridgeTest extends UiTestBase {
                 document, CgShaderNodeRegistry.builtins(), new CgMasterNode());
 
         assertFalse(result.ok());
-        assertTrue(result.errors().get(0), result.errors().get(0).contains("Output"));
+        // "output node", from the EMITTER now rather than the bridge. The bridge used to refuse a
+        // masterless document outright and return null, which killed every node thumbnail to report one
+        // missing node; it now builds the graph and lets the emit be the thing that fails, because the
+        // emit is the only operation a master is required for.
+        assertTrue(result.errors().get(0),
+                result.errors().get(0).toLowerCase(java.util.Locale.ROOT).contains("output"));
     }
 
     // ── Multiple outputs (6.3.6's real remaining blocker, now proven through the full bridge) ────

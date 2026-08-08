@@ -61,7 +61,28 @@ public final class StatusBar {
      * live unless the item carries it. Both references explain every widget on hover for exactly this
      * reason; it is what lets {@code compiled 12n/9e} be the item rather than the whole sentence.</p>
      */
-    public record Item(String id, String text, Align align, @Nullable String tooltip) {
+    public record Item(String id, String text, Align align, @Nullable String tooltip, Severity severity) {
+
+        public Item {
+            if (severity == null) severity = Severity.NORMAL;
+        }
+    }
+
+    /**
+     * How an item should read — {@link Severity#NORMAL} unless it is reporting a failure.
+     *
+     * <h3>Ambient does not mean unimportant</h3>
+     *
+     * <p>"compiled 12n/9e" and "1 error(s)" are both ambient — both describe how things are right now, and
+     * both are replaced by the next compile — so both belong here rather than in {@link Notifications}. But
+     * they are not the same news, and rendered identically the failure reads as a statistic. The severity
+     * travels so the view can say so, and the view says it with a <b>class</b> rather than a colour, which
+     * is what lets one palette serve this, the Problems rows and the notification cards.</p>
+     */
+    public enum Severity {
+        NORMAL,
+        WARNING,
+        ERROR
     }
 
     /** Insertion-ordered, so the composed line is stable rather than reordering as items update. */
@@ -99,6 +120,12 @@ public final class StatusBar {
      * text left out.</p>
      */
     public static void set(String id, @Nullable String text, Align align, @Nullable String tooltip) {
+        set(id, text, align, tooltip, Severity.NORMAL);
+    }
+
+    /** As {@link #set(String, String, Align, String)}, saying whether this item is reporting a failure. */
+    public static void set(String id, @Nullable String text, Align align, @Nullable String tooltip,
+                           Severity severity) {
         if (id == null) return;
         // Blank and absent are the same state, normalised once here so every comparison below has one
         // spelling to consider rather than three.
@@ -106,7 +133,8 @@ public final class StatusBar {
         Align wantedAlign = align == null ? Align.LEFT : align;
         Item previous = wanted == null
                 ? ITEMS.remove(id)
-                : ITEMS.put(id, new Item(id, wanted, wantedAlign, tooltip));
+                : ITEMS.put(id, new Item(id, wanted, wantedAlign, tooltip,
+                        severity == null ? Severity.NORMAL : severity));
         // Silent when nothing moved, for the reason every announcement here is: a status item written on
         // a per-frame path -- and the line-owner readout is exactly that -- would otherwise emit on every
         // frame whether or not it changed.
@@ -117,7 +145,8 @@ public final class StatusBar {
         if (wanted == null && previous == null) return;
         if (wanted != null && previous != null
                 && previous.text().equals(wanted) && previous.align() == wantedAlign
-                && java.util.Objects.equals(previous.tooltip(), tooltip)) {
+                && java.util.Objects.equals(previous.tooltip(), tooltip)
+                && previous.severity() == (severity == null ? Severity.NORMAL : severity)) {
             return;
         }
         onDidChange.emit(text());

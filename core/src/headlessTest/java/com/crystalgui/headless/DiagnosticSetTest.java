@@ -188,4 +188,34 @@ public class DiagnosticSetTest {
         assertEquals(0, row.start().column());
         assertEquals(Integer.MAX_VALUE, row.end().column());
     }
+
+    /**
+     * <b>A diagnostic's message is one line, whatever the producer sent.</b>
+     *
+     * <p>A GLSL driver's info log is newline-<em>terminated</em>, so the message reached the Problems panel
+     * as {@code …undefined variable "cg_Normal"
+} and shaped as <b>two lines</b> in a sixteen-pixel row.
+     * {@code white-space: nowrap} does not prevent that — it stops text wrapping and says nothing about an
+     * explicit break — so the box came out twice as tall as its row, was centred, and overhung it by half a
+     * line each way. A {@code UIText} draws from its box top, so the words landed a few pixels above the
+     * icon beside them and it read as the <em>row</em> being misaligned.</p>
+     *
+     * <p>Measured, not guessed: the row's parts all shared its centre line exactly, and the message box was
+     * 26px tall against a 16px row. Every consumer draws a diagnostic on one line, so the message is
+     * flattened once here rather than defended against in each of them.</p>
+     */
+    @Test
+    public void aMessageIsFlattenedToOneLine() {
+        Diagnostic fromDriver = new Diagnostic(TextPoint.ZERO, TextPoint.ZERO, DiagnosticSeverity.ERROR,
+                "Vertex shader compile failed: 0(437) : error C1503: undefined variable \"cg_Normal\"\n",
+                "glsl", null);
+
+        assertFalse("a newline survived into the message", fromDriver.message().contains("\n"));
+        assertTrue(fromDriver.message().endsWith("\"cg_Normal\""));
+
+        assertEquals("interior breaks collapse to a single space, keeping the words apart",
+                "first second third",
+                new Diagnostic(TextPoint.ZERO, TextPoint.ZERO, DiagnosticSeverity.WARNING,
+                        "first\n  second\tthird", null, null).message());
+    }
 }

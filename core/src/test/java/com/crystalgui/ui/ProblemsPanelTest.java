@@ -4,14 +4,17 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
+import com.crystalgui.ui.elements.UIText;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -166,26 +169,59 @@ public class ProblemsPanelTest extends UiTestBase {
         assertTrue(chosen.isEmpty());
     }
 
-    /** The table carries the columns a problem is read by. */
+    /**
+     * <b>A row is severity, message and line — packed, not columned.</b>
+     *
+     * <p>The panel used to be a three-column table with a header. IntelliJ packs the same information into
+     * one line, and it is the better shape here: the Line column spent its width on a four-character
+     * number, and the Severity column existed to label an icon. The two tests that pinned those columns
+     * went with them — they described a design that was deliberately replaced.</p>
+     *
+     * <p>The severity reaches the sheet as a <b>class</b>, never a colour from Java, which is what lets one
+     * palette serve these rows and the notification cards.</p>
+     */
     @Test
-    public void theTableHasSeverityMessageAndLineColumns() {
+    public void aRowCarriesSeverityMessageAndLine() {
         build();
-        assertEquals(3, panel.table().getColumns().size());
+        DiagnosticSet set = new DiagnosticSet();
+        set.setAll(List.of(
+                new Diagnostic(new TextPoint(142, 0), new TextPoint(142, 0), DiagnosticSeverity.WARNING,
+                        "Field can be converted to a local variable", "java", null)));
+        panel.bindTo(set);
+        settle();
+
+        List<UIElement> rows = panel.getElementsByClassName(ProblemsPanel.ROW_CLASS);
+        assertFalse("no row was realised", rows.isEmpty());
+        UIElement row = rows.get(0);
+
+        UIElement icon = row.querySelector("." + ProblemsPanel.ICON_CLASS);
+        assertNotNull(icon);
+        assertTrue("severity must reach the sheet as a class: " + icon.getClasses(),
+                icon.hasClass(ProblemsPanel.SEVERITY_PREFIX + "warning"));
+        assertEquals("Field can be converted to a local variable",
+                ((UIText) row.querySelector("." + ProblemsPanel.MESSAGE_CLASS)).getText());
+        assertEquals("one-based, like every editor and compiler",
+                ":143", ((UIText) row.querySelector("." + ProblemsPanel.LINE_CLASS)).getText());
     }
 
     /**
-     * Every column carries a header label.
+     * A problem with nowhere to point renders no line at all.
      *
-     * <p>The severity column was blank, which made it a sortable control with no label and no affordance:
-     * clicking it re-sorted the panel alphabetically with nothing on screen to say so, and the result read
-     * as the ordering being broken rather than as a sort having been applied.</p>
+     * <p>A shader graph reports about a node, not a row. With the Line column gone there is no empty cell
+     * to fill, so the row simply ends after the message — which is better than the {@code —} the column
+     * needed.</p>
      */
     @Test
-    public void everyColumnIsLabelledSoNoSortableHeaderIsInvisible() {
+    public void aProblemWithNoPositionShowsNoLine() {
         build();
-        for (var column : panel.table().getColumns()) {
-            assertFalse("a sortable column with a blank header is an invisible control",
-                    column.getHeader() == null || column.getHeader().isBlank());
-        }
+        DiagnosticSet set = new DiagnosticSet();
+        set.setAll(List.of(
+                new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION, DiagnosticSeverity.ERROR,
+                        "The graph has no Output node", "shadergraph", "node-1")));
+        panel.bindTo(set);
+        settle();
+
+        UIElement row = panel.getElementsByClassName(ProblemsPanel.ROW_CLASS).get(0);
+        assertEquals("", ((UIText) row.querySelector("." + ProblemsPanel.LINE_CLASS)).getText());
     }
 }

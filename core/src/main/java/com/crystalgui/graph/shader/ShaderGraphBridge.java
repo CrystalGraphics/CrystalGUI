@@ -374,15 +374,24 @@ public final class ShaderGraphBridge {
                     propertyValuesOf(data, type)));
             present.put(data.id(), true);
         }
-        if (masterId == null) return null;
-
+        // NO MASTER IS NOT NO GRAPH, and returning null here killed far more than it meant to.
+        //
+        // Only the OUTPUT designation needs a master: a node's own thumbnail compiles from that node's
+        // output port and never walks to the master at all. Bailing before the edges were even linked
+        // meant deleting the Output node blanked every preview in the canvas — the whole graph went dark
+        // to report one missing node, and the Fresnel and Normal Vector thumbnails that had nothing to do
+        // with it went with it.
+        //
+        // The full emit still refuses, and says so itself: CgShaderEmitter reports "the graph's output node
+        // is not present" when asked to emit toward one that is not there. That is the right place for it,
+        // because that is the only operation the master is required for.
         for (EdgeData edge : document.edges()) {
             if (!Boolean.TRUE.equals(present.get(edge.from().nodeId()))) continue;
             if (!Boolean.TRUE.equals(present.get(edge.to().nodeId()))) continue;
             graph.link(edge.from().nodeId(), edge.from().portId(),
                     edge.to().nodeId(), edge.to().portId());
         }
-        return graph.output(masterId);
+        return masterId == null ? graph : graph.output(masterId);
     }
 
     /**
@@ -459,8 +468,8 @@ public final class ShaderGraphBridge {
 
         CgShaderGraph graph = toShaderGraph(document, shaderNodes, master);
         if (graph == null) {
-            return new CgShaderEmitter.Result("", java.util.List.of(),
-                    java.util.List.of("The graph has no Output node, so there is nothing to compile"));
+            return new CgShaderEmitter.Result("", java.util.List.of(), java.util.List.of(
+                    CgShaderProblem.graph("The graph has no Output node, so there is nothing to compile")));
         }
         try {
             return CgShaderEmitter.emit(graph, master);
@@ -478,8 +487,8 @@ public final class ShaderGraphBridge {
             // right to refuse. Reporting puts the message in the status line, which is where a compile
             // error belongs.
             String message = refused.getMessage();
-            return new CgShaderEmitter.Result("", java.util.List.of(),
-                    java.util.List.of(message == null ? refused.toString() : message));
+            return new CgShaderEmitter.Result("", java.util.List.of(), java.util.List.of(
+                    CgShaderProblem.graph(message == null ? refused.toString() : message)));
         }
     }
 }

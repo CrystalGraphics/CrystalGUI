@@ -45,12 +45,57 @@ import javax.annotation.Nullable;
 public record Diagnostic(TextPoint start, TextPoint end, DiagnosticSeverity severity, String message,
                          @Nullable String source, @Nullable String code) implements Comparable<Diagnostic> {
 
+    /**
+     * Any run of whitespace, newlines included.
+     *
+     * <p><b>Two backslashes, and Java 15 is why the one-backslash version compiled.</b> {@code "\s"} is a
+     * string escape for a space since Java 15, so {@code "\s+"} is not the regex it looks like — it is the
+     * two characters {@code " +"}, matching runs of <em>spaces only</em>. A trailing newline then survived
+     * the collapse and was removed by the {@code trim()} beside it, which made the bug look fixed while an
+     * interior break still shaped a second line.</p>
+     */
+    private static final java.util.regex.Pattern COLLAPSE_WHITESPACE =
+            java.util.regex.Pattern.compile("\\s+");
+
+    /**
+     * The range for a diagnostic that is not about a place in text.
+     *
+     * <p>A shader graph's compiler reports about a <b>node</b>: there is no row for it to point at, and
+     * the nearest lie — {@code (0,0)} — renders as a confident "line 1" over a document that may have no
+     * lines at all. A negative row is out of band for every real producer and lets a panel say "no line"
+     * instead of naming one.</p>
+     *
+     * <p>Not a separate diagnostic type, because everything else about one still applies: severity, a
+     * message, who reported it, and its code. Only the position is absent.</p>
+     */
+    public static final TextPoint NO_POSITION = new TextPoint(-1, -1);
+
+    /** Whether this points at somewhere in the text. @see #NO_POSITION */
+    public boolean hasPosition() {
+        return start.row() >= 0;
+    }
+
     public Diagnostic {
         if (start == null || end == null) {
             throw new IllegalArgumentException("A diagnostic needs both ends of its range");
         }
         if (severity == null) throw new IllegalArgumentException("A diagnostic needs a severity");
         if (message == null) message = "";
+        // ONE LINE, ALWAYS. A diagnostic is rendered as a row in a list, a line in a tooltip, or a hover
+        // over a squiggle — every consumer draws it on one line, and none of them asked for the newline a
+        // producer happened to include.
+        //
+        // The producer that forced this is a GLSL driver: an info log is newline-TERMINATED, so a
+        // message ending `undefined variable "cg_Normal"` plus a trailing break shaped as two lines in a
+        // sixteen-pixel row. `white-space: nowrap` does not help, because it stops text WRAPPING and says
+        // nothing about an explicit break. The box came out twice as tall as its row, was centred, and
+        // overhung it by half a line each way.
+        // The glyphs then drew from the box top, a few pixels above where the icon beside them sat, and it
+        // read as the row being misaligned rather than as the message being two lines.
+        //
+        // Collapsed rather than rejected: the text is still the whole message, and a producer that formats
+        // across lines is being reasonable about a medium this one does not have.
+        message = COLLAPSE_WHITESPACE.matcher(message).replaceAll(" ").trim();
         // Normalised rather than rejected: a producer that reports a backwards range has a bug, but
         // refusing the whole diagnostic would hide the problem it was trying to tell us about.
         if (end.compareTo(start) < 0) {

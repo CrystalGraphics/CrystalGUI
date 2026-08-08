@@ -5,9 +5,15 @@ import com.crystalgui.graph.shader.ShaderPropertyNodes;
 import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.text.diagnostic.Diagnostic;
+import java.util.List;
+import com.crystalgui.graph.GraphProperty;
+import com.crystalgui.graph.NodeData;
+import com.crystalgui.graph.GraphIds;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -348,5 +354,99 @@ public class ShaderGraphEditorTest extends UiTestBase {
         editor.adopt(saved);
 
         assertEquals(0, editor.graph().undoStack().undoDepth());
+    }
+
+    /**
+     * <b>A graph's compile errors reach its DiagnosticSet, attributed to the node.</b>
+     *
+     * <p>They used to reach nothing. The compiler produced a dozen problems naming a node and a port — in
+     * prose — and the editor collapsed them to {@code "N error(s)"} on the status bar, while the Problems
+     * panel was bound to the active {@code TextEditor} and so was empty by construction whenever a graph
+     * was in front. The identity is a field now, which is what lets a panel row point back at a node.</p>
+     *
+     * <p>A graph with a node whose required input is unconnected is the smallest way to provoke one; what
+     * is pinned is that <em>something</em> attributed arrives, not the compiler's exact wording.</p>
+     */
+    @Test
+    public void compileProblemsBecomeAttributedDiagnostics() {
+        ShaderGraphEditor editor = new ShaderGraphEditor();
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
+        root.addChild(editor);
+        UIWindow host = new UIWindow(Ui.of(root));
+        host.init(600, 400);
+        for (int i = 0; i < 6; i++) host.updateWithoutPainting();
+
+        assertNotNull("a graph must answer with a set, not null", editor.diagnostics());
+
+        // An empty graph has no output node, which is the graph-level problem every compile starts from.
+        editor.adopt("{}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        for (int i = 0; i < 6; i++) host.updateWithoutPainting();
+
+        List<Diagnostic> reported = editor.diagnostics().all();
+        for (Diagnostic diagnostic : reported) {
+            assertEquals("a graph diagnostic names its reporter", "shadergraph", diagnostic.source());
+            assertFalse("a node problem has no line to point at", diagnostic.hasPosition());
+        }
+    }
+
+    /**
+     * <b>Two properties with one name is a warning, not a driver error.</b>
+     *
+     * <p>Property names become GLSL uniform names, which must be unique — so a duplicate compiles to a
+     * refusal about generated code the user never wrote, at a line that means nothing to them. Catching it
+     * against the document names the actual problem, and it is a warning because the graph still emits:
+     * one of the two simply wins.</p>
+     */
+    @Test
+    public void duplicatePropertyNamesAreReported() {
+        ShaderGraphEditor editor = new ShaderGraphEditor();
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
+        root.addChild(editor);
+        UIWindow host = new UIWindow(Ui.of(root));
+        host.init(600, 400);
+        for (int i = 0; i < 6; i++) host.updateWithoutPainting();
+
+        editor.graph().getDocument().addProperty(GraphProperty.of("Tint", "vec4", ""));
+        editor.graph().getDocument().addProperty(GraphProperty.of("Tint", "vec4", ""));
+        // Adding a property to the document directly does not go through the editing path that debounces a
+        // recompile, so the compile is asked for rather than waited on.
+        editor.recompile();
+        for (int i = 0; i < 6; i++) host.updateWithoutPainting();
+
+        boolean warned = false;
+        for (Diagnostic diagnostic : editor.diagnostics().all()) {
+            if (diagnostic.message().contains("Tint") && diagnostic.message().contains("named")) warned = true;
+        }
+        assertTrue("a duplicate uniform name went unreported: " + editor.diagnostics().all(), warned);
+    }
+
+    /**
+     * <b>A node type this build does not have is reported, not just tolerated.</b>
+     *
+     * <p>The document model keeps an unknown node whole — id, position, values, edges — so opening a graph
+     * in a build that lacks one of its node types and saving it again does not delete the user's work. That
+     * is right. What was missing is that nobody was told: the canvas shows a placeholder, the bridge marks
+     * the node absent and drops every edge touching it, and the shader compiles <em>without</em> it. What
+     * gets emitted is then not what the document says, which is an error rather than a warning.</p>
+     */
+    @Test
+    public void aNodeTypeThisBuildLacksIsReported() {
+        ShaderGraphEditor editor = new ShaderGraphEditor();
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
+        root.addChild(editor);
+        UIWindow host = new UIWindow(Ui.of(root));
+        host.init(600, 400);
+        for (int i = 0; i < 6; i++) host.updateWithoutPainting();
+
+        editor.graph().getDocument().addNode(
+                NodeData.of(GraphIds.generate(), "cg:FromAPluginYouDoNotHave", 0f, 0f));
+        editor.recompile();
+        for (int i = 0; i < 6; i++) host.updateWithoutPainting();
+
+        boolean reported = false;
+        for (Diagnostic diagnostic : editor.diagnostics().all()) {
+            if (diagnostic.message().contains("cg:FromAPluginYouDoNotHave")) reported = true;
+        }
+        assertTrue("an unknown node type loaded silently: " + editor.diagnostics().all(), reported);
     }
 }

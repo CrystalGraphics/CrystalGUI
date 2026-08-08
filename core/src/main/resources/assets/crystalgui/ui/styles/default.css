@@ -966,6 +966,20 @@ tooltip {
 tooltip .__label__ {
     color: #FFFFFF;
     max-width: 170px;
+    /* SET EXPLICITLY, because `white-space` INHERITS and a tooltip lives as an internal child of the thing
+     * it describes. Anchor it to a status-bar item, a table header, a graph node title — anything that
+     * carries `white-space: nowrap` so its own label ellipsizes — and the tooltip inherits the prohibition
+     * and lays its whole sentence out on one line. `max-width` then clamps the BOX while the glyphs run
+     * straight past it, which is a background two thirds the length of its own text.
+     *
+     * No amount of sizing fixes that from the tooltip's side: you cannot wrap text that has been told not
+     * to wrap. A tooltip is not part of its anchor's text flow — it only lives there so the cascade gives
+     * it colour and font — so the one thing it must not inherit is how that anchor breaks lines. */
+    white-space: normal;
+    /* NEVER SHRUNK. The box shrink-wraps the label, so a label that gives way leaves the background
+     * narrower than the glyphs drawn on it — which is what a tooltip on a short status item looked like.
+     * The wrap is `max-width`'s job; shrinking is nobody's. */
+    flex-shrink: 0;
 }
 
 /* ── Resize handle ──────────────────────────────────────────────────────────────────────────────
@@ -5138,14 +5152,23 @@ notificationsview > .__notification-list__ {
     overlay-fit: contain;
 }
 
+/* A FAILING status item reads as a failure. "compiled 12n/9e" and "1 error(s)" are both ambient and both
+ * replaced by the next compile, so both belong in the bar — but rendered identically the failure reads as
+ * a statistic. The same three severities, the same palette, the third surface to use it. */
+.__status-bar__ .__status-item__.severity-error {
+    color: #C75450;
+}
+
+.__status-bar__ .__status-item__.severity-warning {
+    color: #C7A54A;
+}
+
 .__notification__ .__severity__.severity-info {
     overlay: icon("crystalgui:general/informationDialog");
-    color: #4A88C7;
 }
 
 .__notification__ .__severity__.severity-warning {
     overlay: icon("crystalgui:general/warningDialog");
-    color: #C7A54A;
 }
 
 .__notification__ .__severity__.severity-error {
@@ -5227,6 +5250,16 @@ notificationsview .__notifications-empty__ {
     transition: opacity 150ms;
 }
 
+/* A NOTIFICATION CARD WRAPS ITS TITLE TOO, rather than gaining a horizontal scroller like the Problems
+ * rows next to it — and the difference is the shape of the thing, not an inconsistency. A problem is a
+ * dense single-line row in a column you scan down, where a wrapped entry breaks the rhythm and sideways is
+ * the only direction left. A notification is a card that already wraps its detail and grows downward, so a
+ * title that wraps costs nothing and a horizontal scrollbar under a stack of cards would be strange. */
+notificationsview .__notification__ .__message__ {
+    white-space: normal;
+    text-overflow: clip;
+}
+
 /* A BALLOON WRAPS; A LIST ROW ELLIPSIZES. The shared rule truncates, which is right in the panel — rows
  * there are scanned down a fixed-width column and a wrapped one breaks that rhythm. A balloon has no
  * column and no neighbours to line up with, so truncating just loses the message: "opened gradle...."
@@ -5277,4 +5310,76 @@ notificationsview .__notifications-empty__ {
     color: #787A80;
     flex-shrink: 0;
     margin-left: 4px;
+}
+
+/* A STATUS-BAR TOOLTIP GETS MORE ROOM. 170px is tuned for a label or a toolbar button, where the tooltip
+ * is a few words; a status item's tooltip is the sentence its four-word readout left out — a compile
+ * summary, a driver's refusal — and at the default width that is five or six lines of very short measure. */
+.__status-bar__ tooltip .__label__ {
+    max-width: 255px;
+}
+
+/* ── Problems rows ───────────────────────────────────────────────────────────────────────────────────
+ *
+ * IntelliJ's shape: one line per problem, not three columns. The severity is the icon, the message is the
+ * line, and the row it sits on is a dim suffix — which is the whole of what the header, the Severity
+ * column and the Line column were spending space to say. */
+problemspanel .__problem__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    gap-all: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+problemspanel .__problem__:hover {
+    background: #2A2D2E;
+}
+
+/* Same class convention, same three glyphs, as the notification cards — a severity is a severity, and a
+ * second palette for it would drift the first time either was touched. */
+problemspanel .__problem__ .__severity__ {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+}
+
+problemspanel .__problem__ .__severity__.severity-info {
+    overlay: icon("crystalgui:general/informationDialog");
+}
+
+problemspanel .__problem__ .__severity__.severity-warning {
+    overlay: icon("crystalgui:general/warningDialog");
+}
+
+problemspanel .__problem__ .__severity__.severity-error {
+    overlay: icon("crystalgui:general/statusError");
+}
+
+problemspanel .__problem__ .__message__ {
+    font-size: 7px;
+    color: #DFE1E5;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* THE MESSAGE KEEPS ITS WIDTH once the list scrolls sideways, which is the whole of the switch: a
+ * shrinkable item contributes ZERO to its row's min-content width, so with it on there is never any
+ * overflow to scroll and the bar can never appear. `text-overflow` stays and simply never fires — nothing
+ * clamps the label now. Same pair, same reason, as the project tree's rows. */
+problemspanel .__h-scroll__ .__problem__ .__message__ {
+    flex-shrink: 0;
+}
+
+/* DIMMER, and it carries its own colon. It answers "where", which you read second — and a problem with
+ * nothing to point at renders it empty rather than reserving the space. */
+problemspanel .__problem__ .__line__ {
+    font-size: 7px;
+    color: #6E7076;
+    flex-shrink: 0;
 }

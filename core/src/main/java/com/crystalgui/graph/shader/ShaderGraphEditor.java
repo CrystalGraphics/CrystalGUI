@@ -40,6 +40,13 @@ import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.elements.graph.GraphView;
 
+import com.crystalgraphics.shadergraph.CgShaderProblem;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import java.util.ArrayList;
+import java.util.List;
 import javax.annotation.Nullable;
 
 /**
@@ -122,6 +129,9 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
     /** The detail the item has no room for — the character count, or the first error in full. */
     @Nullable
     private String lastCompileTooltip;
+
+    /** Whether the last compile failed, so restoring the item on activation restores its colour too. */
+    private boolean lastCompileFailed;
 
     private final CgShaderNodeRegistry shaderNodes = CgShaderNodeRegistry.builtins();
     private final CgMasterNode master = new CgMasterNode();
@@ -390,9 +400,200 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
             return;
         }
         if (lastCompileStatus != null) {
-            StatusBar.set(COMPILE_STATUS, lastCompileStatus, StatusBar.Align.LEFT, lastCompileTooltip);
+            StatusBar.set(COMPILE_STATUS, lastCompileStatus, StatusBar.Align.LEFT, lastCompileTooltip,
+                    lastCompileFailed ? StatusBar.Severity.ERROR : StatusBar.Severity.NORMAL);
         }
     }
+
+
+    /**
+     * The compiler's problems, as diagnostics — what the Problems panel shows for a graph.
+     *
+     * <h3>No line, and that is the honest answer</h3>
+     *
+     * <p>A graph problem is about a <b>node</b>, not a row: there is no text for it to point at until the
+     * driver rejects the generated source, which is a different reporter. So the range is
+     * {@code Diagnostic.NO_POSITION} and the node id travels in {@code code}, which is where LSP puts a
+     * reporter's own identity for a complaint. A panel that renders a row number then has something true
+     * to say rather than a confident "line 1".</p>
+     *
+     * <p>{@code setAll} rather than incremental adds: a compile is a complete statement about the graph, so
+     * anything it did not repeat is fixed. The set announces once, so a panel rebuilds once however many
+     * problems moved.</p>
+     */
+    private void publishProblems(CgShaderEmitter.Result result) {
+        List<Diagnostic> diagnostics = new ArrayList<>();
+        for (CgShaderProblem problem : result.problems()) {
+            diagnostics.add(new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION,
+                    problem.isError() ? DiagnosticSeverity.ERROR : DiagnosticSeverity.WARNING,
+                    problem.message(), "shadergraph", problem.nodeId()));
+        }
+        addDriverProblems(diagnostics, result);
+        addPreviewProblems(diagnostics);
+        addGraphWarnings(diagnostics);
+        problems.setAll(diagnostics);
+
+        // THE STATUS ITEM FOLLOWS THE DIAGNOSTICS, not just the emit. A driver refusal arrives AFTER a
+        // successful emit -- the graph produced GLSL it believed in and the hardware refused it -- so
+        // `result.ok()` is true while the shader does not exist. Reporting "compiled 10n/7e" in that state
+        // is the most misleading thing the bar can say: a confident success beside a blank preview and a
+        // red row in Problems.
+        for (Diagnostic diagnostic : diagnostics) {
+            if (diagnostic.severity() != DiagnosticSeverity.ERROR) continue;
+            lastCompileFailed = true;
+            lastCompileStatus = "1 error(s)";
+            lastCompileTooltip = diagnostic.message();
+            if (statusActive) {
+                StatusBar.set(COMPILE_STATUS, lastCompileStatus, StatusBar.Align.LEFT, lastCompileTooltip,
+                        StatusBar.Severity.ERROR);
+            }
+            break;
+        }
+    }
+
+    /**
+     * The driver's refusal of the generated source, mapped back to the node that wrote the line.
+     *
+     * <h3>The failure the graph cannot predict</h3>
+     *
+     * <p>Everything above is the emitter's opinion of the graph. This is the case where the emitter was
+     * satisfied and the <b>driver</b> was not — an unsupported builtin, a profile difference, a swizzle the
+     * emitter got wrong. It used to produce a blank panel and a log line while the status bar said
+     * "compiled 12n/9e", which is the worst of both: a confident success and nothing on screen.</p>
+     *
+     * <p>A driver reports {@code 0(278) : error C1503}, and 278 is a line of code the user never wrote.
+     * {@code lineOwners} is what makes that actionable — it is the map this whole mechanism was built for,
+     * and until now its only consumer was the caret readout in the status bar.</p>
+     */
+    private void addDriverProblems(List<Diagnostic> into, CgShaderEmitter.Result result) {
+        String driver = mainPreview.lastDriverError();
+        publishedDriverError = driver;
+        if (driver == null) return;
+        int line = glslLineOf(driver);
+        String owner = line > 0 ? result.ownerOfLine(line) : null;
+        into.add(new Diagnostic(
+                line > 0 ? new TextPoint(line - 1, 0) : Diagnostic.NO_POSITION,
+                line > 0 ? new TextPoint(line - 1, 0) : Diagnostic.NO_POSITION,
+                DiagnosticSeverity.ERROR,
+                owner == null ? driver : driver + "  (emitted by " + owner + ")",
+                "glsl", owner));
+    }
+
+    /**
+     * The first line number in a driver message, or -1.
+     *
+     * <p>{@code 0(278) : error C1503} is NVIDIA's shape and {@code ERROR: 0:278:} is Mesa's; both put the
+     * line after a colon or a bracket following the source index. Matching a number in either rather than
+     * a vendor's exact grammar, because getting it wrong costs the attribution and never the message —
+     * which is still shown in full.</p>
+     */
+    private static int glslLineOf(String message) {
+        // Scanned rather than matched, because the two vendor shapes differ only in a bracket and the
+        // pattern for both is "a number, a separator, the line". A regex for it needs four escaped
+        // classes and says less than this does.
+        for (int i = 0; i < message.length(); i++) {
+            if (message.charAt(i) != '(' && message.charAt(i) != ':') continue;
+            int j = i + 1;
+            while (j < message.length() && message.charAt(j) == ' ') j++;
+            int digits = j;
+            while (digits < message.length() && Character.isDigit(message.charAt(digits))) digits++;
+            if (digits == j) continue;
+            try {
+                return Integer.parseInt(message.substring(j, digits));
+            } catch (NumberFormatException tooLong) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Nodes whose own thumbnail will not compile.
+     *
+     * <p>{@code CgPreviewRenderer} knew which nodes these were and why, and told nobody — the node drew
+     * nothing, permanently, because the failure set is also what stops it retrying. A blank thumbnail with
+     * no explanation is indistinguishable from one that has not rendered yet.</p>
+     */
+    private void addPreviewProblems(List<Diagnostic> into) {
+        previews.renderer().failures().forEach((nodeId, reasons) -> {
+            for (CgShaderProblem reason : reasons) {
+                into.add(new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION,
+                        DiagnosticSeverity.WARNING,
+                        "Preview unavailable: " + reason.message(), "shadergraph.preview", nodeId));
+            }
+        });
+    }
+
+    /**
+     * What the compiler has no reason to look at — <b>warnings</b> about the document rather than errors
+     * about the emit.
+     *
+     * <p>Duplicate property names are the one that matters: they become GLSL uniform names, which must be
+     * unique, so two properties called {@code Color} compile to a driver error at a line the user never
+     * wrote. Catching it here names the actual problem instead.</p>
+     */
+    private void addGraphWarnings(List<Diagnostic> into) {
+        addUnknownNodeProblems(into);
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (GraphProperty property : graph.getDocument().properties()) {
+            String name = property.name() == null ? "" : property.name().trim();
+            if (name.isEmpty()) {
+                into.add(warning("A property with no name cannot become a uniform", property.id()));
+            } else if (!seen.add(name.toLowerCase(java.util.Locale.ROOT))) {
+                into.add(warning("Two properties are named '" + name
+                        + "' — they become one uniform, and the second wins", property.id()));
+            }
+        }
+    }
+
+    /**
+     * Nodes this build has no definition for — the "opened without the plugin" case, said out loud.
+     *
+     * <h3>Surviving silently is half a feature</h3>
+     *
+     * <p>The document model is deliberately built so an unknown node <em>survives</em>: it keeps its id,
+     * position, values and edges, so opening a graph in a build that lacks one of its node types and saving
+     * it again does not quietly delete the user's work. That half is right and worth keeping.</p>
+     *
+     * <p>The half that was missing is that nobody was told. {@code GraphView} builds a placeholder widget
+     * and the bridge marks the node absent and drops every edge touching it, so the graph <b>compiles
+     * without it</b> — a shader that is silently missing a step, from a canvas that looks almost normal.
+     * An error, not a warning: what is emitted is not what the document says.</p>
+     */
+    private void addUnknownNodeProblems(List<Diagnostic> into) {
+        for (NodeData data : graph.getDocument().nodes()) {
+            String typeId = data.typeId();
+            // The two the registry legitimately does not hold: the master is the compiler's own object, and
+            // a property node is synthesised from the document's declarations rather than registered.
+            if (ShaderGraphBridge.MASTER_TYPE.equals(typeId) || ShaderPropertyNodes.isPropertyNode(data)) {
+                continue;
+            }
+            if (shaderNodes.get(typeId) != null) continue;
+            into.add(new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION,
+                    DiagnosticSeverity.ERROR,
+                    "No definition for node type '" + typeId + "' in this build — it is kept in the"
+                            + " document but left out of the compiled shader",
+                    "shadergraph", data.id()));
+        }
+    }
+
+    private static Diagnostic warning(String message, String code) {
+        return new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION,
+                DiagnosticSeverity.WARNING, message, "shadergraph", code);
+    }
+
+    /**
+     * What is wrong with this graph. @see #publishProblems
+     *
+     * <p>Owned here rather than built on demand, because a view binds to it once and then listens.</p>
+     */
+    @Override
+    public DiagnosticSet diagnostics() {
+        return problems;
+    }
+
+    private final DiagnosticSet problems = new DiagnosticSet();
+
 
 
     /**
@@ -560,6 +761,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
                 ? String.format("compiled  %dn/%de",
                         graph.getDocument().nodeCount(), graph.getDocument().edges().size())
                 : result.errors().size() + " error(s)";
+        lastCompileFailed = !result.ok();
         lastCompileTooltip = result.ok()
                 ? String.format("%d chars, %d varyings, %d mapped lines",
                         result.source().length(), result.varyings().size(), result.lineOwners().size())
@@ -568,8 +770,13 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         // it -- an animated node recompiles every frame -- so writing unconditionally put a background
         // document's summary on the bar underneath somebody else's file. @see #setActive
         if (statusActive) {
-            StatusBar.set(COMPILE_STATUS, lastCompileStatus, StatusBar.Align.LEFT, lastCompileTooltip);
+            StatusBar.set(COMPILE_STATUS, lastCompileStatus, StatusBar.Align.LEFT, lastCompileTooltip,
+                    lastCompileFailed ? StatusBar.Severity.ERROR : StatusBar.Severity.NORMAL);
         }
+        // UNCONDITIONALLY, unlike the status item above: a diagnostic set belongs to the document, so a
+        // graph compiling in the background must keep its problems current for whenever its tab returns.
+        // Only the STATUS BAR is a claim on the screen right now.
+        publishProblems(result);
     }
 
     private void reportLineOwner() {
@@ -645,7 +852,40 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         if (ticking || getAttachedWindow() == null) return;
         ticking = true;
         getAttachedWindow().registerTicker(this::attachPreviews);
+        getAttachedWindow().registerTicker(this::watchDriverError);
     }
+
+    /**
+     * Republishes the diagnostics when the driver's verdict changes.
+     *
+     * <h3>The compile finishes before the failure exists</h3>
+     *
+     * <p>{@link #publishProblems} runs from {@link #recompile()} and asks the preview what the driver said —
+     * but a material compiles lazily on its first <b>bind</b>, so at that moment the GLSL has not been near
+     * the hardware yet. The error appears one frame later, inside the preview's own tick, with nothing left
+     * to report it.</p>
+     *
+     * <p>It used to be masked: an animated graph recompiles every frame, so the <em>next</em> compile's
+     * publish carried the previous frame's error and it looked like it worked. Break a static graph — change
+     * the vertex format to one with no normals — and the recompile happens once, before the failure, and the
+     * Problems panel stays empty about a shader that does not exist.</p>
+     *
+     * <p>A polled string comparison rather than a signal from the renderer: the renderer is CrystalGraphics'
+     * and has no business knowing a diagnostics panel exists, and this is one reference comparison per frame
+     * against a value that changes about once a minute.</p>
+     */
+    private boolean watchDriverError(float deltaSeconds) {
+        String current = mainPreview.lastDriverError();
+        if (!java.util.Objects.equals(current, publishedDriverError) && lastCompile != null) {
+            publishProblems(lastCompile);
+        }
+        // NEVER DROPPED: there is no signal that says a compile is about to fail.
+        return true;
+    }
+
+    /** What {@link #publishProblems} last saw from the driver. @see #watchDriverError */
+    @Nullable
+    private String publishedDriverError;
 
     private boolean ticking;
 

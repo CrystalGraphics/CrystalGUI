@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.workbench.document;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.text.LineEnding;
 import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.diagnostic.DiagnosticSet;
 import javax.annotation.Nullable;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.core.signal.Connection;
@@ -98,6 +99,12 @@ public record TextFileDocument(TextEditor editor, Resource resource)
     /** The name is the readout; this is the thing the letters stand for. */
     private static String describe(LineEnding ending) {
         return ending == LineEnding.CRLF ? "CRLF (Windows)" : "LF (Unix and macOS)";
+    }
+
+    /** The editor's own set — a text document's problems are the editor's to keep. */
+    @Override
+    public DiagnosticSet diagnostics() {
+        return editor.diagnostics();
     }
 
     @Override

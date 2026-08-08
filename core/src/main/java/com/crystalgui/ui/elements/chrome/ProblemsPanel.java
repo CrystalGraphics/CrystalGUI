@@ -8,8 +8,8 @@ import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.table.TableColumn;
-import com.crystalgui.ui.elements.table.TableView;
+import com.crystalgui.ui.elements.list.ListRenderer;
+import com.crystalgui.ui.elements.list.ListView;
 
 import javax.annotation.Nullable;
 
@@ -45,6 +45,15 @@ public class ProblemsPanel extends UIElement {
     public static final String PANEL_CLASS = "__problems__";
     public static final String CONTENT_CLASS = "__content__";
     public static final String TABLE_CLASS = "__problems-table__";
+    /** One problem. @see #ProblemsPanel */
+    public static final String ROW_CLASS = "__problem__";
+    /** The severity glyph — a class the sheet turns into an icon and a colour. */
+    public static final String ICON_CLASS = "__severity__";
+    public static final String MESSAGE_CLASS = "__message__";
+    /** The trailing {@code :591}. Dimmer, because it is where to look rather than what is wrong. */
+    public static final String LINE_CLASS = "__line__";
+    /** Severity, as a class. Same convention as the notification cards. */
+    public static final String SEVERITY_PREFIX = "severity-";
     public static final String EMPTY_CLASS = "__problems-empty__";
 
     /** The row a user chose — a double click, or Enter on the selection. Never fired for a mere
@@ -53,7 +62,7 @@ public class ProblemsPanel extends UIElement {
 
     private final UIElement content = new UIElement();
     private final ObservableList<Diagnostic> rows = new ObservableList<>();
-    private final TableView<Diagnostic> table = new TableView<>(rows);
+    private final ListView<Diagnostic> table = new ListView<>(rows);
     private final UIText empty = new UIText("No problems");
 
     @Nullable
@@ -72,18 +81,16 @@ public class ProblemsPanel extends UIElement {
         addInternalChild(content);
 
         table.addClass(TABLE_CLASS);
-        // 1-based, because every editor, compiler and person counts lines from one. The model is 0-based
-        // and stays that way; this is the only place the two meet.
-        // NAMED, not blank. IntelliJ shows no header over its severity icons, but this table always draws
-        // a header row -- so a blank cell there is a sortable control with no label, no affordance and no
-        // hint that clicking it did anything. Observed: the panel came up sorted alphabetically by
-        // severity with nothing on screen to explain why, which reads as the ordering being wrong rather
-        // than as a sort having been applied.
-        table.addColumn(TableColumn.<Diagnostic>of("Severity", ProblemsPanel::severityLabel)
-                .width(64f).sortable());
-        table.addColumn(TableColumn.<Diagnostic>of("Problem", Diagnostic::message).flexible().sortable());
-        table.addColumn(TableColumn.<Diagnostic>of("Line",
-                d -> String.valueOf(d.start().row() + 1)).width(48f).sortable());
+        // ONE ROW PER PROBLEM, not three columns — IntelliJ's shape, and the columns were overhead for
+        // what is really one line: the severity is an icon, the message is the line, and the row it is on
+        // is a dim suffix. A header over three sortable columns is a lot of chrome to say "warning, line
+        // 143", and the Line column spent most of its width on a number four characters long.
+        table.setItemHeight(16f);
+        // A PROBLEM IS NOT WORTH HALF-READING. A driver's message names a line, a symbol and a reason, and
+        // the part that gets truncated in a narrow panel is the end -- which is the part that says what is
+        // wrong. Scrolling sideways is the same answer the project tree already gives a long filename.
+        table.setHorizontalScrolling(true);
+        table.setRenderer(new ProblemRenderer());
         content.addChild(table);
 
         empty.addClass(EMPTY_CLASS);
@@ -102,7 +109,7 @@ public class ProblemsPanel extends UIElement {
         return false;
     }
 
-    public TableView<Diagnostic> table() {
+    public ListView<Diagnostic> table() {
         return table;
     }
 
@@ -142,13 +149,58 @@ public class ProblemsPanel extends UIElement {
         empty.generalStyle(g -> g.opacity(anything ? 0f : 1f));
     }
 
-    /** Words, not symbols — this column is read, and a glyph the bundled font lacks draws a blank
-     * advance rather than failing. */
-    private static String severityLabel(Diagnostic diagnostic) {
+    /**
+     * The row: severity glyph, message, and the line it is on.
+     *
+     * <p>Built in {@code createTemplate} and only written into by {@code bind} — an element created during
+     * bind lands after that frame's layout pass, which this engine has paid for three times over.</p>
+     */
+    private static final class ProblemRenderer implements ListRenderer<Diagnostic> {
+
+        @Override
+        public UIElement createTemplate() {
+            UIElement row = new UIElement();
+            row.addClass(ROW_CLASS);
+
+            UIElement icon = new UIElement();
+            icon.addClass(ICON_CLASS);
+            icon.setHitTest(false);
+
+            UIText message = new UIText("");
+            message.addClass(MESSAGE_CLASS);
+            message.setHitTest(false);
+
+            UIText line = new UIText("");
+            line.addClass(LINE_CLASS);
+            line.setHitTest(false);
+            line.forceSelfSizeWidth();
+
+            row.addChild(icon);
+            row.addChild(message);
+            row.addChild(line);
+            return row;
+        }
+
+        @Override
+        public void bind(Diagnostic diagnostic, int index, UIElement template) {
+            java.util.List<UIElement> parts = template.getChildren();
+            // SWAPPED, never added: a template is a different problem every time the view recycles it, so
+            // adding `severity-error` without removing `severity-warning` leaves both on the element and
+            // the cascade resolves whichever happens to win — a random colour rather than a wrong one.
+            parts.get(0).swapPrefixedClass(SEVERITY_PREFIX, SEVERITY_PREFIX + severityClass(diagnostic));
+            ((UIText) parts.get(1)).setText(diagnostic.message());
+            // OMITTED, not dashed, when there is nothing to point at. With the column gone there is no
+            // empty cell to fill, so a graph's node-level problem simply ends after its message.
+            ((UIText) parts.get(2)).setText(
+                    diagnostic.hasPosition() ? ":" + (diagnostic.start().row() + 1) : "");
+        }
+    }
+
+    /** The class the sheet keys the glyph and the colour off. */
+    private static String severityClass(Diagnostic diagnostic) {
         DiagnosticSeverity severity = diagnostic.severity();
-        if (severity == DiagnosticSeverity.ERROR) return "Error";
-        if (severity == DiagnosticSeverity.WARNING) return "Warning";
-        if (severity == DiagnosticSeverity.INFORMATION) return "Note";
-        return "Hint";
+        if (severity == DiagnosticSeverity.ERROR) return "error";
+        if (severity == DiagnosticSeverity.WARNING) return "warning";
+        return "info";
     }
 }
