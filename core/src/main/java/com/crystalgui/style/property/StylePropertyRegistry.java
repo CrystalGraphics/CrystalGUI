@@ -112,6 +112,19 @@ public class StylePropertyRegistry {
     //
     // Must be `create(new ColorProperty(...))`: the create(String, int) overload would bind this int
     // literal to IntProperty and silently give a non-interpolating, non-colour-parsing property.
+    /**
+     * The caret's own colour — CSS's {@code caret-color}.
+     *
+     * <p>Zero means <b>unset</b>, and the caret then follows {@code color}, which is the web's {@code auto}
+     * and was the only behaviour before this existed. It matters wherever the TEXT is recoloured to say
+     * something about itself rather than about the caret: a search box reds its query when nothing matches,
+     * and a red caret says the caret is wrong.</p>
+     */
+    public static final StyleProperty<Integer> CARET_COLOR =
+            create(new ColorProperty("caret-color", 0)).setInheritable(true);
+
+    // Must be `create(new ColorProperty(...))`: the create(String, int) overload would bind this int
+    // literal to IntProperty and silently give a non-interpolating, non-colour-parsing property.
     public static final StyleProperty<Integer> SELECTION_COLOR =
             create(new ColorProperty("selection-color", 0x803C8527)).setInheritable(true);
     // A paint-time nudge of the glyphs inside whatever box layout already gave them. Not CSS — CSS

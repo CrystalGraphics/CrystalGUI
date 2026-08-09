@@ -1,5 +1,8 @@
 package com.crystalgui.ui.elements.tree;
 
+import com.crystalgui.ui.elements.Tooltip;
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.elements.SearchField;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.search.SearchMatch;
@@ -69,6 +72,22 @@ public final class TreeSearch<T> {
 
     /** The dismiss button at the far right — {@code .__find-close__}. */
     public static final String CLOSE_CLASS = "__find-close__";
+
+    /** On each option toggle inside the box — Cc, W, .* */
+    public static final String OPTION_CLASS = "__search-option__";
+
+    /** On a toggle that is on. @see #addOption */
+    public static final String OPTION_ON_CLASS = "__on__";
+
+    /** On the count while a non-empty query matches nothing. @see SearchField#NOT_FOUND_CLASS */
+    public static final String NOT_FOUND_CLASS = SearchField.NOT_FOUND_CLASS;
+
+    /** On a match arrow with nothing to step through. @see #apply */
+    public static final String OFF_CLASS = "__off__";
+
+    /** The previous / next match buttons, beside the count. */
+    public static final String PREV_CLASS = "__find-prev__";
+    public static final String NEXT_CLASS = "__find-next__";
 
     /**
      * On the HOST while the bar is showing.
@@ -200,9 +219,37 @@ public final class TreeSearch<T> {
     /** Where the bar was added, so {@link #apply} can mark it. */
     @Nullable
     private UIElement host;
-    private final TextField input = new TextField();
+    /**
+     * The box, with the toggles inside its border.
+     *
+     * <p>A {@link SearchField} rather than a bare {@code TextField}, which is what this used to be. The
+     * distinction is not decoration: IntelliJ's focus ring encloses the magnifier, the text, the clear
+     * button and the option toggles as ONE control, with the text occupying only what is left between
+     * them. A strip of buttons mounted beside a plain field looks the same until something resizes.</p>
+     */
+    private final SearchField box = new SearchField();
+
+    private final TextField input = box.field();
+
+    /** Cc / W / .* — the state the matcher reads. @see SearchQuery.Options */
+    private SearchQuery.Options searchOptions = SearchQuery.Options.DEFAULT;
+
+    /** Fires when a toggle changes, so a host can re-run whatever it matched with. */
+    public final Signal.Value<SearchQuery.Options> onOptionsChanged = new Signal.Value<>();
     private final UIText count = new UIText("");
-    private final Button modeButton = new Button("Highlight");
+    /**
+     * Highlight vs Filter, as a glyph.
+     *
+     * <p>It read "Highlight" / "Filter" in words, which is clearer in isolation and cost about fifty pixels
+     * of a bar that is as narrow as its panel — so in the explorer the box sat pinned at its minimum with
+     * the count truncated to an ellipsis, and no width was left for the thing everything else exists to
+     * serve. IntelliJ spends that space on the funnel glyph for the same reason.</p>
+     */
+    private final Button modeButton = new Button("");
+
+    /** Previous / next match — the ↑ ↓ pair, beside the count that says which one you are on. */
+    private final Button prevButton = new Button("");
+    private final Button nextButton = new Button("");
 
     /**
      * DISMISS, and the only affordance for it that does not require knowing Escape.
@@ -232,6 +279,48 @@ public final class TreeSearch<T> {
         /** Always there. What a search-first panel — a settings window, a picker — wants. */
         PERMANENT
     }
+
+    /**
+     * A control the bar may show beside the box.
+     *
+     * <p>Declared rather than hidden in CSS, which is where these started. A sheet can only say "not here",
+     * and it says it from a selector that has to know the host's tag — so `projectfiletree .__find-prev__`
+     * and `navigatorview .__nav-search__ .__find-mode__` were two hosts reaching into a component's parts
+     * by name. This is the same decision made where it belongs: the host owns which controls its search
+     * has, the sheet owns what they look like.</p>
+     *
+     * <p>The box's own contents are not here. The magnifier, the clear button and the Cc/W/.* toggles are
+     * inside the field's border and are what the search <em>is</em>; these four are furniture around it.</p>
+     */
+    public enum Control {
+        /** The {@code Cc} toggle. */
+        MATCH_CASE,
+        /** The {@code W} toggle. */
+        WORDS,
+        /** The {@code .*} toggle. */
+        REGEX,
+        /** The previous / next match arrows. */
+        ARROWS,
+        /** The match count — {@code 1/4}. */
+        COUNT,
+        /** The dismiss button. Never shown on a {@linkplain Presentation#PERMANENT permanent} bar. */
+        CLOSE
+    }
+
+    /**
+     * The Highlight/Filter toggle is deliberately NOT a {@link Control}.
+     *
+     * <p>It is the one control here that changes what the search <em>does</em> rather than how precisely it
+     * matches, so a host that keeps a search at all generally wants it. Where it is not wanted — the
+     * settings sidebar, which always filters — the sheet already declines it, and that is the right level
+     * for a decision about a control the widget still fully supports.</p>
+     */
+    private static final String MODE_IS_NOT_A_CONTROL = "";
+
+    private final java.util.EnumSet<Control> controls = java.util.EnumSet.allOf(Control.class);
+
+    /** The three option toggles, so {@link #setControls} can reach the ones inside the box. */
+    private final java.util.EnumMap<Control, Button> optionButtons = new java.util.EnumMap<>(Control.class);
 
     private Presentation presentation = Presentation.TRANSIENT;
 
@@ -307,7 +396,11 @@ public final class TreeSearch<T> {
         }
 
         bar.addClass(BAR_CLASS);
-        input.addClass(INPUT_CLASS);
+        // ON THE BOX, not on the TextField inside it. The class names "the search input of a find bar",
+        // and that is now a bordered control containing the text rather than the text itself -- left on the
+        // inner field its `min-width: 60px` and `max-width: 320px` fought the box's own layout from one
+        // level down and squeezed the text to nothing. Same shape as the navigator's `__nav-search__`.
+        box.addClass(INPUT_CLASS);
         input.setPlaceholder("Search");
         // IMMEDIATE, because a search that waits for Enter is a filter you cannot feel. ON_COMMIT is the
         // right default for a form field and the wrong one for this.
@@ -327,8 +420,18 @@ public final class TreeSearch<T> {
                     yield true;
                 }
                 case CgKeyCodes.KEY_ESCAPE -> {
-                    close();
-                    yield true;
+                    // ESCAPE IS A CASCADE, and this box is only its first step. It closes a transient bar
+                    // and clears a permanent one -- but once there is nothing left for it to do here, it
+                    // must NOT be consumed, or whatever is outside can never be closed. The settings dialog
+                    // is the case: its search is permanent and always focused, so it swallowed every
+                    // Escape and the dialog could not be dismissed from the keyboard at all.
+                    //
+                    // The same rule the engine already applies at the top: a drag eats Escape before a
+                    // close watcher, and a nested popover before the modal behind it.
+                    boolean anythingToDo = !query.isEmpty()
+                            || (open && presentation != Presentation.PERMANENT);
+                    if (anythingToDo) close();
+                    yield anythingToDo;
                 }
                 default -> false;
             };
@@ -345,12 +448,32 @@ public final class TreeSearch<T> {
         count.setHitTest(false);
         modeButton.addClass(MODE_CLASS);
         modeButton.onPressed.connect(this::toggleMode);
-        bar.addChild(input);
+        // THE TOGGLES GO IN THE BOX, not in the bar -- see the field's note. Mounted here rather than by
+        // each host, because they are the component's own state: a host that wants fewer declines them in
+        // CSS, the way the navigator already declines the mode button and the count.
+        addOption(Control.MATCH_CASE, "__option-match-case__", "Match Case", "Alt+C", CgKeyCodes.KEY_C,
+                () -> searchOptions.matchCase(), v -> searchOptions = searchOptions.withMatchCase(v));
+        addOption(Control.WORDS, "__option-words__", "Words", "Alt+W", CgKeyCodes.KEY_W,
+                () -> searchOptions.wholeWords(), v -> searchOptions = searchOptions.withWholeWords(v));
+        addOption(Control.REGEX, "__option-regex__", "Regex", "Alt+X", CgKeyCodes.KEY_X,
+                () -> searchOptions.regex(), v -> searchOptions = searchOptions.withRegex(v));
+        bar.addChild(box);
         bar.addChild(count);
         closeButton.addClass(CLOSE_CLASS);
         closeButton.onPressed.connect(this::close);
+        Tooltip.attach(prevButton, "Previous Match  Shift+Enter");
+        Tooltip.attach(nextButton, "Next Match  Enter");
+        Tooltip.attach(modeButton, "Filter Search Results");
+        Tooltip.attach(closeButton, "Close  Escape");
+        prevButton.addClass(PREV_CLASS);
+        prevButton.onPressed.connect(() -> moveToMatch(-1));
+        nextButton.addClass(NEXT_CLASS);
+        nextButton.onPressed.connect(() -> moveToMatch(1));
+        bar.addChild(prevButton);
+        bar.addChild(nextButton);
         bar.addChild(modeButton);
         bar.addChild(closeButton);
+        refreshControls();
         this.host = host;
         // INTERNAL, because the bar IS chrome of the host rather than content somebody put there: it is
         // skipped by public traversal and by UIDescriptionCodec, which is what a widget's own parts are.
@@ -388,13 +511,47 @@ public final class TreeSearch<T> {
     public TreeSearch<T> setPresentation(Presentation next) {
         if (next == null || next == presentation) return this;
         presentation = next;
-        StyleGroup.importantPipeline(closeButton.getStyle().getLayoutGroup(),
-                l -> l.display(next == Presentation.PERMANENT ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
+        refreshControls();
         if (next == Presentation.PERMANENT) {
             open = true;
             apply();
         }
         return this;
+    }
+
+    /**
+     * Which controls the bar shows. Everything, unless a host says otherwise.
+     *
+     * <p>Call with no arguments for a bare box — the settings sidebar wants exactly that, since its tree is
+     * the answer and there is nothing to step through or dismiss.</p>
+     */
+    public TreeSearch<T> setControls(Control... shown) {
+        controls.clear();
+        if (shown != null) java.util.Collections.addAll(controls, shown);
+        refreshControls();
+        return this;
+    }
+
+    public java.util.Set<Control> controls() {
+        return java.util.Collections.unmodifiableSet(controls);
+    }
+
+    private void refreshControls() {
+        show(count, Control.COUNT);
+        show(prevButton, Control.ARROWS);
+        show(nextButton, Control.ARROWS);
+        optionButtons.forEach((control, button) -> show(button, control));
+        // A permanent bar cannot be dismissed, so its close button is never shown whatever is asked for --
+        // one refusal, in the same place the hide is written, rather than a rule every caller must know.
+        boolean closeable = controls.contains(Control.CLOSE)
+                && presentation != Presentation.PERMANENT;
+        StyleGroup.importantPipeline(closeButton.getStyle().getLayoutGroup(),
+                l -> l.display(closeable ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+    }
+
+    private void show(UIElement element, Control control) {
+        StyleGroup.importantPipeline(element.getStyle().getLayoutGroup(),
+                l -> l.display(controls.contains(control) ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
     }
 
     public Presentation presentation() {
@@ -470,9 +627,62 @@ public final class TreeSearch<T> {
         return tree;
     }
 
+    /** The box — the bordered control holding the text, the clear button and the toggles. */
+    public SearchField box() {
+        return box;
+    }
+
     /** The bar itself, for a host that wants to name or place it. */
     public UIElement bar() {
         return bar;
+    }
+
+    /** The options the matcher should honour — Cc / W / .* as the user has them. */
+    public SearchQuery.Options searchOptions() {
+        return searchOptions;
+    }
+
+    /**
+     * One toggle in the box.
+     *
+     * <p>A {@code Button} overriding {@code isChecked()}, which is how every stateful control here says it
+     * is on: the pseudo-class comes for free and the sheet draws the state. @see PseudoClasses</p>
+     */
+    private void addOption(Control control, String styleClass, String title, String accelerator, int key,
+                           java.util.function.BooleanSupplier get,
+                           java.util.function.Consumer<Boolean> set) {
+        Button option = new Button("");
+        // NAMED, because three glyphs reading Cc / W / .* are only obvious to somebody who already knows
+        // them. IntelliJ's own tooltip is the title, the accelerator, and one line of instruction -- and
+        // the accelerator is BOUND below rather than merely advertised: a tooltip naming a shortcut that
+        // does nothing is worse than no tooltip.
+        Tooltip.attach(option, title + "  " + accelerator);
+        option.addClass(OPTION_CLASS);
+        option.addClass(styleClass);
+        option.onPressed.connect(() -> {
+            boolean next = !get.getAsBoolean();
+            set.accept(next);
+            // AN EXPLICIT CLASS, not an isChecked() override. `:checked` is re-evaluated from the dirty-match
+            // set, and invalidateStyleMatch is protected -- so a toggle flipped from a listener would be
+            // drawn in the state it had just left until something else happened to dirty it. A class change
+            // is what the engine is guaranteed to notice.
+            if (next) option.addClass(OPTION_ON_CLASS);
+            else option.removeClass(OPTION_ON_CLASS);
+            onOptionsChanged.emit(searchOptions);
+            setQuery(query);
+            apply();
+        });
+        optionButtons.put(control, option);
+        box.addOption(option);
+
+        // ALT+C / ALT+W / ALT+X, on the box rather than in the keymap. The same reasoning that put Ctrl+F
+        // on the tree: these must not be taken from the rest of the application, and they only mean
+        // anything while there is a query to apply them to.
+        input.onKeyDown.attachListener((element, event) -> {
+            if (!CgModifiers.hasAlt(event.getModifiers()) || event.getKeyCode() != key) return;
+            option.onPressed.emit();
+            event.stopPropagation();
+        }, false, true);
     }
 
     /** The search box, for a host that wants to style or focus it. */
@@ -507,7 +717,10 @@ public final class TreeSearch<T> {
         // the middle of a query would jump to the end on every keystroke.
         if (!input.getText().equals(query)) input.setText(query);
         writingBack = false;
-        modeButton.setText(mode == Mode.FILTER ? "Filter" : "Highlight");
+        // A GLYPH WITH A STATE, not a label that says which state it is in. Same idiom as the option
+        // toggles beside it, and the same reason: `:checked` is not re-evaluated from a listener.
+        if (mode == Mode.FILTER) modeButton.addClass(OPTION_ON_CLASS);
+        else modeButton.removeClass(OPTION_ON_CLASS);
 
         int matches = matchRows().size();
         // POSITIONAL, not merely a count. Navigation you cannot see the position of is navigation you
@@ -516,9 +729,45 @@ public final class TreeSearch<T> {
         // WHAT IS ON SCREEN, not what the model holds: a lazily-listed tree would otherwise report a
         // number about the parts that happen to have been opened, which reads as a search result and is
         // not one.
-        if (matches == 0) count.setText("no matches here");
-        else if (currentMatch < 0) count.setText(matches + " shown");
-        else count.setText((currentMatch + 1) + " of " + matches);
+        // TERSE, because this bar lives in a sidebar. "no matches here" and "1 of 4" are better English
+        // and they are eleven and six characters of a row that is already overfull at 187px -- the box
+        // was shrinking to its floor to pay for them, which trades the control everything else exists to
+        // serve for a sentence. IntelliJ can afford "0 results" because its bar spans an editor.
+        if (matches == 0) count.setText("0");
+        else if (currentMatch < 0) count.setText(String.valueOf(matches));
+        else count.setText((currentMatch + 1) + "/" + matches);
+
+        // NOTHING FOUND, said three ways at once because they are one fact: the query reds, the count reds,
+        // and the two arrows go dead. `SearchField.setNotFound` has existed since the box was built and
+        // nothing had ever called it -- a state the widget could render and no one ever put it in.
+        //
+        // An UNCOMPILABLE PATTERN counts as nothing found, deliberately: to somebody typing `(unclosed` the
+        // answer is the same, and a second colour for it would be a distinction only the implementer cares
+        // about. SearchQuery.isInvalidPattern is why the box can say so at all.
+        boolean nothing = !query.isEmpty() && matches == 0;
+        box.setNotFound(nothing);
+        if (nothing) count.addClass(NOT_FOUND_CLASS);
+        else count.removeClass(NOT_FOUND_CLASS);
+
+        // DISABLED, not hidden. An arrow that vanishes when a query stops matching moves everything beside
+        // it on every keystroke; greyed, it stays where the hand expects it and says why it does nothing.
+        boolean canStep = matches > 0;
+        prevButton.setEnabled(canStep);
+        nextButton.setEnabled(canStep);
+        // AND UNHITTABLE, which is what actually makes it look dead. `:disabled` and `:hover` tie on
+        // specificity and a `:disabled:hover` compound does not match here, so a disabled arrow kept
+        // lighting up under the pointer -- and kept showing its tooltip, which is worse: a dead control
+        // explaining what it would have done. Taking it out of hit testing means `:hover` can never
+        // match it and the tooltip never opens, which is what a disabled control should do anyway.
+        prevButton.setHitTest(canStep);
+        nextButton.setHitTest(canStep);
+        // AND AN EXPLICIT CLASS for the colour, rather than leaning on `:disabled`. Same answer as the
+        // option toggles and for the same reason: a pseudo-class here is re-evaluated on the engine's
+        // terms and a class is re-evaluated on ours. `:disabled` was styled correctly and still lost.
+        for (Button arrow : new Button[]{prevButton, nextButton}) {
+            if (canStep) arrow.removeClass(OFF_CLASS);
+            else arrow.addClass(OFF_CLASS);
+        }
     }
 
     // ── Navigation ──────────────────────────────────────────────────────────────────────────────

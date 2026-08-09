@@ -1,5 +1,10 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.ui.event.KeyboardEvent;
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgui.ui.elements.TextField;
+import com.crystalgui.ui.elements.SearchField;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.UIText;
@@ -17,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.List;
 
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
@@ -366,6 +372,124 @@ public class TreeSearchInstallTest extends UiTestBase {
             if (child instanceof UIText label) return label.highlightBandCount();
         }
         return -1;
+    }
+
+
+    /**
+     * <b>Clearing the query with the ✕ leaves the caret in the box.</b>
+     *
+     * <p>{@code emitMouseDown} blurs the focus owner <em>before</em> it dispatches, and the clear button is
+     * not focusable — so the press emptied the field and left it dead, and the next query needed a click to
+     * start. That is the opposite of what a clear button is for.</p>
+     *
+     * <p>Driven through {@code emitMouseDown}'s own route rather than {@code sendInputEvent}, because the
+     * blur is the thing under test and dispatching straight at the element skips it entirely — the same
+     * distinction that hid the menu bar's focus bug for sixteen passing tests.</p>
+     */
+    @Test
+    public void clearingWithTheButtonKeepsTheCaretInTheBox() {
+        search.setQuery("mama");
+        settle();
+        TextField field = search.input();
+        window.getInputHandler().requestFocus(field);
+        settle();
+        assertSame(field, window.getInputHandler().getFocusedElement());
+
+        UIElement clearButton = search.box().querySelector("." + SearchField.CLEAR_CLASS);
+        assertNotNull("no clear button, so this asserts nothing", clearButton);
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        // The CENTRE, and a frame around it: a press is accumulated and dispatched by the frame pair, and
+        // the element's own origin sits on its border.
+        int cx = (int) (clearButton.getRuntimeCache().getX()
+                + clearButton.getRuntimeCache().getWidth() / 2f);
+        int cy = (int) (clearButton.getRuntimeCache().getY()
+                + clearButton.getRuntimeCache().getHeight() / 2f);
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(cx, cy, 0, 0, 0, true, 0f, 0L));
+        window.getInputHandler().endFrame();
+        settle();
+
+        assertEquals("the button did not clear the query", "", search.query());
+        assertSame("clearing took the caret out of the box",
+                field, window.getInputHandler().getFocusedElement());
+    }
+
+
+    /** Everything, unless a host says otherwise. */
+    @Test
+    public void everyControlIsShownByDefault() {
+        assertEquals(java.util.EnumSet.allOf(TreeSearch.Control.class), search.controls());
+    }
+
+    /**
+     * <b>A host declares which controls its search has.</b>
+     *
+     * <p>These were hidden in the sheet — `projectfiletree .__find-prev__` and
+     * `navigatorview .__nav-search__ .__find-count__`, two hosts reaching into a component's parts by name
+     * from a selector that had to know the host's tag. A sheet can only say "not here"; this says it where
+     * the decision lives. The sheet still owns what they look like.</p>
+     */
+    @Test
+    public void aHostCanDeclineControls() {
+        search.setControls(TreeSearch.Control.COUNT, TreeSearch.Control.CLOSE);
+        settle();
+        assertEquals(java.util.EnumSet.of(TreeSearch.Control.COUNT, TreeSearch.Control.CLOSE),
+                search.controls());
+    }
+
+    /** And can decline all of them, which is what a search-first sidebar wants. */
+    @Test
+    public void aBareBoxIsSpelledWithNoArguments() {
+        search.setControls();
+        settle();
+        assertTrue("a bare box still has its own text field", search.controls().isEmpty());
+        assertNotNull(search.input());
+    }
+
+
+    /** Escape delivered to the search box, reporting whether the box consumed it. */
+    private boolean escapeInBox(TreeSearch<String> target) {
+        TextField field = target.input();
+        KeyboardEvent.Down event = new KeyboardEvent.Down(
+                field, CgKeyCodes.KEY_ESCAPE, '\0', false, 0, 0L);
+        window.getInputHandler().sendInputEvent(field, event);
+        settle();
+        return event.isPropagationStopped();
+    }
+
+    /**
+     * <b>Escape stops being the search box's once the box has nothing left to do.</b>
+     *
+     * <p>It is a cascade — the same rule the engine already applies above, where a live drag eats Escape
+     * before a close watcher and a nested popover before the modal behind it. A permanent bar clears its
+     * query on the first press and must then let the second one through, or whatever contains it can never
+     * be closed from the keyboard. The settings dialog is exactly that: its search is permanent and always
+     * focused, so it swallowed every Escape and the dialog could not be dismissed at all.</p>
+     */
+    @Test
+    public void escapePassesThroughOnceThereIsNothingLeftToClear() {
+        search.setPresentation(TreeSearch.Presentation.PERMANENT);
+        search.setQuery("mama");
+        settle();
+
+        assertTrue("the first Escape should clear the query", escapeInBox(search));
+        assertEquals("", search.query());
+        assertTrue("a permanent bar stays open", search.isOpen());
+
+        assertFalse("the second Escape must reach whatever contains the search",
+                escapeInBox(search));
+    }
+
+    /** A transient bar closes on the first press and passes the next one on. */
+    @Test
+    public void escapeClosesATransientBarThenPassesThrough() {
+        search.open();
+        settle();
+        assertTrue(escapeInBox(search));
+        assertFalse("a closed bar has no claim on Escape", search.isOpen());
+        assertFalse(escapeInBox(search));
     }
 
 }

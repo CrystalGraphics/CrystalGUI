@@ -132,8 +132,12 @@ button text, dropdown text {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* A LIGHTER FACE, not a different colour. This was `#FF0000` -- a placeholder that shipped, and one nobody
+ * saw for as long as every button in the engine was a labelled rectangle somebody rarely hovered. It became
+ * unmissable the moment buttons were used as small glyphs in a row: the search toggles flashed red under the
+ * pointer and stayed red while focused. */
 button:hover, dropdown:hover {
-    background: #FF0000;
+    background: #B4B4B4;
 }
 button:active, dropdown:active {
     background: #7A7A7A;
@@ -2251,19 +2255,21 @@ searchfield {
     align-items: center;
     width: 100%;
 }
-/* The magnifier is NOT drawn, deliberately, and this is a real gap rather than an oversight:
- * `CgUiShape`'s catalog has no magnifier (it runs chevrons/triangles/checkmark/cross/plus/minus/arrows),
- * and the two cheap fakes are both worse than nothing. A text glyph is out — the bundled Minecraft font
- * has no U+1F50D and a missing glyph draws a blank advance rather than failing, which is the exact trap
- * the create menu's twisty already documents. A stand-in shape that is not a magnifier would just be a
- * wrong icon. So the element stays as a structural hook with no box, and a theme (or a MAGNIFIER kind
- * added to the catalog — a circle plus a handle, more than the stroke helpers currently do) turns it on. */
+/* THE MAGNIFIER, which this element existed as a hook for and could not draw.
+ *
+ * It was `display: none` with a paragraph explaining why: `CgUiShape`'s catalog has no magnifier, a text
+ * glyph was out (the bundled Minecraft font has no U+1F50D, and a missing glyph draws a blank advance
+ * rather than failing), and a stand-in shape that is not a magnifier is just a wrong icon. All true, and
+ * all about SHAPES -- the answer turned out to be an SVG, which the engine renders as real geometry with
+ * `currentColor` bound at draw time. So the hook is finally connected, for every consumer at once. */
 searchfield .__icon__ {
-    display: none;
-    width: 9px;
-    height: 9px;
+    width: 10px;
+    height: 10px;
     flex-shrink: 0;
     margin-left: 3px;
+    overlay: icon("crystalgui:general/search/search");
+    overlay-fit: contain;
+    color: #8A8A8A;
 }
 /* The field owns the slack; icon and clear keep their own size. */
 searchfield .__field__ {
@@ -4909,14 +4915,6 @@ navigatorview .__nav-sidebar__ {
  *
  * There used to be a lone TextField here with `width: 100%` on it. Left on the input after the migration
  * that rule fought the bar's flex layout from one level down, which is why the class names the bar now. */
-/* NO COUNT EITHER. "no matches here" is a whole sentence sitting permanently beside a search box that is
- * itself the narrowest thing in the dialog, and the tree below already answers the question — an empty
- * sidebar is a more direct "no matches" than a label saying so. It also has to be paid for in width: the
- * bar is a flex row, so the count's own text is part of what the pane can never shrink below. */
-navigatorview .__nav-search__ .__find-count__ {
-    display: none;
-}
-
 /* NO MODE BUTTON in a settings tree. The component offers Highlight/Filter and this host always wants
  * Filter -- typing a setting's name should leave the categories that contain it and nothing else, which is
  * what IntelliJ's settings search and VS Code's settings editor both do. Hidden rather than removed,
@@ -5746,8 +5744,24 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
 .__find-bar__ {
     flex-direction: row;
     align-items: center;
+    /* THE BAR SPANS ITS HOST. Without this it is sized to its own children, so its width IS their width and
+     * there is no free space in it -- which made every attempt to widen the box inside it do nothing at
+     * all, whatever flex property was tried. The row was never short of a rule; it was short of a parent. */
+    width: 100%;
     flex-shrink: 0;
-    gap-all: 6px;
+    /* CLIPS ITS OWN CHILDREN. At a narrow panel the row genuinely does not fit -- measured at 112px wide
+     * with the mode button laid out at x=146 and the close at x=162, both past the bar's right edge of 144,
+     * and both still painting. That is what "the count overlaps the buttons" actually was: not a text
+     * overflow, but the whole row spilling out of a box that never clipped it. A control drawn outside its
+     * own bar is worse than one missing, because it lands on top of whatever is there.
+     *
+     * A backstop rather than the fix -- the floor below is what keeps the row fitting in the first place. */
+    overflow: hidden;
+    /* SMALL, because the row is now icons rather than words and every gap is space the box cannot have.
+     * At 6px the children plus the gaps came to ~2px MORE than the panel, so the box shrank to its
+     * min-width and stayed there however wide the panel got -- a two-pixel overflow reading as "the search
+     * box never grows". */
+    gap-all: 4px;
     height: 20px;
     padding-left: 6px;
     padding-right: 4px;
@@ -5767,8 +5781,19 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
  * belonging to the panel rather than to the query. The auto margin moved to the close button, which is
  * the one control that does belong at the edge; it must stay the ONLY claimant, since auto margins share
  * the slack rather than the first one taking it. */
+/* THE COUNT REDS TOO. One fact, said everywhere it is visible: the query, the count and the arrows all
+ * report "nothing" together rather than leaving the reader to notice a zero. */
+.__find-bar__ .__find-count__.__not-found__ {
+    color: #E06C6C;
+}
+
 .__find-bar__ .__find-count__ {
     color: #8A8A8A;
+    /* CLIPPED, not merely ellipsised. `text-overflow` decides what the cut glyphs look like; it does not
+     * itself cut anything -- without `overflow: hidden` the box shrinks correctly and the glyphs go on
+     * painting at their full width, straight over the filter and close buttons beside them. The base
+     * `button text` rule carries the same warning, and this is the same trap one row up. */
+    overflow: hidden;
     /* SHRINKS, and it is the only thing in the row that may. flex-shrink defaults to 0 here (not 1, as on
      * the web), so in a narrow host every sibling is rigid and the input -- the one element that does
      * shrink -- collapsed to about 40px in the Preferences sidebar, with four characters of query showing
@@ -5779,11 +5804,17 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     text-overflow: ellipsis;
 }
 
+/* NO AUTO MARGIN. An auto margin absorbs the row's free space BEFORE flex-grow gets any, so the box could
+ * never grow past its minimum however wide the panel was -- the close button quietly took all of it. The
+ * box grows instead, which puts the close at the right edge anyway in every panel narrower than its cap. */
 .__find-bar__ .__find-close__ {
-    margin-left: auto;
-    width: 16px;
-    height: 16px;
+    width: 12px;
+    height: 10px;
+    min-height: 0px;
+    padding-all: 0px;
     flex-shrink: 0;
+    background: none;
+    background-color: transparent;
     overlay: icon("crystalgui:x");
     overlay-fit: contain;
     color: #8A8A8A;
@@ -5796,18 +5827,97 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     background-color: #4B4D50;
 }
 
+/* A GLYPH, not a word. See TreeSearch's note: the words cost about fifty pixels of a bar that is as narrow
+ * as its panel, which left the box pinned at its minimum with the count truncated to an ellipsis. */
 .__find-bar__ .__find-mode__ {
-    height: 16px;
-    padding-left: 6px;
-    padding-right: 6px;
+    width: 12px;
+    height: 10px;
+    min-height: 0px;
+    padding-all: 0px;
     flex-shrink: 0;
-    background: #3C3F41;
-    border-radius: 2px;
+    border-radius: 3px;
+    overlay: icon("crystalgui:general/search/filter");
+    overlay-fit: contain;
+    background: none;
+    background-color: transparent;
+    color: #9A9A9A;
 }
 
-.__find-bar__ .__find-mode__ text {
-    font-size: 10;
-    color: #BBBBBB;
+.__find-bar__ .__find-mode__:hover {
+    color: #E0E0E0;
+    background: none;
+    background-color: #4E5157;
+}
+
+.__find-bar__ .__find-mode__.__on__ {
+    color: #FFFFFF;
+    background: none;
+    background-color: #3574F0;
+}
+
+.__find-bar__ .__find-prev__,
+.__find-bar__ .__find-next__ {
+    width: 11px;
+    height: 10px;
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    overlay-fit: contain;
+    background: none;
+    background-color: transparent;
+    color: #9A9A9A;
+}
+
+.__find-bar__ .__find-prev__ { overlay: icon("crystalgui:general/search/up", #9A9A9A, monochrome); }
+.__find-bar__ .__find-next__ { overlay: icon("crystalgui:general/search/down", #9A9A9A, monochrome); }
+
+.__find-bar__ .__find-prev__:hover,
+.__find-bar__ .__find-next__:hover {
+    color: #E0E0E0;
+    background: none;
+    background-color: #4E5157;
+}
+
+/* NOTHING TO STEP THROUGH.
+ *
+ * AFTER the hover rule, and repeated for the hovered case. `:disabled` and `:hover` are both one
+ * pseudo-class, so they tie on specificity and the later rule wins -- written above, a disabled arrow still
+ * lit up under the pointer and looked live. `button:disabled` also repaints the whole face grey, which is
+ * right for a labelled button and wrong for a glyph, so the glyph itself dims instead. */
+/* NOTHING TO STEP THROUGH.
+ *
+ * An explicit class rather than `:disabled`, which was styled correctly and still lost -- the same answer
+ * the option toggles use, and for the same reason: a pseudo-class is re-evaluated on the engine's terms and
+ * a class on ours. The buttons also leave hit testing when this is on, so no hover state can reach them. */
+/* THE TINT IS ON THE DRAWABLE, not on `color`.
+ *
+ * The dead tint is #5A5D63 rather than something darker: the bar's own background is #2F3033, so a very
+ * dark glyph loses contrast against it and reads as smudged rather than disabled. Recessed means clearly
+ * below the live #9A9A9A while still clearly ABOVE the surface it sits on.
+ *
+ * `currentColor` is not reaching these files -- an explicit `icon(..., #RRGGBB, monochrome)` recolours them
+ * and `color` alone does nothing, which is why three rounds of setting `color` changed nothing visible. So
+ * each state redeclares the overlay with its own tint. Verbose, and honest about what actually works; the
+ * `currentColor` gap is worth fixing in the SVG layer, and when it is these collapse back to `color`. */
+.__find-bar__ .__find-prev__.__off__ {
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:general/search/up", #5A5D63, monochrome);
+}
+
+.__find-bar__ .__find-next__.__off__ {
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:general/search/down", #5A5D63, monochrome);
+}
+
+.__find-bar__ .__find-prev__:hover {
+    overlay: icon("crystalgui:general/search/up", #E0E0E0, monochrome);
+}
+
+.__find-bar__ .__find-next__:hover {
+    overlay: icon("crystalgui:general/search/down", #E0E0E0, monochrome);
 }
 
 /* THE MATCHED CHARACTERS, NOT THE ROW -- IntelliJ's amber band behind the query span, and the reason
@@ -5835,31 +5945,29 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
 
 /* The search box. A real TextField, so it needs the geometry `textfield` gets everywhere else — the
  * first version drew the query with a UIText, which looked identical and could not be clicked into. */
+/* THE BOX'S PLACE IN THE ROW. Everything it looks like is on `.__search-field__` below -- this rule says
+ * only how it shares the bar, which is the one thing the bar gets to decide.
+ *
+ * A FLOOR as well as a cap: shrinking to nothing is worse than overflowing, since it is the only element
+ * in the row that may shrink at all. Capped because the bar is as wide as its panel and a query is not --
+ * stretched across the Problems panel it ran the full width of the window with four characters in it. */
 .__find-bar__ .__find-input__ {
+    /* WIDTH PLUS SHRINK, not flex-grow. flex-grow divides only what is left after every basis is laid out,
+     * and with a content basis the box simply kept its content width while the row carried slack. A 100%
+     * basis that is allowed to shrink fills the row exactly. */
+    /* THE FILL IDIOM: a ZERO basis plus flex-grow, which AGENTS.md states outright and which I reached for
+     * last. `flex-grow` alone divides only what is left after every basis is laid out, so with a content
+     * basis the box kept its content width while the row carried slack; `width: 100%` is not honoured here
+     * at all. `width: 0; flex-grow: 1` is the spelling that works, and it is the one `searchfield .__field__`
+     * two hundred lines up was already using. */
+    width: 0;
     flex-grow: 1;
     flex-shrink: 1;
-    /* A FLOOR as well as a cap. Shrinking to nothing is worse than overflowing: an input too narrow to
-     * show the caret is not a control, and it is the shrinking sibling by construction. */
-    min-width: 60px;
-    /* CAPPED, because the bar is as wide as its panel and a query is not. Stretched across the Problems
-     * panel the field ran the full width of the window with four characters in it, which reads as a
-     * layout accident rather than a search box. IntelliJ's search field and VS Code's tree find widget
-     * are both a fixed size for the same reason; the count and the mode button still sit at the far
-     * right, since they carry margin-left: auto. */
+    /* LOW ENOUGH THAT THE REST STILL FITS. At 100px the box alone exceeded what a squeezed panel had to
+     * give -- 112px of bar against 100 + two 12px buttons + 20 of gaps + 10 of padding -- so the row
+     * overflowed however far it was dragged. A search box needs to show a few characters, not a query. */
+    min-width: 52px;
     max-width: 320px;
-    height: 16px;
-    padding-left: 4px;
-    padding-right: 4px;
-    font-size: 10;
-    color: #D0D2D6;
-    background-color: #1E1F22;
-    border-width: 1px;
-    border-color: #4A4D50;
-    border-radius: 2px;
-}
-
-.__find-bar__ .__find-input__:focus {
-    border-color: #4A88C7;
 }
 
 /* The Problems panel's bar sits in the panel's own column, between the tabs and the body — see
@@ -5867,3 +5975,138 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
 problemspanel > .__find-bar__ {
     flex-shrink: 0;
 }
+
+
+/* ── The search box, with its toggles inside the border ─────────────────────────────────────────────
+ *
+ * ONE CONTROL. IntelliJ's focus ring encloses the magnifier, the text, the clear button and the toggles
+ * together, and the text may only occupy what is left between them.
+ *
+ * THE FIELD IS THE ONLY THING IN THE ROW THAT MAY SHRINK. flex-shrink defaults to 0 here (not 1, as on the
+ * web), so everything is rigid unless it says so -- and a rigid text box would push the toggles out of the
+ * border instead of scrolling inside it. Same trap the find bar hit one level up (plan.md 29.12).
+ *
+ * `.__focused__` rather than `:focus-within`: this engine has no such pseudo-class, and an unknown one
+ * POISONS THE SHEET rather than being ignored -- see SearchField.FOCUSED_CLASS. */
+.__search-field__ {
+    flex-direction: row;
+    align-items: center;
+    height: 16px;
+    gap-all: 3px;
+    padding-left: 4px;
+    padding-right: 3px;
+    border-radius: 2px;
+    background: #1B1B1B;
+    outline-width: 1px;
+    outline-color: #3C3C3C;
+}
+
+.__search-field__.__focused__ {
+    outline-color: #4A88C7;
+}
+
+.__search-field__ .__icon__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    overlay: icon("crystalgui:general/search/search");
+    overlay-fit: contain;
+    color: #8A8A8A;
+}
+
+.__search-field__ .__field__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    height: 14px;
+    background: none;
+    outline-width: 0px;
+    font-size: 10;
+    color: #D0D2D6;
+}
+
+/* THE QUERY REDS, THE CARET DOES NOT. The red is a statement about the text -- it found nothing -- and a
+ * red caret reads as the caret itself being wrong. `caret-color` is the web's answer and exists for this. */
+.__search-field__.__not-found__ .__field__ {
+    color: #E06C6C;
+    caret-color: #D0D2D6;
+}
+
+/* SMALL AND QUIET, and hard against the toggles. It is the least important control in the box -- it undoes
+ * something you can also undo by selecting and typing -- so it should read as an affordance you can find
+ * rather than one competing with the glyphs beside it. IntelliJ draws it dimmer than everything else in the
+ * field and tucks it against the option group. */
+.__search-field__ .__clear__ {
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    overlay: icon("crystalgui:x");
+    overlay-fit: contain;
+    color: #5F6265;
+}
+
+.__search-field__ .__clear__:hover {
+    color: #C0C0C0;
+        background-color: #393b40;
+}
+
+.__search-field__ .__clear__:hover {
+    color: #E0E0E0;
+}
+
+/* ROOM TO BREATHE. At 1px the three glyphs ran together into one shape; IntelliJ spaces them by about a
+ * third of their own width, which is what makes them read as three controls. */
+.__search-field__ .__options__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    gap-all: 2px;
+    margin-left: 2px;
+}
+
+/* NO FILL AT REST. `button` gives every button a background, and inherited here it drew each toggle as a
+ * grey chip -- three of them in a row read as a segmented control rather than as glyphs in a text field.
+ * IntelliJ's sit on the field's own background until you hover one. */
+/* SHORTER THAN THE ROW. The lit background is the whole point of the on-state, and at the field's own inner
+ * height it ran edge to edge and read as a band rather than as a chip on a control -- IntelliJ leaves clear
+ * space above and below so the blue is obviously ON THE GLYPH. Width stays wider than height for the same
+ * reason: `.*` and `Cc` are wide glyphs and a square would crop them. */
+.__search-option__ {
+    width: 12px;
+    height: 10px;
+    /* MIN-HEIGHT, NOT HEIGHT, is what was holding these open. `button` sets `min-height: 14px` plus its own
+     * padding, and a minimum is a different property from a size -- so every `height` written here lost to
+     * it silently and the chip stayed exactly as tall as the field's interior however small the number got.
+     * Clearing both is what lets the lit background sit INSIDE the border with space above and below. */
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    overlay-fit: contain;
+    background: none;
+    background-color: transparent;
+    color: #9A9A9A;
+}
+
+.__search-option__:hover {
+    color: #393b40;
+    background-color: #393b40;
+}
+
+/* ON IS BLUE, not a lighter grey. It is the one state that has to be readable at a glance across three
+ * adjacent 13px glyphs, and grey-on-grey is not. An explicit class rather than `:checked` -- see
+ * TreeSearch.addOption. */
+.__search-option__.__on__ {
+    color: #FFFFFF;
+    background-color: #375fad;
+}
+
+.__search-option__.__on__:hover {
+    background: none;
+    background-color: #4A82F2;
+}
+
+.__option-match-case__ { overlay: icon("crystalgui:general/search/matchCase"); }
+.__option-words__      { overlay: icon("crystalgui:general/search/exactWords"); }
+.__option-regex__      { overlay: icon("crystalgui:general/search/regex"); }
+

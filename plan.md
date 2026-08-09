@@ -4233,3 +4233,195 @@ icons the same way.
 The `_dark` variants are probably redundant here: `CgUiSvg` leaves `currentColor` unresolved and binds it at
 draw time, so one file tinted from CSS covers both themes. Worth checking whether the pairs differ
 structurally or only in a hard-coded fill before shipping twice as many files.
+
+## 30.9 What landed, and the four traps on the way
+
+The bar is IntelliJ's shape now: `🔍 query ✕ Cc W .*` inside **one** border, then the count, ↑ ↓, the mode
+glyph and the close outside it.
+
+- `SearchField` gained an `__options__` strip **inside** the border, plus `setNotFound()` for the red text
+  (which doubles as the invalid-pattern signal).
+- `TreeSearch` swapped its bare `TextField` for a `SearchField`, mounted Cc / W / .*, and gained prev/next
+  buttons. The mode button became the funnel glyph, and the count went terse (`1/4`) — the words cost about
+  fifty pixels of a row that is 187px wide in the explorer, and the box was shrinking to its floor to pay
+  for them.
+- The IntelliJ icons were converted from hard-coded `fill="#6C707E"` to `currentColor`, which is what lets
+  `:hover` and the on-state reach them; the `_dark` duplicates went with the conversion. `ATTRIBUTION.md`
+  records the modification, as Apache 2.0 § 4(b) requires.
+- **The magnifier finally draws.** `searchfield .__icon__` had been `display: none` with a paragraph
+  explaining that `CgUiShape` has no magnifier and every fake was worse than nothing. All true, and all
+  about *shapes* — the answer was an SVG. Every `SearchField` in the application gets it.
+
+Four traps, each of which cost a round:
+
+1. **An unknown pseudo-class poisons the sheet.** One `:focus-within` rule broke six unrelated layout tests.
+2. **`markAsInternal()` on the widget itself makes it unstyleable as a selector subject** — it still works
+   as an ancestor, so `.__search-field__ .__icon__` matched while `.__search-field__` did not.
+3. **A hidden child still counts for a `gap-all`.** The strip has to not exist until something is mounted.
+4. **The row had no free space to distribute** — the bar was content-sized, so no flex property on the box
+   could ever widen it. `width: 0; flex-grow: 1` is the idiom, but the parent has to have a width first.
+
+Every one of those was found by printing real geometry from the harness rather than by reading the sheet.
+
+## 30.10 Matching IntelliJ's chrome
+
+The toggles worked before they looked right. Five corrections, all from side-by-side comparison:
+
+- **No fill at rest.** `button` gives every button a background, and inherited here it drew each toggle as a
+  grey chip — three in a row read as a segmented control rather than as glyphs inside a text field.
+  IntelliJ's sit on the field's own background until hovered.
+- **Smaller** — 13px, and the same for the bar's own buttons.
+- **Blue when on** (`#3574F0`), not a lighter grey. It is the one state that has to be readable at a glance
+  across three adjacent 13px glyphs, and grey-on-grey is not.
+- **Looser spacing.** At 1px the three glyphs ran together into one shape; IntelliJ spaces them by about a
+  third of their own width, which is what makes them read as three controls.
+- **Tooltips**, each naming the control and its accelerator — and the accelerators are **bound**, not merely
+  advertised. Alt+C / Alt+W / Alt+X, on the box rather than in the keymap, for the reason Ctrl+F is on the
+  tree: they must not be taken from the rest of the application. A tooltip naming a shortcut that does
+  nothing is worse than no tooltip.
+
+**The arrows are declined in the project panel.** Its bar is 187px and every control in it is rigid, so the
+two arrows were 34px taken straight out of the one element that matters — the query was down to about a
+character and a half. Up/Down in the box already step the matches and the count still says where you are, so
+what is declined is a second way to do a thing rather than the thing. A host declining a capability in its
+sheet, as the navigator already does for the mode button and the count; the Problems panel spans the window
+and keeps them.
+
+### 30.10a Why the chip would not get smaller
+
+Three rounds of shrinking `height` — 13, then 12, then 10 — changed nothing: the lit background stayed
+exactly as tall as the field's interior and kept touching its borders. Nothing in the cascade looked wrong
+because the rule that was winning was not competing for the same property: `button { min-height: 14px }`,
+plus its own padding. **A minimum is not a size**, so no amount of specificity on `height` could beat it.
+
+Measuring the element settled it in one run — 14px where the sheet said 10 — after three rounds of reading
+the stylesheet settled nothing. Anything restyling a `button` into a compact glyph has to clear
+`min-height` and the base padding, not just set a size.
+
+### 30.10b The red was a placeholder, and my override could not reach it
+
+Clicking a toggle left it red. Two separate things:
+
+`button:hover` shipped with **`background: #FF0000`** — a placeholder that survived for as long as every
+button in the engine was a labelled rectangle nobody hovered much. Small glyphs in a row made it unmissable.
+It is a grey now, which fixes every button in the application rather than these three.
+
+And my own `:hover` rule could not have overridden it anyway: it set `background-color`, which is a
+**different property** from the `background` drawable. The drawable paints over the fill, so the red showed
+through a rule that looked like it should have replaced it. Every state on these buttons now sets
+`background: none` as well as a colour.
+
+### 30.10c Saying "nothing found" once, in every place it shows
+
+The query reds, the count reds, and the two arrows go dead — one fact reported everywhere it is visible,
+rather than leaving a reader to notice a zero. An **uncompilable pattern counts as nothing found**,
+deliberately: to somebody typing `(unclosed` the answer is the same, and a second colour for it would be a
+distinction only the implementer cares about.
+
+`SearchField.setNotFound` had existed since the box was built and **nothing had ever called it** — a state
+the widget could already render that no one had put it in.
+
+The arrows are **disabled, not hidden**: one that vanishes when a query stops matching moves everything
+beside it on every keystroke; greyed, it stays where the hand expects it. `button:disabled` repaints the
+face, which is right for a labelled button and wrong for a glyph, so these dim the glyph instead.
+
+**And the caret is not red.** It used the element's `color`, so reddening the text reddened it too — and a
+red caret reads as the caret being wrong rather than as the query finding nothing. That needed a real
+property: `caret-color`, the web's own answer, with zero meaning "follow `color`" so nothing else in the
+engine changes. It is registered, exposed on `GeneralGroup`, and added to AGENTS.md's property list in the
+same edit, which that list asks for by name.
+
+The arrows took a second pass. `setEnabled(false)` was being called correctly and the `:disabled` rule was
+correct, but it sat **above** the `:hover` rule — and `:disabled` and `:hover` are both one pseudo-class, so
+they tie on specificity and the later rule wins. The arrows greyed and then lit up again the moment the
+cursor touched them. The fix is ordering plus an explicit `:disabled:hover`; the probe printing
+`prevEnabled=false` is what ruled out the Java half in one run.
+
+Reordering was not enough. `:disabled` and `:hover` tie on specificity, and the `:disabled:hover` compound
+does not match in this engine — so the arrow greyed while idle and lit up the moment the pointer touched it,
+tooltip and all. `setHitTest(false)` alongside `setEnabled(false)` is the fix: `:hover` can never match an
+element that is not hit-tested, and the tooltip never opens either, which a disabled control should not do
+regardless. Verified by asking `getHoveredElement` at the arrow's own centre and getting what is behind it.
+
+### 30.10d The icons do not honour `currentColor`
+
+Three rounds of setting `color` on the match arrows changed nothing, and the reason was neither the cascade
+nor the class: **the tint never reached the SVG.**
+
+Isolated by elimination, each step a single harness run:
+
+1. `color` computed to `ff3e3e3e` on the element and the `__off__` class was present — so the sheet was
+   right and the Java was right.
+2. `icon("...up", #FF00FF)` — an explicit tint, no `monochrome` — drew **unchanged**. So `setTint` was
+   reaching the drawable and doing nothing, which means nothing in the file was flagged `currentColor`.
+3. `icon("...up", #FF00FF, monochrome)` — which forces *every* colour to the tint regardless of
+   `currentColor` — drew **magenta**.
+
+So the drawable and the tint plumbing both work; what does not is the `currentColor` flag surviving from the
+file to the draw op. The file says `fill="currentColor"` on its path, `SvgStyle` has a `case "fill"`,
+`SvgColor.parse` recognises the keyword, `SvgResolver` passes `style.fill().currentColor()` into the scene
+and `SvgDocument` reads it back at draw time — every link looks right on paper, which is exactly why reading
+the code four times did not find it. **I have not isolated which link drops it.**
+
+The bar uses the spelling that demonstrably works: each state redeclares its overlay with an explicit tint
+and `monochrome`. Verbose, and honest. When `currentColor` is fixed these collapse back to one `color` per
+state — and that fix is worth doing, because the whole icon layer is documented as depending on it.
+
+## 30.11 Which controls a search has is the HOST's declaration
+
+The matching options and the match arrows are now `TreeSearch.Control` — `MATCH_CASE`, `WORDS`, `REGEX`,
+`ARROWS`, `COUNT`, `CLOSE` — with every one shown unless a host says otherwise.
+
+They were hidden in the sheet before: `projectfiletree .__find-prev__` and
+`navigatorview .__nav-search__ .__find-count__`, two hosts reaching into a component's parts by name from a
+selector that had to know the host's tag. A sheet can only ever say "not here". This says it where the
+decision lives, and the sheet keeps what it is good at — what the controls look like.
+
+- **Project explorer**: `COUNT, CLOSE`. A file tree searches by name; match case, whole words and a regex
+  are precision tools for prose and for code, and a filename is short enough to see whether you have it.
+  The arrows go with them — Up/Down in the box already step the matches, and in a 187px panel every control
+  is width the query does not get.
+- **Preferences**: nothing. The tree below *is* the answer there, an empty sidebar says "no matches" more
+  directly than a count, and a permanent bar has nothing to dismiss.
+- **Problems**: everything, which is where these tools are actually worth their space.
+
+**The Highlight/Filter toggle is deliberately not a `Control`.** It changes what the search *does* rather
+than how precisely it matches, so a host that keeps a search at all generally wants it; where it is not
+wanted the sheet already declines it, which is the right level for a control the widget still fully
+supports.
+
+### 30.11a Two from a narrow panel
+
+**The count appeared to paint over the buttons, and that was not what was happening.** Adding
+`overflow: hidden` to the count did not fix it, so I measured the row instead of reading the sheet again:
+at a 112px bar the mode button was laid out at x=146 and the close at x=162, both past the bar's right edge
+of 144, and both still painting. **The whole row was spilling out of a box that never clipped it** — the
+count was merely the thing that happened to be under the spill.
+
+Two changes, one of them the actual fix. The box's `min-width` was 100px, which alone exceeded what a
+squeezed panel had to give (112 of bar against 100 + two 12px buttons + 20 of gaps + 10 of padding), so the
+row overflowed however far it was dragged; at 52px everything fits, measured. And `.__find-bar__` now clips
+its own children as a backstop, because a control drawn outside its bar is worse than one missing — it
+lands on top of whatever is there.
+
+**Escape could not close Preferences.** The search bar there is permanent and always focused, so it consumed
+every press. Escape is a cascade — the engine already applies that at the top, where a live drag eats it
+before a close watcher and a nested popover before the modal behind it — and any control that takes Escape
+owes the same courtesy: consume it while there is something to clear or close, and pass it on the moment
+there is not.
+
+### 30.12 The same ratchet, a third time
+
+29.15 let the sidebar's minimum fall on a fold; 29.16 stopped a press on the divider from freezing it. This
+is the same dead end again, reached by filtering: type a query that reveals a long page name, clear it, and
+the split can no longer be dragged narrow.
+
+The shrink was gated on `contentChanged`, which was set from `onExpandChanged` alone — and the comment
+saying that was "the only thing that alters what the widest row could be" was **written by me and already
+false when I wrote it**. Filtering replaces the row set outright, and the reveal-and-restore that filtering
+performs goes through the bulk `setExpandedItems`, which emits no signal at all.
+
+Fixed by setting the flag wherever the query changes. The general lesson is the one the third occurrence
+finally makes plain: **a gate keyed to one cause is a gate that will be reached from another.** What the
+rule actually needs to know is "the set of rows is different now", and the honest way to state that is to
+set it from every path that makes it true, not from the one that happened to exist first.

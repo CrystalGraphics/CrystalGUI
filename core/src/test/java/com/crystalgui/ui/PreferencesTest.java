@@ -599,4 +599,35 @@ public class PreferencesTest extends UiTestBase {
                 nav.split().getPercentage() > before);
     }
 
+
+    /**
+     * <b>Clearing a query gives the sidebar's width back.</b>
+     *
+     * <p>The same one-way ratchet {@link #foldingABranchLetsTheSidebarShrinkAgain} fixed, reached the other
+     * way. The minimum may only fall when the content changed, and that was wired to {@code onExpandChanged}
+     * alone — but a filter replaces the row set outright, and the bulk {@code setExpandedItems} that reveal
+     * and restore go through does not emit that signal at all. So a query that revealed a long page name
+     * widened the sidebar permanently, and clearing it left the split stuck.</p>
+     */
+    @Test
+    public void clearingAQueryLetsTheSidebarShrinkAgain() {
+        NavigatorView<String> nav = longTitledNavigator();
+        UIWindow w = nav.getAttachedWindow();
+        float idle = nav.sidebarMinimumWidth();
+
+        TreeSearch<String> search = nav.treeSearch();
+        assertNotNull(search);
+        search.setMode(TreeSearch.Mode.FILTER);
+        // Matches the long child, so filtering reveals it and the sidebar has to widen for it.
+        search.setQuery("far longer");
+        for (int i = 0; i < 8; i++) w.updateWithoutPainting();
+        assertTrue("the query did not widen the sidebar, so this asserts nothing",
+                nav.sidebarMinimumWidth() > idle);
+
+        search.setQuery("");
+        for (int i = 0; i < 8; i++) w.updateWithoutPainting();
+        assertEquals("clearing the query left the sidebar stuck at the long row's width",
+                idle, nav.sidebarMinimumWidth(), 0.5f);
+    }
+
 }

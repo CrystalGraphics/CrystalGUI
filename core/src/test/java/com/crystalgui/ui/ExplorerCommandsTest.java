@@ -32,6 +32,7 @@ import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.ui.elements.SearchField;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.chrome.InputDialog;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -1425,9 +1426,18 @@ public class ExplorerCommandsTest extends UiTestBase {
     }
 
     /** The find bar's input, or null. */
+    /**
+     * The text field inside the search box.
+     *
+     * <p>{@code FIND_INPUT_CLASS} names the BOX now, not the text — the toggles live inside its border, so
+     * the class that says "the search input of a find bar" belongs to the bordered control containing the
+     * text rather than to the text itself. The field is the {@code SearchField}'s own, which is what every
+     * key in these tests is aimed at.</p>
+     */
     private TextField searchBox() {
         for (UIElement element : window.ui.rootElement.querySelectorAll(
                 "." + ProjectFileTree.FIND_INPUT_CLASS)) {
+            if (element instanceof SearchField box) return box.field();
             if (element instanceof TextField field) return field;
         }
         return null;

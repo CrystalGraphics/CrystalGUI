@@ -97,3 +97,15 @@ guessing at where the line falls is a worse bet than naming the source.
 Neither licence grants trademark rights — Apache 2.0 § 6 says so outright. The file-type icons above are
 JetBrains' own drawings of documents, not marks. The **IntelliJ IDEA logo is** a mark, which is why it lives
 in `core/src/test/resources/` and not here: it is the SVG renderer's torture test, not a shipped asset.
+
+## `general/search/` — IntelliJ Platform (Apache 2.0)
+
+`search`, `matchCase`, `exactWords`, `regex`, `newLine`, `filter`, `up`, `down` — the Find toolbar icons
+from the IntelliJ Platform, © 2000-2023 JetBrains s.r.o. and contributors, used under the Apache License
+2.0.
+
+**Modified**, which Apache 2.0 § 4(b) requires stating: every hard-coded `fill="#6C707E"` was replaced with
+`fill="currentColor"`. The engine leaves `currentColor` unresolved in its cached draw ops and binds it at
+draw time (see `CgUiSvg`), so one file is themed from CSS and reacts to `:hover` and the on/off state. The
+upstream `*_dark.svg` variants exist precisely because the fills are hard-coded upstream; with the colour
+bound at draw time they are duplicates, and they were removed rather than shipped unused.
