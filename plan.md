@@ -4074,3 +4074,120 @@ with a flag so its auto-size is not mistaken for the user doing it.
 Worth recording about the test: the first version asserted on `sidebarMinimumWidth()` and **passed against
 the bug**, because the minimum grows either way — what ownership gates is whether the pane follows it. The
 mutation check is what exposed that; the assertion is on the split's share now.
+
+---
+
+# Part VI — §30. Search options: research and substrate plan
+
+## 30.1 What IntelliJ actually has
+
+Read off the Find bar, left to right. **It is the editor/console find bar**, which matters — some of it is
+about document text and cannot mean anything for a tree.
+
+| Control | Accelerator | What it does |
+|---|---|---|
+| ⏎ (multiline) | — | Turns the field into a multi-line text area, so a query can contain newlines |
+| **Cc** | Alt+C | Match case |
+| **W** | Alt+W | Whole words only |
+| **.\*** | Alt+X | Regular expression |
+| `0 results` | — | Match count |
+| ↑ ↓ | Enter / Shift+Enter | Previous / next match |
+| **funnel** | — | *Search In Selection* (Ctrl+Alt+E), then a **Search Scope** radio group: Anywhere · In Comments · In String Literals · Except Comments · Except String Literals · Except Comments and String Literals |
+| ⋮ | — | Overflow: history, and the options that did not fit |
+| ✕ | Escape | Close |
+
+One detail worth porting verbatim, straight off its own tooltip: **"Use Tab to focus on an option, and
+Space to toggle it."** The toggles are in the tab order and Space activates them — they are not mouse-only
+decorations.
+
+## 30.2 What applies to us, and what does not
+
+| Feature | Verdict |
+|---|---|
+| Match case | **Port.** Applies to any search over any string |
+| Whole words | **Port.** Same |
+| Regex | **Port.** Same, and it is the one that needs real substrate work |
+| Count, prev/next, close | **Have.** `TreeSearch` already carries all three |
+| Multiline | **No.** `TextField` is single-line, and a newline in a query is meaningless against a filename or a menu label |
+| Search In Selection | **Editor only**, and there is no editor find bar yet |
+| Search Scope (comments / string literals) | **Editor only, and language-aware** — it needs `SyntaxTokenizer` to say which spans are comments. Nothing about a file tree has comments |
+| Overflow ⋮ (history) | **Later.** Query history is its own feature with its own persistence question |
+
+The split is the whole point: **three of these belong to the matcher and are universal; the rest belong to a
+document find bar this project has not built.** Building the universal three now makes the editor find bar
+cheaper later rather than duplicating it.
+
+## 30.3 Where each piece belongs
+
+**`SearchQuery` carries the options.** It is currently a bare string wrapper (`text`, `length`, `isEmpty`)
+and it is already the value type every caller passes to `SearchMatcher`. Putting `matchCase` / `wholeWords`
+/ `regex` on it means the matcher **cannot be called without them** — the alternative, extra parameters at
+every call site, is the shape that lets one caller silently keep the old behaviour.
+
+```java
+SearchQuery.of("foo")                                  // unchanged, defaults off
+SearchQuery.of("foo", Options.of().matchCase(true))    // explicit
+```
+
+**`SearchMatcher` honours them.** Three concrete changes:
+
+1. It lowercases the haystack unconditionally today (`candidate.toLowerCase(Locale.ROOT)`). That becomes
+   conditional — and the `EXACT` / `PREFIX` / `ACRONYM` / `SUBSTRING` ladder has to keep working in both
+   modes, since `QuickPick` *ranks* on `Kind`.
+2. Whole words is a boundary test around an existing substring hit, not a new search: find the hit, then
+   check that neither edge is a word character. Cheap, and it composes with match case for free.
+3. Regex is a genuinely different path — `Pattern.compile` once per query (never per candidate), and it
+   must still produce `SearchMatch.Range`s or the amber banding stops working. An invalid pattern is a
+   **state, not an exception**: IntelliJ reds the field and reports nothing; it must not throw into a
+   keystroke handler.
+
+Regex has no meaningful place on the `Kind` ladder — score it as `SUBSTRING` with the existing positional
+bonus, so ranking degrades gracefully rather than inventing a fourth ordering nobody asked for.
+
+**`SearchField` grows an options slot.** This is where it earns its keep. It already owns
+`__icon__` / `__field__` / `__clear__` as internal children; it gains a `__options__` row between the field
+and the clear button, plus `addOption(...)`. Then:
+
+- `TreeSearch` swaps its bare `TextField` for a `SearchField` and mounts `Cc` / `W` / `.*` into the slot.
+- `QuickPick` and `NodeCreationMenu`, which already use `SearchField`, add nothing and are unchanged.
+- The navigator hides the slot in CSS, exactly as it already hides the mode button and the count.
+
+That last point is the test of the design: **a consumer that wants none of this must not pay for it**, and
+the mechanism for declining is the one already established twice in §29.12.
+
+**Keyboard.** Alt+C / Alt+W / Alt+X, and the toggles in the tab order with Space activating them. The
+accelerators are bound on the `SearchField`, not globally — Alt+W must not be taken from the rest of the
+application, the same reasoning that put Ctrl+F on the tree rather than in the keymap (29.8).
+
+## 30.4 What this forces out of the existing code
+
+- **Every `SearchMatcher` caller must pass through `SearchQuery`.** `WorkspaceTreeSource` and
+  `ProblemsTreeSource` currently do their own `toLowerCase().contains()` — two more private matchers, which
+  is the exact defect 29.11 fixed once already. They route through the matcher, or match case silently
+  does nothing in two panels.
+- **`TreeSearch.Model.matchRanges` becomes the only marking source**, which it already is — but a regex
+  hit can be zero-length (`a*`), and a zero-width band must not paint.
+- **`descendantMatches` must use the same predicate**, or a folder's badge counts differently from what the
+  arrows step through.
+
+## 30.5 Sequencing
+
+1. `SearchQuery.Options` + `SearchMatcher` honouring case and whole-words. No UI. Testable headlessly.
+2. Regex path, including the invalid-pattern state.
+3. `SearchField.__options__` slot + `addOption`.
+4. `TreeSearch` swaps `TextField` → `SearchField`, mounts the three toggles, binds the accelerators.
+5. Route `WorkspaceTreeSource` / `ProblemsTreeSource` through the matcher.
+6. Persistence — IntelliJ remembers the toggles; ours would be `Settings`, and that is a decision to take
+   deliberately rather than by default.
+
+Steps 1–2 are the substrate and are worth landing alone: they are headless, they need no pixels, and every
+later step is UI over them.
+
+## 30.6 Deliberately out of scope
+
+- **The editor find bar itself.** It is the natural consumer of all of this and it does not exist yet;
+  building the options first is what makes it cheap.
+- **Search scopes** (comments / string literals) — they need `SyntaxTokenizer` spans and only mean anything
+  in a document.
+- **Query history** — its own feature, with its own persistence question.
+- **Multiline** — `TextField` is single-line by construction.
