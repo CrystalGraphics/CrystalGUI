@@ -367,7 +367,196 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
             request(parent);
             return List.of();
         }
-        return filter.isEmpty() ? known : filtered(known);
+        // HIGHLIGHT KEEPS EVERY ROW. The query still applies -- isMatch and descendantMatches are what
+        // the renderer reads -- it simply does not decide what exists.
+        List<CgPath> visible = filter.isEmpty() || findMode == FindMode.HIGHLIGHT
+                ? known : filtered(known);
+        if (compactFolders) visible = compacted(parent, visible);
+        // AFTER compaction, and that ordering is the whole of why a chain does not swallow the row being
+        // created: a directory with one child plus a placeholder still has one *real* child, so
+        // compressing first keeps the chain honest, and prepending after keeps the placeholder visible.
+        if (pendingNew != null && pendingNew.parent() != null && pendingNew.parent().equals(parent)) {
+            List<CgPath> withPending = new ArrayList<>(visible.size() + 1);
+            withPending.add(pendingNew);
+            withPending.addAll(visible);
+            return withPending;
+        }
+        return visible;
+    }
+
+    // -- The row being created ----------------------------------------------------------------------
+
+    /**
+     * The placeholder for an entry that does not exist yet -- VS Code's {@code NewExplorerItem}.
+     *
+     * <p>A row before a file: the tree shows where the thing will land, inside the folder that was
+     * chosen, while its name is still being typed. The alternative is a dialog that hides the folder it
+     * is asking about.</p>
+     */
+    @Nullable
+    private CgPath pendingNew;
+
+    /** @see #beginPendingNew for why a control character. */
+    private static final String PENDING_NAME = "\u0001new";
+
+    /**
+     * Inserts a placeholder as the first child of {@code parent} and returns it.
+     *
+     * <p><b>First, not sorted into place.</b> An entry with no name has no position -- sorting it would
+     * put it at the top anyway and then make it jump on the first keystroke, which is movement under the
+     * cursor for no information. VS Code puts it at the top and leaves it there.</p>
+     *
+     * <p>The name is {@code U+0001}, which no filesystem permits in a real one -- so the placeholder can
+     * never collide with anything the workspace holds, and a path that somehow reached the server would be
+     * refused there rather than creating something. {@code U+0000} is the obvious choice and
+     * {@link CgPath} rightly refuses it outright, which is how this was found.</p>
+     */
+    public CgPath beginPendingNew(CgPath parent, boolean directory) {
+        endPendingNew();
+        CgPath placeholder = parent.resolve(PENDING_NAME);
+        pendingNew = placeholder;
+        if (directory) directories.add(placeholder);
+        dirty = true;
+        return placeholder;
+    }
+
+    /** Removes the placeholder, whether the edit committed or was abandoned. */
+    public void endPendingNew() {
+        if (pendingNew == null) return;
+        directories.remove(pendingNew);
+        pendingNew = null;
+        dirty = true;
+    }
+
+    /** Whether {@code path} is the row being created rather than a real entry. */
+    public boolean isPendingNew(CgPath path) {
+        return pendingNew != null && pendingNew.equals(path);
+    }
+
+    /** The parent the placeholder sits under, or null when there is none. */
+    @Nullable
+    public CgPath pendingNewParent() {
+        return pendingNew == null ? null : pendingNew.parent();
+    }
+
+    /**
+     * What has been listed under {@code directory} -- unfiltered, uncompacted, no request issued.
+     *
+     * <p>For asking a question <em>about</em> the tree rather than rendering it: name validation needs the
+     * real siblings, and {@link #children} would answer with whatever the filter and the compaction left,
+     * so a name would be judged free because the row holding it is currently hidden.</p>
+     */
+    public List<CgPath> listedChildren(CgPath directory) {
+        List<CgPath> known = children.get(directory);
+        return known == null ? List.of() : known;
+    }
+
+    // ── Compact folders ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Whether a single-child directory chain renders as one row — VS Code's
+     * {@code explorer.compactFolders}, IntelliJ's <i>Compact Empty Middle Packages</i>.
+     *
+     * <p><b>On by default</b>, as it is in VS Code, and the reason is arithmetic: {@code src/main/java/
+     * com/crystalgui} is five rows and one useful one. A tree of Java or C# packages is mostly chains.</p>
+     */
+    private boolean compactFolders = true;
+
+    /** The displayed label for a compacted row — {@code "main/java/com/crystalgui"}. */
+    private final Map<CgPath, String> compactLabels = new HashMap<>();
+
+    /** Every path swallowed by a chain → the row that now stands for it. @see #visibleRowFor */
+    private final Map<CgPath, CgPath> chainOwner = new HashMap<>();
+
+    public WorkspaceTreeSource setCompactFolders(boolean value) {
+        if (this.compactFolders == value) return this;
+        this.compactFolders = value;
+        compactLabels.clear();
+        chainOwner.clear();
+        dirty = true;
+        return this;
+    }
+
+    public boolean isCompactFolders() {
+        return compactFolders;
+    }
+
+    /**
+     * What to draw for {@code path} — a project's name, its own name, or the whole chain it stands for.
+     *
+     * <p>Asked by the renderer rather than computed there, because the chain is a fact the source
+     * discovered while listing and the view has no way to rediscover it: by the time a row exists, the
+     * intermediate directories are not in the tree at all.</p>
+     */
+    public String rowLabel(CgPath path) {
+        // The placeholder has no name yet, and showing its sentinel would flash a control character on
+        // the frame between the row appearing and the editor taking over.
+        if (isPendingNew(path)) return "";
+        if (path.isProjectRoot()) return displayNameOf(path);
+        String label = compactLabels.get(path);
+        return label != null ? label : path.name();
+    }
+
+    /**
+     * The row that shows {@code path}, which may be a chain end further down.
+     *
+     * <p>Needed by anything that maps a <em>path</em> back to the tree — reveal, auto-reveal, a problem
+     * row jumping to a file. Without it, revealing {@code src/main/java/Foo} tries to expand
+     * {@code src/main}, which is no longer a row, and the reveal silently does nothing.</p>
+     */
+    public CgPath visibleRowFor(CgPath path) {
+        CgPath owner = chainOwner.get(path);
+        return owner != null ? owner : path;
+    }
+
+    /**
+     * Replaces each directory child with the end of its single-child chain.
+     *
+     * <h3>The rule is VS Code's, and the root carve-out is the whole of it</h3>
+     *
+     * <p>{@code ExplorerCompressionDelegate.isIncompressible} refuses to merge a node into its parent when
+     * the parent is a <b>root</b> — so a top-level folder always keeps its own row and absorbs downward
+     * from there. That is why the answer is {@code src/main/java} and never {@code project/src/main/java}:
+     * the roots are the one thing a user picked, and hiding one inside a path is hiding the project.</p>
+     *
+     * <p>A chain stops at the first directory whose listing has not arrived. That is not a compromise —
+     * compressing through an unlisted directory would mean asserting it has exactly one child before
+     * anything has said so, and the row would then have to un-compress itself when the listing landed.
+     * Stopping means the row simply grows once, on the refresh the listing already triggers.</p>
+     */
+    private List<CgPath> compacted(CgPath parent, List<CgPath> visible) {
+        List<CgPath> out = new ArrayList<>(visible.size());
+        for (CgPath child : visible) {
+            if (!directories.contains(child)) {
+                out.add(child);
+                continue;
+            }
+            CgPath end = child;
+            StringBuilder label = new StringBuilder(child.name());
+            List<CgPath> swallowed = new ArrayList<>(2);
+            while (true) {
+                List<CgPath> inner = children.get(end);
+                // A filter must not compress: the one child that survived filtering is not the one child
+                // the directory has, so the row would claim a structure the project does not have.
+                if (inner == null || inner.size() != 1 || !filter.isEmpty()) break;
+                CgPath only = inner.get(0);
+                if (!directories.contains(only)) break;
+                swallowed.add(end);
+                end = only;
+                label.append('/').append(only.name());
+            }
+            if (swallowed.isEmpty()) {
+                // No longer a chain -- a sibling appeared, or the filter changed. Left behind, the stale
+                // label would render a path that is no longer true.
+                compactLabels.remove(child);
+                chainOwner.remove(child);
+            } else {
+                compactLabels.put(end, label.toString());
+                for (CgPath inner : swallowed) chainOwner.put(inner, end);
+            }
+            out.add(end);
+        }
+        return out;
     }
 
     /**
@@ -407,6 +596,65 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
             if (matches(child)) kept.add(child);
         }
         return kept;
+    }
+
+    /**
+     * What typing does — VS Code's {@code ExplorerFindProvider} has both, and so does this.
+     *
+     * <p>They answer different questions. <b>Filter</b> asks "show me only these", which is what you want
+     * when hunting through a large tree; <b>highlight</b> asks "where are these", which is what you want
+     * when the shape of the tree is part of the answer — and it is IntelliJ's speed search.</p>
+     */
+    public enum FindMode {
+        /** Non-matching rows are removed. */
+        FILTER,
+        /** Every row stays; matches are marked and folders count what is under them. */
+        HIGHLIGHT
+    }
+
+    private FindMode findMode = FindMode.HIGHLIGHT;
+
+    /**
+     * Sets the mode.
+     *
+     * <p><b>Highlight is the default</b>, and the reason is a defect this file already described: a filter
+     * with nothing saying it is on is a tree that has mysteriously lost half its files. Highlight cannot
+     * do that — the tree is still the tree — so it is the safe one to have on when the user has not
+     * chosen.</p>
+     */
+    public WorkspaceTreeSource setFindMode(FindMode mode) {
+        FindMode next = mode == null ? FindMode.HIGHLIGHT : mode;
+        if (next == findMode) return this;
+        findMode = next;
+        dirty = true;
+        return this;
+    }
+
+    public FindMode findMode() {
+        return findMode;
+    }
+
+    /** Whether {@code path}'s own name matches what is being searched for. */
+    public boolean isMatch(CgPath path) {
+        return parsedFilter != null && SearchMatcher.match(parsedFilter, path.name(), 0) != null;
+    }
+
+    /**
+     * How many <b>listed</b> descendants of {@code directory} match, itself excluded.
+     *
+     * <p>Listed, not all: a lazily-loaded tree cannot answer for a folder it has never opened without
+     * fetching the project, and claiming zero there would be a wrong answer rather than a partial one.
+     * VS Code's {@code ExplorerFindHighlightTree} counts the same way and for the same reason.</p>
+     */
+    public int descendantMatches(CgPath directory) {
+        List<CgPath> listed = children.get(directory);
+        if (listed == null || parsedFilter == null) return 0;
+        int count = 0;
+        for (CgPath child : listed) {
+            if (isMatch(child)) count++;
+            count += descendantMatches(child);
+        }
+        return count;
     }
 
     /** A path survives the filter if its own name matches, or anything listed beneath it does. */

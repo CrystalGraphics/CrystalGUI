@@ -622,6 +622,27 @@ public class TextField extends UIElement implements UIFrameTicker {
         return this;
     }
 
+    /**
+     * Selects {@code [start, end)}, leaving the caret at {@code end}.
+     *
+     * <p>{@link #selectAll} is the special case, and the reason the general one is wanted is inline
+     * rename: F2 selects a filename's <b>stem</b> and not its extension, because the extension is almost
+     * never what is being changed and selecting it means the first keystroke destroys it. Every file
+     * manager does this and none of them can with select-all alone.</p>
+     *
+     * <p>Clamped rather than refused. A caller computing an offset from a string — the last dot in a name
+     * — is one rename away from an index past the end, and throwing there would take the widget down for
+     * something with an obvious right answer.</p>
+     */
+    public TextField setSelection(int start, int end) {
+        int limit = text.length();
+        this.selectionAnchor = Math.max(0, Math.min(limit, start));
+        this.caret = Math.max(0, Math.min(limit, end));
+        resetBlink();
+        onStyleChanged();
+        return this;
+    }
+
     /** Drops any selection, leaving the caret where it is. */
     public TextField clearSelection() {
         selectionAnchor = caret;

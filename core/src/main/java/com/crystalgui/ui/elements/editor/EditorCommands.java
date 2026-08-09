@@ -109,6 +109,9 @@ public final class EditorCommands {
         // its registrar rather than declaring editor.undo beside it keeps ONE command per concept, so a
         // menu and the palette cannot show two entries that do the same thing.
         UndoCommands.register();
+        // Edit > Cut/Copy/Paste, which are NOT ours: they resolve the position's own provider, so the one
+        // menu row means files in the tree and text here. @see com.crystalgui.core.command.ClipboardCommands
+        com.crystalgui.core.command.ClipboardCommands.register();
         CommandRegistry.global().contribute(EditorCommands.class, EditorCommands::declare);
     }
 
@@ -167,11 +170,9 @@ public final class EditorCommands {
                 .enabledWhen(when(editor -> true))
                 .run(on(editor -> editor.setSelection(0, editor.getText().length()))));
         registry.register(Command.of(PREFIX + "copy", "Copy")
-                .menu(MenuId.MAIN_EDIT, "2_clipboard", 20)
                 .run(on(editor -> CgPlatform.input().setClipboard(editor.getSelectedText())))
                 .enabledWhen(when(TextEditor::hasSelection)));
         registry.register(Command.of(PREFIX + "cut", "Cut")
-                .menu(MenuId.MAIN_EDIT, "2_clipboard", 10)
                 .run(on(editor -> {
                     CgPlatform.input().setClipboard(editor.getSelectedText());
                     editor.deleteSelections();
@@ -179,7 +180,6 @@ public final class EditorCommands {
                 // Two conditions, and both matter: nothing to cut, or nowhere to cut from.
                 .enabledWhen(when(editor -> editor.hasSelection() && !editor.isReadOnly())));
         registry.register(Command.of(PREFIX + "paste", "Paste")
-                .menu(MenuId.MAIN_EDIT, "2_clipboard", 30)
                 .run(on(editor -> {
                     String pasted = CgPlatform.input().getClipboard();
                     if (pasted != null && !pasted.isEmpty()) editor.insertAtCaret(pasted);

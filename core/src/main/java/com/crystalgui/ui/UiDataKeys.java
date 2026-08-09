@@ -72,6 +72,13 @@ public final class UiDataKeys {
      * answers this rather than the bar itself: the walk only finds ancestors, and a menu bar is a sibling
      * of the content everything else is focused inside.</p>
      */
+    /**
+     * What cut, copy and paste mean at this position — the widget you are in, not the widget a command
+     * happened to be written for. @see ClipboardActions
+     */
+    public static final DataKey<ClipboardActions> CLIPBOARD =
+            DataKey.create("clipboard", ClipboardActions.class);
+
     public static final DataKey<MenuBarView> MENU_BAR =
             DataKey.create("menuBar", MenuBarView.class);
 

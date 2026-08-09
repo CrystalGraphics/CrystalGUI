@@ -23,6 +23,7 @@ import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.chrome.Preferences;
 import com.crystalgui.ui.elements.workbench.ExplorerCommands;
+import com.crystalgui.ui.elements.workbench.ProjectFileTree;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -131,8 +132,17 @@ public class PreferencesKeyTest extends UiTestBase {
         assertTrue("the commands were never installed, so neither assertion here means anything",
                 window.getCommands().get(ExplorerCommands.PREFERENCES) != null);
         chord(CgKeyCodes.KEY_N, CgModifiers.CTRL);
+        // NEW FILE NAMES ITSELF IN THE TREE NOW, so the evidence it arrived is a row-level editor rather
+        // than a popup. Both are accepted because the modal is still the fallback for a host with no tree
+        // on screen -- what is being asserted is that the chord reached a command at all.
+        boolean editing = false;
+        for (UIElement element : window.ui.rootElement.querySelectorAll(
+                "." + ProjectFileTree.EDITOR_CLASS)) {
+            if (element.getRuntimeCache().getWidth() > 0f) editing = true;
+        }
         assertTrue("Mod+N did not reach a command from the editor root",
-                !window.ui.rootElement.querySelectorAll("popover").isEmpty()
+                editing
+                        || !window.ui.rootElement.querySelectorAll("popover").isEmpty()
                         || !window.ui.rootElement.querySelectorAll("dialog").isEmpty());
     }
 

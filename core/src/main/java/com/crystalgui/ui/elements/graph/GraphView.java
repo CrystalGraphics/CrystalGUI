@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.graph;
 
+import com.crystalgui.ui.ClipboardActions;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -114,9 +115,61 @@ public class GraphView extends CanvasView implements UndoScope {
      * <p>{@code super.getData(key)} last, so the generic {@code ELEMENT} answer stays reachable — the
      * rule every override of this method follows.</p>
      */
+    /**
+     * What Cut/Copy/Paste mean in a node graph — nodes and the wires between them.
+     *
+     * <p>Runs the registered graph commands rather than reaching for the clipboard itself, so the one
+     * copy of "what does cutting a selection do" stays in {@code GraphCommands} where its undo grouping
+     * and its paste offset already live. @see com.crystalgui.ui.ClipboardActions</p>
+     */
+    private final ClipboardActions clipboardActions = new ClipboardActions() {
+        @Override
+        public boolean canCut() {
+            return isEnabled(GraphCommands.CUT);
+        }
+
+        @Override
+        public void cut() {
+            run(GraphCommands.CUT);
+        }
+
+        @Override
+        public boolean canCopy() {
+            return isEnabled(GraphCommands.COPY);
+        }
+
+        @Override
+        public void copy() {
+            run(GraphCommands.COPY);
+        }
+
+        @Override
+        public boolean canPaste() {
+            return isEnabled(GraphCommands.PASTE);
+        }
+
+        @Override
+        public void paste() {
+            run(GraphCommands.PASTE);
+        }
+
+        private boolean isEnabled(String id) {
+            com.crystalgui.core.command.Command command =
+                    com.crystalgui.core.command.CommandRegistry.global().get(id);
+            return command != null && command.isEnabled(
+                    com.crystalgui.core.command.CommandContext.of(GraphView.this));
+        }
+
+        private void run(String id) {
+            com.crystalgui.core.command.CommandRegistry.global().run(id,
+                    com.crystalgui.core.command.CommandContext.of(GraphView.this));
+        }
+    };
+
     @Override
     public Object getData(DataKey<?> key) {
         if (key == GRAPH_VIEW) return this;
+        if (key == UiDataKeys.CLIPBOARD) return clipboardActions;
         if (key == UiDataKeys.SELECTION) {
             return new java.util.ArrayList<Object>(getSelection().nodes());
         }

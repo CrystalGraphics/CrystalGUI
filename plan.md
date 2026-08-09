@@ -3532,3 +3532,147 @@ began at different places on every row and there was no column to read down. Fix
 `margin-left: auto` on `.__accelerator__` — and the 24px gap had to move to `padding-left`, because an
 auto margin contributes nothing to min-content, so as a margin it stopped reserving the gap while the menu
 was being measured and the widest row would have had its label touching its shortcut.
+
+---
+
+# Part V — §29. The Project explorer: research and rewrite
+
+> **Status: BUILT.** §29.1–29.3 are the research it was built from; §29.4 is the five features it
+> selected, §29.5 what it deliberately excludes, and **§29.6 records what actually landed.**
+
+## 29.1 What is actually there
+
+The panel is not a stub, and calling it "frankensteined" undersells the model half. `WorkspaceTreeSource`
+is a genuine `TreeDataSource` over an asynchronous `WorkspaceClient` with a defensible answer to the hard
+question (answer from what has arrived, request what has not, report a directory as having children while
+its listing is in flight so there is still an arrow to click). Four sort orders. Failures surfaced rather
+than swallowed.
+
+**Present and working**: multi-select (`SelectionMode.MULTIPLE`), keyboard tree navigation including
+Left/Right/`*`, drag and drop with a ghost, `FileDecorations` with bubbling, auto-reveal, undo for file
+operations on a *workspace* stack (`ProjectFileTree implements UndoScope`), a context menu built from
+`MenuId.EXPLORER_CONTEXT`, type-to-filter, four sort orders, incremental naming for paste-in-place.
+
+**The real problem is the view.** `ProjectFileTree` is 825 lines that own rendering, drag and drop,
+filtering, selection, decorations, undo scoping and the row template together. Nothing in it is wrong;
+there is simply no seam, so every new feature lands in the same class.
+
+## 29.2 VS Code — `explorerViewer.ts` and `files.contribution.ts`
+
+Read directly rather than recalled. The defaults matter as much as the features, because a default-on
+feature is one users assume exists:
+
+| Setting | Default | Have it? |
+|---|---|---|
+| `explorer.compactFolders` | **true** | **no** |
+| `explorer.autoReveal` | true | yes |
+| `explorer.enableUndo` | true | yes |
+| `explorer.confirmDelete` | true | yes |
+| `explorer.enableDragAndDrop` | true | yes |
+| `explorer.sortOrder` | `default` | yes |
+| `explorer.incrementalNaming` | `simple` | **partly** — only paste-in-place |
+| `explorer.confirmDragAndDrop` | true | **no** |
+| `explorer.autoOpenDroppedFile` | true | no |
+| `explorer.fileNesting.enabled` | **false** | no, and correctly so |
+| sticky scroll | *does not exist* | — |
+
+The implementation details worth porting:
+
+- **Compressed nodes.** `ExplorerCompressionDelegate implements ITreeCompressionDelegate`, and the whole
+  rule is one predicate: `isIncompressible()` returns true for `stat.isRoot || !stat.isDirectory ||
+  stat instanceof NewExplorerItem || (!stat.parent || stat.parent.isRoot)`. So a chain compresses only
+  between directories, never through a root, and never through a row being created. Rendering is
+  `renderCompressedElements()` with the label as an **array** of segments, and
+  `CompressedNavigationController` gives each segment its own index so the keyboard can step
+  `first/previous/next/last` *within* one row.
+- **Inline editing.** `FilesRenderer.renderInputBox()` puts a real input in the row.
+  `editableData.validationMessage(value)` validates per keystroke, Enter commits, Escape cancels, and
+  **F2 cycles the selection** prefix → all → suffix → prefix. The icon updates live while typing, via
+  `label.setFile(joinPath(parent, value || ' '))`.
+- **Find.** `ExplorerFindProvider implements IAsyncFindProvider` with **two modes**: *filter*, which
+  creates phantom items and marks matches with `markItemAndParentsAsFiltered()`, and *highlight*, which
+  uses `ExplorerFindHighlightTree` to count descendant matches **without restructuring the tree**.
+- **Drop.** `FileDragAndDrop.onDragOver()` validates, `drop()` routes to `handleExplorerDrop()`, and copy
+  goes through `findValidPasteFileTarget()` — which is where incremental naming lives.
+
+## 29.3 IntelliJ — the Project tool window
+
+Same ideas, different names, and two it has that VS Code does not:
+
+- **Compact Empty Middle Packages** — the same compression, renamed *Hide* Empty Middle Packages when
+  Flatten Packages is on.
+- **Speed search** — type to *navigate*, not to filter. This is the half we are missing: our
+  type-to-filter removes rows, and `ProjectFileTree`'s own javadoc already names the consequence — "a
+  filter with nothing saying it is on is a tree that has mysteriously lost half its files, which is
+  IntelliJ's one real weakness with speed search."
+- **Autoscroll to / from Source** — two independent toggles. We have "from" (auto-reveal); "to" (select a
+  row and it opens) is a different thing and deliberately not ours by default.
+
+## 29.4 The five
+
+Chosen for what a user notices and what forces a real seam, not for what is quickest:
+
+| # | Feature | Why this one |
+|---|---|---|
+| 1 | **Compact folders** | Default **on** in VS Code and standard in IntelliJ. `src/main/java/com/crystalgui` is five rows here and one there. The only one of the five that changes what the tree *is*, so it goes first |
+| 2 | **Inline rename and inline new** | A modal dialog to rename a file is what file managers stopped doing decades ago. Needs an editable-row state in `TreeView`, which nothing else can provide |
+| 3 | **Clipboard delegation** | `Edit ▸ Cut/Copy/Paste` currently mean *the editor's* only; the explorer's and the graph's exist and are unreachable. IntelliJ's one-action-many-providers over `DataProvider.getData` — removes parallelism rather than adding to it |
+| 4 | **Find with filter AND highlight modes** | Ours is filter-only and invisible while on. VS Code ships both modes for exactly this reason |
+| 5 | **Conflict resolution on every file operation** | Paste into a folder that already has the name currently collides. VS Code applies incremental naming for a copy and confirms an overwrite for a move. This is the only one of the five that is a **data-loss** bug rather than a missing convenience |
+
+## 29.5 Deliberately not in this pass
+
+- **File nesting** — off by default even in VS Code, and it needs a pattern language to be worth anything.
+- **Sticky scroll** — not an Explorer feature in VS Code at all; the famous one is the editor's.
+- **Open Editors section** — `Window ▸` now lists the open editors, which covers the need it serves.
+- **Flatten packages / show members** — both are language-model features, and this application has one
+  language and no symbol index.
+
+## 29.6 What landed
+
+Built 2026-08-09, all five. **2806 tests, 0 failures** — 45 new across the menu bar and the explorer.
+
+| # | Feature | Where |
+|---|---|---|
+| 1 | **Compact folders** | `WorkspaceTreeSource.setCompactFolders` / `rowLabel` / `visibleRowFor`, on by default |
+| 2 | **Inline rename and inline new** | `ProjectFileTree.beginRename` / `beginNew`, `WorkspaceTreeSource.beginPendingNew`, F2 |
+| 3 | **Clipboard delegation** | `ui.ClipboardActions`, `UiDataKeys.CLIPBOARD`, `core.command.ClipboardCommands`, three providers |
+| 4 | **Find with both modes** | `WorkspaceTreeSource.FindMode`, `isMatch`, `descendantMatches`, and a visible find bar |
+| 5 | **Conflict resolution** | `ExplorerCommands.paste` — incremental naming for a copy, refusal for a destructive move |
+
+### The details worth keeping
+
+- **Compaction is answered from listings, and stops at the first one that has not arrived.** Compressing
+  through an unlisted directory would assert it has exactly one child before anything said so, and the row
+  would then have to un-compress when the listing landed. Stopping means it grows once, on the refresh the
+  listing already triggers.
+- **The root carve-out is VS Code's, and it protects the *root's* row only.** `chain/a/b` is one row and
+  `My Project/chain` is never one — which is `isIncompressible`'s `parent.isRoot` clause exactly. The first
+  draft of the test asserted `a/b` with `chain` on its own row; the code was right and the test was wrong.
+- **`visibleRowFor` is the half that is easy to miss.** Once compacted, an intermediate directory is not a
+  row — so `reveal` expanding it sets a flag nothing reads, walks the whole way down and finds nothing to
+  select.
+- **The placeholder's name is `U+0001`.** `U+0000` was the obvious choice and `CgPath` refuses it outright,
+  which is how this was found. No filesystem permits either, so the row can never collide with a real entry
+  and a path that somehow reached the server would be refused rather than creating something.
+- **Blur commits, Escape cancels, an invalid name cancels.** VS Code's rule. Cancelling on blur throws away
+  a name you have finished typing, which is the more expensive of the two mistakes; committing a name the
+  validator refused is worse than both.
+- **The inline editor is built in `createTemplate` and shown by `display`.** It has to be: the edit begins
+  from a key press *on the row*, and building the field then would rebuild the element that press is being
+  dispatched through — the trap this codebase already records twice.
+- **Highlight is the default find mode**, because a filter with nothing on screen saying it is on is a tree
+  that has mysteriously lost half its files — which is a defect `ProjectFileTree`'s own javadoc named
+  before the bar existed. Two modes are worth having; *seeing that one is running* is what was missing.
+- **A copy never overwrites; a destructive move is refused rather than renamed.** Renaming a move would be
+  wrong in a way renaming a copy is not: the user asked to move this file *here*, and landing it beside the
+  one already there leaves two where they asked for one. VS Code prompts to replace; with no undo for a
+  clobbered file and no OS trash underneath, refusing is the honest version of that prompt.
+
+### What this did not do
+
+The panel is still one 900-line widget. The five features each landed behind a seam — the source owns
+compaction and find, `ClipboardActions` owns the clipboard, `TreeView` owns the editable row — but
+`ProjectFileTree` itself was not decomposed, and that remains the thing to do next: VS Code separates
+`ExplorerService`/`ExplorerItem` from `ExplorerView`/`FilesRenderer`, and ours still owns rendering, drag
+and drop, filtering, selection, decorations and undo scoping in one class.

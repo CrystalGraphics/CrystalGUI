@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgui.ui.ClipboardActions;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.text.CgTextLayout;
@@ -3575,8 +3576,52 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * stack — two mechanisms disagreeing about the same question, which is the thing {@code DataContext}
      * exists to stop.</p>
      */
+    /**
+     * What Cut/Copy/Paste mean in a text editor. @see com.crystalgui.ui.ClipboardActions
+     *
+     * <p>Held rather than built per call: {@code getData} is asked while a menu is being built, once per
+     * row, and a fresh object each time would make identity meaningless to anything caching one.</p>
+     */
+    private final ClipboardActions clipboardActions = new ClipboardActions() {
+        @Override
+        public boolean canCut() {
+            return hasSelection() && !isReadOnly();
+        }
+
+        @Override
+        public void cut() {
+            CgPlatform.input().setClipboard(getSelectedText());
+            deleteSelections();
+        }
+
+        @Override
+        public boolean canCopy() {
+            return hasSelection();
+        }
+
+        @Override
+        public void copy() {
+            CgPlatform.input().setClipboard(getSelectedText());
+        }
+
+        @Override
+        public boolean canPaste() {
+            // The SYSTEM clipboard, because that is the one an editor pastes from -- and it is why this
+            // question belongs to the provider rather than to the command.
+            String pending = CgPlatform.input().getClipboard();
+            return !isReadOnly() && pending != null && !pending.isEmpty();
+        }
+
+        @Override
+        public void paste() {
+            String pending = CgPlatform.input().getClipboard();
+            if (pending != null && !pending.isEmpty()) insertAtCaret(pending);
+        }
+    };
+
     @Override
     public Object getData(DataKey<?> key) {
+        if (key == UiDataKeys.CLIPBOARD) return clipboardActions;
         Object undo = undoScopeData(key);
         return undo != null ? undo : super.getData(key);
     }
