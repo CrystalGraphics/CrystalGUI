@@ -126,8 +126,18 @@ public class NavigatorView<T> extends UIElement {
         // A drag is the user taking ownership of the width. After one, the sidebar stops following its
         // content: somebody who widened it to read a long name must not have it snapped back the next
         // time a branch folds.
-        split.divider().onMouseDown.attachListener((element, event) -> userSizedSidebar = true,
-                false, true);
+        // OWNERSHIP IS TAKEN BY MOVING THE DIVIDER, not by touching it. This listened on the divider's
+        // mouse-DOWN, so a click that moved nothing -- landing on the handle, a press-and-release, the
+        // start of a drag that went back where it began -- permanently switched off the auto-sizing. The
+        // symptom is silent and does not look like a click: unfolding a long page name simply stops
+        // widening the sidebar, for the rest of the session, with the label clipped at the pane edge.
+        //
+        // Reading the percentage instead also covers the keyboard resize (Home/End on the divider), which
+        // the mouse-down never did. `writingSplit` is what keeps our own auto-size from reading as the
+        // user having done it.
+        split.onPercentageChanged.connect(value -> {
+            if (!writingSplit) userSizedSidebar = true;
+        });
         addInternalChild(split);
 
         updateHistoryButtons();
@@ -182,14 +192,19 @@ public class NavigatorView<T> extends UIElement {
         // clamps the drawn width back up, and the two silently disagree. Dragging away from the minimum
         // then moves nothing until the weight climbs back to it, which is a dead zone exactly as wide as
         // the gap. Telling the split is what keeps them the same number.
-        split.setPaneSizeLimits(0, sidebarMinimum, Float.MAX_VALUE);
+        writingSplit = true;
+        try {
+            split.setPaneSizeLimits(0, sidebarMinimum, Float.MAX_VALUE);
 
         // OPENS AT ITS CONTENT rather than at a fraction somebody picked: a settings tree holds short
         // names, so any hardcoded share is wasteful on a narrow one and clipping on a wide one -- and the
         // width that fits is already being computed right here.
-        float total = split.getRuntimeCache().getWidth();
-        if (total > 0f && !userSizedSidebar) {
-            split.setPercentage(Math.min(90f, sidebarMinimum / total * 100f));
+            float total = split.getRuntimeCache().getWidth();
+            if (total > 0f && !userSizedSidebar) {
+                split.setPercentage(Math.min(90f, sidebarMinimum / total * 100f));
+            }
+        } finally {
+            writingSplit = false;
         }
         return true;
     }
@@ -211,6 +226,9 @@ public class NavigatorView<T> extends UIElement {
 
     /** Set when a fold or unfold changes what the widest row could be. @see #fitSidebarToRows */
     private boolean contentChanged;
+
+    /** True while this widget is writing the split itself, so it is not mistaken for the user. */
+    private boolean writingSplit;
 
     @Override
     protected void onLayoutChanged() {
