@@ -3676,3 +3676,37 @@ compaction and find, `ClipboardActions` owns the clipboard, `TreeView` owns the 
 `ProjectFileTree` itself was not decomposed, and that remains the thing to do next: VS Code separates
 `ExplorerService`/`ExplorerItem` from `ExplorerView`/`FilesRenderer`, and ours still owns rendering, drag
 and drop, filtering, selection, decorations and undo scoping in one class.
+
+## 29.7 The decomposition
+
+`ProjectFileTree` was **1194 lines owning five jobs**, which is the shape §29.6 named as the thing still
+to do. Split the way VS Code's explorer is, because the boundaries are worth porting and not only the
+behaviour — the same argument `com.crystalgui.text.cursor` makes about taking Monaco's module layout
+rather than just its algorithms.
+
+| Ours | VS Code | Lines |
+|---|---|---|
+| `ProjectFileTree` — the view: tree, selection, reveal, public surface | `views/explorerView.ts` | 673 |
+| `FilesRenderer` — building and filling a row, every recycling rule | `FilesRenderer` in `explorerViewer.ts` | 208 |
+| `ExplorerEditing` — the inline edit state machine and its row wiring | `IExplorerService.setEditable` + `renderInputBox` | 212 |
+| `ExplorerDragAndDrop` — drag source, drop target, ghost | `FileDragAndDrop`, same file | 195 |
+| `ExplorerFind` — the bar, its two modes, per-row marking | `ExplorerFindProvider`, same file | 161 |
+| `WorkspaceTreeSource` — the model | `common/explorerModel.ts` | (unchanged) |
+
+**Beside, not behind an interface.** VS Code needs `IExplorerService` between renderer and view because its
+renderer may not touch the view; with one view implementation in one package that is a layer to keep in
+step rather than a seam. Parts reach the widget through package-private accessors — `itemForRow`,
+`rowItems`, `requestRefresh`, `contentBox`, `rowElementFor` — which is exactly what `TextEditor`'s ten view
+parts already do here.
+
+**Two things deliberately did not move:**
+
+- **The CSS class names.** A stylesheet targets `projectfiletree .__find-bar__`, so the constants belong to
+  the widget a selector names rather than to whichever part writes them.
+- **The public surface.** `ExplorerCommands` asks the *panel* to rename, not the panel's editing part, so
+  `beginRename`/`beginNew`/`isEditing`/`cancelEdit` stay and delegate.
+
+**The extraction is a pure code move**, which is what makes 2806 existing tests a real net under it — the
+same property the `TextEditor` split relied on. One boundary was drawn wrong twice on the way (the drag cut
+swallowed the filter API, the renderer cut swallowed the clipboard provider); both were caught by the
+compiler within seconds, which is the argument for doing this as a move rather than a rewrite.
