@@ -2,6 +2,8 @@ package com.crystalgui.core.search;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.List;
 import java.util.Locale;
 
@@ -55,9 +57,28 @@ public final class SearchMatcher {
     public static SearchMatch match(SearchQuery query, @Nullable String candidate, int fieldWeight) {
         if (query.isEmpty() || candidate == null || candidate.isEmpty()) return null;
 
+        // REGEX IS ITS OWN PATH and returns early: none of the ladder below means anything for a pattern,
+        // and an invalid one matches nothing rather than throwing -- see SearchQuery.isInvalidPattern.
+        if (query.options().regex()) return matchPattern(query, candidate, fieldWeight);
+
         String needle = query.text();
-        String haystack = candidate.toLowerCase(Locale.ROOT);
+        // CONDITIONALLY, now. The query is normalised to the same case, so the two agree by construction;
+        // lower-casing here unconditionally is what made Match Case unimplementable.
+        String haystack = query.options().matchCase() ? candidate : candidate.toLowerCase(Locale.ROOT);
         if (needle.length() > haystack.length()) return null;
+
+        // WHOLE WORDS IS A BOUNDARY TEST AROUND AN ORDINARY HIT, not a search of its own -- which is what
+        // lets it compose with match case for free. It also collapses the ladder: EXACT is the only kind a
+        // whole-word match can be at the start of a string, and an acronym is by definition not one word.
+        if (query.options().wholeWords()) {
+            int at = indexOfWord(haystack, needle);
+            if (at < 0) return null;
+            SearchMatch.Kind kind = at == 0 && needle.length() == haystack.length()
+                    ? SearchMatch.Kind.EXACT
+                    : at == 0 ? SearchMatch.Kind.PREFIX : SearchMatch.Kind.SUBSTRING;
+            return scored(kind, fieldWeight, candidate, at,
+                    List.of(new SearchMatch.Range(at, at + needle.length())));
+        }
 
         if (haystack.equals(needle)) {
             return scored(SearchMatch.Kind.EXACT, fieldWeight, candidate, 0,
@@ -82,6 +103,43 @@ public final class SearchMatcher {
                     List.of(new SearchMatch.Range(at, at + needle.length())));
         }
         return null;
+    }
+
+    /** The first occurrence of {@code needle} with a non-word character (or an end) on both sides. */
+    private static int indexOfWord(String haystack, String needle) {
+        for (int at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + 1)) {
+            boolean leftOk = at == 0 || !isWordChar(haystack.charAt(at - 1));
+            int end = at + needle.length();
+            boolean rightOk = end == haystack.length() || !isWordChar(haystack.charAt(end));
+            if (leftOk && rightOk) return at;
+        }
+        return -1;
+    }
+
+    private static boolean isWordChar(char c) {
+        return Character.isLetterOrDigit(c) || c == '_';
+    }
+
+    /**
+     * The regex path.
+     *
+     * <p>Scored as {@link SearchMatch.Kind#SUBSTRING} with the usual positional bonus. A pattern has no
+     * meaningful place on the EXACT/PREFIX/ACRONYM ladder, and inventing a fourth ordering for it would
+     * change how {@code QuickPick} ranks everything else; degrading to the weakest kind keeps ranking
+     * sane without pretending the pattern said something about intent.</p>
+     *
+     * <p>A <b>zero-width</b> match is refused. {@code a*} matches the empty string at position 0 of every
+     * candidate, which would report everything as a hit and paint a zero-width band on each.</p>
+     */
+    @Nullable
+    private static SearchMatch matchPattern(SearchQuery query, String candidate, int fieldWeight) {
+        Pattern pattern = query.pattern();
+        if (pattern == null) return null;          // invalid pattern: a state, not an exception
+        Matcher matcher = pattern.matcher(candidate);
+        if (!matcher.find()) return null;
+        if (matcher.end() == matcher.start()) return null;
+        return scored(SearchMatch.Kind.SUBSTRING, fieldWeight, candidate, matcher.start(),
+                List.of(new SearchMatch.Range(matcher.start(), matcher.end())));
     }
 
     /**
