@@ -4463,3 +4463,78 @@ refusing it means `x*` cannot find a real `x`, which is not what a regex means.
 Still out of scope, deliberately: multiline (the field is single-line), capture groups and replace, and
 search scopes (comments / string literals) which need `SyntaxTokenizer` spans and only mean anything in a
 document.
+
+---
+
+# Part VII — §31. Editor find & replace: research and ownership
+
+## 31.1 The question: should the search live in `TextEditor`?
+
+**No.** It is there today — `TextEditor.find`, `searchMatches`, `currentMatch`, `replaceAll` — and both
+references put every one of those somewhere else. The split they agree on is four-way, and they agree
+almost exactly.
+
+## 31.2 VS Code / Monaco
+
+| Piece | File | What it owns |
+|---|---|---|
+| `FindReplaceState` | `contrib/find/browser/findState.ts` | The **state**: `searchString`, `replaceString`, `isRegex`, `matchCase`, `wholeWord`, `preserveCase`, `searchScope`, `matchesCount`, `currentMatch`. Observable — `onFindReplaceStateChange` reports *which* fields moved |
+| `TextModelSearch` | `common/model/textModelSearch.ts` | The **engine**. `SearchParams` → `SearchData`, word-separator handling via `WordCharacterClassifier`, multiline-regex detection. Reached as `ITextModel.findMatches(...)` — **the model searches itself** |
+| `FindModelBoundToEditorModel` | `contrib/find/browser/findModel.ts` | The **controller**: watches the state, re-runs the search, owns the `findMatch` / `currentFindMatch` decorations, implements replace and replace-all |
+| `FindWidget` | `contrib/find/browser/findWidget.ts` | The **view**. Box, toggles, buttons, counter. Knows nothing about searching |
+
+## 31.3 IntelliJ
+
+| Piece | What it owns |
+|---|---|
+| `FindModel` | The **state** — string to find, string to replace, case sensitive, whole words only, regular expressions, preserve case, in selection. Fires listeners |
+| `FindManager.findString(text, offset, model, file)` | The **engine**, an application service returning a `FindResult`. Independent of any editor |
+| `SearchResults` | The **occurrences**: the list, the cursor, and — the part we need — the **excluded** set that Replace All skips |
+| `EditorSearchSession` | The per-editor **controller**: owns the component, drives `FindManager`, maintains `LivePreview` decorations |
+| `SearchReplaceComponent` | The **view**, built with `buildFor(project, editor)` |
+
+## 31.4 The port
+
+Four types, and the boundary each reference draws is the same one this repo already draws for
+`com.crystalgui.text.cursor`: **the algorithms are headless and the widget is a consumer.**
+
+| Ours | Theirs | Package |
+|---|---|---|
+| `SearchQuery` + `Options` | `FindReplaceState` / `FindModel` | `core.search` — **exists** |
+| `TextSearch.findAll(CharSequence, SearchQuery)` | `TextModelSearch` / `FindManager.findString` | `text.search` — **to write**, headless |
+| `SearchResults` — occurrences, cursor, **exclusions** | `SearchResults` | `text.search` — **to write**, headless |
+| `EditorSearchSession` | `FindModelBoundToEditorModel` / `EditorSearchSession` | `ui.elements.editor` |
+| `SearchReplaceBar` | `FindWidget` / `SearchReplaceComponent` | `ui.elements.editor` |
+
+`TextEditor` keeps what a view keeps: its buffer, its decorations, its caret. `find`/`replaceAll`/
+`searchMatches` move out — the current signatures stay as thin delegates so nothing outside breaks.
+
+**Why it matters here rather than being tidiness.** `TextEditor` reached 4159 lines before its view parts
+were extracted, and the reason that extraction paid was that the algorithms became reachable without a
+`UIWindow`, fonts and an input handler — it "exposed a real bug within minutes". Search is the same shape:
+whole-words-at-a-boundary, overlapping matches, regex with zero-width guards and preserve-case replacement
+are all decidable on a `CharSequence`, and none of them should need a frame to test.
+
+## 31.5 What the exclusions are
+
+IntelliJ's `SearchResults` carries an **excluded** set; `Exclude` toggles the current match in it, Replace
+All skips it, and the editor **strikes the excluded span through**. That is why exclusions belong with the
+occurrences rather than in the widget: they survive the bar being scrolled, re-queried or re-focused, and
+the renderer has to see them.
+
+We can draw it: the editor already publishes per-line `::highlight()` ranges (`search`, `bracket`, syntax
+captures), and `HighlightStyle` carries `text-decoration-line`. An excluded match is a second highlight
+name with `line-through` — no new rendering path.
+
+## 31.6 What is in scope
+
+The bar matches the one already shipped: the same `__find-bar__` chrome, the same `SearchField` box with
+`Cc` / `W` / `.*` inside its border, the same count, arrows and close. New here:
+
+- a **chevron** on the left that expands the replace row
+- a **replace box** with **Preserve case** (`AᴀA`, Alt+E)
+- **Replace**, **Replace All**, **Exclude**
+- exclusions, struck through in the editor
+
+Out, for the same reasons as §30.6: multiline (the field is single-line), search scopes (needs
+`SyntaxTokenizer` spans and is its own feature), and the overflow `⋮` menu.
