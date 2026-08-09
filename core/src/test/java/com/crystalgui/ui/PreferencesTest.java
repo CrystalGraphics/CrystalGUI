@@ -1,8 +1,11 @@
 package com.crystalgui.ui;
 
+import org.joml.Vector2f;
+import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.elements.tree.TreeSearch;
 import com.crystalgui.ui.elements.tree.TreeDataSource;
+import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.elements.tree.TreeRow;
 import com.crystalgui.ui.elements.chrome.NavigatorView;
 import com.crystalgui.ui.elements.TextField;
@@ -527,6 +530,25 @@ public class PreferencesTest extends UiTestBase {
      */
     @Test
     public void foldingABranchLetsTheSidebarShrinkAgain() {
+        NavigatorView<String> nav = longTitledNavigator();
+        UIWindow w = nav.getAttachedWindow();
+        float collapsed = nav.sidebarMinimumWidth();
+
+        nav.tree().setExpanded("Short", true);
+        for (int i = 0; i < 6; i++) w.updateWithoutPainting();
+        float expanded = nav.sidebarMinimumWidth();
+        assertTrue("unfolding did not widen the sidebar (" + collapsed + " -> " + expanded
+                + "), so this asserts nothing", expanded > collapsed);
+
+        nav.tree().setExpanded("Short", false);
+        for (int i = 0; i < 6; i++) w.updateWithoutPainting();
+        assertEquals("the minimum stayed at the widest row ever seen",
+                collapsed, nav.sidebarMinimumWidth(), 0.5f);
+    }
+
+
+    /** One short root hiding a child far longer than it — something a fold can give width back from. */
+    private NavigatorView<String> longTitledNavigator() {
         NavigatorView<String> nav = new NavigatorView<>();
         nav.layout(l -> l.width(400).height(300));
         nav.setSource(new TreeDataSource<String>() {
@@ -546,18 +568,35 @@ public class PreferencesTest extends UiTestBase {
         w.init(800, 600);
         w.setUiScale(1f);
         for (int i = 0; i < 6; i++) w.updateWithoutPainting();
-        float collapsed = nav.sidebarMinimumWidth();
+        return nav;
+    }
+
+    /**
+     * <b>A press on the divider that moves nothing must not take ownership of the width.</b>
+     *
+     * <p>The flag was set from the divider's mouse-DOWN, so landing on the handle — or a drag that ended
+     * where it began — permanently switched off the auto-sizing. It fails silently and does not look like
+     * a click: unfolding a long page name simply stops widening the sidebar for the rest of the session,
+     * leaving the label clipped at the pane edge.</p>
+     */
+    @Test
+    public void pressingTheDividerWithoutMovingItKeepsAutoSizing() {
+        NavigatorView<String> nav = longTitledNavigator();
+        UIWindow w = nav.getAttachedWindow();
+        UIElement divider = nav.split().divider();
+        w.getInputHandler().sendInputEvent(divider,
+                new MouseEvent.Down(divider, new ReadOnlyVec2f(new Vector2f(0f, 0f)), 0, 1));
+        for (int i = 0; i < 4; i++) w.updateWithoutPainting();
+        // The SPLIT's share, not the minimum -- the minimum grows either way; what ownership gates is
+        // whether the pane actually follows it.
+        float before = nav.split().getPercentage();
 
         nav.tree().setExpanded("Short", true);
-        for (int i = 0; i < 6; i++) w.updateWithoutPainting();
-        float expanded = nav.sidebarMinimumWidth();
-        assertTrue("unfolding did not widen the sidebar (" + collapsed + " -> " + expanded
-                + "), so this asserts nothing", expanded > collapsed);
+        for (int i = 0; i < 8; i++) w.updateWithoutPainting();
 
-        nav.tree().setExpanded("Short", false);
-        for (int i = 0; i < 6; i++) w.updateWithoutPainting();
-        assertEquals("the minimum stayed at the widest row ever seen",
-                collapsed, nav.sidebarMinimumWidth(), 0.5f);
+        assertTrue("a press that moved nothing stopped the sidebar following its content ("
+                        + before + " -> " + nav.split().getPercentage() + ")",
+                nav.split().getPercentage() > before);
     }
 
 }

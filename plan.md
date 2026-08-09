@@ -4056,3 +4056,21 @@ now, and a latent one-way ratchet became something you hit by typing.
 The regression test builds a `NavigatorView` directly rather than opening Preferences — every child title in
 the settings fixture is shorter than its root titles, so unfolding it widens nothing and there would be
 nothing to give back.
+
+## 29.16 Touching the divider is not resizing it
+
+29.15 let the sidebar give width back on a fold; it still would not take width when a long name was
+unfolded. The auto-size is deliberately switched off once the user sets the width by hand — but the flag
+was latched from the divider's **mouse-down**, so a click that moved nothing, or a drag that ended where it
+began, turned it off forever.
+
+It fails in the worst way available: silently, and not looking like a click. The sidebar simply stops
+following its content for the rest of the session, and the only visible symptom is a clipped label.
+
+Ownership is read from `onPercentageChanged` now, which is movement rather than contact — and it covers the
+keyboard resize (Home/End on the divider) that the mouse-down never saw. The widget guards its own writes
+with a flag so its auto-size is not mistaken for the user doing it.
+
+Worth recording about the test: the first version asserted on `sidebarMinimumWidth()` and **passed against
+the bug**, because the minimum grows either way — what ownership gates is whether the pane follows it. The
+mutation check is what exposed that; the assertion is on the split's share now.
