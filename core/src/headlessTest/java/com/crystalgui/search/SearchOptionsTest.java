@@ -108,14 +108,34 @@ public class SearchOptionsTest {
     }
 
     /**
-     * <b>A zero-width match is not a match.</b>
+     * <b>A zero-width match is skipped, not taken — and the search carries on past it.</b>
      *
-     * <p>{@code a*} matches the empty string at position 0 of everything, which would report every
-     * candidate as a hit and paint a zero-width band on each.</p>
+     * <p>{@code x*} matches the empty string at position 0 of everything, so taking it would report every
+     * candidate as a hit and paint a zero-width band on each. Refusing the whole pattern is the other
+     * wrong answer: {@code x*} against text that really does contain an {@code x} should find it, which is
+     * what a regex means.</p>
      */
     @Test
-    public void aZeroWidthPatternMatchesNothing() {
-        assertNull(match("x*", REGEX, "no ex in here"));
+    public void aZeroWidthMatchIsSkippedAndTheSearchContinues() {
+        assertNull("nothing but empty matches here", match("x*", REGEX, "no letters"));
+        SearchMatch found = match("x*", REGEX, "the box");
+        assertNotNull("the real match after the empty one was missed", found);
+        assertEquals(6, found.ranges().get(0).start());
+        assertEquals(7, found.ranges().get(0).end());
+    }
+
+    /**
+     * <b>Whole words composes with regex.</b>
+     *
+     * <p>Both references do this by wrapping the pattern in word boundaries. Applied to the match instead,
+     * so a user's own anchors and alternations survive — {@code foo|bar} means something different
+     * once it is wrapped again.</p>
+     */
+    @Test
+    public void wholeWordsAppliesToARegexMatchToo() {
+        SearchQuery.Options both = REGEX.withWholeWords(true);
+        assertNull("`gr.ph` inside shadergraph is not a word", match("gr.ph", both, "new.shadergraph"));
+        assertNotNull(match("gr.ph", both, "a graph here"));
     }
 
     /** Case sensitivity reaches the pattern too, rather than being a separate literal-only idea. */

@@ -4425,3 +4425,41 @@ Fixed by setting the flag wherever the query changes. The general lesson is the 
 finally makes plain: **a gate keyed to one cause is a gate that will be reached from another.** What the
 rule actually needs to know is "the set of rows is different now", and the honest way to state that is to
 set it from every path that makes it true, not from the one that happened to exist first.
+
+## 30.13 The options never reached the matching
+
+`GRAPH` with Match Case and Words both lit still matched `new.shadergraph`. The toggles were live, the
+options were on the query, and none of it arrived: `TreeSearch.Model.setQuery` took a **`String`**, so every
+model rebuilt its own `SearchQuery` from the bare text and dropped Match Case, Words and Regex on the way in.
+Step 5 of 30.5 — "route the sources through the matcher" — was the step I never did.
+
+`setQuery` now takes a `SearchQuery`. The type that carries the options is the type the matcher takes, so
+there is no longer a shape in which a model can be handed a query and lose half of it.
+
+What that flushed out, which is the same defect 29.11 fixed once already:
+
+- **`ProblemsTreeSource` had a private matcher** — `trim().toLowerCase()` and a `contains`. It now calls
+  `SearchMatcher`, so every option applies there.
+- **`WorkspaceTreeSource.setFilter(String)`** built its own query. It takes a `SearchQuery` now, with the
+  string form kept for callers that only have text.
+- **`Preferences.matches` rebuilt one** from `navigator.query()`, so the toggles were inert in the settings
+  tree. `NavigatorView.parsedQuery()` hands over the real thing.
+
+### Regex: no parser, and nothing to steal engine-wise
+
+IntelliJ is Java and uses `java.util.regex.Pattern` directly; VS Code is JS and uses the platform `RegExp`
+in Monaco, handing workspace search to ripgrep's Rust engine. Its `SearchParams`/`SearchData` layer is a
+**wrapper**, not an engine. We are Java, so `Pattern` is already ours — `SearchQuery` compiles it once per
+query.
+
+What is worth porting is the semantics around it, and one was missing: **whole words composes with regex**.
+Both references wrap the pattern in word boundaries; this applies the boundary test to the *match* instead,
+so a user's own anchors and alternations survive — wrapping `foo|bar` changes what it means.
+
+Also settled while here: a **zero-width match is skipped and the search continues** rather than the pattern
+being refused outright. `x*` matches the empty string everywhere, so taking it reports every candidate; but
+refusing it means `x*` cannot find a real `x`, which is not what a regex means.
+
+Still out of scope, deliberately: multiline (the field is single-line), capture groups and replace, and
+search scopes (comments / string literals) which need `SyntaxTokenizer` spans and only mean anything in a
+document.

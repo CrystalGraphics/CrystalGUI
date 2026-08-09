@@ -169,9 +169,10 @@ public final class Preferences {
      * the path to a deep match reachable is {@code FilteredTreeSource}'s job.</p>
      */
     private boolean matches(String path) {
-        String raw = navigator.query();
-        if (raw.isEmpty()) return true;
-        SearchQuery query = SearchQuery.of(raw);
+        // THE NAVIGATOR'S OWN QUERY, options and all. Rebuilding one from `query()` -- which is what this
+        // did -- drops Match Case, Words and Regex, so the toggles were live in the bar and inert here.
+        SearchQuery query = navigator.parsedQuery();
+        if (query == null || query.isEmpty()) return true;
         if (SearchMatcher.match(query, paths.title(path), 0) != null) return true;
         // DIRECTLY UNDER, not `idsUnder`. The comment above already says keeping the path to a deep match
         // reachable is FilteredTreeSource's job -- and it is, via its own descendant walk. Doing it here as

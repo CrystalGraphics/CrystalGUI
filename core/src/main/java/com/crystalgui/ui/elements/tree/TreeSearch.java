@@ -135,7 +135,15 @@ public final class TreeSearch<T> {
          * <p>Called on every keystroke and on every mode change. A model that only highlights ignores
          * {@code filtering} and does nothing here beyond remembering the query.</p>
          */
-        void setQuery(String query, boolean filtering);
+        /**
+         * The query, <b>with its options</b>, and whether the tree should be narrowed to it.
+         *
+         * <p>A {@link SearchQuery} rather than a {@code String}, because the options are the whole point:
+         * handed the raw text, a model builds its own query and silently drops Match Case, Words and Regex
+         * -- which is exactly what happened, and why `GRAPH` with both toggles lit still matched
+         * `shadergraph`. The type that carries them is the type the matcher takes.</p>
+         */
+        void setQuery(SearchQuery query, boolean filtering);
 
         /** Whether {@code item}'s own text matches — not whether something beneath it does. */
         boolean isMatch(T item);
@@ -180,8 +188,8 @@ public final class TreeSearch<T> {
             private SearchQuery query;
 
             @Override
-            public void setQuery(String text, boolean filtering) {
-                query = text == null || text.isBlank() ? null : SearchQuery.of(text);
+            public void setQuery(SearchQuery next, boolean filtering) {
+                query = next == null || next.isEmpty() ? null : next;
                 // The predicate is set even in Highlight mode, and then not used: FilteredTreeSource
                 // delegates entirely with no filter, so clearing it is what turns filtering off.
                 if (filtered == null) return;
@@ -495,7 +503,7 @@ public final class TreeSearch<T> {
      */
     public void setQuery(String text) {
         this.query = text == null ? "" : text;
-        model.setQuery(query, mode == Mode.FILTER);
+        model.setQuery(SearchQuery.of(query, searchOptions), mode == Mode.FILTER);
         tree.refresh();
         revealForFilter();
         apply();
@@ -580,7 +588,7 @@ public final class TreeSearch<T> {
     public void setMode(Mode next) {
         if (next == null || next == mode) return;
         mode = next;
-        model.setQuery(query, mode == Mode.FILTER);
+        model.setQuery(SearchQuery.of(query, searchOptions), mode == Mode.FILTER);
         tree.refresh();
         revealForFilter();
         apply();
@@ -635,6 +643,20 @@ public final class TreeSearch<T> {
     /** The bar itself, for a host that wants to name or place it. */
     public UIElement bar() {
         return bar;
+    }
+
+    /**
+     * Sets the options a host wants, and re-runs the query against them.
+     *
+     * <p>The toggles are the user's way in; this is the programmatic one, and the only way a test can
+     * assert that an option reaches the matching.</p>
+     */
+    public TreeSearch<T> setSearchOptions(SearchQuery.Options next) {
+        searchOptions = next == null ? SearchQuery.Options.DEFAULT : next;
+        onOptionsChanged.emit(searchOptions);
+        setQuery(query);
+        apply();
+        return this;
     }
 
     /** The options the matcher should honour — Cc / W / .* as the user has them. */

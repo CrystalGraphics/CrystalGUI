@@ -108,10 +108,7 @@ public final class SearchMatcher {
     /** The first occurrence of {@code needle} with a non-word character (or an end) on both sides. */
     private static int indexOfWord(String haystack, String needle) {
         for (int at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + 1)) {
-            boolean leftOk = at == 0 || !isWordChar(haystack.charAt(at - 1));
-            int end = at + needle.length();
-            boolean rightOk = end == haystack.length() || !isWordChar(haystack.charAt(end));
-            if (leftOk && rightOk) return at;
+            if (isWord(haystack, at, at + needle.length())) return at;
         }
         return -1;
     }
@@ -136,11 +133,27 @@ public final class SearchMatcher {
         Pattern pattern = query.pattern();
         if (pattern == null) return null;          // invalid pattern: a state, not an exception
         Matcher matcher = pattern.matcher(candidate);
-        if (!matcher.find()) return null;
-        if (matcher.end() == matcher.start()) return null;
-        return scored(SearchMatch.Kind.SUBSTRING, fieldWeight, candidate, matcher.start(),
-                List.of(new SearchMatch.Range(matcher.start(), matcher.end())));
+        boolean words = query.options().wholeWords();
+        while (matcher.find()) {
+            if (matcher.end() == matcher.start()) continue;
+            // WHOLE WORDS COMPOSES WITH REGEX, which is what both references do -- they wrap the pattern in
+            // word boundaries. Applied to the match rather than to the pattern so a user's own anchors and
+            // alternations are left alone: `foo|bar` means something different once it is wrapped again.
+            if (!words || isWord(candidate, matcher.start(), matcher.end())) {
+                return scored(SearchMatch.Kind.SUBSTRING, fieldWeight, candidate, matcher.start(),
+                        List.of(new SearchMatch.Range(matcher.start(), matcher.end())));
+            }
+        }
+        return null;
     }
+
+    /** Whether {@code [start, end)} has a non-word character (or an end) on both sides. */
+    private static boolean isWord(String candidate, int start, int end) {
+        boolean leftOk = start == 0 || !isWordChar(candidate.charAt(start - 1));
+        boolean rightOk = end == candidate.length() || !isWordChar(candidate.charAt(end));
+        return leftOk && rightOk;
+    }
+
 
     /**
      * The best match across several candidates in one field — a synonym list, say.
