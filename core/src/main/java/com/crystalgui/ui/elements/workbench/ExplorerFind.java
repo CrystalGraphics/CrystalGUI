@@ -38,6 +38,37 @@ final class ExplorerFind {
     /** True while {@link #apply} is writing the field, so its own listener is ignored. */
     private boolean writingBack;
 
+    /** Whether the bar has been asked for, independently of whether anything is typed in it yet. */
+    private boolean open;
+
+    /**
+     * Shows the bar and puts the caret in it — Ctrl+F.
+     *
+     * <p>Opening with an empty query is the whole point of having the flag: a search box you can only
+     * reach by first typing a character into the tree is not one you can click into, and Ctrl+F is what
+     * everybody presses.</p>
+     */
+    void openBar() {
+        open = true;
+        apply();
+        focusInput();
+    }
+
+    /** Hides the bar and clears what it was filtering by — Escape. */
+    void closeBar() {
+        open = false;
+        tree.setFilter("");
+        apply();
+        UIWindow window = tree.getAttachedWindow();
+        if (window != null && tree.treeView().focusable()) {
+            window.getInputHandler().requestPointerFocus(tree.treeView());
+        }
+    }
+
+    boolean isOpen() {
+        return open;
+    }
+
     private final UIElement findBar = new UIElement();
     /**
      * A real input, not a readout.
@@ -68,6 +99,11 @@ final class ExplorerFind {
         // IMMEDIATE, because a search that waits for Enter is a filter you cannot feel. ON_COMMIT is the
         // right default for a form field and the wrong one for this.
         findQuery.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
+        findQuery.onKeyDown.attachListener((element, event) -> {
+            if (event.getKeyCode() != CgKeyCodes.KEY_ESCAPE) return;
+            closeBar();
+            event.stopPropagation();
+        }, false, true);
         findQuery.attachListener(typed -> {
             // GUARDED, because apply() writes the field back: without this, setFilter -> apply ->
             // setText -> this listener -> setFilter is a loop that only stops because Property.set drops
@@ -100,7 +136,12 @@ final class ExplorerFind {
 
     /** Shows or hides the bar, and writes what it says. */
     void apply() {
-        boolean searching = !tree.filter().isEmpty();
+        // OPEN UNTIL DISMISSED, not until the query is empty. Backspacing the last character used to hide
+        // the bar out from under the caret, so there was no way to clear a query and retype one -- the
+        // box vanished mid-edit and focus went nowhere. VS Code's find widget stays until Escape or its
+        // close button; IntelliJ's speed search is the one that vanishes, and it vanishes because it is a
+        // transient popup rather than a bar you can click into.
+        boolean searching = open || !tree.filter().isEmpty();
         StyleGroup.importantPipeline(findBar.getStyle().getLayoutGroup(),
                 l -> l.display(searching ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
         if (!searching) return;
@@ -165,8 +206,8 @@ final class ExplorerFind {
             if (event.getModifiers() != 0) return;     // Ctrl+C is a command, not a letter
             int key = event.getKeyCode();
             if (key == CgKeyCodes.KEY_ESCAPE) {
-                if (tree.filter().isEmpty()) return;
-                tree.setFilter("");
+                if (!open && tree.filter().isEmpty()) return;
+                closeBar();
                 event.stopPropagation();
                 return;
             }
@@ -180,6 +221,7 @@ final class ExplorerFind {
             // Printable only. A tree that filtered on Delete would eat the delete key, and the arrows have
             // to keep moving the selection.
             if (typed >= ' ' && typed != 127) {
+                open = true;
                 tree.setFilter(tree.filter() + typed);
                 // FOCUS FOLLOWS THE FIRST KEYSTROKE, into the field the query now lives in. Leaving focus
                 // on the tree would mean the second character went through this handler too while a real

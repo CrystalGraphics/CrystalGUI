@@ -61,6 +61,9 @@ public final class ExplorerCommands {
     /** Open a file by name — VS Code's Ctrl+P, IntelliJ's Go to File. */
     public static final String GO_TO_FILE = "explorer.goToFile";
 
+    /** Opens the tree's search box. Ctrl+F, which is what everybody presses. */
+    public static final String FIND_IN_TREE = "explorer.find";
+
     /** The preferences window. VS Code's Ctrl+, — IntelliJ uses Ctrl+Alt+S, which is less universal. */
     public static final String PREFERENCES = "workbench.preferences";
     public static final String CUT = "explorer.cut";
@@ -192,6 +195,18 @@ public final class ExplorerCommands {
                             window.ui.rootElement.settings());
                 }));
 
+        registry.register(Command.of(FIND_IN_TREE, "Find in Project View")
+                // ELEMENT-SCOPED, bound on the tree rather than declared globally: Ctrl+F means Find in
+                // an editor and this must not take it away from one. The resolver walks the focused
+                // element's chain first, so the tree's own binding wins only while the tree has focus.
+                .run(context -> {
+                    Workbench workbench = workbenchFor(context);
+                    if (workbench != null && workbench.fileTree() != null) {
+                        workbench.fileTree().openFind();
+                    }
+                })
+                .enabledWhen(context -> workbenchFor(context) != null));
+
         registry.register(Command.of(GO_TO_FILE, "Go to File…")
                 .binding("Mod+P")
                 // FILE ▸ OPEN, and this is the honest version of it. There is no native file dialog to
@@ -235,6 +250,7 @@ public final class ExplorerCommands {
      * a bare key at the root fires while typing into any editor sharing the window.</p>
      */
     public static void bindDefaults(Keymap keymap) {
+        keymap.bind("Mod+F", FIND_IN_TREE);
         keymap.bind("Mod+X", CUT);
         keymap.bind("Mod+C", COPY);
         keymap.bind("Mod+V", PASTE);

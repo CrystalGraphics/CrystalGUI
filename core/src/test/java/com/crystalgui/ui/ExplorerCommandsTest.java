@@ -1433,4 +1433,104 @@ public class ExplorerCommandsTest extends UiTestBase {
     }
 
 
+
+    /**
+     * <b>F2 opens an editor that stays open.</b>
+     *
+     * <p>The reported flicker, and it was not in the explorer at all: {@code ListView} restores focus to
+     * whichever row is at {@code focusedIndex} after a rebuild, and that took focus from the input inside
+     * a row. The editor read the blur as the user leaving, committed and closed, so the field appeared
+     * for exactly one frame.</p>
+     *
+     * <p>Driven through the <b>keymap</b> from a <b>focused row</b>, because neither shortcut is optional
+     * here: executing the command directly never reproduced it, and aiming focus at the tree itself does
+     * nothing at all — the tree is not focusable, so F2 resolved against nothing and the first version of
+     * this test passed while asserting neither.</p>
+     */
+    @Test
+    public void f2OpensAnEditorThatSurvivesTheFollowingFrames() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src/Main.java"));
+        settle();
+
+        UIElement row = null;
+        for (UIElement element : window.ui.rootElement.querySelectorAll(
+                "." + ProjectFileTree.ROW_CLASS)) {
+            if (element.getRuntimeCache().getWidth() > 0f) {
+                row = element;
+                break;
+            }
+        }
+        assertNotNull("no row to focus", row);
+        window.getInputHandler().requestFocus(row);
+        settle();
+
+        window.getInputHandler().consumeKeyboardEvent(
+                new CgSystemInput.Keyboard.Event(' ', CgKeyCodes.KEY_F2, true, false, 1L));
+
+        for (int frame = 0; frame < 10; frame++) {
+            settle();
+            assertTrue("the editor closed on frame " + frame + " — the flicker",
+                    workbench.fileTree().isEditing());
+        }
+    }
+
+
+    /**
+     * <b>Backspacing a query to empty does not close the box.</b>
+     *
+     * <p>It used to: the bar was shown when the filter was non-empty, so deleting the last character hid
+     * it out from under the caret and there was no way to clear a query and retype one. VS Code's find
+     * widget stays until Escape or its close button.</p>
+     */
+    @Test
+    public void emptyingTheSearchBoxLeavesItOpen() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().openFind();
+        settle();
+        TextField box = searchBox();
+        assertNotNull("Ctrl+F did not open the box", box);
+
+        box.setText("mai");
+        settle();
+        box.setText("");
+        settle();
+
+        assertTrue("backspacing to empty closed the box", workbench.fileTree().isFindOpen());
+        assertNotNull("and it must still be on screen to type into", searchBox());
+    }
+
+    /** Escape is what dismisses it, and it clears the query on the way out. */
+    @Test
+    public void escapeClosesTheSearchBoxAndClearsIt() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().openFind();
+        settle();
+        searchBox().setText("mai");
+        settle();
+
+        workbench.fileTree().closeFind();
+        settle();
+        assertFalse(workbench.fileTree().isFindOpen());
+        assertEquals("the query outlived the box", "", workbench.fileTree().filter());
+    }
+
+    /** Ctrl+F opens it with nothing typed, which is the whole reason it is not driven by the query. */
+    @Test
+    public void findOpensWithAnEmptyQuery() {
+        workbench.fileTree().loadProjects();
+        settle();
+        assertFalse(workbench.fileTree().isFindOpen());
+
+        registry().get(ExplorerCommands.FIND_IN_TREE).execute(CommandContext.of(workbench.fileTree()));
+        settle();
+
+        assertTrue("Ctrl+F did not open the search box", workbench.fileTree().isFindOpen());
+        assertNotNull(searchBox());
+        assertEquals("it should open empty", "", workbench.fileTree().filter());
+    }
+
 }

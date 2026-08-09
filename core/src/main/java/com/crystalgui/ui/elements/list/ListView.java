@@ -1015,6 +1015,22 @@ public class ListView<T> extends ScrollerView {
         UIElement focused = window.getInputHandler().getFocusedElement();
         if (focused != null && !containsInSubtree(focused)) return;
 
+        // AND NEVER OUT OF A CONTROL INSIDE A ROW. The guard above says "restore, never take" and stops
+        // one step short: it asks whether focus is in this LIST, and a list is not only its rows.
+        //
+        // This method exists to reattach focus to a row whose ELEMENT went away and came back. Focus
+        // sitting on something a row CONTAINS was never lost, so there is nothing to restore and taking
+        // it is pure theft. Asked as "is the focused element itself a row" rather than "is it inside the
+        // row I am restoring to", because the two rows need not be the same one -- the editor may be
+        // several rows below whichever index last had focus, and stealing across rows is the same bug.
+        //
+        // The explorer's inline rename is exactly this shape. F2 put an input in a row and focused it;
+        // the next frame's restore pulled focus onto the row at `focusedIndex`, the editor read the blur
+        // as the user leaving, committed, and closed -- so the field appeared for one frame and vanished.
+        // Reported twice as "the rename flickers", and it is this method rather than anything in the
+        // explorer.
+        if (focused != null && !realised.containsValue(focused)) return;
+
         if (focused != row && row.focusable()) {
             // Restoring focus to a row that scrolled back into view is the view's own doing, not the
             // user's — without the guard it would re-select that row and quietly discard whatever

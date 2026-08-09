@@ -552,6 +552,21 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         find.toggleFindMode();
     }
 
+    /** Shows the search box and puts the caret in it — Ctrl+F. @see ExplorerFind */
+    public void openFind() {
+        find.openBar();
+    }
+
+    /** Hides it and clears the query. @see ExplorerFind */
+    public void closeFind() {
+        find.closeBar();
+    }
+
+    /** Whether the search box is showing. */
+    public boolean isFindOpen() {
+        return find.isOpen();
+    }
+
     /** The element the parts add their own chrome to. */
     UIElement contentBox() {
         return content;
