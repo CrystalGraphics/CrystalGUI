@@ -4034,3 +4034,25 @@ types — and not the prose about it. `ge` now returns General (a title) and Sha
 named *Geometry*, a word-start match you can see the moment the page opens).
 
 Reversible in one line if a "matched in description" affordance ever exists to hang it on.
+
+## 29.15 The sidebar could grow and never give it back
+
+Unfold a long page name in Preferences and the split could not be dragged narrow again — not even after
+folding it away.
+
+`NavigatorView.fitSidebarToRows` sizes the sidebar to its widest **realised** row and grew monotonically.
+The reason was sound and is written on the method: the measure reads realised rows, so a plain scroll
+changes the answer, and letting it fall every frame would make the pane breathe as you scrolled. But it
+feeds a *minimum*, so a label seen once pinned the floor for the rest of the session.
+
+Only the shrink is gated now, on `onExpandChanged` — the one event that changes what the widest row could
+be. Growth still lands the frame a long row appears, and scrolling still cannot move it, so the breathing
+the original rule prevented cannot come back.
+
+**This code is older than the migration and the commit did not touch it.** What the migration changed is
+reachability: reveal-on-filter (29.10) expands branches nobody opened, so deep rows get realised routinely
+now, and a latent one-way ratchet became something you hit by typing.
+
+The regression test builds a `NavigatorView` directly rather than opening Preferences — every child title in
+the settings fixture is shorter than its root titles, so unfolding it widens nothing and there would be
+nothing to give back.
