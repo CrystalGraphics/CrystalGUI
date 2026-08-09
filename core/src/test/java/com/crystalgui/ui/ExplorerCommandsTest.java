@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -366,6 +367,37 @@ public class ExplorerCommandsTest extends UiTestBase {
      * written for: the replacement listing had already arrived before the first assertion ran.</p>
      */
     private void answerPromptWithoutSettling(String name) {
+        // THE ROW'S OWN INPUT, not a dialog. New File and Rename edit in place now -- VS Code's
+        // FilesRenderer.renderInputBox -- and the modal survives only as the fallback for a host with no
+        // tree on screen, which answerDialogPrompt below still covers.
+        TextField field = visibleInlineEditor();
+        if (field == null) {
+            answerDialogPrompt(name);
+            return;
+        }
+        field.setText(name);
+        field.onSubmit.emit(name);
+    }
+
+    /** The inline editor of whichever row is being edited, or null when none is. */
+    private TextField visibleInlineEditor() {
+        if (!workbench.fileTree().isEditing()) return null;
+        for (UIElement element : window.ui.rootElement.querySelectorAll(
+                "." + ProjectFileTree.EDITOR_CLASS)) {
+            if (element instanceof TextField field && element.getRuntimeCache().getWidth() > 0) {
+                return field;
+            }
+        }
+        // Realised but not yet laid out: still the right field to type into, and waiting a frame here
+        // would hide the very defect these tests exist for.
+        for (UIElement element : window.ui.rootElement.querySelectorAll(
+                "." + ProjectFileTree.EDITOR_CLASS)) {
+            if (element instanceof TextField field) return field;
+        }
+        return null;
+    }
+
+    private void answerDialogPrompt(String name) {
         UIElement popup = window.ui.rootElement.querySelector("." + InputDialog.PROMPT_CLASS);
         assertNotNull("no name prompt is open", popup);
         TextField field = (TextField) popup.querySelector("textfield");
@@ -486,25 +518,24 @@ public class ExplorerCommandsTest extends UiTestBase {
     }
 
     /**
-     * <b>The prompt is never visible anywhere but the middle.</b>
+     * <b>The row's input is never painted anywhere but in its row.</b>
      *
-     * <p>A popup is out of flow, so it has no size until it has been laid out — and a prompt positioned
-     * before that lands at 0,0. The centring pass is therefore unavoidable; what was wrong is that the
-     * popup was <em>painted</em> in the corner while it waited, and the sheet's open transition faded it in
-     * there before it hopped to the middle. Every New File and every Delete opened with a visible jump
-     * across the window.</p>
+     * <p>Inherited from the modal this replaced, where the defect was that a popup with no size yet was
+     * <em>painted</em> at 0,0 and faded in there before hopping to the centre — so every New File opened
+     * with a visible jump across the window. An inline editor cannot land in the corner for that reason,
+     * but it can land in the wrong row: it is built once per template and shown by class, so a stale
+     * {@code display} on a recycled row would put a live input on somebody else's file.</p>
      *
-     * <p>Asserted as "on every frame, it is either invisible or centred" rather than "it ends up centred",
-     * because the end state was already correct — the whole defect lived in the frames in between, which an
-     * assertion made after settling steps straight past.</p>
+     * <p>Asserted <b>on every frame</b> rather than after settling, because the end state was already
+     * right in the original defect too — the whole of it lived in the frames in between.</p>
      */
     @Test
-    public void theNamePromptIsNeverPaintedInTheCorner() {
+    public void theRowInputIsOnlyEverInsideItsOwnRow() {
         workbench.fileTree().loadProjects();
         settle();
         registry().get(ExplorerCommands.NEW_FILE).execute(CommandContext.of(workbench.fileTree()));
 
-        boolean everCentred = false;
+        boolean everShown = false;
         for (int frame = 0; frame < 12; frame++) {
             serverSide.deliver();
             clientSide.deliver();
@@ -512,20 +543,21 @@ public class ExplorerCommandsTest extends UiTestBase {
             serverSession.tick();
             window.updateWithoutPainting();
 
-            UIElement popup = window.ui.rootElement.querySelector("." + InputDialog.PROMPT_CLASS);
-            if (popup == null) continue;
-            float opacity = popup.getStyle().getGeneralGroup().opacity();
-            float width = popup.getRuntimeCache().getWidth();
-            if (opacity <= 0f || width <= 0f) continue;          // not shown yet -- nothing to see
-
-            float x = popup.getRuntimeCache().getX();
-            float expected = (window.getScreenWidth() - width) / 2f;
-            assertEquals("frame " + frame + ": the prompt is visible at x=" + x
-                            + " while the centre is " + expected,
-                    expected, x, 1f);
-            everCentred = true;
+            int shown = 0;
+            for (UIElement element : window.ui.rootElement.querySelectorAll(
+                    "." + ProjectFileTree.EDITOR_CLASS)) {
+                if (element.getRuntimeCache().getWidth() <= 0f) continue;
+                shown++;
+                UIElement row = element.getParent();
+                assertNotNull("frame " + frame + ": the input is not in a row at all", row);
+                assertTrue("frame " + frame + ": the input is in a row that is not being edited",
+                        row.hasClass(ProjectFileTree.EDITING_CLASS));
+            }
+            assertTrue("frame " + frame + ": " + shown + " rows are showing an input at once",
+                    shown <= 1);
+            if (shown == 1) everShown = true;
         }
-        assertTrue("the prompt never became visible at all, so this asserted nothing", everCentred);
+        assertTrue("no input ever became visible, so this asserted nothing", everShown);
     }
 
     /**
@@ -1105,6 +1137,156 @@ public class ExplorerCommandsTest extends UiTestBase {
         // Ask for something, then ask again before anything can have come back.
         source.indexStep(1);
         assertTrue("a step with everything in flight reported the crawl finished", source.indexStep(1));
+    }
+
+
+    // -- Inline editing -------------------------------------------------------------------------------
+
+    /**
+     * <b>Rename edits the row, not a dialog over it.</b>
+     *
+     * <p>VS Code's {@code FilesRenderer.renderInputBox}. A dialog hides the folder you are naming inside,
+     * puts the answer somewhere other than the question, and cannot show the icon change as you type.</p>
+     */
+    @Test
+    public void renameEditsInPlace() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src/Main.java"));
+        settle();
+
+        registry().get(ExplorerCommands.RENAME).execute(CommandContext.of(workbench.fileTree()));
+        settle();
+
+        assertTrue("no row went into edit mode", workbench.fileTree().isEditing());
+        assertEquals("the wrong row is being edited",
+                CgPath.parse("mymod.proj:src/Main.java"), workbench.fileTree().editingPath());
+        assertNotNull("there is no input in the row to type into", visibleInlineEditor());
+
+        answerPrompt("Renamed.java");
+        assertFalse("the edit never finished", workbench.fileTree().isEditing());
+        assertTrue("the file was never renamed",
+                names(CgPath.parse("mymod.proj:src")).contains("Renamed.java"));
+    }
+
+    /** Escape abandons it, and takes any placeholder row with it. */
+    @Test
+    public void escapeCancelsAnEditAndItsPlaceholder() {
+        workbench.fileTree().loadProjects();
+        settle();
+        registry().get(ExplorerCommands.NEW_FILE).execute(CommandContext.of(workbench.fileTree()));
+        settle();
+        assertTrue("no placeholder row appeared", workbench.fileTree().isEditing());
+        assertTrue("the placeholder is not in the tree", hasUnnamedRow());
+
+        workbench.fileTree().cancelEdit();
+        settle();
+        assertFalse(workbench.fileTree().isEditing());
+        // The row count is NOT asserted: New File expands the folder it will land in, and cancelling an
+        // edit is not a reason to fold it again -- that would undo something the user can see and did not
+        // ask to have undone.
+        assertFalse("the placeholder outlived the edit that owned it", hasUnnamedRow());
+    }
+
+    /**
+     * <b>A name that is already taken is refused rather than committed.</b>
+     *
+     * <p>Cancelling is the answer a blur gives too, and the only one that cannot destroy anything:
+     * committing a name the validator has refused would overwrite, and trapping the user in a row they
+     * cannot leave is the alternative to both.</p>
+     */
+    @Test
+    public void aDuplicateNameIsRefused() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:README.md"));
+        settle();
+
+        registry().get(ExplorerCommands.RENAME).execute(CommandContext.of(workbench.fileTree()));
+        settle();
+        // src is a sibling of src at the project root, so this asks for a name that is taken.
+        answerPrompt("src");
+        settle();
+
+        assertTrue("the original was renamed onto a name that was already taken",
+                names(CgPath.ofProject("mymod.proj")).contains("README.md"));
+    }
+
+    // -- Clipboard delegation -------------------------------------------------------------------------
+
+    /**
+     * <b>Edit > Copy means FILES when the tree is what you are in.</b>
+     *
+     * <p>One row, many providers — IntelliJ's {@code $Copy} and its {@code CopyProvider}. Before this,
+     * the single Edit row named {@code editor.copy} and was permanently greyed over the file tree while
+     * {@code explorer.copy} sat unreachable in the same registry.</p>
+     */
+    @Test
+    public void theEditMenusCopyActsOnFilesWhenTheTreeIsFocused() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src/Main.java"));
+        settle();
+
+        Command copy = registry().get(ClipboardCommands.COPY);
+        assertNotNull("the delegating command is not registered", copy);
+        CommandContext context = CommandContext.of(workbench.fileTree());
+        assertTrue("Edit > Copy is greyed with a file selected in the tree", copy.isEnabled(context));
+
+        copy.execute(context);
+        Command paste = registry().get(ClipboardCommands.PASTE);
+        assertTrue("nothing was put on the explorer's clipboard",
+                paste.isEnabled(CommandContext.of(workbench.fileTree())));
+    }
+
+    /** Nothing provides a clipboard out on the chrome, and saying so is the honest answer. */
+    @Test
+    public void theEditMenusCopyIsGreyedWhereNothingProvidesAClipboard() {
+        Command copy = registry().get(ClipboardCommands.COPY);
+        assertFalse("something claimed a clipboard where there is none",
+                copy.isEnabled(CommandContext.of(new UIElement())));
+    }
+
+    // -- Conflicts ------------------------------------------------------------------------------------
+
+    /**
+     * <b>A copy into a folder that already has the name never overwrites.</b>
+     *
+     * <p>VS Code's {@code findValidPasteFileTarget} applies incremental naming for exactly this. The
+     * check used to fire only for paste-in-place, so a copy into another folder holding a namesake went
+     * through as a plain write — the one <b>data-loss</b> bug among the five features.</p>
+     */
+    @Test
+    public void pastingOntoANamesakeCopiesBesideItRatherThanOverIt() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src/Main.java"));
+        settle();
+
+        registry().get(ExplorerCommands.COPY).execute(CommandContext.of(workbench.fileTree()));
+        // Pasted straight back into the same folder, which is the same question: the name is taken.
+        registry().get(ExplorerCommands.PASTE).execute(CommandContext.of(workbench.fileTree()));
+        settle();
+
+        List<String> after = names(CgPath.parse("mymod.proj:src"));
+        assertTrue("the original was overwritten", after.contains("Main.java"));
+        assertTrue("no second copy was made: " + after, after.size() > 1);
+    }
+
+    /** Whether the tree currently shows the placeholder row, which has no name yet. */
+    private boolean hasUnnamedRow() {
+        for (var row : workbench.fileTree().treeView().visibleRows()) {
+            if (workbench.fileTree().source().isPendingNew(row.item())) return true;
+        }
+        return false;
+    }
+
+    private List<String> names(CgPath directory) {
+        List<String> out = new ArrayList<>();
+        for (CgPath child : workbench.fileTree().source().listedChildren(directory)) {
+            out.add(child.name());
+        }
+        return out;
     }
 
 }

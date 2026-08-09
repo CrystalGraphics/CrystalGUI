@@ -1336,3 +1336,86 @@ menu bar does not.
 > **Styling a title's text**: the size must go on the `text` element, not on `.__menu-title__`.
 > `* { font-size: 10 }` in `default.css` gives every element a candidate, so font-size does not inherit
 > anywhere in this engine. See the invariant table in `AGENTS.md`.
+
+---
+
+## Cut, copy and paste — one action, many providers
+
+**Never add a fourth `cut` command.** `Edit ▸ Cut/Copy/Paste` are single rows that ask the *position* what
+they mean, so a widget joins in by answering one data key:
+
+```java
+private final ClipboardActions clipboardActions = new ClipboardActions() {
+    public boolean canCut()   { return hasSelection() && !isReadOnly(); }
+    public void    cut()      { … }
+    public boolean canCopy()  { return hasSelection(); }
+    public void    copy()     { … }
+    public boolean canPaste() { return … }        // whichever clipboard YOU mean
+    public void    paste()    { … }
+};
+
+@Override
+public Object getData(DataKey<?> key) {
+    if (key == UiDataKeys.CLIPBOARD) return clipboardActions;
+    return super.getData(key);
+}
+```
+
+IntelliJ's `CutProvider`/`CopyProvider`/`PasteProvider`, reached through the walk that already exists —
+innermost answer wins, so the widget you are in is the widget that decides.
+
+| Rule | Why |
+|---|---|
+| The specific commands stay | `editor.cut`, `explorer.cut`, `graph.cut` keep their own element-scoped bindings and their palette rows. What changes is that the **menu** stops naming one of them |
+| `canPaste()` is not "is the clipboard non-empty" | A file tree cannot paste text and an editor cannot paste files. Only the provider knows which clipboard it means |
+| No defaults on the interface | Six abstract methods. A provider silently inheriting "cannot paste" is indistinguishable from one that considered paste and refused |
+| Enablement is re-asked at activation | The menu may have been open while the selection changed — the same rule `MenuBuilder` follows for every row |
+
+## The Project explorer
+
+### Inline editing
+
+```java
+tree.beginRename(path, name -> files().move(path, path.parent().resolve(name), false));
+tree.beginNew(parentFolder, /* directory */ false, name -> files().create(…));
+```
+
+An input **in the row** — VS Code's `FilesRenderer.renderInputBox`. `InputDialog` survives only as the
+fallback for a host with no tree on screen (New File from the palette with the explorer closed).
+
+| Rule | Why |
+|---|---|
+| The editor is built in `createTemplate`, never in `bind` | The edit begins from a key press *on the row*; building the field then rebuilds the element that press is being dispatched through |
+| Blur **commits** | Cancelling on blur throws away a name you have finished typing — the more expensive of the two mistakes. Escape cancels |
+| An invalid name **cancels**, never commits | Committing a name the validator refused would overwrite; trapping the user in a row they cannot leave is the only other option |
+| The **stem** is selected, not the whole name | F2 everywhere. The extension is almost never what is being changed, and selecting it means the first keystroke destroys it |
+| `beginNew` expands the folder first | Otherwise the placeholder is a child of a folded folder and nothing appears — which reads as New File doing nothing |
+
+### Compact folders
+
+`WorkspaceTreeSource.setCompactFolders(boolean)`, **on by default** as in VS Code.
+
+- `rowLabel(path)` is the one question a renderer asks: a project's name, a plain name, or the whole chain
+  a compacted row stands for. The view cannot derive the last — by the time a row exists, the swallowed
+  directories are not in the tree.
+- `visibleRowFor(path)` maps any path to the row standing for it. **Anything mapping a path back to the
+  tree must use it** — reveal, auto-reveal, a problem row jumping to a file — or it expands a directory
+  that is no longer a row and silently does nothing.
+- A chain never crosses a **root**, and stops at the first directory whose listing has not arrived.
+
+### Find
+
+`WorkspaceTreeSource.FindMode.HIGHLIGHT` (default) keeps every row and marks matches;
+`FILTER` removes non-matching rows. `isMatch(path)` and `descendantMatches(directory)` are what a renderer
+reads. Both counts are over what has been **listed** — a lazily-loaded tree cannot answer for a folder
+nobody has opened without fetching the project.
+
+> Highlight is the default because a filter with nothing on screen saying it is on is a tree that has
+> mysteriously lost half its files. The find bar exists for the same reason and is the actual feature.
+
+### File operations
+
+`ExplorerCommands` resolves conflicts rather than writing through them: a **copy** onto a taken name gets
+`WorkspaceFileService.incrementalName`, and a **move** onto one is refused with the name in the message.
+Every path out of a paste iteration must call its `batch.track()` runnable, including the refusals — a
+`continue` that skips it leaves the undo group open forever.

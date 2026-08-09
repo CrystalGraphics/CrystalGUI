@@ -1,5 +1,8 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.command.CommandContext;
+import com.crystalgui.core.command.Command;
+import com.crystalgui.ui.ClipboardActions;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -15,7 +18,9 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.DragGhost;
+import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
 import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
@@ -37,6 +42,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.elements.list.SelectionMode;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIInputHandler;
 
@@ -196,6 +202,7 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         content.addChild(tree);
         dragGhost.parkIn(this);
         installTypeToFilter();
+        buildFindBar();
         installDropTarget();
     }
 
@@ -330,7 +337,11 @@ public class ProjectFileTree extends UIElement implements UndoScope {
                 source.ensureListed(directory);
                 return;                       // wait for it; the ticker calls back
             }
-            if (!tree.isExpanded(directory)) tree.setExpanded(directory, true);
+            // MAPPED THROUGH THE CHAIN. With compact folders on, an intermediate directory is not a row at
+            // all -- expanding `src/main` when the row is `src/main/java/com/crystalgui` sets a flag
+            // nothing reads, so the reveal walks the whole way down and then finds nothing to select.
+            CgPath row = source.visibleRowFor(directory);
+            if (!tree.isExpanded(row)) tree.setExpanded(row, true);
         }
         tree.refresh();
 
@@ -516,6 +527,7 @@ public class ProjectFileTree extends UIElement implements UndoScope {
     public ProjectFileTree setFilter(String query) {
         source.setFilter(query);
         tree.refresh();
+        applyFindBar();
         onFilterChanged.emit(source.filter());
         return this;
     }
@@ -647,7 +659,8 @@ public class ProjectFileTree extends UIElement implements UndoScope {
      * index is one insertion away from silently writing the badge into the label, and the indices would
      * live at the call site where nothing explains them.</p>
      */
-    private record RowParts(UIElement twisty, UIElement icon, UIText label, UIText badge) {
+    private record RowParts(UIElement twisty, UIElement icon, UIText label, UIText badge,
+                            TextField editor) {
     }
 
     private final java.util.Map<UIElement, RowParts> rowParts = new java.util.HashMap<>();
@@ -668,6 +681,292 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         element.swapPrefixedClass(prefix, next);
     }
 
+    // -- Find ---------------------------------------------------------------------------------------
+
+    /** The bar along the top of the panel while a search is live. */
+    public static final String FIND_BAR_CLASS = "__find-bar__";
+
+    /** The button that switches Filter and Highlight. */
+    public static final String FIND_MODE_CLASS = "__find-mode__";
+
+    /** The "3 of 12" readout. */
+    public static final String FIND_COUNT_CLASS = "__find-count__";
+
+    /** On a row whose own name matches, in Highlight mode. */
+    public static final String MATCH_CLASS = "__match__";
+
+    /** On a row that matches nothing and contains nothing that does. */
+    public static final String DIMMED_CLASS = "__dimmed__";
+
+    private final UIElement findBar = new UIElement();
+    private final UIText findQuery = new UIText("");
+    private final UIText findCount = new UIText("");
+    private final Button findMode = new Button("Highlight");
+
+    /**
+     * The bar that says a search is on.
+     *
+     * <h3>Why this is the feature and the modes are the detail</h3>
+     *
+     * <p>This panel's own javadoc named the defect before the bar existed: "a filter with nothing saying
+     * it is on is a tree that has mysteriously lost half its files, which is IntelliJ's one real weakness
+     * with speed search." Typing narrowed the tree and nothing on screen explained why. Two modes are
+     * worth having; <b>being able to see that one of them is running</b> is what was actually missing.</p>
+     */
+    private void buildFindBar() {
+        findBar.addClass(FIND_BAR_CLASS);
+        findQuery.setHitTest(false);
+        findCount.addClass(FIND_COUNT_CLASS);
+        findCount.setHitTest(false);
+        findMode.addClass(FIND_MODE_CLASS);
+        findMode.onPressed.connect(this::toggleFindMode);
+        findBar.addChild(findQuery);
+        findBar.addChild(findCount);
+        findBar.addChild(findMode);
+        // FIRST, not appended. The tree is already in `content` and grows, so adding the bar after it
+        // put the bar below the list and overlapping its last row -- VS Code's find widget is at the top
+        // of the view and there is nothing for it to cover there.
+        content.addChildAt(findBar, 0);
+        applyFindBar();
+    }
+
+    /** Filter <-> Highlight. Kept on the source, which is what both the rows and the model read. */
+    public void toggleFindMode() {
+        source.setFindMode(source.findMode() == WorkspaceTreeSource.FindMode.HIGHLIGHT
+                ? WorkspaceTreeSource.FindMode.FILTER
+                : WorkspaceTreeSource.FindMode.HIGHLIGHT);
+        tree.refresh();
+        applyFindBar();
+    }
+
+    /** Shows or hides the bar, and writes what it says. */
+    private void applyFindBar() {
+        boolean searching = !filter().isEmpty();
+        StyleGroup.importantPipeline(findBar.getStyle().getLayoutGroup(),
+                l -> l.display(searching ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        if (!searching) return;
+        findQuery.setText(filter());
+        findMode.setText(source.findMode() == WorkspaceTreeSource.FindMode.FILTER
+                ? "Filter" : "Highlight");
+        int matches = 0;
+        for (TreeRow<CgPath> row : tree.visibleRows()) {
+            if (source.isMatch(row.item())) matches++;
+        }
+        // WHAT IS ON SCREEN, not what the workspace holds. The tree is listed a directory at a time, so a
+        // total would be a number about the parts that happen to have been opened -- which reads as a
+        // search result and is not one. See WorkspaceTreeSource.descendantMatches.
+        findCount.setText(matches == 0 ? "no matches here" : matches + " shown");
+    }
+
+    // -- Inline editing ---------------------------------------------------------------------------
+
+    /** On the row's inline input, hidden unless that row is being edited. */
+    public static final String EDITOR_CLASS = "__row-editor__";
+
+    /** On the row while it is being edited, so a theme can quiet the rest of it. */
+    public static final String EDITING_CLASS = "__editing__";
+
+    /**
+     * An edit in progress -- VS Code's {@code editableData}.
+     *
+     * @param path     the row being edited; for a new entry, the placeholder the source inserted
+     * @param onCommit handed the typed name, only when it is valid and changed
+     */
+    private record Editing(CgPath path, java.util.function.Consumer<String> onCommit) {
+    }
+
+    @Nullable
+    private Editing editing;
+
+    /** True while a commit or cancel is running, so a blur raised by either cannot re-enter. */
+    private boolean finishingEdit;
+
+    /**
+     * Renames {@code path} in place -- F2.
+     *
+     * <p>An input <b>in the row</b>, not a dialog over it. A dialog is what this used to do and what file
+     * managers stopped doing decades ago: it hides the folder you are naming inside, it puts the answer
+     * somewhere other than where the question is, and it cannot show the icon change as you type.</p>
+     */
+    public void beginRename(CgPath path, java.util.function.Consumer<String> onCommit) {
+        if (path == null || path.isProjectRoot()) return;
+        startEditing(new Editing(path, onCommit));
+    }
+
+    /**
+     * Adds a placeholder row under {@code parent} and edits it -- VS Code's {@code NewExplorerItem}.
+     *
+     * <p>The row exists before the file does, which is the whole point: you see where it will land, in
+     * the folder you chose, before committing to a name.</p>
+     */
+    public void beginNew(CgPath parent, boolean directory,
+                         java.util.function.Consumer<String> onCommit) {
+        if (parent == null) return;
+        // EXPANDED FIRST, or the placeholder is a child of a folded folder and nothing appears at all --
+        // which reads as New File doing nothing.
+        if (!tree.isExpanded(parent)) tree.setExpanded(parent, true);
+        CgPath placeholder = source.beginPendingNew(parent, directory);
+        startEditing(new Editing(placeholder, onCommit));
+    }
+
+    private void startEditing(Editing next) {
+        cancelEdit();
+        editing = next;
+        // Deferred rather than immediate: this is routinely called from a menu row's activation or a key
+        // press, and refreshing now would rebuild the element that dispatch is still walking.
+        pendingRefresh = true;
+    }
+
+    /** Whether a row is being edited. */
+    public boolean isEditing() {
+        return editing != null;
+    }
+
+    /** The row being edited, or null. */
+    @Nullable
+    public CgPath editingPath() {
+        return editing == null ? null : editing.path();
+    }
+
+    /** Drops the edit, and any placeholder with it. */
+    public void cancelEdit() {
+        if (editing == null || finishingEdit) return;
+        finishingEdit = true;
+        editing = null;
+        source.endPendingNew();
+        pendingRefresh = true;
+        finishingEdit = false;
+        returnFocusToTree();
+    }
+
+    /**
+     * Accepts what was typed, if it is usable.
+     *
+     * <p><b>An invalid name cancels rather than commits.</b> That is the same answer a blur gives, and the
+     * only one that cannot destroy anything: committing a name the validator has already refused is
+     * worse, and the alternative to both is trapping the user in a row they cannot leave.</p>
+     */
+    private void commitEdit(String typed) {
+        Editing current = editing;
+        if (current == null || finishingEdit) return;
+        String name = typed == null ? "" : typed.trim();
+        boolean usable = isValidName(current.path(), name);
+        finishingEdit = true;
+        editing = null;
+        source.endPendingNew();
+        pendingRefresh = true;
+        finishingEdit = false;
+        returnFocusToTree();
+        // The unchanged case is not a failure and must not be reported as one -- pressing F2 then Enter is
+        // how people check what a file is called.
+        if (usable && !name.equals(current.path().name())) current.onCommit().accept(name);
+    }
+
+    /**
+     * Whether {@code name} may be committed for {@code path}.
+     *
+     * <p>Three refusals, each a real one rather than a guess: empty, a path separator (which would
+     * silently create the entry in another directory), and a sibling that already exists. The last is
+     * checked against what has been <b>listed</b>, so it catches the case that matters -- a name you can
+     * see on screen.</p>
+     */
+    boolean isValidName(CgPath path, String name) {
+        if (name.isEmpty() || ".".equals(name) || "..".equals(name)) return false;
+        if (name.indexOf('/') >= 0 || name.indexOf('\\') >= 0) return false;
+        CgPath parent = path.parent();
+        if (parent == null) return true;
+        for (CgPath sibling : source.listedChildren(parent)) {
+            if (!sibling.equals(path) && sibling.name().equalsIgnoreCase(name)) return false;
+        }
+        return true;
+    }
+
+    /** Focus goes back to the tree, or the next key press lands nowhere. */
+    private void returnFocusToTree() {
+        UIWindow window = getAttachedWindow();
+        if (window != null && tree.getAttachedWindow() != null) {
+            window.getInputHandler().requestPointerFocus(tree);
+        }
+    }
+
+    /**
+     * Wires one row's input. Once, in {@code createTemplate} -- a listener may only be attached once, and
+     * a recycled row keeps the one it was built with.
+     */
+    private void installEditor(UIElement row, TextField editor) {
+        editor.onSubmit.connect(this::commitEdit);
+        editor.onBlur.attachListener((element, event) -> {
+            // BLUR COMMITS, as VS Code's does. Cancelling on blur means clicking away from a name you have
+            // finished typing throws it away, which is the more expensive of the two mistakes.
+            CgPath item = rowItems.get(row);
+            if (editing != null && item != null && item.equals(editing.path())) {
+                commitEdit(editor.getText());
+            }
+        }, false, true);
+        editor.onKeyDown.attachListener((element, event) -> {
+            if (event.getKeyCode() == CgKeyCodes.KEY_ESCAPE) {
+                cancelEdit();
+                event.stopPropagation();
+            }
+        }, false, true);
+    }
+
+    /**
+     * Puts {@code row} into or out of edit mode.
+     *
+     * <p>Driven from {@code bind}, because a recycled row may arrive still showing the previous
+     * occupant's editor -- the same reason every other data-driven class here is swapped rather than
+     * added.</p>
+     */
+    private void applyEditing(UIElement row, RowParts parts, CgPath item) {
+        boolean active = editing != null && editing.path().equals(item);
+        if (active) row.addClass(EDITING_CLASS);
+        else row.removeClass(EDITING_CLASS);
+        StyleGroup.importantPipeline(parts.editor().getStyle().getLayoutGroup(),
+                l -> l.display(active ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        StyleGroup.importantPipeline(parts.label().getStyle().getLayoutGroup(),
+                l -> l.display(active ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
+        if (!active) return;
+
+        String current = source.isPendingNew(item) ? "" : item.name();
+        parts.editor().setText(current);
+        UIWindow window = getAttachedWindow();
+        if (window != null) window.getInputHandler().requestFocus(parts.editor());
+        // THE STEM IS SELECTED, NOT THE WHOLE NAME, which is what F2 does everywhere: the extension is
+        // almost never what you are changing, and selecting it means the first keystroke destroys it.
+        int dot = current.lastIndexOf('.');
+        if (dot > 0) parts.editor().setSelection(0, dot);
+        else parts.editor().selectAll();
+    }
+
+    /**
+     * Marks a row for the live search — Highlight mode only.
+     *
+     * <p>Three states rather than two, and the third is the one that makes highlight usable: a row that
+     * matches is <b>marked</b>, a row that contains a match is left alone so the path to it stays
+     * readable, and a row that is neither is <b>dimmed</b>. Marking alone leaves the eye hunting through
+     * full-strength noise; removing the rest is the other mode.</p>
+     *
+     * <p>Classes are SWAPPED, never merely added: a template is a different row every time the view
+     * recycles it, and a stale mark would leave the previous file's highlight on this one.</p>
+     */
+    private void applyFindMarks(UIElement row, RowParts parts, CgPath item, TreeRow<CgPath> treeRow) {
+        boolean searching = !filter().isEmpty()
+                && source.findMode() == WorkspaceTreeSource.FindMode.HIGHLIGHT;
+        boolean match = searching && source.isMatch(item);
+        int beneath = searching && treeRow.expandable() ? source.descendantMatches(item) : 0;
+
+        if (match) row.addClass(MATCH_CLASS);
+        else row.removeClass(MATCH_CLASS);
+        if (searching && !match && beneath == 0) row.addClass(DIMMED_CLASS);
+        else row.removeClass(DIMMED_CLASS);
+
+        // THE FOLDER COUNT GOES IN THE BADGE, which already exists and already sits beside the name. A
+        // second element would be a slot that is empty in every other state the row can be in.
+        if (beneath > 0) parts.badge().setText(String.valueOf(beneath));
+        else if (searching) parts.badge().setText("");
+    }
+
     private final class RowRenderer implements TreeRenderer<CgPath> {
 
         @Override
@@ -686,6 +985,15 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             UIText label = new UIText("");
             UIText badge = new UIText("");
             badge.addClass(BADGE_CLASS);
+            // THE INLINE EDITOR, built here and hidden -- VS Code's FilesRenderer.renderInputBox, which
+            // puts a real input INTO the row rather than opening a dialog over it.
+            //
+            // In createTemplate for the reason the four slots above are: an element created during bind
+            // lands after that frame's layout pass. It is also the only way this can work at all, since
+            // the edit begins from a KEY PRESS on the row -- building the field then would rebuild the
+            // element the press is being dispatched through.
+            TextField editor = new TextField();
+            editor.addClass(EDITOR_CLASS);
 
             // Every part refuses the click so the press lands on the row. Click targeting takes the exact
             // element hit and never walks up to a handler-bearing ancestor, which is why every composite
@@ -714,7 +1022,9 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             row.addChild(icon);
             row.addChild(label);
             row.addChild(badge);
-            rowParts.put(row, new RowParts(twisty, icon, label, badge));
+            row.addChild(editor);
+            rowParts.put(row, new RowParts(twisty, icon, label, badge, editor));
+            installEditor(row, editor);
             // A FOLDER TOGGLES ON ONE CLICK; A FILE OPENS ON TWO. Not one rule for both, and the
             // difference is not a compromise -- the two rows mean different things.
             //
@@ -770,7 +1080,12 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             RowParts parts = rowParts.get(template);
             if (parts == null) return;
 
-            String name = item.isProjectRoot() ? source.displayNameOf(item) : item.name();
+            // ONE QUESTION, asked of the source: a project's name, a plain name, or the whole chain a
+            // compacted row stands for. The view cannot work the last one out -- by the time a row exists
+            // the swallowed directories are not in the tree at all.
+            applyEditing(template, parts, item);
+            applyFindMarks(template, parts, item, row);
+            String name = source.rowLabel(item);
             // No manual indent and no "+ "/"- " prefix any more: TreeView already writes padding-left from
             // the depth and puts __expanded__/__collapsed__/__leaf__ on the row, so doing either here
             // indented every row TWICE and spelled the twisty in text where CSS can draw it.
@@ -784,7 +1099,9 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             // dead strip down the left of the panel.
             parts.twisty().setHitTest(directory);
             FileIconTheme theme = FileIconTheme.getDefault();
-            CgUiDrawable glyph = theme.drawableFor(name, directory, row.expanded());
+            // THE ITEM'S OWN NAME, never the row label: a compacted row reads "main/java/com" and asking
+            // the theme about that string would look up an extension of "/com".
+            CgUiDrawable glyph = theme.drawableFor(item.name(), directory, row.expanded());
             // EMPTY, never null: null is how the cascade spells "nobody set this", so writing it would
             // leave the previous file's icon in place on a recycled row rather than clearing it.
             //
@@ -816,8 +1133,60 @@ public class ProjectFileTree extends UIElement implements UndoScope {
      * stack — two mechanisms disagreeing about the same question, which is the thing {@code DataContext}
      * exists to stop.</p>
      */
+    /**
+     * What Cut/Copy/Paste mean in a file tree — <b>files</b>, not text.
+     *
+     * <p>The whole reason {@code ClipboardActions} exists: this and the editor's are both correct and
+     * neither can be the other, so the menu asks the position rather than naming one of them.</p>
+     *
+     * <p><b>Reported rather than performed.</b> The tree does not own the file service — {@link Workbench}
+     * does — so these run the registered explorer commands, which is also what keeps one undo step per
+     * gesture and one place where a conflict is resolved.</p>
+     */
+    private final ClipboardActions clipboardActions = new ClipboardActions() {
+        @Override
+        public boolean canCut() {
+            return isEnabled(ExplorerCommands.CUT);
+        }
+
+        @Override
+        public void cut() {
+            run(ExplorerCommands.CUT);
+        }
+
+        @Override
+        public boolean canCopy() {
+            return isEnabled(ExplorerCommands.COPY);
+        }
+
+        @Override
+        public void copy() {
+            run(ExplorerCommands.COPY);
+        }
+
+        @Override
+        public boolean canPaste() {
+            return isEnabled(ExplorerCommands.PASTE);
+        }
+
+        @Override
+        public void paste() {
+            run(ExplorerCommands.PASTE);
+        }
+
+        private boolean isEnabled(String id) {
+            Command command = CommandRegistry.global().get(id);
+            return command != null && command.isEnabled(CommandContext.of(ProjectFileTree.this));
+        }
+
+        private void run(String id) {
+            CommandRegistry.global().run(id, CommandContext.of(ProjectFileTree.this));
+        }
+    };
+
     @Override
     public Object getData(DataKey<?> key) {
+        if (key == UiDataKeys.CLIPBOARD) return clipboardActions;
         Object undo = undoScopeData(key);
         return undo != null ? undo : super.getData(key);
     }

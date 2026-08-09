@@ -125,6 +125,9 @@ public final class ExplorerCommands {
 
         registry.register(Command.of(RENAME, "Rename…")
                 .menu(MenuId.EXPLORER_CONTEXT, "4_modify", 10)
+                // F2 EVERYWHERE -- Windows Explorer, VS Code, IntelliJ. Declared on the command rather
+                // than bound onto the tree, so the palette advertises it and a user can remap it.
+                .binding("F2")
                 .run(context -> promptRename(workbenchFor(context), context))
                 // The project root is not a file and has no parent to rename within.
                 .enabledWhen(context -> workbenchFor(context) != null && isRenameable(target(context))));
@@ -298,22 +301,44 @@ public final class ExplorerCommands {
         // WorkspaceFileService.batch for why the group cannot be closed at the end of this loop.
         WorkspaceFileService.Batch batch = workbench.files().batch(moving ? "move files" : "paste files");
         for (CgPath source : CLIPBOARD.consumeIfCut()) {
+            // CLAIMED FIRST, so every path out of this iteration -- including the two refusals below --
+            // settles its share of the batch. A `continue` that skipped it would leave the group open
+            // forever and the whole paste would never become one undo step.
+            Runnable done = batch.track();
             // A folder pasted into itself, or into its own descendant, would move a directory under
             // itself -- which the filesystem refuses with a message about paths rather than about the
             // gesture. Refusing here says the useful thing.
             if (source.equals(destination) || source.contains(destination)) {
                 Notifications.show(Notification.error("Cannot paste").withDetail(source.name() + " into itself"));
+                done.run();
                 continue;
             }
             CgPath into = destination.resolve(source.name());
-            if (source.equals(into)) {
-                // Pasting a copy back where it came from: give it VS Code's incremental name rather than
-                // refusing, which is what makes Copy then Paste a duplicate-in-place gesture.
+            List<String> taken = namesIn(workbench, destination);
+            if (source.equals(into) || (!moving && taken.contains(into.name()))) {
+                // A COPY NEVER OVERWRITES. VS Code's findValidPasteFileTarget does the same, and the two
+                // cases are one rule rather than two: pasting back where it came from and pasting onto a
+                // namesake in another folder are both "this name is taken", and both mean the user wants
+                // a second copy -- they asked for a copy.
+                //
+                // This used to fire ONLY for paste-in-place, so a copy into a folder that already had the
+                // name went through as a plain write. That is the data-loss half of the same line.
                 into = destination.resolve(WorkspaceFileService.incrementalName(
-                        source.name(), namesIn(workbench, destination)));
+                        source.name(), taken));
+            } else if (moving && taken.contains(into.name())) {
+                // A MOVE ONTO A NAMESAKE IS DESTRUCTIVE AND IS REFUSED, not silently renamed.
+                //
+                // Renaming would be wrong in a way a copy's rename is not: the user asked to move this
+                // file HERE, and quietly landing it beside the one already there leaves two files where
+                // they asked for one. VS Code prompts to replace; there is no undo for a clobbered file
+                // here and no OS trash under it, so refusing is the honest version of that prompt until
+                // one exists -- and it says which name, which is what makes it actionable.
+                Notifications.show(Notification.error("Cannot move " + source.name())
+                        .withDetail(destination.name() + " already has a " + into.name()));
+                done.run();
+                continue;
             }
             CgPath finalTarget = into;
-            Runnable done = batch.track();
             if (moving) {
                 // ONE completion hook, not two copies of it -- the batch has to be told either way.
                 workbench.files().move(source, finalTarget, false, done);
@@ -369,12 +394,34 @@ public final class ExplorerCommands {
 
     // ── Actions ─────────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * Creates an entry, named in the tree rather than in a dialog.
+     *
+     * <h3>Inline, and the dialog is the fallback rather than the other way round</h3>
+     *
+     * <p>VS Code and IntelliJ both put a real input <em>in the row</em>: you see the folder it will land
+     * in, its siblings, and the icon its extension gives it, all while typing. A modal hides every one of
+     * those behind itself, and it hides them at the exact moment they are the question being asked.</p>
+     *
+     * <p>The dialog remains for the case with no tree to put a row in -- New File invoked from the
+     * palette while the explorer is closed. That is a real path, not a hedge: {@code destinationFor}
+     * answers with the project root there, and there is no row for it.</p>
+     */
     private static void promptNew(Workbench workbench, CommandContext context, boolean folder) {
         CgPath parent = destinationFor(workbench, context);
         if (parent == null) return;
 
-        InputDialog.ask(context.source(), folder ? "New Folder" : "New File", "Name", "", name -> {
-            CgPath path = parent.resolve(name);
+        ProjectFileTree tree = workbench.fileTree();
+        if (tree != null && tree.getAttachedWindow() != null) {
+            tree.beginNew(parent, folder, name -> createEntry(workbench, parent.resolve(name), folder));
+            return;
+        }
+        InputDialog.ask(context.source(), folder ? "New Folder" : "New File", "Name", "", name ->
+                createEntry(workbench, parent.resolve(name), folder));
+    }
+
+    private static void createEntry(Workbench workbench, CgPath path, boolean folder) {
+        {
             if (folder) {
                 workbench.files().createFolder(path);
             } else {
@@ -388,14 +435,27 @@ public final class ExplorerCommands {
                 // fight the selection the user is about to make inside it.
                 workbench.files().create(path, "", () -> workbench.openFile(path), null);
             }
-        });
+        }
     }
 
+    /**
+     * Renames in place. @see #promptNew for why the dialog is the fallback.
+     *
+     * <p>The row has to be <b>revealed</b> first: Rename reached from the palette or the menu bar acts on
+     * the selected path, which may be scrolled out of view or inside a folded folder -- and an editor
+     * opened on a row nobody can see is an edit with no visible subject.</p>
+     */
     private static void promptRename(Workbench workbench, CommandContext context) {
         CgPath path = target(context);
         if (!isRenameable(path)) return;
         CgPath parent = path.parent();
 
+        ProjectFileTree tree = workbench.fileTree();
+        if (tree != null && tree.getAttachedWindow() != null) {
+            tree.reveal(path);
+            tree.beginRename(path, name -> workbench.files().move(path, parent.resolve(name), false));
+            return;
+        }
         InputDialog.ask(context.source(), "Rename", "New name", path.name(), name -> {
             if (name.equals(path.name())) return;
             workbench.files().move(path, parent.resolve(name), false);

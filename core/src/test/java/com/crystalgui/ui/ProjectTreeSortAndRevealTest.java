@@ -195,6 +195,10 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
      */
     @Test
     public void typeToFilterNarrowsTheTree() {
+        // FILTER IS NO LONGER THE DEFAULT -- Highlight is, because a filter with nothing on screen saying
+        // it is on is a tree that has mysteriously lost half its files. The mechanism is unchanged; which
+        // one runs unasked is what moved. See WorkspaceTreeSource.FindMode.
+        tree.source().setFindMode(WorkspaceTreeSource.FindMode.FILTER);
         assertEquals(List.of("src", "Apple.md", "zebra.txt"), visibleNames());
 
         tree.setFilter("zeb");
@@ -207,6 +211,51 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
     }
 
     /**
+     * <b>Highlight keeps every row and marks the matches.</b>
+     *
+     * <p>The half filtering cannot do, and the reason it is the default: the tree is still the tree, so
+     * nothing can go missing without the user having asked for it. IntelliJ's speed search behaves this
+     * way and VS Code ships both modes.</p>
+     */
+    @Test
+    public void highlightMarksWithoutRemovingAnything() {
+        tree.source().setFindMode(WorkspaceTreeSource.FindMode.HIGHLIGHT);
+        tree.setFilter("zeb");
+        settle();
+
+        assertEquals("highlight must not remove a single row",
+                List.of("src", "Apple.md", "zebra.txt"), visibleNames());
+        assertTrue("the match is not marked",
+                tree.source().isMatch(CgPath.parse("mymod.proj:zebra.txt")));
+        assertFalse("a non-match must not be marked",
+                tree.source().isMatch(CgPath.parse("mymod.proj:Apple.md")));
+    }
+
+    /**
+     * <b>A folder counts what matches beneath it.</b>
+     *
+     * <p>VS Code's {@code ExplorerFindHighlightTree}. Counted over what has been <em>listed</em>, which is
+     * the same honest limit filtering already has — a lazily-loaded tree cannot answer for a folder
+     * nobody has opened without fetching the project.</p>
+     */
+    @Test
+    public void aFolderCountsTheMatchesBeneathIt() {
+        tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), true);
+        settle();
+        tree.source().setFindMode(WorkspaceTreeSource.FindMode.HIGHLIGHT);
+        // "Main", which is a DIRECT child of src. `target.java` lives in src/deep, which nobody has
+        // opened -- and counting it would mean claiming an answer about a directory that has never been
+        // listed, which is exactly the limit this method documents.
+        tree.setFilter("Main");
+        settle();
+
+        assertEquals("src should count the one listed descendant that matches", 1,
+                tree.source().descendantMatches(CgPath.parse("mymod.proj:src")));
+        assertEquals("a file has nothing beneath it to count", 0,
+                tree.source().descendantMatches(CgPath.parse("mymod.proj:zebra.txt")));
+    }
+
+    /**
      * <b>A folder survives the filter when something listed beneath it matches.</b>
      *
      * <p>Otherwise filtering would hide the only route to the match. The limit is honest and documented:
@@ -216,6 +265,7 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
      */
     @Test
     public void aFolderSurvivesWhenSomethingListedInsideItMatches() {
+        tree.source().setFindMode(WorkspaceTreeSource.FindMode.FILTER);
         tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), true);
         settle();
         assertTrue("fixture wrong -- src was never listed", visibleNames().contains("Main.java"));
@@ -961,4 +1011,5 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
         assertFalse("Enter armed a drag that no mouse-up will ever end",
                 window.getInputHandler().getDragController().isDragging());
     }
+
 }

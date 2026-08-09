@@ -5695,3 +5695,89 @@ problemspanel .__problem__.__problem-file__ .__message__ {
     flex-shrink: 0;
     background-color: #BBBBBB;
 }
+
+/* ── The explorer's inline editor ───────────────────────────────────────────────────────────────
+ *
+ * A real input IN the row -- VS Code's FilesRenderer.renderInputBox. Built in createTemplate and hidden,
+ * because an element created during bind lands after that frame's layout pass; ProjectFileTree writes
+ * `display` at IMPORTANT to show it, so nothing here needs to. */
+projectfiletree .__row-editor__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    height: 16px;
+    padding-left: 2px;
+    padding-right: 2px;
+    margin-left: 0px;
+    font-size: 10;
+    background-color: #1E1F22;
+    border-width: 1px;
+    border-color: #4A88C7;
+    border-radius: 2px;
+}
+
+/* The row being edited stops advertising anything else: a badge or a decoration colour beside a live
+ * input reads as validation feedback about the name, which it is not. */
+projectfiletree .__project-row__.__editing__ .__badge__ {
+    display: none;
+}
+
+/* ── The explorer's find bar ────────────────────────────────────────────────────────────────────
+ *
+ * Shown only while a search is live -- ProjectFileTree writes `display` at IMPORTANT. Its whole job is
+ * to make the search VISIBLE: the panel's own note recorded the defect it fixes, which is that typing
+ * narrowed the tree with nothing on screen to say why. */
+projectfiletree .__find-bar__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    gap-all: 6px;
+    height: 20px;
+    padding-left: 6px;
+    padding-right: 4px;
+    background-color: #2F3033;
+    border-width-bottom: 1px;
+    border-bottom-color: #3C3F41;
+}
+
+projectfiletree .__find-bar__ text {
+    font-size: 10;
+    color: #D0D2D6;
+    white-space: nowrap;
+}
+
+projectfiletree .__find-count__ {
+    color: #8A8A8A;
+    margin-left: auto;
+}
+
+projectfiletree .__find-mode__ {
+    height: 16px;
+    padding-left: 6px;
+    padding-right: 6px;
+    flex-shrink: 0;
+    background: #3C3F41;
+    border-radius: 2px;
+}
+
+projectfiletree .__find-mode__ text {
+    font-size: 10;
+    color: #BBBBBB;
+}
+
+/* A MATCH IS LIT, NOT BOXED. Highlight mode keeps every row, so the marking has to survive being one of
+ * fifty on screen -- a background band reads at a glance where a colour change alone does not. */
+projectfiletree .__project-row__.__match__ {
+    background-color: #4A6E9A66;
+}
+
+projectfiletree .__project-row__.__match__ .__label__,
+projectfiletree .__project-row__.__match__ text {
+    color: #FFFFFF;
+}
+
+/* The third state, and the one that makes highlight usable: everything that is neither a match nor on
+ * the way to one recedes. Removing them instead is the other mode. */
+projectfiletree .__project-row__.__dimmed__ text {
+    color: #6A6A6A;
+}
