@@ -4,7 +4,9 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.tree.TreeRow;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -33,8 +35,19 @@ final class ExplorerFind {
         this.tree = tree;
     }
 
+    /** True while {@link #apply} is writing the field, so its own listener is ignored. */
+    private boolean writingBack;
+
     private final UIElement findBar = new UIElement();
-    private final UIText findQuery = new UIText("");
+    /**
+     * A real input, not a readout.
+     *
+     * <p>The first version drew the query with a {@code UIText}, which looked identical and was not the
+     * same thing at all: it could not be clicked into, could not take a caret, and — the tell — Ctrl+A
+     * went past it to the tree and selected every file. A search box the user cannot put the cursor in is
+     * a label that happens to contain their typing.</p>
+     */
+    private final TextField findQuery = new TextField();
     private final UIText findCount = new UIText("");
     private final Button findMode = new Button("Highlight");
 
@@ -50,7 +63,18 @@ final class ExplorerFind {
      */
     void build() {
         findBar.addClass(ProjectFileTree.FIND_BAR_CLASS);
-        findQuery.setHitTest(false);
+        findQuery.addClass(ProjectFileTree.FIND_INPUT_CLASS);
+        findQuery.setPlaceholder("Search files");
+        // IMMEDIATE, because a search that waits for Enter is a filter you cannot feel. ON_COMMIT is the
+        // right default for a form field and the wrong one for this.
+        findQuery.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
+        findQuery.attachListener(typed -> {
+            // GUARDED, because apply() writes the field back: without this, setFilter -> apply ->
+            // setText -> this listener -> setFilter is a loop that only stops because Property.set drops
+            // a re-entrant set, which is a mechanism to depend on rather than a design.
+            if (writingBack) return;
+            tree.setFilter(typed);
+        });
         findCount.addClass(ProjectFileTree.FIND_COUNT_CLASS);
         findCount.setHitTest(false);
         findMode.addClass(ProjectFileTree.FIND_MODE_CLASS);
@@ -80,7 +104,11 @@ final class ExplorerFind {
         StyleGroup.importantPipeline(findBar.getStyle().getLayoutGroup(),
                 l -> l.display(searching ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
         if (!searching) return;
-        findQuery.setText(tree.filter());
+        writingBack = true;
+        // Only when it differs: assigning the same string still moves the caret to the end, so typing in
+        // the middle of a query would jump to the end on every keystroke.
+        if (!findQuery.getText().equals(tree.filter())) findQuery.setText(tree.filter());
+        writingBack = false;
         findMode.setText(tree.source().findMode() == WorkspaceTreeSource.FindMode.FILTER
                 ? "Filter" : "Highlight");
         int matches = 0;
@@ -153,9 +181,21 @@ final class ExplorerFind {
             // to keep moving the selection.
             if (typed >= ' ' && typed != 127) {
                 tree.setFilter(tree.filter() + typed);
+                // FOCUS FOLLOWS THE FIRST KEYSTROKE, into the field the query now lives in. Leaving focus
+                // on the tree would mean the second character went through this handler too while a real
+                // input sat beside it holding the first -- two places to type one query.
+                focusInput();
                 event.stopPropagation();
             }
         }, false, true);
+    }
+
+    /** Puts the caret in the search box, at the end of what is already there. */
+    void focusInput() {
+        UIWindow window = findQuery.getAttachedWindow();
+        if (window == null) return;
+        window.getInputHandler().requestPointerFocus(findQuery);
+        findQuery.setSelection(findQuery.getText().length(), findQuery.getText().length());
     }
 
 }

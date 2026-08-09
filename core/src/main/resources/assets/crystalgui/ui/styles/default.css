@@ -5781,3 +5781,24 @@ projectfiletree .__project-row__.__match__ text {
 projectfiletree .__project-row__.__dimmed__ text {
     color: #6A6A6A;
 }
+
+/* The search box. A real TextField, so it needs the geometry `textfield` gets everywhere else — the
+ * first version drew the query with a UIText, which looked identical and could not be clicked into. */
+projectfiletree .__find-input__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    height: 16px;
+    padding-left: 4px;
+    padding-right: 4px;
+    font-size: 10;
+    color: #D0D2D6;
+    background-color: #1E1F22;
+    border-width: 1px;
+    border-color: #4A4D50;
+    border-radius: 2px;
+}
+
+projectfiletree .__find-input__:focus {
+    border-color: #4A88C7;
+}

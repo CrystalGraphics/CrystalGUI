@@ -530,6 +530,9 @@ public class ProjectFileTree extends UIElement implements UndoScope {
     /** The bar along the top of the panel while a search is live. */
     public static final String FIND_BAR_CLASS = "__find-bar__";
 
+    /** The search box itself. A real input — see {@link ExplorerFind}. */
+    public static final String FIND_INPUT_CLASS = "__find-input__";
+
     /** The button that switches Filter and Highlight. */
     public static final String FIND_MODE_CLASS = "__find-mode__";
 
@@ -604,6 +607,7 @@ public class ProjectFileTree extends UIElement implements UndoScope {
     void requestRefresh() {
         pendingRefresh = true;
     }
+
 
     /** Every realised row and the item it is showing. Written by {@link FilesRenderer}, read by the
      * parts that have to answer "what is this row about" — the drag, the context menu, the editor. */
