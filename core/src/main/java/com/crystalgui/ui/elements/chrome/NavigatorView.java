@@ -276,8 +276,9 @@ public class NavigatorView<T> extends UIElement {
         // means for a settings tree involves labels and descriptions this widget has never heard of.
         search = TreeSearch.installOn(tree, sidebar, 0, new TreeSearch.Model<T>() {
             @Override
-            public void setQuery(String text, boolean filtering) {
-                query = text == null ? "" : text.trim();
+            public void setQuery(SearchQuery next, boolean filtering) {
+                parsedQuery = next == null || next.isEmpty() ? null : next;
+                query = parsedQuery == null ? "" : parsedQuery.text();
                 // A FILTER CHANGES WHICH ROWS EXIST, which is the same thing a fold does and the same
                 // reason the minimum has to be allowed to fall. Without this the sidebar ratcheted open on
                 // any query that revealed a long name and never gave the width back when the query was
@@ -298,7 +299,8 @@ public class NavigatorView<T> extends UIElement {
                 // matched a description instead, and then there is nothing here to mark -- correctly: a
                 // band over an unrelated word would be a worse answer than no band at all.
                 if (query.isEmpty()) return List.of();
-                SearchMatch match = SearchMatcher.match(SearchQuery.of(query), titleOf.apply(item), 0);
+                SearchMatch match = parsedQuery == null ? null
+                        : SearchMatcher.match(parsedQuery, titleOf.apply(item), 0);
                 return match == null ? List.of() : match.ranges();
             }
 
@@ -382,6 +384,10 @@ public class NavigatorView<T> extends UIElement {
     private Predicate<T> matcher = item -> true;
 
     private String query = "";
+
+    /** The query with its options, so {@code matches} honours Match Case / Words / Regex. */
+    @Nullable
+    private SearchQuery parsedQuery;
 
     /** Shown on a node with no page of its own. @see PageStack#setPlaceholder */
     public NavigatorView<T> setPlaceholder(@Nullable UIElement placeholder) {
@@ -599,5 +605,16 @@ public class NavigatorView<T> extends UIElement {
 
     public String query() {
         return query;
+    }
+
+    /**
+     * The query <b>with its options</b> — null when nothing is being searched for.
+     *
+     * <p>What a matcher should be given. {@link #query()} is the bare text, and anything rebuilding a
+     * {@code SearchQuery} from it drops Match Case, Words and Regex on the floor.</p>
+     */
+    @Nullable
+    public SearchQuery parsedQuery() {
+        return parsedQuery;
     }
 }

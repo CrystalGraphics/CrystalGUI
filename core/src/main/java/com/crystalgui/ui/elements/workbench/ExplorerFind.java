@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.ui.UIElement;
@@ -62,7 +63,7 @@ final class ExplorerFind implements TreeSearch.Model<CgPath> {
     // ── TreeSearch.Model ────────────────────────────────────────────────────────────────────────
 
     @Override
-    public void setQuery(String query, boolean filtering) {
+    public void setQuery(SearchQuery query, boolean filtering) {
         tree.source().setFilter(query);
         tree.source().setFindMode(filtering
                 ? WorkspaceTreeSource.FindMode.FILTER

@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.ui.elements.tree.TreeSearch;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgraphics.platform.service.CgInputService;
@@ -724,6 +725,48 @@ public class ProblemsPanelTest extends UiTestBase {
         settle();
 
         assertTrue("the name check must not keep everything", panel.visibleFiles().isEmpty());
+    }
+
+
+    // -- The toggles reach the matching ------------------------------------------------------------
+
+    /**
+     * <b>Match Case and Words reach the panel's own filtering.</b>
+     *
+     * <p>They did not. The bar held the options, and {@code Model.setQuery} took a {@code String} — so
+     * every model rebuilt its own {@code SearchQuery} from the text and dropped them. {@code GRAPH} with
+     * both toggles lit still matched {@code new.shadergraph}, which is the shape the interface change
+     * (a {@code SearchQuery} in, options and all) exists to make impossible.</p>
+     */
+    @Test
+    public void matchCaseAndWordsReachTheFilter() {
+        give(shader, error(1, "nothing relevant"));
+        panel.bindTo(markers);
+        settle();
+        TreeSearch<ProblemNode> search = panel.search();
+        assertNotNull(search);
+        search.setMode(TreeSearch.Mode.FILTER);
+
+        // "water" is in shaders/water.glsl, so the file name carries the match.
+        search.setQuery("water");
+        settle();
+        assertEquals("the plain query should find it", List.of(shader), panel.visibleFiles());
+
+        search.setSearchOptions(SearchQuery.Options.DEFAULT.withMatchCase(true));
+        search.setQuery("WATER");
+        settle();
+        assertTrue("Match Case never reached the filter", panel.visibleFiles().isEmpty());
+
+        search.setSearchOptions(SearchQuery.Options.DEFAULT.withWholeWords(true));
+        search.setQuery("ater");
+        settle();
+        assertTrue("Words never reached the filter", panel.visibleFiles().isEmpty());
+
+        search.setSearchOptions(SearchQuery.Options.DEFAULT);
+        search.setQuery("ater");
+        settle();
+        assertEquals("and without the options it is a plain substring again",
+                List.of(shader), panel.visibleFiles());
     }
 
 }

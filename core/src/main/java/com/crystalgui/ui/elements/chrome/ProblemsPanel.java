@@ -404,10 +404,10 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
             private SearchQuery query;
 
             @Override
-            public void setQuery(String text, boolean filtering) {
-                query = text == null || text.isBlank() ? null : SearchQuery.of(text);
+            public void setQuery(SearchQuery next, boolean filtering) {
+                query = next == null || next.isEmpty() ? null : next;
                 if (source == null) return;
-                source.setTextFilter(filtering ? text : null);
+                source.setTextFilter(filtering ? query : null);
                 // REVEALING IS THE COMPONENT'S, not this panel's. There used to be a loop here expanding
                 // every file heading, written because filtering alone left a heading standing over a match
                 // nobody could see. It is a property of Filter mode rather than of problems -- Preferences

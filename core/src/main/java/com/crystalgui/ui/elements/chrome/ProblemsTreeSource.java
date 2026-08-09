@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.core.search.SearchQuery;
+import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
@@ -36,6 +38,10 @@ public final class ProblemsTreeSource implements com.crystalgui.ui.elements.tree
 
     private String text = "";
 
+    /** The parsed query, carrying the Match Case / Words / Regex options. Null when not searching. */
+    @Nullable
+    private SearchQuery query;
+
     /**
      * When set, the only file the tree shows — VS Code's "Show Active File Only".
      *
@@ -65,7 +71,20 @@ public final class ProblemsTreeSource implements com.crystalgui.ui.elements.tree
 
     /** Substring match against the message, case-insensitive. Empty shows everything. */
     public void setTextFilter(@Nullable String value) {
-        this.text = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        setTextFilter(value == null ? null : SearchQuery.of(value));
+    }
+
+    /**
+     * As above, with the query's <b>options</b> — Match Case, Words, Regex.
+     *
+     * <p>This used to be a private matcher: {@code value.trim().toLowerCase()} and a {@code contains}. It
+     * was the second notion of "matches" in this panel (29.11 fixed the first), and it silently ignored
+     * every option the search bar offered — {@code GRAPH} with Match Case and Words both lit still matched
+     * {@code shadergraph}, because nothing about the toggles reached this far.</p>
+     */
+    public void setTextFilter(@Nullable SearchQuery value) {
+        this.query = value == null || value.isEmpty() ? null : value;
+        this.text = this.query == null ? "" : this.query.text();
     }
 
     public String textFilter() {
@@ -145,13 +164,13 @@ public final class ProblemsTreeSource implements com.crystalgui.ui.elements.tree
         //
         // Keeping the whole file rather than only its named heading, because a heading that expands onto
         // nothing is worse than either: the name matched, so the file is what you were looking for.
-        boolean fileMatches = !text.isEmpty()
-                && resource.name().toLowerCase(Locale.ROOT).contains(text);
+        boolean searching = query != null;
+        boolean fileMatches = searching && SearchMatcher.match(query, resource.name(), 0) != null;
         List<Diagnostic> kept = new ArrayList<>();
         for (Diagnostic diagnostic : markers.read(resource)) {
             if (!severities.contains(diagnostic.severity())) continue;
-            if (!text.isEmpty() && !fileMatches
-                    && !diagnostic.message().toLowerCase(Locale.ROOT).contains(text)) continue;
+            if (searching && !fileMatches
+                    && SearchMatcher.match(query, diagnostic.message(), 0) == null) continue;
             kept.add(diagnostic);
         }
         return kept;

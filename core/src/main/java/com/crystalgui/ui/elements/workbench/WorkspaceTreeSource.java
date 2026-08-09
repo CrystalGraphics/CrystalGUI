@@ -574,12 +574,28 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
      * Find in Files, which is a different feature with a server behind it.</p>
      */
     public WorkspaceTreeSource setFilter(String query) {
-        String next = query == null ? "" : query.trim();
-        if (next.equals(filter)) return this;
-        filter = next;
-        parsedFilter = next.isEmpty() ? null : SearchQuery.of(next);
+        return setFilter(query == null ? null : SearchQuery.of(query));
+    }
+
+    /**
+     * As above, with the query's <b>options</b> — Match Case, Words, Regex.
+     *
+     * <p>The overload that matters: given only the text, this built its own {@code SearchQuery} and every
+     * option the user had set was silently dropped on the way in.</p>
+     */
+    public WorkspaceTreeSource setFilter(@Nullable SearchQuery query) {
+        SearchQuery next = query == null || query.isEmpty() ? null : query;
+        String text = next == null ? "" : next.text();
+        if (text.equals(filter) && sameOptions(next, parsedFilter)) return this;
+        filter = text;
+        parsedFilter = next;
         dirty = true;
         return this;
+    }
+
+    private static boolean sameOptions(@Nullable SearchQuery a, @Nullable SearchQuery b) {
+        if (a == null || b == null) return a == b;
+        return a.options().equals(b.options());
     }
 
     public String filter() {
