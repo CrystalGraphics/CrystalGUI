@@ -160,7 +160,21 @@ public class NavigatorView<T> extends UIElement {
         }
         if (widest <= 0f) return true;   // nothing laid out yet
         float wanted = Math.min(MAX_SIDEBAR_WIDTH, widest + SIDEBAR_PADDING);
-        if (wanted <= sidebarMinimum) return true;
+        if (wanted == sidebarMinimum) return true;
+        // GROWS FREELY, SHRINKS ONLY WHEN THE CONTENT CHANGED.
+        //
+        // Monotonic growth was the original rule, and its reason was sound: this measures the REALISED
+        // rows, so a plain scroll changes the answer, and letting it fall on every frame would make the
+        // pane breathe as you scrolled. But it is the pane's MINIMUM, so a label seen once pinned the
+        // floor for the rest of the session -- unfold a long name, and the split could never be dragged
+        // narrow again even after folding it away. Only the shrink is gated: growth still lands the frame
+        // a long row appears.
+        //
+        // `contentChanged` is set from onExpandChanged, which is the only thing that alters what the
+        // widest row COULD be. Scrolling never sets it, so the breathing the original rule prevented
+        // cannot come back.
+        if (wanted < sidebarMinimum && !contentChanged) return true;
+        contentChanged = false;
         sidebarMinimum = wanted;
         // THROUGH SplitView'S OWN API, not a CSS min-width on the pane. SplitView already clamps a drag
         // against a per-pane minimum (see boundsFor), and it has no idea about a `min-width` written
@@ -180,6 +194,11 @@ public class NavigatorView<T> extends UIElement {
         return true;
     }
 
+    /** The width the sidebar refuses to be dragged below — the widest row it is currently showing. */
+    public float sidebarMinimumWidth() {
+        return sidebarMinimum;
+    }
+
     /** Room for the arrow, the gap and the pane's own padding, plus a little air. */
     private static final float SIDEBAR_PADDING = 28f;
 
@@ -189,6 +208,9 @@ public class NavigatorView<T> extends UIElement {
     private float sidebarMinimum;
 
     private boolean userSizedSidebar;
+
+    /** Set when a fold or unfold changes what the widest row could be. @see #fitSidebarToRows */
+    private boolean contentChanged;
 
     @Override
     protected void onLayoutChanged() {
@@ -219,6 +241,9 @@ public class NavigatorView<T> extends UIElement {
         // have to write one to see anything.
         tree.setRenderer(new TitleRenderer());
         tree.onSelectionChanged.connect(selected -> onTreeSelection());
+        // The one event that changes what the widest row could be. A fold must be able to give the width
+        // back; a scroll must not.
+        tree.onExpandChanged.connect((item, open) -> contentChanged = true);
         sidebar.addChild(tree);
 
         // THE SHARED COMPONENT, at the top of the sidebar, filtering by default.

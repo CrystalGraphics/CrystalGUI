@@ -2,6 +2,7 @@ package com.crystalgui.ui;
 
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.elements.tree.TreeSearch;
+import com.crystalgui.ui.elements.tree.TreeDataSource;
 import com.crystalgui.ui.elements.tree.TreeRow;
 import com.crystalgui.ui.elements.chrome.NavigatorView;
 import com.crystalgui.ui.elements.TextField;
@@ -504,6 +505,59 @@ public class PreferencesTest extends UiTestBase {
         assertTrue("and the path to it, got " + rows, rows.contains("editor"));
         assertFalse("a sibling of the match was kept for sharing its parent, got " + rows,
                 rows.contains("editor.appearance") || rows.contains("editor.codeStyle"));
+    }
+
+
+    /**
+     * <b>Folding a long branch gives the width back.</b>
+     *
+     * <p>The sidebar's minimum grows to fit the widest realised row, and it used to grow only. The reason
+     * was sound — the measure reads <em>realised</em> rows, so letting it fall every frame would make the
+     * pane breathe as you scrolled — but it is a <em>minimum</em>, so one long label seen once pinned the
+     * floor for the rest of the session: unfold a deep name and the split could never be dragged narrow
+     * again, even after folding it away.</p>
+     *
+     * <p>Only the shrink is gated now, on {@code onExpandChanged} — the one event that changes what the
+     * widest row could be. Growth still lands the frame a long row appears; scrolling still cannot move
+     * it.</p>
+     *
+     * <p>Built on {@link NavigatorView} directly rather than through {@link Preferences}, because the
+     * settings fixture's child titles are all shorter than its root titles, so unfolding it never widens
+     * anything and there would be nothing to give back.</p>
+     */
+    @Test
+    public void foldingABranchLetsTheSidebarShrinkAgain() {
+        NavigatorView<String> nav = new NavigatorView<>();
+        nav.layout(l -> l.width(400).height(300));
+        nav.setSource(new TreeDataSource<String>() {
+            @Override public List<String> roots() { return List.of("Short"); }
+            @Override public List<String> children(String parent) {
+                return "Short".equals(parent)
+                        ? List.of("A name far longer than any root here") : List.of();
+            }
+            @Override public boolean hasChildren(String item) { return "Short".equals(item); }
+        });
+        nav.setTitleFunction(item -> item);
+
+        UIElement host = new UIElement().layout(l -> l.width(400).height(300));
+        host.addChild(nav);
+        UIWindow w = new UIWindow(Ui.of(host));
+        w.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        w.init(800, 600);
+        w.setUiScale(1f);
+        for (int i = 0; i < 6; i++) w.updateWithoutPainting();
+        float collapsed = nav.sidebarMinimumWidth();
+
+        nav.tree().setExpanded("Short", true);
+        for (int i = 0; i < 6; i++) w.updateWithoutPainting();
+        float expanded = nav.sidebarMinimumWidth();
+        assertTrue("unfolding did not widen the sidebar (" + collapsed + " -> " + expanded
+                + "), so this asserts nothing", expanded > collapsed);
+
+        nav.tree().setExpanded("Short", false);
+        for (int i = 0; i < 6; i++) w.updateWithoutPainting();
+        assertEquals("the minimum stayed at the widest row ever seen",
+                collapsed, nav.sidebarMinimumWidth(), 0.5f);
     }
 
 }
