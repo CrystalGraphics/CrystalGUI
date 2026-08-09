@@ -3710,3 +3710,327 @@ parts already do here.
 same property the `TextEditor` split relied on. One boundary was drawn wrong twice on the way (the drag cut
 swallowed the filter API, the renderer cut swallowed the clipboard provider); both were caught by the
 compiler within seconds, which is the argument for doing this as a move rather than a rewrite.
+
+## 29.8 Search, generalised to any tree
+
+`ExplorerFind` was 405 lines serving one panel while four widgets used `TreeView`. It is now
+`ui.elements.tree.TreeSearch<T>` — **installed onto** a tree, IntelliJ's `SpeedSearchBase.installOn`
+boundary rather than a field on `TreeView`, which is also what `ContextMenu.attach` already does here.
+
+**Both references generalise it, and agree on the split.** VS Code puts `FindWidget`, `FindController`
+and `TreeFindMode` in `abstractTree.ts` — the tree owns *"all UI rendering, mode management, and keyboard
+bindings for search interaction itself"* — and the client supplies
+`IKeyboardNavigationLabelProvider.getKeyboardNavigationLabel(element)`. Find is **opt-in** there too:
+without a label provider it does not initialise. IntelliJ says the same with `TreeSpeedSearch` and a
+converter from element to text.
+
+| Generic (`TreeSearch`) | Client (`TreeSearch.Model<T>`) |
+|---|---|
+| The bar: input, positional counter, mode button | `setQuery(query, filtering)` — narrow, or don't |
+| Filter ⇄ Highlight | `isMatch(item)` |
+| ↓/↑ navigation, wrapping, jump-to-first | `matchRanges(item)` for the amber band |
+| Keys and the focus discipline | `descendantMatches(item)` for a branch badge |
+| `::highlight()` marking, dimming, `__searching__` on the host | |
+
+`TreeSearch.byText(textOf)` builds the whole Model from one lambda for a tree that only highlights —
+which is IntelliJ's speed search exactly — and `byText(textOf, filtered)` adds filtering through the
+`FilteredTreeSource` that already existed.
+
+**The second consumer is the point.** `ProblemsPanel` gained search in three lines: a `byText` on the
+problem's message, an activate callback, and a placeholder. A generalisation with one consumer is
+speculative; this one had four candidates and now has two users.
+
+**Where it bends, as predicted.** `ExplorerFind` survives at 128 lines as a `Model` implementation,
+because a file tree knows two things a generic one cannot: it filters over *what has been listed* (a
+lazily-loaded tree cannot answer "does anything beneath this match" without fetching the project), and it
+can count descendants for free because every listing is already in a map. Deriving that count generically
+would call `children()` on unlisted directories and turn a keystroke into a listing storm. VS Code's
+`IAsyncFindProvider` exists for exactly this reason.
+
+**One collision worth recording.** `ProblemsPanel`'s empty-state label is `position: absolute; top: 0` —
+correct alone, and drawn straight over the bar the moment one appeared. Nothing in CSS can ask "is there
+a visible sibling above me", so `TreeSearch` marks its host with `__searching__` and the panel styles
+around it.
+
+### 29.8a What the second consumer immediately found
+
+Installing `TreeSearch` on the Problems panel exposed four things in the first minute of use, every one of
+them a place where "it works in the explorer" was not the same as "it is general":
+
+- **Ctrl+F was bound on the explorer's command**, so every other tree had a search box reachable only by
+  typing into it — the "you can only get there by already being there" problem the bar existed to fix. The
+  component binds it now, on the tree's own element, with no `CommandRegistry` dependency.
+- **The bar was added with `addChildAt`**, which threw the instant a composite hosted it: every widget here
+  refuses public children. It is `insertInternalChildAt` now, which is also the honest description — the
+  bar is the host's chrome, not content somebody put there.
+- **"First child" is not "above the rows".** The Problems panel stacks its table and its empty state as
+  *out-of-flow* elements so neither one's arrival resizes the panel, so an in-flow bar dropped beside them
+  shared their y and was drawn through by the first row. `installOn` takes an index.
+- **A match inside a collapsed branch is invisible, and the counter only knows visible rows** — so
+  filtering found the file heading and reported "no matches here". The panel expands to reveal, which is
+  what VS Code's tree find does.
+
+And one behaviour that was wrong in the explorer too and only became obvious with a second consumer:
+**matched characters were marked in Highlight mode only**, so the amber band vanished when the mode button
+was pressed. Filtering narrows the list; it does not answer "where in this row". Marked in both now.
+
+### 29.8b The keys were never reaching the tree
+
+Ctrl+F and type-ahead both worked in the explorer and neither worked in the Problems panel, and the
+difference was not in `TreeSearch` at all. `ListView` gives its rows `CLICK_NOT_TABBABLE` and left itself
+`FocusPolicy.NONE`, so a list could hold focus only *by way of a row* — and `UIInputHandler` dispatches no
+keyboard event whatsoever while `focusedElement` is null. Every key the list owns was dead until a row had
+been clicked, including the arrow handling attached four lines below the constructor. Clicking the empty
+space under the rows made it worse rather than better: the press blurs before it dispatches, so it took
+focus away and gave it to nothing.
+
+The explorer hid this by being a panel you click a file in within seconds of it appearing. A fresh Problems
+panel is not.
+
+Two things are worth keeping from finding it:
+
+- **The row comment already described the fix.** It says "the LIST is the tab stop, the arrows move inside
+  it" — written when rows became focusable, and the other half of the sentence was never implemented.
+  A comment stating an invariant is not the same as anything enforcing it.
+- **No test through `sendInputEvent` could have caught it.** Dispatching straight at an element skips focus
+  resolution entirely, so such a test passes against a widget that can never hold focus. The two regression
+  tests go through `consumeKeyboardEvent`, which also means they have to satisfy its two real
+  preconditions: modifiers come from `CgPlatform.input()` rather than the event, and the sink returns early
+  until a frame has completed. Both were load-bearing in reproducing it.
+
+### 29.8c Two bugs that looked like search bugs and were not
+
+**The amber band on rows that did not match.** A query for `mama` marked `mama.glsl` correctly and also
+banded eight other filenames across their entire width, while the counter truthfully said "1 of 1". The
+search was right about everything; `UIText.toCgSpans` assigns `highlightPerChar` only on the path that
+*has* highlights, and returns early twice for "nothing to style" without clearing it. An unhighlighted
+label shapes as a single run starting at character 0, and the band pass reads each run's first character —
+so one leftover entry at index 0 paints across the whole string. Rows are pooled, so every row element that
+had ever carried a match kept banding whatever name landed on it next.
+
+Worth noting what could not have caught it: the registered range was empty, the resolved `::highlight()`
+style was correct, and the match count was correct. Only the paint disagreed, which is why
+`UIText.highlightBandCount()` now exists beside `styleSpanCount()` — the same reason that one does.
+
+**The Problems panel highlighting nothing.** Marking lived in the host's renderer, which is where both
+references put it and is defensible — a renderer knows which of its elements is the label and the component
+cannot. But it makes adoption a two-part contract with a silent second half: the panel installed
+`TreeSearch`, got a bar, arrows, keys and a correct counter, and marked nothing, because the component had
+no way to reach the rows. `TreeSearch` now decorates the tree's renderer at install; a host that calls
+`markRow` itself still wins for that row, which is how the explorer keeps its folder badge and its own
+choice of label.
+
+Both were found by the same rule as 29.8b: reproduce through the real route and assert the thing that
+actually changes on screen, not the thing that is easy to reach.
+
+### 29.8d Where the bar's own controls belong
+
+The count and the mode button were pinned to the right edge on an auto margin, which is fine in a 240px
+explorer panel and wrong in a panel-wide bar: the count answers a question about what was just typed, and
+putting it a full window away from the caret makes it read as belonging to the panel rather than to the
+query. They sit beside the field now.
+
+The far edge gets an X instead, which is what IntelliJ's find toolbar and VS Code's find widget both put
+there — and it is the one control that genuinely belongs at the edge. It also closes a real gap: the bar
+dismisses rather than closing on an empty query (29.5), so until now the only way out was a key nobody is
+told about.
+
+One trap worth naming, already documented on the view-container header and hit again here: **auto margins
+share the slack rather than the first one taking it**, so the count's `margin-left: auto` had to be removed
+when the close button gained one, not merely joined by it.
+
+## 29.9 The sweep — every other tree search in the codebase
+
+Five widgets hold a `TreeView`. Two were already migrated; the survey found one more genuine duplicate and
+one thing that only looks like one.
+
+| Widget | Verdict |
+|---|---|
+| `ProjectFileTree` | migrated (29.4–29.8) |
+| `ProblemsPanel` | migrated (29.8) |
+| **`NavigatorView`** (and therefore `Preferences`) | **migrated here** |
+| `NodeCreationMenu` | deliberately not — see below |
+| `TreeView` / `TreeSearch` | the component itself |
+
+### NavigatorView
+
+It carried a `TextField`, a `FilteredTreeSource`, a `query` field, an `applyFilter` and its own arrow
+forwarding — `TreeSearch`'s entire job, minus the marking, the count and the type-ahead it never had. The
+one part that was genuinely its own stayed: `setMatcher`, because what a query means for a settings tree
+involves labels and descriptions the widget has never heard of.
+
+Two things the component did not have and now does:
+
+- **`Presentation.PERMANENT`.** A settings search is not summoned and dismissed; it is the first thing in
+  the sidebar. So no close button, no hiding, and Escape clears the query instead. The refusal lives in
+  `close()` rather than at each caller, because the X, Escape and a host call all route through it.
+- **`setArrowNavigation(false)`.** The navigator's arrows walk the visible tree and *open the page* for
+  what they land on, query or no query. Match-stepping would fight that and go dead on an empty box.
+  Filtering already narrows the rows, so "arrow through what is left" is the same gesture with a better
+  answer — which is also why the settings search is FILTER mode and its sheet hides the mode button, as
+  IntelliJ and VS Code both do.
+
+And one thing the migration exposed in the component: **`flex-shrink` defaults to 0 here**, so the input
+was the only element in the bar that could give. In a narrow sidebar it collapsed to about 40px and showed
+`nt` for a four-character query. The input has a floor now and the count is what shrinks — it is the one
+part of the bar losable without losing the control.
+
+### What was deliberately left alone
+
+- **`NodeCreationMenu`** replaces its tree *model* per keystroke — `NodeMenuTree.categorised(offers)` while
+  browsing, `NodeMenuTree.ranked(offers)` while searching. That is the quick-open pattern: a result set is
+  ranked, not filed. `TreeSearch` narrows and marks a tree that stays the same tree, and teaching it to
+  swap models would be turning it into `QuickPick`. It already marks its own matches through
+  `::highlight()` and `SearchMatch.ranges`, which is the same idea correctly applied to a different shape.
+- **`QuickPick`, `CommandPalette`, `GoToFile`** are flat `ListView`s in a popover where the field is the
+  primary UI and the list is its output. VS Code and IntelliJ both keep quick-open separate from tree find
+  for exactly this reason.
+- **`SearchField`** is a text-input widget (icon, field, clear), not a search mechanism. `TreeSearch` uses a
+  bare `TextField` because its bar supplies the surrounding controls itself; folding one composite into the
+  other would put two clear affordances in one row.
+
+## 29.10 Revealing — and why the answer is the mode, not the panel
+
+"Should searching unfold?" looked like it needed a per-panel answer — yes for Preferences, unclear for the
+file tree. It does not. Both references draw the line at the **mode**, and once it is drawn there both
+cases answer themselves.
+
+**Filter mode reveals.** The tree *is* the result set: everything left is there because it matched or
+because it contains something that did. A match inside a collapsed branch is therefore not hidden, it is
+missing — the filter did its work and then showed nothing. That is precisely what Preferences did with
+`gene`: it kept `Editor`, because `Editor ▸ General` matched, and drew one collapsed row and "no matches
+here". The count agreed, because a count can only see visible rows.
+
+**Highlight mode does not.** The tree is untouched by construction — that is the whole distinction — and
+marking is a statement about what is on screen. Expanding would move rows under the cursor on every
+keystroke, which is exactly what someone chose Highlight to avoid. IntelliJ's speed search behaves this
+way, and it is why a folder carries a count badge: the badge says something is inside without opening it.
+
+So the file tree, which defaults to Highlight, does not unfold — and if you switch it to Filter, it does,
+because then the same reasoning applies to it. No panel had to decide anything.
+
+**And the expansion is put back** when the query clears or the mode leaves Filter, which VS Code also does.
+Without it one search leaves the tree sprawled open for the session.
+
+This also deleted code rather than adding it: the Problems panel had a bespoke expand-every-heading loop,
+written when its filter left a heading standing over a match nobody could see. Preferences needed the
+identical loop the moment it migrated, which is the signal that it was never about problems.
+
+### The Problems panel opens its groups
+
+Unrelated, and the same shape of question. A problem list is opened to be read, not navigated — a collapsed
+heading shows a filename and a count, which the status bar already says — so both references expand theirs.
+The trap is the second half: the panel refreshes on every diagnostic, tab switch and filter change, so
+re-opening whatever is closed would make a heading impossible to fold at all. A `seenHeadings` set is what
+separates "new" from "closed on purpose".
+
+Five existing tests started from a collapsed tree and had to state that premise explicitly instead of
+assuming it. One of them needed a real fix rather than a line: it read `getElementsByClassName(ROW_CLASS)
+.get(0)` for "the heading", which works only while the pool has held exactly one row — collapse after an
+expand and that call can return a pooled element the view is no longer showing. It asks `realisedRows()`
+for index 0 now.
+
+## 29.11 Three bugs, none of them in the search
+
+### `g` found two files and `graph` found one
+
+`ProblemsTreeSource` filtered on diagnostic **messages**; `TreeSearch`'s model treats a file heading as
+searchable by its **name**. Two answers to "does this match" inside one panel, and they only disagree when a
+query hits exactly one of them — `new.shadergraph` has "graph" in its name and in no message, so the row the
+search would have marked was filtered away before the marking could run. `g` appears in both messages, which
+is why the shorter query looked right.
+
+A file whose name matches now keeps its problems, rather than only its heading: a heading that expands onto
+nothing is worse than either answer, and the name matching means the file *is* what was being looked for.
+
+### The selection grew by one on every mode flip
+
+Not additive, and not the search's. `TreeView.refresh` remembers the selected **items** and restores them
+after a re-flatten — right, because indices do not survive one — but never cleared the index-based selection
+in between. `ListView`'s clamp only discards indices that are now *out of range*; one that is still in range
+survives, pointing at a different row, and the restore then adds the real one on top.
+
+Collapsing hid this for a long time, because the list shrinks and stale indices fall off the end. Expanding
+is where it bites: everything below moves down, every old index stays valid. **It is not a search bug at
+all** — selecting a file and expanding a folder above it selected an extra row, which is what the regression
+test does. Filtering just re-flattens often enough to make it obvious.
+
+### Preferences changed a row's font colour
+
+`Code Style` was being dimmed. Correct by the letter of the rule ("matches nothing, contains nothing that
+does") and wrong in spirit: `FilteredTreeSource` keeps a matching node's **whole subtree unfiltered**, by
+design and with a comment saying so, so a row can be on screen purely because its parent matched.
+
+The fix is the mirror of 29.10: **filtering removes, highlighting dims.** Filtering has already made its
+statement by narrowing; repeating it in grey about what survived is weaker, sometimes untrue, and mostly
+reads as "disabled". Marking stays in both modes, because a band says *where* rather than *whether*.
+
+## 29.12 The colouring, and what a permanent bar costs in width
+
+**The first fix was half of one.** Dimming was only the visible half: `.__match__ text { color: #FFFFFF }`
+brightens a match, and a navigator's matcher answers "does anything at or under this path match", so nearly
+every surviving row is a match. The sidebar was `#CCCCCC` with no query and white with one — which is why it
+read as the font changing rather than as rows being marked.
+
+The rule is one rule, not two. **Highlight mode paints a three-state answer over a complete tree** — match
+white, ordinary grey, irrelevant dimmed — because nothing has been taken away and colour is the only thing
+that can say where to look. **Filter mode has already said it by narrowing**, so neither half applies. The
+amber band survives both, because it says *where*, which narrowing cannot.
+
+**And the count came out of the navigator.** "no matches here" is a whole sentence parked permanently beside
+the narrowest control in the dialog, and the tree below already answers the question — an empty sidebar is a
+more direct "no matches" than a label claiming it. It was also being paid for in width: the bar is a flex
+row, so the count's own text is part of what the pane can never shrink below. Measured after removing it,
+the bar is exactly as wide as the tree (141px against 141px) instead of setting the floor for the whole
+split.
+
+Both of those are CSS in the host's sheet rather than options on the component — the same call as hiding the
+mode button. The capability stays; the sheet declines it.
+
+## 29.13 A recursive predicate picks the wrong branch
+
+`ge` listed Appearance and Code Style beside General. Two rules stacked:
+
+`FilteredTreeSource` has **two** branches, and the predicate chooses between them — a node whose own
+predicate is true "keeps its whole subtree, unfiltered" (its own comment), while a node kept by the
+descendant walk brings only the branches that matched. That is the right distinction: search for a category
+and you want all of it; search for something inside one and you want the path to it.
+
+`Preferences.matches` walked `idsUnder`, i.e. every setting **at or under** a path. So `Editor` reported a
+match because `Editor ▸ General` held one, and the source took the subtree branch. Its own javadoc already
+said the other half — "keeping the path to a deep match reachable is FilteredTreeSource's job" — and the
+source does do it; the matcher was doing it a second time and changing the answer in the process.
+
+Answering for the node alone (`idsDirectlyUnder`) restores the distinction. VS Code's tree filter draws the
+same line: Recurse for a node that matched, Visible for one merely carrying a match.
+
+**What still shows, and correctly:** a page whose own *settings* match — labels and descriptions, not just
+titles — survives, because typing a setting's name is meant to find the category holding it. So `Shaders`
+and `Workbench` remaining under `ge` is the feature, not the bug.
+
+**Test honesty:** the regression test is not mutation-caught. Telling the two implementations apart needs a
+query matching a setting that lives *only* on a child page, and every easily-named setting in the fixture is
+declared on the parent — where the page matches itself and correctly keeps its subtree. The test pins the
+outcome; the visual check on the real settings tree is what caught it.
+
+## 29.14 The rows really did match — in prose nobody can see
+
+After 29.13 narrowed the filter correctly, `ge` still kept Appearance, Shaders and Workbench. They were
+genuine matches: `SearchMatcher` is substring-or-word-start (deliberately not fuzzy), and the settings under
+those pages say "arran**ge**ment", "Percenta**ge**" and "chan**ge** it" — in their **descriptions**.
+
+Every hit was real and none was visible, which is the whole problem. **A row in a filtered tree that cannot
+be explained from what is on screen is indistinguishable from a bug**, and it was reported as one twice.
+
+The reference split is not "does the search index descriptions" but "what shape is the result":
+
+- **VS Code** searches descriptions because its settings search is a **ranked list** — a description-only hit
+  sinks to the bottom and costs nothing.
+- **IntelliJ** indexes them and *tells you*, showing where the hit was.
+- **A tree filter presents every survivor as an equal**, with nowhere to put that explanation.
+
+So the matcher reads the page title and the setting **labels** — the setting's name, which is what somebody
+types — and not the prose about it. `ge` now returns General (a title) and Shaders (which holds a setting
+named *Geometry*, a word-start match you can see the moment the page opens).
+
+Reversible in one line if a "matched in description" affordance ever exists to hang it on.

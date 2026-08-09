@@ -198,7 +198,7 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
         // FILTER IS NO LONGER THE DEFAULT -- Highlight is, because a filter with nothing on screen saying
         // it is on is a tree that has mysteriously lost half its files. The mechanism is unchanged; which
         // one runs unasked is what moved. See WorkspaceTreeSource.FindMode.
-        tree.source().setFindMode(WorkspaceTreeSource.FindMode.FILTER);
+        tree.setFindFiltering(true);
         assertEquals(List.of("src", "Apple.md", "zebra.txt"), visibleNames());
 
         tree.setFilter("zeb");
@@ -219,7 +219,7 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
      */
     @Test
     public void highlightMarksWithoutRemovingAnything() {
-        tree.source().setFindMode(WorkspaceTreeSource.FindMode.HIGHLIGHT);
+        tree.setFindFiltering(false);
         tree.setFilter("zeb");
         settle();
 
@@ -242,7 +242,7 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
     public void aFolderCountsTheMatchesBeneathIt() {
         tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), true);
         settle();
-        tree.source().setFindMode(WorkspaceTreeSource.FindMode.HIGHLIGHT);
+        tree.setFindFiltering(false);
         // "Main", which is a DIRECT child of src. `target.java` lives in src/deep, which nobody has
         // opened -- and counting it would mean claiming an answer about a directory that has never been
         // listed, which is exactly the limit this method documents.
@@ -265,7 +265,7 @@ public class ProjectTreeSortAndRevealTest extends UiTestBase {
      */
     @Test
     public void aFolderSurvivesWhenSomethingListedInsideItMatches() {
-        tree.source().setFindMode(WorkspaceTreeSource.FindMode.FILTER);
+        tree.setFindFiltering(true);
         tree.treeView().setExpanded(CgPath.parse("mymod.proj:src"), true);
         settle();
         assertTrue("fixture wrong -- src was never listed", visibleNames().contains("Main.java"));

@@ -173,11 +173,30 @@ public final class Preferences {
         if (raw.isEmpty()) return true;
         SearchQuery query = SearchQuery.of(raw);
         if (SearchMatcher.match(query, paths.title(path), 0) != null) return true;
-        for (String id : idsUnder(path)) {
+        // DIRECTLY UNDER, not `idsUnder`. The comment above already says keeping the path to a deep match
+        // reachable is FilteredTreeSource's job -- and it is, via its own descendant walk. Doing it here as
+        // well does not merely duplicate the work, it changes the ANSWER: the source has two branches, and
+        // a node whose own predicate is true "keeps its whole subtree, unfiltered" (its words). So a
+        // recursive matcher told it `Editor` had matched, and `ge` listed Appearance and Code Style beside
+        // General because they are Editor's children.
+        //
+        // Answering only for this node restores the distinction the source is built around: matched
+        // yourself, and you bring your subtree; kept only because something beneath you matched, and you
+        // bring only the branches that did. VS Code's tree filter draws the same line (Recurse vs Visible).
+        for (String id : paths.idsDirectlyUnder(path)) {
             Setting<?> setting = SettingsRegistry.get().get(id);
             if (setting == null) continue;
             if (SearchMatcher.match(query, setting.getLabel(), 0) != null) return true;
-            if (SearchMatcher.match(query, setting.getDescription(), 0) != null) return true;
+            // DESCRIPTIONS ARE NOT SEARCHED. A label is the setting's NAME -- the thing somebody types.
+            // A description is prose about it, and a short query hits prose constantly: `ge` matched
+            // "arrangement", "Percentage" and "change it", so Appearance, Shaders and Workbench all
+            // appeared under a two-letter query with nothing on screen explaining why.
+            //
+            // The cost of a filtered TREE, and the reason this differs from VS Code: its settings search is
+            // a RANKED LIST, so a description-only hit sinks to the bottom where it costs nothing. A tree
+            // shows every survivor as an equal, so an unexplainable row is indistinguishable from a bug --
+            // and it was reported as one twice. IntelliJ indexes descriptions and tells you it did; until
+            // there is somewhere to say so, matching what is written on the row is the honest answer.
         }
         return false;
     }

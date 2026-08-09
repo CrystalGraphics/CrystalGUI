@@ -10,6 +10,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.*;
 
 /**
@@ -184,23 +185,24 @@ public class HighlightTest extends UiTestBase {
     }
 
     /**
-     * <b>{@code background-color} is valid CSS on a highlight and is refused anyway, because we cannot
-     * paint it.</b>
+     * <b>{@code background-color} on a highlight is paintable now, and this test flipped as intended.</b>
      *
-     * <p>A band behind a character range needs per-range rects from the text layout; {@code CgStyleSpan}
-     * carries colour and decorations and nothing positional. Accepting the declaration and dropping it
-     * would give an author a rule that looks correct and does nothing — the exact fault
-     * {@code CgStyleSpan}'s own javadoc records about three fields that were carried and then ignored.
-     * The engine logs it as "not implemented" rather than "not allowed", since the spec sides with the
-     * author here.</p>
+     * <p>It used to assert the opposite, with a javadoc saying "this test is meant to flip. When
+     * per-range geometry lands, move {@code BACKGROUND_COLOR} from {@code NOT_YET_PAINTABLE} to
+     * {@code ALLOWED} and invert this assertion." That is what happened — and the geometry it was waiting
+     * for turned out to need no new machinery at all: shaping already breaks a run at every span
+     * boundary, so a highlighted range <em>is</em> one or more {@code CgShapedRun}s and each carries its
+     * own source range and advance. {@code UIText.paintHighlightBands} walks them.</p>
      *
-     * <p><b>This test is meant to flip.</b> When per-range geometry lands — alongside 6.1.6's caret,
-     * which needs the same machinery — move {@code BACKGROUND_COLOR} from {@code NOT_YET_PAINTABLE} to
-     * {@code ALLOWED} and invert this assertion. Failing then is the point.</p>
+     * <p>{@code text-shadow} stays refused, and for the reason that always applied to it rather than to
+     * both: it is a second <em>draw</em> of one range, not a rect behind it.</p>
      */
     @Test
-    public void backgroundColorIsRefusedUntilItCanBePainted() {
-        assertTrue("still unpaintable — see the javadoc before changing this",
+    public void backgroundColorOnAHighlightIsPaintable() {
+        assertTrue("background-color must be in ALLOWED now",
+                com.crystalgui.style.HighlightStyle.ALLOWED
+                        .contains(com.crystalgui.style.property.StylePropertyRegistry.BACKGROUND_COLOR));
+        assertFalse("and must no longer be listed as unpaintable",
                 com.crystalgui.style.HighlightStyle.NOT_YET_PAINTABLE
                         .contains(com.crystalgui.style.property.StylePropertyRegistry.BACKGROUND_COLOR));
 
@@ -208,9 +210,23 @@ public class HighlightTest extends UiTestBase {
                 "text::highlight(hit) { background-color: #5A4A00; text-decoration-line: underline; }");
         var style = window.getStyleEngine().highlightStyle(text, "hit");
 
-        assertEquals("the paintable half still applies", 1, style.decorations().size());
-        assertTrue("and the unpaintable one never reached the resolved style",
-                style.get(com.crystalgui.style.property.StylePropertyRegistry.BACKGROUND_COLOR, -1) == -1);
+        assertEquals("the decoration still applies", 1, style.decorations().size());
+        assertEquals("and the band reaches the resolved style", 0xFF5A4A00, style.backgroundColor());
+    }
+
+    /** No rule, no band — and zero rather than a null, so a painter needs no null check. */
+    @Test
+    public void anUnstyledHighlightHasNoBand() {
+        UIText text = build(SENTENCE, "text::highlight(hit) { color: #FF0000; }");
+        assertEquals(0, window.getStyleEngine().highlightStyle(text, "hit").backgroundColor());
+    }
+
+    /** {@code text-shadow} is still a second draw of a range, which a span cannot express. */
+    @Test
+    public void textShadowOnAHighlightIsStillRefused() {
+        assertTrue("text-shadow remains unpaintable — see HighlightStyle",
+                com.crystalgui.style.HighlightStyle.NOT_YET_PAINTABLE
+                        .contains(com.crystalgui.style.property.StylePropertyRegistry.TEXT_SHADOW));
     }
 
     /** CSS spells strikethrough `line-through`, and multiple keywords are legal in one declaration. */
@@ -347,4 +363,49 @@ public class HighlightTest extends UiTestBase {
         TextRange untouched = TextRange.of(0, 4);
         assertSame("entirely before it — must not even copy", untouched, untouched.clippedTo(10));
     }
+
+    /**
+     * <b>A band must not outlive the highlight that asked for it.</b>
+     *
+     * <p>The per-character band array was assigned only on the path that <em>has</em> highlights, so the
+     * two early returns for "nothing to style" left the previous one in place. That is not a stale style:
+     * an unhighlighted label shapes as a single run starting at character 0, and the band pass reads the
+     * run's first character, so one leftover entry at index 0 paints across the entire string.</p>
+     *
+     * <p>Rows are pooled, so in the explorer every row element that had ever shown a match went on banding
+     * whatever filename landed on it next — full width, for a query that matched one file. Nothing else
+     * was wrong: the registered range was empty, the count said "1 of 1", and only the paint disagreed,
+     * which is exactly why {@link UIText#highlightBandCount()} exists to be asserted on.</p>
+     */
+    @Test
+    public void aBandIsClearedWhenItsHighlightGoesAway() {
+        UIText text = build("mama.glsl", "text::highlight(find-match) { background-color: #C8873C; }");
+        text.highlights().set("find-match", java.util.List.of(TextRange.of(0, 4)));
+        settle();
+        settle();
+        assertEquals("the band should cover exactly the query span", 4, text.highlightBandCount());
+
+        // What recycling does: a new name, and no match this time.
+        text.highlights().remove("find-match");
+        text.setText("gradle.properties");
+        settle();
+        settle();
+        assertEquals("a row with no match must carry no band", 0, text.highlightBandCount());
+    }
+
+    /** The same, for a label whose text never changes — only the highlight is withdrawn. */
+    @Test
+    public void withdrawingAHighlightClearsTheBandWithoutRetyping() {
+        UIText text = build("mama.glsl", "text::highlight(find-match) { background-color: #C8873C; }");
+        text.highlights().set("find-match", java.util.List.of(TextRange.of(0, 4)));
+        settle();
+        settle();
+        assertEquals(4, text.highlightBandCount());
+
+        text.highlights().remove("find-match");
+        settle();
+        settle();
+        assertEquals(0, text.highlightBandCount());
+    }
+
 }

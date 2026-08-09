@@ -136,10 +136,22 @@ public final class ProblemsTreeSource implements com.crystalgui.ui.elements.tree
 
     /** Everything in one file that survives the current filter, in document order. */
     public List<Diagnostic> matching(Resource resource) {
+        // THE FILE'S NAME COUNTS AS A MATCH FOR EVERYTHING IN IT.
+        //
+        // The filter used to read messages only, while the search treats a heading as searchable by its
+        // FILE NAME -- two different answers to "does this match", in one panel. It showed as `g` listing
+        // both shadergraphs and `graph` listing one: `new.shadergraph` has "graph" in its name and not in
+        // its message, so the row the search would have marked was filtered away before the marking ran.
+        //
+        // Keeping the whole file rather than only its named heading, because a heading that expands onto
+        // nothing is worse than either: the name matched, so the file is what you were looking for.
+        boolean fileMatches = !text.isEmpty()
+                && resource.name().toLowerCase(Locale.ROOT).contains(text);
         List<Diagnostic> kept = new ArrayList<>();
         for (Diagnostic diagnostic : markers.read(resource)) {
             if (!severities.contains(diagnostic.severity())) continue;
-            if (!text.isEmpty() && !diagnostic.message().toLowerCase(Locale.ROOT).contains(text)) continue;
+            if (!text.isEmpty() && !fileMatches
+                    && !diagnostic.message().toLowerCase(Locale.ROOT).contains(text)) continue;
             kept.add(diagnostic);
         }
         return kept;

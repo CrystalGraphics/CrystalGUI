@@ -60,6 +60,8 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
     @Getter
     private float indentPerDepth = 12f;
 
+    /** The tree-level renderer, which {@link com.crystalgui.ui.elements.tree.TreeSearch} decorates. */
+    @Getter
     @Nullable
     private TreeRenderer<T> treeRenderer;
 
@@ -129,6 +131,24 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
      */
     public java.util.List<T> expandedItems() {
         return new java.util.ArrayList<>(expanded);
+    }
+
+    /**
+     * Replaces the whole expansion state at once, in one re-flatten.
+     *
+     * <p>For the two callers that have a <em>set</em> rather than a node: restoring a saved session, and
+     * {@link TreeSearch} opening a filtered tree and putting it back afterwards. Going through
+     * {@link #setExpanded} for each would re-flatten once per node, which on a filtered tree is a re-flatten
+     * per surviving branch on every keystroke.</p>
+     *
+     * <p>Insertion order is preserved, because a lazily-listed tree needs parents before children — a
+     * folder cannot be expanded before the listing that reveals it has arrived.</p>
+     */
+    public TreeView<T> setExpandedItems(java.util.Collection<T> items) {
+        expanded.clear();
+        if (items != null) expanded.addAll(items);
+        refresh();
+        return this;
     }
 
     public TreeView<T> setExpanded(T item, boolean open) {
@@ -290,6 +310,17 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         // horizontal scroll extent and re-measured it, which is what made the scrollbar flicker on every
         // refresh.
         getModel().setAll(flattened);
+
+        // CLEARED FIRST, and this is the half that was missing. ListView's clamp only discards indices that
+        // are now OUT OF RANGE -- an index that is still in range survives and quietly points at a
+        // different row. Restoring the remembered items on top of that leaves BOTH: the stale index and the
+        // real one, selected together.
+        //
+        // It showed as the file tree gaining a selected row on every flip of the search mode. Nothing was
+        // additive; each flip left one more index behind, so the selection grew by one and looked like
+        // repeated clicking. The remembered items above are the whole truth about what is selected, so
+        // anything the clamp happened to leave is noise.
+        clearSelection();
 
         if (selectedItems.isEmpty()) return;
         for (int index = 0; index < flattened.size(); index++) {

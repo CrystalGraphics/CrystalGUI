@@ -1,5 +1,10 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.ui.event.KeyboardEvent;
+import com.crystalgui.ui.elements.tree.TreeSearch;
+import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.ui.elements.chrome.NavigatorView;
+import com.crystalgui.ui.elements.TextField;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 
@@ -368,4 +373,137 @@ public class PreferencesTest extends UiTestBase {
                     SettingsCategory.isPage(path));
         }
     }
+
+    // -- The search, since it became TreeSearch's --------------------------------------------------
+
+    /** The component, which the sidebar's search box now belongs to. */
+    private TreeSearch<String> search(Preferences preferences) {
+        TreeSearch<String> search = preferences.navigator().treeSearch();
+        assertNotNull("the navigator built no search — setSource installs it", search);
+        return search;
+    }
+
+    /**
+     * <b>Typing still narrows the tree.</b>
+     *
+     * <p>The whole point of the migration is that this did not change. What used to be a {@code TextField},
+     * a {@code FilteredTreeSource}, a query field and an {@code applyFilter} in {@link NavigatorView} is
+     * now one {@code installOn} call, and the matcher — the one part that is genuinely the host's, since
+     * it reads setting labels and descriptions this widget has never heard of — stayed.</p>
+     */
+    @Test
+    public void searchStillFiltersTheSidebar() {
+        Preferences preferences = open();
+        int all = preferences.navigator().tree().visibleRows().size();
+        assertTrue("nothing in the tree, so this asserts nothing", all > 0);
+
+        search(preferences).setQuery("zzzz-matches-nothing");
+        settle();
+        assertEquals("a query matching nothing must leave no rows",
+                0, preferences.navigator().tree().visibleRows().size());
+
+        search(preferences).setQuery("");
+        settle();
+        assertEquals("clearing the query must put every row back",
+                all, preferences.navigator().tree().visibleRows().size());
+    }
+
+    /**
+     * <b>It filters rather than highlights, and the mode is the host's choice.</b>
+     *
+     * <p>IntelliJ's settings search and VS Code's settings editor both narrow the tree; a highlight-only
+     * settings search would leave you scrolling a full tree looking for a mark.</p>
+     */
+    @Test
+    public void theSettingsSearchFiltersByDefault() {
+        Preferences preferences = open();
+        assertEquals(TreeSearch.Mode.FILTER, search(preferences).mode());
+    }
+
+    /**
+     * <b>The bar is permanent — nothing dismisses it.</b>
+     *
+     * <p>A transient bar is right for a tree in a panel and wrong here: the box is the first thing in the
+     * sidebar and it is how you are expected to start, so a stray Escape leaving the panel with no visible
+     * search and no hint that Ctrl+F brings it back is a dead end rather than a dismissal.</p>
+     */
+    @Test
+    public void theSettingsSearchCannotBeDismissed() {
+        Preferences preferences = open();
+        TreeSearch<String> search = search(preferences);
+        assertTrue(search.isOpen());
+
+        search.setQuery("tab");
+        settle();
+        search.close();
+        settle();
+
+        assertTrue("the permanent bar was dismissed", search.isOpen());
+        assertEquals("close on a permanent bar clears rather than hides", "", search.query());
+    }
+
+    /**
+     * <b>The arrows still walk the tree, not the matches.</b>
+     *
+     * <p>{@link NavigatorView}'s arrows open the page for whatever they land on, with or without a query,
+     * so the component's match-stepping is turned off there. It would both fight the navigation and go
+     * dead the moment the box was empty — and filtering already narrows the rows, which makes "arrow
+     * through what is left" the same gesture with a better answer.</p>
+     */
+    @Test
+    public void arrowsStillWalkTheTreeWithNoQuery() {
+        Preferences preferences = open();
+        List<String> rows = preferences.navigator().tree().visibleRows().stream()
+                .map(TreeRow::item).toList();
+        assertTrue("fewer than two rows, so stepping proves nothing", rows.size() >= 2);
+        preferences.navigator().navigateTo(rows.get(0));
+        settle();
+
+        TextField box = preferences.navigator().search();
+        assertNotNull(box);
+        window.getInputHandler().requestFocus(box);
+        settle();
+        window.getInputHandler().sendInputEvent(box,
+                new KeyboardEvent.Down(box, CgKeyCodes.KEY_DOWN, '\0', false, 0, 0L));
+        settle();
+
+        assertEquals("Down in the search box did not step the tree",
+                rows.get(1), preferences.navigator().pages().current());
+    }
+
+
+    /**
+     * <b>A query shows the branches that matched, not every sibling of one.</b>
+     *
+     * <p><b>Not mutation-caught, and worth saying so.</b> Distinguishing the two implementations needs a
+     * query matching a setting that lives <em>only</em> on a child page; every setting in this fixture
+     * that is easy to name is declared on the parent, where {@code Editor} matches itself and correctly
+     * keeps its subtree. What this pins is the outcome — the visual check on the real settings tree is
+     * what caught the regression.</p>
+     *
+     * <p>Two rules stacked into a wrong answer. {@code matches} walked every setting <em>at or under</em> a
+     * path, so {@code Editor} reported a match because {@code Editor ▸ General} held one — and
+     * {@link com.crystalgui.ui.elements.tree.FilteredTreeSource} has two branches, where a node whose own
+     * predicate is true "keeps its whole subtree, unfiltered". So {@code ge} listed Appearance and Code
+     * Style beside General, purely for being Editor's children.</p>
+     *
+     * <p>The matcher answers for the node itself now; keeping the path to a deep match reachable was always
+     * the source's job, and its own descendant walk still does it. VS Code's tree filter draws the same
+     * line — Recurse for a node that matched, Visible for one carrying a match.</p>
+     */
+    @Test
+    public void filteringKeepsOnlyTheBranchesThatMatched() {
+        Preferences preferences = open();
+        search(preferences).setQuery("General");
+        settle();
+
+        List<String> rows = preferences.navigator().tree().visibleRows().stream()
+                .map(TreeRow::item).toList();
+        assertTrue("the page holding the match must survive, got " + rows,
+                rows.contains("editor.general"));
+        assertTrue("and the path to it, got " + rows, rows.contains("editor"));
+        assertFalse("a sibling of the match was kept for sharing its parent, got " + rows,
+                rows.contains("editor.appearance") || rows.contains("editor.codeStyle"));
+    }
+
 }

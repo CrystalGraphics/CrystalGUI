@@ -250,7 +250,8 @@ public final class ExplorerCommands {
      * a bare key at the root fires while typing into any editor sharing the window.</p>
      */
     public static void bindDefaults(Keymap keymap) {
-        keymap.bind("Mod+F", FIND_IN_TREE);
+        // Mod+F is NOT bound here any more -- TreeSearch binds it on the tree it is installed on, so
+        // every tree gets it rather than only this one. The command survives for the palette.
         keymap.bind("Mod+X", CUT);
         keymap.bind("Mod+C", COPY);
         keymap.bind("Mod+V", PASTE);

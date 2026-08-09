@@ -43,22 +43,24 @@ public final class HighlightStyle {
      */
     public static final Set<StyleProperty<?>> ALLOWED = Set.of(
             StylePropertyRegistry.COLOR,
+            StylePropertyRegistry.BACKGROUND_COLOR,
             StylePropertyRegistry.TEXT_DECORATION_LINE);
 
     /**
      * Allowed by CSS on a highlight pseudo-element, <b>not yet paintable here</b> — a different failure
      * from a property CSS forbids, so it gets a different message.
      *
-     * <p>Both need geometry this layer does not have. {@code background-color} is a band behind a
-     * character range, and {@code text-shadow} on a highlight is a second draw of just that range —
-     * neither is expressible as a {@code CgStyleSpan}, which carries colour and decorations and nothing
-     * positional. They need per-range rects derived from {@code CgTextLayout}, which is the same
-     * machinery 6.1.6 needs to place a caret, so the two belong in one pass.</p>
+     * <p>{@code text-shadow} on a highlight is a second draw of just that range, which is not expressible
+     * as a {@code CgStyleSpan} — that carries colour and decorations and nothing positional.</p>
      *
-     * <p>Until then a search hit can be recoloured or underlined, but not banded.</p>
+     * <p><b>{@code background-color} used to be here and no longer is.</b> The band it needs turned out to
+     * be free: shaping already breaks a run at every span boundary, so a highlighted range <em>is</em> one
+     * or more {@code CgShapedRun}s, and each carries {@code sourceStart}/{@code sourceEnd} and
+     * {@code totalAdvance}. {@code UIText} walks them and fills a rect before the glyphs. No per-range
+     * measurement and no second shaping pass — the geometry this file said the layer did not have was
+     * sitting in the layout the whole time.</p>
      */
     public static final Set<StyleProperty<?>> NOT_YET_PAINTABLE = Set.of(
-            StylePropertyRegistry.BACKGROUND_COLOR,
             StylePropertyRegistry.TEXT_SHADOW);
 
     /** No rule matched — every getter falls through to its inherited/absent answer. */
@@ -88,6 +90,16 @@ public final class HighlightStyle {
      * parent. A background-only highlight — a search hit — therefore leaves the text its normal
      * colour, which is what makes the range still readable.</p>
      */
+    /**
+     * The band behind this range, or {@code 0} for none.
+     *
+     * <p>Zero rather than a nullable Integer because a fully transparent band and no band are the same
+     * thing to a painter, and every caller would otherwise repeat the null check.</p>
+     */
+    public int backgroundColor() {
+        return get(StylePropertyRegistry.BACKGROUND_COLOR, 0);
+    }
+
     public int color(int inherited) {
         return get(StylePropertyRegistry.COLOR, inherited);
     }

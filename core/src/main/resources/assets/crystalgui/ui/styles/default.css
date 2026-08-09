@@ -4904,19 +4904,33 @@ navigatorview .__nav-sidebar__ {
     background: #252526;
 }
 
-navigatorview .__nav-search__ {
-    width: 100%;
-    height: 20px;
-    border-radius: 3px;
-    padding-left: 6px;
-    padding-right: 6px;
-    outline-width: 1px;
-    outline-color: #3C3C3C;
-    background: #1E1E1E;
+/* THE SEARCH BAR of a navigator — TreeSearch's, permanent, above the tree. It carries the box, the match
+ * count and the mode button, so everything below is about the ROW; the box's own look is `.__find-input__`.
+ *
+ * There used to be a lone TextField here with `width: 100%` on it. Left on the input after the migration
+ * that rule fought the bar's flex layout from one level down, which is why the class names the bar now. */
+/* NO COUNT EITHER. "no matches here" is a whole sentence sitting permanently beside a search box that is
+ * itself the narrowest thing in the dialog, and the tree below already answers the question — an empty
+ * sidebar is a more direct "no matches" than a label saying so. It also has to be paid for in width: the
+ * bar is a flex row, so the count's own text is part of what the pane can never shrink below. */
+navigatorview .__nav-search__ .__find-count__ {
+    display: none;
 }
 
-navigatorview .__nav-search__:focus {
-    outline-color: #0078D4;
+/* NO MODE BUTTON in a settings tree. The component offers Highlight/Filter and this host always wants
+ * Filter -- typing a setting's name should leave the categories that contain it and nothing else, which is
+ * what IntelliJ's settings search and VS Code's settings editor both do. Hidden rather than removed,
+ * because the mode is a real capability the sheet is declining, not one the widget lacks. */
+navigatorview .__nav-search__ .__find-mode__ {
+    display: none;
+}
+
+navigatorview .__nav-search__ {
+    width: 100%;
+    background-color: transparent;
+    border-width-bottom: 0px;
+    padding-left: 0px;
+    padding-right: 0px;
 }
 
 navigatorview .__nav-sidebar__ treeview {
@@ -5722,12 +5736,14 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     display: none;
 }
 
-/* ── The explorer's find bar ────────────────────────────────────────────────────────────────────
+/* ── A tree's find bar ──────────────────────────────────────────────────────────────────────────
  *
- * Shown only while a search is live -- ProjectFileTree writes `display` at IMPORTANT. Its whole job is
- * to make the search VISIBLE: the panel's own note recorded the defect it fixes, which is that typing
+ * Shown only while a search is live -- TreeSearch writes `display` at IMPORTANT. UNSCOPED, because the
+ * bar belongs to any TreeView that opts in: scoping it to `projectfiletree` would leave the Problems
+ * panel's identical bar unstyled, which is the second-consumer test this generalisation exists to pass.
+ * Its whole job is to make the search VISIBLE: the panel's own note recorded the defect it fixes, which is that typing
  * narrowed the tree with nothing on screen to say why. */
-projectfiletree .__find-bar__ {
+.__find-bar__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
@@ -5740,18 +5756,47 @@ projectfiletree .__find-bar__ {
     border-bottom-color: #3C3F41;
 }
 
-projectfiletree .__find-bar__ text {
+.__find-bar__ text {
     font-size: 10;
     color: #D0D2D6;
     white-space: nowrap;
 }
 
-projectfiletree .__find-count__ {
+/* BESIDE THE FIELD, not at the far edge. The count answers a question about what was just typed, and
+ * pinning it to the right of a panel-wide bar put it a whole window away from the caret — read as
+ * belonging to the panel rather than to the query. The auto margin moved to the close button, which is
+ * the one control that does belong at the edge; it must stay the ONLY claimant, since auto margins share
+ * the slack rather than the first one taking it. */
+.__find-bar__ .__find-count__ {
     color: #8A8A8A;
-    margin-left: auto;
+    /* SHRINKS, and it is the only thing in the row that may. flex-shrink defaults to 0 here (not 1, as on
+     * the web), so in a narrow host every sibling is rigid and the input -- the one element that does
+     * shrink -- collapsed to about 40px in the Preferences sidebar, with four characters of query showing
+     * as "nt". The count is the one part that can be lost without losing the control. */
+    flex-shrink: 1;
+    min-width: 0px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
-projectfiletree .__find-mode__ {
+.__find-bar__ .__find-close__ {
+    margin-left: auto;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    overlay: icon("crystalgui:x");
+    overlay-fit: contain;
+    color: #8A8A8A;
+    background: none;
+    border-radius: 2px;
+}
+
+.__find-bar__ .__find-close__:hover {
+    color: #E0E0E0;
+    background-color: #4B4D50;
+}
+
+.__find-bar__ .__find-mode__ {
     height: 16px;
     padding-left: 6px;
     padding-right: 6px;
@@ -5760,34 +5805,48 @@ projectfiletree .__find-mode__ {
     border-radius: 2px;
 }
 
-projectfiletree .__find-mode__ text {
+.__find-bar__ .__find-mode__ text {
     font-size: 10;
     color: #BBBBBB;
 }
 
-/* A MATCH IS LIT, NOT BOXED. Highlight mode keeps every row, so the marking has to survive being one of
- * fifty on screen -- a background band reads at a glance where a colour change alone does not. */
-projectfiletree .__project-row__.__match__ {
-    background-color: #4A6E9A66;
+/* THE MATCHED CHARACTERS, NOT THE ROW -- IntelliJ's amber band behind the query span, and the reason
+ * ::highlight() exists at all: what is being styled is a range inside a string, so wrapping it would put
+ * a real Taffy node around three characters of every filename.
+ *
+ * The row itself is deliberately left alone. A whole-row mark says "something here matched" and leaves
+ * the eye to find what -- which is exactly the work the band saves. */
+::highlight(find-match) {
+    background-color: #C8873C;
+    color: #1B1B1B;
 }
 
-projectfiletree .__project-row__.__match__ .__label__,
-projectfiletree .__project-row__.__match__ text {
+/* The row still says it matched, quietly, so a scan down the panel finds the hits before reading them. */
+.__match__ .__label__,
+.__match__ text {
     color: #FFFFFF;
 }
 
 /* The third state, and the one that makes highlight usable: everything that is neither a match nor on
  * the way to one recedes. Removing them instead is the other mode. */
-projectfiletree .__project-row__.__dimmed__ text {
+.__dimmed__ text {
     color: #6A6A6A;
 }
 
 /* The search box. A real TextField, so it needs the geometry `textfield` gets everywhere else — the
  * first version drew the query with a UIText, which looked identical and could not be clicked into. */
-projectfiletree .__find-input__ {
+.__find-bar__ .__find-input__ {
     flex-grow: 1;
     flex-shrink: 1;
-    min-width: 0px;
+    /* A FLOOR as well as a cap. Shrinking to nothing is worse than overflowing: an input too narrow to
+     * show the caret is not a control, and it is the shrinking sibling by construction. */
+    min-width: 60px;
+    /* CAPPED, because the bar is as wide as its panel and a query is not. Stretched across the Problems
+     * panel the field ran the full width of the window with four characters in it, which reads as a
+     * layout accident rather than a search box. IntelliJ's search field and VS Code's tree find widget
+     * are both a fixed size for the same reason; the count and the mode button still sit at the far
+     * right, since they carry margin-left: auto. */
+    max-width: 320px;
     height: 16px;
     padding-left: 4px;
     padding-right: 4px;
@@ -5799,6 +5858,12 @@ projectfiletree .__find-input__ {
     border-radius: 2px;
 }
 
-projectfiletree .__find-input__:focus {
+.__find-bar__ .__find-input__:focus {
     border-color: #4A88C7;
+}
+
+/* The Problems panel's bar sits in the panel's own column, between the tabs and the body — see
+ * TreeSearch.installOn(index). It must not stretch the row the tabs live in. */
+problemspanel > .__find-bar__ {
+    flex-shrink: 0;
 }

@@ -1,5 +1,8 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.core.search.SearchQuery;
+import com.crystalgui.core.search.SearchMatcher;
+import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
@@ -20,10 +23,14 @@ import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
 import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.ui.elements.tree.TreeSearch;
 import com.crystalgui.ui.elements.tree.TreeView;
 import com.crystalgui.ui.elements.workbench.HeaderContributor;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 
 /**
@@ -98,6 +105,13 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
 
     @Nullable
     private ProblemsTreeSource source;
+
+    /** Headings already auto-opened once. @see #openNewHeadings */
+    private final Set<ProblemNode> seenHeadings = new HashSet<>();
+
+    /** The shared search component, rebuilt with the tree. @see TreeSearch */
+    @Nullable
+    private TreeSearch<ProblemNode> search;
     @Nullable
     private TreeView<ProblemNode> tree;
 
@@ -372,6 +386,85 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
 
     /** The filter this panel is showing through, or null before binding. */
     @Nullable
+    /**
+     * The search model — highlight through {@link TreeSearch}, filter through the source's own text filter.
+     *
+     * <p>Not {@code TreeSearch.byText} alone, because this panel <b>already knows how to narrow itself</b>:
+     * {@code ProblemsTreeSource.setTextFilter} filters problems by message and keeps the file headings
+     * that still have one. Handing the component a {@code FilteredTreeSource} instead would be a second
+     * filter arguing with that one over the same list.</p>
+     *
+     * <p>It also fixes what highlight alone cannot: a problem's message lives on a row inside a file
+     * heading, so until the heading is expanded there is nothing on screen to match. Filter mode reaches
+     * it because the <em>source</em> does the narrowing.</p>
+     */
+    private TreeSearch.Model<ProblemNode> searchModel() {
+        return new TreeSearch.Model<>() {
+            @Nullable
+            private SearchQuery query;
+
+            @Override
+            public void setQuery(String text, boolean filtering) {
+                query = text == null || text.isBlank() ? null : SearchQuery.of(text);
+                if (source == null) return;
+                source.setTextFilter(filtering ? text : null);
+                // REVEALING IS THE COMPONENT'S, not this panel's. There used to be a loop here expanding
+                // every file heading, written because filtering alone left a heading standing over a match
+                // nobody could see. It is a property of Filter mode rather than of problems -- Preferences
+                // needed the identical loop the moment it migrated -- so TreeSearch does it, and puts the
+                // expansion back when the query clears, which this never did.
+            }
+
+            @Override
+            public boolean isMatch(ProblemNode item) {
+                return query != null && SearchMatcher.match(query, searchTextOf(item), 0) != null;
+            }
+
+            @Override
+            public List<SearchMatch.Range> matchRanges(ProblemNode item) {
+                if (query == null) return List.of();
+                SearchMatch match = SearchMatcher.match(query, searchTextOf(item), 0);
+                return match == null ? List.of() : match.ranges();
+            }
+
+            @Override
+            public int descendantMatches(ProblemNode item) {
+                // The file heading already shows its problem count; a second number beside it would be
+                // two answers to one question.
+                return 0;
+            }
+        };
+    }
+
+    /**
+     * What a row is searched by — its message, or the file's name for a heading.
+     *
+     * <p>The one thing {@link TreeSearch} cannot know. A problem's <em>message</em> is what anybody is
+     * looking for ("cannot find symbol"), and a file heading is searched by name so narrowing to one file
+     * works the way it does in the project tree.</p>
+     */
+    private static String searchTextOf(ProblemNode node) {
+        if (node.isFile()) {
+            return node.resource() == null ? "" : node.resource().name();
+        }
+        return node.diagnostic() == null ? "" : node.diagnostic().message();
+    }
+
+    /** Opens the search box — Ctrl+F, and the panel's menu entry. */
+    public void openFind() {
+        if (search != null) search.open();
+    }
+
+    public boolean isFindOpen() {
+        return search != null && search.isOpen();
+    }
+
+    /** The search component, or null before a workspace is bound. */
+    @Nullable
+    public TreeSearch<ProblemNode> search() {
+        return search;
+    }
+
     public ProblemsTreeSource source() {
         return source;
     }
@@ -394,6 +487,7 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
             refresh();
             return this;
         }
+        seenHeadings.clear();
         source = new ProblemsTreeSource(markers);
         // THE SCOPE SURVIVES A REBIND. A fresh source defaults to the whole workspace, so without this the
         // File tab would stay lit while the tree quietly showed everything.
@@ -413,6 +507,21 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
         tree.setRenderer(new ProblemRenderer());
         tree.onRowActivated.connect(this::chooseRow);
         content.addChild(tree);
+        // SEARCH, FOR ONE LAMBDA. The bar, the two modes, the arrows, the counter, the keys and the
+        // amber marking are all TreeSearch's -- this panel supplies only what a problem's searchable text
+        // is, which is the seam VS Code calls IKeyboardNavigationLabelProvider and IntelliJ calls the
+        // speed-search converter.
+        //
+        // Rebuilt with the tree, because it installs onto one: a component pointed at a tree that has
+        // been replaced would drive rows nobody is showing.
+        // HIGHLIGHT-ONLY, which is IntelliJ's speed search: ProblemsTreeSource already narrows itself
+        // through setTextFilter and its own severity and scope rules, so handing the component a second
+        // way to hide rows would be two filters disagreeing about one list.
+        // IN THE PANEL'S OWN COLUMN, after the tabs and before the body -- not in `content`. The list and
+        // the empty state are both position: absolute in there, stacked so neither one's arrival resizes
+        // the panel, so an in-flow bar beside them shares their y and the first row is drawn over it.
+        search = TreeSearch.installOn(tree, this, 0, searchModel(), node -> onProblemChosen.emit(node));
+        search.input().setPlaceholder("Search problems");
         binding.add(markers.onDidChange.connect(resource -> refresh()));
         refresh();
         return this;
@@ -485,11 +594,37 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
         boolean anything = source != null && source.shownCount() > 0;
         if (tree != null) {
             tree.refresh();
+            openNewHeadings();
             tree.setDisplayed(anything);
         }
         empty.setDisplayed(!anything);
         empty.setText(emptyMessage());
         syncTabs();
+    }
+
+    /**
+     * Opens each file heading the first time it appears.
+     *
+     * <p><b>A problem list arrives to be read, not to be opened.</b> Both references show theirs expanded —
+     * VS Code's Problems view and IntelliJ's Problems tool window — and the reason is that a collapsed
+     * heading shows a filename and a count, which is what the status bar already says. The panel is opened
+     * to see the messages.</p>
+     *
+     * <p><b>Only the first time.</b> A heading the user has collapsed must stay collapsed, and this runs on
+     * every refresh — a diagnostic arriving, a tab switching, a filter changing — so re-opening whatever is
+     * closed would make a heading impossible to fold at all. {@code seenHeadings} is what separates "new"
+     * from "closed on purpose"; {@code ProblemNode} is a record, so a heading that comes and goes with the
+     * same resource is the same key.</p>
+     */
+    private void openNewHeadings() {
+        if (source == null || tree == null) return;
+        List<ProblemNode> open = null;
+        for (ProblemNode root : source.roots()) {
+            if (!seenHeadings.add(root)) continue;
+            if (open == null) open = new ArrayList<>(tree.expandedItems());
+            open.add(root);
+        }
+        if (open != null) tree.setExpandedItems(open);
     }
 
     /**

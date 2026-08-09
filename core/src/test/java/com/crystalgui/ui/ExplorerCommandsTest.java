@@ -44,6 +44,7 @@ import java.util.List;
 
 import com.crystalgui.ui.input.keymap.Keymap;
 
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertFalse;
@@ -1532,5 +1533,208 @@ public class ExplorerCommandsTest extends UiTestBase {
         assertNotNull(searchBox());
         assertEquals("it should open empty", "", workbench.fileTree().filter());
     }
+
+
+    /**
+     * <b>The matched characters are marked, not the row.</b>
+     *
+     * <p>Both references band or recolour the query span itself; a whole-row mark says "something here
+     * matched" and leaves the eye to find what. Registered as a {@code ::highlight()} range rather than
+     * spans, because wrapping would put a real Taffy node around three characters of every filename.</p>
+     */
+    @Test
+    public void aMatchMarksTheQuerySpanAndNotTheWholeRow() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src/Main.java"));
+        settle();
+        workbench.fileTree().setFilter("ain");
+        settle();
+
+        UIText label = null;
+        for (UIElement element : window.ui.rootElement.querySelectorAll("text")) {
+            if (element instanceof UIText candidate && "Main.java".equals(candidate.getText())) {
+                label = candidate;
+                break;
+            }
+        }
+        assertNotNull("the matching row is not on screen", label);
+
+        List<com.crystalgui.ui.text.TextRange> ranges =
+                label.highlights().get(ProjectFileTree.FIND_HIGHLIGHT);
+        assertFalse("nothing was marked at all", ranges.isEmpty());
+        for (com.crystalgui.ui.text.TextRange range : ranges) {
+            assertTrue("a marked range must lie inside the name", range.end() <= "Main.java".length());
+        }
+    }
+
+    /** A recycled row must not keep the previous file's marks — they would band unrelated letters. */
+    @Test
+    public void aNonMatchingRowCarriesNoMarks() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().setFilter("zzzznothing");
+        settle();
+
+        for (UIElement element : window.ui.rootElement.querySelectorAll("text")) {
+            if (element instanceof UIText label) {
+                assertTrue("a stale mark survived on " + label.getText(),
+                        label.highlights().get(ProjectFileTree.FIND_HIGHLIGHT).isEmpty());
+            }
+        }
+    }
+
+
+    // -- Arrow navigation over matches -----------------------------------------------------------------
+
+    /**
+     * Types a query into the search box the way a user would, and settles.
+     *
+     * <p>Expands first, because matching is over what is <b>visible</b>: a collapsed tree shows one row
+     * and nothing to navigate between, which is honest behaviour and a useless fixture.</p>
+     */
+    private void search(String query) {
+        workbench.fileTree().treeView().setExpanded(CgPath.ofProject("mymod.proj"), true);
+        settle();
+        workbench.fileTree().treeView().setExpanded(CgPath.parse("mymod.proj:src"), true);
+        settle();
+        workbench.fileTree().openFind();
+        settle();
+        searchBox().setText(query);
+        settle();
+    }
+
+    /** A key press delivered to the search box, which is where focus is during a search. */
+    private void pressInSearchBox(int keyCode, int modifiers) {
+        TextField box = searchBox();
+        assertNotNull("no search box to type into", box);
+        window.getInputHandler().sendInputEvent(box,
+                new com.crystalgui.ui.event.KeyboardEvent.Down(box, keyCode, '\0', false, modifiers, 0L));
+        settle();
+    }
+
+    /**
+     * <b>Down steps match to match, and typing has already landed on the first.</b>
+     *
+     * <p>{@code QuickPick}'s pattern: the field owns the caret and the arrows, the list is a view of the
+     * selection. Typing jumping to the first match is what makes a query answer itself before you stop
+     * typing — without it the first Down press is spent going nowhere.</p>
+     */
+    @Test
+    public void downStepsThroughTheMatches() {
+        workbench.fileTree().loadProjects();
+        settle();
+        search("a");
+
+        assertTrue("nothing matched, so this asserts nothing",
+                workbench.fileTree().matchCount() >= 2);
+        assertEquals("typing should already be on the first match",
+                0, workbench.fileTree().currentMatchIndex());
+
+        CgPath first = workbench.fileTree().currentMatch();
+        pressInSearchBox(CgKeyCodes.KEY_DOWN, 0);
+        assertEquals(1, workbench.fileTree().currentMatchIndex());
+        assertNotEquals("Down did not move", first, workbench.fileTree().currentMatch());
+    }
+
+    /** Wraps at both ends, like Menu's Up/Down and like Tab. */
+    @Test
+    public void arrowsWrapAtBothEnds() {
+        workbench.fileTree().loadProjects();
+        settle();
+        search("a");
+        int count = workbench.fileTree().matchCount();
+        assertTrue(count >= 2);
+
+        pressInSearchBox(CgKeyCodes.KEY_UP, 0);
+        assertEquals("Up from the first should wrap to the last",
+                count - 1, workbench.fileTree().currentMatchIndex());
+
+        pressInSearchBox(CgKeyCodes.KEY_DOWN, 0);
+        assertEquals("and Down from the last back to the first",
+                0, workbench.fileTree().currentMatchIndex());
+    }
+
+    /**
+     * <b>Focus never leaves the search box.</b>
+     *
+     * <p>The ARIA combobox pattern, and the reason {@code ListView.restoreFocusIfRealised} must not take
+     * focus from a control inside a row: the first arrow press would otherwise put the caret on a tree
+     * row and the second would be typed into nothing.</p>
+     */
+    @Test
+    public void arrowsLeaveFocusInTheSearchBox() {
+        workbench.fileTree().loadProjects();
+        settle();
+        search("a");
+        TextField box = searchBox();
+        window.getInputHandler().requestFocus(box);
+        settle();
+
+        pressInSearchBox(CgKeyCodes.KEY_DOWN, 0);
+        assertSame("an arrow moved focus out of the box",
+                box, window.getInputHandler().getFocusedElement());
+        pressInSearchBox(CgKeyCodes.KEY_UP, 0);
+        assertSame(box, window.getInputHandler().getFocusedElement());
+    }
+
+    /**
+     * <b>The keys that move a caret still move one.</b>
+     *
+     * <p>Left, Right, Home and End are deliberately not taken: this is a real text field, and match
+     * navigation gets the pair that means nothing in a single-line input.</p>
+     */
+    @Test
+    public void caretKeysAreNotStolenByMatchNavigation() {
+        workbench.fileTree().loadProjects();
+        settle();
+        search("ma");
+        int before = workbench.fileTree().currentMatchIndex();
+
+        pressInSearchBox(CgKeyCodes.KEY_LEFT, 0);
+        pressInSearchBox(CgKeyCodes.KEY_RIGHT, 0);
+        pressInSearchBox(CgKeyCodes.KEY_HOME, 0);
+        pressInSearchBox(CgKeyCodes.KEY_END, 0);
+
+        assertEquals("a caret key moved the match — the box would be unusable",
+                before, workbench.fileTree().currentMatchIndex());
+    }
+
+    /**
+     * <b>A folder that only CONTAINS matches is not a stop.</b>
+     *
+     * <p>You can already see it and its badge says how many are inside; stopping there would put a deep
+     * hit several presses away. The rule is the same in both modes — filtering keeps such folders too, so
+     * "every visible row is a match" was never true even there.</p>
+     */
+    @Test
+    public void aFolderThatMerelyContainsMatchesIsNotAStop() {
+        workbench.fileTree().loadProjects();
+        settle();
+        // Matches Main.java inside src, and not src itself.
+        search("Main");
+
+        assertTrue("the query should match something", workbench.fileTree().matchCount() >= 1);
+        for (int i = 0; i < workbench.fileTree().matchCount(); i++) {
+            CgPath at = workbench.fileTree().currentMatch();
+            assertNotEquals("src is a stop, and it does not match its own name",
+                    CgPath.parse("mymod.proj:src"), at);
+            pressInSearchBox(CgKeyCodes.KEY_DOWN, 0);
+        }
+    }
+
+    /** Enter opens what the arrows are on. */
+    @Test
+    public void enterOpensTheCurrentMatch() {
+        workbench.fileTree().loadProjects();
+        settle();
+        search("Main");
+        assertEquals(CgPath.parse("mymod.proj:src/Main.java"), workbench.fileTree().currentMatch());
+
+        pressInSearchBox(CgKeyCodes.KEY_RETURN, 0);
+        assertEquals("Enter did not open the current match",
+                CgPath.parse("mymod.proj:src/Main.java"), workbench.activeFilePath());
+    }
+
 
 }

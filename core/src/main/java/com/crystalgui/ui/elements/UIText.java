@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.font.CgFontFamilyGroup;
 import com.crystalgraphics.api.text.CgShapedParagraph;
@@ -169,6 +170,14 @@ public final class UIText extends UIElement {
     });
 
     private CgShapedParagraph shapedParagraph;
+
+    /**
+     * The highlight that won each character, or null — what {@link #paintHighlightBands} reads.
+     *
+     * <p>Built by {@code toCgSpans} rather than recomputed, so the band and the glyph colour cannot
+     * disagree about which range won where they overlap.</p>
+     */
+    private HighlightStyle[] highlightPerChar;
 
     /** The decoration the retained paragraph was shaped for — part of the cache key. */
     private Set<TextDecorationLine> shapedForDecorations = Collections.emptySet();
@@ -354,6 +363,29 @@ public final class UIText extends UIElement {
     }
 
     /**
+     * How many characters currently carry a highlight <b>band</b> — the only observable of the band pass.
+     *
+     * <p>The sibling of {@link #styleSpanCount()} and there for the same reason: a band changes no
+     * geometry and no computed style, so a test that asserts on the registered range or the resolved
+     * {@code ::highlight()} style passes against a version painting the band over completely the wrong
+     * characters. Which is what happened — a recycled row banded its whole label because this array was
+     * never cleared when the highlight went away, while the range, the style and the match count were all
+     * correct.</p>
+     *
+     * <p>Reads what the last shaping produced rather than recomputing, because that is what the paint
+     * reads. It is therefore only meaningful after a frame.</p>
+     */
+    public int highlightBandCount() {
+        HighlightStyle[] perChar = highlightPerChar;
+        if (perChar == null) return 0;
+        int count = 0;
+        for (HighlightStyle style : perChar) {
+            if (style != null && (style.backgroundColor() >>> 24) != 0) count++;
+        }
+        return count;
+    }
+
+    /**
      * How many style spans the last shaping used — zero meaning the plain, unspanned path.
      *
      * <p>Public for the same reason {@link #displayedText()} is: it is the <b>only</b> way to observe
@@ -398,6 +430,18 @@ public final class UIText extends UIElement {
         // against the unspanned one -- acceptable here precisely because it happens only when a
         // decoration is actually set, so ordinary labels are untouched.
         Set<CgTextDecoration> base = toCgDecorations(ownDecorations());
+
+        // CLEARED FIRST, because the two early returns below are the case where a label that USED to carry
+        // a band no longer does -- and leaving the old array in place is not a stale style, it is a band
+        // over the wrong text entirely. `paintHighlightBands` reads `perChar[run.sourceStart()]` and an
+        // unhighlighted label shapes as ONE run starting at 0, so a single leftover entry at index 0 paints
+        // across the whole string.
+        //
+        // Which is exactly what a recycled row does: the explorer's rows are pooled, so every row element
+        // that had ever shown a match went on banding whatever name landed on it next, full width. The
+        // count said "1 of 1" the whole time -- the model was right and only the paint was wrong.
+        if (!shadow) this.highlightPerChar = null;
+
         if (styles.isEmpty() && base.isEmpty()) return Collections.emptyList();
         if (styles.isEmpty()) {
             return limit <= 0 ? Collections.emptyList()
@@ -407,6 +451,10 @@ public final class UIText extends UIElement {
         // Winner per character, then run-length encoded — the only way to get disjoint spans out of
         // ranges that may overlap across names.
         HighlightStyle[] perChar = new HighlightStyle[limit];
+        // RETAINED for the paint pass, which needs to know which characters carry a band. Only from the
+        // ordinary pass: the shadow pass darkens every colour, and a band drawn from those would be a
+        // second, dimmer rectangle behind the first.
+        if (!shadow) this.highlightPerChar = perChar;
         for (Map.Entry<String, HighlightStyle> entry : styles.entrySet()) {
             for (TextRange range : highlights.get(entry.getKey())) {
                 TextRange clipped = range.clippedTo(limit);
@@ -615,6 +663,8 @@ public final class UIText extends UIElement {
         // per-instance data. Batched, the two passes coalesce into a single draw call. The `try` matters:
         // an unclosed batch makes the *next* beginBatch throw, so one bad frame would take down all
         // subsequent text rather than just this label.
+        paintHighlightBands(ctx, textLayout, contentX, contentY);
+
         boolean shadow = general.textShadow();
         CgTextRenderer renderer = ctx.text();
         if (shadow) renderer.beginBatch();
@@ -640,6 +690,55 @@ public final class UIText extends UIElement {
                     .submit();
         } finally {
             if (shadow) renderer.endBatch();
+        }
+    }
+
+
+    /**
+     * Fills the {@code background-color} band behind every highlighted range — CSS Custom Highlight's
+     * one genuinely <em>positional</em> property.
+     *
+     * <h3>The geometry was already in the layout</h3>
+     *
+     * <p>{@link HighlightStyle} used to list {@code background-color} as allowed-but-unpaintable, on the
+     * grounds that a band needs per-range rects and a {@code CgStyleSpan} carries nothing positional.
+     * True, and beside the point: <b>shaping breaks a run at every span boundary</b>, so a highlighted
+     * range already <em>is</em> one or more {@link CgShapedRun}s — and each one carries its own
+     * {@code sourceStart}/{@code sourceEnd} and {@code totalAdvance}. Walking them costs no measurement
+     * and no second shaping pass.</p>
+     *
+     * <p>Drawn <b>before</b> the glyphs, which is the only order that works: this is a background, and
+     * the quad path has no depth to sort by — whatever is submitted last is on top.</p>
+     *
+     * <p>Returns immediately for every ordinary label. {@code highlightPerChar} is null unless something
+     * registered a range <em>and</em> a stylesheet styled it, so the fast unspanned path pays one null
+     * check.</p>
+     */
+    private void paintHighlightBands(CgUiPaintContext ctx, CgTextLayout layout,
+                                     float contentX, float contentY) {
+        HighlightStyle[] perChar = highlightPerChar;
+        if (perChar == null || perChar.length == 0) return;
+        List<List<CgShapedRun>> lines = layout.lines();
+        if (lines.isEmpty()) return;
+
+        float lineHeight = layout.totalHeight() / lines.size();
+        float y = contentY;
+        for (List<CgShapedRun> line : lines) {
+            float x = contentX;
+            for (CgShapedRun run : line) {
+                float advance = run.totalAdvance();
+                int at = run.sourceStart();
+                // The run's FIRST character decides, because a run cannot span two highlights: the
+                // boundary that made them different styles is also a shaping boundary.
+                HighlightStyle style = at >= 0 && at < perChar.length ? perChar[at] : null;
+                int band = style == null ? 0 : style.backgroundColor();
+                // Alpha zero is "no band" and not "a transparent band" — see HighlightStyle.
+                if (band != 0 && (band >>> 24) != 0) {
+                    ctx.fillRect(x, y, advance, lineHeight, band);
+                }
+                x += advance;
+            }
+            y += lineHeight;
         }
     }
 

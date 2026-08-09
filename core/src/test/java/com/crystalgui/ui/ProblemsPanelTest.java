@@ -1,5 +1,11 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.ui.elements.tree.TreeSearch;
+import com.crystalgui.testsupport.TestPlatformService;
+import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
@@ -17,6 +23,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -70,6 +77,22 @@ public class ProblemsPanelTest extends UiTestBase {
         return new Diagnostic(new TextPoint(row, 0), new TextPoint(row, 1), severity, message, null, null);
     }
 
+    /**
+     * Folds every heading — the state these tests used to get for free.
+     *
+     * <p>Headings open as they arrive now, which is what both references do and what the panel is opened
+     * for. The tests below are about folding and grouping rather than about the default, so they state the
+     * collapsed premise instead of assuming it.</p>
+     */
+    private void collapseEverything() {
+        for (Resource resource : List.of(shader, util)) {
+            if (markers.forResource(resource) != null) {
+                panel.tree().setExpanded(ProblemNode.file(resource), false);
+            }
+        }
+        settle();
+    }
+
     private void expandEverything() {
         for (Resource resource : List.of(shader, util)) {
             if (markers.forResource(resource) != null) {
@@ -91,6 +114,7 @@ public class ProblemsPanelTest extends UiTestBase {
         give(util, at(2, DiagnosticSeverity.WARNING, "unused uniform"));
         panel.bindTo(markers);
         settle();
+        collapseEverything();
 
         assertEquals("both files should head the tree", List.of(shader, util), panel.visibleFiles());
         assertTrue("a collapsed file must not spill its problems", panel.visibleProblems().isEmpty());
@@ -193,6 +217,10 @@ public class ProblemsPanelTest extends UiTestBase {
         panel.bindTo(markers);
         settle();
 
+        // FOLDED FIRST, so activation is an unfold. Headings open on arrival now, and this test is about
+        // what activating one DOES rather than about which way it happens to go from the default.
+        collapseEverything();
+
         List<ProblemNode> chosen = new ArrayList<>();
         panel.onProblemChosen.connect(chosen::add);
         panel.tree().onRowActivated.emit(0);
@@ -243,12 +271,15 @@ public class ProblemsPanelTest extends UiTestBase {
         panel.bindTo(markers);
         settle();
 
-        UIElement heading = panel.tree().getElementsByClassName(ProblemsPanel.ROW_CLASS).get(0);
+        collapseEverything();
+        UIElement heading = panel.tree().realisedRows().get(0);
+        assertNotNull("no row is realised, so this asserts nothing", heading);
         assertTrue("a collapsed file must say so",
                 heading.hasClass(com.crystalgui.ui.elements.tree.TreeView.COLLAPSED_CLASS));
 
         expandEverything();
-        heading = panel.tree().getElementsByClassName(ProblemsPanel.ROW_CLASS).get(0);
+        heading = panel.tree().realisedRows().get(0);
+        assertNotNull(heading);
         assertTrue("an expanded file must say so",
                 heading.hasClass(com.crystalgui.ui.elements.tree.TreeView.EXPANDED_CLASS));
     }
@@ -294,6 +325,7 @@ public class ProblemsPanelTest extends UiTestBase {
         give(shader, error(4, "undefined variable"));
         panel.bindTo(markers);
         settle();
+        collapseEverything();
         assertTrue(panel.visibleProblems().isEmpty());
 
         panel.requestFold(ProblemNode.file(shader));
@@ -376,6 +408,7 @@ public class ProblemsPanelTest extends UiTestBase {
         assertTrue("the tree stopped listening to its model",
                 panel.tree().isListeningToModel());
 
+        collapseEverything();
         // The fold has to still land...
         panel.requestFold(ProblemNode.file(shader));
         settle();
@@ -521,4 +554,176 @@ public class ProblemsPanelTest extends UiTestBase {
         assertTrue("a filtered-out tree claimed the workspace was clean",
                 ((com.crystalgui.ui.elements.UIText) empty).getText().toLowerCase().contains("filter"));
     }
+
+    // -- Keys reach a list nobody has clicked a row in ---------------------------------------------
+
+    private int heldModifiers = 0;
+
+    /**
+     * A key through the REAL sink — {@code consumeKeyboardEvent}, not {@code sendInputEvent}.
+     *
+     * <p>The distinction is the whole reason this bug survived: dispatching straight at an element skips
+     * focus resolution, so a test written that way passes against a widget that can never be focused.
+     * Modifiers are read from the platform rather than the event, and the sink is dead until a frame has
+     * completed, so both have to be real here too.</p>
+     */
+    private void key(int code, char ch, int mods) {
+        heldModifiers = mods;
+        TestPlatformService.get().input(new CgInputService() {
+            @Override public int getCurrentModifiers() { return heldModifiers; }
+            @Override public int translateKeyboardCodes(int c) { return c; }
+            @Override public boolean isKeyDown(int c) { return false; }
+            @Override public int translateMouseCodes(int c) { return c; }
+            @Override public boolean isMouseDown(int c) { return false; }
+            @Override public int howManyMouseButtons() { return 3; }
+            @Override public String getClipboard() { return ""; }
+            @Override public void setClipboard(String t) { }
+        });
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(ch, code, true, false, 0L));
+        settle();
+    }
+
+    /** Focus on the LIST, which is what clicking the empty space under the rows now gives you. */
+    private void focusTheList() {
+        window.getInputHandler().requestFocus(panel.tree());
+        settle();
+        assertSame("the list could not take focus, so nothing below tests anything",
+                panel.tree(), window.getInputHandler().getFocusedElement());
+    }
+
+    /**
+     * <b>Ctrl+F opens the search with only the list focused.</b>
+     *
+     * <p>It did not, and the reason was two steps back from the keystroke: {@code FocusPolicy} defaults to
+     * {@code NONE}, so a {@code ListView} could hold focus only by way of a row, and
+     * {@code consumeKeyboardEvent} dispatches <em>nothing</em> while {@code focusedElement} is null. Every
+     * key the list owns — the arrows, type-ahead, this — was silently dead until a row had been clicked.</p>
+     */
+    @Test
+    public void ctrlFOpensTheSearchWithOnlyTheListFocused() {
+        give(shader, error(1, "output missing"));
+        panel.bindTo(markers);
+        settle();
+        expandEverything();
+        focusTheList();
+
+        key(CgKeyCodes.KEY_F, 'f', CgModifiers.CTRL);
+        assertTrue("Ctrl+F did not open the find bar", panel.isFindOpen());
+    }
+
+    /** And a printable character starts one, which is IntelliJ's speed search. */
+    @Test
+    public void typingWithOnlyTheListFocusedStartsASearch() {
+        give(shader, error(1, "output missing"));
+        panel.bindTo(markers);
+        settle();
+        expandEverything();
+        focusTheList();
+
+        key(CgKeyCodes.KEY_O, 'o', 0);
+        assertTrue("type-ahead did not open the find bar", panel.isFindOpen());
+        assertNotNull(panel.search());
+        assertEquals("the first character was dropped", "o", panel.search().query());
+    }
+
+
+    // -- Headings open by default ------------------------------------------------------------------
+
+    /**
+     * <b>A problem list arrives to be read.</b>
+     *
+     * <p>Both references show theirs expanded — VS Code's Problems view and IntelliJ's Problems tool
+     * window — because a collapsed heading shows a filename and a count, which is what the status bar
+     * already says. The panel is opened to see the messages.</p>
+     */
+    @Test
+    public void headingsOpenWhenTheirProblemsArrive() {
+        give(shader, error(1, "one"), error(2, "two"));
+        panel.bindTo(markers);
+        settle();
+
+        assertEquals("the heading was left folded over its own problems",
+                2, panel.visibleProblems().size());
+    }
+
+    /**
+     * <b>But a heading the user folded stays folded.</b>
+     *
+     * <p>This runs on every refresh — a diagnostic arriving, a tab switching, a filter changing — so
+     * re-opening whatever is closed would make a heading impossible to fold at all.</p>
+     */
+    @Test
+    public void aFoldedHeadingIsNotReopenedByARefresh() {
+        give(shader, error(1, "one"));
+        panel.bindTo(markers);
+        settle();
+        panel.tree().setExpanded(ProblemNode.file(shader), false);
+        settle();
+        assertTrue("the fold did not take", panel.visibleProblems().isEmpty());
+
+        // Something else changes, and the panel refreshes.
+        give(util, error(5, "elsewhere"));
+        settle();
+
+        assertTrue("a refresh reopened a heading the user had folded",
+                panel.visibleProblems().stream().noneMatch(d -> "one".equals(d.message())));
+    }
+
+    /** A heading that appears later opens too — it is new, not folded. */
+    @Test
+    public void aHeadingArrivingLaterOpensAsWell() {
+        give(shader, error(1, "one"));
+        panel.bindTo(markers);
+        settle();
+
+        give(util, error(5, "elsewhere"));
+        settle();
+
+        assertTrue("the second file's heading stayed folded",
+                panel.visibleProblems().stream().anyMatch(d -> "elsewhere".equals(d.message())));
+    }
+
+
+    /**
+     * <b>A query matching the FILE'S NAME keeps the file.</b>
+     *
+     * <p>The filter read messages only, while the search treats a heading as searchable by its file name —
+     * two different answers to "does this match", inside one panel. It showed as {@code g} listing both
+     * shadergraphs and {@code graph} listing one: {@code new.shadergraph} has "graph" in its name and not
+     * in its message, so the row the search would have marked was filtered away before the marking ran.</p>
+     */
+    @Test
+    public void aQueryMatchingTheFileNameKeepsItsProblems() {
+        give(shader, error(1, "no mention of the query in here"));
+        give(util, error(2, "also nothing"));
+        panel.bindTo(markers);
+        settle();
+
+        // "water" is in shaders/water.glsl and in neither message.
+        panel.search().setMode(TreeSearch.Mode.FILTER);
+        panel.search().setQuery("water");
+        settle();
+
+        assertEquals("a file whose NAME matched was filtered away",
+                List.of(shader), panel.visibleFiles());
+        assertEquals("and its problems came with it — a heading onto nothing is worse than either",
+                1, panel.visibleProblems().size());
+    }
+
+    /** And a query matching neither still empties the tree. */
+    @Test
+    public void aQueryMatchingNothingStillEmptiesTheTree() {
+        give(shader, error(1, "no mention of the query in here"));
+        panel.bindTo(markers);
+        settle();
+
+        panel.search().setMode(TreeSearch.Mode.FILTER);
+        panel.search().setQuery("zzzz-nothing");
+        settle();
+
+        assertTrue("the name check must not keep everything", panel.visibleFiles().isEmpty());
+    }
+
 }
