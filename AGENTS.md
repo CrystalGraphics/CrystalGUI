@@ -1290,6 +1290,13 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
                                part each — LineNumbersPart, ViewCursorsPart, SelectionsPart,
                                CurrentLinePart, IndentGuidesPart, WhitespacePart, RulersPart,
                                GutterEdgePart, FoldingDecorationsPart, ZoomIndicatorPart
+    .workbench                 The shell's file panel, split the way VS Code's explorer is: ProjectFileTree
+                               is the VIEW (explorerView.ts), FilesRenderer builds and fills a row,
+                               ExplorerDragAndDrop is FileDragAndDrop, ExplorerFind is ExplorerFindProvider
+                               plus the bar it lacks, ExplorerEditing is setEditable + renderInputBox, and
+                               WorkspaceTreeSource is the MODEL (explorerModel.ts) — listings, sorting,
+                               compact folders, what matches. The parts sit BESIDE the view and reach it
+                               through package-private accessors, as TextEditor's ten view parts do
     .workbench.decoration      FileDecoration, FileDecorationProvider, FileDecorations — VS Code's
                                IDecorationsProvider. Independent contributors (dirty, read-only, errors,
                                VCS) merged per field, with bubbling up to ancestor folders
