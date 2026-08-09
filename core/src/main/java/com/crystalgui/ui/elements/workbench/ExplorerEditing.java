@@ -51,6 +51,7 @@ final class ExplorerEditing {
     /** True while a commit or cancel is running, so a blur raised by either cannot re-enter. */
     private boolean finishingEdit;
 
+
     /**
      * Renames {@code path} in place -- F2.
      *
@@ -82,6 +83,7 @@ final class ExplorerEditing {
     private void startEditing(Editing next) {
         cancelEdit();
         editing = next;
+        primed = null;
         // Deferred rather than immediate: this is routinely called from a menu row's activation or a key
         // press, and refreshing now would rebuild the element that dispatch is still walking.
         tree.requestRefresh();
@@ -103,6 +105,7 @@ final class ExplorerEditing {
         if (editing == null || finishingEdit) return;
         finishingEdit = true;
         editing = null;
+        primed = null;
         tree.source().endPendingNew();
         tree.requestRefresh();
         finishingEdit = false;
@@ -123,6 +126,7 @@ final class ExplorerEditing {
         boolean usable = isValidName(current.path(), name);
         finishingEdit = true;
         editing = null;
+        primed = null;
         tree.source().endPendingNew();
         tree.requestRefresh();
         finishingEdit = false;
@@ -168,6 +172,17 @@ final class ExplorerEditing {
         editor.onBlur.attachListener((element, event) -> {
             // BLUR COMMITS, as VS Code's does. Cancelling on blur means clicking away from a name you have
             // finished typing throws it away, which is the more expensive of the two mistakes.
+            //
+            // BUT NOT A BLUR THE TREE RAISED ON ITSELF. ListView.recycle() blurs a row before pooling it
+            // -- deliberately, and for a defect of its own -- so every refresh while an edit is open
+            // raised a blur here, committed, and ended the edit. The row then re-bound without its editor
+            // and the whole thing read as a flicker: F2 opened a field and shut it in the same frame.
+            //
+            // The refresh is not a user gesture and must not be read as one. ASKED OF THE LIST, not
+            // tracked here: a refresh can be started by anyone -- five call sites reach
+            // treeView().refresh() directly -- so a flag this class set around its own calls would be
+            // right for some refreshes and wrong for the rest.
+            if (tree.treeView().isRecyclingRow()) return;
             CgPath item = tree.itemForRow(row);
             if (editing != null && item != null && item.equals(editing.path())) {
                 commitEdit(editor.getText());
@@ -196,7 +211,23 @@ final class ExplorerEditing {
                 l -> l.display(active ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
         StyleGroup.importantPipeline(parts.label().getStyle().getLayoutGroup(),
                 l -> l.display(active ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
-        if (!active) return;
+        if (!active) {
+            if (primed == row) primed = null;
+            return;
+        }
+
+        // ONCE PER EDIT, NOT ONCE PER BIND, and this is the whole of the reported flicker.
+        //
+        // bind() runs on every refresh, and a refresh happens for reasons that have nothing to do with the
+        // edit: a listing arriving, a decoration changing, auto-reveal following the active tab, a fold.
+        // Priming on each of them re-set the text to the file's name, re-took focus and re-selected the
+        // stem -- so what you had typed was thrown away several times a second and the selection flashed.
+        // It also made the field impossible to type in at all, since the caret was put back every frame.
+        //
+        // Keyed on the ROW ELEMENT rather than a boolean, because the view may hand the edit a different
+        // element: a row that scrolls out and back is a new template, and that one does need priming.
+        if (primed == row) return;
+        primed = row;
 
         String current = tree.source().isPendingNew(item) ? "" : item.name();
         parts.editor().setText(current);
@@ -208,5 +239,9 @@ final class ExplorerEditing {
         if (dot > 0) parts.editor().setSelection(0, dot);
         else parts.editor().selectAll();
     }
+
+    /** The row element already primed for the current edit. @see #applyEditing */
+    @Nullable
+    private UIElement primed;
 
 }

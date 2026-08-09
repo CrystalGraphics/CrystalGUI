@@ -1289,4 +1289,148 @@ public class ExplorerCommandsTest extends UiTestBase {
         return out;
     }
 
+
+    // -- Reported bugs ---------------------------------------------------------------------------------
+
+    /**
+     * <b>An edit survives the refreshes that happen while it is open.</b>
+     *
+     * <p>{@code ListView.recycle()} blurs a row before pooling it — deliberately, for a defect of its own
+     * — and the inline editor read that blur as the user leaving, committed, and closed. F2 opened an
+     * input and shut it in the same frame, which is what it looked like: a flicker.</p>
+     */
+    @Test
+    public void anEditSurvivesARefresh() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src/Main.java"));
+        settle();
+
+        registry().get(ExplorerCommands.RENAME).execute(CommandContext.of(workbench.fileTree()));
+        settle();
+        assertTrue("the edit never opened", workbench.fileTree().isEditing());
+
+        // Exactly what a decoration change, a listing arriving or a fold does — and any of them can land
+        // in the frames between opening the editor and typing into it.
+        workbench.fileTree().treeView().refresh();
+        settle();
+
+        assertTrue("a refresh closed the edit, which is the flicker", workbench.fileTree().isEditing());
+        assertEquals("and it must still be the same row",
+                CgPath.parse("mymod.proj:src/Main.java"), workbench.fileTree().editingPath());
+    }
+
+    /**
+     * <b>A refresh does not reset what has been typed.</b>
+     *
+     * <p>The reported flicker. {@code bind} runs on every refresh — a listing arriving, a decoration
+     * changing, auto-reveal following the active tab, a fold — and priming the editor there re-set the
+     * text to the file's name, re-took focus and re-selected the stem. So a name in progress was thrown
+     * away several times a second, and the field could not be typed in at all because the caret was put
+     * back on every frame.</p>
+     */
+    @Test
+    public void typingSurvivesTheRefreshesThatHappenWhileEditing() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src/Main.java"));
+        settle();
+
+        registry().get(ExplorerCommands.RENAME).execute(CommandContext.of(workbench.fileTree()));
+        settle();
+        TextField field = visibleInlineEditor();
+        assertNotNull(field);
+
+        field.setText("HalfTyped");
+        // Any of the ordinary reasons a row rebinds.
+        workbench.fileTree().treeView().refresh();
+        settle();
+
+        assertTrue("the edit closed", workbench.fileTree().isEditing());
+        assertEquals("a refresh threw away what had been typed", "HalfTyped",
+                visibleInlineEditor().getText());
+    }
+
+    /** The other half: a blur the USER caused still commits, or the feature is gone rather than fixed. */
+    @Test
+    public void aRealBlurStillCommits() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().reveal(CgPath.parse("mymod.proj:src/Main.java"));
+        settle();
+
+        registry().get(ExplorerCommands.RENAME).execute(CommandContext.of(workbench.fileTree()));
+        settle();
+        TextField field = visibleInlineEditor();
+        assertNotNull(field);
+        field.setText("Blurred.java");
+
+        // Focus moves somewhere real, which is what clicking away is. A FOCUSABLE element, deliberately:
+        // requestFocus no-ops on one that is not, so aiming this at the tree itself asserted nothing.
+        UIElement elsewhere = new UIElement().layout(l -> l.width(10).height(10));
+        elsewhere.setFocusPolicy(com.crystalgui.ui.input.FocusPolicy.FOCUSABLE);
+        window.ui.rootElement.addChild(elsewhere);
+        window.updateWithoutPainting();
+        window.getInputHandler().requestFocus(elsewhere);
+        settle();
+
+        assertFalse("the edit should have finished", workbench.fileTree().isEditing());
+        assertTrue("a blur the user caused must still commit",
+                names(CgPath.parse("mymod.proj:src")).contains("Blurred.java"));
+    }
+
+    /**
+     * <b>The search box is a real input.</b>
+     *
+     * <p>It was drawn with a {@code UIText}, which looks identical and is not the same thing: it could not
+     * be clicked into, could not take a caret, and Ctrl+A went past it to the tree and selected every
+     * file. A search box the user cannot put the cursor in is a label containing their typing.</p>
+     */
+    @Test
+    public void theSearchBoxCanBeFocusedAndTypedIn() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().setFilter("ma");
+        settle();
+
+        TextField box = searchBox();
+        assertNotNull("the find bar has no input in it at all", box);
+        assertTrue("the search box cannot take focus, so it cannot be clicked into",
+                box.focusable());
+        assertEquals("it does not show the query", "ma", box.getText());
+
+        // Typing into the box drives the filter, rather than the box being a readout of it.
+        box.setText("mai");
+        settle();
+        assertEquals("typing in the box did not reach the filter", "mai",
+                workbench.fileTree().filter());
+    }
+
+    /** Ctrl+A belongs to whatever has focus — which is the box, once it can hold focus at all. */
+    @Test
+    public void selectAllInTheSearchBoxSelectsItsText() {
+        workbench.fileTree().loadProjects();
+        settle();
+        workbench.fileTree().setFilter("main");
+        settle();
+
+        TextField box = searchBox();
+        assertNotNull(box);
+        window.getInputHandler().requestFocus(box);
+        settle();
+
+        box.selectAll();
+        assertTrue("the box has no selection, so Ctrl+A had nothing to act on", box.hasSelection());
+    }
+
+    /** The find bar's input, or null. */
+    private TextField searchBox() {
+        for (UIElement element : window.ui.rootElement.querySelectorAll(
+                "." + ProjectFileTree.FIND_INPUT_CLASS)) {
+            if (element instanceof TextField field) return field;
+        }
+        return null;
+    }
+
+
 }

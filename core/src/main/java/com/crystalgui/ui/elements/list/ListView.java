@@ -882,6 +882,28 @@ public class ListView<T> extends ScrollerView {
         return -1;
     }
 
+    /**
+     * Whether the blur being dispatched right now came from pooling a row rather than from the user.
+     *
+     * <h3>Why this has to be asked here and not guessed at the listener</h3>
+     *
+     * <p>{@link #recycle} blurs a row before pooling it, deliberately and for a defect of its own — focus
+     * used to ride a recycled element into the pool and back out onto an unrelated item. That blur is
+     * indistinguishable, at the listener, from the user clicking away.</p>
+     *
+     * <p>It matters to anything that puts a <b>focusable control in a row</b> and treats losing focus as a
+     * decision. The explorer's inline rename does: every refresh while an edit was open raised a blur,
+     * committed the name and closed the field, so F2 opened an input and shut it in the same frame. A flag
+     * on the widget that owns the input cannot be right, because a refresh can be started by anyone —
+     * five call sites reached {@code treeView().refresh()} directly. The list is the only thing that knows.</p>
+     */
+    public boolean isRecyclingRow() {
+        return recycling;
+    }
+
+    /** @see #isRecyclingRow */
+    private boolean recycling;
+
     private void recycle(UIElement row) {
         // Blur BEFORE pooling, and this is the fix for the worst symptom this widget had: focus rode the
         // recycled element into the pool and out again, so scrolling away from a focused row left the
@@ -889,8 +911,13 @@ public class ListView<T> extends ScrollerView {
         // the identity — the index is — so the element must give focus up the moment it stops
         // representing anything, and focusedIndex is what remembers where to put it back.
         var window = getAttachedWindow();
-        if (window != null) window.getInputHandler().blurIfFocused(row);
-        renderer.unbind(row);
+        recycling = true;
+        try {
+            if (window != null) window.getInputHandler().blurIfFocused(row);
+            renderer.unbind(row);
+        } finally {
+            recycling = false;
+        }
         // display: none rather than removal. Removing would destroy the Taffy node and every style
         // candidate on it, so the next scroll step would pay to rebuild what it just threw away — which
         // is precisely the cost a pool exists to avoid.

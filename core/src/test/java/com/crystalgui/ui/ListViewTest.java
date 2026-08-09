@@ -813,4 +813,54 @@ public class ListViewTest extends UiTestBase {
         assertEquals("rows are written to the viewport width, so there is nothing to scroll",
                 0f, list.getMaxScrollLeft(), 0.01f);
     }
+
+    /**
+     * <b>A blur raised by pooling says so.</b>
+     *
+     * <p>{@link ListView#recycle} blurs a row before pooling it, deliberately and for a defect of its own.
+     * That blur is indistinguishable at a listener from the user clicking away — which matters to anything
+     * putting a focusable control in a row and treating lost focus as a decision. The explorer's inline
+     * rename does exactly that, so the list has to be able to say which kind of blur it is.</p>
+     */
+    @Test
+    public void recyclingIsAnnouncedWhileItHappens() {
+        boolean[] seenDuringUnbind = {false};
+        boolean[] seenDuringBind = {false};
+        model = new ObservableList<>();
+        for (int i = 0; i < 200; i++) model.add("item " + i);
+        list = new ListView<>(model);
+        list.setItemHeight(10f);
+        list.layout(l -> l.width(100).height(100));
+        list.setRenderer(new ListRenderer<String>() {
+            @Override
+            public UIElement createTemplate() {
+                return new UIElement();
+            }
+
+            @Override
+            public void bind(String item, int index, UIElement template) {
+                if (list.isRecyclingRow()) seenDuringBind[0] = true;
+            }
+
+            @Override
+            public void unbind(UIElement template) {
+                if (list.isRecyclingRow()) seenDuringUnbind[0] = true;
+            }
+        });
+        UIElement root = new UIElement().layout(l -> l.width(100).height(100));
+        root.addChild(list);
+        window = new UIWindow(Ui.of(root));
+        window.init(200, 200);
+        settle();
+
+        // Far enough that every realised row leaves the window and is pooled.
+        list.setScrollTop(900f);
+        settle();
+
+        assertTrue("recycling was never announced, so a pooled row's blur is indistinguishable"
+                + " from the user leaving", seenDuringUnbind[0]);
+        assertFalse("binding is not recycling — a guard reading this would swallow real events",
+                seenDuringBind[0]);
+    }
+
 }
