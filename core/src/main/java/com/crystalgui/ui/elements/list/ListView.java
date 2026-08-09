@@ -159,6 +159,20 @@ public class ListView<T> extends ScrollerView {
         // addInternalChild, which is the correct half of that pair.
         subscribeToModel();
 
+        // THE LIST IS THE TAB STOP, and until now nothing had made it one. The roving-tabindex comment on
+        // the row below has said so since rows became focusable, but the other half was never written:
+        // rows are CLICK_NOT_TABBABLE and the list was FocusPolicy.NONE, so the composite had *zero* tab
+        // stops and could hold focus only by way of a row.
+        //
+        // That is not a tab-order nicety. `UIInputHandler.consumeKeyboardEvent` dispatches nothing at all
+        // when `focusedElement` is null, so a list nobody had clicked a row in heard no keys whatsoever —
+        // not the arrows attached immediately below, not type-ahead, not Ctrl+F. Clicking the empty space
+        // under the rows was actively worse than not clicking: `emitMouseDown` blurs before it dispatches,
+        // so it took focus away and handed it to nothing. The Problems panel is where it showed, because
+        // a fresh panel has no reason to have been clicked into; the explorer hid it by being a thing you
+        // click a file in immediately.
+        setFocusPolicy(FocusPolicy.CLICK);
+
         // Arrow keys on the view itself, matching TabView's idiom rather than the keymap: a keymap
         // binding names a command id, and command ids are global to the window — two lists on one screen
         // would need two sets of ids for identical behaviour. Widget-local keys belong on the widget.

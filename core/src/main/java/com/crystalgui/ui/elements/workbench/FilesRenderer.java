@@ -165,7 +165,7 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         // compacted row stands for. The view cannot work the last one out -- by the time a row exists
         // the swallowed directories are not in the tree at all.
         tree.editing().applyEditing(template, parts, item);
-        tree.find().applyMarks(template, parts, item, row);
+        tree.find().applyMarks(template, parts, item, row.expandable());
         String name = tree.source().rowLabel(item);
         // No manual indent and no "+ "/"- " prefix any more: TreeView already writes padding-left from
         // the depth and puts __expanded__/__collapsed__/__leaf__ on the row, so doing either here

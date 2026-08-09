@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.ui.elements.tree.TreeSearch;
+import com.crystalgui.core.search.SearchQuery;
+import com.crystalgui.core.search.SearchMatcher;
+import com.crystalgui.core.search.SearchMatch;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.nav.NavigationHistory;
 import com.crystalgui.core.signal.Signal;
@@ -45,6 +49,7 @@ import java.util.function.Predicate;
  */
 public class NavigatorView<T> extends UIElement {
 
+    /** On the search BAR — the box, its count and its mode button. @see TreeSearch */
     public static final String SEARCH_CLASS = "__nav-search__";
     public static final String SIDEBAR_CLASS = "__nav-sidebar__";
     public static final String DETAIL_CLASS = "__nav-detail__";
@@ -68,7 +73,15 @@ public class NavigatorView<T> extends UIElement {
     private final UIElement sidebar = new UIElement();
     private final UIElement detail = new UIElement();
     private final UIElement header = new UIElement();
-    private final TextField search = new TextField();
+    /**
+     * The search, and every part of it — the box, the count, the mode button, the marking and the filter.
+     *
+     * <p>Built in {@link #setSource} rather than here, because it installs onto a tree and there is none
+     * until then. Permanent: a settings window's search is the first thing in the sidebar and dismissing
+     * it would leave the panel with no visible way back.</p>
+     */
+    @Nullable
+    private TreeSearch<T> search;
     private final Breadcrumbs breadcrumbs = new Breadcrumbs();
     private final Button back = new Button("<");
     private final Button forward = new Button(">");
@@ -90,10 +103,6 @@ public class NavigatorView<T> extends UIElement {
         markAsInternal();
 
         sidebar.addClass(SIDEBAR_CLASS);
-        search.addClass(SEARCH_CLASS);
-        search.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
-        search.attachListener(query -> applyFilter(query));
-        sidebar.addChild(search);
 
         header.addClass(HEADER_CLASS);
         back.addClass(BACK_CLASS);
@@ -120,16 +129,6 @@ public class NavigatorView<T> extends UIElement {
         split.divider().onMouseDown.attachListener((element, event) -> userSizedSidebar = true,
                 false, true);
         addInternalChild(split);
-
-        // Arrow keys reach the tree while the caret stays in the field. CAPTURE phase, so they are taken
-        // before the field can treat them as caret movement.
-        search.events.getGroup(KeyboardEvent.Down.class).attachListener((element, event) -> {
-            if (tree == null) return;
-            int key = event.getKeyCode();
-            if (key != CgKeyCodes.KEY_UP && key != CgKeyCodes.KEY_DOWN) return;
-            event.stopPropagation();
-            step(key == CgKeyCodes.KEY_DOWN ? 1 : -1);
-        }, true, false);
 
         updateHistoryButtons();
     }
@@ -221,6 +220,74 @@ public class NavigatorView<T> extends UIElement {
         tree.setRenderer(new TitleRenderer());
         tree.onSelectionChanged.connect(selected -> onTreeSelection());
         sidebar.addChild(tree);
+
+        // THE SHARED COMPONENT, at the top of the sidebar, filtering by default.
+        //
+        // What used to be here was a TextField, a FilteredTreeSource, a query field and an applyFilter --
+        // which is TreeSearch's whole job, minus the marking, the count and the type-ahead it never had.
+        // Filtering is FILTER mode; the matcher below is the one thing that stayed, because what a query
+        // means for a settings tree involves labels and descriptions this widget has never heard of.
+        search = TreeSearch.installOn(tree, sidebar, 0, new TreeSearch.Model<T>() {
+            @Override
+            public void setQuery(String text, boolean filtering) {
+                query = text == null ? "" : text.trim();
+                if (filtered == null) return;
+                filtered.setFilter(query.isEmpty() || !filtering ? null : matcher);
+            }
+
+            @Override
+            public boolean isMatch(T item) {
+                return !query.isEmpty() && matcher.test(item);
+            }
+
+            @Override
+            public List<SearchMatch.Range> matchRanges(T item) {
+                // OVER THE TITLE, which is the only string on screen. A caller's matcher may well have
+                // matched a description instead, and then there is nothing here to mark -- correctly: a
+                // band over an unrelated word would be a worse answer than no band at all.
+                if (query.isEmpty()) return List.of();
+                SearchMatch match = SearchMatcher.match(SearchQuery.of(query), titleOf.apply(item), 0);
+                return match == null ? List.of() : match.ranges();
+            }
+
+            @Override
+            public int descendantMatches(T item) {
+                // COUNTED, not answered 0. `beneath` is what keeps an ancestor from being dimmed, and a
+                // filtered settings tree is mostly ancestors -- every category kept only because a setting
+                // under it matched. Answering 0 greys out exactly the rows the filter went to the trouble
+                // of keeping.
+                //
+                // Over the FILTERED source, which has already done the work: while filtering it yields
+                // only surviving children, so this is a walk over what is on screen rather than over the
+                // whole tree.
+                if (filtered == null || query.isEmpty()) return 0;
+                int total = 0;
+                for (T child : filtered.children(item)) {
+                    if (matcher.test(child)) total++;
+                    total += descendantMatches(child);
+                }
+                return total;
+            }
+        }, this::navigateTo);
+        // ON THE BAR, not on the box. The class names the search AREA of a navigator, and that is now a
+        // row with a count and a mode button in it rather than a lone field -- pointing it at the input
+        // left a `width: 100%` rule fighting the bar's own flex layout from one level down.
+        search.bar().addClass(SEARCH_CLASS);
+        search.input().setPlaceholder("Search");
+        search.setPresentation(TreeSearch.Presentation.PERMANENT);
+        search.setMode(TreeSearch.Mode.FILTER);
+        // ARROWS STAY OURS. They walk the visible tree and OPEN the page for whatever they land on, with
+        // or without a query -- so match-stepping would both fight that and go dead the moment the box was
+        // empty. Filtering already narrows the rows, which makes "arrow through what is left" the same
+        // gesture with a better answer.
+        search.setArrowNavigation(false);
+        search.input().events.getGroup(KeyboardEvent.Down.class).attachListener((element, event) -> {
+            if (tree == null) return;
+            int key = event.getKeyCode();
+            if (key != CgKeyCodes.KEY_UP && key != CgKeyCodes.KEY_DOWN) return;
+            event.stopPropagation();
+            step(key == CgKeyCodes.KEY_DOWN ? 1 : -1);
+        }, true, false);
         return this;
     }
 
@@ -374,13 +441,6 @@ public class NavigatorView<T> extends UIElement {
         navigateTo(rows.get(next).item());
     }
 
-    private void applyFilter(String text) {
-        query = text == null ? "" : text.trim();
-        if (filtered == null) return;
-        filtered.setFilter(query.isEmpty() ? null : matcher);
-        if (tree != null) tree.refresh();
-    }
-
     private void updateHistoryButtons() {
         back.setEnabled(history.canGoBack());
         forward.setEnabled(history.canGoForward());
@@ -389,7 +449,7 @@ public class NavigatorView<T> extends UIElement {
     /** Focus belongs in the search field, which is where the keys are steered from. */
     public void giveFocus() {
         UIWindow window = getAttachedWindow();
-        if (window != null) window.getInputHandler().requestFocus(search);
+        if (window != null && search != null) window.getInputHandler().requestFocus(search.input());
     }
 
     /**
@@ -451,7 +511,15 @@ public class NavigatorView<T> extends UIElement {
         return split;
     }
 
+    /** The search box itself. Null until {@link #setSource} has run — it installs onto the tree. */
+    @Nullable
     public TextField search() {
+        return search == null ? null : search.input();
+    }
+
+    /** The whole search component, for a caller that wants the mode, the count or the marking. */
+    @Nullable
+    public TreeSearch<T> treeSearch() {
         return search;
     }
 

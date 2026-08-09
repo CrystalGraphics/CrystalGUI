@@ -18,6 +18,7 @@ import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.elements.list.SelectionMode;
 import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.ui.elements.tree.TreeSearch;
 import com.crystalgui.ui.elements.tree.TreeView;
 import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -219,7 +220,6 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         addInternalChild(content);
         content.addChild(tree);
         dnd.parkGhostIn(this);
-        find.installTypeToFilter();
         find.build();
         dnd.installDropTarget();
     }
@@ -413,9 +413,10 @@ public class ProjectFileTree extends UIElement implements UndoScope {
     public final Signal.Value<String> onFilterChanged = new Signal.Value<>();
 
     public ProjectFileTree setFilter(String query) {
-        source.setFilter(query);
-        tree.refresh();
-        find.apply();
+        // THROUGH THE COMPONENT, which owns the query now: it narrows the source through this class's
+        // Model, refreshes, and jumps to the first match. Setting the source directly would leave the bar
+        // and the match position describing a query that is no longer the one in effect.
+        find.setFilter(query);
         onFilterChanged.emit(source.filter());
         return this;
     }
@@ -523,33 +524,58 @@ public class ProjectFileTree extends UIElement implements UndoScope {
 
     // -- Find ---------------------------------------------------------------------------------------
     //
-    // The bar, the modes and the per-row marking live in ExplorerFind, beside this class. The CLASS NAMES
-    // stay here: a stylesheet targets `projectfiletree .__find-bar__`, so they belong to the widget the
-    // selector names rather than to whichever part happens to write them.
+    // The bar, the modes, the arrows and the marking are TreeSearch's, on any tree -- ExplorerFind is
+    // only the four answers a FILE tree has that a generic one cannot. These constants are kept as
+    // aliases so existing selectors and callers still name the panel, but they ARE the component's: two
+    // string literals for one class name is how a stylesheet and a widget drift apart.
 
     /** The bar along the top of the panel while a search is live. */
-    public static final String FIND_BAR_CLASS = "__find-bar__";
+    public static final String FIND_BAR_CLASS = TreeSearch.BAR_CLASS;
 
     /** The search box itself. A real input — see {@link ExplorerFind}. */
-    public static final String FIND_INPUT_CLASS = "__find-input__";
+    public static final String FIND_INPUT_CLASS = TreeSearch.INPUT_CLASS;
 
     /** The button that switches Filter and Highlight. */
-    public static final String FIND_MODE_CLASS = "__find-mode__";
+    public static final String FIND_MODE_CLASS = TreeSearch.MODE_CLASS;
 
     /** The match readout. */
-    public static final String FIND_COUNT_CLASS = "__find-count__";
+    public static final String FIND_COUNT_CLASS = TreeSearch.COUNT_CLASS;
+
+    /**
+     * The {@code ::highlight()} name the matched characters carry.
+     *
+     * <p>A highlight rather than a class, because what is being styled is a <b>range inside a string</b>
+     * and not an element — which is the whole reason the CSS Custom Highlight API exists. Wrapping the
+     * matched letters in spans would put a real Taffy node around three characters of every filename.</p>
+     */
+    public static final String FIND_HIGHLIGHT = TreeSearch.HIGHLIGHT;
 
     /** On a row whose own name matches, in Highlight mode. */
-    public static final String MATCH_CLASS = "__match__";
+    public static final String MATCH_CLASS = TreeSearch.MATCH_CLASS;
 
     /** On a row that matches nothing and contains nothing that does. */
-    public static final String DIMMED_CLASS = "__dimmed__";
+    public static final String DIMMED_CLASS = TreeSearch.DIMMED_CLASS;
 
     private final ExplorerFind find = new ExplorerFind(this);
 
-    /** Filter ⇄ Highlight. @see ExplorerFind */
+    /** Filter ⇄ Highlight. @see com.crystalgui.ui.elements.tree.TreeSearch */
     public void toggleFindMode() {
         find.toggleFindMode();
+    }
+
+    /**
+     * Whether a search removes non-matching rows.
+     *
+     * <p>On the PANEL rather than on {@code source()}, because the mode is the search component's state
+     * now: setting it on the source alone is overwritten by the next keystroke, which re-derives it from
+     * the component. That is the honest consequence of the two having one owner instead of two.</p>
+     */
+    public void setFindFiltering(boolean filtering) {
+        find.setFiltering(filtering);
+    }
+
+    public boolean isFindFiltering() {
+        return find.isFiltering();
     }
 
     /** Shows the search box and puts the caret in it — Ctrl+F. @see ExplorerFind */
@@ -565,6 +591,22 @@ public class ProjectFileTree extends UIElement implements UndoScope {
     /** Whether the search box is showing. */
     public boolean isFindOpen() {
         return find.isOpen();
+    }
+
+    /** The match the search box's arrows are currently on, or null. @see ExplorerFind */
+    @Nullable
+    public CgPath currentMatch() {
+        return find.currentMatchPath();
+    }
+
+    /** How many matches are on screen. */
+    public int matchCount() {
+        return find.matchCount();
+    }
+
+    /** Which of them is current, zero-based, or -1. */
+    public int currentMatchIndex() {
+        return find.currentMatchIndex();
     }
 
     /** The element the parts add their own chrome to. */

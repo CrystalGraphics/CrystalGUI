@@ -434,4 +434,39 @@ public class TreeViewTest extends UiTestBase {
             assertTrue("stale index " + index, index < 3);
         }
     }
+
+    /**
+     * <b>Expanding a node ABOVE the selection must not select a second row.</b>
+     *
+     * <p>{@code refresh} remembers the selected <em>items</em> and restores them after the re-flatten,
+     * which is right — indices do not survive one. What was missing is the clear in between: {@code
+     * ListView}'s clamp only discards indices that are now <em>out of range</em>, and an index that is
+     * still in range survives pointing at a different row. Restoring on top of that leaves both.</p>
+     *
+     * <p>Collapsing hid it, because the list shrinks and the stale index usually falls off the end.
+     * Expanding is where it bites: everything below moves down, every old index stays valid, and each
+     * re-flatten leaves one more row selected. It surfaced as the file tree gaining a selected row on every
+     * flip of the search mode — nothing was additive, the selection simply grew by one each time.</p>
+     */
+    @Test
+    public void expandingAboveTheSelectionDoesNotSelectASecondRow() {
+        build();
+        tree.setSelectionMode(SelectionMode.MULTIPLE);
+        settle();
+
+        // a, b, c — with c selected.
+        tree.select(2);
+        settle();
+        assertEquals(java.util.Set.of(2), tree.getSelectedIndices());
+
+        // a, a1, a2, b, c — c has moved to 4, and index 2 is now a2.
+        tree.setExpanded("a", true);
+        settle();
+
+        assertEquals("expanding above the selection left the old index selected too",
+                1, tree.getSelectedIndices().size());
+        assertEquals("and the row that stayed selected is not the one that was",
+                "c", tree.rowAt(tree.getSelectedIndices().iterator().next()).item());
+    }
+
 }

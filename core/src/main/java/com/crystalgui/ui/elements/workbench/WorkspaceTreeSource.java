@@ -6,6 +6,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.ProjectInfo;
 import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.ui.elements.tree.TreeDataSource;
@@ -637,6 +638,20 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
     /** Whether {@code path}'s own name matches what is being searched for. */
     public boolean isMatch(CgPath path) {
         return parsedFilter != null && SearchMatcher.match(parsedFilter, path.name(), 0) != null;
+    }
+
+    /**
+     * <b>Where</b> in {@code path}'s name the query matched — empty when it did not.
+     *
+     * <p>{@link SearchMatch} has carried these ranges all along; nothing had asked for them. Both
+     * references highlight the matched <em>characters</em> rather than the row: IntelliJ bands them in
+     * amber, VS Code recolours them. A whole-row mark says "something here matched" and leaves the eye
+     * to find what.</p>
+     */
+    public List<SearchMatch.Range> matchRanges(CgPath path) {
+        if (parsedFilter == null) return List.of();
+        SearchMatch match = SearchMatcher.match(parsedFilter, path.name(), 0);
+        return match == null ? List.of() : match.ranges();
     }
 
     /**
