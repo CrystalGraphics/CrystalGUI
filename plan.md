@@ -4191,3 +4191,45 @@ later step is UI over them.
   in a document.
 - **Query history** — its own feature, with its own persistence question.
 - **Multiline** — `TextField` is single-line by construction.
+
+## 30.7 The toggles are INSIDE the field, not beside it
+
+Worth stating precisely, because it decides the layout and it is not what "a bar with some buttons on it"
+would produce. In IntelliJ the focus ring encloses the whole cluster:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 🔍  the query text scrolls here …          ✕  ⏎ Cc W .* │   <- one border, one focus ring
+└─────────────────────────────────────────────────────────┘   0 results  ↑ ↓  ▽  ⋮  ✕
+```
+
+The magnifier, the clear ✕ and the three toggles are all **within** the field's box; the text may only
+occupy what is left between them. Outside the box sit the count, the prev/next arrows, the funnel, the
+overflow and the close — those are bar furniture.
+
+Two consequences:
+
+- **`SearchField` is exactly the right host**, and this is the strongest argument for using it over
+  `TreeSearch`'s bare `TextField`: it already owns the border and already parks `__icon__` and
+  `__clear__` inside it as internal children. `__options__` goes in the same box.
+- **The inner `TextField` is the only thing in that row that may shrink** (`flex-shrink: 1; min-width: 0`),
+  with the icon, the options and the clear at `flex-shrink: 0`. A long query then scrolls inside the field
+  instead of pushing the toggles out of it — which is what the second reference screenshot shows, with the
+  text clipped and the cluster still parked at the right edge. This is the same trap 29.12 hit in the find
+  bar, one level down.
+
+Also visible in that screenshot and worth porting: **the query text turns red when nothing matches.** It is
+the same signal as the invalid-pattern state and can share it — `SearchField` needs one "this query found
+nothing" flag driving a class, rather than two.
+
+## 30.8 Assets
+
+`ui/icons/general/search/` now carries `matchCase`, `exactWords`, `regex`, `newLine`, `filter`, `search`
+and up/down arrows, each with a `_dark` variant. These are IntelliJ Platform icons, so **`ATTRIBUTION.md`
+must list them in the same commit that ships them** — Apache 2.0 requires the licence and notice to travel
+with the distribution, and a javadoc comment does not satisfy it. The repo already indexes the 50 filetype
+icons the same way.
+
+The `_dark` variants are probably redundant here: `CgUiSvg` leaves `currentColor` unresolved and binds it at
+draw time, so one file tinted from CSS covers both themes. Worth checking whether the pairs differ
+structurally or only in a hard-coded fill before shipping twice as many files.
