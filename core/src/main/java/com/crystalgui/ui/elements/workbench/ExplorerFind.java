@@ -46,6 +46,12 @@ final class ExplorerFind implements TreeSearch.Model<CgPath> {
     void build() {
         search = TreeSearch.installOn(tree.treeView(), tree.contentBox(), this, tree::activate);
         search.input().setPlaceholder("Search files");
+        // A FILE TREE SEARCHES BY NAME. Match case, whole words and a regex are precision tools for prose
+        // and for code; a filename is short, and you can see whether you have it. The arrows go with them:
+        // Up/Down in the box already step the matches, and the panel is 187px wide, where every control is
+        // width the query does not get. Declared here rather than hidden in the sheet -- a host owns which
+        // controls its search has, the sheet owns what they look like.
+        search.setControls(TreeSearch.Control.COUNT, TreeSearch.Control.CLOSE);
     }
 
     private TreeSearch<CgPath> search() {

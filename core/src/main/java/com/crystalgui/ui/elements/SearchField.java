@@ -2,6 +2,8 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import javax.annotation.Nullable;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
@@ -32,16 +34,55 @@ public class SearchField extends UIElement {
     public static final String FIELD_CLASS = "__field__";
     public static final String CLEAR_CLASS = "__clear__";
 
+    /**
+     * The toggle strip — {@code Cc} / {@code W} / {@code .*} and whatever else a consumer mounts.
+     *
+     * <p><b>Inside the border, not beside it.</b> IntelliJ's focus ring encloses the magnifier, the text,
+     * the clear button and the toggles as one control, and the text may only occupy what is left between
+     * them. That is why this belongs to {@code SearchField} rather than to the bar around it: the box
+     * already exists here, and a strip mounted outside is a second control that merely looks attached
+     * until something resizes.</p>
+     */
+    public static final String OPTIONS_CLASS = "__options__";
+
+    /** On the whole field while its query finds nothing — IntelliJ reds the text. */
+    public static final String NOT_FOUND_CLASS = "__not-found__";
+
+    /**
+     * On the box while the caret is in it — the focus ring for the whole control.
+     *
+     * <p>Maintained here rather than written as {@code :focus-within}, which this engine does not have.
+     * An unknown pseudo-class is not ignored: it <b>poisons the sheet</b>, and one such rule broke six
+     * unrelated layout tests in panels that had never heard of a search box. The supported set is on
+     * {@code PseudoClasses}; anything outside it has to be a class somebody maintains.</p>
+     */
+    public static final String FOCUSED_CLASS = "__focused__";
+
     private final UIElement icon = new UIElement();
     private final TextField field = new TextField();
     private final UIElement clear = new UIElement();
+
+    /**
+     * Created on the first {@link #addOption}, never before.
+     *
+     * <p>Not a permanent child hidden with {@code display: none}: the row carries {@code gap-all}, and a
+     * hidden child still counts for a gap, so every existing consumer — the palette, the create menu, the
+     * Blackboard — silently gained a few pixels and the Blackboard's overflow tests caught it. Not
+     * existing is the only spelling of "costs nothing" that is actually free.</p>
+     */
+    @Nullable
+    private UIElement options;
 
     /** Fires on every keystroke — see the constructor's note on why this is not deferred to Enter. */
     public final Signal.Action onQueryChanged = new Signal.Action();
 
     public SearchField() {
         addClass(SEARCH_FIELD_CLASS);
-        markAsInternal();
+        // NOT markAsInternal(). That marks THIS element internal, and an internal element is skipped by the
+        // style match walk -- so every `.__search-field__` rule silently matched nothing and the box had no
+        // border, no icon, no sizing, while its children (styled by their own classes) looked fine. The
+        // parts are already internal individually via addInternalChild, which is the correct half of that
+        // pair; ListView's constructor carries the same warning, and MenuBarView paid for it once already.
 
         icon.addClass(ICON_CLASS);
         // Scenery. A press on the magnifier belongs to the field beside it, and an icon that ate the
@@ -57,9 +98,20 @@ public class SearchField extends UIElement {
             onQueryChanged.emit();
         });
 
+        // THE RING BELONGS TO THE BOX, and only the inner field can take focus -- so the box watches it.
+        field.onFocus.attachListener((element, event) -> addClass(FOCUSED_CLASS), false, true);
+        field.onBlur.attachListener((element, event) -> removeClass(FOCUSED_CLASS), false, true);
+
         clear.addClass(CLEAR_CLASS);
         clear.onMouseDown.attachListener((element, event) -> {
             setText("");
+            // AND PUT THE CARET BACK. `emitMouseDown` blurs the focus owner BEFORE it dispatches, and this
+            // element is not focusable, so the press cleared the query and left the box dead -- you had to
+            // click into it again to type the next one, which is the opposite of what a clear button is
+            // for. `requestPointerFocus` rather than `requestFocus`: this is a click, and the programmatic
+            // one rings `:focus-visible`.
+            UIWindow window = getAttachedWindow();
+            if (window != null) window.getInputHandler().requestPointerFocus(field);
             event.stopPropagation();
         }, false, true);
 
@@ -87,6 +139,43 @@ public class SearchField extends UIElement {
 
     public SearchField setPlaceholder(String placeholder) {
         field.setPlaceholder(placeholder);
+        return this;
+    }
+
+    /**
+     * Mounts a toggle into the strip inside the border.
+     *
+     * <p>A consumer that wants none of this calls it never and is untouched — there is no strip until the
+     * first call.</p>
+     */
+    public SearchField addOption(UIElement option) {
+        if (option == null) return this;
+        if (options == null) {
+            options = new UIElement();
+            options.addClass(OPTIONS_CLASS);
+            // AFTER the clear button, matching IntelliJ: the one control whose presence changes with the
+            // query sits next to the text it clears, rather than beyond a fixed strip.
+            addInternalChild(options);
+        }
+        options.addChild(option);
+        return this;
+    }
+
+    /** The strip, or null until something has been mounted in it. */
+    @Nullable
+    public UIElement options() {
+        return options;
+    }
+
+    /**
+     * Marks the query as finding nothing, which reds the text.
+     *
+     * <p>One flag rather than two: "no results" and "that pattern will not compile" are the same thing to
+     * look at, and IntelliJ draws them the same way.</p>
+     */
+    public SearchField setNotFound(boolean notFound) {
+        if (notFound) addClass(NOT_FOUND_CLASS);
+        else removeClass(NOT_FOUND_CLASS);
         return this;
     }
 

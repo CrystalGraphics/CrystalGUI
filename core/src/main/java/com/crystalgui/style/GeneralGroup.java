@@ -190,6 +190,16 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
+    /** The caret's colour, or 0 to follow {@code color}. @see StylePropertyRegistry#CARET_COLOR */
+    public int caretColor() {
+        return getValueSave(StylePropertyRegistry.CARET_COLOR);
+    }
+
+    public GeneralGroup caretColor(int caretColor) {
+        set(StylePropertyRegistry.CARET_COLOR, caretColor);
+        return this;
+    }
+
     /** Fill behind selected text — CSS's {@code ::selection { background-color }}. */
     public int selectionColor() {
         return getValueSave(StylePropertyRegistry.SELECTION_COLOR);

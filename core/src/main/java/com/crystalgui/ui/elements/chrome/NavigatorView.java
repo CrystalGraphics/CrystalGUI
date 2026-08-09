@@ -180,9 +180,13 @@ public class NavigatorView<T> extends UIElement {
         // narrow again even after folding it away. Only the shrink is gated: growth still lands the frame
         // a long row appears.
         //
-        // `contentChanged` is set from onExpandChanged, which is the only thing that alters what the
-        // widest row COULD be. Scrolling never sets it, so the breathing the original rule prevented
-        // cannot come back.
+        // `contentChanged` is set by the two things that alter what the widest row COULD be: a fold, and a
+        // change of filter. NOT by scrolling, which is what the monotonic rule originally existed to guard
+        // against -- a plain scroll changes which rows are realised and must not move the floor.
+        //
+        // The filter half was missed at first because `onExpandChanged` looked like the whole story. It is
+        // not: filtering replaces the row set outright, and the bulk `setExpandedItems` that reveal and
+        // restore go through does not emit that signal at all.
         if (wanted < sidebarMinimum && !contentChanged) return true;
         contentChanged = false;
         sidebarMinimum = wanted;
@@ -274,6 +278,11 @@ public class NavigatorView<T> extends UIElement {
             @Override
             public void setQuery(String text, boolean filtering) {
                 query = text == null ? "" : text.trim();
+                // A FILTER CHANGES WHICH ROWS EXIST, which is the same thing a fold does and the same
+                // reason the minimum has to be allowed to fall. Without this the sidebar ratcheted open on
+                // any query that revealed a long name and never gave the width back when the query was
+                // cleared -- the identical dead end 29.15 fixed for folding, reached the other way.
+                contentChanged = true;
                 if (filtered == null) return;
                 filtered.setFilter(query.isEmpty() || !filtering ? null : matcher);
             }
@@ -318,6 +327,11 @@ public class NavigatorView<T> extends UIElement {
         search.bar().addClass(SEARCH_CLASS);
         search.input().setPlaceholder("Search");
         search.setPresentation(TreeSearch.Presentation.PERMANENT);
+        // A BARE BOX. The tree below IS the answer here -- an empty sidebar says "no matches" more directly
+        // than a count does, there is nothing to step through once filtering has narrowed it, and a
+        // permanent bar has nothing to dismiss. The matching options are precision tools for prose; a
+        // settings page is found by its name.
+        search.setControls();
         search.setMode(TreeSearch.Mode.FILTER);
         // ARROWS STAY OURS. They walk the visible tree and OPEN the page for whatever they land on, with
         // or without a query -- so match-stepping would both fight that and go dead the moment the box was
