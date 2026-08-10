@@ -2318,6 +2318,17 @@ public class UIElement implements SettingsScope, DataProvider {
         CgUiDrawable overlay = styleGen.overlay();
         if (overlay == CgUiDrawable.EMPTY) return;
 
+        // A MARK TAKES THE ELEMENT'S `color`; A PICTURE KEEPS ITS OWN PALETTE.
+        //
+        // The reset above is not enough on its own, and for a long time it was all there was: a
+        // `shape()` overlay multiplies by the ambient tint, so pinning that tint to white meant every
+        // chevron, checkmark and cross in the engine painted WHITE no matter what any stylesheet said.
+        // It looked correct for exactly as long as every background was dark -- the light theme made
+        // every fold arrow in the file tree disappear. Gated on the drawable rather than applied to
+        // all of them, because tinting a multi-colour file-type icon by the surrounding text colour is
+        // how it turns to mud. @see CgUiDrawable#followsTextColor()
+        if (overlay.followsTextColor()) ctx.setColor(styleGen.color());
+
         // `overlay-origin` picks which box the layer is laid into, then `overlay-fit`/`-position`
         // size and place the drawable inside it. Defaults (border-box + fill) reproduce the
         // pre-longhand behaviour of stretching across the element's whole outer box exactly.
