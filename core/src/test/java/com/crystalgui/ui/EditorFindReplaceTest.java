@@ -174,13 +174,31 @@ public class EditorFindReplaceTest extends UiTestBase {
         settle();
         assertEquals("the count should follow the edit", 0, editor.matchCount());
 
+        assertEquals("the BAR should say so too", "0", bar.countText());
+
         editor.undoStack().undo();
         settle();
         assertEquals("and follow it back on undo", 3, editor.matchCount());
+        // THE BAR, not just the editor. Undo comes from outside the bar, so nothing it does would have
+        // re-read the count -- it went on reporting the numbers from before the undo.
+        assertEquals("the bar did not follow the undo", "3", bar.countText());
 
         editor.undoStack().redo();
         settle();
         assertEquals(0, editor.matchCount());
+    }
+
+
+    /** Ctrl+F means find: it folds the replace row back rather than giving you the state you left. */
+    @Test
+    public void openingFindFoldsTheReplaceRow() {
+        bar.openReplace();
+        settle();
+        assertTrue(bar.isReplaceShown());
+
+        bar.open();
+        settle();
+        assertFalse("find reopened with the replace row still expanded", bar.isReplaceShown());
     }
 
 }

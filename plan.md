@@ -4573,3 +4573,25 @@ name, since highlights already carry `text-decoration-line`.
 And one real defect the fix for (5) introduced: the guard was written as an early `return` in a paint
 method, which stranded a pushed scissor — the window flickered and then threw. **A paint method may skip the
 draw; it may never skip the method.**
+
+### 31.7a Four more from using it
+
+- **The bar did not follow an undo.** Everything it says — the count, the dead arrows, the red query — is
+  read from the editor, and it was only ever re-read when the bar itself had just done something. An edit
+  from outside (undo, redo, a paste, a server push) moved the matches and left the bar reporting the numbers
+  from before. It listens to the editor's change signal now, which the editor emits *after* re-running the
+  search, so the numbers are already current.
+- **`0/3` read as a failure.** A re-find leaves nothing selected until something steps to a match, and a
+  leading zero looks like "no results" rather than a total. It says `3` until there is a current match.
+- **Ctrl+F on an open replace row now folds it back.** Find means find; reopening with the replace row
+  expanded gives back the state you left rather than what the key asked for. Both chords are also handled
+  inside the bar, because the keymap resolves outward from the focused element and that element is a
+  `TextField` *inside* the bar.
+- **The chevron stole the caret.** `emitMouseDown` blurs the focus owner before it dispatches and the
+  chevron is not focusable, so expanding the replace row took the caret out of the query being typed. The
+  same trap the clear button paid for, and the third time this session — anything clickable that is not
+  itself focusable has to hand focus back deliberately.
+
+**Not a bug, worth recording:** `Ctrl+R` appears dead *in the harness only*. `InteractiveSceneRunner`
+binds it to a stylesheet reload and consumes it before the scene sees it, so the editor's Replace chord
+cannot be tested there. It is bound in the keymap and reachable from Edit ▸ Replace.

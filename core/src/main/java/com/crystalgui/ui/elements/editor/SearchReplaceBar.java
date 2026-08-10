@@ -104,11 +104,26 @@ public class SearchReplaceBar extends UIElement {
 
         chevron.addClass(CHEVRON_CLASS);
         Tooltip.attach(chevron, "Replace  Ctrl+R");
-        chevron.onPressed.connect(() -> setReplaceShown(!replaceShown));
+        chevron.onPressed.connect(() -> {
+            setReplaceShown(!replaceShown);
+            // AND PUT THE CARET BACK. `emitMouseDown` blurs the focus owner before it dispatches and the
+            // chevron is not focusable, so expanding the replace row took the caret out of the query you
+            // were in the middle of typing. Same trap the clear button paid for.
+            focus(replaceShown ? replaceBox.field() : findBox.field());
+        });
 
         close.addClass(CLOSE_CLASS);
         Tooltip.attach(close, "Close  Escape");
         close.onPressed.connect(this::close);
+
+        // THE BAR FOLLOWS THE DOCUMENT, not only its own buttons. Everything it says -- the count, the dead
+        // arrows, the red query -- is read from the editor, and it was only ever re-read when the bar
+        // itself had just done something. An edit from outside (undo, redo, a paste, a server push) moved
+        // the matches and left the bar reporting the numbers from before it.
+        //
+        // The editor re-runs the search from the buffer's change signal BEFORE emitting this, so the
+        // numbers are already current by the time this reads them.
+        editor.onChanged.connect(text -> refresh());
 
         setReplaceShown(false);
         refresh();
@@ -121,6 +136,25 @@ public class SearchReplaceBar extends UIElement {
             if (!writingBack) runSearch();
         });
         findBox.field().onKeyDown.attachListener((element, event) -> {
+            // CTRL+F AND CTRL+R WHILE THE BAR HAS FOCUS. They are in the keymap too, but the keymap
+            // resolves outward from the focused element and the focused element here is a TextField inside
+            // the bar -- so the bar answers for its own chords rather than depending on the walk.
+            //
+            // Ctrl+F on an open replace FOLDS IT BACK: it means "find", and a find bar showing a replace
+            // row is not what was asked for.
+            if (CgModifiers.hasCtrl(event.getModifiers())) {
+                if (event.getKeyCode() == CgKeyCodes.KEY_F) {
+                    setReplaceShown(false);
+                    focus(findBox.field());
+                    event.stopPropagation();
+                    return;
+                }
+                if (event.getKeyCode() == CgKeyCodes.KEY_R) {
+                    setReplaceShown(true);
+                    event.stopPropagation();
+                    return;
+                }
+            }
             boolean handled = switch (event.getKeyCode()) {
                 case CgKeyCodes.KEY_RETURN -> CgModifiers.hasShift(event.getModifiers())
                         ? step(-1) : step(1);
@@ -249,7 +283,11 @@ public class SearchReplaceBar extends UIElement {
         int matches = editor.matchCount();
         boolean nothing = !findBox.getText().isEmpty() && matches == 0;
         findBox.setNotFound(nothing);
-        count.setText(matches == 0 ? "0" : editor.currentMatchNumber() + "/" + matches);
+        // "3", not "0/3". A re-find leaves nothing selected until something steps to a match, and a
+        // leading zero reads as a failure rather than as a total -- which is exactly how it looked after
+        // an undo restored three matches.
+        int at = editor.currentMatchNumber();
+        count.setText(matches == 0 ? "0" : at == 0 ? String.valueOf(matches) : at + "/" + matches);
         if (nothing) count.addClass(SearchField.NOT_FOUND_CLASS);
         else count.removeClass(SearchField.NOT_FOUND_CLASS);
 
@@ -274,6 +312,9 @@ public class SearchReplaceBar extends UIElement {
     public void open() {
         open = true;
         setDisplayed(true);
+        // FIND MEANS FIND. Reopening with the replace row still expanded gives back the state you left,
+        // which is not what the key asked for.
+        setReplaceShown(false);
         focus(findBox.field());
     }
 
@@ -356,6 +397,11 @@ public class SearchReplaceBar extends UIElement {
     }
 
     // ── Parts ───────────────────────────────────────────────────────────────────────────────────
+
+    /** What the count says — the only observable of it, for a test that must not assert on pixels. */
+    public String countText() {
+        return count.getText();
+    }
 
     public SearchField findField() {
         return findBox;
