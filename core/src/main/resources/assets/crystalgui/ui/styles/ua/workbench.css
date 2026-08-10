@@ -1,0 +1,1484 @@
+/* ua/workbench.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ *
+ * The dock, quick pick, diagnostics, the shader graph editor shell, drag ghost, region drop, activity bar, menu accelerators, name prompts, Preferences, NavigatorView.
+ *
+ * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
+ * one sheet the engine loads — rule order across files is as load-bearing as within one
+ * (:disabled after :hover ties), so files split at section boundaries and never reorder.
+ * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
+ * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+
+/* ── Dock ────────────────────────────────────────────────────────────────────────
+ *
+ * None of these widgets is in ElementRegistry, so their tag comes from UIElement.tagName()'s
+ * fallback: the simple class name, lowercased. That is deliberate rather than an omission — a
+ * DockArea needs a panel registry and a layout to exist at all, so there is no no-arg factory to
+ * register, and the same is already true of graphview and canvasview.
+ *
+ * A widget's cascade identity is its TAG, never its Java supertype, so floatingdock inherits nothing
+ * from `dialog` and has to name whatever it wants. */
+
+dockarea {
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+}
+
+dockgroup {
+    flex-direction: column;
+    background: var(--dock-bg, #2B2B2B);
+    /* The group is a positioned ancestor for its own overlay and insertion caret, both of which are
+     * absolute and expect this box as their containing block. */
+    position: relative;
+}
+
+/* The drop preview: a translucent wash over the half of the pane the drop would take. Hit-testing is
+ * switched off in Java (setHitTest covers the whole subtree) rather than here — there is no
+ * pointer-events property, and an overlay that takes the pointer ends the drag on top of itself. */
+dockgroup .__drop-overlay__ {
+    background: var(--dock-drop-overlay, #4A88C766);
+    border-all-radius: 2px;
+}
+
+/* The caret between two tabs during a reorder. Deliberately brighter than the overlay: it marks a
+ * single boundary rather than an area, so it has to read at 2px wide. */
+/* THE INSERTION PLACEHOLDER, shared by every list that can be reordered by dragging -- tab strips,
+ * tool-window stripes. One widget (InsertionMarker), so one rule: it used to be per-consumer, which is how
+ * the second one would have got a different colour for no reason anyone chose.
+ *
+ * A SLOT, not a hairline. It is sized to the item it would sit beside, so it says "a thing this size goes
+ * here" rather than only "here" -- which is the question you have while carrying something. Both references
+ * do this: IntelliJ opens a tab-width gap in a strip and a button-sized square in a stripe.
+ *
+ * Outlined and barely filled, so whatever it overlaps still reads through it. Sized and placed from Java,
+ * since it tracks a pointer; only the paint is here. */
+.__insertion__ {
+    background-color: var(--dock-insertion-bg, #7EB6FF30);
+    outline: 1px var(--dock-insertion-border, #7EB6FF);
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+/* In a rail the gap is an ordinary child, so it needs the same spacing the buttons carry -- otherwise the
+ * list closes up by two pixels the moment one opens, and every button below the gap shifts by that much
+ * more than the gap actually accounts for. */
+workbench .__activity-bar__ .__insertion__ {
+    margin-bottom: 2px;
+}
+
+/* Which group commands act on. An outline rather than a background, so a panel's own colour is not
+ * repainted every time focus moves. */
+dockgroup.__active__ {
+    outline-width: 1px;
+    outline-color: var(--dock-active-border, #4A88C7);
+}
+
+/* A panel whose type is registered but has no factory. Visible on purpose: a tab with nothing behind
+ * it is reportable, while a silently absent tab looks like the layout failed to restore. */
+dockgroup .__missing__ {
+    flex-grow: 1;
+    background: var(--dock-missing-bg, #3A2B2B);
+}
+
+/* A region -- sidebar, panel, auxiliary -- filling the SplitView pane it sits in.
+ *
+ * flex-basis 0 with flex-grow 1, not height:100%: this engine's flex-shrink defaults to 0, so a child
+ * that keeps its content size spills out of the pane instead of dividing it. The same rule the dock's
+ * pane host and the inspector already carry, and the same failure without it -- the host measured to
+ * nothing, so the file tree's rows existed and could not be clicked. */
+/* A container fills its region, and its content fills what the header leaves. Same column-fill idiom as
+ * every other pane child -- without it the header measures and the content does not, which shows up as a
+ * tool window whose rows exist and cannot be clicked. */
+.__view-container__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+.__view-container__ .__header__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 2px 4px 2px 8px;
+    gap: 4px;
+}
+
+/* ONE LINE, ELLIPSIZED -- never wrapped. A header that wraps turns "Services" into "Servic / es" and
+ * doubles the height of every container in a narrow region, which is what a minimum width exists to stop
+ * you reaching in the first place. text-overflow does NOT inherit, so it has to sit on the UIText itself. */
+/* NO LONGER GROWS. The hide button is pushed to the trailing edge by its own auto margin instead, which
+ * leaves the space after the title free for a view's contributed controls -- IntelliJ reads
+ * "Problems  [File 65]  [Project Errors]" on one line, and a growing title would strand them at the far
+ * right. One auto margin means one claimant, so it takes all the slack rather than sharing it. */
+.__view-container__ .__header__ .__title__ {
+    flex-grow: 0;
+    /* NEVER SHRINKS. With the title growing, ellipsis was its own protection; once it stopped growing it
+     * became the first thing flex took space from, and "Problems" rendered as "Pr" beside its own tabs. */
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--panel-header-fg, #A0A0A0);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.__view-container__ .__header__ .__hide__ {
+    margin-left: auto;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    overlay: icon("crystalgui:x");
+    overlay-fit: contain;
+    color: var(--panel-header-icon, #A0A0A0);
+}
+
+.__view-container__ .__header__ .__hide__:hover {
+    color: var(--panel-header-icon-hover, #E0E0E0);
+}
+
+.__view-container__ .__view-content__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* THE STRETCH BETWEEN THE TWO GROUPS, which is what pushes the bottom one to the foot of the rail.
+ *
+ * A spacer rather than `margin-top: auto`, after that spelling went wrong twice. Auto margins SHARE the
+ * free space with every other auto margin in the same container, so the answer depends on how many
+ * elements carry one -- and during a drag the insertion gap can lead the bottom group too, which made
+ * three of them split the rail into three gaps. One always-present element cannot do that.
+ *
+ * `height: 0` with `flex-grow: 1` is the fill idiom, and flex-shrink is deliberately untouched. */
+/* THE RULE BETWEEN AN ANCHOR'S TWO HALVES -- IntelliJ's StripeButtonSeparator.
+ *
+ * Structural, not decorative: the two halves are separate reorder units that happen to share a stripe, so
+ * without a visible boundary the rail looks like one list that refuses to be rearranged. See
+ * StripeView.SEPARATOR_CLASS. */
+workbench .__activity-bar__ .__stripe-separator__ {
+    width: 12px;
+    height: 1px;
+    flex-shrink: 0;
+    margin-top: 3px;
+    margin-bottom: 5px;
+    background-color: var(--activitybar-separator, #4E5157);
+}
+
+.__activity-bar__ .__stripe-spacer__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* The count over a rail icon. */
+.__activity-bar__ .__badge__ {
+    font-size: 9px;
+    color: var(--activitybar-badge-fg, #FFFFFF);
+}
+
+/* THE DOT FORM — IntelliJ's unread mark on the bell, in the icon's top-right corner.
+ *
+ * Absolutely positioned so it OVERLAPS the icon rather than taking a slot beside it: the rail is 20px wide
+ * and a badge in flow would push the glyph out of the button. Taffy resolves an absolute child against its
+ * parent, which is the rail button itself, so `right`/`top` are the corner of the button.
+ *
+ * The drawing is JetBrains' own `general/modified` — a filled blue circle, which is exactly this mark. It
+ * carries its own colour, so nothing here tints it; the size is what makes a 16px source read as a dot.
+ *
+ * The `_dark` variant is deliberately NOT selected here: `icon()` in a stylesheet has no variant machinery
+ * (only FileIconTheme.withVariant does, from Java), and the two drawings of a blue dot do not differ. */
+.__activity-bar__ .__badge__.__dot__ {
+    position: absolute;
+    right: -0px;
+    /* NEGATIVE, so it sits against the glyph's top-right rather than inside the button's box. IntelliJ's
+     * mark overhangs the icon slightly, and the rail button is a couple of pixels taller than the 16px
+     * drawing it centres — so a `top` of 0 still lands below the bell's shoulder. */
+    top: -2px;
+    width: 10px;
+    height: 10px;
+    overlay: icon("crystalgui:general/modified");
+    overlay-fit: contain;
+}
+
+.__region-host__ {
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+/* One rule for every region, and the axis is NOT the split's. A SplitView pane is itself a flex
+ * container and this engine's flex-direction defaults to COLUMN, so a pane's child always grows by
+ * HEIGHT and fills width -- whether the split beside it runs horizontally or vertically. Splitting this
+ * per region on the split's orientation collapsed the sidebar to nothing, which showed up as a file tree
+ * whose rows existed and could not be clicked. */
+.__region-host__ {
+    width: 100%;
+    height: 0;
+}
+
+/* The banner column: a strip (or several) above a panel's own content. Only exists when a
+ * DockBannerProvider answered, so this rule reaches nothing on an ordinary tab. */
+.__dock-bannered__ {
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+/* IntelliJ's EditorNotificationPanel. A row, full width, sitting inside the tab rather than over it --
+ * a banner says what this tab IS, so it has to still be there tomorrow. */
+.__dock-banner__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    flex-shrink: 0;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--banner-border, #00000040);
+}
+
+.__dock-banner__ .__message__ {
+    flex-grow: 1;
+    font-size: 11px;
+}
+
+.__dock-banner__ .__action__ {
+    padding: 2px 8px;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+/* Severity, as three classes rather than three colours in Java -- the project rule. */
+.__dock-banner__.__info__ {
+    background: var(--banner-info-bg, #2D3A4A);
+    color: var(--banner-info-fg, #C8D6E5);
+}
+
+.__dock-banner__.__warning__ {
+    background: var(--banner-warning-bg, #4A3F2D);
+    color: var(--banner-warning-fg, #E5D6A8);
+}
+
+.__dock-banner__.__error__ {
+    background: var(--banner-error-bg, #4A2D2D);
+    color: var(--banner-error-fg, #E5B4B4);
+}
+
+floatingdock {
+    background: var(--dock-floating-bg, #1E1E1EF0);
+    min-width: 160px;
+    min-height: 120px;
+}
+
+/* An empty group, which only the central one can be. It is the guarantee that the work area still
+ * exists rather than a pane that failed to collapse -- so it says so, instead of reading as a dead
+ * grey box. VS Code draws a shortcut watermark here; a recessed panel is the same idea, cheaper. */
+dockgroup.__empty__ {
+    background: var(--dock-empty-bg, #232323);
+}
+dockgroup.__empty__ .__strip__ {
+    opacity: 0.5;
+}
+
+/* ── Quick pick / command palette ──────────────────────────────────────────────────────────────
+ *
+ * left/top/width are written from Java at IMPORTANT origin by QuickPick.reposition(), because they are
+ * computed from the window rather than authored. Everything else belongs here, per the widget rule.
+ */
+quickpick {
+    background: var(--palette-bg, #252526);
+    outline-width: 1px;
+    outline-color: var(--palette-border, #454545);
+    padding-all: 4px;
+}
+
+/* CHILD combinator, not descendant: "__content__" is a shared structural class -- CanvasView uses it
+ * for its transformed world plane -- so a descendant rule reaches into any graph nested below. */
+quickpick > .__content__ {
+    flex-direction: column;
+}
+
+quickpick .__search__ {
+    margin-bottom: 4px;
+}
+
+/* Taller, rounded, and ringed on focus -- VS Code's quick input. The height is the palette's most-read
+ * control and 16px left the text sitting tight against both edges; 22px gives the caret room without
+ * making the box the loudest thing in the popup. The ring is a focus affordance rather than decoration:
+ * this field holds focus for the whole life of the palette, so "where do my keystrokes go" has to be
+ * answerable at a glance. */
+quickpick .__search__ textfield {
+    height: 22px;
+    border-radius: 3px;
+    padding-left: 6px;
+    padding-right: 6px;
+    outline-width: 1px;
+    outline-color: var(--palette-field-border, #3C3C3C);
+    background: var(--palette-field-bg, #1E1E1E);
+}
+
+quickpick .__search__ textfield:focus {
+    outline-color: var(--palette-field-focus-border, #0078D4);
+}
+
+/* AUTO, not SCROLL: SCROLL draws both bars unconditionally, which put a horizontal scrollbar across a
+ * one-row palette that had nothing to scroll. Height is written from Java -- min(rows, 12) * row
+ * height -- and deliberately NOT flex-grow. A popover
+ * sizes to its own content, so there is no free space for a grow to claim and the list would resolve to
+ * zero: a search box with nothing under it. See QuickPick.sizeListToContent. */
+quickpick .__results__ {
+    overflow: auto;
+}
+
+/* Paired with QuickPick.ROW_HEIGHT -- a virtualised list needs its row height in Java to map an index to
+ * a scroll offset, and the two must agree or rows drift from the boxes drawn for them. */
+quickpick .__row__ {
+    flex-direction: row;
+    align-items: center;
+    height: 22px;
+    padding-left: 8px;
+    /* CLEAR OF THE SCROLLBAR. The bar is 8px and absolutely positioned over the right edge, so a row
+     * padded to 6px ran its accelerator underneath it -- the keys were sliced in half by a bar that has
+     * no idea they are there. 14 is the bar plus the padding the left side already has. */
+    padding-right: 14px;
+    gap-all: 6px;
+}
+
+/* ARROW-KEY selection is BLUE and hover is GREEN, which is a real distinction rather than two skins of
+ * one state: the blue row is what Enter will run, the green one is merely what the pointer is over. A
+ * palette that painted both the same would make the mouse look like it had moved the selection. */
+quickpick .__row__.__selected__ {
+    background-color: var(--palette-selected-bg, #04395E);
+}
+
+quickpick .__row__:hover {
+    background-color: var(--palette-hover-bg, #2A3B2A);
+}
+
+/* Selection wins where both apply -- the pointer resting over the selected row must not repaint it as
+ * merely hovered, or the row Enter would run stops being identifiable. */
+quickpick .__row__.__selected__:hover {
+    background-color: var(--palette-selected-bg, #04395E);
+}
+
+/* Listed but not choosable. Dimmed rather than hidden: hiding is VS Code's rule and it does not survive
+ * enablement predicates that walk up from the focused element, which answer "no" to everything when
+ * nothing is focused. IntelliJ's Find Action dims instead, and that is what this is. */
+quickpick .__row__.__qp-disabled__ {
+    opacity: 0.4;
+}
+
+/* Dimmer than the label, so "Dock: " reads as provenance rather than as part of the name. */
+quickpick .__qp-category__ {
+    color: var(--palette-category-fg, #9D9D9D);
+}
+
+quickpick .__qp-label__ {
+    color: var(--palette-label-fg, #CCCCCC);
+}
+
+quickpick .__qp-spacer__ {
+    flex-grow: 1;
+}
+
+/* A ROW of key boxes. Java splits the chord (see QuickPick.setAccelerator); this draws it. */
+quickpick .__qp-accelerator__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 3px;
+    flex-shrink: 0;
+}
+
+/* Each key in its own box, VS Code's quick input. Filled by default. */
+quickpick .__qp-key__ {
+    /* A ROW that sizes to its own text. `flex-shrink: 0` is explicit rather than inherited from this
+     * engine's default, because the row it sits in has a flex-grow spacer beside it and a key that gives
+     * way to that spacer is a key with its label hanging out of it. */
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background-color: var(--palette-key-bg, #3C3C3C);
+    outline-width: 1px;
+    outline-color: var(--palette-key-border, #4A4A4A);
+    border-radius: 3px;
+    padding-left: 5px;
+    padding-right: 5px;
+    height: 16px;
+    min-width: 16px;
+}
+
+quickpick .__qp-key__ text {
+    color: var(--palette-key-fg, #CCCCCC);
+}
+
+/* On a highlighted row the fill goes and only the OUTLINE stays -- which is what VS Code does, and it
+ * is not decoration: a filled grey box on a coloured row reads as a second, competing background. The
+ * outline keeps the key legible as a key while letting the row's own colour through. */
+quickpick .__row__.__selected__ .__qp-key__,
+quickpick .__row__:hover .__qp-key__ {
+    background-color: #00000000;
+    outline-color: var(--palette-key-hover-border, #9BB8CC);
+}
+
+quickpick .__row__.__selected__ .__qp-key__ text,
+quickpick .__row__:hover .__qp-key__ text {
+    color: var(--palette-key-hover-fg, #FFFFFF);
+}
+
+/* The `+` is punctuation between keys, not a key. No box, and dimmer than one. */
+/* The `+` between two keys. Punctuation, not a key -- no box, and dimmer than one.
+ *
+ * EXPLICIT WIDTH, deliberately. UIText self-sizes and latches that width on its FIRST measurement, so a
+ * separator that was ever measured while hidden keeps a near-zero width for good -- which is what left
+ * the plus signs as slivers between correctly-sized boxes. A glyph this small and this fixed does not
+ * need measuring at all, and stating the width means there is no first pass to get wrong. */
+quickpick .__qp-key-sep__ {
+    color: var(--palette-key-sep-fg, #8A8A8A);
+    width: 8px;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+/* Which characters the query matched. Java says WHERE (QuickPickEntry's ranges); this says how it
+ * looks -- the whole point of the Custom Highlight API. */
+quickpick ::highlight(quickpick-match) {
+    color: var(--palette-match-fg, #2AAAFF);
+}
+
+/* ── Diagnostics ───────────────────────────────────────────────────────────────────────────────
+ *
+ * Java says WHERE (SquigglesPart places a band per view line); this says what a severity looks like.
+ * A new severity is a rule here, not a recompile -- the same split the node graph's port palette uses.
+ * HINT is absent on purpose: it draws no band at all, so a style suggestion cannot be mistaken for a
+ * compile error. See DiagnosticSeverity.
+ */
+.__squiggle__ {
+    z-index: -1;
+}
+
+.__squiggle-error__ {
+    background-color: var(--squiggle-error, #F14C4C);
+}
+
+.__squiggle-warning__ {
+    background-color: var(--squiggle-warning, #CCA700);
+}
+
+.__squiggle-information__ {
+    background-color: var(--squiggle-info, #3794FF);
+}
+
+/* The error stripe — marks in the vertical scrollbar's groove, one per problem in the WHOLE document.
+ *
+ * ABOVE the thumb, not below. Under it these vanish for exactly the documents where the stripe matters
+ * least to lose them: a file that mostly fits gives a thumb covering most of the groove, so most marks
+ * are hidden -- observed with only two of four visible. IntelliJ dodges this by giving the stripe its own
+ * lane beside the scrollbar; VS Code draws the ruler over a translucent slider. A 1.2%-tall mark over a
+ * solid thumb is the cheaper version of the second and costs the thumb nothing readable. */
+.__error-stripe__ {
+    z-index: 1;
+    opacity: 0.85;
+}
+
+.__error-stripe-error__ {
+    background-color: var(--stripe-error, #F14C4C);
+}
+
+.__error-stripe-warning__ {
+    background-color: var(--stripe-warning, #CCA700);
+}
+
+.__error-stripe-information__ {
+    background-color: var(--stripe-info, #3794FF);
+}
+
+/* The inspection widget — the problem readout in the editor's top-right corner.
+ * Position is written from Java (right/top insets, content-sized); everything else is here. */
+.__inspection__ {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 6px;
+    padding-right: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    background: var(--inspection-bg, #2D2D2DE0);
+    border-radius: 3px;
+    z-index: 2;
+}
+
+.__inspection-status__ {
+    font-size: 7px;
+    margin-right: 4px;
+}
+
+.__inspection-clean__ .__inspection-status__ { color: var(--inspection-clean-fg, #6A9955); }
+.__inspection-errors__ .__inspection-status__ { color: var(--inspection-error-fg, #F14C4C); }
+.__inspection-warnings__ .__inspection-status__ { color: var(--inspection-warning-fg, #CCA700); }
+
+/* Drawn shapes, never glyphs: MinecraftRegular.otf has no U+25B2/U+25BC and a missing glyph renders as
+ * a blank advance, so a text arrow would be an empty button that reads as a layout bug. */
+.__inspection-previous__, .__inspection-next__ {
+    width: 11px;
+    height: 11px;
+    background: none;
+    overlay-fit: contain;
+}
+
+.__inspection-previous__ { overlay: shape("triangle-up"); }
+.__inspection-next__ { overlay: shape("triangle-down"); }
+
+.__inspection-previous__:disabled, .__inspection-next__:disabled {
+    opacity: 0.3;
+}
+
+/* The Problems panel. Sized by its dock pane, so it only has to fill it. */
+/* A COLUMN OF [tabs, body], where the body is [gutter | tree]. The tabs span the panel and the gutter
+ * runs beside the tree only, which is IntelliJ's arrangement — the two axes cannot be one element. */
+problemspanel {
+    flex-grow: 1;
+    background: var(--problems-bg, #1E1E1E);
+}
+
+problemspanel .__problems-body__ {
+    flex-direction: row;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+/* THE SCOPE TABS. Two tabs rather than VS Code's `Show Active File Only` menu row, because the current
+ * scope has to be readable without opening anything: a filter hidden in a menu is a mode you can be in
+ * without knowing, and an empty Problems panel means two different things depending which one you are in. */
+/* Scoped to the CLASS, not to problemspanel: these now live on the container's title line, so they are
+ * no longer descendants of the panel that owns them. @see HeaderContributor */
+.__problem-tabs__ {
+    flex-direction: row;
+    flex-shrink: 0;
+    align-items: center;
+    padding-left: 6px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    gap-all: 4px;
+}
+
+.__problem-tab__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    gap-all: 4px;
+    padding-left: 5px;
+    padding-right: 5px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    border-radius-all: 3px;
+    /* SIZED LIKE THE ROWS BELOW, not like the title. A scope tab is a control on a header, and at the
+     * title's weight it competes with the name of the panel it sits on. */
+    font-size: 7px;
+    color: var(--problems-tab-fg, #9DA0A8);
+    cursor: pointer;
+}
+
+.__problem-tab__:hover {
+    background: var(--problems-tab-hover-bg, #2F3133);
+}
+
+/* THE TAB IN FORCE, as a filled pill — IntelliJ's selected tab, and the reason the tabs exist at all. */
+.__problem-tab__.__selected__ {
+    background: var(--problems-tab-active-bg, #2F5C8F);
+    color: var(--problems-tab-active-fg, #DFE1E5);
+}
+
+.__problem-tab__ .__tab-count__ {
+    font-size: 7px;
+    color: var(--problems-tab-count-fg, #7A7D85);
+    flex-shrink: 0;
+}
+
+.__problem-tab__.__selected__ .__tab-count__ {
+    color: var(--problems-tab-active-count-fg, #B6C6DA);
+}
+
+/* PADDED TO MEET THE FIRST ROW. The gutter's icon and the tree's first row are read as a pair, and four
+ * pixels of difference between them reads as one of the two being misplaced. */
+problemspanel .__problems-head__ {
+    width: 24px;
+    flex-shrink: 0;
+    align-items: center;
+    padding-top: 4px;
+    gap-all: 6px;
+}
+
+/* THE EYE. Opens the view menu — Show Errors / Warnings / Infos, then Show Active File Only, which is
+ * VS Code's filter menu in IntelliJ's affordance. Quiet at rest and lit on hover, because it is chrome
+ * that is used rarely and sits beside content that is read constantly. */
+problemspanel .__view-options__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    cursor: pointer;
+    overlay: icon("crystalgui:general/show");
+    color: var(--problems-options-fg, #8A8D94);
+}
+
+problemspanel .__view-options__:hover {
+    color: var(--problems-options-hover-fg, #D5D7DB);
+}
+
+/* THE CORNER MARK that says the eye opens a menu rather than toggling something. Its own element because
+ * `overlay` is one drawable and IntelliJ draws this BESIDE the glyph, in the bottom-right, not instead of
+ * it. Out of flow so it cannot push the eye off centre. */
+problemspanel .__view-options__ .__dropdown-gutter__ {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 14px;
+    height: 14px;
+    overlay: icon("crystalgui:general/dropdownGutter");
+    color: var(--problems-options-fg, #8A8D94);
+}
+
+problemspanel .__view-options__:hover .__dropdown-gutter__ {
+    color: var(--problems-options-hover-fg, #D5D7DB);
+}
+
+/* THE ROWS START LEVEL WITH THE EYE. The tree is absolutely positioned inside the content box, so the
+ * offset goes here rather than as padding on a parent it does not measure against. */
+problemspanel .__problem-list__ {
+    padding-top: 4px;
+}
+
+/* STILL A CHILD COMBINATOR, just one level lower: the content moved inside `__problems-body__` when the
+ * gutter arrived, and `problemspanel > .__content__` silently stopped matching — so the tree lost its
+ * flex-grow, collapsed to nothing, and the panel rendered empty with a correct count on the tab above it.
+ * The combinator itself is deliberate and stays: `.__content__` is a name three widgets use, and a
+ * descendant selector for it has broken this codebase three times. */
+problemspanel .__problems-body__ > .__content__ {
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+/* Stacked, not swapped: the table and the empty state occupy the same box and cross-fade on opacity, so
+ * neither one's arrival resizes the panel. */
+problemspanel .__problem-list__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+}
+
+problemspanel .__problems-empty__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding-all: 8px;
+    color: var(--problems-empty-fg, #8A8A8A);
+}
+
+/* ── Shader graph editor ──
+ *
+ * The canvas. Geometry only: what a node LOOKS like is graph.css's job, and the syntax colours for the
+ * emitted source come from the texteditor rules above.
+ *
+ * The GLSL it emits is NOT in here -- it is a panel the widget owns and does not contain, so a host can
+ * dock it wherever it likes. Its rule is the tag-qualified one below, not a descendant of this. */
+shadergrapheditor {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+shadergrapheditor .__shader-content__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* `height: 0; flex-grow: 1` -- the content wrapper is a COLUMN, so filling it means growing on the main
+ * axis, and this engine's flex-shrink defaults to 0 so the zero basis is what makes the growth bounded.
+ * (It read `height: 100%` when a SplitView sat here and laid its panes out in a row.) */
+shadergrapheditor .__shader-graph__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* THE EMITTED SOURCE, wherever its host has put it -- so this is tag-qualified rather than a descendant
+ * rule. It is a dock panel in CrystalEditor and could be anything else elsewhere.
+ *
+ * `height: 0; flex-grow: 1` is the shape that used to hang. A TextEditor whose height came from its
+ * parent made scrollbar sizing circular -- a bar changes the viewport, the viewport decides the bar --
+ * and this rule read `height: 300px` as the workaround. The real cause was elsewhere and is fixed:
+ * rebindRealisedLines re-dirtied the tree on every settled pass, so the loop had no fixed point to reach.
+ * EditorIndefiniteHeightTest pins both indefinite shapes, and UIWindow now bounds the settle loop and
+ * names the culprit rather than hanging. */
+texteditor.__shader-source__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    font-size: 7px;
+}
+
+/* THE GRAPH INSPECTOR -- the tabbed frame, and what its two tabs need to fill it.
+ *
+ * A NEW ELEMENT WITH NO RULE HAS NO SIZE, and that is the whole of what went wrong here. A widget's
+ * cascade identity is its TAG, never its Java supertype, and an unregistered class's tag is its
+ * lowercased simple name -- so `ShaderGraphInspector` matched nothing and took its height from its
+ * content. `tabview` is `height: 100%`, which against an indefinite parent resolves to the content
+ * height too, so the strip drew at its natural size and `__panes__` had nothing left to grow into.
+ * The tabs appeared, correctly styled, above a permanently empty box.
+ *
+ * Same failure `Dropdown extends Button` had: it laid out at zero height until `default.css` named it.
+ * The lesson is cheap to restate and expensive to rediscover -- WHEN YOU ADD A PANEL CLASS, ADD ITS
+ * RULE IN THE SAME EDIT. ShaderGraphInspectorLayoutTest asserts on geometry rather than structure,
+ * because a structural test passes with every row present and none of them on screen. */
+shadergraphinspector {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* The two tabs. Everything they LOOK like already comes from `.__configurator-panel__` above --
+ * background, padding rhythm, scrolling -- because they ARE ConfiguratorPanels. What that rule cannot
+ * give them is a size: it is a widget rule, and how big a panel should be depends on where it was put.
+ * This is the pane's answer, and it is the same `height: 0; flex-grow: 1` every other panel uses. */
+shadernodeinspector,
+shadergraphsettingspanel {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* ── Workbench ──
+ * The project editor's shell: a dock, a file tree, and the panels a host adds to it. */
+workbench {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+/* ROW, so the activity bar sits beside the dock rather than above it. The engine's flex-direction
+ * default is COLUMN (see TaffyBridge), which is the one Taffy divergence most likely to bite here. */
+workbench .__workbench-content__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+    flex-direction: row;
+}
+
+/* A REGION HAS A FLOOR, which is the whole reason the frame is a SplitView rather than a dock tree --
+ * "setPaneSizeLimits gives a real minimum in pixels, which is what 'the sidebar is at least 150px wide'
+ * means and what a flex weight is structurally unable to say".
+ *
+ * Without one a divider drags a region down to nothing in particular: names truncate to a single letter,
+ * a container's header wraps, and the panel is still nominally open while showing no information at all.
+ * The floor is what makes "narrow" bottom out at "narrow" instead of at "useless".
+ *
+ * On the CROSS axis of each region -- width for the columns, height for the strip -- because that is the
+ * axis its divider moves along. */
+workbench .__region-sidebar__, workbench .__region-auxiliary__ {
+    min-width: 120px;
+}
+
+workbench .__region-panel__ {
+    min-height: 60px;
+}
+
+/* And the same floor one level down, so a region's two halves cannot squeeze each other out either. */
+.__region-half__ {
+    min-width: 0px;
+    min-height: 40px;
+}
+
+/* A region's two halves and the split between them. Both are pane children, so both fill by height --
+ * the fill idiom, and flex-shrink is deliberately untouched. See RegionHost. */
+.__region-split__, .__region-half__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* ── Drag ghost ────────────────────────────────────────────────────────────────────────────────
+ * The floating stand-in that follows the cursor during any drag -- files, tool windows, anything.
+ * ONE rule set, unscoped, because DragGhost is one widget: it used to be a near-identical block per
+ * widget, which is how two of them ended up with different padding for no reason anyone chose.
+ *
+ * THE BOX IS THE ICON, and the label floats beside it out of flow. That is the whole geometry and it
+ * is what makes GhostAnchor.GRAB work at a window edge: the box never grows, so the icon stays exactly
+ * under the point you grabbed, and it is the LABEL that moves aside. Putting the label in flow and
+ * clamping the box was the first attempt -- it slid the icon out from under the cursor. */
+.__drag-ghost__ {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--ghost-bg, #2F5F9EC0);
+    border-radius: 2px;
+}
+
+.__drag-ghost__ .__pre-icon__ {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+}
+
+/* OUT OF FLOW, to the right of the icon by default. `left: 100%` resolves against the ghost's own box,
+ * so the gap is stated once and holds whatever size the icon takes. */
+.__drag-ghost__ .__label__ {
+    position: absolute;
+    left: 100%;
+    margin-left: 6px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-left: 6px;
+    padding-right: 6px;
+    background-color: var(--ghost-label-bg, #3C3F41F0);
+    border-radius: 3px;
+    color: var(--ghost-label-fg, #FFFFFF);
+    white-space: nowrap;
+}
+
+/* Flipped to the LEFT of the icon on the right-hand half of the window, so the label never runs off
+ * the edge -- and the icon still does not move. RegionDropOverlay decides, by pointer position rather
+ * than by whether the text would fit: the text changes length as the destination changes, so a fit
+ * test flips and unflips while the pointer sits still. */
+.__drag-ghost__.__flipped__ .__label__ {
+    left: auto;
+    right: 100%;
+    margin-left: 0px;
+    margin-right: 6px;
+}
+
+/* NO DESTINATION means no label at all, not an empty capsule -- the middle of the window, where a drop
+ * is refused. An empty box would read as a name that failed to load. */
+.__drag-ghost__.__unlabelled__ .__label__ {
+    display: none;
+}
+
+/* ── Region drop overlay ───────────────────────────────────────────────────────────────────────
+ * Where a dragged tool window would land. The layer covers the whole workbench and is unhittable;
+ * only the preview rectangle inside it is ever visible, and it is shown by OPACITY rather than by
+ * `display` so the box it is measured from survives being hidden. Same idiom as the dock's own drop
+ * preview, and deliberately the same colour -- these are two halves of one gesture vocabulary. */
+.__region-drop-overlay__ {
+    background: none;
+}
+
+.__region-drop-preview__ {
+    background-color: var(--region-drop-bg, #3574F055);
+    outline: 1px var(--region-drop-border, #3574F0);
+}
+
+/* ── Activity bar ──────────────────────────────────────────────────────────────────────────────
+ * IntelliJ's tool window stripe / VS Code's Activity Bar: a narrow rail of icon-only toggles.
+ *
+ * TWO of them, left and right -- which of the four (rail, group) slots a button is in IS which region
+ * its tool window opens in. See StripeRail. They are ordinary flex children of the workbench row, so
+ * nothing here positions them: DOM order does, and both carry the same fixed width.
+ *
+ * Deliberately narrow and fixed. It is chrome that must never compete with the work area, and both
+ * originals keep it under three characters wide. */
+workbench .__activity-bar__ {
+    width: 20px;
+    height: 100%;
+    flex-shrink: 0;
+    align-items: center;
+    padding-top: 2px;
+    background: var(--activitybar-bg, #2B2B2B);
+}
+
+
+/* WIDTH ZERO AS THE BASIS, not merely flex-grow. This engine defaults flex-shrink to 0, so a grown
+ * child keeps its content size as a floor and overflows its parent rather than shrinking -- the trap
+ * FlexShrinkOverflowTest pins, and the one that made __panes__ overhang its frame at small sizes. */
+/* The dock is the EDITOR region, and it sits in the CENTRE split -- a column. `width: 0` was right when
+ * it was a row child beside the activity bar and collapses it here, which is what left the editor area
+ * framed and empty while a file was open behind it. Grow along the axis you are actually in. */
+workbench .__dock__ {
+    flex-grow: 1;
+    width: 100%;
+    height: 0;
+}
+
+/* The region frame fills the row beside the activity bar. */
+workbench .__workbench-regions__ {
+    flex-grow: 1;
+    width: 0;
+    height: 100%;
+}
+
+/* A split is mounted inside the frame box, or inside another split's pane. Column-filling either way. */
+.__workbench-split__ {
+    flex-grow: 1;
+    width: 100%;
+    height: 0;
+}
+
+/* Also a pane's child, so also column-filling -- see the region rule below. */
+.__workbench-centre__ {
+    flex-grow: 1;
+    width: 100%;
+    height: 0;
+}
+
+workbench .__activity-item__ {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    margin-bottom: 2px;
+    justify-content: center;
+    align-items: center;
+    background: none;
+    border-radius: 2px;
+}
+
+workbench .__activity-item__ .__pre-icon__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+}
+
+/* HOVER IS THE ACCENT, and open is the quiet one -- the opposite of the usual arrangement, and
+ * deliberate. The rail's open panels are also the ones already visible on screen, so lighting them up
+ * says something the layout has already said; the accent is better spent on the button under the pointer,
+ * which is the one thing the layout cannot tell you. */
+workbench .__activity-item__:hover {
+    background: var(--activitybar-item-hover-bg, #3574F0);
+}
+
+/* The OPEN panel's button, which is what :checked means here -- ActivityBar.ItemButton derives it from
+ * the dock rather than storing it, so this cannot disagree with what is on screen.
+ *
+ * ACCENT, not a lighter grey. Grey is what :hover already means, so a grey :checked makes "this panel is
+ * open" and "the pointer is over this" the same signal -- and open is the one you need to read across the
+ * whole rail at a glance. Both editors use their selection accent here. */
+workbench .__activity-item__:checked {
+    background: var(--activitybar-item-checked-bg, #4E5157);
+}
+
+/* Hover still wins on an open button. Without this the two rules tie on specificity and source order
+ * decides, so pointing at an open panel's button would leave it looking untouched -- exactly when you are
+ * reaching for it to close it, which is the one moment the hover feedback is load-bearing. */
+workbench .__activity-item__:checked:hover {
+    background: var(--activitybar-item-hover-bg, #3574F0);
+}
+
+/* AN EDITOR OPENED FOR A FILE, which needs a size given to it because it has none of its own.
+ *
+ * A TextEditor's lines are absolutely positioned inside its text viewport, so the widget contributes
+ * NOTHING to its own intrinsic height -- the same shape as canvasview and its transformed plane. In a
+ * dock pane with no rule sizing it that resolves to zero, and the tab paints blank while the editor holds
+ * the file perfectly well: the read succeeded, the status line said so, and there was nothing on screen.
+ *
+ * Class-qualified rather than a bare `texteditor` rule, which would reach every editor in the engine --
+ * including the ones a page deliberately gives a fixed height. */
+texteditor.__file-editor__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* A PANEL THAT FOLLOWS SOMETHING, rather than being it — the Inspector, which shows whichever shader
+ * graph is in front.
+ *
+ * The dock sizes whatever the registry hands it, and Taffy's flex-shrink defaults to 0, so a column child
+ * with no basis keeps its own CONTENT size: the panel measures right and paints empty. Same trap
+ * `__file-editor__` above records.
+ *
+ * This used to be a `__panel-host__` wrapper with a `> *` rule, because the inspector was swapped INTO a
+ * host element. The inspector is retargeted in place now and is handed the panel's box directly, so it
+ * carries the rule itself — and the child half, which was the easy half to forget, is simply gone. */
+.__inspector__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+projectfiletree {
+    flex-grow: 1;
+    background: var(--tree-bg, #252526);
+    padding-all: 4px;
+}
+
+projectfiletree .__tree-content__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+projectfiletree .__project-tree__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+    font-size: 7px;
+}
+
+/* NO height here, deliberately. A virtualised list positions its rows from its own size strategy, so the
+ * row height is the strategy's to decide -- setItemHeight, not CSS. Declaring one here used to win the
+ * cascade and paint a 12px row inside a 16px slot, leaving a dead band between every pair that quietly
+ * swallowed clicks. Padding is what belongs here: it sits inside the row rather than shrinking it. */
+projectfiletree .__project-row__ {
+    /* A ROW container now, so ALIGN-ITEMS does the vertical centring.
+     *
+     * It used to be `justify-content: center`, and that was right when the row was a column with one
+     * label in it: this engine's flex-direction default is COLUMN, so the main axis was vertical. With
+     * four slots side by side the main axis is horizontal, and justify-content would now centre the whole
+     * group across the panel's WIDTH -- which is the exact symptom the old comment recorded, arriving
+     * from the other direction. */
+    flex-direction: row;
+    align-items: center;
+    height: 20px;
+
+    /* NO padding-left. It used to be 2px, and that quietly outranked the indent.
+     *
+     * TreeView writes `padding-left: depth * indentPerDepth` at DEFAULT origin, and this sheet is
+     * USER_AGENT -- which is higher -- so a constant here pins every row at the same inset however deep
+     * it is. It went unnoticed for as long as the renderer ALSO indented by prefixing the label with two
+     * spaces per level: the tree looked right and was being indented by the wrong mechanism entirely.
+     * Deleting the text prefix, which is the correct thing to do once TreeView owns the indent, made the
+     * whole tree go flat at once. Any rule that wants inset on these rows has to say `margin-left`, or
+     * put it on the tree's content box instead. */
+    padding-right: 4px;
+}
+
+/* Fixed width and flex-shrink: 0 on both leading slots. A long file name must ellipsize in the LABEL,
+ * never squeeze the icon. */
+projectfiletree .__project-row__ .__twisty__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+projectfiletree .__project-row__.__collapsed__ .__twisty__ {
+    overlay: shape("chevron-right");
+}
+
+projectfiletree .__project-row__.__expanded__ .__twisty__ {
+    overlay: shape("chevron-down");
+}
+
+/* A leaf keeps the slot and draws nothing, so every label in the tree starts at the same x. Collapsing
+ * it to zero width would step file names left of folder names at the same depth. */
+projectfiletree .__project-row__.__leaf__ .__twisty__ {
+    overlay: none;
+}
+
+projectfiletree .__project-row__ .__pre-icon__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    margin-right: 2px;
+    overlay-fit: contain;
+}
+
+/* THE LABEL IS WHAT GIVES WAY, and it needs BOTH halves to do it.
+ *
+ * `flex-shrink: 1` alone is not enough: a flex item will not shrink below its own content unless it is
+ * also allowed a minimum of zero, so a long name kept its natural width, overflowed the row and was
+ * hard-clipped by the panel -- a name cut mid-character with no ellipsis, which reads as broken rather
+ * than as truncated. The row is pinned to the panel's width for the same reason: an unconstrained row has
+ * nothing to shrink against. */
+projectfiletree .__project-row__ text {
+    flex-shrink: 1;
+    min-width: 0px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+projectfiletree .__project-row__ {
+    width: 100%;
+    min-width: 0px;
+}
+
+/* UNLESS THE LIST SCROLLS SIDEWAYS, in which case the label must NOT give way — it is the thing being
+ * scrolled to. `flex-shrink: 0` is the whole switch: a shrinkable item contributes ZERO to its row's
+ * min-content width, so with it on there is never any overflow to scroll, the range is always exactly the
+ * viewport, and the scrollbar can never appear no matter how long the name.
+ *
+ * `text-overflow` is left in place and is not contradictory — nothing clamps the label now, so it never
+ * fires, and it stays the correct behaviour for whatever does clamp one later.
+ *
+ * ListView writes the class, so the two halves cannot be set independently. They are one decision: rows
+ * that keep their width are the only rows there is anything to scroll. */
+projectfiletree .__h-scroll__ .__project-row__ text {
+    flex-shrink: 0;
+}
+
+/* AND THE BADGE FOLLOWS THE NAME rather than the row's trailing edge.
+ *
+ * `margin-left: auto` pins it to the row's right edge by construction, which stops being the right edge of
+ * anything you can see the moment the row is wider than the viewport — badges sat off-screen until scrolled
+ * to. It also made the row's measured content width equal to its own width, so the label could never be
+ * seen to stick out past it and there was nothing to scroll to in the first place. */
+projectfiletree .__h-scroll__ .__project-row__ .__badge__ {
+    margin-left: 4px;
+}
+
+/* The badge is pushed to the trailing edge and never shrinks -- it is one or two characters and the
+ * label is what has room to give. */
+projectfiletree .__project-row__ .__badge__ {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding-left: 4px;
+}
+
+/* SELECTION IS THE ONLY HIGHLIGHT, and there is deliberately no :hover rule beside it.
+ *
+ * IntelliJ's Project view highlights the selected row and nothing else, and the reason shows up the moment
+ * both exist: the two are the same kind of signal -- a filled row -- so whichever wins reads as "this is
+ * the one", and the pointer is almost never over the row you are about to act on. A hover tint made the
+ * selected file look unselected while you moved toward the menu.
+ *
+ * Ordering could not fix it either: at equal specificity the later rule wins, so hover and selection
+ * simply take turns being wrong. The answer is that a list with a selection does not need a hover state --
+ * the cursor already says where the pointer is. */
+projectfiletree .__project-row__.__selected__ {
+    background-color: var(--tree-selected-bg, #2F5F9E);
+    color: var(--tree-selected-fg, #FFFFFF);
+}
+
+
+/* ── The editor ──
+ * The whole application: a workbench, the panels it ships, and the commands it answers to. */
+crystaleditor {
+    width: 100%;
+    height: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+/* Child combinator, and a unique class name -- "__content__" is shared (CanvasView uses it for its
+ * transformed world plane), so a descendant rule naming it reaches into every graph below. */
+crystaleditor > .__editor-content__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+/* ── Menu accelerators ──
+ *
+ * The keystroke, in the item's trailing slot. THE MENU IS WHERE A SHORTCUT IS LEARNED -- nobody reads a
+ * keymap file -- so this is the one piece of a menu row that exists purely to teach.
+ *
+ * Dimmer than the label and deliberately so: it is a footnote to the item, not a second thing to read.
+ * IntelliJ, VS Code and every native menu do exactly this. `margin-left: auto` is what pushes it to the
+ * right edge, which is what makes a column of chords scannable rather than ragged against the labels. */
+/* FLUSH RIGHT, via an auto margin rather than a fixed gap.
+ *
+ * Every native menu right-aligns its shortcuts -- IntelliJ, VS Code, Windows -- and it is not decoration:
+ * with the accelerator following its label, `Ctrl+\` and `Ctrl+Shift+K` start at different places on
+ * every row, so there is no column to read down and the longest one decides how wide the menu is anyway.
+ *
+ * `margin-left: auto` claims the row's free space. Exactly ONE auto margin in the row, which is what makes
+ * it a right-align rather than a centring -- auto margins SHARE free space between every claimant, the trap
+ * the activity bar's groups already spent a session on.
+ *
+ * The 24px moved to PADDING because an auto margin contributes nothing to min-content: as a margin it
+ * stopped reserving the gap while the menu was being measured, so the widest row -- the one with no free
+ * space left to push with -- would have had its label touching its shortcut. */
+menuitem .__accelerator__ {
+    color: var(--menu-accelerator, #8A8A8A);
+    margin-left: auto;
+    padding-left: 24px;
+    white-space: nowrap;
+}
+
+
+
+
+/* ── Name prompts ──
+ *
+ * IntelliJ's New File popup: a caption over a field, centred, and nothing else. No frame, no buttons, no
+ * separators -- Enter commits and Escape cancels, and a button that duplicates a key the popup already
+ * answers is another row to lay out and another thing to read.
+ *
+ * ONE surface colour for the whole popup, deliberately. The reference has the field and the box at the
+ * same fill with no rule between them, which is what makes it read as a single object rather than a form.
+ * left/top are written from Java at IMPORTANT origin by InputDialog's centring, per the popup rule. */
+popover.__prompt__ {
+    width: 280px;
+    flex-direction: column;
+    background: var(--prompt-bg, #2E2E2E);
+    outline-width: 1px;
+    outline-color: var(--prompt-border, #4A4A4A);
+    padding-all: 10px;
+    gap-all: 6px;
+}
+
+/* Centred, because it is a caption rather than a label for the field beside it. */
+popover.__prompt__ .__prompt-caption__ {
+    width: 100%;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    color: var(--prompt-caption-fg, #C8C8C8);
+}
+
+/* NO border and NO background of its own: it takes the popup's. A field that draws its own box puts a
+ * rule through the middle of a surface the reference deliberately keeps unbroken. */
+popover.__prompt__ textfield {
+    width: 100%;
+    height: 16px;
+    background: var(--prompt-field-bg, #2E2E2E);
+    border-width: 0px;
+    color: var(--prompt-field-fg, #DDDDDD);
+    padding-left: 2px;
+}
+
+/* ── Preferences ───────────────────────────────────────────────────────────────
+ *
+ * A dialog VARIANT, spelled as a class on a real `dialog` -- like `dialog.__picker__` above. Not a tag:
+ * a subclass reports its own tag name, so every `dialog ...` rule in this sheet would miss it and the
+ * window would come up with an unstyled title bar. One scrolling list of groups, which is VS Code's
+ * settings editor rather than IntelliJ's category tree. */
+dialog.__preferences__ {
+    width: 720px;
+    height: 480px;
+    /* Transparent while closed, opaque once `__open__` lands. THE PAIR is what gives the transition a
+     * value to start from: a box coming out of `display: none` has no previous opacity to interpolate
+     * from, which is the problem `@starting-style` exists to solve on the web. `menu .__items__` uses the
+     * same arrangement for the same reason.
+     *
+     * 120ms, matching the menus. The window is placed one frame after it opens (see Preferences.centre),
+     * and it is held at opacity 0 through that frame at IMPORTANT origin -- so the fade begins from where
+     * the window actually is, rather than showing it in the corner and sliding. The two compose: the hold
+     * outranks this rule, and dropping the hold hands the property back here.
+     *
+     * `display` IS IN THE LIST, and that is what makes the fade OUT exist. display is discrete, so
+     * without naming it the box snaps to `none` on the frame the close happens and takes the opacity
+     * transition with it -- the window faded in and vanished. Naming it keeps the element laid out for
+     * the same duration and hides it at the end: CSS `transition-behavior: allow-discrete`, implemented
+     * in the style engine (LayoutProperties.DISPLAY) rather than in Dialog, so anything can fade out by
+     * saying so.
+     *
+     * ONE LIST, not two declarations: `transition` is a single property whose value is the whole list, so
+     * a second declaration REPLACES this one rather than adding to it. */
+    opacity: 0;
+    transition: opacity 240ms ease, display 240ms ease;
+    /* Resizable, because the label column is the thing people run out of and no default width is right
+     * for every language. `resize` is a real CSS property here and Dialog already routes its handles
+     * through its own position, so this is the whole of it. */
+    resize: both;
+    min-width: 480px;
+    min-height: 320px;
+}
+
+/* 0, not auto: flex-shrink is 0 in this engine, so a growing child keeps its content size and overflows
+ * the dialog instead of scrolling inside it -- which is exactly what happened, and read as a missing
+ * scrollbar rather than as a panel that had never been given a height to overflow. See AGENTS.md. */
+dialog.__preferences__.__open__ {
+    opacity: 1;
+}
+
+dialog.__preferences__ .__configurator-panel__ {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+    min-height: 0px;
+}
+
+/* Wider than the inspector's column, and the reason is the width of the panel each lives in: an
+ * inspector is a few hundred pixels of a side dock, this is a window sized for its own content. The
+ * shared token cannot serve both, which is the same argument the configurator's own comment makes for
+ * not sharing one scale with the graph. */
+dialog.__preferences__ .__configurator__ > .__label__ {
+    width: 170px;
+    min-width: 170px;
+}
+
+/* ── NavigatorView ─────────────────────────────────────────────────────────────
+ *
+ * Search + tree on the left, breadcrumb + page on the right. A general shell, so these rules key on the
+ * tag and its parts rather than on Preferences -- a keymap editor or a node library gets the same window
+ * for free by using the widget. */
+navigatorview {
+    width: 100%;
+    height: 100%;
+}
+
+navigatorview > splitview {
+    width: 100%;
+    height: 100%;
+}
+
+/* 0 basis with flex-grow, not auto: flex-shrink is 0 in this engine, so a content-sized column keeps
+ * whatever its widest row needs and pushes the divider out of the dialog. */
+navigatorview .__nav-sidebar__ {
+    width: 100%;
+    height: 100%;
+    padding-all: 4px;
+    gap-all: 4px;
+    background: var(--nav-sidebar-bg, #252526);
+}
+
+/* THE SEARCH BAR of a navigator — TreeSearch's, permanent, above the tree. It carries the box, the match
+ * count and the mode button, so everything below is about the ROW; the box's own look is `.__find-input__`.
+ *
+ * There used to be a lone TextField here with `width: 100%` on it. Left on the input after the migration
+ * that rule fought the bar's flex layout from one level down, which is why the class names the bar now. */
+/* NO MODE BUTTON in a settings tree. The component offers Highlight/Filter and this host always wants
+ * Filter -- typing a setting's name should leave the categories that contain it and nothing else, which is
+ * what IntelliJ's settings search and VS Code's settings editor both do. Hidden rather than removed,
+ * because the mode is a real capability the sheet is declining, not one the widget lacks. */
+navigatorview .__nav-search__ .__find-mode__ {
+    display: none;
+}
+
+navigatorview .__nav-search__ {
+    width: 100%;
+    background-color: transparent;
+    border-width-bottom: 0px;
+    padding-left: 0px;
+    padding-right: 0px;
+}
+
+navigatorview .__nav-sidebar__ treeview {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+navigatorview .__nav-detail__ {
+    width: 100%;
+    height: 100%;
+    padding-all: 6px;
+    gap-all: 4px;
+}
+
+navigatorview .__nav-header__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 18px;
+    gap-all: 4px;
+    flex-shrink: 0;
+}
+
+navigatorview .__nav-back__,
+navigatorview .__nav-forward__ {
+    width: 18px;
+    height: 16px;
+    flex-shrink: 0;
+    padding-all: 0px;
+}
+
+/* The trail. `flex-grow` so it takes the rest of the header rather than the buttons doing so. */
+navigatorview .__nav-header__ breadcrumbs {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 3px;
+    width: 0px;
+    flex-grow: 1;
+}
+
+/* A TRAIL IS A ROW, and this rule was missing entirely — the only breadcrumbs in the engine lived in a
+ * navigator header, which set the direction itself, so the widget had never been asked to stand alone.
+ * The engine's flex-direction default is COLUMN (see TaffyBridge), so the status bar's trail came out
+ * stacked vertically: `harness:scratch` over `>` over `README.md`, clipped by a 22px bar. A widget's own
+ * axis is not a host's decision. */
+breadcrumbs {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 3px;
+}
+
+/* The glyph in front of a crumb. Sized like the file tree's, and `contain` rather than a fixed scale so
+ * a 16px source icon lands in a 10px slot without being cropped. Hidden when the crumb supplied none, so
+ * a settings trail pays nothing for the slot existing. */
+breadcrumbs .__crumb-icon__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+    margin-right: 1px;
+}
+
+breadcrumbs .__crumb__ {
+    color: var(--breadcrumb-link-fg, #7CB7E8);
+    flex-shrink: 0;
+}
+
+/* Where you ARE, so not a link: plain, and not coloured as one. A last segment that looked clickable
+ * would be a control that does nothing. */
+breadcrumbs .__crumb__.__crumb-current__ {
+    color: var(--breadcrumb-current-fg, #DDDDDD);
+}
+
+/* The chevron between two crumbs. A shape rather than a character — see Breadcrumbs for why a glyph in
+ * Java is both unthemeable and at the mercy of the font having the codepoint. */
+breadcrumbs .__crumb-sep__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--breadcrumb-sep-fg, #7A7A7A);
+    overlay: shape("chevron-right");
+}
+
+navigatorview pagestack {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+pagestack .__page__ {
+    width: 100%;
+    height: 100%;
+}
+
+pagestack .__page-placeholder__ {
+    width: 100%;
+    padding-all: 8px;
+    color: var(--pagestack-empty-fg, #8A8A8A);
+}
+
+/* A tree node. Height matches the palette's rows so the two windows read as one product, and the row is
+ * full width so the whole strip is a hit target rather than only the glyphs. */
+/* NO padding-left here. TreeView writes the indent as padding-left from TreeRow.depth at DEFAULT
+ * origin, so a rule setting padding on this element outranks it and flattens the whole tree -- every
+ * level drawn at the same inset, with no sign anything is nested. */
+navigatorview .__nav-node__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 18px;
+    gap-all: 2px;
+}
+
+/* Sized to its TEXT, not stretched: NavigatorView measures these to decide how wide the sidebar has to
+ * be, and a label that fills the pane would only ever measure the pane. */
+navigatorview .__nav-label__ {
+    color: var(--nav-label-fg, #CCCCCC);
+    flex-shrink: 0;
+}
+
+/* The expander. Its glyph comes from the state class TreeView puts on the row, so what is drawn is the
+ * sheet's business and the renderer never picks a character. A leaf keeps the box so its label lines up
+ * with a sibling that has one. */
+navigatorview .__nav-arrow__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+}
+
+/* `overlay: shape(...)`, which is how every other arrow in this sheet is drawn -- the configurator
+ * group's head uses the same pair. A leaf gets neither, and keeps its empty box so its label lines up
+ * with a sibling that has one. */
+navigatorview .__nav-node__.__collapsed__ > .__nav-arrow__ {
+    overlay: shape("chevron-right");
+    color: var(--nav-arrow-fg, #B0B0B0);
+}
+
+navigatorview .__nav-node__.__expanded__ > .__nav-arrow__ {
+    overlay: shape("chevron-down");
+    color: var(--nav-arrow-fg, #B0B0B0);
+}
+
+navigatorview treeview .__row__:hover {
+    background-color: var(--list-hover-bg, #2A2D2E);
+}
+
+navigatorview treeview .__row__.__selected__ {
+    background-color: var(--list-selected-bg, #04395E);
+}

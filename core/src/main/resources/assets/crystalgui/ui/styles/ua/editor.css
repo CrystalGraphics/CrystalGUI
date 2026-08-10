@@ -1,0 +1,469 @@
+/* ua/editor.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ *
+ * The scroll substrate every list shares (scroller/scrollerview/listview/treeview/tableview), then the text editor: viewport, caret, selection, gutter, syntax highlight names, guides, zoom, folding.
+ *
+ * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
+ * one sheet the engine loads — rule order across files is as load-bearing as within one
+ * (:disabled after :hover ties), so files split at section boundaries and never reorder.
+ * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
+ * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+
+/* ── Scroller / ScrollerView ────────────────────────────────────────────────────────────────────
+ * The bar's ROOT is the track — no separate track element. The thumb's length and position come from
+ * Java at IMPORTANT origin (they're runtime state), so a theme only sets thickness and colours here.
+ *
+ * The bars are absolutely positioned by ScrollerView so they overlay content rather than taking a
+ * slice of the layout; these rules pin them to the trailing edges. */
+
+/* Wheel and programmatic scrolls ease instead of jumping. CSS's own default is `auto` (instant), but
+ * a jump-per-notch reads as broken in a UI at this scale — this is the engine making a nicer default,
+ * and any consumer can put it back with `scroll-behavior: auto`. Dragging a thumb stays instant
+ * regardless; see ScrollerView. `scroll-duration` is ours, not CSS — browsers hard-code their curve. */
+/* `listview`, `treeview` and `tableview` are all named alongside `scrollerview` below, and it is not
+ * optional — nor is it enough to name the base class.
+ *
+ * A widget's cascade identity is its TAG, never its Java supertype. ListView extends ScrollerView but
+ * reports `listview`; TreeView extends ListView and reports `treeview`; TableView likewise. Each new
+ * subclass is a NEW tag that matches none of the rules its superclass relies on — which is why naming
+ * `listview` alone was not enough, and the tree and table shipped with invisible scrollbars until they
+ * were named here too.
+ *
+ * Without these the bars exist as elements, get no width from anywhere, and simply do not draw — a
+ * 100,000-row list that scrolls with no thumb to show where you are. The same trap made `Dropdown` lay
+ * out at zero height until this file named it. */
+scrollerview,
+listview,
+treeview,
+tableview,
+texteditor {
+    scroll-behavior: smooth;
+    scroll-duration: 0.18;
+}
+
+/* The multi-line editor (6.1.6). Geometry only, plus the two colours without which the widget cannot be
+ * used at all: a caret and a selection band that are invisible are not "unthemed", they are broken. A
+ * theme overrides both, the same way it overrides the scroller track above.
+ *
+ * The caret and the bands are ordinary absolutely-positioned children in document coordinates, so they
+ * scroll with the text for free -- see TextEditor#layOutCaretAndSelection. */
+texteditor {
+    overflow: auto;
+    line-height: 1.4;
+    /* Text must not sit flush against the editor's own edge. At uiScale 2 a 1px border is two physical
+     * pixels, and a Minecraft-font `l` is about that wide of actual ink -- so a flush first glyph is
+     * painted over by the border and the line reads as ".ine 0" instead of "line 0". This is geometry,
+     * not taste, which is why it is in the user-agent sheet; TextEditor derives its text origin, its
+     * caret and its hit testing from exactly this padding. */
+    padding-left: 1px;
+    padding-right: 3px;
+}
+
+/* A line must not wrap: the editor's whole windowing model is that row N sits at N * lineHeight, and a
+ * wrapped line silently breaks that arithmetic rather than looking wrong. Soft wrap needs the
+ * variable-height virtualisation deferred in 6.1.3. */
+/* justify-content centres on the MAIN axis, and the engine's default flex-direction is column -- so
+ * this is what puts the text in the middle of its row rather than at the top of it. The caret and the
+ * selection bands are centred on the same axis from the font's own ink height, so all three agree
+ * however tall line-height is. */
+/* THE STACK, bottom to top: current line, selection, text, caret, scrollbars, gutter.
+ *
+ * These are load-bearing, not styling. Equal-z siblings paint in insertion order, and the scrollers are
+ * created by ScrollerView's constructor while the lines are realised later -- so at equal z the text
+ * painted OVER the horizontal bar, and the row straddling the bar's strip spilled across it. The bars
+ * have to be above the text; the gutter has to be above the bars, so a long line scrolled sideways
+ * passes behind the numbers rather than through them. */
+texteditor .__line__ {
+    white-space: nowrap;
+    justify-content: center;
+    z-index: 0;
+}
+
+/* THE Z-INDICES ARE LOAD-BEARING, not decoration. Equal-z siblings paint in insertion order, and the
+ * caret is created in the constructor while lines are realised later -- so without this the caret paints
+ * UNDER every line and reads as a caret that lags a character behind whatever was just typed. Stacking it
+ * explicitly is also what lets the bands sit behind the glyphs they highlight rather than over them. */
+/* The caret's WIDTH comes from the inheritable `caret-width` property on the editor, not from a width
+ * here -- TextEditor sizes and positions the element from it so it can straddle the character boundary
+ * rather than start at it. Colour and stacking remain a theme's business. */
+texteditor {
+    caret-width: 1px;
+}
+
+texteditor .__caret__ {
+    background-color: var(--editor-caret, #FF0000);
+    z-index: 1;
+}
+
+texteditor .__selection__ {
+    background-color: var(--editor-selection-bg, #2C5A8C);
+    z-index: -1;
+}
+
+/* The gutter. Scroll-exempt, so TextEditor positions its numbers by hand -- it has to hold still
+ * horizontally while scrolling vertically, and a scroll offset here is a pose translate that cannot
+ * apply on one axis only. z-index above the lines so a long line scrolled sideways passes behind the
+ * numbers rather than through them. */
+/* THE GUTTER'S THREE METRICS LIVE HERE, and TextEditor reads them back off the laid-out box. They were
+ * Java constants of the `max(6f, fontSize * 0.9f)` kind, which is precisely what this file exists to
+ * prevent — a pixel value in a widget belongs in the user-agent sheet, where a theme can change it and
+ * where the three can be compared side by side.
+ *
+ *   padding-left   the margin before the digits. The digits are right-aligned in a field sized to the
+ *                  widest number the file can reach, so without this the number that fills the field
+ *                  exactly (10 in a two-digit file) sits flush on the border.
+ *   padding-right  the fold column: the clear space between the numbers and the code. This is what makes
+ *                  the gutter read as a margin rather than as digits jammed against the text, and it is
+ *                  where a fold arrow goes when there is one.
+ *   margin-right   the gap between the gutter's painted box and the first character. Margin, not padding,
+ *                  and the distinction is load-bearing: it is space OUTSIDE the background, which is the
+ *                  only reason the level-0 indent guide can sit in it without the gutter painting over it.
+ *
+ * The line numbers are positioned with left: 0, and an absolute inset is padding-box relative — so
+ * padding-left places them and must not be added again in Java. */
+texteditor .__gutter__ {
+    z-index: 6;
+    padding-left: 4px;
+    padding-right: 14px;
+    margin-right: 7px;
+    background-color: var(--editor-gutter-bg, #1A1D23);
+    /* Clips its own numbers. The gutter stops above the horizontal scrollbar, but the numbers inside it
+     * are positioned by hand from the scroll offset, so without this the one at the boundary is drawn
+     * past the gutter's edge and over the bar. */
+    overflow: hidden;
+}
+
+/* Right-aligned within a box TextEditor sizes to the digits and insets by the gutter's own margin, so
+ * the widest number in the file stops short of the border instead of touching it. No padding here: the
+ * geometry is the widget's, and a padding-right would eat into the margin it just reserved. */
+texteditor .__line-number__ {
+    justify-content: center;
+    align-items: flex-end;
+    color: var(--editor-line-number, #5C6570);
+    white-space: nowrap;
+}
+
+/* Behind everything, including the selection bands: it marks a row, it does not compete with them. */
+texteditor .__current-line__ {
+    background-color: var(--editor-current-line, #232830);
+    z-index: -2;
+}
+
+/* THE TEXT VIEWPORT. Everything drawn in document coordinates lives in here — lines, caret, selection
+ * bands, the current-line band, indent guides, whitespace markers and rulers — and this is what stops any
+ * of them reaching the gutter or the scrollbars.
+ *
+ * overflow: hidden is the entire point of the element. Widening the editor's own padding does NOT work:
+ * drawSubtree scissors to the PADDING box on purpose (real CSS overflow:hidden clips at the padding edge
+ * too), so padding is inside the rect and growing it moves no clip. Scroll-exempt children are inside it
+ * as well — popScissor runs after they are drawn — so the chrome cannot be excluded that way either. The
+ * only way to clip the text and not the gutter is to give the text its own box.
+ *
+ * z-index 0: it holds the text, so it sits where the text used to. The gutter (6) and the bars (7) are
+ * above it, and the current-line band and selection are below via their own negative z inside it. */
+texteditor .__text-viewport__ {
+    overflow: hidden;
+    z-index: 0;
+}
+
+/* Indent guides sit BEHIND the text but in front of the current-line band, so a guide still reads on the
+ * row the caret is on. Deliberately dim: a guide the eye can follow when it looks for it and ignores when
+ * it does not is the whole design brief, and one that competes with the code is worse than none.
+ *
+ * These start at indent level ONE. Level zero is the gutter's edge below, not a guide — see there. */
+texteditor .__indent-guide__ {
+    background-color: var(--editor-indent-guide, #2F3540);
+    z-index: -1;
+}
+
+/* THE MATCHING BRACKET PAIR, marked whenever the caret is on either side of one.
+ *
+ * This belongs in the user-agent sheet by the same rule as the caret and the selection band: the widget
+ * PUBLISHES the ranges whether or not anything styles them, so with no rule the feature is fully working
+ * and completely invisible — which is not "unthemed", it is broken. It was exactly that until now.
+ *
+ * A COLOUR on the glyph, not a background behind it. IntelliJ tints the brace itself, and the reason is
+ * legibility rather than taste: a background has to fight the current-line band, which is drawn under the
+ * very line a bracket match is most often looked at, and a subtle fill loses that fight completely. */
+texteditor text::highlight(bracket) {
+    color: var(--syntax-bracket, #4EC9A0);
+}
+
+/* ── Syntax colours ──
+ *
+ * THE SAME TRAP THE BRACKET RULE ABOVE RECORDS, and it caught us a second time. A tokenizer publishes
+ * its ranges whether or not anything styles them, so setting a language on an editor made it tokenize
+ * correctly and look *identical* — every keyword, string and comment resolved, was handed to the
+ * cascade, and rendered in the default colour. That is not "unthemed": with no rule here, choosing a
+ * language does nothing observable at all, and the bug reads as the tokenizer failing.
+ *
+ * The names are what SyntaxTokenizer emits. SyntaxToken.generalName() falls back from `function.builtin`
+ * to `function`, so a sheet that names only the general forms still colours every specialisation —
+ * which is why these six are enough for any tokenizer, including a future tree-sitter one.
+ *
+ * VS Code's Dark+ values, matching the diagnostic colours already in this sheet. */
+texteditor text::highlight(keyword) {
+    color: var(--syntax-keyword, #569CD6);
+}
+
+texteditor text::highlight(type) {
+    color: var(--syntax-type, #4EC9A0);
+}
+
+texteditor text::highlight(function) {
+    color: var(--syntax-function, #DCDCAA);
+}
+
+texteditor text::highlight(string) {
+    color: var(--syntax-string, #CE9178);
+}
+
+texteditor text::highlight(number) {
+    color: var(--syntax-number, #B5CEA8);
+}
+
+texteditor text::highlight(comment) {
+    color: var(--syntax-comment, #6A9955);
+}
+
+/* THE ACTIVE GUIDE — the block the caret is actually inside, which IntelliJ draws brighter than the rest.
+ *
+ * Brighter, not thicker or a different hue: the guides are a background layer the eye is meant to be able
+ * to ignore, and one that changes weight as the caret moves would pull attention on every keystroke. The
+ * whole point of highlighting one is that the others stay quiet.
+ *
+ * Which guide this is comes from IndentLevels.activeGuideFor — a port of Monaco's getActiveIndentGuide —
+ * and notably it is NOT simply "the deepest guide on the caret's row": standing on a line that opens or
+ * closes a block activates the CHILD block, not the one that line is written at. */
+texteditor .__indent-guide__.__active__ {
+    background-color: var(--editor-indent-guide-active, #6E7A8A);
+}
+
+/* THE GUTTER'S RIGHT EDGE. One element, full viewport height, sitting in the gutter's margin-right.
+ *
+ * This is what the level-zero indent guide was pretending to be, and the distinction is the whole reason
+ * the guides used to break: an indent guide is drawn per row from THAT ROW's indentation, so a line at
+ * indent 0 has none and the vertical run stopped dead wherever the code reached column 0 — the letter
+ * sitting there looked like it had cut the line in half. An edge is structural: one element spanning the
+ * viewport, which no line of code can interrupt.
+ *
+ * Same colour as an indent guide on purpose, so the two read as one continuous system. */
+texteditor .__gutter-edge__ {
+    background-color: var(--editor-gutter-edge, #2F3540);
+    z-index: 4;
+}
+
+/* Whitespace markers are text, not a fill, so they take a colour rather than a background. Dimmer than
+ * the dimmest syntax colour, for the same reason as the guides. */
+texteditor .__whitespace__ {
+    color: var(--editor-whitespace, #454C57);
+    z-index: 0;
+    white-space: nowrap;
+}
+
+/* THE ZOOM INDICATOR. IntelliJ's: a small bar at the bottom of the viewport reporting the size, with a
+ * button back to the default. Bottom-centre because the caret is almost never there, so the thing telling
+ * you about the text does not sit on the text you are reading.
+ *
+ * The HOLD is the widget's (it is a countdown, not a property); the FADE is here. TextEditor only adds and
+ * removes __shown__, and the transition below runs because the computed opacity changed — so how long the
+ * fade takes and what it eases on stay in the sheet, and the widget never learns either.
+ *
+ * flex-direction: row, because the engine's Taffy default is COLUMN and the label would otherwise sit
+ * above the button rather than beside it. */
+texteditor .__zoom-indicator__ {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap-all: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+    background-color: var(--editor-zoom-bg, #2B303B);
+    border-radius: 3px;
+    z-index: 7;
+    opacity: 0;
+    transition: opacity 0.45s;
+}
+
+texteditor .__zoom-indicator__.__shown__ {
+    opacity: 1;
+}
+
+/* FIXED SIZE, declared here rather than inherited. font-size is inheritable, so without a specified
+ * value these would take the editor's — which zoom rewrites at IMPORTANT — and the indicator would shrink
+ * to unreadable at 4px and balloon at 40. It describes the text; it is not part of it. */
+texteditor .__zoom-label__ {
+    font-size: 10;
+    color: var(--editor-zoom-fg, #C8CDD4);
+    white-space: nowrap;
+}
+
+/* A LINK, not a raised button. It is one action inside a transient bar, and a chunky grey button there
+ * reads as a dialog. Everything the `button` rule gives it is unwound: the fill, the rounding, the
+ * padding, the minimum height and the focus ring.
+ *
+ * These win on specificity without a fight -- `texteditor .__zoom-reset__` is 11 against `button`'s 1 --
+ * except against `button:hover` and `button:active`, which are also 11. Those tie, and this file's later
+ * source position decides it. Spelled out because a tie broken by source order is exactly what a future
+ * reorganisation of this sheet would silently flip.
+ *
+ * The hover state changes the DECORATION, not the colour: an underline appearing under an already-blue
+ * label is what says "link" -- a colour shift on hover reads as a button lighting up, which is the thing
+ * this is trying not to look like. text-decoration-line is inheritable, so it reaches the Button's own
+ * UIText without a descendant selector. */
+texteditor .__zoom-reset__ {
+    font-size: 10;
+    background: #00000000;
+    color: var(--editor-zoom-link, #4A9EFF);
+    white-space: nowrap;
+    padding-all: 0px;
+    min-height: 0px;
+    border-radius: 0px;
+    text-shadow: false;
+    outline: none;
+}
+texteditor .__zoom-reset__:hover {
+    background: #00000000;
+    color: var(--editor-zoom-link, #4A9EFF);
+    text-decoration-line: underline;
+}
+texteditor .__zoom-reset__:active {
+    background: #00000000;
+    color: var(--editor-zoom-link-pressed, #2F7FD8);
+    text-decoration-line: underline;
+}
+
+/* A column ruler spans the viewport and does not scroll vertically -- TextEditor marks it scroll-exempt
+ * and subtracts the horizontal offset by hand, exactly as the gutter does. */
+texteditor .__ruler__ {
+    background-color: var(--editor-ruler, #2F3540);
+    z-index: 4;
+}
+
+/* Functional geometry for the table's own structure. Nothing here is decoration — a theme owns all of
+ * that — but without these the widget does not work at all:
+ *
+ *  - The divider is ABSOLUTELY positioned (TableView writes the inset, so it straddles the boundary
+ *    instead of consuming header width the rows do not have). An out-of-flow box with no declared width
+ *    is zero pixels wide, so without this rule there is nothing to grab and columns cannot be resized.
+ *    In flow it merely looked wrong; out of flow it is unusable, which is what promotes this from a
+ *    theme's business to the user-agent sheet's.
+ *  - Rows and header cells lay out along the row axis. The engine's Taffy default is COLUMN, so
+ *    omitting this stacks every cell vertically. */
+tableview .__row__,
+tableview .__header__,
+tableview .__header-cell__ {
+    flex-direction: row;
+    align-items: center;
+}
+
+tableview .__divider__ {
+    width: 3px;
+    cursor: ew-resize;
+}
+
+/* Cells clip. A name longer than its column must not bleed under the next one — and because the cell
+ * is the clipping box, `text-overflow` has to sit on the text inside it, not here. */
+tableview .__cell__ {
+    overflow: hidden;
+}
+
+scroller .__track__ {
+    background: var(--scrollbar-track, #2A2A2A);
+}
+/* Only the CROSS axis is set here. The main axis (length + position) is written from Java at
+ * IMPORTANT origin, since it's runtime state, and would override anything declared here anyway.
+ * A horizontal bar's thumb fills the bar's height; a vertical bar's fills its width. */
+scroller .__thumb__ {
+    height: 100%;
+    background: var(--scrollbar-thumb, #6E6E6E);
+    /* Half the 8px bar thickness set on the ScrollerView rules below. Deliberately on the thumb only —
+     * the track stays square so the bar keeps a crisp edge against the content it overlays. */
+    border-radius: 4px;
+}
+scroller.__vertical__ .__thumb__ {
+    width: 100%;
+}
+scroller .__thumb__:hover {
+    background: var(--scrollbar-thumb-hover, #8C8C8C);
+}
+scroller .__thumb__:active {
+    background: var(--scrollbar-thumb-pressed, #B4B4B4);
+}
+
+/* Step buttons. Hidden by default — that's what every modern desktop UI does, and it's what Ore
+ * chose too (`.__scroller_head_button__ { display: none }`). They are fully wired regardless, so a
+ * theme turns them on with nothing but CSS:
+ *     scroller .__head__, scroller .__tail__ { display: flex; }
+ * Because they're flex items, hiding them lets __track__ take the whole bar, so the geometry with
+ * buttons off is identical to not having them at all. */
+scroller .__head__,
+scroller .__tail__ {
+    display: none;
+    background: var(--scrollbar-tail, #4A4A4A);
+    /* Sized along the bar's MAIN axis, filling the cross axis. A horizontal bar's buttons are 8px
+     * WIDE and full height; the vertical rule below swaps that. Getting this wrong is why a
+     * `height`-only rule collapses the horizontal bar's buttons to nothing. Kept here rather than in
+     * a theme so enabling them stays a pure `display: flex`.
+     * 8 matches the bar's thickness, so a button comes out square. */
+    width: 8px;
+    height: 100%;
+}
+scroller.__vertical__ .__head__,
+scroller.__vertical__ .__tail__ {
+    width: 100%;
+    height: 8px;
+}
+scroller .__head__:hover,
+scroller .__tail__:hover {
+    background: var(--scrollbar-tail-hover, #6E6E6E);
+}
+
+/* The little square where the two bars meet — `::-webkit-scrollbar-corner` in a browser. Shown only
+ * when both bars are visible; ScrollerView sizes it from their measured thicknesses. */
+scrollerview .__corner__,
+listview .__corner__,
+treeview .__corner__,
+texteditor .__corner__,
+tableview .__corner__ {
+    background: var(--scrollbar-corner, #2A2A2A);
+}
+
+/* ABOVE the editor's text AND above its gutter. Only the editor needs this: a list's rows do not overlap
+ * its bars.
+ *
+ * The bars used to sit BELOW the gutter, which forced the gutter to stop short of them -- otherwise it
+ * painted over the bar's left end as a dead square. Stopping short left the corner between the two
+ * uncovered, and scrolled text showed through it. Putting the bars on top removes the reason the gutter
+ * had to stop, so it can run the full height and there is no corner left to leak through.
+ *
+ * The lines are still behind the gutter (they are at z-index 0), which is the property that mattered:
+ * a long line scrolled sideways passes behind the numbers rather than through them. */
+texteditor .__v-scroller__,
+texteditor .__h-scroller__,
+texteditor .__corner__ {
+    z-index: 7;
+}
+
+/* BY CLASS, not by a list of tags. This was `scrollerview, listview, treeview, texteditor,
+ * tableview` -- one entry per ScrollerView subclass -- and a widget's cascade identity is its TAG, so
+ * `ConfiguratorPanel extends ScrollerView` reported `configuratorpanel` and matched none of them. Its
+ * bars were laid out at zero width: invisible, while the wheel still scrolled perfectly, which reads as
+ * a widget that forgot its scrollbars rather than a sheet that never sized them.
+ *
+ * A list of tags that has to name every subclass is a maintenance trap of the kind AGENTS.md already
+ * records for the registered-property table: adding a subclass is one line somewhere else, nothing links
+ * the two, and the omission is silent. Only ScrollerView creates these classes, so keying on the class
+ * is both narrower in intent and wider in reach. Per-widget rules that genuinely differ -- texteditor's
+ * z-index above -- stay tag-scoped. */
+.__v-scroller__ {
+    width: 8px;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+.__h-scroller__ {
+    height: 8px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}

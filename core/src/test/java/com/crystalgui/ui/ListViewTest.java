@@ -1,6 +1,8 @@
 package com.crystalgui.ui;
 
+import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.property.ObservableList;
+import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.list.FixedHeightStrategy;
 import com.crystalgui.ui.elements.list.ListRenderer;
@@ -712,8 +714,15 @@ public class ListViewTest extends UiTestBase {
      */
     @Test
     public void theScrollbarSizingRuleIsKeyedByClassNotByTag() {
-        String sheet = com.crystalgraphics.util.io.CgIO.loadSource("crystalgui:ui/styles/default.css");
-        assertNotNull("default.css must be readable", sheet);
+        // The user-agent sheet is nine ua/ parts now — read the same concatenation the engine loads,
+        // through the one manifest, so a part rename cannot silently shrink this test's coverage.
+        StringBuilder joined = new StringBuilder();
+        for (String part : StyleSheetRegistry.DEFAULT_SHEET_PARTS) {
+            String css = CgIO.loadSource(part.replace(":", ":ui/styles/") + ".css");
+            if (css != null) joined.append(css).append('\n');
+        }
+        String sheet = joined.toString();
+        assertTrue("the ua/ parts must be readable", !sheet.isEmpty());
         assertTrue("the vertical scrollbar has no class-scoped sizing rule, so any ScrollerView subclass "
                 + "not named by a tag rule draws no bar at all", sheet.contains(".__v-scroller__ {"));
         assertTrue("the horizontal scrollbar has no class-scoped sizing rule",

@@ -1390,7 +1390,9 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 
 | Path | Notes |
 |---|---|
-| `ui/styles/default.css` | **User-agent sheet.** Functional geometry for every widget with no theme loaded. |
+| `ui/styles/ua/*.css` | **User-agent sheet, in nine domain parts** (core, widgets, editor, overlays, config-kit, inspector, workbench, panels, search) concatenated in `StyleSheetRegistry.DEFAULT_SHEET_PARTS` order into `StyleSheet.DEFAULT` — one sheet, one parse, one variable scope, and cross-part order is as load-bearing as order within a file. Functional geometry for every widget with no theme loaded; every colour is `var(--token, #fallback)`. Was a single 6,200-line `default.css` until plan_styling.md step 8. |
+| `ui/themes/base.css`, `ui/themes/crystal-dark.css` | The token tables: component→system derivations, and the default theme (pins today's look exactly). See `docs/CGUI_THEMING.md`. |
+| `ui/schemes/dark-plus.css` | The default editor colour scheme — the second, independently-selectable axis. |
 | `ui/styles/ore.css` | Minecraft Ore UI theme, ported from LDLib2's `ore.lss`. |
 | `ui/styles/graph.css` | Node-graph theme — Unity Shader Graph's look, including the per-type port palette every wire reads its colour from. |
 | `ui/styles/filetypes.css` | Per-file-type colour palette, keyed on the `.filetype-*` class `FileIconTheme.classFor` returns. **Not** in `default.css` — that is the UA sheet and carries geometry only. |
@@ -1447,10 +1449,13 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `docs/CGUI_WIDGETS.md` | **current** | All thirteen widgets: API, internal-child class hooks, pseudo-classes, covering harness scene |
 | `docs/CGUI_SERVER_AND_SERIALIZATION.md` | **current** | Codecs, `StateMap`, descriptions, content hashing, network ids, `SheetRef`, packets/sessions/RPC, known gaps, the headless contract |
 | `docs/CGUI_WORKBENCH_SERVICES.md` | **current** | The service layer under the dock/workbench/editor — what a widget may *ask* rather than reach through the application for. `Disposer` today; `DataContext`, service events, `Resource`, `DockPane` and `DockService` as they land. **Every new service API is added here in the same commit** |
+| `docs/CGUI_THEMING.md` | **current** | Themes, editor colour schemes, the token vocabulary and the anti-rot rules. Its token table is **generated and machine-checked** (`StyleGovernanceTest.theDocumentedTokenTableIsCurrent`) — regenerate from the failing test's output, never hand-edit |
+| `plan_styling.md` (repo root) | **live** | The styling overhaul plan: audit, reference research, token architecture, governance, the step-by-step migration and its recorded revisions |
 | `plan.md` (repo root) | **live** | The architecture review this layer is being rebuilt from: audit, VS Code/IntelliJ research, the six-step port, and what each step deliberately does not do |
 
-These three are the only docs under `docs/` — audited against the code on 2026-07-29 and accurate as
-of that pass. `CRYSTALGUI_OVERHAUL_V4.md` (the historical decision record for why CrystalGUI stopped
+These four are the only docs under `docs/` — the first three audited against the code on
+2026-07-29, `CGUI_THEMING.md` added 2026-08-10 with its token table machine-checked against the
+css on every test run. `CRYSTALGUI_OVERHAUL_V4.md` (the historical decision record for why CrystalGUI stopped
 owning rendering infrastructure) was deleted; its one durable conclusion — CrystalGraphics owns the
 backend, CrystalGUI is a thin immediate-mode paint surface — is recorded in
 [CrystalGraphics ownership boundary](#crystalgraphics-ownership-boundary) above.

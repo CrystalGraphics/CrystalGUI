@@ -1,16 +1,21 @@
 package com.crystalgui.style;
 
+import com.crystalgui.style.sheet.StyleSheetRegistry;
+
 import org.junit.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,12 +41,30 @@ public class StyleGovernanceTest {
     private static final List<String> SCHEME_TOKEN_PREFIXES =
             List.of("--editor-", "--syntax-", "--find-match-", "--search-excluded-");
 
-    /** The engine's structure sheets — every colour in them must be a token reference.
+    /** The engine's structure sheets — every colour in them must be a token reference. The
+     * user-agent parts come from {@link StyleSheetRegistry#DEFAULT_SHEET_PARTS}, the one manifest,
+     * so renaming a part without updating it fails here rather than silently shrinking coverage.
      * ore.css is deliberately absent: it is a full sprite SKIN awaiting its move to {@code themes/}
      * (plan_styling.md §3.2), where hex is legal — holding it to the token rule now would demand
      * tokenizing a file whose whole content is theme-side. */
-    private static final List<String> STRUCTURE_SHEETS =
-            List.of("default.css", "graph.css", "filetypes.css", "decorations.css");
+    private static final List<String> STRUCTURE_SHEETS = structureSheets();
+
+    private static List<String> structureSheets() {
+        List<String> sheets = new ArrayList<>(userAgentParts());
+        sheets.add("graph.css");
+        sheets.add("filetypes.css");
+        sheets.add("decorations.css");
+        return sheets;
+    }
+
+    /** {@code "crystalgui:ua/core"} → {@code "ua/core.css"}, relative to {@link #STYLES}. */
+    private static List<String> userAgentParts() {
+        List<String> parts = new ArrayList<>();
+        for (String key : StyleSheetRegistry.DEFAULT_SHEET_PARTS) {
+            parts.add(key.substring(key.indexOf(':') + 1) + ".css");
+        }
+        return parts;
+    }
 
     /**
      * <b>The system vocabulary, pinned</b> — plan_styling.md §3.1, decided 2026-08-10. This list
@@ -114,10 +137,18 @@ public class StyleGovernanceTest {
         definitionsOf(load(THEMES + "crystal-dark.css")).forEach((k, v) -> defined.add(k));
         definitionsOf(load(SCHEMES + "dark-plus.css")).forEach((k, v) -> defined.add(k));
 
+        // The ua/ parts are ONE sheet — one parse, one local-variable scope — so a --cfg-* defined
+        // in config-kit.css legitimately serves a use in inspector.css. Locals are therefore
+        // collected across the whole concatenation for the parts, per-file for standalone sheets.
+        Set<String> uaLocals = new HashSet<>();
+        for (String part : userAgentParts()) {
+            uaLocals.addAll(definitionsOf(load(STYLES + part)).keySet());
+        }
+
         List<String> offences = new ArrayList<>();
         for (String sheet : STRUCTURE_SHEETS) {
             String css = stripComments(load(STYLES + sheet));
-            Set<String> local = definitionsOf(css).keySet();
+            Set<String> local = sheet.startsWith("ua/") ? uaLocals : definitionsOf(css).keySet();
             Matcher ref = VAR_ANY.matcher(css);
             while (ref.find()) {
                 String name = ref.group(1);
@@ -214,13 +245,63 @@ public class StyleGovernanceTest {
 
     // ── rule 8: the UA sheet's own three rules ──────────────────────────────────────────────────
 
-    /** default.css's opening contract, finally with teeth: no {@code !important} (it escalates
-     * above every author sheet), no {@code asset()} (must stand alone with no pack loaded). */
+    /** The user-agent sheet's opening contract, finally with teeth, over every part: no
+     * {@code !important} (it escalates above every author sheet), no {@code asset()} (must stand
+     * alone with no pack loaded). */
     @Test
     public void theUserAgentSheetKeepsItsContract() {
-        String css = stripComments(load(STYLES + "default.css"));
-        assertTrue("default.css must not use !important", !css.contains("!important"));
-        assertTrue("default.css must not reference asset()", !css.contains("asset("));
+        for (String part : userAgentParts()) {
+            String css = stripComments(load(STYLES + part));
+            assertTrue(part + " must not use !important", !css.contains("!important"));
+            assertTrue(part + " must not reference asset()", !css.contains("asset("));
+        }
+    }
+
+    // ── rule 9: the doc cannot go stale ─────────────────────────────────────────────────────────
+
+    /**
+     * <b>The token table in {@code docs/CGUI_THEMING.md} regenerates from the css and matches.</b>
+     * The StylePropertyRegistry lesson, automated instead of remembered: a hand-maintained list
+     * "goes stale silently", so this one is generated — and on failure the message IS the fresh
+     * table, ready to paste between the markers.
+     */
+    @Test
+    public void theDocumentedTokenTableIsCurrent() throws IOException {
+        Map<String, String> rows = new TreeMap<>();
+        for (String[] source : new String[][]{
+                {THEMES + "base.css", "base.css"},
+                {THEMES + "crystal-dark.css", "crystal-dark.css"},
+                {SCHEMES + "dark-plus.css", "dark-plus.css"}}) {
+            definitionsOf(load(source[0])).forEach((name, value) ->
+                    rows.putIfAbsent(name, "| `" + name + "` | `" + value + "` | " + source[1] + " |"));
+        }
+        String expected = String.join("\n", rows.values());
+
+        Path doc = docPath();
+        String text = Files.readString(doc, StandardCharsets.UTF_8);
+        int begin = text.indexOf("<!-- TOKENS:BEGIN -->");
+        int end = text.indexOf("<!-- TOKENS:END -->");
+        assertTrue("docs/CGUI_THEMING.md is missing its TOKENS markers", begin >= 0 && end > begin);
+
+        // drop the marker line and the table header, keep the data rows
+        String documented = text.substring(begin, end).lines()
+                .filter(line -> line.startsWith("| `"))
+                .reduce((a, b) -> a + "\n" + b).orElse("");
+        if (!documented.equals(expected)) {
+            fail("The generated token table in docs/CGUI_THEMING.md is stale. Paste this between the markers"
+                    + " (keeping the header row):\n| Token | Value | Defined in |\n|---|---|---|\n" + expected);
+        }
+    }
+
+    /** The doc, found from the test's working directory — Gradle runs tests from the module dir,
+     * IDEs sometimes from the repo root; try both rather than encoding one runner's habit. */
+    private static Path docPath() {
+        Path fromModule = Path.of("../docs/CGUI_THEMING.md");
+        if (Files.exists(fromModule)) return fromModule;
+        Path fromRoot = Path.of("docs/CGUI_THEMING.md");
+        assertTrue("cannot locate docs/CGUI_THEMING.md from " + Path.of("").toAbsolutePath(),
+                Files.exists(fromRoot));
+        return fromRoot;
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────

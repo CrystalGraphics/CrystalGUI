@@ -5,6 +5,7 @@ import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.selector.Selector;
 import com.crystalgui.ui.UIElement;
+import lombok.Getter;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -43,7 +44,10 @@ import java.util.regex.Matcher;
 public final class StyleSheet {
 
     /**
-     * The engine's user-agent stylesheet: {@code assets/crystalgui/ui/styles/default.css}.
+     * The engine's user-agent stylesheet: the {@code assets/crystalgui/ui/styles/ua/*.css} parts,
+     * concatenated in {@link StyleSheetRegistry#DEFAULT_SHEET_PARTS} order. (One 6,000-line
+     * {@code default.css} until plan_styling.md step 8 split it at its own section boundaries —
+     * a pure move; the concatenation is the old file.)
      *
      * <p>Gives every widget functional (deliberately unthemed) geometry, plus a few generic layout
      * helpers. <b>Not applied automatically</b> — hand it to the engine like any other sheet:</p>
@@ -55,7 +59,12 @@ public final class StyleSheet {
     public static final StyleSheet DEFAULT = loadUserAgentSheet();
 
     private final List<StyleRule> rules;
-    /** Cascade origin every declaration in this sheet is applied at — see {@link StyleEngine}. */
+    /** Cascade origin every declaration in this sheet is applied at — see {@link StyleEngine}. 
+     * -- GETTER --
+     * Cascade origin every non-
+     *  declaration in this sheet is applied at. 
+     */
+    @Getter
     private final StyleOrigin origin;
     private final Map<String, List<StyleRule>> byId = new HashMap<>();
     private final Map<String, List<StyleRule>> byClass = new HashMap<>();
@@ -185,12 +194,7 @@ public final class StyleSheet {
         return new ArrayList<>(candidates);
     }
 
-    /** Cascade origin every non-{@code !important} declaration in this sheet is applied at. */
-    public StyleOrigin getOrigin() {
-        return origin;
-    }
-
-    /** Re-reads {@code default.css} at {@link StyleOrigin#USER_AGENT}.
+    /** Re-reads the {@code ua/} parts at {@link StyleOrigin#USER_AGENT}.
      *
      * <p>Shouts if it comes back empty rather than failing quietly: {@code StyleSheetRegistry.of}
      * returns an empty sheet for a missing resource, and because {@link #DEFAULT} holds the result
@@ -200,8 +204,9 @@ public final class StyleSheet {
         StyleSheet sheet = StyleSheetRegistry.of(StyleSheetRegistry.DEFAULT_SHEET);
         if (sheet.getRules().isEmpty()) {
             CrystalGuiCore.LOGGER.error(
-                    "StyleSheet.DEFAULT is EMPTY — 'assets/crystalgui/ui/styles/default.css' is missing or "
-                            + "failed to parse. Widgets have no default geometry and will lay out at zero size.");
+                    "StyleSheet.DEFAULT is EMPTY — every 'assets/crystalgui/ui/styles/ua/*.css' part is "
+                            + "missing or failed to parse. Widgets have no default geometry and will lay "
+                            + "out at zero size.");
         }
         return new StyleSheet(sheet.getRules(), StyleOrigin.USER_AGENT);
     }
