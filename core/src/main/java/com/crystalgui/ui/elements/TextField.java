@@ -313,6 +313,15 @@ public class TextField extends UIElement implements UIFrameTicker {
         return placeholder;
     }
 
+    /** Half-strength, alpha kept — a hint should read as one without needing a colour of its own. */
+    private static int dim(int argb) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = ((argb >> 16) & 0xFF) / 2;
+        int g = ((argb >> 8) & 0xFF) / 2;
+        int b = (argb & 0xFF) / 2;
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
     public TextField setPlaceholder(String placeholder) {
         this.placeholder = placeholder == null ? "" : placeholder;
         onStyleChanged();
@@ -1109,12 +1118,23 @@ public class TextField extends UIElement implements UIFrameTicker {
             ctx.fillRect(from, originY, to - from, inkHeight, styleGen.selectionColor());
         }
 
-        String shown = text.isEmpty() ? placeholder : text;
+        // A PLACEHOLDER IS A HINT, AND ONLY WHILE YOU ARE TYPING INTO IT.
+        //
+        // Drawn in the text colour it is indistinguishable from content: two find boxes reading "Search"
+        // and "Replace" look like a query somebody typed, and the bar looks busy when it is empty. It is
+        // dimmed, and shown only while the field has focus — which is when "what goes here?" is a question
+        // the reader is actually asking.
+        boolean showingPlaceholder = text.isEmpty();
+        // SKIP THE DRAW, NEVER THE METHOD. An early `return` here left the scissor this pass had pushed
+        // un-popped -- "Unbalanced scissor stack after the main paint pass: depth 1, expected 0", and the
+        // whole window flickering before it threw. Anything that decides not to paint has to fall through
+        // to the same teardown as anything that does.
+        String shown = showingPlaceholder && !isFocused() ? "" : showingPlaceholder ? placeholder : text;
         if (!shown.isEmpty()) {
             ctx.text().draw()
                     .at(originX, originY)
                     .text(shown)
-                    .color(styleGen.color())
+                    .color(showingPlaceholder ? dim(styleGen.color()) : styleGen.color())
                     .family(resolveFamily())
                     .submit();
         }
