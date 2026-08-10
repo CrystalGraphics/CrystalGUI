@@ -3,6 +3,7 @@ package com.crystalgui.style.theme;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.sheet.DeclarationParser;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -62,6 +63,18 @@ public final class UiThemeManager {
     private UiTheme activeTheme;
     @Nullable
     private UiTheme activeScheme;
+
+    /**
+     * Per-token overrides applied <b>over</b> whatever theme is active — VS Code's
+     * {@code workbench.colorCustomizations}, and the reason its users never have to fork a theme to
+     * change one colour.
+     *
+     * <p>Last in the merge (plan_styling.md §3.3), so it survives a theme swap and re-applies on top
+     * of the new one: "I always want my accent pink" is a statement about the user, not about the
+     * theme they happen to be running. Keys are token names with or without the {@code --} prefix —
+     * a settings file written by hand should not fail on a detail that carries no information.</p>
+     */
+    private final Map<String, String> overrides = new LinkedHashMap<>();
 
     private UiThemeManager() {
     }
@@ -146,25 +159,64 @@ public final class UiThemeManager {
         return true;
     }
 
-    /** Deactivates both axes and unbinds the variable table — restores the pristine sheets. */
+    /**
+     * Replaces the user's token overrides and re-applies. Values are raw CSS text, so
+     * {@code var(--accent)} is as legal as {@code #FF00AA} — an override may point one token at
+     * another, which is how "make the focus ring my accent" is said in one line.
+     *
+     * <p>An override naming a token nothing else defines is kept rather than refused: a theme
+     * arriving later may introduce it, and dropping it here would silently lose the user's setting
+     * in between. It resolves to nothing until then, which is the same degrade any undefined
+     * reference gets.</p>
+     */
+    public void setOverrides(Map<String, String> tokenOverrides) {
+        Map<String, String> normalised = new LinkedHashMap<>();
+        tokenOverrides.forEach((key, value) -> {
+            String name = key.startsWith("--") ? key : "--" + key;
+            normalised.put(name, value);
+        });
+        if (normalised.equals(overrides)) return;      // same guard as setTheme, same reason
+        overrides.clear();
+        overrides.putAll(normalised);
+        apply();
+    }
+
+    /** The overrides in force, token names normalised to their {@code --} form. */
+    public Map<String, String> overrides() {
+        return Map.copyOf(overrides);
+    }
+
+    /** Deactivates both axes, drops the overrides, and unbinds the table — the pristine sheets. */
     public void resetForTesting() {
         activeTheme = null;
         activeScheme = null;
+        overrides.clear();
         apply();
     }
 
     private void apply() {
         List<UiTheme> chain = inheritanceChain(activeTheme);
 
-        // Merge order (later wins): base ← root ancestor ← … ← theme ← scheme. plan_styling.md
-        // §3.3; the user-override layer slots in after the scheme when it lands. With neither axis
-        // active the table stays EMPTY — pristine sheets, not a half-bound base.
+        // Merge order (later wins): base ← root ancestor ← … ← theme ← scheme ← the user's own
+        // overrides (plan_styling.md §3.3). With NOTHING active the table stays empty — pristine
+        // sheets on their fallbacks, not a half-bound base.
         LinkedHashMap<String, String> merged = new LinkedHashMap<>();
-        if (!chain.isEmpty() || activeScheme != null) merged.putAll(baseTable());
+        boolean anything = !chain.isEmpty() || activeScheme != null || !overrides.isEmpty();
+        if (anything) merged.putAll(baseTable());
         for (UiTheme link : chain) merged.putAll(link.variables());
         if (activeScheme != null) merged.putAll(activeScheme.variables());
+        merged.putAll(overrides);
 
         StyleSheetRegistry.bindVariables(DeclarationParser.resolveTable(merged));
+
+        // The file-type icons are DRAWINGS, not tinted glyphs — JetBrains ships each one twice because a
+        // filled multi-colour shape cannot be recoloured for the opposite background the way a monochrome
+        // stroke can. So the icon set follows the theme's declared kind rather than any token, and this is
+        // the one place that knows the kind changed. Unthemed keeps the DARK drawings, matching the ua/
+        // fallbacks' own dark-first look.
+        FileIconTheme.setVariant(activeTheme != null && activeTheme.kind() == UiTheme.Kind.LIGHT
+                ? FileIconTheme.Variant.LIGHT
+                : FileIconTheme.Variant.DARK);
 
         // One parse over the concatenated chain, root-first — cross-link source order falls out of
         // the single parse instead of needing rules renumbered by hand.

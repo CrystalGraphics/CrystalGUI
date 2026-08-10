@@ -605,8 +605,8 @@ coexist freely, so step 5 can land section-by-section.
 | 6 | **Extract the scheme**: editor `::highlight()` + surface colours → `schemes/dark-plus.css` (§3.6). First real two-axis swap end-to-end. | M | Med |
 | 7 | **Settings + Preferences ▸ Appearance page** (§3.7) + harness `--theme=` flag. | M | Low |
 | 8 | **Split the file** *(revised — see §3.2)*: default.css → nine `ua/` DOMAIN parts as a contiguous partition, proven declaration-identical to HEAD; `StyleSheetRegistry` grows the `DEFAULT_SHEET_PARTS` composite manifest (one sheet, one parse, one variable scope); `docs/CGUI_THEMING.md` written with its generated, machine-checked token table. `BASE_LOOK` deferred with a named trigger. Hard rule kept: **no single sheet file over ~1,500 lines** (largest shipped part: workbench.css at 1,475+header). | L | Med |
-| 9 | **`crystal-light.css`** — the acceptance test of the vocabulary. Every place light looks wrong is a rule that bypassed a token. Parity test (§4.2.8) turns on. Coherent, not necessarily beautiful. | M | Med |
-| 10 | **User override layer** — settings-backed token overrides merged last (§3.5). | S | Low |
+| 9 | **Ledger paydown + `crystal-light.css`** *(done — see §9 below)*. The plan understated this: light mode is *blocked* by the fine-tune ledger, because a theme redefining only the system tokens leaves every pinned component token on its dark fallback. So step 9 is first and foremost the paydown — 279 component tokens derived into the vocabulary — and light falls out of it. Parity test on. | L | Med |
+| 10 | **User override layer** — settings-backed token overrides merged last (§3.5). *(done)* | S | Low |
 | 11a | **Islands structural prerequisites** (§6 header): dock `--panel-gap` gaps; rounded-chrome/rectangular-clip strategy validated in harness captures, with the FBO fallback measured before adoption. | M | Med |
 | 11b | **Core-widget design pass** (§6.2) — the component language over `look/widgets.css` + tokens, verified in `cgui-gallery`. | M | — |
 | 11c | **Workbench/editor polish pass** (§6.1) — now edits to ~40 values in crystal-dark.css plus targeted look/ rules, instead of spelunking 6,241 lines. | M | — |
@@ -771,6 +771,36 @@ against the IntelliJ references, probes reverted after.
   [theming architecture](https://sujeet.pro/articles/design-tokens-and-theming)
 
 ---
+
+## 9a. What the light theme found (step 9's real output)
+
+The acceptance test worked exactly as intended — a second theme is a machine for finding rules that
+bypassed the vocabulary. What it turned up, and what was done:
+
+**Fixed here:**
+
+- **The editor declared neither `color` nor `background`.** Its text was the `color` property's
+  *initial* value (white) inherited from nowhere in particular, and its surface was whatever pane
+  sat behind it. Invisible in a dark UI, fatal in a light one — white text on a white pane. Both
+  are now `--editor-fg` / `--editor-bg`, scheme-owned (a document's ink and paper belong to the
+  colour scheme, IntelliJ's split), with fallbacks reproducing the old accident exactly so the
+  unthemed editor is unchanged.
+- **`light-plus.css`** — a light UI theme needs a light *scheme* or the document stays dark; VS
+  Code's Light+ values, key-for-key with `dark-plus` and parity-tested.
+- **File-type icons follow the theme's kind.** `FileIconTheme.Variant` existed with a javadoc
+  saying it would become a property of the active theme "when editor themes land". They landed;
+  `UiThemeManager` drives it, so a light theme gets JetBrains' light drawings. These are *drawings*,
+  not tinted glyphs — the one thing a theme changes that no token can express.
+
+**Known, left for the polish pass (§6):**
+
+- **Brand palettes are washed out on light.** The file-type text colours (`--filetype-*`) are
+  theme-independent by design — Java's orange is Java's orange — but several were picked against a
+  dark background and read faintly on a light one. The honest fix is a light-mode palette override
+  in `crystal-light`, which is a design decision per language, not a mechanical one.
+- **Some chrome still reads low-contrast on light** (a panel header title, the Problems strip).
+  Each is a specific rule to find, and the light theme is what makes them findable — which is the
+  whole point of shipping it now rather than after the polish.
 
 ## 10. Where this leaves us
 

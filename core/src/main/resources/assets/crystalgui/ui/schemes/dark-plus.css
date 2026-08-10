@@ -18,6 +18,8 @@
 
 theme {
     /* ── The editor's surfaces ── */
+    --editor-bg: #1E1E1E;
+    --editor-fg: #D4D4D4;
     --editor-caret: #FF0000;
     --editor-current-line: #232830;
     --editor-selection-bg: #2C5A8C;
