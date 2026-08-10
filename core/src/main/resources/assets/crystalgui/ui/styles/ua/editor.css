@@ -56,6 +56,18 @@ texteditor {
      * caret and its hit testing from exactly this padding. */
     padding-left: 1px;
     padding-right: 3px;
+
+    /* THE DOCUMENT'S OWN SURFACE AND TEXT COLOUR, and the reason they are here at all: until the light
+     * theme was built, this widget declared NEITHER. Its text was the `color` property's initial value
+     * (white) inherited from nowhere in particular, and its background was whatever pane happened to sit
+     * behind it. Both are invisible mistakes in a dark UI and fatal in a light one -- white text on a
+     * white pane -- which is exactly the class of gap a second theme exists to find.
+     *
+     * The fallbacks reproduce that accident exactly (white text, no fill), so an unthemed editor is
+     * unchanged; the SCHEME supplies the real pair, because a document's ink and paper belong to the
+     * editor colour scheme rather than to the UI theme -- the same split IntelliJ draws. */
+    color: var(--editor-fg, #FFFFFF);
+    background: var(--editor-bg, #00000000);
 }
 
 /* A line must not wrap: the editor's whole windowing model is that row N sits at N * lineHeight, and a

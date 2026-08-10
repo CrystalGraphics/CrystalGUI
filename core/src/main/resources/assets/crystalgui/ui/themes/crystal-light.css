@@ -1,0 +1,99 @@
+/* @theme  Crystal Light
+ * @id     crystalgui:crystal-light
+ * @kind   light
+ * @extends —
+ * @editor-scheme crystalgui:light-plus
+ * @author crystalgui
+ *
+ * The vocabulary's acceptance test: if a light theme needs more than this file, some rule
+ * bypassed a token. Authored rather than inverted — a light UI is not a photographic negative,
+ * and the roles reverse meaning (a RECESSED surface goes white here, being the brightest thing
+ * on screen, while it is the darkest in the dark theme).
+ *
+ * Two blocks, and the split is the whole architecture: the SYSTEM vocabulary is the ~30 roles
+ * every component token derives from (base.css), and the pins below are the handful that cannot
+ * derive — alpha scrims, and the graph's translucent bands where the wire showing through is the
+ * design. Everything else in the UI follows from the first block.
+ */
+
+/* ── The system vocabulary ─────────────────────────────────────────────────────────────────── */
+theme {
+    --surface-base: #E8E8EC;
+    --surface-panel: #F2F2F4;
+    --surface-raised: #E4E4E8;
+    --surface-recessed: #FFFFFF;
+    --surface-editor: #FFFFFF;
+    --surface-overlay: #FFFFFF;
+    --border-base: #C4C4C8;
+    --border-strong: #9A9AA0;
+    --border-field: #C0C0C6;
+    --divider: #D6D6DA;
+    --fg: #1F1F22;
+    --fg-secondary: #55565B;
+    --fg-hint: #8C8D93;
+    --fg-disabled: #B0B1B6;
+    --fg-on-accent: #FFFFFF;
+    --accent: #3574F0;
+    --accent-hover: #2B60D0;
+    --accent-soft: #B9CCF5;
+    --hover-bg: #E0E4EA;
+    --pressed-bg: #D2D7DF;
+    --selection-bg: #CBDDF7;
+    --selection-inactive-bg: #E0E0E4;
+    --focus-ring: #0060DF;
+    --error: #D02B2B;
+    --warning: #9A7500;
+    --info: #1B72C4;
+    --success: #2E6B1F;
+    --modified: #A5762B;
+    --link: #2A6DB0;
+}
+
+/* ── Pins: what a role cannot say ──────────────────────────────────────────────────────────── */
+theme {
+    --banner-error-bg: #FAE4E4;
+    --banner-error-fg: #7A1F1F;
+    --banner-info-bg: #DCE8F5;
+    --banner-info-fg: #1B4568;
+    --banner-warning-bg: #F7EEDA;
+    --banner-warning-fg: #5C4708;
+
+    --blackboard-drop-line: #3574F0;
+
+    --colorpicker-bg: #FFFFFFEE;
+    --colorpicker-handle-shadow: #00000040;
+
+    --configkit-alpha-bg: #3A3A32;
+
+    --dialog-backdrop: #00000040;
+    --dialog-picker-bg: #F2F2F4D0;
+
+    --dock-drop-overlay: #3574F033;
+    --dock-floating-bg: #F2F2F4F5;
+    --dock-insertion-bg: #3574F028;
+
+    --field-invalid-bg: #FBE9E9;
+
+    --ghost-bg: #B9CCF5D0;
+    --ghost-label-bg: #55565BF0;
+
+    --graph-control-row-bg: #C8C8CE76;
+    --graph-exposed-dot: #4E9E2B;
+    --graph-exposed-ring: #4E9E2B;
+    --graph-inline-editor-bg: #C8C8CE76;
+    --graph-inputs-bg: #D4D4DA76;
+    --graph-marquee-bg: #3574F028;
+    --graph-marquee-border: #3574F0;
+    --graph-node-hover-ring: #8FB4D8;
+    --graph-outputs-bg: #C0C0C876;
+    --graph-ports-bg: #E0E0E676;
+    --graph-selection-ring: #3574F0;
+    --graph-title-bg: #C8C8CE76;
+
+    --inspection-bg: #F2F2F4E8;
+
+    --region-drop-bg: #3574F033;
+
+    --tooltip-bg: #FFFFFFF5;
+    --tooltip-border: #00000030;
+}

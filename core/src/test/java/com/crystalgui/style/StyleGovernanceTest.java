@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,6 +41,31 @@ public class StyleGovernanceTest {
      * "Crystal Dark + a different scheme" a legal pair (plan_styling.md §3.6). */
     private static final List<String> SCHEME_TOKEN_PREFIXES =
             List.of("--editor-", "--syntax-", "--find-match-", "--search-excluded-");
+
+    /**
+     * <b>Palette tokens: defined by NO theme, on purpose.</b> A language's brand colour, a graph
+     * port type, a VCS status — these mean the same thing in every theme, so pinning them in one
+     * would force every other theme to restate them (and a light theme that forgot would silently
+     * lose Java's orange). They live as their sheet's {@code var()} fallback and nowhere else.
+     *
+     * <p>Named here rather than left to look like a typo, and deliberately by PREFIX with an
+     * exception list: {@code --graph-port-vec3} is palette, {@code --graph-port-label-hover-fg} is
+     * the band's own chrome and must derive like any other surface — a prefix rule alone captured
+     * it once and quietly deleted its derivation.</p>
+     */
+    private static final List<String> FALLBACK_ONLY_PREFIXES =
+            List.of("--filetype-", "--graph-port-");
+    private static final Set<String> FALLBACK_ONLY_EXCEPTIONS =
+            Set.of("--graph-port-label-hover-fg");
+    private static final Set<String> FALLBACK_ONLY_EXACT = Set.of(
+            "--decoration-added", "--decoration-renamed", "--decoration-untracked",
+            "--decoration-deleted", "--decoration-conflict");
+
+    private static boolean isFallbackOnly(String token) {
+        if (FALLBACK_ONLY_EXCEPTIONS.contains(token)) return false;
+        if (FALLBACK_ONLY_EXACT.contains(token)) return true;
+        return FALLBACK_ONLY_PREFIXES.stream().anyMatch(token::startsWith);
+    }
 
     /** The engine's structure sheets — every colour in them must be a token reference. The
      * user-agent parts come from {@link StyleSheetRegistry#DEFAULT_SHEET_PARTS}, the one manifest,
@@ -152,12 +178,15 @@ public class StyleGovernanceTest {
             Matcher ref = VAR_ANY.matcher(css);
             while (ref.find()) {
                 String name = ref.group(1);
+                if (isFallbackOnly(name)) continue;
                 if (!defined.contains(name) && !local.contains(name)) {
                     offences.add(sheet + ": " + name);
                 }
             }
         }
-        assertTrue("var() references no shipped table defines (typo, or a token deleted without its uses):\n"
+        assertTrue("var() references no shipped table defines (typo, or a token deleted without its uses).\n"
+                + "If it is a theme-independent palette value, add it to FALLBACK_ONLY_* above — deliberately,\n"
+                + "since a light theme then inherits the dark file's value:\n"
                 + String.join("\n", offences), offences.isEmpty());
     }
 
@@ -204,18 +233,45 @@ public class StyleGovernanceTest {
 
     // ── rule 5: the shipped theme is complete ───────────────────────────────────────────────────
 
-    /** crystal-dark defines the whole system vocabulary — the completeness a sparse third-party
-     * theme relies on through {@code @extends}. When crystal-light lands, this becomes the
-     * dark/light parity check. */
+    /** Each shipped theme defines the whole system vocabulary — the completeness a sparse
+     * third-party theme relies on through {@code @extends}. */
     @Test
-    public void crystalDarkDefinesTheFullSystemVocabulary() {
-        Set<String> defined = new HashSet<>();
-        definitionsOf(load(THEMES + "crystal-dark.css")).forEach((k, v) -> defined.add(k.substring(2)));
-        List<String> missing = new ArrayList<>();
-        for (String name : SYSTEM_VOCABULARY) {
-            if (!defined.contains(name)) missing.add(name);
+    public void everyShippedThemeDefinesTheFullSystemVocabulary() {
+        for (String theme : List.of("crystal-dark.css", "crystal-light.css")) {
+            Set<String> defined = new HashSet<>();
+            definitionsOf(load(THEMES + theme)).forEach((k, v) -> defined.add(k.substring(2)));
+            List<String> missing = new ArrayList<>();
+            for (String name : SYSTEM_VOCABULARY) {
+                if (!defined.contains(name)) missing.add(name);
+            }
+            assertTrue(theme + " is missing system tokens:\n" + String.join("\n", missing), missing.isEmpty());
         }
-        assertTrue("crystal-dark is missing system tokens:\n" + String.join("\n", missing), missing.isEmpty());
+    }
+
+    /**
+     * <b>Each light/dark pair defines the IDENTICAL key set.</b> The test that keeps light mode from
+     * rotting the moment attention moves on: a token added to one alone leaves the other resolving
+     * it from the sheet's fallback — a dark value on a light surface, invisible to anyone not
+     * running the light side, which is nearly everyone.
+     */
+    @Test
+    public void eachThemeAndSchemePairDefinesTheSameKeys() {
+        assertSameKeys(THEMES + "crystal-dark.css", THEMES + "crystal-light.css");
+        assertSameKeys(SCHEMES + "dark-plus.css", SCHEMES + "light-plus.css");
+    }
+
+    private static void assertSameKeys(String darkFile, String lightFile) {
+        Set<String> dark = definitionsOf(load(darkFile)).keySet();
+        Set<String> light = definitionsOf(load(lightFile)).keySet();
+
+        Set<String> darkOnly = new TreeSet<>(dark);
+        darkOnly.removeAll(light);
+        Set<String> lightOnly = new TreeSet<>(light);
+        lightOnly.removeAll(dark);
+
+        assertTrue("in " + darkFile + " but not its light pair: " + darkOnly
+                + "\nin " + lightFile + " but not its dark pair: " + lightOnly,
+                darkOnly.isEmpty() && lightOnly.isEmpty());
     }
 
     // ── rules 6+7: the two axes stay apart ──────────────────────────────────────────────────────
@@ -230,11 +286,13 @@ public class StyleGovernanceTest {
     @Test
     public void theSchemeAndThemeAxesStayApart() {
         List<String> offences = new ArrayList<>();
-        definitionsOf(load(SCHEMES + "dark-plus.css")).forEach((name, value) -> {
-            if (SCHEME_TOKEN_PREFIXES.stream().noneMatch(name::startsWith)) {
-                offences.add("dark-plus.css defines a non-scheme token: " + name);
-            }
-        });
+        for (String scheme : List.of("dark-plus.css", "light-plus.css")) {
+            definitionsOf(load(SCHEMES + scheme)).forEach((name, value) -> {
+                if (SCHEME_TOKEN_PREFIXES.stream().noneMatch(name::startsWith)) {
+                    offences.add(scheme + " defines a non-scheme token: " + name);
+                }
+            });
+        }
         definitionsOf(load(THEMES + "crystal-dark.css")).forEach((name, value) -> {
             if (SCHEME_TOKEN_PREFIXES.stream().anyMatch(name::startsWith)) {
                 offences.add("crystal-dark.css defines a scheme-owned token: " + name);

@@ -1,133 +1,340 @@
 /*
- * base.css — the COMPONENT-TOKEN derivation table (plan_styling.md §3.1).
+ * base.css — the COMPONENT-TOKEN derivation table (plan_styling.md §3.1, docs/CGUI_THEMING.md).
  *
- * Every component token an engine sheet references is defined here as a reference into the SYSTEM
- * vocabulary, which a theme supplies. This file is the engine's equivalent of VS Code's colour
- * registry: it is where "tab background falls back to the editor background" lives.
+ * Every component token an engine sheet references resolves here, into the SYSTEM vocabulary a
+ * theme supplies. This file is the engine's equivalent of VS Code's colour registry — it is where
+ * "the tab strip's background is the base surface" is written down, once, for every theme.
  *
- * MIGRATION DRAFT: these derivations were emitted mechanically during the step-5 tokenization,
- * kept ONLY where the current value already coincides with the sys token (so binding crystal-dark
- * changes nothing). Every token whose current value matches no sys role is pinned in
- * crystal-dark.css instead — that fine-tune block is the migration debt, and the Islands pass
- * (step 11) pays it down by re-deriving here deliberately. Do NOT hand-add hex values here;
- * governance enforces derivation-only.
+ * DERIVATION-ONLY, enforced: no hex values live here. A component token whose value cannot be
+ * expressed as a system role is pinned in each theme's own file instead (the alpha scrims), and a
+ * value that is the same in EVERY theme — a language's brand colour, a port type, a VCS status —
+ * is defined nowhere at all and rides its sheet's var() fallback.
  */
 
 theme {
     --activitybar-badge-fg: var(--fg-on-accent);
     --activitybar-bg: var(--surface-panel);
+    --activitybar-item-checked-bg: var(--selection-inactive-bg);
     --activitybar-item-hover-bg: var(--accent);
+    --activitybar-separator: var(--divider);
 
     --balloon-bg: var(--surface-raised);
+    --balloon-border: var(--border-base);
+    --balloon-hover-bg: var(--hover-bg);
 
-    --blackboard-arrow-hover-fg: var(--fg-on-accent);
+    --banner-border: var(--divider);
+
+    --blackboard-arrow-fg: var(--fg-hint);
+    --blackboard-arrow-hover-fg: var(--fg);
+    --blackboard-empty-fg: var(--fg-hint);
+    --blackboard-subtitle-fg: var(--fg-hint);
+    --blackboard-type-fg: var(--fg-hint);
+
+    --breadcrumb-current-fg: var(--fg);
+    --breadcrumb-link-fg: var(--link);
+    --breadcrumb-sep-fg: var(--fg-hint);
+
+    --button-bg: var(--surface-raised);
+    --button-disabled-bg: var(--surface-raised);
+    --button-disabled-fg: var(--fg-disabled);
+    --button-fg: var(--fg);
+    --button-hover-bg: var(--hover-bg);
+    --button-pressed-bg: var(--pressed-bg);
 
     --checkbox-checked-bg: var(--success);
+    --checkbox-disabled-bg: var(--surface-raised);
+    --checkbox-mark-bg: var(--surface-raised);
+    --checkbox-mark-hover-bg: var(--hover-bg);
 
-    --configkit-field-bg: var(--surface-base);
+    --colorpicker-channel-fg: var(--fg-secondary);
+    --colorpicker-handle-ring: var(--fg-on-accent);
+    --colorpicker-thumb: var(--fg-on-accent);
+    --colorpicker-thumb-ring: var(--border-strong);
+
+    --configkit-alpha-fill: var(--fg-on-accent);
+    --configkit-band-bg: var(--surface-raised);
+    --configkit-check-hover-bg: var(--hover-bg);
+    --configkit-dropdown-hover-bg: var(--hover-bg);
+    --configkit-dropdown-pressed-bg: var(--pressed-bg);
+    --configkit-field-bg: var(--surface-recessed);
+    --configkit-field-border: var(--border-field);
+    --configkit-field-border-bottom: var(--border-base);
+    --configkit-field-border-top: var(--border-field);
+    --configkit-label-fg: var(--fg-secondary);
+    --configkit-list-body-bg: var(--surface-panel);
+    --configkit-list-head-bg: var(--surface-raised);
+    --configkit-panel-bg: var(--surface-panel);
     --configkit-popup-bg: var(--surface-overlay);
+    --configkit-slider-fill: var(--border-strong);
+    --configkit-swatch-border: var(--border-base);
+    --configkit-value-fg: var(--fg);
 
+    --decoration-dirty: var(--modified);
     --decoration-error: var(--error);
+    --decoration-ignored: var(--fg-disabled);
     --decoration-info: var(--info);
     --decoration-modified: var(--modified);
+    --decoration-readonly: var(--fg-hint);
     --decoration-warning: var(--warning);
 
+    --dialog-bg: var(--surface-panel);
+    --dialog-border: var(--border-base);
     --dialog-close-bg: var(--surface-overlay);
+    --dialog-close-fg: var(--fg);
+    --dialog-close-hover-bg: var(--error);
+    --dialog-fg: var(--fg);
+    --dialog-title-bg: var(--surface-raised);
 
-    --dock-active-border: var(--link);
+    --dock-active-border: var(--accent);
     --dock-bg: var(--surface-panel);
+    --dock-empty-bg: var(--surface-base);
+    --dock-insertion-border: var(--accent);
+    --dock-missing-bg: var(--surface-raised);
 
+    --editorfind-bg: var(--surface-panel);
+    --editorfind-border: var(--divider);
+
+    --field-bg: var(--surface-recessed);
+    --field-disabled-bg: var(--surface-base);
     --field-disabled-fg: var(--fg-disabled);
+    --field-fg: var(--fg);
+    --field-invalid-fg: var(--error);
+    --field-placeholder: var(--fg-hint);
 
     --findbar-action-bg: var(--surface-raised);
+    --findbar-action-disabled-bg: var(--surface-panel);
+    --findbar-action-disabled-fg: var(--fg-disabled);
+    --findbar-action-fg: var(--fg);
+    --findbar-arrow-fg: var(--fg-secondary);
+    --findbar-bg: var(--surface-panel);
     --findbar-border: var(--divider);
-    --findbar-button-fg: var(--fg-hint);
+    --findbar-button-fg: var(--fg-secondary);
+    --findbar-button-hover-bg: var(--hover-bg);
+    --findbar-button-hover-fg: var(--fg);
+    --findbar-close-hover-bg: var(--hover-bg);
     --findbar-count-fg: var(--fg-hint);
+    --findbar-error-fg: var(--error);
+    --findbar-fg: var(--fg);
+    --findbar-icon: var(--fg-secondary);
+    --findbar-icon-hover: var(--fg);
+    --findbar-icon-off: var(--fg-disabled);
+    --findbar-toggle-fg: var(--fg-secondary);
+    --findbar-toggle-hover-fg: var(--fg);
     --findbar-toggle-on-bg: var(--accent);
     --findbar-toggle-on-fg: var(--fg-on-accent);
 
     --ghost-label-fg: var(--fg-on-accent);
 
+    --graph-canvas: var(--surface-base);
+    --graph-collapse-fg: var(--fg-secondary);
+    --graph-collapse-hover-fg: var(--fg);
+    --graph-control-fg: var(--fg-secondary);
+    --graph-dot-bg: var(--surface-base);
+    --graph-edge: var(--border-base);
     --graph-editor-dot-ring-bg: var(--surface-panel);
-    --graph-port-label-hover-fg: var(--fg-on-accent);
+    --graph-field: var(--surface-recessed);
+    --graph-hairline: var(--divider);
+    --graph-header: var(--surface-raised);
+    --graph-panel: var(--surface-panel);
+    --graph-port-label-hover-fg: var(--fg);
+    --graph-preview-bg: var(--surface-raised);
+    --graph-property-node-bg: var(--surface-raised);
+    --graph-seam: var(--surface-base);
+    --graph-text: var(--fg-secondary);
+    --graph-text-bright: var(--fg);
 
+    --inspection-clean-fg: var(--success);
     --inspection-error-fg: var(--error);
     --inspection-warning-fg: var(--warning);
 
-    --label-fg: var(--fg-on-accent);
+    --label-fg: var(--fg);
 
     --list-hover-bg: var(--hover-bg);
     --list-selected-bg: var(--selection-bg);
 
+    --menu-accelerator: var(--fg-hint);
+    --menu-arrow: var(--fg-secondary);
     --menu-bg: var(--surface-overlay);
-    --menu-border: var(--border-strong);
+    --menu-border: var(--border-base);
+    --menu-fg: var(--fg);
     --menu-item-disabled-fg: var(--fg-disabled);
+    --menu-item-focus-bg: var(--hover-bg);
+    --menu-mark: var(--fg);
+    --menu-separator: var(--divider);
 
     --menubar-bg: var(--surface-raised);
-    --menubar-open-fg: var(--fg-on-accent);
+    --menubar-fg: var(--fg-secondary);
+    --menubar-hover-bg: var(--hover-bg);
+    --menubar-open-fg: var(--fg);
+
+    --nav-arrow-fg: var(--fg-secondary);
+    --nav-label-fg: var(--fg-secondary);
+    --nav-sidebar-bg: var(--surface-panel);
 
     --nodemenu-bg: var(--surface-panel);
     --nodemenu-border: var(--border-base);
+    --nodemenu-category-fg: var(--fg-hint);
+    --nodemenu-category-label-fg: var(--fg-secondary);
+    --nodemenu-empty-fg: var(--fg-hint);
+    --nodemenu-hover-bg: var(--hover-bg);
+    --nodemenu-selected-bg: var(--accent-soft);
     --nodemenu-selected-fg: var(--fg-on-accent);
     --nodemenu-separator-fg: var(--fg-disabled);
-    --nodemenu-twisty-fg: var(--fg-hint);
+    --nodemenu-title-bg: var(--surface-raised);
+    --nodemenu-twisty-fg: var(--fg-secondary);
 
-    --notification-bg: var(--surface-panel);
-    --notification-close-hover-fg: var(--fg-on-accent);
+    --notification-bg: var(--surface-raised);
+    --notification-close-fg: var(--fg-hint);
+    --notification-close-hover-bg: var(--hover-bg);
+    --notification-close-hover-fg: var(--fg);
     --notification-detail-fg: var(--fg-secondary);
+    --notification-error-fg: var(--error);
+    --notification-hover-bg: var(--hover-bg);
     --notification-message-fg: var(--fg);
+    --notification-secondary-fg: var(--fg-secondary);
+    --notification-secondary-hover-fg: var(--fg);
+    --notification-time-fg: var(--fg-hint);
 
-    --notifications-bg: var(--surface-base);
+    --notifications-bg: var(--surface-panel);
+    --notifications-empty-fg: var(--fg-hint);
     --notifications-link-fg: var(--link);
+    --notifications-link-hover-fg: var(--accent-hover);
     --notifications-title-fg: var(--fg-secondary);
 
     --pagestack-empty-fg: var(--fg-hint);
 
-    --palette-field-bg: var(--surface-base);
+    --palette-bg: var(--surface-panel);
+    --palette-border: var(--border-base);
+    --palette-category-fg: var(--fg-secondary);
+    --palette-field-bg: var(--surface-recessed);
     --palette-field-border: var(--border-field);
+    --palette-field-focus-border: var(--accent);
+    --palette-hover-bg: var(--hover-bg);
+    --palette-key-bg: var(--surface-raised);
     --palette-key-border: var(--border-base);
+    --palette-key-fg: var(--fg-secondary);
+    --palette-key-hover-border: var(--border-strong);
     --palette-key-hover-fg: var(--fg-on-accent);
     --palette-key-sep-fg: var(--fg-hint);
+    --palette-label-fg: var(--fg);
+    --palette-match-fg: var(--accent);
     --palette-selected-bg: var(--selection-bg);
 
-    --problems-bg: var(--surface-base);
-    --problems-empty-fg: var(--fg-hint);
-    --problems-message-fg: var(--fg);
-    --problems-tab-active-bg: var(--accent-soft);
-    --problems-tab-active-fg: var(--fg);
-    --problems-tab-fg: var(--fg-secondary);
+    --panel-header-fg: var(--fg-secondary);
+    --panel-header-icon: var(--fg-secondary);
+    --panel-header-icon-hover: var(--fg);
 
+    --pill-name-fg: var(--fg);
+    --pill-type-fg: var(--fg-secondary);
+
+    --preview-surface-bg: var(--surface-base);
+
+    --problems-bg: var(--surface-panel);
+    --problems-count-fg: var(--fg-hint);
+    --problems-empty-fg: var(--fg-hint);
+    --problems-line-fg: var(--fg-hint);
+    --problems-message-fg: var(--fg);
+    --problems-options-fg: var(--fg-secondary);
+    --problems-options-hover-fg: var(--fg);
+    --problems-tab-active-bg: var(--accent-soft);
+    --problems-tab-active-count-fg: var(--fg-on-accent);
+    --problems-tab-active-fg: var(--fg-on-accent);
+    --problems-tab-count-fg: var(--fg-hint);
+    --problems-tab-fg: var(--fg-secondary);
+    --problems-tab-hover-bg: var(--hover-bg);
+    --problems-tree-line-fg: var(--fg-hint);
+    --problems-unnecessary-fg: var(--fg-hint);
+
+    --prompt-bg: var(--surface-panel);
     --prompt-border: var(--border-base);
+    --prompt-caption-fg: var(--fg);
+    --prompt-field-bg: var(--surface-recessed);
+    --prompt-field-fg: var(--fg);
 
     --region-drop-border: var(--accent);
 
+    --resizer-grip: var(--border-strong);
+
+    --scrollbar-corner: var(--surface-base);
+    --scrollbar-tail: var(--surface-raised);
+    --scrollbar-tail-hover: var(--border-base);
+    --scrollbar-thumb: var(--border-base);
+    --scrollbar-thumb-hover: var(--border-strong);
+    --scrollbar-thumb-pressed: var(--fg-secondary);
+    --scrollbar-track: var(--surface-base);
+
+    --search-match-fg: var(--modified);
+
     --searchfield-bg: var(--surface-recessed);
     --searchfield-border: var(--border-field);
-    --searchfield-focus-border: var(--link);
-    --searchfield-icon-fg: var(--fg-hint);
+    --searchfield-caret: var(--fg);
+    --searchfield-clear-fg: var(--fg-disabled);
+    --searchfield-clear-hover-bg: var(--hover-bg);
+    --searchfield-clear-hover-fg: var(--fg);
+    --searchfield-error-fg: var(--error);
+    --searchfield-fg: var(--fg);
+    --searchfield-focus-border: var(--accent);
+    --searchfield-icon-fg: var(--fg-secondary);
+    --searchfield-option-fg: var(--fg-secondary);
+    --searchfield-option-hover-bg: var(--hover-bg);
+    --searchfield-option-hover-fg: var(--fg);
+    --searchfield-option-on-bg: var(--accent);
     --searchfield-option-on-fg: var(--fg-on-accent);
+    --searchfield-option-on-hover-bg: var(--accent-hover);
+
+    --slider-disabled-fill: var(--fg-disabled);
+    --slider-disabled-thumb: var(--fg-disabled);
+    --slider-fill: var(--success);
+    --slider-thumb: var(--fg);
+    --slider-thumb-hover: var(--fg);
+    --slider-thumb-ring: var(--fg-on-accent);
+    --slider-track: var(--surface-raised);
+
+    --splitter-bg: var(--divider);
+    --splitter-hover-bg: var(--border-strong);
+    --splitter-pressed-bg: var(--fg);
 
     --squiggle-error: var(--error);
     --squiggle-info: var(--info);
     --squiggle-warning: var(--warning);
 
     --statusbar-bg: var(--surface-panel);
+    --statusbar-border: var(--divider);
+    --statusbar-crumb-fg: var(--fg-hint);
+    --statusbar-error-fg: var(--error);
     --statusbar-fg: var(--fg-secondary);
+    --statusbar-hover-fg: var(--fg);
     --statusbar-item-fg: var(--fg-secondary);
     --statusbar-sep: var(--divider);
+    --statusbar-warning-fg: var(--warning);
 
     --stripe-error: var(--error);
     --stripe-info: var(--info);
     --stripe-warning: var(--warning);
 
+    --switch-bg: var(--surface-raised);
     --switch-checked-bg: var(--success);
+    --switch-disabled-knob: var(--fg-disabled);
+    --switch-knob: var(--fg);
 
-    --tab-active-fg: var(--fg-on-accent);
+    --tab-active-bg: var(--surface-panel);
+    --tab-active-fg: var(--fg);
+    --tab-bg: var(--surface-raised);
+    --tab-disabled-bg: var(--surface-raised);
     --tab-disabled-fg: var(--fg-disabled);
+    --tab-fg: var(--fg-secondary);
+    --tab-hover-bg: var(--hover-bg);
+    --tab-pane-bg: var(--surface-panel);
+    --tab-strip-bg: var(--surface-base);
 
-    --tooltip-fg: var(--fg-on-accent);
+    --tooltip-fg: var(--fg);
 
-    --tree-editor-border: var(--link);
-    --tree-match-fg: var(--fg-on-accent);
+    --tree-bg: var(--surface-panel);
+    --tree-dimmed-fg: var(--fg-hint);
+    --tree-drop-border: var(--accent);
+    --tree-editor-bg: var(--surface-recessed);
+    --tree-editor-border: var(--accent);
+    --tree-match-fg: var(--fg);
+    --tree-selected-bg: var(--accent-soft);
     --tree-selected-fg: var(--fg-on-accent);
 }

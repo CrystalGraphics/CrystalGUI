@@ -128,16 +128,22 @@ public final class FileIconTheme {
     }
 
     /**
-     * <b>Provisional, and deliberately a static.</b>
+     * Which drawing of each icon is in use — <b>driven by the active theme's {@code @kind}</b>.
      *
-     * <p>There is no editor-theme concept yet, so there is nothing for an icon variant to be a property
-     * <em>of</em> — and inventing a seam before the thing it seams exists is how you get an abstraction
-     * shaped for a guess. When editor themes land this becomes a property of the active theme and this
-     * field goes away; until then one global switch is the honest representation of "the whole application
-     * is light or dark".</p>
+     * <p>This field carried a note saying it was provisional because "there is no editor-theme concept
+     * yet, so there is nothing for an icon variant to be a property <em>of</em>". Themes have landed, and
+     * {@code UiThemeManager} now sets this on every swap. It stays a <em>static</em> rather than becoming
+     * a field on the theme, because that note's other half still holds: the consumers are static
+     * utilities ({@link #withVariant}, {@link #classFor}) reached from row-binding code that has no theme
+     * in hand, and threading one through them would be plumbing in service of a purity nothing needs.
+     * One global switch remains the honest representation of "the whole application is light or dark".</p>
      *
-     * <p>{@code volatile} because a theme switch is not going to happen on the render thread and a stale
-     * read would show one row's icon from the old variant.</p>
+     * <p>{@code volatile} because a theme switch does not happen on the render thread and a stale read
+     * would show one row's icon from the old variant.</p>
+     *
+     * <p><b>A change here needs the rows rebound to be seen</b> — the icon name is chosen in {@code bind},
+     * not by the cascade, so restyling alone will not repaint it. {@code WorkbenchSettings.apply} refreshes
+     * the file tree immediately after applying the theme, which is what makes the swap visible.</p>
      */
     private static volatile Variant variant = Variant.DARK;
 

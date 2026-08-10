@@ -1,5 +1,6 @@
 package com.crystalgui.style.theme;
 
+import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiTestBase;
@@ -13,9 +14,11 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -212,6 +215,65 @@ public class UiThemeManagerTest extends UiTestBase {
         assertEquals("the second identical set must not re-apply", 1, emits[0]);
     }
 
+    // ── the user's own overrides ────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>An override beats the theme, and SURVIVES a theme swap.</b>
+     *
+     * <p>VS Code's {@code workbench.colorCustomizations} and the reason nobody there forks a theme to
+     * change one colour. Last in the merge, so it re-applies on top of whatever is picked next —
+     * "I always want this token pink" is a statement about the user, not about the theme.</p>
+     */
+    @Test
+    public void anOverrideBeatsTheThemeAndSurvivesASwap() {
+        ThemeRegistry.registerSource(DARK);
+        UiThemeManager.getInstance().setTheme("test:dark");
+        assertEquals(0.25f, opacityOf(varProbe), 0.001f);
+
+        UiThemeManager.getInstance().setOverrides(Map.of("probe-opacity", "0.9"));
+        assertEquals("the override must beat the theme", 0.9f, opacityOf(varProbe), 0.001f);
+
+        ThemeRegistry.registerSource("""
+                /* @theme  Other
+                 * @id     test:other
+                 * @kind   dark */
+                theme { --probe-opacity: 0.3; }
+                """);
+        UiThemeManager.getInstance().setTheme("test:other");
+        assertEquals("the override must survive the swap", 0.9f, opacityOf(varProbe), 0.001f);
+
+        UiThemeManager.getInstance().setOverrides(Map.of());
+        assertEquals("and clearing it must hand the token back to the theme",
+                0.3f, opacityOf(varProbe), 0.001f);
+    }
+
+    /** An override works with no theme at all — the user has not opted into a theme to have an opinion. */
+    @Test
+    public void anOverrideAppliesWithNoThemeActive() {
+        assertEquals(0.5f, opacityOf(varProbe), 0.001f);
+        UiThemeManager.getInstance().setOverrides(Map.of("--probe-opacity", "0.15"));
+        assertEquals(0.15f, opacityOf(varProbe), 0.001f);
+    }
+
+    /** The {@code --} prefix is optional — a hand-written settings file must not fail on a detail
+     * that carries no information. */
+    @Test
+    public void overrideKeysAreNormalised() {
+        UiThemeManager.getInstance().setOverrides(Map.of("probe-opacity", "0.15"));
+        assertTrue(UiThemeManager.getInstance().overrides().containsKey("--probe-opacity"));
+        assertEquals(0.15f, opacityOf(varProbe), 0.001f);
+    }
+
+    /** An override may point one token at another, not just at a literal. */
+    @Test
+    public void anOverrideMayReferenceAnotherToken() {
+        ThemeRegistry.registerBuiltins();
+        UiThemeManager.getInstance().setTheme("crystalgui:crystal-dark");
+        UiThemeManager.getInstance().setOverrides(Map.of("--probe-opacity", "var(--themed-probe)",
+                "--themed-probe", "0.42"));
+        assertEquals(0.42f, opacityOf(varProbe), 0.001f);
+    }
+
     // ── refusals ────────────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -239,45 +301,105 @@ public class UiThemeManagerTest extends UiTestBase {
     // ── the shipped theme ───────────────────────────────────────────────────────────────────────
 
     /**
-     * <b>Binding crystal-dark is identical to running unthemed.</b> The migration's contract: the
-     * shipped theme pins today's look exactly (its fine-tune block exists for this), so the whole
-     * tokenization is a pure mechanical transform and every visual change later is a deliberate
-     * edit to one theme file. Asserted through the real cascade on a real widget.
+     * <b>The unthemed fallbacks and the shipped theme are two different looks, and both are
+     * deliberate.</b>
+     *
+     * <p>Through step 8 these were identical — the migration's contract, so that tokenizing 485
+     * hexes could be proven a pure transform. Step 9's paydown ended that on purpose: the ua/
+     * fallbacks stay the FUNCTIONAL look (default.css's original promise — every widget usable with
+     * no theme installed, and every test and harness scene that installs no theme unaffected),
+     * while {@code crystal-dark} became a DESIGNED look whose component tokens derive from one
+     * ~30-role palette. That is the function/look split the plan once wanted as two files, arrived
+     * at by value instead — and the button is the clearest case: unthemed it is a pale slab with
+     * dark text (legacy), themed it is a raised dark surface with light text (coherent).</p>
      */
     @Test
-    public void bindingCrystalDarkChangesNothing() {
+    public void theShippedThemeIsADesignedLookNotTheRawFallbacks() {
         Button button = new Button("probe");
         root.addChild(button);
         window.updateWithoutPainting();
-
-        int unthemedColor = button.getStyle().getGeneralGroup().color();
-        float unthemedProbe = opacityOf(varProbe);
+        int unthemed = button.getStyle().getGeneralGroup().color();
 
         ThemeRegistry.registerBuiltins();
         assertTrue(UiThemeManager.getInstance().setTheme("crystalgui:crystal-dark"));
         window.updateWithoutPainting();
+        int themed = button.getStyle().getGeneralGroup().color();
 
-        assertEquals("crystal-dark must reproduce the unthemed look exactly",
-                unthemedColor, button.getStyle().getGeneralGroup().color());
-        assertEquals(unthemedProbe, opacityOf(varProbe), 0.001f);
+        assertNotEquals("crystal-dark must be a design, not a restatement of the fallbacks",
+                unthemed, themed);
+
+        // ...and specifically: the themed label is LIGHT, because a dark theme's button is a dark
+        // surface. The unthemed one is near-black on pale grey.
+        assertTrue("a dark theme's button label must be light, was " + Integer.toHexString(themed),
+                luminance(themed) > 0.5f);
+        assertTrue("the unthemed button label must stay dark (the legacy functional look)",
+                luminance(unthemed) < 0.3f);
     }
 
-    /** The scheme axis is identity-preserving too: dark-plus's values ARE default.css's fallbacks
-     * (they were extracted from it), so activating the shipped pair changes nothing. */
+    /** Switching between the two shipped themes moves a value in both directions — the dropdown
+     * doing what a dropdown promises. */
     @Test
-    public void bindingTheShippedPairChangesNothing() {
+    public void theTwoShippedThemesDiffer() {
         Button button = new Button("probe");
         root.addChild(button);
-        window.updateWithoutPainting();
-        int unthemedColor = button.getStyle().getGeneralGroup().color();
-
         ThemeRegistry.registerBuiltins();
-        assertTrue(UiThemeManager.getInstance().setTheme("crystalgui:crystal-dark"));
-        assertTrue(UiThemeManager.getInstance().setScheme("crystalgui:dark-plus"));
-        window.updateWithoutPainting();
 
-        assertEquals(unthemedColor, button.getStyle().getGeneralGroup().color());
-        // and the scheme's tokens genuinely reach the bound table
+        UiThemeManager.getInstance().setTheme("crystalgui:crystal-dark");
+        window.updateWithoutPainting();
+        int dark = button.getStyle().getGeneralGroup().color();
+
+        assertTrue(UiThemeManager.getInstance().setTheme("crystalgui:crystal-light"));
+        window.updateWithoutPainting();
+        int light = button.getStyle().getGeneralGroup().color();
+
+        assertNotEquals(dark, light);
+        assertTrue("a light theme's button label must be dark", luminance(light) < 0.3f);
+    }
+
+    /**
+     * <b>The file-type icon set follows the theme's kind.</b>
+     *
+     * <p>These are drawings, not tinted glyphs: JetBrains ships {@code java.svg} and
+     * {@code java_dark.svg} because a filled multi-colour shape cannot be recoloured for the opposite
+     * background the way a monochrome stroke can. So this is the one thing a theme changes that no token
+     * can express, and {@code FileIconTheme}'s own javadoc had been waiting for themes to land to drive
+     * it. Unthemed stays DARK, matching the ua/ fallbacks' dark-first look.</p>
+     */
+    @Test
+    public void theIconSetFollowsTheThemesKind() {
+        ThemeRegistry.registerBuiltins();
+
+        UiThemeManager.getInstance().setTheme("crystalgui:crystal-dark");
+        assertEquals(FileIconTheme.Variant.DARK, FileIconTheme.getVariant());
+        assertTrue("a dark theme must reach the _dark drawings",
+                FileIconTheme.withVariant("crystalgui:filetypes/java").endsWith("_dark"));
+
+        UiThemeManager.getInstance().setTheme("crystalgui:crystal-light");
+        assertEquals(FileIconTheme.Variant.LIGHT, FileIconTheme.getVariant());
+        assertEquals("a light theme must use the base drawings",
+                "crystalgui:filetypes/java", FileIconTheme.withVariant("crystalgui:filetypes/java"));
+
+        UiThemeManager.getInstance().setTheme(null);
+        assertEquals("unthemed keeps the dark drawings", FileIconTheme.Variant.DARK,
+                FileIconTheme.getVariant());
+    }
+
+    /** Rough perceptual luminance of an ARGB int, 0..1 — enough to ask "is this light or dark". */
+    private static float luminance(int argb) {
+        float r = ((argb >> 16) & 0xFF) / 255f;
+        float g = ((argb >> 8) & 0xFF) / 255f;
+        float b = (argb & 0xFF) / 255f;
+        return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+    }
+
+    /** The scheme axis IS still identity-preserving: dark-plus's values were extracted from the
+     * editor's own fallbacks, so it restates them rather than redesigning them. (Unlike the UI
+     * theme, which step 9 turned into a design — the editor's colours were already coherent.) */
+    @Test
+    public void theShippedSchemeRestatesTheEditorsFallbacks() {
+        ThemeRegistry.registerBuiltins();
+        assertTrue(UiThemeManager.getInstance().setScheme("crystalgui:dark-plus"));
+
         StyleSheet late = StyleSheet.parse(".x { opacity: var(--syntax-keyword); }");
         assertEquals("#569CD6", late.getRules().get(0).declarations().get(0).value().rawValue);
     }

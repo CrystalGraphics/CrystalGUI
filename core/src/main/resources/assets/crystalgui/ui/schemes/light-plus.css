@@ -1,0 +1,61 @@
+/* @scheme Light+
+ * @id     crystalgui:light-plus
+ * @kind   dark
+ * @author crystalgui
+ *
+ * VS Code's Light+ values — the scheme crystal-light suggests, and the half of light mode a UI theme
+ * cannot supply: a document's ink and paper belong here. The SECOND, independently-selectable
+ * axis (plan_styling.md §3.6): a scheme is a variable table over the editor's already-tokenized
+ * rules, exactly as a theme is over the chrome's. The rules themselves stay in default.css — the
+ * widget publishes its ranges whether or not anything styles them, and a themeless editor that
+ * silently rendered plain text would read as the tokenizer failing, not as an absent scheme; the
+ * var() fallbacks there ARE this scheme's values, so an editor without a scheme looks identical.
+ *
+ * Scope, machine-enforced (StyleGovernanceTest): a scheme defines ONLY --editor-*, --syntax-*,
+ * --find-match-* and --search-excluded-* tokens. Everything else is the UI theme's business —
+ * that split is what makes Crystal Dark + a different scheme a legal pair, as in IntelliJ.
+ */
+
+theme {
+    /* ── The editor's surfaces ── */
+    --editor-bg: #FFFFFF;
+    --editor-fg: #1F1F22;
+    --editor-caret: #0057B8;
+    --editor-current-line: #F2F6FC;
+    --editor-selection-bg: #ADD6FF;
+    --editor-gutter-bg: #FFFFFF;
+    --editor-gutter-edge: #E4E4E8;
+    --editor-line-number: #9A9AA0;
+    --editor-indent-guide: #E4E4E8;
+    --editor-indent-guide-active: #B0B1B6;
+    --editor-whitespace: #D0D0D6;
+    --editor-ruler: #E4E4E8;
+
+    /* ── Folding ── */
+    --editor-fold: #9A9AA0;
+    --editor-fold-active: #3B3C41;
+    --editor-fold-placeholder-bg: #E8EDF5;
+    --editor-fold-placeholder-fg: #55565B;
+    --editor-fold-placeholder-hover-bg: #D8E2F0;
+    --editor-fold-placeholder-hover-fg: #1F1F22;
+
+    /* ── The zoom indicator ── */
+    --editor-zoom-bg: #EDEFF3;
+    --editor-zoom-fg: #3B3C41;
+    --editor-zoom-link: #1B72C4;
+    --editor-zoom-link-pressed: #12508C;
+
+    /* ── Find & replace, in the document ── */
+    --find-match-bg: #F5D9A0;
+    --find-match-fg: #1F1F22;
+    --search-excluded-fg: #8C8D93;
+
+    /* ── Syntax — the six general names every tokenizer falls back to ── */
+    --syntax-keyword: #0000FF;
+    --syntax-type: #267F99;
+    --syntax-function: #795E26;
+    --syntax-string: #A31515;
+    --syntax-number: #098658;
+    --syntax-comment: #008000;
+    --syntax-bracket: #267F99;
+}
