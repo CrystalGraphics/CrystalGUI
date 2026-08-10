@@ -6046,12 +6046,8 @@ problemspanel > .__find-bar__ {
 }
 
 .__search-field__ .__clear__:hover {
-    color: #C0C0C0;
-        background-color: var(--searchfield-clear-hover-bg, #393b40);
-}
-
-.__search-field__ .__clear__:hover {
     color: var(--searchfield-clear-hover-fg, #E0E0E0);
+    background-color: var(--searchfield-clear-hover-bg, #393b40);
 }
 
 /* ROOM TO BREATHE. At 1px the three glyphs ran together into one shape; IntelliJ spaces them by about a

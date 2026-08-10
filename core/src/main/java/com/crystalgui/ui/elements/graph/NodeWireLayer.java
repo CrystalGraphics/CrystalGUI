@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.graph;
 
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.canvas.WorldRect;
 import org.joml.Vector2f;
@@ -56,6 +57,8 @@ public class NodeWireLayer extends UIElement {
     NodeWireLayer(GraphView view, List<GraphConnection> connections) {
         this.view = view;
         this.connections = connections;
+        // The hook the selection accent is read through -- see selectedWireColor().
+        addClass("__wire-layer__");
         // A painter, never a target: a wire under the cursor must not swallow a press meant for the
         // canvas underneath (marquee, in 6.2.4) or for a node above.
         setHitTest(false);
@@ -195,8 +198,9 @@ public class NodeWireLayer extends UIElement {
             // These are the only affordances a wire has. It cannot carry a border, a :hover or a
             // :checked rule, being painted rather than laid out.
             boolean hovered = connection.equals(view.getHoveredWire());
-            int colorA = selected ? SELECTED_WIRE_COLOR : connection.from().typeColor();
-            int colorB = selected ? SELECTED_WIRE_COLOR : connection.to().typeColor();
+            int selectedColor = selectedWireColor();
+            int colorA = selected ? selectedColor : connection.from().typeColor();
+            int colorB = selected ? selectedColor : connection.to().typeColor();
             wire(ctx, a.x(), a.y(), b.x(), b.y(), connection.from().dotRadius(), connection.to().dotRadius(),
                     colorA, colorB, selected || hovered);
         }
@@ -265,10 +269,17 @@ public class NodeWireLayer extends UIElement {
      * means "selected" everywhere else in the editor. A selected wire and a selected node should not be
      * announcing the same state in two different colours.</p>
      *
-     * <p>Hard-coded rather than read from the cascade, unlike {@link NodePort#typeColor()}: that one is
-     * read back out of CSS because the per-type palette genuinely belongs to the theme. This is one
-     * fixed accent, and giving it a stylesheet hook would imply the other twelve wire states have one
-     * too.</p>
+     * <p><b>Read from the cascade, like {@link NodePort#typeColor()}</b> — and it used to be a
+     * hard-coded constant, on the argument that one fixed accent needs no stylesheet hook. Theming
+     * broke that argument: the node's ring is {@code var(--graph-selection-ring)} now, so a theme
+     * that moves it would leave a constant-coloured wire announcing selection in a different colour
+     * than the ring — the exact mismatch this colour exists to avoid. The hook is
+     * {@code selection-color} on this layer's own {@code .__wire-layer__} rule in graph.css, which
+     * routes through the same token; the fallback covers a graph running without its sheet.</p>
      */
-    private static final int SELECTED_WIRE_COLOR = 0xFF44C0FF;
+    private int selectedWireColor() {
+        return getStyle().getGeneralGroup()
+                .getValue(StylePropertyRegistry.SELECTION_COLOR)
+                .orElse(0xFF44C0FF);
+    }
 }

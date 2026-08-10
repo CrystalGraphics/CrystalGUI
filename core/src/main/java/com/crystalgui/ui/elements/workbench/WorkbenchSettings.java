@@ -1,13 +1,19 @@
 package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.core.settings.Setting;
+import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCategory;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsRegistry;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.style.theme.ThemeRegistry;
+import com.crystalgui.style.theme.UiTheme;
+import com.crystalgui.style.theme.UiThemeManager;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.editor.TextEditor;
 import com.crystalgui.ui.elements.workbench.document.TextFileDocument;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -86,6 +92,59 @@ public final class WorkbenchSettings {
             Setting.number("editor.caretBlinkSeconds", "Caret blink interval", 0.5)
                     .description("Seconds between caret blinks. Zero holds the caret steady.");
 
+    // ── Appearance ──────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The two axes of {@code plan_styling.md} §3.7, side by side on one page exactly as IntelliJ
+     * shows them: the UI theme restyles the chrome, the editor colour scheme the document — and
+     * Crystal Dark plus any scheme is a legal pair.
+     *
+     * <p><b>Options are display names, values are display names.</b> The dropdown control shows the
+     * setting's value verbatim, so the human-readable name is what is stored; {@link #themeId} maps
+     * it back to the registry id at apply time (the same bridge {@link #sortOrder()} builds for its
+     * enum). A stored name whose theme has gone is clamped by {@code Setting.select}'s own parse to
+     * the default — the §4.4 fallback, for free.</p>
+     *
+     * <p>The option list snapshots the registry at declaration, and the field initializer registers
+     * the built-ins first so the snapshot is never empty. A mod registering themes later than class
+     * load will not appear until the declaration is re-run — a real limitation, lifted when the
+     * select control learns dynamic options, and preferred to a dropdown whose contents change
+     * while it is open.</p>
+     */
+    public static final Setting<String> UI_THEME = themeSetting();
+
+    public static final Setting<String> EDITOR_SCHEME = schemeSetting();
+
+    private static Setting<String> themeSetting() {
+        ThemeRegistry.registerBuiltins();
+        return Setting.select("appearance.theme", "Theme",
+                        displayNames(ThemeRegistry.themes()), "Crystal Dark")
+                .description("The UI theme — panels, buttons, trees, every surface but the editor's text.");
+    }
+
+    private static Setting<String> schemeSetting() {
+        ThemeRegistry.registerBuiltins();
+        return Setting.select("appearance.editorScheme", "Editor color scheme",
+                        displayNames(ThemeRegistry.schemes()), "Dark+")
+                .description("Colours inside the editor: syntax, selection, gutter, guides. "
+                        + "Independent of the UI theme.");
+    }
+
+    private static List<String> displayNames(List<UiTheme> registered) {
+        List<String> names = new ArrayList<>();
+        for (UiTheme theme : registered) names.add(theme.displayName());
+        return names;
+    }
+
+    /** The registry id for a stored display name, or {@code null} when the theme has gone —
+     * which {@code setTheme(null)} degrades to "unthemed" rather than to anything surprising. */
+    private static String themeId(List<UiTheme> pool, String displayName) {
+        for (UiTheme theme : pool) {
+            if (theme.displayName().equals(displayName)) return theme.id();
+        }
+        return null;
+    }
+
     // ── Workbench ───────────────────────────────────────────────────────────────────────────────
 
     public static final Setting<Boolean> RESTORE_SESSION =
@@ -108,6 +167,7 @@ public final class WorkbenchSettings {
         SettingsCategory.page("explorer", "Explorer");
         SettingsCategory.page("editor", "Editor");
         SettingsCategory.page("workbench", "Workbench");
+        SettingsCategory.page("appearance", "Appearance & Behavior");
 
         declareDemo();
 
@@ -121,6 +181,8 @@ public final class WorkbenchSettings {
         registry.register(CARET_BLINK);
         registry.register(RESTORE_SESSION);
         registry.register(RESTORE_VIEW_STATE);
+        registry.register(UI_THEME);
+        registry.register(EDITOR_SCHEME);
     }
 
     /**
@@ -138,9 +200,6 @@ public final class WorkbenchSettings {
         SettingsCategory.page("editor.codeStyle", "Code Style");
         SettingsCategory.page("editor.codeStyle.java", "Java But This One Is Really Look like goddamn");
         SettingsCategory.page("editor.codeStyle.glsl", "GLSL");
-        SettingsCategory.page("appearance", "Appearance & Behavior");
-        SettingsCategory.page("appearance.theme", "Theme");
-        SettingsCategory.section("appearance.theme.colors", "Colours");
         SettingsCategory.page("appearance.notifications", "Notifications");
         SettingsCategory.page("build", "Build & Deployment");
         SettingsCategory.page("build.shaders", "Shaders");
@@ -166,11 +225,6 @@ public final class WorkbenchSettings {
                 Setting.integer("editor.codeStyle.glsl.indent", "Indent", 4),
                 Setting.select("editor.codeStyle.glsl.precision", "Default precision",
                         java.util.List.of("lowp", "mediump", "highp"), "highp"),
-                Setting.select("appearance.theme.name", "Theme",
-                        java.util.List.of("Dark", "Light", "Ore", "High Contrast"), "Dark"),
-                Setting.bool("appearance.theme.syncWithOs", "Sync with OS", false),
-                Setting.string("appearance.theme.colors.accent", "Accent", "#0078D4"),
-                Setting.string("appearance.theme.colors.selection", "Selection", "#04395E"),
                 Setting.bool("appearance.notifications.onBuildFinished", "Build finished", true),
                 Setting.bool("appearance.notifications.onError", "Error", true),
                 Setting.integer("appearance.notifications.dismissAfter", "Dismiss after (seconds)", 8),
@@ -202,7 +256,7 @@ public final class WorkbenchSettings {
      * settings resolve outward, so a change made at the window (which is where the preferences window
      * writes) would never be heard by a listener attached to the workbench itself.</p>
      */
-    public static void install(Workbench workbench, com.crystalgui.core.settings.Settings settings) {
+    public static void install(Workbench workbench, Settings settings) {
         declare();
         apply(workbench);
         settings.onChanged.connect(change -> apply(workbench));
@@ -210,6 +264,15 @@ public final class WorkbenchSettings {
 
     /** Pushes the values in force into the widgets that read them. Safe to call as often as you like. */
     public static void apply(Workbench workbench) {
+        // The two appearance axes. installInto is idempotent, and the manager's own same-id guard
+        // makes the setTheme/setScheme pair a no-op on every apply() that didn't change them — so
+        // an unrelated toggle does not re-substitute every stylesheet.
+        UiThemeManager themes = UiThemeManager.getInstance();
+        UIWindow window = workbench.getAttachedWindow();
+        if (window != null) themes.installInto(window.getStyleEngine());
+        themes.setTheme(themeId(ThemeRegistry.themes(), workbench.resolve(UI_THEME)));
+        themes.setScheme(themeId(ThemeRegistry.schemes(), workbench.resolve(EDITOR_SCHEME)));
+
         workbench.setAutoReveal(workbench.resolve(AUTO_REVEAL));
         workbench.fileTree().source().setSortOrder(sortOrder(workbench));
         workbench.fileTree().treeView().refresh();

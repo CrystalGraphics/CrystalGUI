@@ -2,6 +2,7 @@
  * @id     crystalgui:crystal-dark
  * @kind   dark
  * @extends —
+ * @editor-scheme crystalgui:dark-plus
  * @author crystalgui
  *
  * The engine's default look — TODAY'S look, exactly. The system block is the 30-token vocabulary
@@ -44,7 +45,9 @@ theme {
     --link: #4A88C7;
 }
 
-/* ── Fine-tunes: the current look, pinned exactly. Shrinks in step 11. ─────────────────────── */
+/* ── Fine-tunes: the current look, pinned exactly. Shrinks in step 11. ───────────────────────
+ * Editor and syntax tokens are deliberately ABSENT: they belong to the scheme axis
+ * (schemes/dark-plus.css), and the default.css fallbacks cover a theme running without one. */
 theme {
     --activitybar-item-checked-bg: #4E5157;
     --activitybar-separator: #4E5157;
@@ -130,26 +133,6 @@ theme {
     --dock-insertion-border: #7EB6FF;
     --dock-missing-bg: #3A2B2B;
 
-    --editor-caret: #FF0000;
-    --editor-current-line: #232830;
-    --editor-fold: #4A515C;
-    --editor-fold-active: #A9B2BF;
-    --editor-fold-placeholder-bg: #2A303A;
-    --editor-fold-placeholder-fg: #8A94A3;
-    --editor-fold-placeholder-hover-bg: #3C4553;
-    --editor-fold-placeholder-hover-fg: #DCE1E8;
-    --editor-gutter-bg: #1A1D23;
-    --editor-gutter-edge: #2F3540;
-    --editor-indent-guide: #2F3540;
-    --editor-indent-guide-active: #6E7A8A;
-    --editor-line-number: #5C6570;
-    --editor-ruler: #2F3540;
-    --editor-selection-bg: #2C5A8C;
-    --editor-whitespace: #454C57;
-    --editor-zoom-bg: #2B303B;
-    --editor-zoom-fg: #C8CDD4;
-    --editor-zoom-link: #4A9EFF;
-    --editor-zoom-link-pressed: #2F7FD8;
 
     --editorfind-bg: #303235;
     --editorfind-border: #4A4D50;
@@ -231,8 +214,6 @@ theme {
     --filetype-yml: #CB171E;
     --filetype-zip: #ECC48D;
 
-    --find-match-bg: #C8873C;
-    --find-match-fg: #1B1B1B;
 
     --findbar-action-disabled-bg: #2E3033;
     --findbar-action-disabled-fg: #5A5D63;
@@ -381,7 +362,6 @@ theme {
     --scrollbar-thumb-pressed: #B4B4B4;
     --scrollbar-track: #2A2A2A;
 
-    --search-excluded-fg: #7A7A7A;
     --search-match-fg: #E0A040;
 
     --searchfield-caret: #D0D2D6;
@@ -418,13 +398,6 @@ theme {
     --switch-disabled-knob: #8C8C8C;
     --switch-knob: #D0D1D4;
 
-    --syntax-bracket: #4EC9A0;
-    --syntax-comment: #6A9955;
-    --syntax-function: #DCDCAA;
-    --syntax-keyword: #569CD6;
-    --syntax-number: #B5CEA8;
-    --syntax-string: #CE9178;
-    --syntax-type: #4EC9A0;
 
     --tab-active-bg: #3A3A3A;
     --tab-bg: #6E6E6E;
