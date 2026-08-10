@@ -147,7 +147,17 @@ public final class SearchMatcher {
         return null;
     }
 
-    /** Whether {@code [start, end)} has a non-word character (or an end) on both sides. */
+    /**
+     * Whether {@code [start, end)} has a non-word character (or an end) on both sides.
+     *
+     * <p>Public because the editor scans for <b>every</b> match rather than the best one, so it cannot go
+     * through {@link #match} — and a second definition of "a word" is a second answer to Whole Words. An
+     * underscore counts as part of the word, which is what a reader of code expects.</p>
+     */
+    public static boolean isWholeWordAt(String candidate, int start, int end) {
+        return isWord(candidate, start, end);
+    }
+
     private static boolean isWord(String candidate, int start, int end) {
         boolean leftOk = start == 0 || !isWordChar(candidate.charAt(start - 1));
         boolean rightOk = end == candidate.length() || !isWordChar(candidate.charAt(end));

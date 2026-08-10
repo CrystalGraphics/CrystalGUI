@@ -499,7 +499,7 @@ texteditor .__line__ {
  * here -- TextEditor sizes and positions the element from it so it can straddle the character boundary
  * rather than start at it. Colour and stacking remain a theme's business. */
 texteditor {
-    caret-width: 15px;
+    caret-width: 1px;
 }
 
 texteditor .__caret__ {
@@ -6110,3 +6110,132 @@ problemspanel > .__find-bar__ {
 .__option-words__      { overlay: icon("crystalgui:general/search/exactWords"); }
 .__option-regex__      { overlay: icon("crystalgui:general/search/regex"); }
 
+
+/* ── The editor's find & replace bar ────────────────────────────────────────────────────────────────
+ *
+ * The same chrome as the tree's, by construction: it carries `__find-bar__`, its boxes carry
+ * `__find-input__`, and its toggles carry `__search-option__`, so everything above already styles it. What
+ * is new is the shape -- a chevron and a CLOSE on the outside, and one or two ROWS between them, because
+ * the replace row has to line up under the find row rather than beside it. */
+.__find-bar__ .__find-rows__ {
+    flex-direction: column;
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    gap-all: 3px;
+}
+
+/* SAME WIDTH ON BOTH ROWS, which is the whole reason it exists — see SearchReplaceBar. Wide enough for
+ * Replace / Replace All / Exclude, and the find row simply leaves the remainder empty. */
+.__find-bar__ .__find-trailing__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    width: 210px;
+    gap-all: 4px;
+}
+
+.__find-bar__ .__find-row__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    gap-all: 4px;
+}
+
+/* THE CHEVRON, which is the only affordance for the replace row. Vertically centred against the FIRST row
+ * rather than the pair, so it does not drift downward when the second appears -- IntelliJ's sits beside the
+ * search box in both states. */
+.__find-bar__ .__find-chevron__ {
+    width: 12px;
+    height: 12px;
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 2px;
+    border-radius: 3px;
+    background: none;
+    background-color: transparent;
+    overlay: shape("chevron-right");
+    overlay-fit: contain;
+    color: #9A9A9A;
+}
+
+.__find-bar__ .__find-chevron__.__expanded__ {
+    overlay: shape("chevron-down");
+}
+
+.__find-bar__ .__find-chevron__:hover {
+    color: #E0E0E0;
+    background: none;
+    background-color: #4E5157;
+}
+
+/* Replace / Replace All / Exclude. Text buttons rather than glyphs -- there is no icon for "replace all"
+ * that anyone reads correctly, and IntelliJ spells them out for the same reason. */
+.__find-bar__ .__find-action__ {
+    height: 14px;
+    min-height: 0px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    background: none;
+    background-color: #3C3F41;
+}
+
+.__find-bar__ .__find-action__ text {
+    font-size: 10;
+    color: #C8C8C8;
+}
+
+.__find-bar__ .__find-action__:hover {
+    background: none;
+    background-color: #4E5157;
+}
+
+.__find-bar__ .__find-action__:disabled {
+    background: none;
+    background-color: #2E3033;
+}
+
+.__find-bar__ .__find-action__:disabled text {
+    color: #5A5D63;
+}
+
+.__option-preserve-case__ { overlay: icon("crystalgui:general/search/preserveCase"); }
+
+/* AN EXCLUDED MATCH IS STRUCK THROUGH, not hidden and not un-highlighted: it is still one of the matches
+ * and still counted, and the strike is the whole of what "excluded" looks like. A second `::highlight()`
+ * name rather than a second mechanism -- highlights already carry text-decoration-line. */
+::highlight(search-excluded) {
+    text-decoration-line: line-through;
+    color: #7A7A7A;
+}
+
+/* THE EDITOR'S BAR FLOATS over the text, so unlike the panel bars it has to paint its own ground and sit
+ * above the content. Monaco's find widget does the same -- the alternative, stacking it above and pushing
+ * the text down, puts the bar inside every one of the editor's layout sums (view lines, gutter, scroll
+ * extents). */
+.__editor-find__ {
+    height: auto;
+    align-items: flex-start;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-left: 6px;
+    padding-right: 6px;
+    gap-all: 4px;
+    background-color: #303235;
+    border-width-bottom: 1px;
+    border-bottom-color: #4A4D50;
+    z-index: 20;
+}
+
+/* The close sits against the FIRST row rather than centred on the pair, so it does not drift downward when
+ * the replace row appears -- the same reason the chevron is top-aligned. */
+.__editor-find__ .__find-close__ {
+    align-self: flex-start;
+    margin-top: 2px;
+}

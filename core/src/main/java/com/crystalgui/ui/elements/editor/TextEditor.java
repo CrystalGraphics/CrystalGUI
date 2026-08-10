@@ -1,5 +1,10 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgui.ui.UIWindow;
+import com.crystalgui.text.search.TextSearch;
+import com.crystalgui.text.search.SearchResults;
+import com.crystalgui.core.search.SearchQuery;
+import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.ui.ClipboardActions;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgShapedRun;
@@ -592,6 +597,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // a hand-written line in the Ctrl+Z handler, which is precisely why moving that binding to the
             // keymap would otherwise have taken the clamp with it.
             selections.clampTo(buffer.length());
+            // THE MATCHES FOLLOW THE DOCUMENT. Every edit arrives here -- typing, a paste, a replace, and
+            // undo and redo -- and offsets found against the old text describe the new one wrongly: the
+            // count went stale and the highlights sat over whatever had moved into their place. Re-running
+            // from this one signal is what makes undo correct without the undo path knowing about search.
+            if (lastSearch != null && !reentrantFind) {
+                reentrantFind = true;
+                try {
+                    find(lastSearch);
+                } finally {
+                    reentrantFind = false;
+                }
+            }
             onChanged.emit(buffer.toString());
         });
 
@@ -1474,6 +1491,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
             Map<String, List<TextRange>> byName = new LinkedHashMap<>();
             addDocumentRanges(byName, "search", searchMatches, lineStart, lineEnd);
+            // A SECOND NAME rather than a second mechanism: `::highlight()` already carries
+            // `text-decoration-line`, so an excluded span is struck through by the sheet.
+            addDocumentRanges(byName, "search-excluded", results.excludedRanges(), lineStart, lineEnd);
             if (bracketPair != null) {
                 addDocumentRanges(byName, "bracket", List.of(
                         TextRange.of(bracketPair[0], bracketPair[0] + 1),
@@ -1954,31 +1974,121 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * @return how many matches there are
      */
     public int find(String query, boolean caseSensitive) {
-        searchMatches.clear();
-        currentMatch = -1;
-        lastQuery = query == null ? "" : query;
-        lastQueryCaseSensitive = caseSensitive;
-        if (lastQuery.isEmpty()) {
-            highlightsDirty = true;
-            return 0;
-        }
+        return find(SearchQuery.of(query,
+                SearchQuery.Options.DEFAULT.withMatchCase(caseSensitive)));
+    }
 
-        String haystack = buffer.toString();
-        String needle = lastQuery;
-        if (!caseSensitive) {
-            haystack = haystack.toLowerCase(java.util.Locale.ROOT);
-            needle = needle.toLowerCase(java.util.Locale.ROOT);
-        }
-        int at = haystack.indexOf(needle);
-        while (at >= 0) {
-            searchMatches.add(TextRange.of(at, at + needle.length()));
-            // Advance by one, not by the match length: overlapping matches of "aa" in "aaa" are two hits,
-            // which is what every editor reports.
-            at = haystack.indexOf(needle, at + 1);
-        }
+    /**
+     * Finds every match of {@code query}, honouring its Match Case / Words / Regex options.
+     *
+     * <p><b>Every</b> match, which is why this cannot go through {@link SearchMatcher#match} — that answers
+     * "the best match in this candidate", which is the right question for a list row and the wrong one for
+     * a document. The word-boundary rule is still shared, via
+     * {@link SearchMatcher#isWholeWordAt}: a second definition of "a word" would be a second answer to the
+     * same toggle.</p>
+     *
+     * <p>An <b>uncompilable pattern finds nothing</b> and does not throw — it is recompiled on every
+     * keystroke while a regex is being typed.</p>
+     *
+     * @return how many matches there are
+     */
+    public int find(@Nullable SearchQuery query) {
+        lastSearch = query == null || query.isEmpty() ? null : query;
+        lastQuery = lastSearch == null ? "" : lastSearch.text();
+        lastQueryCaseSensitive = lastSearch != null && lastSearch.options().matchCase();
+        // THE SCAN IS THE DOCUMENT'S, not this widget's -- see TextSearch. What stays here is what a view
+        // owns: which match is selected, what to paint, and where the caret goes.
+        results = results.withMatches(TextSearch.findAll(buffer.toString(), lastSearch));
+        searchMatches.clear();
+        searchMatches.addAll(results.matches());
+        currentMatch = results.current();
         highlightsDirty = true;
         return searchMatches.size();
     }
+
+    /** The occurrences, the cursor and the exclusions. @see SearchResults */
+    public SearchResults searchResults() {
+        return results;
+    }
+
+    /**
+     * Excludes the selected match from Replace All, or puts it back — IntelliJ's <b>Exclude</b>.
+     *
+     * <p>The span stays in the list and stays visible; it is struck through instead.</p>
+     */
+    public boolean toggleExcludeCurrentMatch() {
+        boolean changed = results.toggleExcludeCurrent();
+        if (changed) highlightsDirty = true;
+        return changed;
+    }
+
+    private SearchResults results = SearchResults.EMPTY;
+
+    /** Replace edits the buffer, which re-enters this listener; one pass is enough. */
+    private boolean reentrantFind;
+
+    /**
+     * The find & replace bar, built on first use and floated over the editor's top edge.
+     *
+     * <p>Floated rather than stacked above, which is what Monaco does: the editor's layout maths — view
+     * lines, the gutter, scroll extents — all measure against its own box, and pushing content down would
+     * put the bar inside every one of those sums.</p>
+     */
+    public SearchReplaceBar searchBar() {
+        if (searchBar == null) {
+            searchBar = new SearchReplaceBar(this);
+            searchBar.addClass("__editor-find__");
+            // PINNED TO THE VIEWPORT, not to the text. An absolute child of a scroller still moves with the
+            // content -- `top: 0` means the top of the DOCUMENT, so the bar scrolled away and left the
+            // editor behind it. `setScrollExempt` is what holds a decoration still while the text moves.
+            searchBar.setScrollExempt(true);
+            searchBar.layout(l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                    .top(0f).left(0f).widthPercent(100f));
+            searchBar.setDisplayed(false);
+            addInternalChild(searchBar);
+            searchBar.onClosed.connect(() -> {
+                UIWindow window = getAttachedWindow();
+                if (window != null) window.getInputHandler().requestPointerFocus(this);
+            });
+        }
+        return searchBar;
+    }
+
+    /** Opens the find bar — Ctrl+F. */
+    public void openFind() {
+        searchBar().open();
+    }
+
+    /** Opens it with the replace row expanded — Ctrl+R. */
+    public void openReplace() {
+        searchBar().openReplace();
+    }
+
+    @Nullable
+    private SearchReplaceBar searchBar;
+
+    /** Whether a replacement should take the case of what it replaced. @see TextSearch#preserveCase */
+    public TextEditor setPreserveCase(boolean value) {
+        this.preserveCase = value;
+        return this;
+    }
+
+    public boolean preserveCase() {
+        return preserveCase;
+    }
+
+    private boolean preserveCase;
+
+    /** The document text a match covers — what Preserve case reads to decide the replacement's shape. */
+    private String textIn(TextRange range) {
+        String all = buffer.toString();
+        int from = Math.max(0, Math.min(range.start(), all.length()));
+        int to = Math.max(from, Math.min(range.end(), all.length()));
+        return all.substring(from, to);
+    }
+
+    @Nullable
+    private SearchQuery lastSearch;
 
     /** Searches for the word under the caret — {@code Ctrl+F3}. */
     public boolean findWordUnderCaret() {
@@ -2038,6 +2148,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private boolean selectMatch(int index) {
         if (index < 0 || index >= searchMatches.size()) return false;
         currentMatch = index;
+        while (results.current() != index && results.next()) {
+            if (results.current() == index) break;
+        }
         TextRange match = searchMatches.get(index);
         setSelection(match.start(), match.end());
         ensureCaretVisible();
@@ -2048,9 +2161,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public boolean replaceCurrent(String replacement) {
         if (currentMatch < 0 || currentMatch >= searchMatches.size()) return false;
         TextRange match = searchMatches.get(currentMatch);
-        buffer.replace(match.start(), match.end(), replacement == null ? "" : replacement);
+        String text = replacement == null ? "" : replacement;
+        buffer.replace(match.start(), match.end(),
+                preserveCase ? TextSearch.preserveCase(textIn(match), text) : text);
         buffer.breakUndoCoalescing();
-        find(lastQuery, lastQueryCaseSensitive);
+        find(lastSearch);
         return true;
     }
 
@@ -2064,18 +2179,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * @return how many were replaced
      */
     public int replaceAll(String replacement) {
-        if (searchMatches.isEmpty()) return 0;
+        // WHAT THE USER DID NOT STRIKE OUT. `included()` is the whole point of Exclude: the excluded spans
+        // stay in the list and stay drawn, and only this skips them.
+        List<TextRange> targets = results.included();
+        if (targets.isEmpty()) return 0;
         String text = replacement == null ? "" : replacement;
-        List<Change> changes = new ArrayList<>(searchMatches.size());
-        for (TextRange match : searchMatches) {
-            changes.add(new Change(match.start(), match.end(), text));
+        List<Change> changes = new ArrayList<>(targets.size());
+        for (TextRange match : targets) {
+            changes.add(new Change(match.start(), match.end(),
+                    preserveCase ? TextSearch.preserveCase(textIn(match), text) : text));
         }
         int replaced = changes.size();
         ChangeSet edit = ChangeSet.of(buffer.length(), changes);
         buffer.edit(edit);
         buffer.breakUndoCoalescing();
         selections.mapThrough(edit).collapseEachToHead();
-        find(lastQuery, lastQueryCaseSensitive);
+        find(lastSearch);
         return replaced;
     }
 

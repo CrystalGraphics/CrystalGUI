@@ -187,6 +187,12 @@ public final class EditorCommands {
                 .enabledWhen(whenEditable()));
 
         // ── Search ──────────────────────────────────────────────────────────────────────────────
+        registry.register(Command.of(PREFIX + "find", "Find…")
+                .menu(MenuId.MAIN_EDIT, "4_find", 5)
+                .run(on(TextEditor::openFind)));
+        registry.register(Command.of(PREFIX + "replace", "Replace…")
+                .menu(MenuId.MAIN_EDIT, "4_find", 6)
+                .run(on(TextEditor::openReplace)));
         registry.register(Command.of(PREFIX + "findNext", "Find Next")
                 .menu(MenuId.MAIN_EDIT, "4_find", 10)
                 .run(on(TextEditor::findNext)).enabledWhen(when(editor -> editor.matchCount() > 0)));
@@ -286,6 +292,10 @@ public final class EditorCommands {
         keymap.bind("Mod+X", PREFIX + "cut");
         keymap.bind("Mod+V", PREFIX + "paste");
 
+        // ELEMENT-SCOPED, on the editor. Ctrl+F means Find in a tree too, and the resolver walks outward
+        // from focus -- so whichever of them holds the caret answers, and neither takes it from the other.
+        keymap.bind("Mod+F", PREFIX + "find").allowWhileTyping();
+        keymap.bind("Mod+R", PREFIX + "replace").allowWhileTyping();
         keymap.bind("F3", PREFIX + "findNext").allowWhileTyping();
         keymap.bind("Shift+F3", PREFIX + "findPrevious").allowWhileTyping();
         keymap.bind("Mod+F3", PREFIX + "findWordUnderCaret");

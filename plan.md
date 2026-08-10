@@ -4538,3 +4538,38 @@ The bar matches the one already shipped: the same `__find-bar__` chrome, the sam
 
 Out, for the same reasons as §30.6: multiline (the field is single-line), search scopes (needs
 `SyntaxTokenizer` spans and is its own feature), and the overflow `⋮` menu.
+
+## 31.7 What landed
+
+The ownership from §31.4, built and verified against the reference:
+
+- **`text.search.TextSearch`** — every match of a query in a `CharSequence`, headless. The scan that was on
+  the widget.
+- **`text.search.SearchResults`** — occurrences, cursor, and exclusions. Exclusions are kept **by range**,
+  not by index: indices are renumbered by every edit and every re-query, so a Replace All after one more
+  keystroke skipped whichever match had inherited the number.
+- **`editor.SearchReplaceBar`** — the view. The same `__find-bar__` chrome as the tree's, with the toggles
+  built by `SearchField.optionToggle` so the two bars cannot drift.
+- **`TextEditor`** keeps its buffer, decorations and caret, and delegates.
+
+Preserve case is three shapes and no more; Exclude strikes its span through via a second `::highlight()`
+name, since highlights already carry `text-decoration-line`.
+
+### Five things the harness found that no test would have
+
+1. **The bar scrolled away with the text.** An absolute child of a scroller still scrolls — `top: 0` is the
+   top of the *document*. `setScrollExempt(true)` pins it.
+2. **It floated over the first lines.** Fixed by insetting the editor by the bar's measured height from a
+   ticker, which is also how the navigator sizes its sidebar — a style write must not happen inside the
+   layout pass.
+3. **The two boxes did not line up.** Three text buttons on one row and a count plus two glyphs on the
+   other, so the replace box wrapped ~200px earlier. Both rows carry a fixed-width trailing group now, which
+   is the grid IntelliJ lays these out as.
+4. **Escape cleared and then sat there.** The bar is *two* steps of the cascade — clear, then close — and
+   only then does the key belong outside.
+5. **The placeholder read as content.** Drawn in the text colour on an unfocused box, "Search" and "Replace"
+   look like a query somebody typed. Dimmed, and shown only while focused.
+
+And one real defect the fix for (5) introduced: the guard was written as an early `return` in a paint
+method, which stranded a pushed scissor — the window flickered and then threw. **A paint method may skip the
+draw; it may never skip the method.**

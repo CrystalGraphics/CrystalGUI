@@ -161,6 +161,38 @@ public class SearchField extends UIElement {
         return this;
     }
 
+    /**
+     * Builds one option toggle for the strip — the {@code Cc} / {@code W} / {@code .*} shape.
+     *
+     * <p>Shared so the two find bars build them ONE way. Six things have to be right and none is visible in
+     * a screenshot: the class the sheet draws from, the tooltip naming the accelerator, an accelerator that
+     * is actually bound, the {@code __on__} class (a pseudo-class is not re-evaluated when a listener flips
+     * the state), no rest background, and a hit area larger than the glyph. A second builder gets some
+     * subset right and the two drift within a release — which is the same reason {@code MenuBuilder} is the
+     * only thing that turns commands into menu rows.</p>
+     *
+     * <p>The caller owns the state and the behaviour; this owns the button.</p>
+     */
+    public static Button optionToggle(String styleClass, String title, String accelerator) {
+        Button option = new Button("");
+        option.addClass(OPTION_CLASS);
+        option.addClass(styleClass);
+        Tooltip.attach(option, title + "  " + accelerator);
+        return option;
+    }
+
+    /** Reflects an option's on/off state. @see #optionToggle */
+    public static void setOptionOn(Button option, boolean on) {
+        if (on) option.addClass(OPTION_ON_CLASS);
+        else option.removeClass(OPTION_ON_CLASS);
+    }
+
+    /** On every option toggle, in either find bar. */
+    public static final String OPTION_CLASS = "__search-option__";
+
+    /** On a toggle that is on. */
+    public static final String OPTION_ON_CLASS = "__on__";
+
     /** The strip, or null until something has been mounted in it. */
     @Nullable
     public UIElement options() {
