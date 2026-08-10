@@ -56,6 +56,7 @@ public final class ThemeRegistry {
      */
     public static void registerBuiltins() {
         registerTheme("crystalgui:crystal-dark");
+        registerScheme("crystalgui:dark-plus");
     }
 
     @Nullable

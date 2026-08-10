@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -101,6 +102,12 @@ public final class UiThemeManager {
      * that names a scheme.
      */
     public boolean setTheme(@Nullable String id) {
+        // Same id, same registered object: a no-op, deliberately. Settings re-apply wholesale on
+        // every change, so without this every unrelated toggle would re-substitute every sheet.
+        if (Objects.equals(id, activeThemeId())
+                && (id == null || ThemeRegistry.get(id) == activeTheme)) {
+            return true;
+        }
         if (id == null) {
             activeTheme = null;
             apply();
@@ -119,6 +126,10 @@ public final class UiThemeManager {
 
     /** As {@link #setTheme}, for the editor colour scheme — the independent second axis. */
     public boolean setScheme(@Nullable String id) {
+        if (Objects.equals(id, activeSchemeId())
+                && (id == null || ThemeRegistry.get(id) == activeScheme)) {
+            return true;
+        }
         if (id == null) {
             activeScheme = null;
             apply();

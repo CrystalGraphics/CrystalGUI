@@ -29,6 +29,12 @@ public class StyleGovernanceTest {
 
     private static final String STYLES = "/assets/crystalgui/ui/styles/";
     private static final String THEMES = "/assets/crystalgui/ui/themes/";
+    private static final String SCHEMES = "/assets/crystalgui/ui/schemes/";
+
+    /** What a SCHEME may define — the editor's tokens and nothing else. The split that makes
+     * "Crystal Dark + a different scheme" a legal pair (plan_styling.md §3.6). */
+    private static final List<String> SCHEME_TOKEN_PREFIXES =
+            List.of("--editor-", "--syntax-", "--find-match-", "--search-excluded-");
 
     /** The engine's structure sheets — every colour in them must be a token reference.
      * ore.css is deliberately absent: it is a full sprite SKIN awaiting its move to {@code themes/}
@@ -52,15 +58,13 @@ public class StyleGovernanceTest {
             "error", "warning", "info", "success", "modified", "link");
 
     /**
-     * Raw hexes still permitted OUTSIDE a var() fallback, each one a named decision:
-     * {@code #00000000} is the none-fill (a transparent constant, not a colour), and the single
-     * default.css entry is a dead duplicate rule pending cleanup — its twin three lines down wins.
-     * <b>This list only ever shrinks.</b> A new colour goes through a token; adding an entry here
-     * is the five-mid-greys bug asking to be reborn.
+     * Raw hexes still permitted OUTSIDE a var() fallback, each one a named decision.
+     * {@code #00000000} — the none-fill, a transparent constant rather than a colour — is exempted
+     * in the test body; everything else goes through a token. <b>Empty, and it stays empty:</b>
+     * the step-5 migration drained it, and adding an entry here is the five-mid-greys bug asking
+     * to be reborn.
      */
-    private static final Set<String> BARE_HEX_ALLOWLIST = Set.of(
-            "default.css|#C0C0C0"          // .__search-field__ .__clear__:hover dead dup (line ~6049)
-    );
+    private static final Set<String> BARE_HEX_ALLOWLIST = Set.of();
 
     private static final Pattern HEX = Pattern.compile("#[0-9a-fA-F]{3,8}\\b");
     private static final Pattern VAR_WITH_FALLBACK = Pattern.compile("var\\(\\s*(--[\\w-]+)\\s*,[^)]*\\)");
@@ -108,6 +112,7 @@ public class StyleGovernanceTest {
         Set<String> defined = new HashSet<>();
         definitionsOf(load(THEMES + "base.css")).forEach((k, v) -> defined.add(k));
         definitionsOf(load(THEMES + "crystal-dark.css")).forEach((k, v) -> defined.add(k));
+        definitionsOf(load(SCHEMES + "dark-plus.css")).forEach((k, v) -> defined.add(k));
 
         List<String> offences = new ArrayList<>();
         for (String sheet : STRUCTURE_SHEETS) {
@@ -182,7 +187,32 @@ public class StyleGovernanceTest {
         assertTrue("crystal-dark is missing system tokens:\n" + String.join("\n", missing), missing.isEmpty());
     }
 
-    // ── rule 6: the UA sheet's own three rules ──────────────────────────────────────────────────
+    // ── rules 6+7: the two axes stay apart ──────────────────────────────────────────────────────
+
+    /**
+     * <b>A scheme defines editor tokens only; the theme defines everything but.</b> Both directions
+     * enforced, because either drift breaks the axes' independence: a scheme carrying a chrome
+     * token would restyle panels when the user only asked for different syntax colours, and a theme
+     * carrying editor tokens would fight whichever scheme is active for them (the theme would lose
+     * — schemes merge later — but silently, which reads as a broken theme).
+     */
+    @Test
+    public void theSchemeAndThemeAxesStayApart() {
+        List<String> offences = new ArrayList<>();
+        definitionsOf(load(SCHEMES + "dark-plus.css")).forEach((name, value) -> {
+            if (SCHEME_TOKEN_PREFIXES.stream().noneMatch(name::startsWith)) {
+                offences.add("dark-plus.css defines a non-scheme token: " + name);
+            }
+        });
+        definitionsOf(load(THEMES + "crystal-dark.css")).forEach((name, value) -> {
+            if (SCHEME_TOKEN_PREFIXES.stream().anyMatch(name::startsWith)) {
+                offences.add("crystal-dark.css defines a scheme-owned token: " + name);
+            }
+        });
+        assertTrue(String.join("\n", offences), offences.isEmpty());
+    }
+
+    // ── rule 8: the UA sheet's own three rules ──────────────────────────────────────────────────
 
     /** default.css's opening contract, finally with teeth: no {@code !important} (it escalates
      * above every author sheet), no {@code asset()} (must stand alone with no pack loaded). */

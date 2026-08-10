@@ -203,6 +203,14 @@ graphview .__marquee__ {
     border-color: var(--graph-marquee-border, #44C0FF);
 }
 
+/* THE SELECTED WIRE'S COLOUR, read back out of the cascade by NodeWireLayer.selectedWireColor() —
+ * the same pattern NodePort.typeColor() established, and the same token the node's :checked ring
+ * uses, so a theme that moves the selection accent moves the ring and the wire TOGETHER. The layer
+ * paints rather than lays out, so `selection-color` on the layer element is its one styleable knob. */
+graphview .__wire-layer__ {
+    selection-color: var(--graph-selection-ring, #44C0FF);
+}
+
 /* -- Ports -────────────────────────────────────────────────────────────────────────────────────── */
 
 /* The create-node menu, in the same palette as the nodes it makes — but in a NEUTRAL border, not the

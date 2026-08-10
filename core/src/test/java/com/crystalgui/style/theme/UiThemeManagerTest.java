@@ -199,6 +199,19 @@ public class UiThemeManagerTest extends UiTestBase {
                 0.25f, opacityOf(varProbe), 0.001f);
     }
 
+    /** Re-setting the active id is a NO-OP — settings re-apply wholesale on every change, and an
+     * unrelated toggle must not re-substitute every stylesheet. Observed through onChanged. */
+    @Test
+    public void settingTheSameThemeTwiceAppliesOnce() {
+        ThemeRegistry.registerSource(DARK);
+        int[] emits = {0};
+        UiThemeManager.getInstance().onChanged.connect(() -> emits[0]++);
+
+        assertTrue(UiThemeManager.getInstance().setTheme("test:dark"));
+        assertTrue(UiThemeManager.getInstance().setTheme("test:dark"));
+        assertEquals("the second identical set must not re-apply", 1, emits[0]);
+    }
+
     // ── refusals ────────────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -247,6 +260,34 @@ public class UiThemeManagerTest extends UiTestBase {
         assertEquals("crystal-dark must reproduce the unthemed look exactly",
                 unthemedColor, button.getStyle().getGeneralGroup().color());
         assertEquals(unthemedProbe, opacityOf(varProbe), 0.001f);
+    }
+
+    /** The scheme axis is identity-preserving too: dark-plus's values ARE default.css's fallbacks
+     * (they were extracted from it), so activating the shipped pair changes nothing. */
+    @Test
+    public void bindingTheShippedPairChangesNothing() {
+        Button button = new Button("probe");
+        root.addChild(button);
+        window.updateWithoutPainting();
+        int unthemedColor = button.getStyle().getGeneralGroup().color();
+
+        ThemeRegistry.registerBuiltins();
+        assertTrue(UiThemeManager.getInstance().setTheme("crystalgui:crystal-dark"));
+        assertTrue(UiThemeManager.getInstance().setScheme("crystalgui:dark-plus"));
+        window.updateWithoutPainting();
+
+        assertEquals(unthemedColor, button.getStyle().getGeneralGroup().color());
+        // and the scheme's tokens genuinely reach the bound table
+        StyleSheet late = StyleSheet.parse(".x { opacity: var(--syntax-keyword); }");
+        assertEquals("#569CD6", late.getRules().get(0).declarations().get(0).value().rawValue);
+    }
+
+    /** crystal-dark suggests its bundled scheme, IntelliJ's editorScheme — offered, never forced. */
+    @Test
+    public void theShippedThemeSuggestsItsScheme() {
+        ThemeRegistry.registerBuiltins();
+        assertEquals("crystalgui:dark-plus",
+                ThemeRegistry.get("crystalgui:crystal-dark").editorScheme());
     }
 
     // ── late arrivals ───────────────────────────────────────────────────────────────────────────

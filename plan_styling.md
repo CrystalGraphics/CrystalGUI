@@ -429,8 +429,11 @@ What `schemes/*.css` owns, and nothing else (enforced, §4.2):
 
 ### 3.7 Settings + Preferences
 
-- `ui.theme` (string id, default `crystalgui:crystal-dark`) and `editor.colorScheme` (default
-  `crystalgui:dark-plus`) declared in `WorkbenchSettings`, persisted by the existing codec.
+- `appearance.theme` (default `Crystal Dark`) and `appearance.editorScheme` (default `Dark+`)
+  declared in `WorkbenchSettings`, persisted by the existing codec. *(Renamed from the draft's
+  `ui.theme`/`editor.colorScheme`: a setting's id encodes its Preferences page in this codebase, and
+  both belong on Appearance & Behavior. Stored values are display names — `Setting.select`'s parse
+  clamps an orphaned name back to the default, which is the §4.4 fallback for free.)*
 - **Preferences ▸ Appearance**: *Theme* dropdown and *Editor color scheme* dropdown, populated from
   the registries — mirroring the IntelliJ reference exactly. Selecting a theme whose header names a
   `@scheme` offers (not forces) the bundled scheme — IntelliJ's behaviour.
@@ -539,8 +542,15 @@ the migration itself. Each rule is one test, each failure names file/line:
     catches "dim grey on grey" before a screenshot does. Warn, not fail — taste needs room.
 
 Plus one *Java-side* rule folded into an existing pattern: no ARGB colour literals in
-`ui/elements/**` outside documented carve-outs (the `paintSelf` fallback whites, ArgbMath) — grep-
-shaped test, same as the import guard.
+`ui/elements/**` outside documented carve-outs — grep-shaped test, same as the import guard.
+**Audited 2026-08-10 (step 4).** One offender found and fixed: `NodeWireLayer.SELECTED_WIRE_COLOR`
+was `0xFF44C0FF` hardcoded — now read from the cascade (`selection-color` on the layer's
+`.__wire-layer__` rule, routing through `--graph-selection-ring`), because theming broke its
+documented rationale: a theme moving the node's ring token would have left the wire announcing
+selection in a different colour than the ring. The surviving carve-outs, each a non-theming use:
+`UIText`'s `0xFFFFFFFF` identity tint (paint mechanics), `ColorSelector`'s channel bit-math and
+white default (the value being *edited*, not chrome), `ColorControl.DEFAULT_COLOR` (data default
+for a colour-typed setting).
 
 ### 4.3 Process rules (documented in `docs/CGUI_THEMING.md`, mirrored into AGENTS.md invariants)
 
