@@ -8,6 +8,7 @@ import com.crystalgui.ui.UIElement;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,18 @@ public final class StyleSheet {
     private final Map<String, List<StyleRule>> byType = new HashMap<>();
     private final List<StyleRule> universal = new ArrayList<>();
 
+    /**
+     * The CSS text this sheet was parsed from — retained so the sheet can be <b>re-substituted
+     * in place</b> against a different external variable table ({@link #rebind}), which is what a
+     * theme swap is. {@code null} only for rule-copy instances ({@link #DEFAULT}), which the
+     * registry refills by mirroring the cached source sheet instead.
+     *
+     * <p>Deliberately kept in memory rather than re-read through {@code CgIO} on demand: a theme
+     * swap must not depend on the resource still being readable, and inline sheets
+     * ({@code StyleSheet.parse(...)} in a scene or test) have no path to re-read from at all.</p>
+     */
+    private String rawSource;
+
     private StyleSheet(List<StyleRule> rules) {
         this(rules, StyleOrigin.STYLESHEET);
     }
@@ -75,9 +88,34 @@ public final class StyleSheet {
         for (var rule : this.rules) index(rule);
     }
 
+    /**
+     * Parses {@code source} against the registry's currently {@linkplain
+     * StyleSheetRegistry#boundVariables() bound variable table} — so a sheet parsed while a theme
+     * is active resolves the theme's tokens, regardless of load order. With no theme bound the
+     * table is empty and only the sheet's own variables apply.
+     */
     public static StyleSheet parse(String source) {
+        return parse(source, StyleSheetRegistry.boundVariables());
+    }
+
+    /**
+     * Parses {@code source}, resolving {@code var()} references against the sheet's own variable
+     * definitions merged over {@code externalVariables} — <b>locals win</b>, so a sheet's own
+     * domain variables ({@code graph.css}'s {@code --graph-*}) are sovereign and can never be
+     * captured by a theme that happens to reuse a name. The merged table is resolved to a fixed
+     * point first, so definitions may reference definitions ({@link DeclarationParser#resolveTable}).
+     */
+    public static StyleSheet parse(String source, Map<String, String> externalVariables) {
         String stripped = DeclarationParser.stripComments(source);
-        Map<String, String> variables = DeclarationParser.collectVariables(stripped);
+        Map<String, String> locals = DeclarationParser.collectVariables(stripped);
+        Map<String, String> variables;
+        if (externalVariables.isEmpty()) {
+            variables = DeclarationParser.resolveTable(locals);
+        } else {
+            Map<String, String> merged = new LinkedHashMap<>(externalVariables);
+            merged.putAll(locals);
+            variables = DeclarationParser.resolveTable(merged);
+        }
 
         List<StyleRule> rules = new ArrayList<>();
         int sourceOrder = 0;
@@ -96,7 +134,15 @@ public final class StyleSheet {
             }
             sourceOrder++;
         }
-        return new StyleSheet(rules);
+        StyleSheet sheet = new StyleSheet(rules);
+        sheet.rawSource = source;
+        return sheet;
+    }
+
+    /** Collects the {@code --name: value} definitions in {@code source} (comments stripped, every
+     * rule, unresolved) — the public face of variable collection, for the theme layer. */
+    public static Map<String, String> variablesOf(String source) {
+        return DeclarationParser.collectVariables(DeclarationParser.stripComments(source));
     }
 
     private void index(StyleRule rule) {
@@ -189,5 +235,38 @@ public final class StyleSheet {
         byType.clear();
         universal.clear();
         for (var rule : rules) index(rule);
+    }
+
+    /**
+     * Re-substitutes this sheet's retained source against {@code externalVariables} and swaps the
+     * rules in place — the <b>theme-binding</b> operation. No I/O; identity-stable, so every window
+     * holding this sheet sees the new values with no re-registration (the same guarantee
+     * {@link #replaceRules} documents). No-op for rule-copy instances with no source
+     * ({@link #DEFAULT} — the registry mirrors it from the cached source sheet instead).
+     */
+    void rebind(Map<String, String> externalVariables) {
+        if (rawSource == null) return;
+        replaceRules(parse(rawSource, externalVariables).getRules());
+    }
+
+    /**
+     * Replaces both the retained source and the rules — the <b>hot-reload</b> operation, for when
+     * the file's text itself changed. Parses against {@code externalVariables} so a reload while a
+     * theme is active keeps the theme's values.
+     */
+    void refill(String newSource, Map<String, String> externalVariables) {
+        this.rawSource = newSource;
+        replaceRules(parse(newSource, externalVariables).getRules());
+    }
+
+    /**
+     * Public identity-stable swap: adopts {@code freshlyParsed}'s rules and source, keeping
+     * <em>this</em> instance — for holders like {@code UiThemeManager} whose sheets live in engine
+     * lists and must never be re-registered. The parsed argument is a carrier, not a peer: parse
+     * into a throwaway, hand it here, drop it.
+     */
+    public void refillFrom(StyleSheet freshlyParsed) {
+        this.rawSource = freshlyParsed.rawSource;
+        replaceRules(freshlyParsed.getRules());
     }
 }

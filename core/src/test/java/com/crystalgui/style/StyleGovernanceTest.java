@@ -1,0 +1,240 @@
+package com.crystalgui.style;
+
+import org.junit.Test;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+/**
+ * The anti-rot machinery ({@code plan_styling.md} §4.2) — the styling contracts that used to live
+ * in comments, promoted to build failures. default.css rotted to 161 unrelated colours precisely
+ * because breaking its rules broke no build; each test here is one of those rules with teeth.
+ *
+ * <p>Plain text analysis over the shipped sheets (loaded from the classpath, so it runs wherever
+ * the resources do). Deliberately no engine involvement: these are contracts about the FILES.</p>
+ */
+public class StyleGovernanceTest {
+
+    private static final String STYLES = "/assets/crystalgui/ui/styles/";
+    private static final String THEMES = "/assets/crystalgui/ui/themes/";
+
+    /** The engine's structure sheets — every colour in them must be a token reference.
+     * ore.css is deliberately absent: it is a full sprite SKIN awaiting its move to {@code themes/}
+     * (plan_styling.md §3.2), where hex is legal — holding it to the token rule now would demand
+     * tokenizing a file whose whole content is theme-side. */
+    private static final List<String> STRUCTURE_SHEETS =
+            List.of("default.css", "graph.css", "filetypes.css", "decorations.css");
+
+    /**
+     * <b>The system vocabulary, pinned</b> — plan_styling.md §3.1, decided 2026-08-10. This list
+     * IS the spec: base.css may derive only into these names, and adding a name here is an API
+     * decision (append-mostly; renames go through the manager's alias table), not a convenience.
+     */
+    private static final Set<String> SYSTEM_VOCABULARY = Set.of(
+            "surface-base", "surface-panel", "surface-raised", "surface-recessed",
+            "surface-editor", "surface-overlay",
+            "border-base", "border-strong", "border-field", "divider",
+            "fg", "fg-secondary", "fg-hint", "fg-disabled", "fg-on-accent",
+            "accent", "accent-hover", "accent-soft",
+            "hover-bg", "pressed-bg", "selection-bg", "selection-inactive-bg", "focus-ring",
+            "error", "warning", "info", "success", "modified", "link");
+
+    /**
+     * Raw hexes still permitted OUTSIDE a var() fallback, each one a named decision:
+     * {@code #00000000} is the none-fill (a transparent constant, not a colour), and the single
+     * default.css entry is a dead duplicate rule pending cleanup — its twin three lines down wins.
+     * <b>This list only ever shrinks.</b> A new colour goes through a token; adding an entry here
+     * is the five-mid-greys bug asking to be reborn.
+     */
+    private static final Set<String> BARE_HEX_ALLOWLIST = Set.of(
+            "default.css|#C0C0C0"          // .__search-field__ .__clear__:hover dead dup (line ~6049)
+    );
+
+    private static final Pattern HEX = Pattern.compile("#[0-9a-fA-F]{3,8}\\b");
+    private static final Pattern VAR_WITH_FALLBACK = Pattern.compile("var\\(\\s*(--[\\w-]+)\\s*,[^)]*\\)");
+    private static final Pattern VAR_ANY = Pattern.compile("var\\(\\s*(--[\\w-]+)");
+    private static final Pattern VAR_DEF = Pattern.compile("(--[\\w-]+)\\s*:\\s*([^;}]+)");
+    private static final Pattern TOKEN_NAME = Pattern.compile("--[a-z0-9]+(-[a-z0-9]+)*");
+
+    // ── rule 1: no raw hex outside a var() fallback ─────────────────────────────────────────────
+
+    /**
+     * <b>Every colour in a structure sheet is a token reference.</b> A hex may appear only as a
+     * {@code var(--token, #hex)} fallback (the themeless resting value — VS Code's
+     * default-in-registry pattern) or on the shrinking allowlist above. This is the single
+     * strongest anti-rot rule: the compile-time answer to "just this one grey".
+     */
+    @Test
+    public void structureSheetsCarryNoBareHex() {
+        List<String> offences = new ArrayList<>();
+        for (String sheet : STRUCTURE_SHEETS) {
+            String css = stripComments(load(STYLES + sheet));
+            // remove every var(...) span (fallbacks are sanctioned), then look for what remains
+            String withoutVars = removeVarSpans(css);
+            Matcher hex = HEX.matcher(withoutVars);
+            while (hex.find()) {
+                String found = hex.group();
+                if (found.equalsIgnoreCase("#00000000")) continue;      // the none-fill
+                if (BARE_HEX_ALLOWLIST.contains(sheet + "|" + found)) continue;
+                offences.add(sheet + ": bare " + found);
+            }
+        }
+        assertTrue("Bare hex outside a var() fallback — route it through a token:\n" + String.join("\n", offences),
+                offences.isEmpty());
+    }
+
+    // ── rule 2: every reference resolves ────────────────────────────────────────────────────────
+
+    /**
+     * Every {@code var(--name)} referenced by a shipped sheet is defined somewhere the engine will
+     * actually look: the sheet's own locals, base.css, or crystal-dark.css. Undefined references
+     * only warn at runtime — this makes a typo'd token a build failure for SHIPPED files while
+     * staying lenient for user themes.
+     */
+    @Test
+    public void everyTokenReferenceIsDefined() {
+        Set<String> defined = new HashSet<>();
+        definitionsOf(load(THEMES + "base.css")).forEach((k, v) -> defined.add(k));
+        definitionsOf(load(THEMES + "crystal-dark.css")).forEach((k, v) -> defined.add(k));
+
+        List<String> offences = new ArrayList<>();
+        for (String sheet : STRUCTURE_SHEETS) {
+            String css = stripComments(load(STYLES + sheet));
+            Set<String> local = definitionsOf(css).keySet();
+            Matcher ref = VAR_ANY.matcher(css);
+            while (ref.find()) {
+                String name = ref.group(1);
+                if (!defined.contains(name) && !local.contains(name)) {
+                    offences.add(sheet + ": " + name);
+                }
+            }
+        }
+        assertTrue("var() references no shipped table defines (typo, or a token deleted without its uses):\n"
+                + String.join("\n", offences), offences.isEmpty());
+    }
+
+    // ── rule 3: naming lint ─────────────────────────────────────────────────────────────────────
+
+    /** Token names are kebab-case, lower, no value words enforced socially — the shape at least
+     * is mechanical: {@code --[a-z0-9]+(-[a-z0-9]+)*}. */
+    @Test
+    public void tokenNamesFollowTheConvention() {
+        List<String> offences = new ArrayList<>();
+        for (String file : List.of(THEMES + "base.css", THEMES + "crystal-dark.css")) {
+            for (String name : definitionsOf(load(file)).keySet()) {
+                if (!TOKEN_NAME.matcher(name).matches()) offences.add(file + ": " + name);
+            }
+        }
+        assertTrue("Token names off-convention:\n" + String.join("\n", offences), offences.isEmpty());
+    }
+
+    // ── rule 4: base.css is derivation-only ─────────────────────────────────────────────────────
+
+    /**
+     * <b>Every value in base.css is a reference into the system vocabulary.</b> A component token
+     * holding a hex literal here is the five-mid-greys bug being reborn — exact current values
+     * that match no system role live in crystal-dark's fine-tune block instead, where they are
+     * visibly a theme's choice and step 11's shrink target.
+     */
+    @Test
+    public void baseIsDerivationOnly() {
+        List<String> offences = new ArrayList<>();
+        definitionsOf(load(THEMES + "base.css")).forEach((name, value) -> {
+            Matcher ref = VAR_ANY.matcher(value.trim());
+            if (!ref.matches() && !value.trim().matches("var\\(\\s*--[\\w-]+\\s*\\)")) {
+                offences.add(name + ": " + value);
+            } else {
+                Matcher m = VAR_ANY.matcher(value);
+                if (m.find() && !SYSTEM_VOCABULARY.contains(m.group(1).substring(2))) {
+                    offences.add(name + " derives from a non-system token: " + value);
+                }
+            }
+        });
+        assertTrue("base.css must derive into the system vocabulary only:\n" + String.join("\n", offences),
+                offences.isEmpty());
+    }
+
+    // ── rule 5: the shipped theme is complete ───────────────────────────────────────────────────
+
+    /** crystal-dark defines the whole system vocabulary — the completeness a sparse third-party
+     * theme relies on through {@code @extends}. When crystal-light lands, this becomes the
+     * dark/light parity check. */
+    @Test
+    public void crystalDarkDefinesTheFullSystemVocabulary() {
+        Set<String> defined = new HashSet<>();
+        definitionsOf(load(THEMES + "crystal-dark.css")).forEach((k, v) -> defined.add(k.substring(2)));
+        List<String> missing = new ArrayList<>();
+        for (String name : SYSTEM_VOCABULARY) {
+            if (!defined.contains(name)) missing.add(name);
+        }
+        assertTrue("crystal-dark is missing system tokens:\n" + String.join("\n", missing), missing.isEmpty());
+    }
+
+    // ── rule 6: the UA sheet's own three rules ──────────────────────────────────────────────────
+
+    /** default.css's opening contract, finally with teeth: no {@code !important} (it escalates
+     * above every author sheet), no {@code asset()} (must stand alone with no pack loaded). */
+    @Test
+    public void theUserAgentSheetKeepsItsContract() {
+        String css = stripComments(load(STYLES + "default.css"));
+        assertTrue("default.css must not use !important", !css.contains("!important"));
+        assertTrue("default.css must not reference asset()", !css.contains("asset("));
+    }
+
+    // ── helpers ─────────────────────────────────────────────────────────────────────────────────
+
+    private static String load(String resource) {
+        try (InputStream in = StyleGovernanceTest.class.getResourceAsStream(resource)) {
+            if (in == null) fail("shipped resource missing: " + resource);
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static String stripComments(String css) {
+        return css.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("//[^\\n]*", "");
+    }
+
+    private static Map<String, String> definitionsOf(String css) {
+        Map<String, String> defs = new HashMap<>();
+        Matcher def = VAR_DEF.matcher(stripComments(css));
+        while (def.find()) defs.put(def.group(1), def.group(2).trim());
+        return defs;
+    }
+
+    /** Removes every {@code var(...)} span, nested parens handled, leaving the rest of the text. */
+    private static String removeVarSpans(String css) {
+        StringBuilder out = new StringBuilder(css.length());
+        int i = 0;
+        while (i < css.length()) {
+            int start = css.indexOf("var(", i);
+            if (start < 0) {
+                out.append(css, i, css.length());
+                break;
+            }
+            out.append(css, i, start);
+            int depth = 0;
+            int j = start + 3;
+            for (; j < css.length(); j++) {
+                char c = css.charAt(j);
+                if (c == '(') depth++;
+                else if (c == ')' && --depth == 0) break;
+            }
+            i = j + 1;
+        }
+        return out.toString();
+    }
+}

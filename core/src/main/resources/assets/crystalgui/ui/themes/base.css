@@ -1,0 +1,133 @@
+/*
+ * base.css — the COMPONENT-TOKEN derivation table (plan_styling.md §3.1).
+ *
+ * Every component token an engine sheet references is defined here as a reference into the SYSTEM
+ * vocabulary, which a theme supplies. This file is the engine's equivalent of VS Code's colour
+ * registry: it is where "tab background falls back to the editor background" lives.
+ *
+ * MIGRATION DRAFT: these derivations were emitted mechanically during the step-5 tokenization,
+ * kept ONLY where the current value already coincides with the sys token (so binding crystal-dark
+ * changes nothing). Every token whose current value matches no sys role is pinned in
+ * crystal-dark.css instead — that fine-tune block is the migration debt, and the Islands pass
+ * (step 11) pays it down by re-deriving here deliberately. Do NOT hand-add hex values here;
+ * governance enforces derivation-only.
+ */
+
+theme {
+    --activitybar-badge-fg: var(--fg-on-accent);
+    --activitybar-bg: var(--surface-panel);
+    --activitybar-item-hover-bg: var(--accent);
+
+    --balloon-bg: var(--surface-raised);
+
+    --blackboard-arrow-hover-fg: var(--fg-on-accent);
+
+    --checkbox-checked-bg: var(--success);
+
+    --configkit-field-bg: var(--surface-base);
+    --configkit-popup-bg: var(--surface-overlay);
+
+    --decoration-error: var(--error);
+    --decoration-info: var(--info);
+    --decoration-modified: var(--modified);
+    --decoration-warning: var(--warning);
+
+    --dialog-close-bg: var(--surface-overlay);
+
+    --dock-active-border: var(--link);
+    --dock-bg: var(--surface-panel);
+
+    --field-disabled-fg: var(--fg-disabled);
+
+    --findbar-action-bg: var(--surface-raised);
+    --findbar-border: var(--divider);
+    --findbar-button-fg: var(--fg-hint);
+    --findbar-count-fg: var(--fg-hint);
+    --findbar-toggle-on-bg: var(--accent);
+    --findbar-toggle-on-fg: var(--fg-on-accent);
+
+    --ghost-label-fg: var(--fg-on-accent);
+
+    --graph-editor-dot-ring-bg: var(--surface-panel);
+    --graph-port-label-hover-fg: var(--fg-on-accent);
+
+    --inspection-error-fg: var(--error);
+    --inspection-warning-fg: var(--warning);
+
+    --label-fg: var(--fg-on-accent);
+
+    --list-hover-bg: var(--hover-bg);
+    --list-selected-bg: var(--selection-bg);
+
+    --menu-bg: var(--surface-overlay);
+    --menu-border: var(--border-strong);
+    --menu-item-disabled-fg: var(--fg-disabled);
+
+    --menubar-bg: var(--surface-raised);
+    --menubar-open-fg: var(--fg-on-accent);
+
+    --nodemenu-bg: var(--surface-panel);
+    --nodemenu-border: var(--border-base);
+    --nodemenu-selected-fg: var(--fg-on-accent);
+    --nodemenu-separator-fg: var(--fg-disabled);
+    --nodemenu-twisty-fg: var(--fg-hint);
+
+    --notification-bg: var(--surface-panel);
+    --notification-close-hover-fg: var(--fg-on-accent);
+    --notification-detail-fg: var(--fg-secondary);
+    --notification-message-fg: var(--fg);
+
+    --notifications-bg: var(--surface-base);
+    --notifications-link-fg: var(--link);
+    --notifications-title-fg: var(--fg-secondary);
+
+    --pagestack-empty-fg: var(--fg-hint);
+
+    --palette-field-bg: var(--surface-base);
+    --palette-field-border: var(--border-field);
+    --palette-key-border: var(--border-base);
+    --palette-key-hover-fg: var(--fg-on-accent);
+    --palette-key-sep-fg: var(--fg-hint);
+    --palette-selected-bg: var(--selection-bg);
+
+    --problems-bg: var(--surface-base);
+    --problems-empty-fg: var(--fg-hint);
+    --problems-message-fg: var(--fg);
+    --problems-tab-active-bg: var(--accent-soft);
+    --problems-tab-active-fg: var(--fg);
+    --problems-tab-fg: var(--fg-secondary);
+
+    --prompt-border: var(--border-base);
+
+    --region-drop-border: var(--accent);
+
+    --searchfield-bg: var(--surface-recessed);
+    --searchfield-border: var(--border-field);
+    --searchfield-focus-border: var(--link);
+    --searchfield-icon-fg: var(--fg-hint);
+    --searchfield-option-on-fg: var(--fg-on-accent);
+
+    --squiggle-error: var(--error);
+    --squiggle-info: var(--info);
+    --squiggle-warning: var(--warning);
+
+    --statusbar-bg: var(--surface-panel);
+    --statusbar-fg: var(--fg-secondary);
+    --statusbar-item-fg: var(--fg-secondary);
+    --statusbar-sep: var(--divider);
+
+    --stripe-error: var(--error);
+    --stripe-info: var(--info);
+    --stripe-warning: var(--warning);
+
+    --switch-checked-bg: var(--success);
+
+    --tab-active-fg: var(--fg-on-accent);
+    --tab-disabled-fg: var(--fg-disabled);
+
+    --tooltip-fg: var(--fg-on-accent);
+
+    --tree-editor-border: var(--link);
+    --tree-match-fg: var(--fg-on-accent);
+    --tree-selected-fg: var(--fg-on-accent);
+}

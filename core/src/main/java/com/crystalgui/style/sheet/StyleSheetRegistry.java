@@ -3,6 +3,7 @@ package com.crystalgui.style.sheet;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -15,7 +16,47 @@ public final class StyleSheetRegistry {
 
     private static final ConcurrentHashMap<String, StyleSheet> CACHE = new ConcurrentHashMap<>();
 
+    /**
+     * The external variable table every parse resolves against — the active theme's <b>resolved</b>
+     * tokens (the theme manager runs {@code resolveTable} before binding). Empty when no theme is
+     * bound. Volatile: written from {@code bindVariables}, read from any parse.
+     */
+    private static volatile Map<String, String> boundVariables = Map.of();
+
     private StyleSheetRegistry() {
+    }
+
+    /** The currently bound external variable table — what {@link StyleSheet#parse(String)} resolves
+     * against. Never {@code null}; empty when no theme is bound. */
+    public static Map<String, String> boundVariables() {
+        return boundVariables;
+    }
+
+    /**
+     * Binds {@code resolvedTable} as the external variable table and re-substitutes every cached
+     * sheet in place — <b>the theme-swap primitive</b>.
+     *
+     * <p>No I/O: each sheet re-parses from its retained source, so a swap works with the resource
+     * pack long gone and costs one parse per sheet. Identity-stable throughout ({@link
+     * StyleSheet#rebind} goes through {@code replaceRules}), so no engine's sheet <em>list</em>
+     * changes — which is what keeps registration order out of the picture entirely.</p>
+     *
+     * <p><b>This only re-substitutes the sheets. It does not restyle anything</b> — call
+     * {@code StyleEngine.restyleAllWindows()} afterwards, the same pairing {@link #reloadAll}
+     * documents. ({@code UiThemeManager} owns that sequencing; almost nothing else should call
+     * this directly.)</p>
+     */
+    public static void bindVariables(Map<String, String> resolvedTable) {
+        boundVariables = Map.copyOf(resolvedTable);
+        for (var entry : CACHE.entrySet()) {
+            entry.getValue().rebind(boundVariables);
+        }
+        // The user-agent sheet is a rule-copy of the cached one, refilled by mirroring — same
+        // special case as reloadAll below, for the same reason.
+        StyleSheet cachedDefault = CACHE.get(DEFAULT_SHEET);
+        if (cachedDefault != null && !cachedDefault.getRules().isEmpty()) {
+            StyleSheet.DEFAULT.refillFrom(cachedDefault);
+        }
     }
 
     /** Returns the parsed stylesheet for {@code namespacedPath}, or an empty (no-op) stylesheet if
@@ -81,7 +122,9 @@ public final class StyleSheetRegistry {
                 continue;
             }
             try {
-                entry.getValue().replaceRules(StyleSheet.parse(css).getRules());
+                // refill rather than replaceRules: the retained source must follow the file, or the
+                // next theme swap would rebind against the PRE-reload text.
+                entry.getValue().refill(css, boundVariables);
                 reloaded++;
             } catch (Exception e) {
                 CrystalGuiCore.LOGGER.warn(
@@ -92,7 +135,7 @@ public final class StyleSheetRegistry {
         // The user-agent sheet, which is a copy of the cached one rather than the cached one -- see above.
         StyleSheet cachedDefault = CACHE.get(DEFAULT_SHEET);
         if (cachedDefault != null && !cachedDefault.getRules().isEmpty()) {
-            StyleSheet.DEFAULT.replaceRules(cachedDefault.getRules());
+            StyleSheet.DEFAULT.refillFrom(cachedDefault);
         }
         CrystalGuiCore.LOGGER.info("StyleSheetRegistry.reloadAll: re-read {} of {} stylesheet(s)",
                 reloaded, CACHE.size());

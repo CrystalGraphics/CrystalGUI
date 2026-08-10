@@ -67,20 +67,20 @@
  * same block in `default.css` for the three rules of this engine's `var()` that decide the shape of
  * both. */
 * {
-    --node-canvas: #202020;
-    --node-header: #393939;    /* header, input panel, controls row — the "raised" surfaces */
-    --node-panel: #2B2B2B;     /* output panel */
-    --node-seam: #232323;      /* every 1px separator between regions */
-    --node-edge: #1A1A1A;      /* the node's own outer border */
+    --node-canvas: var(--graph-canvas, #202020);
+    --node-header: var(--graph-header, #393939);    /* header, input panel, controls row — the "raised" surfaces */
+    --node-panel: var(--graph-panel, #2B2B2B);     /* output panel */
+    --node-seam: var(--graph-seam, #232323);      /* every 1px separator between regions */
+    --node-edge: var(--graph-edge, #1A1A1A);      /* the node's own outer border */
 
     /* The hairline that rings a control. #282828, NOT black: a line's apparent weight is contrast as
      * much as thickness, and near-black against the panel read as a heavy rule at any width. This
      * sits a hair darker than the panel — it separates without drawing attention. */
-    --node-hairline: #282828;
+    --node-hairline: var(--graph-hairline, #282828);
 
-    --node-field: #1E1E1E;     /* the recessed surface a value is typed or dragged on */
-    --node-text: #C4C4C4;
-    --node-text-bright: #D4D4D4;
+    --node-field: var(--graph-field, #1E1E1E);     /* the recessed surface a value is typed or dragged on */
+    --node-text: var(--graph-text, #C4C4C4);
+    --node-text-bright: var(--graph-text-bright, #D4D4D4);
 }
 
 graphview {
@@ -118,15 +118,15 @@ graphnode {
  * ORDER IS LOAD-BEARING. `:hover` and `:checked` both weigh 11, so source order decides between them and
  * `:checked` has to come second. */
 graphnode:hover {
-    outline: 1px #327090;
+    outline: 1px var(--graph-node-hover-ring, #327090);
     outline-offset: 1px;
 }
 graphnode:checked {
-    outline: 2px #44C0FF;
+    outline: 2px var(--graph-selection-ring, #44C0FF);
     outline-offset: 1px;
 }
 graphnode:checked:hover {
-    outline: 3px #44C0FF;
+    outline: 3px var(--graph-selection-ring, #44C0FF);
     outline-offset: 1px;
 }
 
@@ -139,7 +139,7 @@ graphnode:checked:hover {
  * `ColorControl` swatch, say) is a genuine DOM descendant of it even once promoted — a bare descendant
  * selector painted the popup's title bar in this node-header colour/radius too. */
 graphnode > .__title-bar__ {
-    background: #56565676;
+    background: var(--graph-title-bg, #56565676);
     color: var(--node-text-bright);
     border-top-left-radius-x: 4px;
     border-top-left-radius-y: 4px;
@@ -151,18 +151,18 @@ graphnode .__title__ { font-size: 9; }
  * sit in for the whole session, while the chevron is a hover affordance like a window's own close button.
  * Tying it to selection would leave it permanently on for whatever you clicked last and permanently off
  * for everything else, which is backwards from "reveal on demand". */
-graphnode .__collapse__ { color: #9A9A9A; opacity: 0; }
+graphnode .__collapse__ { color: var(--graph-collapse-fg, #9A9A9A); opacity: 0; }
 graphnode:hover .__collapse__ { opacity: 1; }
-graphnode .__collapse__:hover { color: #E0E0E0; }
+graphnode .__collapse__:hover { color: var(--graph-collapse-hover-fg, #E0E0E0); }
 
 /* The fill sits on the two COLUMNS, not on the band holding them, because the two sides get different
  * greys — that is what makes the direction of flow legible. The greys differ; the alpha never does. */
-graphnode .__inputs__ { background-color: #53535376; }
-graphnode .__outputs__ { background-color: #35353576; }
+graphnode .__inputs__ { background-color: var(--graph-inputs-bg, #53535376); }
+graphnode .__outputs__ { background-color: var(--graph-outputs-bg, #35353576); }
 
 /* The band shows through the three 1px separators default.css opens up (under the title bar, above the
  * section below, between the columns). Darker than either panel so the seams read as seams. */
-graphnode .__ports__ { background-color: #26262676; }
+graphnode .__ports__ { background-color: var(--graph-ports-bg, #26262676); }
 
 /* Same trick as `.__ports__` above, not a border — this engine has no per-edge `border-*-width`
  * property (only the 4-edge `border-width` shorthand and its own `border-width-{edge}` longhands), so a
@@ -173,17 +173,17 @@ graphnode .__ports__ { background-color: #26262676; }
  * `.__ports__`'s own 1px-darker-than-its-columns band reads as a seam. Before this, `.__controls__` and
  * `.__control-row__` were the SAME flat colour, so there was nothing for that padding to expose: touching
  * a differently-coloured preview read as a bare colour jump ("kissing") rather than a framed line. */
-graphnode .__controls__ { background: #26262676; }
+graphnode .__controls__ { background: var(--graph-ports-bg, #26262676); }
 graphnode .__control-row__ {
-    background: #56565676;
-    color: #B4B4B4;
+    background: var(--graph-control-row-bg, #56565676);
+    color: var(--graph-control-fg, #B4B4B4);
 }
 
 graphnode .__preview__ {
     /* OPAQUE, unlike everything above it: a preview is a rendered image, and something showing through
        it is a second picture mixed into the one it exists to display. So the sampled colour goes in
        flat, with no solving. */
-    background: #313131;
+    background: var(--graph-preview-bg, #313131);
     /* Its seam with `.__controls__` above is now that element's own darker padding-frame — see the note
      * there. `border-top-width` was tried here first and does nothing: this engine has no per-edge
      * `border-*-width` property, only the 4-edge `border-width` shorthand and `border-width-{edge}`
@@ -198,9 +198,9 @@ graphnode .__preview__ {
 /* The rubber band. Drawn in the VIEWPORT rather than the plane, so this 1px border stays 1px at any
  * zoom — a band inside the transform would be four physical pixels at 4x and invisible at 0.25x. */
 graphview .__marquee__ {
-    background-color: #2C79C433;
+    background-color: var(--graph-marquee-bg, #2C79C433);
     border-width: 1px;
-    border-color: #44C0FF;
+    border-color: var(--graph-marquee-border, #44C0FF);
 }
 
 /* -- Ports -────────────────────────────────────────────────────────────────────────────────────── */
@@ -217,37 +217,37 @@ graphview .__marquee__ {
  * An accent has to mean exactly one thing. Here it means "this is selected", so the menu cannot borrow
  * it. Unity's own Create Node window is likewise a plain bordered panel. */
 nodecreationmenu {
-    background: #2B2B2B;
+    background: var(--nodemenu-bg, #2B2B2B);
     border-width: 1px;
-    border-color: #4A4A4A;
+    border-color: var(--nodemenu-border, #4A4A4A);
     border-radius: 4px;
     color: var(--node-text);
     font-size: 8;
 }
 /* The header reads as chrome, not as content: same treatment a node's own title bar gets, so the two
    surfaces in this editor that you drag by look alike. */
-nodecreationmenu .__title-bar__ { background: #383838; color: var(--node-text); }
+nodecreationmenu .__title-bar__ { background: var(--nodemenu-title-bg, #383838); color: var(--node-text); }
 nodecreationmenu .__search__ { background: var(--node-field); border-radius: 2px; color: var(--node-text-bright); }
-nodecreationmenu .__entry__:hover { background: #3C4A55; }
-nodecreationmenu .__empty__ { color: #7A7A7A; }
+nodecreationmenu .__entry__:hover { background: var(--nodemenu-hover-bg, #3C4A55); }
+nodecreationmenu .__empty__ { color: var(--nodemenu-empty-fg, #7A7A7A); }
 
 /* The selected row, in the editor blue Unity uses for it. Below :hover in this file so that hovering a
    selected row still reads as hovered -- equal specificity, so source order is what decides, and the
    later rule wins. */
-nodecreationmenu .__entry__.__selected__ { background: #2C5D87; color: #FFFFFF; }
+nodecreationmenu .__entry__.__selected__ { background: var(--nodemenu-selected-bg, #2C5D87); color: var(--nodemenu-selected-fg, #FFFFFF); }
 
 /* The twisty. Dimmer than the label it sits beside: it is a control, and a column of bright arrows
    competes with the names, which are what you are actually reading. */
-nodecreationmenu .__twisty__ { color: #8A8A8A; }
+nodecreationmenu .__twisty__ { color: var(--nodemenu-twisty-fg, #8A8A8A); }
 nodecreationmenu .__entry__:hover .__twisty__ { color: var(--node-text-bright); }
 
 /* A category is a container, not a thing you can create, so it is deliberately QUIETER than its leaves
    rather than louder. Unity's folder rows read as structure you scan past; the node names are the
    payload. Making the folders bolder inverts that and turns the list into a wall of headings. */
-nodecreationmenu .__entry__.__category__ .__label__ { color: #9D9D9D; }
+nodecreationmenu .__entry__.__category__ .__label__ { color: var(--nodemenu-category-label-fg, #9D9D9D); }
 
 nodeport { color: var(--node-text); }
-nodeport:hover .__label__ { color: #FFFFFF; }
+nodeport:hover .__label__ { color: var(--graph-port-label-hover-fg, #FFFFFF); }
 
 /* The type palette. `border-color` is the type's colour and the wire's.
  *
@@ -258,22 +258,22 @@ nodeport:hover .__label__ { color: #FFFFFF; }
 /* A dynamic port takes its type from whatever is connected, so it has no colour of its own until the
  * compiler resolves one. Neutral grey states that honestly — colouring it as float would be a lie in the
  * one direction that matters, since float is the NARROWEST numeric type and reads as "scalar only". */
-nodeport.type-dynamic .__dot__ { border-color: #B4B4B4; }
+nodeport.type-dynamic .__dot__ { border-color: var(--graph-port-dynamic, #B4B4B4); }
 
 nodeport.type-float .__dot__,
-nodeport.type-vec1 .__dot__    { border-color: #84E4E7; }
-nodeport.type-vec2 .__dot__    { border-color: #9AEF92; }
-nodeport.type-vec3 .__dot__    { border-color: #F6FF9A; }
-nodeport.type-vec4 .__dot__    { border-color: #FBCBF4; }
-nodeport.type-bool .__dot__    { border-color: #9C4FFF; }
+nodeport.type-vec1 .__dot__    { border-color: var(--graph-port-vec1, #84E4E7); }
+nodeport.type-vec2 .__dot__    { border-color: var(--graph-port-vec2, #9AEF92); }
+nodeport.type-vec3 .__dot__    { border-color: var(--graph-port-vec3, #F6FF9A); }
+nodeport.type-vec4 .__dot__    { border-color: var(--graph-port-vec4, #FBCBF4); }
+nodeport.type-bool .__dot__    { border-color: var(--graph-port-bool, #9C4FFF); }
 nodeport.type-mat2 .__dot__,
 nodeport.type-mat3 .__dot__,
-nodeport.type-mat4 .__dot__    { border-color: #8FC1DF; }
+nodeport.type-mat4 .__dot__    { border-color: var(--graph-port-mat4, #8FC1DF); }
 nodeport.type-texture2d .__dot__,
 nodeport.type-texture3d .__dot__,
-nodeport.type-cubemap .__dot__ { border-color: #FF8B8B; }
+nodeport.type-cubemap .__dot__ { border-color: var(--graph-port-cubemap, #FF8B8B); }
 nodeport.type-gradient .__dot__,
-nodeport.type-sampler .__dot__ { border-color: #C1C1C1; }
+nodeport.type-sampler .__dot__ { border-color: var(--graph-port-sampler, #C1C1C1); }
 
 /* The gap. Unity's dots do NOT go solid-colour when connected — a screenshot of a wired-up graph shows
  * every dot, blank or connected, with the exact same dark hole between the ring and the core; only the
@@ -286,7 +286,7 @@ nodeport.type-sampler .__dot__ { border-color: #C1C1C1; }
  * #212121 is darker than every panel it can sit on (`--node-header` composited is ~#565656,
  * `--node-panel` ~#353535) specifically so the hole always reads as a hole and never blends into
  * whatever's behind it. */
-nodeport .__dot__ { background-color: #212121; }
+nodeport .__dot__ { background-color: var(--graph-dot-bg, #212121); }
 
 /* The core. Sits centred inside the gap (`NodePort` adds it as `.__dot-core__`, a plain internal child —
  * see that class's own javadoc for why this dot gets a real child element instead of the flat
@@ -301,21 +301,21 @@ nodeport .__dot-core__ {
     flex-grow: 0;
     flex-shrink: 0;
 }
-nodeport.type-dynamic .__dot-core__ { background-color: #B4B4B4; }
+nodeport.type-dynamic .__dot-core__ { background-color: var(--graph-port-dynamic, #B4B4B4); }
 nodeport.type-float .__dot-core__,
-nodeport.type-vec1 .__dot-core__    { background-color: #84E4E7; }
-nodeport.type-vec2 .__dot-core__    { background-color: #9AEF92; }
-nodeport.type-vec3 .__dot-core__    { background-color: #F6FF9A; }
-nodeport.type-vec4 .__dot-core__    { background-color: #FBCBF4; }
-nodeport.type-bool .__dot-core__    { background-color: #9C4FFF; }
+nodeport.type-vec1 .__dot-core__    { background-color: var(--graph-port-vec1, #84E4E7); }
+nodeport.type-vec2 .__dot-core__    { background-color: var(--graph-port-vec2, #9AEF92); }
+nodeport.type-vec3 .__dot-core__    { background-color: var(--graph-port-vec3, #F6FF9A); }
+nodeport.type-vec4 .__dot-core__    { background-color: var(--graph-port-vec4, #FBCBF4); }
+nodeport.type-bool .__dot-core__    { background-color: var(--graph-port-bool, #9C4FFF); }
 nodeport.type-mat2 .__dot-core__,
 nodeport.type-mat3 .__dot-core__,
-nodeport.type-mat4 .__dot-core__    { background-color: #8FC1DF; }
+nodeport.type-mat4 .__dot-core__    { background-color: var(--graph-port-mat4, #8FC1DF); }
 nodeport.type-texture2d .__dot-core__,
 nodeport.type-texture3d .__dot-core__,
-nodeport.type-cubemap .__dot-core__ { background-color: #FF8B8B; }
+nodeport.type-cubemap .__dot-core__ { background-color: var(--graph-port-cubemap, #FF8B8B); }
 nodeport.type-gradient .__dot-core__,
-nodeport.type-sampler .__dot-core__ { background-color: #C1C1C1; }
+nodeport.type-sampler .__dot-core__ { background-color: var(--graph-port-sampler, #C1C1C1); }
 
 /* An unconnected port shows the core only while its own dot is being interacted with — hovered here,
  * or (see `PortDefaultEditor`) its floating default-value editor is focused, which lands here the same
@@ -337,21 +337,21 @@ nodeport:blank .__dot-core__ { background-color: #00000000; }
  * border-color, lighter" from CSS alone), so it mirrors the palette above one-for-one: each tint here is
  * that type's colour blended 50% toward white. The ring and the gap are untouched by hover — only the
  * core lights up. */
-nodeport.type-dynamic:hover .__dot-core__ { background-color: #DADADA; }
+nodeport.type-dynamic:hover .__dot-core__ { background-color: var(--graph-port-dynamic-hover, #DADADA); }
 nodeport.type-float:hover .__dot-core__,
-nodeport.type-vec1:hover .__dot-core__    { background-color: #C2F2F3; }
-nodeport.type-vec2:hover .__dot-core__    { background-color: #CDF7C9; }
-nodeport.type-vec3:hover .__dot-core__    { background-color: #FBFFCD; }
-nodeport.type-vec4:hover .__dot-core__    { background-color: #FDE5FA; }
-nodeport.type-bool:hover .__dot-core__    { background-color: #CEA7FF; }
+nodeport.type-vec1:hover .__dot-core__    { background-color: var(--graph-port-vec1-hover, #C2F2F3); }
+nodeport.type-vec2:hover .__dot-core__    { background-color: var(--graph-port-vec2-hover, #CDF7C9); }
+nodeport.type-vec3:hover .__dot-core__    { background-color: var(--graph-port-vec3-hover, #FBFFCD); }
+nodeport.type-vec4:hover .__dot-core__    { background-color: var(--graph-port-vec4-hover, #FDE5FA); }
+nodeport.type-bool:hover .__dot-core__    { background-color: var(--graph-port-bool-hover, #CEA7FF); }
 nodeport.type-mat2:hover .__dot-core__,
 nodeport.type-mat3:hover .__dot-core__,
-nodeport.type-mat4:hover .__dot-core__    { background-color: #C7E0EF; }
+nodeport.type-mat4:hover .__dot-core__    { background-color: var(--graph-port-mat4-hover, #C7E0EF); }
 nodeport.type-texture2d:hover .__dot-core__,
 nodeport.type-texture3d:hover .__dot-core__,
-nodeport.type-cubemap:hover .__dot-core__ { background-color: #FFC5C5; }
+nodeport.type-cubemap:hover .__dot-core__ { background-color: var(--graph-port-cubemap-hover, #FFC5C5); }
 nodeport.type-gradient:hover .__dot-core__,
-nodeport.type-sampler:hover .__dot-core__ { background-color: #E0E0E0; }
+nodeport.type-sampler:hover .__dot-core__ { background-color: var(--graph-port-sampler-hover, #E0E0E0); }
 
 /* `PortDefaultEditor` — Unity's little floating `X 0 •` beside an unconnected input. Not a descendant of
  * `nodeport` at all: it floats on the plane beside the port, rather than sharing the port's own row
@@ -392,7 +392,7 @@ graphview .__editor__ {
      * `--node-canvas` solves to `#565656` — see this file's own alpha-solving note near the top. A flat
      * opaque `var(--node-header)` looked like a different material entirely sitting on the same canvas
      * every other translucent surface shares. */
-    background: #56565676;
+    background: var(--graph-inline-editor-bg, #56565676);
     border-width: 1px;
     border-color: var(--node-edge);
     border-radius: 4px;
@@ -436,7 +436,7 @@ graphview .__editor-dot-ring__ {
     height: 6px;
     min-height: 6px;
     border-radius: 3px;
-    background: #2B2B2B;
+    background: var(--graph-editor-dot-ring-bg, #2B2B2B);
     flex-direction: row;
     align-items: center;
     justify-content: center;
@@ -541,15 +541,15 @@ graphview .__editor__ .__color__ { width: 40px; }
  * context included. What's left below are the genuinely graph-specific touches — the descendant
  * selectors don't collide with anything in default.css and were never the problem. */
 
-colorselector .__channel-row__ text { color: #9A9A9A; }
-colorselector .__hex-row__ text     { color: #9A9A9A; }
+colorselector .__channel-row__ text { color: var(--colorpicker-channel-fg, #9A9A9A); }
+colorselector .__hex-row__ text     { color: var(--colorpicker-channel-fg, #9A9A9A); }
 
 /* Both handles carry a dark outer ring as well as the white one, so they stay visible against a
  * white square corner and against a yellow band alike. Without it the handle vanishes exactly where
  * the colour is brightest, which is where it is most often dragged. */
 colorselector .__ring-handle__,
 colorselector .__square-handle__ {
-    outline: 1px #00000080;
+    outline: 1px var(--colorpicker-handle-shadow, #00000080);
     outline-offset: 0px;
 }
 
@@ -632,7 +632,7 @@ graphnode.__property-node__ {
     /* BRIGHTER than --node-header (#393939), which every other node's header uses. Unity lifts a
      * property node above the ordinary ones on purpose: it is a reference rather than a computation, and
      * the extra lift is what separates it from the canvas at a glance without a border. */
-    background: #565656;
+    background: var(--graph-property-node-bg, #565656);
     border-radius: 13px;
     min-height: 26px;
     /* SYMMETRIC. Both edges frame a dot -- the green exposed dot on the left, the port dot on the right
@@ -728,19 +728,19 @@ graphnode.__property-node__ nodeport {
  * SELECTION ALWAYS READS BLUE. It is the more urgent state: linkage says where a property is used,
  * selection says what the next keystroke acts on. */
 graphnode.__property-node__.__property-linked__ {
-    outline: 2px #7BD64B;
+    outline: 2px var(--graph-exposed-ring, #7BD64B);
     outline-offset: 1px;
 }
 graphnode.__property-node__.__property-linked__:hover {
-    outline: 3px #7BD64B;
+    outline: 3px var(--graph-exposed-ring, #7BD64B);
     outline-offset: 1px;
 }
 graphnode.__property-node__.__property-linked__:checked {
-    outline: 2px #44C0FF;
+    outline: 2px var(--graph-selection-ring, #44C0FF);
     outline-offset: 1px;
 }
 graphnode.__property-node__.__property-linked__:checked:hover {
-    outline: 3px #44C0FF;
+    outline: 3px var(--graph-selection-ring, #44C0FF);
     outline-offset: 1px;
 }
 
@@ -753,7 +753,7 @@ graphnode.__property-node__ .__exposed-dot__ {
     min-width: 5px;
     flex-grow: 0;
     flex-shrink: 0;
-    background: #7BD64B;
+    background: var(--graph-exposed-dot, #7BD64B);
     border-radius: 3px;
 }
 
@@ -796,7 +796,7 @@ graphnode.__property-node__ .__exposed-dot__ {
  * two competing labels, which is exactly how the side-by-side against Unity showed up. Same grey as
  * a pill's type column, so every caption on this panel is one colour. */
 .__blackboard__ .__titles__ > .__subtitle__ {
-    color: #676767;
+    color: var(--blackboard-subtitle-fg, #676767);
 }
 .__blackboard__ > .__head__ > .__add__ {
     color: var(--node-text-bright);
@@ -807,7 +807,7 @@ graphnode.__property-node__ .__exposed-dot__ {
 /* The graph's own accent, the same one a selected node is outlined in -- a drop target in a second
  * colour would be a second vocabulary for "this is what you are about to act on". */
 .__blackboard__ .__drop-line__ {
-    background-color: #44C0FF;
+    background-color: var(--blackboard-drop-line, #44C0FF);
 }
 /* A heading is BRIGHTER than the pills under it, and the arrow dimmer than the heading. Unity's own
  * ordering, and it is what makes the list read as sections rather than as rows of two kinds. */
@@ -815,11 +815,11 @@ graphnode.__property-node__ .__exposed-dot__ {
     color: var(--node-text-bright);
 }
 .__blackboard__ .__category__ > .__arrow__ {
-    color: #676767;
+    color: var(--blackboard-arrow-fg, #676767);
 }
 .__blackboard__ .__category__:hover > .__name__,
 .__blackboard__ .__category__:hover > .__arrow__ {
-    color: #FFFFFF;
+    color: var(--blackboard-arrow-hover-fg, #FFFFFF);
 }
 /* NO row-level fill. The row is the full width of the panel, so filling it on hover reads as a table
  * row highlighting while the thing under the pointer is the chip. Both states ring the capsule instead.
@@ -838,16 +838,16 @@ graphnode.__property-node__ .__exposed-dot__ {
  * `.__selected__ > .__capsule__` weigh the same (30 each), so source order alone decides between them
  * and selected has to come second. The combined rule outweighs both at 40 and wins outright. */
 .__property-pill__ > .__capsule__:hover {
-    outline: 1px #327090;
+    outline: 1px var(--graph-node-hover-ring, #327090);
 }
 .__property-pill__.__selected__ > .__capsule__ {
-    outline: 2px #44C0FF;
+    outline: 2px var(--graph-selection-ring, #44C0FF);
 }
 .__property-pill__.__selected__ > .__capsule__:hover {
-    outline: 3px #44C0FF;
+    outline: 3px var(--graph-selection-ring, #44C0FF);
 }
 .__property-pill__ .__dot__ {
-    background: #7BD64B;
+    background: var(--graph-exposed-dot, #7BD64B);
 }
 .__property-pill__ .__name__ {
     color: var(--node-text-bright);
@@ -855,7 +855,7 @@ graphnode.__property-node__ .__exposed-dot__ {
 /* Greyer than the name on purpose -- it is a caption, not a second label. Measured against Unity's own
  * board rather than picked. */
 .__property-pill__ > .__type__ {
-    color: #676767;
+    color: var(--blackboard-type-fg, #676767);
 }
 
 /* Solid, not a checkerboard — yet. With `Alpha` now a real master port, a transparent material over a
@@ -864,5 +864,5 @@ graphnode.__property-node__ .__exposed-dot__ {
  * painted in Java (which would put two colours in Java, against this project's rule). Worth doing
  * properly rather than quickly. */
 .__main-preview__ .__surface__ {
-    background: #1A1A1A;
+    background: var(--preview-surface-bg, #1A1A1A);
 }

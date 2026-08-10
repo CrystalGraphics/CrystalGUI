@@ -1,0 +1,445 @@
+/* @theme  Crystal Dark
+ * @id     crystalgui:crystal-dark
+ * @kind   dark
+ * @extends —
+ * @author crystalgui
+ *
+ * The engine's default look — TODAY'S look, exactly. The system block is the 30-token vocabulary
+ * (plan_styling.md §3.1); the fine-tune block below it pins every component token whose current
+ * value does not yet coincide with its system role, so binding this theme is pixel-identical to
+ * running unthemed. That block is the migration's debt ledger: the Islands pass (step 11) shrinks
+ * it by moving components onto the system palette deliberately, one visual decision at a time.
+ */
+
+/* ── The system vocabulary ─────────────────────────────────────────────────────────────────── */
+theme {
+    --surface-base: #1E1E1E;
+    --surface-panel: #2B2B2B;
+    --surface-raised: #3C3F41;
+    --surface-recessed: #1B1B1B;
+    --surface-editor: #1E1E1E;
+    --surface-overlay: #4B4B4B;
+    --border-base: #4A4A4A;
+    --border-strong: #8C8C8C;
+    --border-field: #3C3C3C;
+    --divider: #3C3F41;
+    --fg: #DFE1E5;
+    --fg-secondary: #9DA0A8;
+    --fg-hint: #8A8A8A;
+    --fg-disabled: #6E6E6E;
+    --fg-on-accent: #FFFFFF;
+    --accent: #3574F0;
+    --accent-hover: #4A82F2;
+    --accent-soft: #2F5C8F;
+    --hover-bg: #2A2D2E;
+    --pressed-bg: #26282A;
+    --selection-bg: #04395E;
+    --selection-inactive-bg: #37373D;
+    --focus-ring: #0060DF;
+    --error: #F14C4C;
+    --warning: #CCA700;
+    --info: #3794FF;
+    --success: #3C8527;
+    --modified: #E2C08D;
+    --link: #4A88C7;
+}
+
+/* ── Fine-tunes: the current look, pinned exactly. Shrinks in step 11. ─────────────────────── */
+theme {
+    --activitybar-item-checked-bg: #4E5157;
+    --activitybar-separator: #4E5157;
+
+    --balloon-border: #4E5254;
+    --balloon-hover-bg: #4A4E50;
+
+    --banner-border: #00000040;
+    --banner-error-bg: #4A2D2D;
+    --banner-error-fg: #E5B4B4;
+    --banner-info-bg: #2D3A4A;
+    --banner-info-fg: #C8D6E5;
+    --banner-warning-bg: #4A3F2D;
+    --banner-warning-fg: #E5D6A8;
+
+    --blackboard-arrow-fg: #676767;
+    --blackboard-drop-line: #44C0FF;
+    --blackboard-empty-fg: #7A7A7A;
+    --blackboard-subtitle-fg: #676767;
+    --blackboard-type-fg: #676767;
+
+    --breadcrumb-current-fg: #DDDDDD;
+    --breadcrumb-link-fg: #7CB7E8;
+    --breadcrumb-sep-fg: #7A7A7A;
+
+    --button-bg: #9A9A9A;
+    --button-disabled-bg: #6E6E6E;
+    --button-disabled-fg: #4A4A4A;
+    --button-fg: #222222;
+    --button-hover-bg: #B4B4B4;
+    --button-pressed-bg: #7A7A7A;
+
+    --checkbox-disabled-bg: #6E6E6E;
+    --checkbox-mark-bg: #9A9A9A;
+    --checkbox-mark-hover-bg: #B4B4B4;
+
+    --colorpicker-bg: #1E1E1EDD;
+    --colorpicker-channel-fg: #9A9A9A;
+    --colorpicker-handle-ring: #FFFFFF;
+    --colorpicker-handle-shadow: #00000080;
+    --colorpicker-thumb: #FFFFFF;
+    --colorpicker-thumb-ring: #C1C2C2;
+
+    --configkit-alpha-bg: #14140F;
+    --configkit-alpha-fill: #FFFFFF;
+    --configkit-band-bg: #383838;
+    --configkit-check-hover-bg: #3A3A3A;
+    --configkit-dropdown-hover-bg: #5A5A5A;
+    --configkit-dropdown-pressed-bg: #3D3D3D;
+    --configkit-field-border: #343434;
+    --configkit-field-border-bottom: #545454;
+    --configkit-field-border-top: #121212;
+    --configkit-label-fg: #D2D2D2;
+    --configkit-list-body-bg: #414141;
+    --configkit-list-head-bg: #353535;
+    --configkit-panel-bg: #2E2E2E;
+    --configkit-slider-fill: #6A6A6A;
+    --configkit-swatch-border: #1A1A1A;
+    --configkit-value-fg: #E4E4E4;
+
+    --decoration-added: #81B88B;
+    --decoration-conflict: #E4676B;
+    --decoration-deleted: #C74E39;
+    --decoration-dirty: #E2C08D;
+    --decoration-ignored: #6B6B6B;
+    --decoration-readonly: #8A9199;
+    --decoration-renamed: #73C991;
+    --decoration-untracked: #73C991;
+
+    --dialog-backdrop: #00000080;
+    --dialog-bg: #2E2E2E;
+    --dialog-border: #1A1A1A;
+    --dialog-close-fg: #DDDDDD;
+    --dialog-close-hover-bg: #C05050;
+    --dialog-fg: #DDDDDD;
+    --dialog-picker-bg: #2E2E2E76;
+    --dialog-title-bg: #393939;
+
+    --dock-drop-overlay: #4A88C766;
+    --dock-empty-bg: #232323;
+    --dock-floating-bg: #1E1E1EF0;
+    --dock-insertion-bg: #7EB6FF30;
+    --dock-insertion-border: #7EB6FF;
+    --dock-missing-bg: #3A2B2B;
+
+    --editor-caret: #FF0000;
+    --editor-current-line: #232830;
+    --editor-fold: #4A515C;
+    --editor-fold-active: #A9B2BF;
+    --editor-fold-placeholder-bg: #2A303A;
+    --editor-fold-placeholder-fg: #8A94A3;
+    --editor-fold-placeholder-hover-bg: #3C4553;
+    --editor-fold-placeholder-hover-fg: #DCE1E8;
+    --editor-gutter-bg: #1A1D23;
+    --editor-gutter-edge: #2F3540;
+    --editor-indent-guide: #2F3540;
+    --editor-indent-guide-active: #6E7A8A;
+    --editor-line-number: #5C6570;
+    --editor-ruler: #2F3540;
+    --editor-selection-bg: #2C5A8C;
+    --editor-whitespace: #454C57;
+    --editor-zoom-bg: #2B303B;
+    --editor-zoom-fg: #C8CDD4;
+    --editor-zoom-link: #4A9EFF;
+    --editor-zoom-link-pressed: #2F7FD8;
+
+    --editorfind-bg: #303235;
+    --editorfind-border: #4A4D50;
+
+    --field-bg: #2A2A2A;
+    --field-disabled-bg: #232323;
+    --field-fg: #EEEEEE;
+    --field-invalid-bg: #4A2A2A;
+    --field-invalid-fg: #FF9A9A;
+    --field-placeholder: #7A7A7A;
+
+    --filetype-7z: #ECC48D;
+    --filetype-bat: #89E051;
+    --filetype-bmp: #A074C4;
+    --filetype-build-gradle: #02303A;
+    --filetype-build-gradle-kts: #A97BFF;
+    --filetype-c: #A8B9CC;
+    --filetype-cargo-toml: #DEA584;
+    --filetype-cfg: #9DA5B4;
+    --filetype-cpp: #6098CC;
+    --filetype-cs: #A45FBE;
+    --filetype-css: #563D7C;
+    --filetype-csv: #9DA5B4;
+    --filetype-d-ts: #3178C6;
+    --filetype-dockerfile: #2496ED;
+    --filetype-file: #9DA5B4;
+    --filetype-folder: #8A9199;
+    --filetype-frag: #5686A5;
+    --filetype-gif: #A074C4;
+    --filetype-glsl: #5686A5;
+    --filetype-go: #00ADD8;
+    --filetype-gz: #ECC48D;
+    --filetype-h: #A8B9CC;
+    --filetype-hpp: #6098CC;
+    --filetype-html: #E34C26;
+    --filetype-ico: #A074C4;
+    --filetype-ini: #9DA5B4;
+    --filetype-jar: #ECC48D;
+    --filetype-java: #E76F00;
+    --filetype-jpeg: #A074C4;
+    --filetype-jpg: #A074C4;
+    --filetype-js: #F0DB4F;
+    --filetype-json: #CBCB41;
+    --filetype-jsx: #F0DB4F;
+    --filetype-kt: #A97BFF;
+    --filetype-kts: #A97BFF;
+    --filetype-license: #D9D9D9;
+    --filetype-log: #9DA5B4;
+    --filetype-lua: #51A0CF;
+    --filetype-md: #9DA5B4;
+    --filetype-mjs: #F0DB4F;
+    --filetype-package-json: #CBCB41;
+    --filetype-php: #777BB4;
+    --filetype-png: #A074C4;
+    --filetype-pom-xml: #E37933;
+    --filetype-properties: #9DA5B4;
+    --filetype-ps1: #89E051;
+    --filetype-py: #4B8BBE;
+    --filetype-rar: #ECC48D;
+    --filetype-rb: #CC342D;
+    --filetype-readme-md: #519ABA;
+    --filetype-rs: #DEA584;
+    --filetype-settings-gradle-kts: #A97BFF;
+    --filetype-sh: #89E051;
+    --filetype-shader: #5686A5;
+    --filetype-sql: #E38C00;
+    --filetype-svg: #FFB13B;
+    --filetype-tar: #ECC48D;
+    --filetype-tar-gz: #ECC48D;
+    --filetype-tga: #A074C4;
+    --filetype-toml: #9C6644;
+    --filetype-ts: #3178C6;
+    --filetype-tsx: #3178C6;
+    --filetype-txt: #9DA5B4;
+    --filetype-vert: #5686A5;
+    --filetype-webp: #A074C4;
+    --filetype-xml: #E37933;
+    --filetype-yaml: #CB171E;
+    --filetype-yml: #CB171E;
+    --filetype-zip: #ECC48D;
+
+    --find-match-bg: #C8873C;
+    --find-match-fg: #1B1B1B;
+
+    --findbar-action-disabled-bg: #2E3033;
+    --findbar-action-disabled-fg: #5A5D63;
+    --findbar-action-fg: #C8C8C8;
+    --findbar-arrow-fg: #9A9A9A;
+    --findbar-bg: #2F3033;
+    --findbar-button-hover-bg: #4E5157;
+    --findbar-button-hover-fg: #E0E0E0;
+    --findbar-close-hover-bg: #4B4D50;
+    --findbar-error-fg: #E06C6C;
+    --findbar-fg: #D0D2D6;
+    --findbar-icon: #9A9A9A;
+    --findbar-icon-hover: #E0E0E0;
+    --findbar-icon-off: #5A5D63;
+    --findbar-toggle-fg: #9A9A9A;
+    --findbar-toggle-hover-fg: #E0E0E0;
+
+    --ghost-bg: #2F5F9EC0;
+    --ghost-label-bg: #3C3F41F0;
+
+    --graph-canvas: #202020;
+    --graph-collapse-fg: #9A9A9A;
+    --graph-collapse-hover-fg: #E0E0E0;
+    --graph-control-fg: #B4B4B4;
+    --graph-control-row-bg: #56565676;
+    --graph-dot-bg: #212121;
+    --graph-edge: #1A1A1A;
+    --graph-exposed-dot: #7BD64B;
+    --graph-exposed-ring: #7BD64B;
+    --graph-field: #1E1E1E;
+    --graph-hairline: #282828;
+    --graph-header: #393939;
+    --graph-inline-editor-bg: #56565676;
+    --graph-inputs-bg: #53535376;
+    --graph-marquee-bg: #2C79C433;
+    --graph-marquee-border: #44C0FF;
+    --graph-node-hover-ring: #327090;
+    --graph-outputs-bg: #35353576;
+    --graph-panel: #2B2B2B;
+    --graph-port-bool: #9C4FFF;
+    --graph-port-bool-hover: #CEA7FF;
+    --graph-port-cubemap: #FF8B8B;
+    --graph-port-cubemap-hover: #FFC5C5;
+    --graph-port-dynamic: #B4B4B4;
+    --graph-port-dynamic-hover: #DADADA;
+    --graph-port-mat4: #8FC1DF;
+    --graph-port-mat4-hover: #C7E0EF;
+    --graph-port-sampler: #C1C1C1;
+    --graph-port-sampler-hover: #E0E0E0;
+    --graph-port-vec1: #84E4E7;
+    --graph-port-vec1-hover: #C2F2F3;
+    --graph-port-vec2: #9AEF92;
+    --graph-port-vec2-hover: #CDF7C9;
+    --graph-port-vec3: #F6FF9A;
+    --graph-port-vec3-hover: #FBFFCD;
+    --graph-port-vec4: #FBCBF4;
+    --graph-port-vec4-hover: #FDE5FA;
+    --graph-ports-bg: #26262676;
+    --graph-preview-bg: #313131;
+    --graph-property-node-bg: #565656;
+    --graph-seam: #232323;
+    --graph-selection-ring: #44C0FF;
+    --graph-text: #C4C4C4;
+    --graph-text-bright: #D4D4D4;
+    --graph-title-bg: #56565676;
+
+    --inspection-bg: #2D2D2DE0;
+    --inspection-clean-fg: #6A9955;
+
+    --menu-accelerator: #8A8A8A;
+    --menu-arrow: #A8B0B8;
+    --menu-fg: #DDDDDD;
+    --menu-item-focus-bg: #606060;
+    --menu-mark: #DDDDDD;
+    --menu-separator: #6E6E6E;
+
+    --menubar-fg: #BBBBBB;
+    --menubar-hover-bg: #4C5052;
+
+    --nav-arrow-fg: #B0B0B0;
+    --nav-label-fg: #CCCCCC;
+    --nav-sidebar-bg: #252526;
+
+    --nodemenu-category-fg: #7A7A7A;
+    --nodemenu-category-label-fg: #9D9D9D;
+    --nodemenu-empty-fg: #7A7A7A;
+    --nodemenu-hover-bg: #3C4A55;
+    --nodemenu-selected-bg: #2C5D87;
+    --nodemenu-title-bg: #383838;
+
+    --notification-close-fg: #787A80;
+    --notification-close-hover-bg: #5A5F62;
+    --notification-error-fg: #C75450;
+    --notification-hover-bg: #323232;
+    --notification-secondary-fg: #8A8D94;
+    --notification-secondary-hover-fg: #B4B7BE;
+    --notification-time-fg: #787A80;
+
+    --notifications-empty-fg: #6E7076;
+    --notifications-link-hover-fg: #6BA5DE;
+
+    --palette-bg: #252526;
+    --palette-border: #454545;
+    --palette-category-fg: #9D9D9D;
+    --palette-field-focus-border: #0078D4;
+    --palette-hover-bg: #2A3B2A;
+    --palette-key-bg: #3C3C3C;
+    --palette-key-fg: #CCCCCC;
+    --palette-key-hover-border: #9BB8CC;
+    --palette-label-fg: #CCCCCC;
+    --palette-match-fg: #2AAAFF;
+
+    --panel-header-fg: #A0A0A0;
+    --panel-header-icon: #A0A0A0;
+    --panel-header-icon-hover: #E0E0E0;
+
+    --pill-name-fg: #E4E4E4;
+    --pill-type-fg: #8C8C8C;
+
+    --preview-surface-bg: #1A1A1A;
+
+    --problems-count-fg: #6B6E76;
+    --problems-line-fg: #6E7076;
+    --problems-options-fg: #8A8D94;
+    --problems-options-hover-fg: #D5D7DB;
+    --problems-tab-active-count-fg: #B6C6DA;
+    --problems-tab-count-fg: #7A7D85;
+    --problems-tab-hover-bg: #2F3133;
+    --problems-tree-line-fg: #6B6E76;
+    --problems-unnecessary-fg: #6B6E76;
+
+    --prompt-bg: #2E2E2E;
+    --prompt-caption-fg: #C8C8C8;
+    --prompt-field-bg: #2E2E2E;
+    --prompt-field-fg: #DDDDDD;
+
+    --region-drop-bg: #3574F055;
+
+    --resizer-grip: #FFFFFF40;
+
+    --scrollbar-corner: #2A2A2A;
+    --scrollbar-tail: #4A4A4A;
+    --scrollbar-tail-hover: #6E6E6E;
+    --scrollbar-thumb: #6E6E6E;
+    --scrollbar-thumb-hover: #8C8C8C;
+    --scrollbar-thumb-pressed: #B4B4B4;
+    --scrollbar-track: #2A2A2A;
+
+    --search-excluded-fg: #7A7A7A;
+    --search-match-fg: #E0A040;
+
+    --searchfield-caret: #D0D2D6;
+    --searchfield-clear-fg: #5F6265;
+    --searchfield-clear-hover-bg: #393B40;
+    --searchfield-clear-hover-fg: #E0E0E0;
+    --searchfield-error-fg: #E06C6C;
+    --searchfield-fg: #D0D2D6;
+    --searchfield-option-fg: #9A9A9A;
+    --searchfield-option-hover-bg: #393B40;
+    --searchfield-option-hover-fg: #393B40;
+    --searchfield-option-on-bg: #375FAD;
+    --searchfield-option-on-hover-bg: #4A82F2;
+
+    --slider-disabled-fill: #5A6E5A;
+    --slider-disabled-thumb: #8C8C8C;
+    --slider-fill: #3C8527;
+    --slider-thumb: #D0D1D4;
+    --slider-thumb-hover: #E4E5E8;
+    --slider-thumb-ring: #FFFFFF;
+    --slider-track: #6E6E6E;
+
+    --splitter-bg: #777777;
+    --splitter-hover-bg: #AAAAAA;
+    --splitter-pressed-bg: #DDDDDD;
+
+    --statusbar-border: #1E1E1E;
+    --statusbar-crumb-fg: #8A8D94;
+    --statusbar-error-fg: #C75450;
+    --statusbar-hover-fg: #D5D7DB;
+    --statusbar-warning-fg: #C7A54A;
+
+    --switch-bg: #6E6E6E;
+    --switch-disabled-knob: #8C8C8C;
+    --switch-knob: #D0D1D4;
+
+    --syntax-bracket: #4EC9A0;
+    --syntax-comment: #6A9955;
+    --syntax-function: #DCDCAA;
+    --syntax-keyword: #569CD6;
+    --syntax-number: #B5CEA8;
+    --syntax-string: #CE9178;
+    --syntax-type: #4EC9A0;
+
+    --tab-active-bg: #3A3A3A;
+    --tab-bg: #6E6E6E;
+    --tab-disabled-bg: #4A4A4A;
+    --tab-fg: #DDDDDD;
+    --tab-hover-bg: #8C8C8C;
+    --tab-pane-bg: #3A3A3A;
+    --tab-strip-bg: #2A2A2A;
+
+    --tooltip-bg: #1E1E1EF0;
+    --tooltip-border: #00000080;
+
+    --tree-bg: #252526;
+    --tree-dimmed-fg: #6A6A6A;
+    --tree-drop-border: #4A90D9;
+    --tree-editor-bg: #1E1F22;
+    --tree-selected-bg: #2F5F9E;
+}

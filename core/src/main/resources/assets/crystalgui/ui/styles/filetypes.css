@@ -30,92 +30,92 @@
  */
 
 /* Generic ------------------------------------------------------------------------------------------- */
-.filetype-file    { color: #9DA5B4; }
-.filetype-folder  { color: #8A9199; }
+.filetype-file    { color: var(--filetype-file, #9DA5B4); }
+.filetype-folder  { color: var(--filetype-folder, #8A9199); }
 
 /* JVM ----------------------------------------------------------------------------------------------- */
-.filetype-java    { color: #E76F00; }
-.filetype-kt      { color: #A97BFF; }
-.filetype-kts     { color: #A97BFF; }
+.filetype-java    { color: var(--filetype-java, #E76F00); }
+.filetype-kt      { color: var(--filetype-kt, #A97BFF); }
+.filetype-kts     { color: var(--filetype-kts, #A97BFF); }
 
 /* Web ----------------------------------------------------------------------------------------------- */
-.filetype-js      { color: #F0DB4F; }
-.filetype-mjs     { color: #F0DB4F; }
-.filetype-jsx     { color: #F0DB4F; }
-.filetype-ts      { color: #3178C6; }
-.filetype-d-ts    { color: #3178C6; }
-.filetype-tsx     { color: #3178C6; }
-.filetype-html    { color: #E34C26; }
-.filetype-css     { color: #563D7C; }
+.filetype-js      { color: var(--filetype-js, #F0DB4F); }
+.filetype-mjs     { color: var(--filetype-mjs, #F0DB4F); }
+.filetype-jsx     { color: var(--filetype-jsx, #F0DB4F); }
+.filetype-ts      { color: var(--filetype-ts, #3178C6); }
+.filetype-d-ts    { color: var(--filetype-d-ts, #3178C6); }
+.filetype-tsx     { color: var(--filetype-tsx, #3178C6); }
+.filetype-html    { color: var(--filetype-html, #E34C26); }
+.filetype-css     { color: var(--filetype-css, #563D7C); }
 
 /* Systems ------------------------------------------------------------------------------------------- */
-.filetype-c       { color: #A8B9CC; }
-.filetype-h       { color: #A8B9CC; }
-.filetype-cpp     { color: #6098CC; }
-.filetype-hpp     { color: #6098CC; }
-.filetype-rs      { color: #DEA584; }
-.filetype-go      { color: #00ADD8; }
-.filetype-cs      { color: #A45FBE; }
+.filetype-c       { color: var(--filetype-c, #A8B9CC); }
+.filetype-h       { color: var(--filetype-h, #A8B9CC); }
+.filetype-cpp     { color: var(--filetype-cpp, #6098CC); }
+.filetype-hpp     { color: var(--filetype-hpp, #6098CC); }
+.filetype-rs      { color: var(--filetype-rs, #DEA584); }
+.filetype-go      { color: var(--filetype-go, #00ADD8); }
+.filetype-cs      { color: var(--filetype-cs, #A45FBE); }
 
 /* Scripting ----------------------------------------------------------------------------------------- */
-.filetype-py      { color: #4B8BBE; }
-.filetype-rb      { color: #CC342D; }
-.filetype-php     { color: #777BB4; }
-.filetype-lua     { color: #51A0CF; }
-.filetype-sh      { color: #89E051; }
-.filetype-bat     { color: #89E051; }
-.filetype-ps1     { color: #89E051; }
+.filetype-py      { color: var(--filetype-py, #4B8BBE); }
+.filetype-rb      { color: var(--filetype-rb, #CC342D); }
+.filetype-php     { color: var(--filetype-php, #777BB4); }
+.filetype-lua     { color: var(--filetype-lua, #51A0CF); }
+.filetype-sh      { color: var(--filetype-sh, #89E051); }
+.filetype-bat     { color: var(--filetype-bat, #89E051); }
+.filetype-ps1     { color: var(--filetype-ps1, #89E051); }
 
 /* Shaders — the reason this project exists ---------------------------------------------------------- */
-.filetype-glsl    { color: #5686A5; }
-.filetype-vert    { color: #5686A5; }
-.filetype-frag    { color: #5686A5; }
-.filetype-shader  { color: #5686A5; }
+.filetype-glsl    { color: var(--filetype-glsl, #5686A5); }
+.filetype-vert    { color: var(--filetype-vert, #5686A5); }
+.filetype-frag    { color: var(--filetype-frag, #5686A5); }
+.filetype-shader  { color: var(--filetype-shader, #5686A5); }
 
 /* Data ---------------------------------------------------------------------------------------------- */
-.filetype-json    { color: #CBCB41; }
-.filetype-xml     { color: #E37933; }
-.filetype-yml     { color: #CB171E; }
-.filetype-yaml    { color: #CB171E; }
-.filetype-toml    { color: #9C6644; }
-.filetype-sql     { color: #E38C00; }
+.filetype-json    { color: var(--filetype-json, #CBCB41); }
+.filetype-xml     { color: var(--filetype-xml, #E37933); }
+.filetype-yml     { color: var(--filetype-yml, #CB171E); }
+.filetype-yaml    { color: var(--filetype-yaml, #CB171E); }
+.filetype-toml    { color: var(--filetype-toml, #9C6644); }
+.filetype-sql     { color: var(--filetype-sql, #E38C00); }
 
 /* Images -------------------------------------------------------------------------------------------- */
-.filetype-png     { color: #A074C4; }
-.filetype-jpg     { color: #A074C4; }
-.filetype-jpeg    { color: #A074C4; }
-.filetype-gif     { color: #A074C4; }
-.filetype-bmp     { color: #A074C4; }
-.filetype-webp    { color: #A074C4; }
-.filetype-svg     { color: #FFB13B; }
-.filetype-ico     { color: #A074C4; }
-.filetype-tga     { color: #A074C4; }
+.filetype-png     { color: var(--filetype-png, #A074C4); }
+.filetype-jpg     { color: var(--filetype-jpg, #A074C4); }
+.filetype-jpeg    { color: var(--filetype-jpeg, #A074C4); }
+.filetype-gif     { color: var(--filetype-gif, #A074C4); }
+.filetype-bmp     { color: var(--filetype-bmp, #A074C4); }
+.filetype-webp    { color: var(--filetype-webp, #A074C4); }
+.filetype-svg     { color: var(--filetype-svg, #FFB13B); }
+.filetype-ico     { color: var(--filetype-ico, #A074C4); }
+.filetype-tga     { color: var(--filetype-tga, #A074C4); }
 
 /* Archives ------------------------------------------------------------------------------------------ */
-.filetype-zip     { color: #ECC48D; }
-.filetype-jar     { color: #ECC48D; }
-.filetype-tar     { color: #ECC48D; }
-.filetype-tar-gz  { color: #ECC48D; }
-.filetype-gz      { color: #ECC48D; }
-.filetype-7z      { color: #ECC48D; }
-.filetype-rar     { color: #ECC48D; }
+.filetype-zip     { color: var(--filetype-zip, #ECC48D); }
+.filetype-jar     { color: var(--filetype-jar, #ECC48D); }
+.filetype-tar     { color: var(--filetype-tar, #ECC48D); }
+.filetype-tar-gz  { color: var(--filetype-tar-gz, #ECC48D); }
+.filetype-gz      { color: var(--filetype-gz, #ECC48D); }
+.filetype-7z      { color: var(--filetype-7z, #ECC48D); }
+.filetype-rar     { color: var(--filetype-rar, #ECC48D); }
 
 /* Prose and config ---------------------------------------------------------------------------------- */
-.filetype-md          { color: #9DA5B4; }
-.filetype-txt         { color: #9DA5B4; }
-.filetype-log         { color: #9DA5B4; }
-.filetype-csv         { color: #9DA5B4; }
-.filetype-properties  { color: #9DA5B4; }
-.filetype-cfg         { color: #9DA5B4; }
-.filetype-ini         { color: #9DA5B4; }
+.filetype-md          { color: var(--filetype-md, #9DA5B4); }
+.filetype-txt         { color: var(--filetype-txt, #9DA5B4); }
+.filetype-log         { color: var(--filetype-log, #9DA5B4); }
+.filetype-csv         { color: var(--filetype-csv, #9DA5B4); }
+.filetype-properties  { color: var(--filetype-properties, #9DA5B4); }
+.filetype-cfg         { color: var(--filetype-cfg, #9DA5B4); }
+.filetype-ini         { color: var(--filetype-ini, #9DA5B4); }
 
 /* Named files --------------------------------------------------------------------------------------- */
-.filetype-package-json        { color: #CBCB41; }
-.filetype-build-gradle        { color: #02303A; }
-.filetype-build-gradle-kts    { color: #A97BFF; }
-.filetype-settings-gradle-kts { color: #A97BFF; }
-.filetype-pom-xml             { color: #E37933; }
-.filetype-cargo-toml          { color: #DEA584; }
-.filetype-dockerfile          { color: #2496ED; }
-.filetype-readme-md           { color: #519ABA; }
-.filetype-license             { color: #D9D9D9; }
+.filetype-package-json        { color: var(--filetype-package-json, #CBCB41); }
+.filetype-build-gradle        { color: var(--filetype-build-gradle, #02303A); }
+.filetype-build-gradle-kts    { color: var(--filetype-build-gradle-kts, #A97BFF); }
+.filetype-settings-gradle-kts { color: var(--filetype-settings-gradle-kts, #A97BFF); }
+.filetype-pom-xml             { color: var(--filetype-pom-xml, #E37933); }
+.filetype-cargo-toml          { color: var(--filetype-cargo-toml, #DEA584); }
+.filetype-dockerfile          { color: var(--filetype-dockerfile, #2496ED); }
+.filetype-readme-md           { color: var(--filetype-readme-md, #519ABA); }
+.filetype-license             { color: var(--filetype-license, #D9D9D9); }
