@@ -212,7 +212,7 @@ editor scheme's.
 | `--editor-fold-placeholder-fg` | `#8A94A3` | dark-plus.css |
 | `--editor-fold-placeholder-hover-bg` | `#3C4553` | dark-plus.css |
 | `--editor-fold-placeholder-hover-fg` | `#DCE1E8` | dark-plus.css |
-| `--editor-gutter-bg` | `#1A1D23` | dark-plus.css |
+| `--editor-gutter-bg` | `#1E1E1E` | dark-plus.css |
 | `--editor-gutter-edge` | `#2F3540` | dark-plus.css |
 | `--editor-indent-guide` | `#2F3540` | dark-plus.css |
 | `--editor-indent-guide-active` | `#6E7A8A` | dark-plus.css |
@@ -366,6 +366,7 @@ editor scheme's.
 | `--palette-label-fg` | `var(--fg)` | base.css |
 | `--palette-match-fg` | `var(--accent)` | base.css |
 | `--palette-selected-bg` | `var(--selection-bg)` | base.css |
+| `--panel-bg` | `var(--surface-panel)` | base.css |
 | `--panel-header-fg` | `var(--fg-secondary)` | base.css |
 | `--panel-header-icon` | `var(--fg-secondary)` | base.css |
 | `--panel-header-icon-hover` | `var(--fg)` | base.css |
@@ -483,8 +484,10 @@ editor scheme's.
 | `--tree-drop-border` | `var(--accent)` | base.css |
 | `--tree-editor-bg` | `var(--surface-recessed)` | base.css |
 | `--tree-editor-border` | `var(--accent)` | base.css |
+| `--tree-fg` | `var(--fg)` | base.css |
 | `--tree-match-fg` | `var(--fg)` | base.css |
 | `--tree-selected-bg` | `var(--accent-soft)` | base.css |
 | `--tree-selected-fg` | `var(--fg-on-accent)` | base.css |
+| `--tree-twisty-fg` | `var(--fg-secondary)` | base.css |
 | `--warning` | `#CCA700` | crystal-dark.css |
 <!-- TOKENS:END -->

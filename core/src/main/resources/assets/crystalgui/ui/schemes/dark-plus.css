@@ -23,7 +23,7 @@ theme {
     --editor-caret: #FF0000;
     --editor-current-line: #232830;
     --editor-selection-bg: #2C5A8C;
-    --editor-gutter-bg: #1A1D23;
+    --editor-gutter-bg: #1E1E1E;
     --editor-gutter-edge: #2F3540;
     --editor-line-number: #5C6570;
     --editor-indent-guide: #2F3540;

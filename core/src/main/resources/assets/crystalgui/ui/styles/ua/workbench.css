@@ -93,6 +93,14 @@ dockgroup .__missing__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
+
+    /* A TOOL WINDOW IS OPAQUE, and until the light theme this rule did not exist: the container
+     * painted nothing and let whatever sat behind it show through, which in a dark UI is
+     * indistinguishable from having a background of its own. In a light one it is a hole — the
+     * Problems header read as a dark bar across an otherwise light workbench, and a probe over every
+     * element's computed background found exactly one dark fill in the whole tree (an invisible drop
+     * overlay), which is what proved it was a GAP rather than a wrong colour. */
+    background: var(--panel-bg, #2B2B2B);
 }
 
 .__view-container__ .__header__ {
@@ -998,6 +1006,17 @@ projectfiletree {
     flex-grow: 1;
     background: var(--tree-bg, #252526);
     padding-all: 4px;
+
+    /* THE TREE'S TEXT COLOUR, and like the container's background above it did not exist until a light
+     * theme asked for it: nothing in this file set `color` on a row, so every file name and every fold
+     * chevron drew at the `color` property's INITIAL value — white — which is invisibly correct on a
+     * dark panel and simply invisible on a light one.
+     *
+     * Deliberately on the TREE (type selector, specificity 1) rather than on the row: the `.filetype-*`
+     * classes weigh 10 and must still be able to win, and `color` inherits, so one declaration here
+     * reaches every label, badge and chevron below. Note the file-type classes land on the ICON rather
+     * than the row — neither reference IDE colours a file NAME by type — so nothing is fighting this. */
+    color: var(--tree-fg, #FFFFFF);
 }
 
 projectfiletree .__tree-content__ {
@@ -1047,6 +1066,9 @@ projectfiletree .__project-row__ .__twisty__ {
     width: 12px;
     height: 12px;
     flex-shrink: 0;
+    /* Quieter than the label it sits beside — both references draw the fold arrow as chrome rather
+     * than as content. It tints a `shape()` overlay, so this IS the chevron's colour. */
+    color: var(--tree-twisty-fg, #FFFFFF);
 }
 
 projectfiletree .__project-row__.__collapsed__ .__twisty__ {
