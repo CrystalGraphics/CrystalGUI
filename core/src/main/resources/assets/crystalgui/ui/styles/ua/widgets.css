@@ -25,7 +25,10 @@ button, dropdown {
     background: var(--button-bg, #9A9A9A);
     color: var(--button-fg, #222222);
     text-shadow: false;
-    border-radius: 2px;
+    /* THEMEABLE now, where it was a flat 2px: "Islands" is this token plus a palette, and a flat
+     * theme is the same structure with it zeroed. IntelliJ's own themes set Button.arc for exactly
+     * this reason. The fallback keeps the unthemed look identical. */
+    border-radius: var(--radius-control, 2px);
 }
 /* THE ROOT CAUSE, once: this is the one label every `Button`/`Dropdown` in the engine has (Button
  * gives it no class of its own, hence the tag selector), so a config-kit dropdown squeezed to

@@ -194,7 +194,7 @@ editor scheme's.
 | `--dialog-picker-bg` | `#2E2E2E76` | crystal-dark.css |
 | `--dialog-title-bg` | `var(--surface-raised)` | base.css |
 | `--divider` | `#3C3F41` | crystal-dark.css |
-| `--dock-active-border` | `var(--accent)` | base.css |
+| `--dock-active-border` | `var(--accent-soft)` | base.css |
 | `--dock-bg` | `var(--surface-panel)` | base.css |
 | `--dock-drop-overlay` | `#4A88C766` | crystal-dark.css |
 | `--dock-empty-bg` | `var(--surface-base)` | base.css |
@@ -367,6 +367,7 @@ editor scheme's.
 | `--palette-match-fg` | `var(--accent)` | base.css |
 | `--palette-selected-bg` | `var(--selection-bg)` | base.css |
 | `--panel-bg` | `var(--surface-panel)` | base.css |
+| `--panel-gap` | `6px` | crystal-dark.css |
 | `--panel-header-fg` | `var(--fg-secondary)` | base.css |
 | `--panel-header-icon` | `var(--fg-secondary)` | base.css |
 | `--panel-header-icon-hover` | `var(--fg)` | base.css |
@@ -394,6 +395,8 @@ editor scheme's.
 | `--prompt-caption-fg` | `var(--fg)` | base.css |
 | `--prompt-field-bg` | `var(--surface-recessed)` | base.css |
 | `--prompt-field-fg` | `var(--fg)` | base.css |
+| `--radius-control` | `4px` | crystal-dark.css |
+| `--radius-panel` | `8px` | crystal-dark.css |
 | `--region-drop-bg` | `#3574F055` | crystal-dark.css |
 | `--region-drop-border` | `var(--accent)` | base.css |
 | `--resizer-grip` | `var(--border-strong)` | base.css |
@@ -479,7 +482,6 @@ editor scheme's.
 | `--tooltip-bg` | `#1E1E1EF0` | crystal-dark.css |
 | `--tooltip-border` | `#00000080` | crystal-dark.css |
 | `--tooltip-fg` | `var(--fg)` | base.css |
-| `--tree-bg` | `var(--surface-panel)` | base.css |
 | `--tree-dimmed-fg` | `var(--fg-hint)` | base.css |
 | `--tree-drop-border` | `var(--accent)` | base.css |
 | `--tree-editor-bg` | `var(--surface-recessed)` | base.css |
@@ -490,4 +492,5 @@ editor scheme's.
 | `--tree-selected-fg` | `var(--fg-on-accent)` | base.css |
 | `--tree-twisty-fg` | `var(--fg-secondary)` | base.css |
 | `--warning` | `#CCA700` | crystal-dark.css |
+| `--workbench-bg` | `var(--surface-base)` | base.css |
 <!-- TOKENS:END -->

@@ -27,6 +27,14 @@ dockarea {
 dockgroup {
     flex-direction: column;
     background: var(--dock-bg, #2B2B2B);
+
+    /* THE ISLAND. Rounding here is FREE, and the reason is worth stating because it is the whole
+     * feasibility argument for this look: resolveOverflowClip() only reaches the FBO-mask path when
+     * `overflow` actually CLIPS, and a dockgroup's overflow is visible. So a rounded panel costs a
+     * different fragment shader for its own fill and nothing else — no layer, no mask, no second
+     * pass. Inner scroll viewports keep square clips and stay on the cheap scissor path, which is
+     * invisible at this radius because the panel's own fill is what draws the corner. */
+    border-radius: var(--radius-panel, 0px);
     /* The group is a positioned ancestor for its own overlay and insertion caret, both of which are
      * absolute and expect this box as their containing block. */
     position: relative;
@@ -101,6 +109,10 @@ dockgroup .__missing__ {
      * element's computed background found exactly one dark fill in the whole tree (an invisible drop
      * overlay), which is what proved it was a GAP rather than a wrong colour. */
     background: var(--panel-bg, #2B2B2B);
+
+    /* Matched to the group's, so this container's own fill cannot square off the island's corners.
+     * Nothing clips here either — see dockgroup — so it is a shader change, not a layer. */
+    border-radius: var(--radius-panel, 0px);
 }
 
 .__view-container__ .__header__ {
@@ -769,6 +781,12 @@ workbench .__workbench-content__ {
     flex-grow: 1;
     flex-basis: 0;
     flex-direction: row;
+
+    /* THE GROUND THE ISLANDS SIT ON. Every gap between panels shows this and nothing else, so it is
+     * the one surface that is defined by what you see BETWEEN things rather than on them. A flat
+     * theme sets --panel-gap to 0 and it stops being visible at all, which is the correct way for a
+     * flat theme to say "no islands" — nothing structural changes. */
+    background: var(--workbench-bg, #1E1E1E);
 }
 
 /* A REGION HAS A FLOOR, which is the whole reason the frame is a SplitView rather than a dock tree --
@@ -787,6 +805,29 @@ workbench .__region-sidebar__, workbench .__region-auxiliary__ {
 
 workbench .__region-panel__ {
     min-height: 60px;
+}
+
+/* ── The gutters between islands ───────────────────────────────────────────────────────────────
+ *
+ * A divider IS the gap: it already sits between exactly the two things that need separating, it is
+ * already the drag target, and it is already sized. So the Islands look is this rule and nothing
+ * structural — the divider stops painting a line and starts showing the ground through, and the
+ * width comes from --panel-gap.
+ *
+ * Scoped to the workbench, deliberately. A SplitView inside a panel (the graph's inspector, a
+ * settings navigator) is dividing CONTENT rather than separating islands, and there the visible
+ * line is the right affordance — which is why the generic rule in ua/widgets.css keeps it.
+ *
+ * The hover state stays, because an invisible divider you cannot find is a worse trade than a
+ * visible one: at rest it is a gap, under the pointer it is a control. IntelliJ does exactly this. */
+workbench splitview > .__divider__ {
+    width: var(--panel-gap, 4px);
+    height: var(--panel-gap, 4px);
+    background: none;
+}
+
+workbench splitview > .__divider__:hover {
+    background: var(--splitter-hover-bg, #AAAAAA);
 }
 
 /* And the same floor one level down, so a region's two halves cannot squeeze each other out either. */
@@ -1004,7 +1045,11 @@ texteditor.__file-editor__ {
 
 projectfiletree {
     flex-grow: 1;
-    background: var(--tree-bg, #252526);
+    /* TRANSPARENT BY DEFAULT, so the island's own fill is the one that draws the panel's corners.
+     * A tree filling the bottom of a rounded container squared it off, and the tree is not a
+     * surface in its own right — it is content ON one. A theme that genuinely wants a distinct
+     * well behind its file list still can, by setting --tree-bg. */
+    background: var(--tree-bg, #00000000);
     padding-all: 4px;
 
     /* THE TREE'S TEXT COLOUR, and like the container's background above it did not exist until a light

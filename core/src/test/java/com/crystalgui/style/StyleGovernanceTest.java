@@ -61,9 +61,21 @@ public class StyleGovernanceTest {
             "--decoration-added", "--decoration-renamed", "--decoration-untracked",
             "--decoration-deleted", "--decoration-conflict");
 
+    /**
+     * <b>Offered hooks: defined by no theme, and that is the point.</b> Distinct from a palette —
+     * these have a <em>no-op</em> fallback (transparent, none, zero), so the engine's default is "do
+     * nothing" and a theme that wants the effect opts in by defining the token.
+     *
+     * <p>{@code --tree-bg} is the shape of it: the file tree paints no surface of its own now, so
+     * the island's fill draws the panel's rounded corners instead of being squared off by it — but a
+     * theme that genuinely wants a recessed well behind its file list still has a name to say so
+     * with. An undefined reference with a no-op fallback is an offer, not a typo.</p>
+     */
+    private static final Set<String> OPTIONAL_HOOK_TOKENS = Set.of("--tree-bg");
+
     private static boolean isFallbackOnly(String token) {
         if (FALLBACK_ONLY_EXCEPTIONS.contains(token)) return false;
-        if (FALLBACK_ONLY_EXACT.contains(token)) return true;
+        if (FALLBACK_ONLY_EXACT.contains(token) || OPTIONAL_HOOK_TOKENS.contains(token)) return true;
         return FALLBACK_ONLY_PREFIXES.stream().anyMatch(token::startsWith);
     }
 
@@ -104,7 +116,10 @@ public class StyleGovernanceTest {
             "fg", "fg-secondary", "fg-hint", "fg-disabled", "fg-on-accent",
             "accent", "accent-hover", "accent-soft",
             "hover-bg", "pressed-bg", "selection-bg", "selection-inactive-bg", "focus-ring",
-            "error", "warning", "info", "success", "modified", "link");
+            "error", "warning", "info", "success", "modified", "link",
+            // Non-colour, and themeable for the same reason IntelliJ's themes set arcs and insets:
+            // "Islands" IS these three plus a palette, and a flat theme is them zeroed.
+            "radius-panel", "radius-control", "panel-gap");
 
     /**
      * Raw hexes still permitted OUTSIDE a var() fallback, each one a named decision.

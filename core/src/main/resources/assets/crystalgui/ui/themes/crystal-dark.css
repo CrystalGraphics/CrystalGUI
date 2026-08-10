@@ -44,6 +44,13 @@ theme {
     --success: #3C8527;
     --modified: #E2C08D;
     --link: #4A88C7;
+
+    /* ── Islands geometry. Same in both themes: a theme changes the LOOK, and a flat theme is
+     * expressed by zeroing these rather than by shipping different structure. ── */
+    --radius-panel: 8px;
+    --radius-control: 4px;
+    --panel-gap: 6px;
+
 }
 
 /* ── Pins: what a role cannot say ──────────────────────────────────────────────────────────── */
