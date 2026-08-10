@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
@@ -111,7 +112,7 @@ public final class EditorCommands {
         UndoCommands.register();
         // Edit > Cut/Copy/Paste, which are NOT ours: they resolve the position's own provider, so the one
         // menu row means files in the tree and text here. @see com.crystalgui.core.command.ClipboardCommands
-        com.crystalgui.core.command.ClipboardCommands.register();
+        ClipboardCommands.register();
         CommandRegistry.global().contribute(EditorCommands.class, EditorCommands::declare);
     }
 
@@ -193,6 +194,33 @@ public final class EditorCommands {
         registry.register(Command.of(PREFIX + "replace", "Replace…")
                 .menu(MenuId.MAIN_EDIT, "4_find", 6)
                 .run(on(TextEditor::openReplace)));
+        // THE BAR'S OWN CHORDS, as commands. They were listeners on its text fields -- six shortcuts in a
+        // place no keymap could see and nobody could rebind, in an application that has a command layer and
+        // an element-scoped resolver for exactly this. Every one resolves from the focused element, so they
+        // only mean anything while the bar (which lives inside the editor) holds the caret.
+        registry.register(Command.of(PREFIX + "toggleMatchCase", "Match Case")
+                .run(on(e -> e.searchBar().toggleMatchCase())));
+        registry.register(Command.of(PREFIX + "toggleWholeWords", "Words")
+                .run(on(e -> e.searchBar().toggleWholeWords())));
+        registry.register(Command.of(PREFIX + "toggleRegex", "Regex")
+                .run(on(e -> e.searchBar().toggleRegex())));
+        registry.register(Command.of(PREFIX + "togglePreserveCase", "Preserve Case")
+                .run(on(e -> e.searchBar().togglePreserveCase())));
+        registry.register(Command.of(PREFIX + "replaceCurrent", "Replace")
+                .menu(MenuId.MAIN_EDIT, "4_find", 7)
+                .run(on(e -> e.searchBar().replaceCurrent()))
+                .enabledWhen(when(editor -> editor.matchCount() > 0)));
+        registry.register(Command.of(PREFIX + "replaceAll", "Replace All")
+                .menu(MenuId.MAIN_EDIT, "4_find", 8)
+                .run(on(e -> e.searchBar().replaceEvery()))
+                .enabledWhen(when(editor -> editor.matchCount() > 0)));
+        registry.register(Command.of(PREFIX + "excludeMatch", "Exclude Match")
+                .run(on(e -> e.searchBar().toggleExclude()))
+                .enabledWhen(when(editor -> editor.matchCount() > 0)));
+
+        registry.register(Command.of(PREFIX + "find.close", "Close Find Bar")
+                .run(on(e -> e.searchBar().close())));
+
         registry.register(Command.of(PREFIX + "findNext", "Find Next")
                 .menu(MenuId.MAIN_EDIT, "4_find", 10)
                 .run(on(TextEditor::findNext)).enabledWhen(when(editor -> editor.matchCount() > 0)));
@@ -212,6 +240,7 @@ public final class EditorCommands {
                 .run(on(TextEditor::goToNextProblem))
                 .enabledWhen(when(editor -> !editor.diagnostics().isEmpty())));
         registry.register(Command.of(PREFIX + "previousProblem", "Previous Problem")
+                .run(on(TextEditor::goToPreviousProblem))
                 .run(on(TextEditor::goToPreviousProblem))
                 .enabledWhen(when(editor -> !editor.diagnostics().isEmpty())));
 
@@ -296,6 +325,14 @@ public final class EditorCommands {
         // from focus -- so whichever of them holds the caret answers, and neither takes it from the other.
         keymap.bind("Mod+F", PREFIX + "find").allowWhileTyping();
         keymap.bind("Mod+R", PREFIX + "replace").allowWhileTyping();
+        // IntelliJ's own accelerators, and the ones the tooltips name. `allowWhileTyping` because the whole
+        // point of them is to be pressed while the caret is in the query.
+        keymap.bind("Alt+C", PREFIX + "toggleMatchCase").allowWhileTyping();
+        keymap.bind("Alt+W", PREFIX + "toggleWholeWords").allowWhileTyping();
+        keymap.bind("Alt+X", PREFIX + "toggleRegex").allowWhileTyping();
+        keymap.bind("Alt+E", PREFIX + "togglePreserveCase").allowWhileTyping();
+        keymap.bind("Mod+Alt+E", PREFIX + "excludeMatch").allowWhileTyping();
+        keymap.bind("Escape", PREFIX + "find.close").allowWhileTyping();
         keymap.bind("F3", PREFIX + "findNext").allowWhileTyping();
         keymap.bind("Shift+F3", PREFIX + "findPrevious").allowWhileTyping();
         keymap.bind("Mod+F3", PREFIX + "findWordUnderCaret");

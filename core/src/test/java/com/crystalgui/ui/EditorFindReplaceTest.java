@@ -11,6 +11,7 @@ import com.crystalgui.ui.event.KeyboardEvent;
 import org.junit.Before;
 import org.junit.Test;
 
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -199,6 +200,100 @@ public class EditorFindReplaceTest extends UiTestBase {
         bar.open();
         settle();
         assertFalse("find reopened with the replace row still expanded", bar.isReplaceShown());
+    }
+
+
+    /**
+     * <b>The bar's operations are reachable without its buttons.</b>
+     *
+     * <p>Which is what makes them bindable: the chords used to be listeners on this widget's own text
+     * fields, so six shortcuts lived somewhere no keymap could see and nobody could rebind. Commands invoke
+     * these, and the keymap binds the commands.</p>
+     */
+    @Test
+    public void theOptionsAreReachableAsOperations() {
+        type("ONE");
+        assertEquals(3, editor.matchCount());
+
+        bar.toggleMatchCase();
+        settle();
+        assertEquals("Match Case did not reach the scan", 0, editor.matchCount());
+
+        bar.toggleMatchCase();
+        settle();
+        assertEquals(3, editor.matchCount());
+    }
+
+    /** Tab visits the two text fields before the options — an explicit ring, not DOM order. */
+    @Test
+    public void tabVisitsTheReplaceFieldBeforeTheOptions() {
+        bar.openReplace();
+        settle();
+        window.getInputHandler().requestFocus(bar.findField().field());
+        settle();
+
+        tab();
+        assertSame("Tab from the query should reach the replacement first",
+                bar.replaceField().field(), window.getInputHandler().getFocusedElement());
+
+        tab();
+        assertSame("and only then the first option",
+                bar.findField().options().getChildren().get(0),
+                window.getInputHandler().getFocusedElement());
+    }
+
+    private void tab() {
+        UIElement focused = window.getInputHandler().getFocusedElement();
+        window.getInputHandler().sendInputEvent(focused,
+                new KeyboardEvent.Down(focused, CgKeyCodes.KEY_TAB, '\0', false, 0, 0L));
+        settle();
+    }
+
+
+    /**
+     * <b>An Alt chord is not text.</b>
+     *
+     * <p>{@code TextField} refused Ctrl combos and not Alt ones, so Alt+W inserted a {@code w} <em>and</em>
+     * consumed the event — and the keymap resolves after dispatch, only if nothing stopped it. Every Alt
+     * shortcut in the application was therefore dead in exactly the place its own tooltip said to press
+     * it.</p>
+     */
+    @Test
+    public void anAltChordIsNotTypedIntoTheField() {
+        window.getInputHandler().requestFocus(bar.findField().field());
+        settle();
+        bar.findField().setText("");
+        settle();
+
+        window.getInputHandler().sendInputEvent(bar.findField().field(),
+                new KeyboardEvent.Down(bar.findField().field(), CgKeyCodes.KEY_W, 'w', false,
+                        com.crystalgraphics.platform.input.CgModifiers.ALT, 0L));
+        settle();
+
+        assertEquals("Alt+W typed into the query instead of reaching the keymap",
+                "", bar.findField().getText());
+    }
+
+
+    /**
+     * <b>A tooltip names its accelerator, read from the keymap.</b>
+     *
+     * <p>Wrong twice: {@code Tooltip.attach} adds a listener pair rather than replacing one, so updating
+     * the text left the first tooltip showing; and the refresh that reads the keymap was written and never
+     * called, because a scripted edit into the ticker did not match and nothing asserted on it. A tooltip's
+     * text is in no layout, no computed style and no screenshot unless the pointer is over it — this is the
+     * only place the question can be asked.</p>
+     */
+    @Test
+    public void tooltipsNameTheirAccelerator() {
+        bar.openReplace();
+        for (int i = 0; i < 6; i++) window.updateWithoutPainting();
+
+        assertTrue("no tooltip named a chord: " + bar.tooltipTexts(),
+                bar.tooltipTexts().stream().anyMatch(t -> t.startsWith("Match Case  ")));
+        assertTrue(bar.tooltipTexts().stream().anyMatch(t -> t.startsWith("Words  ")));
+        assertTrue("a command with no chord shows its name alone",
+                bar.tooltipTexts().contains("Replace All"));
     }
 
 }

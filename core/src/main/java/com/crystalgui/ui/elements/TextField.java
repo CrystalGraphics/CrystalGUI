@@ -195,6 +195,11 @@ public class TextField extends UIElement implements UIFrameTicker {
             // Ctrl-combos that reach here (Ctrl+S and friends) carry a control character, which
             // insertChar rejects anyway, but bailing early keeps them from being swallowed.
             if (CgModifiers.hasCtrl(event.getModifiers())) return;
+            // ALT TOO, and for the same reason. Alt+W is a chord; typed into a field it inserted a "w" AND
+            // consumed the event, so the keymap -- which resolves after dispatch and only if nothing
+            // stopped it -- never saw the binding. Every Alt shortcut in the application was therefore dead
+            // exactly where its own tooltip said to press it.
+            if (CgModifiers.hasAlt(event.getModifiers())) return;
             char typed = event.getCharacter();
             if (typed != '\0' && !Character.isISOControl(typed)) {
                 insertChar(typed);

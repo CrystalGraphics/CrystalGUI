@@ -480,6 +480,13 @@ public class MenuBarView extends UIElement implements UIFrameTicker {
 
     private void onKeyDown(KeyboardEvent.Down event) {
         if (!CgModifiers.hasAlt(event.getModifiers())) return;
+        // NOT WHILE SOMEBODY IS TYPING. A mnemonic is a global affordance and a focused text field is a
+        // local one, and the local one wins -- otherwise Alt+E in the editor's find bar opens the Edit menu
+        // instead of toggling Preserve Case, and no per-field workaround can fix it because this listener
+        // sees the key first. The same predicate `allowWhileTyping` already uses.
+        UIWindow window = getAttachedWindow();
+        UIElement focused = window == null ? null : window.getInputHandler().getFocusedElement();
+        if (focused != null && focused.consumesTextInput()) return;
         char typed = Character.toUpperCase(event.getCharacter());
         for (Title title : titles) {
             if (title.mnemonic != typed || typed == 0) continue;

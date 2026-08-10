@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.editor;
 
+import java.util.function.IntUnaryOperator;
+import java.util.function.IntFunction;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.text.search.TextSearch;
 import com.crystalgui.text.search.SearchResults;
@@ -1037,7 +1039,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * <p>Every horizontal and line-relative movement goes through here, so "does this work with several
      * carets?" stops being a question that has to be asked once per key.</p>
      */
-    private void moveEach(java.util.function.IntUnaryOperator move, boolean extend) {
+    private void moveEach(IntUnaryOperator move, boolean extend) {
         clearGoalColumns();
         selections.transform(selection -> {
             int head = Math.max(0, Math.min(move.applyAsInt(selection.head()), buffer.length()));
@@ -1048,7 +1050,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** Deletes a per-caret range given as {@code {from, to}}. */
-    private void deleteEach(java.util.function.IntFunction<int[]> range) {
+    private void deleteEach(IntFunction<int[]> range) {
         if (selections.hasSelection()) {
             deleteSelections();
             return;
@@ -2042,7 +2044,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // content -- `top: 0` means the top of the DOCUMENT, so the bar scrolled away and left the
             // editor behind it. `setScrollExempt` is what holds a decoration still while the text moves.
             searchBar.setScrollExempt(true);
-            searchBar.layout(l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+            searchBar.layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
                     .top(0f).left(0f).widthPercent(100f));
             searchBar.setDisplayed(false);
             addInternalChild(searchBar);
@@ -2775,7 +2777,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         final float width = textViewportWidth();
         final float height = viewportHeight();
         StyleGroup.defaultPipeline(textViewport().getStyle().getLayoutGroup(),
-                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(left).top(0f).width(width).height(height));
     }
 
@@ -3259,7 +3261,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         final float width = Math.max(textViewportWidth(),
                 xOfView(viewLine, projection.maxColumn(model.viewLineInRow())) + 1f);
         StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(),
-                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE)
+                l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .top(top).left(left).width(width).height(lineHeight()));
         // The DISPLAY text, with tabs expanded to their stops -- see RowMetrics. setText no-ops on an
         // unchanged string, so rebinding every visible line costs one re-shape per line that moved.

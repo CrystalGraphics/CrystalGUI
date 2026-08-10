@@ -1,5 +1,13 @@
 package com.crystalgui.ui.elements.editor;
 
+import java.util.Map;
+import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.Collection;
+import java.util.ArrayList;
+import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.search.SearchQuery;
@@ -103,17 +111,18 @@ public class SearchReplaceBar extends UIElement {
         addInternalChild(close);
 
         chevron.addClass(CHEVRON_CLASS);
-        Tooltip.attach(chevron, "Replace  Ctrl+R");
+        // ON THE MOUSE-DOWN, which is the frame the blur happens in. `emitMouseDown` blurs before it
+        // dispatches, and a Button's onPressed fires on the mouse-UP -- so restoring focus there left the
+        // field drawn unfocused for every frame in between, which is the flicker. Same frame, no gap.
+        chevron.onMouseDown.attachListener((element, event) -> focus(findBox.field()), false, true);
         chevron.onPressed.connect(() -> {
             setReplaceShown(!replaceShown);
-            // AND PUT THE CARET BACK. `emitMouseDown` blurs the focus owner before it dispatches and the
-            // chevron is not focusable, so expanding the replace row took the caret out of the query you
-            // were in the middle of typing. Same trap the clear button paid for.
-            focus(replaceShown ? replaceBox.field() : findBox.field());
+            // Focus was restored on the down; opening the row must not move it. Opening replace is not the
+            // same as wanting to type in it, and the query you were in the middle of is still the query.
+            focus(findBox.field());
         });
 
         close.addClass(CLOSE_CLASS);
-        Tooltip.attach(close, "Close  Escape");
         close.onPressed.connect(this::close);
 
         // THE BAR FOLLOWS THE DOCUMENT, not only its own buttons. Everything it says -- the count, the dead
@@ -123,7 +132,20 @@ public class SearchReplaceBar extends UIElement {
         //
         // The editor re-runs the search from the buffer's change signal BEFORE emitting this, so the
         // numbers are already current by the time this reads them.
+        tooltips.put(prev, new String[]{"Previous Match", "editor.findPrevious"});
+        tooltips.put(next, new String[]{"Next Match", "editor.findNext"});
+        tooltips.put(chevron, new String[]{"Replace", "editor.replace"});
+        tooltips.put(close, new String[]{"Close", "editor.find.close"});
+        tooltips.put(replaceOne, new String[]{"Replace", "editor.replaceCurrent"});
+        tooltips.put(replaceAll, new String[]{"Replace All", "editor.replaceAll"});
+        tooltips.put(exclude, new String[]{"Exclude", "editor.excludeMatch"});
+
         editor.onChanged.connect(text -> refresh());
+
+        for (UIElement element : new UIElement[]{findBox.field(), replaceBox.field(),
+                replaceOne, replaceAll, exclude}) {
+            bindTab(element);
+        }
 
         setReplaceShown(false);
         refresh();
@@ -136,25 +158,6 @@ public class SearchReplaceBar extends UIElement {
             if (!writingBack) runSearch();
         });
         findBox.field().onKeyDown.attachListener((element, event) -> {
-            // CTRL+F AND CTRL+R WHILE THE BAR HAS FOCUS. They are in the keymap too, but the keymap
-            // resolves outward from the focused element and the focused element here is a TextField inside
-            // the bar -- so the bar answers for its own chords rather than depending on the walk.
-            //
-            // Ctrl+F on an open replace FOLDS IT BACK: it means "find", and a find bar showing a replace
-            // row is not what was asked for.
-            if (CgModifiers.hasCtrl(event.getModifiers())) {
-                if (event.getKeyCode() == CgKeyCodes.KEY_F) {
-                    setReplaceShown(false);
-                    focus(findBox.field());
-                    event.stopPropagation();
-                    return;
-                }
-                if (event.getKeyCode() == CgKeyCodes.KEY_R) {
-                    setReplaceShown(true);
-                    event.stopPropagation();
-                    return;
-                }
-            }
             boolean handled = switch (event.getKeyCode()) {
                 case CgKeyCodes.KEY_RETURN -> CgModifiers.hasShift(event.getModifiers())
                         ? step(-1) : step(1);
@@ -181,19 +184,17 @@ public class SearchReplaceBar extends UIElement {
             if (handled) event.stopPropagation();
         }, false, true);
 
-        option(findBox, "__option-match-case__", "Match Case", "Alt+C", CgKeyCodes.KEY_C,
+        matchCaseToggle = option(findBox, "__option-match-case__", "Match Case", "editor.toggleMatchCase",
                 () -> options.matchCase(), on -> options = options.withMatchCase(on));
-        option(findBox, "__option-words__", "Words", "Alt+W", CgKeyCodes.KEY_W,
+        wordsToggle = option(findBox, "__option-words__", "Words", "editor.toggleWholeWords",
                 () -> options.wholeWords(), on -> options = options.withWholeWords(on));
-        option(findBox, "__option-regex__", "Regex", "Alt+X", CgKeyCodes.KEY_X,
+        regexToggle = option(findBox, "__option-regex__", "Regex", "editor.toggleRegex",
                 () -> options.regex(), on -> options = options.withRegex(on));
 
         count.addClass(COUNT_CLASS);
         prev.addClass(PREV_CLASS);
-        Tooltip.attach(prev, "Previous Match  Shift+Enter");
         prev.onPressed.connect(() -> step(-1));
         next.addClass(NEXT_CLASS);
-        Tooltip.attach(next, "Next Match  Enter");
         next.onPressed.connect(() -> step(1));
 
         findRow.addChild(findBox);
@@ -211,7 +212,8 @@ public class SearchReplaceBar extends UIElement {
     private void buildReplaceRow() {
         replaceBox.addClass(INPUT_CLASS);
         replaceBox.setPlaceholder("Replace");
-        option(replaceBox, "__option-preserve-case__", "Preserve case", "Alt+E", CgKeyCodes.KEY_E,
+        preserveCaseToggle = option(replaceBox, "__option-preserve-case__", "Preserve case",
+                "editor.togglePreserveCase",
                 editor::preserveCase, editor::setPreserveCase);
 
         replaceOne.addClass(ACTION_CLASS);
@@ -225,7 +227,6 @@ public class SearchReplaceBar extends UIElement {
             refresh();
         });
         exclude.addClass(ACTION_CLASS);
-        Tooltip.attach(exclude, "Exclude this match from Replace All");
         exclude.onPressed.connect(() -> {
             editor.toggleExcludeCurrentMatch();
             refresh();
@@ -246,9 +247,10 @@ public class SearchReplaceBar extends UIElement {
      * same way. The accelerator binds on the box rather than in the keymap — Alt+W must not be taken from
      * the rest of the application, the same reasoning that puts Ctrl+F on the widget.</p>
      */
-    private void option(SearchField box, String styleClass, String title, String accelerator, int key,
-                        BooleanSupplier get, Consumer<Boolean> set) {
-        Button toggle = SearchField.optionToggle(styleClass, title, accelerator);
+    private Button option(SearchField box, String styleClass, String title, String commandId,
+                          BooleanSupplier get, Consumer<Boolean> set) {
+        Button toggle = SearchField.optionToggle(styleClass, title, "");
+        tooltips.put(toggle, new String[]{title, commandId});
         SearchField.setOptionOn(toggle, get.getAsBoolean());
         toggle.onPressed.connect(() -> {
             boolean on = !get.getAsBoolean();
@@ -256,12 +258,10 @@ public class SearchReplaceBar extends UIElement {
             SearchField.setOptionOn(toggle, on);
             runSearch();
         });
-        box.field().onKeyDown.attachListener((element, event) -> {
-            if (!CgModifiers.hasAlt(event.getModifiers()) || event.getKeyCode() != key) return;
-            toggle.onPressed.emit();
-            event.stopPropagation();
-        }, false, true);
+        (box == findBox ? findOptions : replaceOptions).add(toggle);
+        bindTab(toggle);
         box.addOption(toggle);
+        return toggle;
     }
 
     // ── Driving the editor ──────────────────────────────────────────────────────────────────────
@@ -355,6 +355,103 @@ public class SearchReplaceBar extends UIElement {
     }
 
     /**
+     * Tab order: the query, then the replacement, then the options.
+     *
+     * <p>DOM order cannot express it. The toggles live <em>inside</em> the find box — that is what makes the
+     * box one control — so they precede the replace row in the tree, and Tab walked
+     * {@code query → Cc → W → .* → replacement}. What is wanted is the two text fields first: they are what
+     * the bar is for, and the options are a refinement of a query you have already typed. Integer
+     * {@code tabindex} was deliberately never ported (see {@code FocusPolicy}), so an explicit ring is the
+     * only lever, and it is the honest one — the order is a decision, not a side effect of nesting.</p>
+     *
+     * <p>Hidden rows are skipped rather than focused invisibly, so a folded replace row is not three dead
+     * Tab stops.</p>
+     */
+    private List<UIElement> tabRing() {
+        List<UIElement> ring = new ArrayList<>();
+        ring.add(findBox.field());
+        if (replaceShown) ring.add(replaceBox.field());
+        ring.addAll(findOptions);
+        if (replaceShown) {
+            ring.addAll(replaceOptions);
+            ring.add(replaceOne);
+            ring.add(replaceAll);
+            ring.add(exclude);
+        }
+        return ring;
+    }
+
+    /** Moves along the ring, wrapping. Returns false when focus is not on it at all. */
+    private boolean moveTab(int delta) {
+        List<UIElement> ring = tabRing();
+        UIWindow window = getAttachedWindow();
+        if (window == null || ring.isEmpty()) return false;
+        UIElement focused = window.getInputHandler().getFocusedElement();
+        int at = ring.indexOf(focused);
+        if (at < 0) return false;
+        int next = Math.floorMod(at + delta, ring.size());
+        window.getInputHandler().requestFocus(ring.get(next));
+        return true;
+    }
+
+    /** Tab and Shift+Tab, on everything the ring contains. */
+    private void bindTab(UIElement element) {
+        element.onKeyDown.attachListener((el, event) -> {
+            if (event.getKeyCode() != CgKeyCodes.KEY_TAB) return;
+            if (moveTab(CgModifiers.hasShift(event.getModifiers()) ? -1 : 1)) event.stopPropagation();
+        }, false, true);
+    }
+
+    /**
+     * What each control is called and which command it runs, so its tooltip can name the <b>live</b> chord.
+     *
+     * <p>The accelerators were spelled into the tooltips as literals — "Alt+X" — which is a promise the
+     * widget cannot keep the moment anything rebinds the command. {@code Keymap.acceleratorFor} is what the
+     * menus already read, and it resolves outward from this element, so a keymap installed anywhere above
+     * answers.</p>
+     */
+    private final Map<Button, String[]> tooltips = new LinkedHashMap<>();
+
+    private void refreshTooltips() {
+        for (Map.Entry<Button, String[]> entry : tooltips.entrySet()) {
+            String title = entry.getValue()[0];
+            KeyChord chord =
+                    Keymap.acceleratorFor(this, entry.getValue()[1]);
+            String text = chord == null ? title : title + "  " + chord;
+            if (text.equals(shownTooltips.get(entry.getKey()))) continue;
+            shownTooltips.put(entry.getKey(), text);
+            // ONE Tooltip, RETAINED. `attach` adds a hover listener pair every time it is called and does
+            // not replace what is already there -- so calling it again left the first tooltip in place and
+            // the accelerator never appeared, however correct the lookup was. StatusBarView's own note says
+            // the same thing.
+            Tooltip existing = attached.get(entry.getKey());
+            if (existing == null) attached.put(entry.getKey(), Tooltip.attach(entry.getKey(), text));
+            else existing.setText(text);
+        }
+    }
+
+    /**
+     * What every tooltip currently says — the only observable of it.
+     *
+     * <p>Worth having: a tooltip's text is not in the layout, not in the computed style and not in any
+     * capture unless the pointer happens to be over it, so "does it name its accelerator" has nowhere else
+     * to be asserted. It was wrong twice — once because {@code Tooltip.attach} adds rather than replaces,
+     * and once because the refresh was written and never called.</p>
+     */
+    public Collection<String> tooltipTexts() {
+        return shownTooltips.values();
+    }
+
+    /** What each tooltip currently says, so the lookup is not repeated every frame. */
+    private final Map<Button, String> shownTooltips = new HashMap<>();
+
+    /** The one Tooltip per control. @see #refreshTooltips */
+    private final Map<Button, Tooltip> attached = new HashMap<>();
+
+    private final List<UIElement> findOptions = new ArrayList<>();
+    private final List<UIElement> replaceOptions = new ArrayList<>();
+
+    /**
      * Keeps the editor's text clear of the bar.
      *
      * <p>The bar floats — that is what keeps it out of the editor's layout sums — so nothing would
@@ -385,6 +482,11 @@ public class SearchReplaceBar extends UIElement {
         ticking = true;
         getAttachedWindow().registerTicker(delta -> {
             syncEditorInset();
+            // FROM HERE TOO, and not from the constructor: `Keymap.acceleratorFor` walks up from this
+            // element, so it can only answer once the bar is in a tree whose editor has installed its
+            // keymap. Cheap to re-ask -- `refreshTooltips` compares the text it last wrote and does
+            // nothing when it has not moved.
+            refreshTooltips();
             return true;
         });
     }
@@ -399,6 +501,51 @@ public class SearchReplaceBar extends UIElement {
     // ── Parts ───────────────────────────────────────────────────────────────────────────────────
 
     /** What the count says — the only observable of it, for a test that must not assert on pixels. */
+    /**
+     * The operations a command can invoke.
+     *
+     * <p>The chords used to be listeners on this widget's own fields — Alt+C, Alt+W, Alt+X, Ctrl+F, Ctrl+R
+     * — which put six shortcuts somewhere no keymap could see and nobody could rebind. This engine has a
+     * command layer and an element-scoped resolver for exactly this; a bar in an application belongs in it.
+     * (A generic widget like {@code TreeSearch} is the case that does not: making it depend on a
+     * {@code CommandRegistry} to answer one keystroke would be the wrong direction.)</p>
+     */
+    public void toggleMatchCase() {
+        matchCaseToggle.onPressed.emit();
+    }
+
+    public void toggleWholeWords() {
+        wordsToggle.onPressed.emit();
+    }
+
+    public void toggleRegex() {
+        regexToggle.onPressed.emit();
+    }
+
+    public void togglePreserveCase() {
+        preserveCaseToggle.onPressed.emit();
+    }
+
+    /** Replaces the selected match. */
+    public void replaceCurrent() {
+        replaceOne.onPressed.emit();
+    }
+
+    /** Replaces every match the user has not excluded. */
+    public void replaceEvery() {
+        replaceAll.onPressed.emit();
+    }
+
+    /** Takes the selected match out of Replace All, or puts it back. */
+    public void toggleExclude() {
+        exclude.onPressed.emit();
+    }
+
+    private Button matchCaseToggle;
+    private Button wordsToggle;
+    private Button regexToggle;
+    private Button preserveCaseToggle;
+
     public String countText() {
         return count.getText();
     }

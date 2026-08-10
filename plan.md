@@ -4595,3 +4595,38 @@ draw; it may never skip the method.**
 **Not a bug, worth recording:** `Ctrl+R` appears dead *in the harness only*. `InteractiveSceneRunner`
 binds it to a stylesheet reload and consumes it before the scene sees it, so the editor's Replace chord
 cannot be tested there. It is bound in the keymap and reachable from Edit ▸ Replace.
+
+### 31.7b Two corrections
+
+**The chords belong in the command layer.** Alt+C, Alt+W, Alt+X, Alt+E, Ctrl+F and Ctrl+R were listeners on
+the bar's own text fields — six shortcuts in a place no keymap could see and nobody could rebind, in an
+application that has a command registry and an element-scoped resolver for exactly this. They are commands
+now, bound in `EditorCommands`, and the bar exposes the operations they invoke.
+
+The distinction worth keeping: a *generic widget* is the case that should not do this. `TreeSearch` binds
+Ctrl+F itself precisely because making a reusable tree component depend on a `CommandRegistry` to answer one
+keystroke is the wrong direction. A bar that only exists inside this application is not that case.
+
+**And a correction to what I wrote about tab order.** The ARIA roving-tabindex pattern *is* ported — that is
+what `FocusPolicy.CLICK_NOT_TABBABLE` is, and `UITreeTraversal` has the walkers. What its own javadoc says
+was left out is **arbitrary reordering** (positive `tabindex`), and that is the part this needed: the option
+toggles live inside the find box, so DOM order walks `query → Cc → W → .* → replacement`. The bar carries an
+explicit ring instead — the two text fields first, then the options, since the options refine a query you
+have already typed. Hidden rows are skipped rather than being dead stops.
+
+### 31.7c Why the Alt shortcuts did nothing
+
+Not the bar. Two engine-level causes, and both were general:
+
+- **`TextField` refused Ctrl chords and not Alt ones.** Alt+W inserted a `w` *and* consumed the event, and
+  the keymap resolves after dispatch only if nothing stopped it — so every Alt shortcut in the application
+  was dead in exactly the place its tooltip said to press it.
+- **`MenuBarView` matched any Alt+letter regardless of focus**, so Alt+E opened the Edit menu rather than
+  toggling Preserve Case. No per-field workaround could fix that, because that listener sees the key first.
+  A mnemonic is a global affordance and a focused input is a local one; the local one wins, on the same
+  predicate `allowWhileTyping` already uses.
+
+Also: the chevron's flicker was restoring focus on the **press** (mouse-up) when the blur happens on the
+**down**, leaving the field drawn unfocused for the frames in between. And the tooltips now read
+`Keymap.acceleratorFor` rather than spelling "Alt+X" — a literal is a promise the widget cannot keep once
+the command is rebindable, which these now are.
