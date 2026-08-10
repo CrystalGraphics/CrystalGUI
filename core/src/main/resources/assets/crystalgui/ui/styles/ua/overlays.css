@@ -28,7 +28,7 @@ textfield {
      * the only one this sheet moves onto resolveOverflowClip()'s FBO mask path. Worth it on a field,
      * which is the widget a square corner reads worst on; not worth it on a scroll viewport, which is
      * why the containers above stay square. */
-    border-radius: 2px;
+    border-radius: var(--radius-control, 2px);
 }
 /* :blank is driven by TextField.isBlank(), already wired into PseudoClasses — so the placeholder,
  * which reuses `color`, dims itself with no widget-specific support. */
@@ -265,7 +265,17 @@ menuitem {
     padding-right: 6px;
     justify-content: flex-start;
     background: #00000000;
-    border-radius: 0;
+
+    /* THE INSET ROUNDED ROW — the single most recognisable trait of IntelliJ's new UI, and of every
+     * modern menu since. The highlight is a rounded BAR sitting inside the popup's padding rather
+     * than a strip running edge to edge, which is what stops a menu reading as a table of cells.
+     *
+     * Two halves, and it only works with both: this radius, and the horizontal margin below that
+     * pulls the bar in from the popup's border. A rounded highlight flush to the edge looks like a
+     * rendering mistake, because its corners get cut by the popup's own rounding. */
+    border-radius: var(--radius-control, 0px);
+    margin-left: 4px;
+    margin-right: 4px;
 }
 /* The active row is highlighted by :focus and DELIBERATELY NOT by :hover.
  *

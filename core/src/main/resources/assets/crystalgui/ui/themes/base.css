@@ -85,7 +85,7 @@ theme {
     --dialog-fg: var(--fg);
     --dialog-title-bg: var(--surface-raised);
 
-    --dock-active-border: var(--accent);
+    --dock-active-border: var(--accent-soft);
     --dock-bg: var(--surface-panel);
     --dock-empty-bg: var(--surface-base);
     --dock-insertion-border: var(--accent);
@@ -329,7 +329,6 @@ theme {
 
     --tooltip-fg: var(--fg);
 
-    --tree-bg: var(--surface-panel);
     --tree-dimmed-fg: var(--fg-hint);
     --tree-drop-border: var(--accent);
     --tree-editor-bg: var(--surface-recessed);
@@ -340,4 +339,5 @@ theme {
     --panel-bg: var(--surface-panel);
     --tree-fg: var(--fg);
     --tree-twisty-fg: var(--fg-secondary);
+    --workbench-bg: var(--surface-base);
 }
