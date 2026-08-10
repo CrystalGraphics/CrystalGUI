@@ -337,4 +337,7 @@ theme {
     --tree-match-fg: var(--fg);
     --tree-selected-bg: var(--accent-soft);
     --tree-selected-fg: var(--fg-on-accent);
+    --panel-bg: var(--surface-panel);
+    --tree-fg: var(--fg);
+    --tree-twisty-fg: var(--fg-secondary);
 }
