@@ -83,7 +83,7 @@
  * it away (a focused row inside a ScrollerView would lose the edge of its own ring). Pulling the
  * stroke inside the border box instead means it always survives the clip. */
 :focus-visible {
-    outline: 1px #0060df;
+    outline: 1px var(--focus-ring, #0060df);
 }
 
 /* ── Button ─────────────────────────────────────────────────────────────────────────────────── */
@@ -100,8 +100,8 @@ button, dropdown {
     padding-bottom: 2px;
     justify-content: center;
     align-items: center;
-    background: #9A9A9A;
-    color: #222222;
+    background: var(--button-bg, #9A9A9A);
+    color: var(--button-fg, #222222);
     text-shadow: false;
     border-radius: 2px;
 }
@@ -137,14 +137,14 @@ button text, dropdown text {
  * unmissable the moment buttons were used as small glyphs in a row: the search toggles flashed red under the
  * pointer and stayed red while focused. */
 button:hover, dropdown:hover {
-    background: #B4B4B4;
+    background: var(--button-hover-bg, #B4B4B4);
 }
 button:active, dropdown:active {
-    background: #7A7A7A;
+    background: var(--button-pressed-bg, #7A7A7A);
 }
 button:disabled, dropdown:disabled {
-    background: #6E6E6E;
-    color: #4A4A4A;
+    background: var(--button-disabled-bg, #6E6E6E);
+    color: var(--button-disabled-fg, #4A4A4A);
 }
 
 /* ── Checkbox ───────────────────────────────────────────────────────────────────────────────────
@@ -162,21 +162,21 @@ checkbox {
 checkbox .__mark__ {
     width: 12px;
     height: 12px;
-    background: #9A9A9A;
+    background: var(--checkbox-mark-bg, #9A9A9A);
     border-radius: 2px;
 }
 checkbox:hover .__mark__ {
-    background: #B4B4B4;
+    background: var(--checkbox-mark-hover-bg, #B4B4B4);
 }
 checkbox:checked .__mark__ {
-    background: #3C8527;
+    background: var(--checkbox-checked-bg, #3C8527);
     /* A real vector checkmark, not a texture asset — default.css has no image assets to lean on and
        previously drew nothing here at all beyond the colour change. shape("checkmark") needs no font
        glyph and no sprite pack, so it works with literally nothing else loaded. */
     overlay: shape("checkmark");
 }
 checkbox:disabled .__mark__ {
-    background: #6E6E6E;
+    background: var(--checkbox-disabled-bg, #6E6E6E);
 }
 
 /* ── Switch ─────────────────────────────────────────────────────────────────────────────────────
@@ -189,12 +189,12 @@ switch {
     height: 12px;
     padding-all: 0;
     align-items: center;
-    background: #6E6E6E;
+    background: var(--switch-bg, #6E6E6E);
     /* Half the height — a pill. Tied to `height` above; change one and change both. */
     border-radius: 7px;
 }
 switch:checked {
-    background: #3C8527;
+    background: var(--switch-checked-bg, #3C8527);
 }
 switch .__spacer__ {
     flex-grow: 0;
@@ -206,13 +206,13 @@ switch:checked .__spacer__ {
 switch .__knob__ {
     height: 100%;
     aspect-rate: 1;
-    background: #D0D1D4;
+    background: var(--switch-knob, #D0D1D4);
     /* Percentages resolve per axis, so 50% on a square (aspect-rate: 1) part is a circle regardless of
      * how big the switch gets — which is why this isn't a px value like the track's. */
     border-radius: 50%;
 }
 switch:disabled .__knob__ {
-    background: #8C8C8C;
+    background: var(--switch-disabled-knob, #8C8C8C);
 }
 
 /* ── Slider ─────────────────────────────────────────────────────────────────────────────────────
@@ -237,12 +237,12 @@ slider {
 /* 3px is half of the 6px bar height, so fill and track read as one rounded rail. */
 slider .__fill__ {
     height: 6px;
-    background: #3C8527;
+    background: var(--slider-fill, #3C8527);
     border-radius: 3px;
 }
 slider .__spacer__ {
     height: 6px;
-    background: #6E6E6E;
+    background: var(--slider-track, #6E6E6E);
     border-radius: 3px;
 }
 slider .__thumb__ {
@@ -253,7 +253,7 @@ slider .__thumb__ {
     /* Required: painter's order is insertion order, so __spacer__ would otherwise draw over the half
      * of the thumb its negative right margin pulls underneath. */
     z-index: 1;
-    background: #D0D1D4;
+    background: var(--slider-thumb, #D0D1D4);
     /* Square, so 50% is a circle — see the switch knob. */
     border-radius: 50%;
     /* Separates the thumb from the fill it sits on. border-color has NO currentColor equivalent here
@@ -262,16 +262,16 @@ slider .__thumb__ {
      * Sizing is unaffected: box-sizing is border-box engine-wide, so the outer box stays 10px and the
      * padding/margin pairing above still holds. */
     border-width: 2px;
-    border-color: #FFFFFF;
+    border-color: var(--slider-thumb-ring, #FFFFFF);
 }
 slider:hover .__thumb__ {
-    background: #E4E5E8;
+    background: var(--slider-thumb-hover, #E4E5E8);
 }
 slider:disabled .__fill__ {
-    background: #5A6E5A;
+    background: var(--slider-disabled-fill, #5A6E5A);
 }
 slider:disabled .__thumb__ {
-    background: #8C8C8C;
+    background: var(--slider-disabled-thumb, #8C8C8C);
 }
 
 /* ── SplitView ──────────────────────────────────────────────────────────────────────────────────
@@ -293,13 +293,13 @@ splitview {
  * Only shows up once a split is nested in a split, which is why it survived until the dock did it. */
 splitview > .__divider__ {
     width: 4px;
-    background: #777777;
+    background: var(--splitter-bg, #777777);
 }
 splitview > .__divider__:hover {
-    background: #AAAAAA;
+    background: var(--splitter-hover-bg, #AAAAAA);
 }
 splitview > .__divider__:active {
-    background: #DDDDDD;
+    background: var(--splitter-pressed-bg, #DDDDDD);
 }
 splitview.__vertical__ > .__divider__ {
     width: auto;
@@ -327,7 +327,7 @@ tabview {
  * taller than they are. */
 tabview .__strip__ {
     flex-grow: 0;
-    background: #2A2A2A;
+    background: var(--tab-strip-bg, #2A2A2A);
 }
 tabview .__rail__ {
     align-items: flex-end;
@@ -352,7 +352,7 @@ tabview.__right__ .__strip-bar__ {
 }
 
 tabview .__panes__ {
-    background: #3A3A3A;
+    background: var(--tab-pane-bg, #3A3A3A);
 }
 tabview .__pane__ {
     padding-all: 4px;
@@ -368,8 +368,8 @@ tab {
     padding-bottom: 2px;
     justify-content: center;
     align-items: center;
-    background: #6E6E6E;
-    color: #DDDDDD;
+    background: var(--tab-bg, #6E6E6E);
+    color: var(--tab-fg, #DDDDDD);
     text-shadow: false;
     /* Rounded on the three OUTER edges only; the edge facing the panes stays square. The whole point of
      * the `tab:checked` rule below is that the seam against the pane disappears, and rounding that edge
@@ -407,18 +407,18 @@ tab .__pre-icon__ {
 }
 
 tab:hover {
-    background: #8C8C8C;
+    background: var(--tab-hover-bg, #8C8C8C);
 }
 /* The selected tab reads as raised into the pane below it: taller, and the same colour as the pane
  * so the seam between them disappears. LDLib's ore theme does the same with a padding shift. */
 tab:checked {
     height: 16px;
-    background: #3A3A3A;
-    color: #FFFFFF;
+    background: var(--tab-active-bg, #3A3A3A);
+    color: var(--tab-active-fg, #FFFFFF);
 }
 tab:disabled {
-    background: #4A4A4A;
-    color: #6E6E6E;
+    background: var(--tab-disabled-bg, #4A4A4A);
+    color: var(--tab-disabled-fg, #6E6E6E);
 }
 
 /* ── Scroller / ScrollerView ────────────────────────────────────────────────────────────────────
@@ -503,12 +503,12 @@ texteditor {
 }
 
 texteditor .__caret__ {
-    background-color: #FF0000;
+    background-color: var(--editor-caret, #FF0000);
     z-index: 1;
 }
 
 texteditor .__selection__ {
-    background-color: #2C5A8C;
+    background-color: var(--editor-selection-bg, #2C5A8C);
     z-index: -1;
 }
 
@@ -538,7 +538,7 @@ texteditor .__gutter__ {
     padding-left: 4px;
     padding-right: 14px;
     margin-right: 7px;
-    background-color: #1A1D23;
+    background-color: var(--editor-gutter-bg, #1A1D23);
     /* Clips its own numbers. The gutter stops above the horizontal scrollbar, but the numbers inside it
      * are positioned by hand from the scroll offset, so without this the one at the boundary is drawn
      * past the gutter's edge and over the bar. */
@@ -551,13 +551,13 @@ texteditor .__gutter__ {
 texteditor .__line-number__ {
     justify-content: center;
     align-items: flex-end;
-    color: #5C6570;
+    color: var(--editor-line-number, #5C6570);
     white-space: nowrap;
 }
 
 /* Behind everything, including the selection bands: it marks a row, it does not compete with them. */
 texteditor .__current-line__ {
-    background-color: #232830;
+    background-color: var(--editor-current-line, #232830);
     z-index: -2;
 }
 
@@ -584,7 +584,7 @@ texteditor .__text-viewport__ {
  *
  * These start at indent level ONE. Level zero is the gutter's edge below, not a guide — see there. */
 texteditor .__indent-guide__ {
-    background-color: #2F3540;
+    background-color: var(--editor-indent-guide, #2F3540);
     z-index: -1;
 }
 
@@ -598,7 +598,7 @@ texteditor .__indent-guide__ {
  * legibility rather than taste: a background has to fight the current-line band, which is drawn under the
  * very line a bracket match is most often looked at, and a subtle fill loses that fight completely. */
 texteditor text::highlight(bracket) {
-    color: #4EC9A0;
+    color: var(--syntax-bracket, #4EC9A0);
 }
 
 /* ── Syntax colours ──
@@ -615,27 +615,27 @@ texteditor text::highlight(bracket) {
  *
  * VS Code's Dark+ values, matching the diagnostic colours already in this sheet. */
 texteditor text::highlight(keyword) {
-    color: #569CD6;
+    color: var(--syntax-keyword, #569CD6);
 }
 
 texteditor text::highlight(type) {
-    color: #4EC9A0;
+    color: var(--syntax-type, #4EC9A0);
 }
 
 texteditor text::highlight(function) {
-    color: #DCDCAA;
+    color: var(--syntax-function, #DCDCAA);
 }
 
 texteditor text::highlight(string) {
-    color: #CE9178;
+    color: var(--syntax-string, #CE9178);
 }
 
 texteditor text::highlight(number) {
-    color: #B5CEA8;
+    color: var(--syntax-number, #B5CEA8);
 }
 
 texteditor text::highlight(comment) {
-    color: #6A9955;
+    color: var(--syntax-comment, #6A9955);
 }
 
 /* THE ACTIVE GUIDE — the block the caret is actually inside, which IntelliJ draws brighter than the rest.
@@ -648,7 +648,7 @@ texteditor text::highlight(comment) {
  * and notably it is NOT simply "the deepest guide on the caret's row": standing on a line that opens or
  * closes a block activates the CHILD block, not the one that line is written at. */
 texteditor .__indent-guide__.__active__ {
-    background-color: #6E7A8A;
+    background-color: var(--editor-indent-guide-active, #6E7A8A);
 }
 
 /* THE GUTTER'S RIGHT EDGE. One element, full viewport height, sitting in the gutter's margin-right.
@@ -661,14 +661,14 @@ texteditor .__indent-guide__.__active__ {
  *
  * Same colour as an indent guide on purpose, so the two read as one continuous system. */
 texteditor .__gutter-edge__ {
-    background-color: #2F3540;
+    background-color: var(--editor-gutter-edge, #2F3540);
     z-index: 4;
 }
 
 /* Whitespace markers are text, not a fill, so they take a colour rather than a background. Dimmer than
  * the dimmest syntax colour, for the same reason as the guides. */
 texteditor .__whitespace__ {
-    color: #454C57;
+    color: var(--editor-whitespace, #454C57);
     z-index: 0;
     white-space: nowrap;
 }
@@ -690,7 +690,7 @@ texteditor .__zoom-indicator__ {
     gap-all: 6px;
     padding-left: 8px;
     padding-right: 8px;
-    background-color: #2B303B;
+    background-color: var(--editor-zoom-bg, #2B303B);
     border-radius: 3px;
     z-index: 7;
     opacity: 0;
@@ -706,7 +706,7 @@ texteditor .__zoom-indicator__.__shown__ {
  * to unreadable at 4px and balloon at 40. It describes the text; it is not part of it. */
 texteditor .__zoom-label__ {
     font-size: 10;
-    color: #C8CDD4;
+    color: var(--editor-zoom-fg, #C8CDD4);
     white-space: nowrap;
 }
 
@@ -726,7 +726,7 @@ texteditor .__zoom-label__ {
 texteditor .__zoom-reset__ {
     font-size: 10;
     background: #00000000;
-    color: #4A9EFF;
+    color: var(--editor-zoom-link, #4A9EFF);
     white-space: nowrap;
     padding-all: 0px;
     min-height: 0px;
@@ -736,19 +736,19 @@ texteditor .__zoom-reset__ {
 }
 texteditor .__zoom-reset__:hover {
     background: #00000000;
-    color: #4A9EFF;
+    color: var(--editor-zoom-link, #4A9EFF);
     text-decoration-line: underline;
 }
 texteditor .__zoom-reset__:active {
     background: #00000000;
-    color: #2F7FD8;
+    color: var(--editor-zoom-link-pressed, #2F7FD8);
     text-decoration-line: underline;
 }
 
 /* A column ruler spans the viewport and does not scroll vertically -- TextEditor marks it scroll-exempt
  * and subtracts the horizontal offset by hand, exactly as the gutter does. */
 texteditor .__ruler__ {
-    background-color: #2F3540;
+    background-color: var(--editor-ruler, #2F3540);
     z-index: 4;
 }
 
@@ -781,14 +781,14 @@ tableview .__cell__ {
 }
 
 scroller .__track__ {
-    background: #2A2A2A;
+    background: var(--scrollbar-track, #2A2A2A);
 }
 /* Only the CROSS axis is set here. The main axis (length + position) is written from Java at
  * IMPORTANT origin, since it's runtime state, and would override anything declared here anyway.
  * A horizontal bar's thumb fills the bar's height; a vertical bar's fills its width. */
 scroller .__thumb__ {
     height: 100%;
-    background: #6E6E6E;
+    background: var(--scrollbar-thumb, #6E6E6E);
     /* Half the 8px bar thickness set on the ScrollerView rules below. Deliberately on the thumb only —
      * the track stays square so the bar keeps a crisp edge against the content it overlays. */
     border-radius: 4px;
@@ -797,10 +797,10 @@ scroller.__vertical__ .__thumb__ {
     width: 100%;
 }
 scroller .__thumb__:hover {
-    background: #8C8C8C;
+    background: var(--scrollbar-thumb-hover, #8C8C8C);
 }
 scroller .__thumb__:active {
-    background: #B4B4B4;
+    background: var(--scrollbar-thumb-pressed, #B4B4B4);
 }
 
 /* Step buttons. Hidden by default — that's what every modern desktop UI does, and it's what Ore
@@ -812,7 +812,7 @@ scroller .__thumb__:active {
 scroller .__head__,
 scroller .__tail__ {
     display: none;
-    background: #4A4A4A;
+    background: var(--scrollbar-tail, #4A4A4A);
     /* Sized along the bar's MAIN axis, filling the cross axis. A horizontal bar's buttons are 8px
      * WIDE and full height; the vertical rule below swaps that. Getting this wrong is why a
      * `height`-only rule collapses the horizontal bar's buttons to nothing. Kept here rather than in
@@ -828,7 +828,7 @@ scroller.__vertical__ .__tail__ {
 }
 scroller .__head__:hover,
 scroller .__tail__:hover {
-    background: #6E6E6E;
+    background: var(--scrollbar-tail-hover, #6E6E6E);
 }
 
 /* The little square where the two bars meet — `::-webkit-scrollbar-corner` in a browser. Shown only
@@ -838,7 +838,7 @@ listview .__corner__,
 treeview .__corner__,
 texteditor .__corner__,
 tableview .__corner__ {
-    background: #2A2A2A;
+    background: var(--scrollbar-corner, #2A2A2A);
 }
 
 /* ABOVE the editor's text AND above its gutter. Only the editor needs this: a list's rows do not overlap
@@ -895,8 +895,8 @@ textfield {
     height: 16px;
     padding-all: 3px;
     align-items: center;
-    background: #2A2A2A;
-    color: #EEEEEE;
+    background: var(--field-bg, #2A2A2A);
+    color: var(--field-fg, #EEEEEE);
     /* The one rounded widget here that also CLIPS (it scissors its own text horizontally), so it is
      * the only one this sheet moves onto resolveOverflowClip()'s FBO mask path. Worth it on a field,
      * which is the widget a square corner reads worst on; not worth it on a scroll viewport, which is
@@ -906,17 +906,17 @@ textfield {
 /* :blank is driven by TextField.isBlank(), already wired into PseudoClasses — so the placeholder,
  * which reuses `color`, dims itself with no widget-specific support. */
 textfield:blank {
-    color: #7A7A7A;
+    color: var(--field-placeholder, #7A7A7A);
 }
 /* :invalid comes from TextField.isInvalid() — content that fails its validator, or a number outside
  * its range. The value stays editable; only the styling changes. */
 textfield:invalid {
-    background: #4A2A2A;
-    color: #FF9A9A;
+    background: var(--field-invalid-bg, #4A2A2A);
+    color: var(--field-invalid-fg, #FF9A9A);
 }
 textfield:disabled {
-    background: #232323;
-    color: #6E6E6E;
+    background: var(--field-disabled-bg, #232323);
+    color: var(--field-disabled-fg, #6E6E6E);
 }
 
 /* ── Generic layout helpers ─────────────────────────────────────────────────────────────────────
@@ -934,7 +934,7 @@ textfield:disabled {
     gap-all: 8px;
 }
 .label {
-    color: #FFFFFF;
+    color: var(--label-fg, #FFFFFF);
 }
 /* Eats the leftover space in a row/column — the usual "push the rest to the far end" trick. */
 .spacer {
@@ -952,8 +952,8 @@ textfield:disabled {
  * A theme that flips a tooltip above its anchor will want margin-bottom instead. */
 
 tooltip {
-    background: #1E1E1EF0;
-    outline: 1px #00000080;
+    background: var(--tooltip-bg, #1E1E1EF0);
+    outline: 1px var(--tooltip-border, #00000080);
     padding-left: 4px;
     padding-right: 4px;
     padding-top: 2px;
@@ -968,7 +968,7 @@ tooltip {
  * which is also what keeps edge-clamping honest — placement measures the box, so the box has to be
  * the size of what actually draws. */
 tooltip .__label__ {
-    color: #FFFFFF;
+    color: var(--tooltip-fg, #FFFFFF);
     max-width: 170px;
     /* SET EXPLICITLY, because `white-space` INHERITS and a tooltip lives as an internal child of the thing
      * it describes. Anchor it to a status-bar item, a table header, a graph node title — anything that
@@ -1021,9 +1021,9 @@ tooltip .__label__ {
 dialog {
     min-width: 80px;
     min-height: 40px;
-    background: #2E2E2E;
-    outline: 1px #1A1A1A;
-    color: #DDDDDD;
+    background: var(--dialog-bg, #2E2E2E);
+    outline: 1px var(--dialog-border, #1A1A1A);
+    color: var(--dialog-fg, #DDDDDD);
     z-index: 5;
 }
 /* `ColorControl`'s popup only. Translucent-over-OPAQUE composites right back to opaque (tinted, but
@@ -1035,7 +1035,7 @@ dialog {
  * `.__outputs__` bands already uses. Scoped to `.__picker__` so every other `Dialog` in the engine
  * (draggable panels, etc.) stays fully opaque; `.__title-bar__` keeps its own separate `#393939`. */
 dialog.__picker__ {
-    background: #2E2E2E76;
+    background: var(--dialog-picker-bg, #2E2E2E76);
 }
 
 /* 14px, not 16 — matches the base `button, dropdown` row height already used everywhere else in this
@@ -1055,7 +1055,7 @@ dialog .__title-bar__ {
     align-items: center;
     /* Title left, close button hard right, whatever the dialog's width. */
     justify-content: space-between;
-    background: #393939;
+    background: var(--dialog-title-bg, #393939);
 }
 
 /* ── Popovers, menus and dropdowns ──────────────────────────────────────────────────────────────
@@ -1075,13 +1075,13 @@ popover, menu, dropdown .__menu__ {
      * NEUTRAL grey, not the earlier #3F4A57 blue-grey — a dropdown's closed face (`--cfg-popup`, the
      * config kit and every graph node share it) is the same grayscale family as this open menu, and a
      * tinted menu on top of a grayscale face read as two different materials the instant it opened. */
-    background: #4B4B4B;
-    outline: 1px #8C8C8C;
+    background: var(--menu-bg, #4B4B4B);
+    outline: 1px var(--menu-border, #8C8C8C);
     /* Light text, set on the POPOVER so it inherits to every item and to arbitrary popover content.
      * Needed because a Dropdown is a Button, so its menu — an internal child — inherits the button's dark
      * `color: #222222`, which on this surface renders as barely-legible grey. Colour is inheritable, so the
      * fix belongs at the top of the popover rather than repeated on each item. */
-    color: #DDDDDD;
+    color: var(--menu-fg, #DDDDDD);
     /* Transparent while closed, opaque once `__open__` lands — see the rule below. The pair is what gives the
      * transition a real value to start from; a popover coming out of `display: none` otherwise has no previous
      * opacity to interpolate from, which is the problem `@starting-style` exists to solve on the web.
@@ -1127,7 +1127,7 @@ menu .__separator__ {
     margin-bottom: 3px;
     margin-left: 6px;
     margin-right: 6px;
-    background: #6E6E6E;
+    background: var(--menu-separator, #6E6E6E);
 }
 
 /* Items are Buttons, so they inherit the button rule above; these overrides make them read as rows
@@ -1160,7 +1160,7 @@ menuitem {
  * still looked like a leftover accent colour. Lighter than the #4B4B4B menu surface is what still reads
  * as "raised" without reaching for hue. */
 menuitem:focus {
-    background: #606060;
+    background: var(--menu-item-focus-bg, #606060);
 }
 /* A row that leads somewhere: label left, arrow hard right, and a gap so the two never touch on a short
  * label. `space-between` overrides the `flex-start` above, which is why this rule follows it. */
@@ -1188,7 +1188,7 @@ menuitem .__submenu-arrow__ {
     height: 8px;
     flex-grow: 0;
     flex-shrink: 0;
-    color: #A8B0B8;
+    color: var(--menu-arrow, #A8B0B8);
     overlay: shape("chevron-right");
 }
 menuitem:focus-visible {
@@ -1209,11 +1209,11 @@ menuitem:focus-visible {
  * `outline` is a shorthand, and a `var()` inside a shorthand silently resolves to nothing here — the
  * same trap that produced zero padding on the main preview's header. */
 menu:focus-visible {
-    outline: 1px #8C8C8C;
+    outline: 1px var(--menu-border, #8C8C8C);
 }
 menuitem:disabled {
     background: #00000000;
-    color: #6E6E6E;
+    color: var(--menu-item-disabled-fg, #6E6E6E);
 }
 /* Zero footprint outside a selectable context — see MenuItem's "Selection mark" javadoc. A plain
  * context-menu row ("Cut", "Copy") never calls `setSelected`, so this never draws for it, and giving
@@ -1240,7 +1240,7 @@ dropdown .__menu__ menuitem .__mark__ {
      * without this the mark sat flush with the row's top edge instead of level with the label's text. */
     align-self: center;
     margin-right: 1px;
-    color: #DDDDDD;
+    color: var(--menu-mark, #DDDDDD);
 }
 dropdown .__menu__ menuitem:checked .__mark__ {
     overlay: shape("checkmark");
@@ -1264,7 +1264,7 @@ menu.__has-checkable__ menuitem .__mark__ {
     flex-shrink: 0;
     align-self: center;
     margin-right: 1px;
-    color: #DDDDDD;
+    color: var(--menu-mark, #DDDDDD);
 }
 /* The mark itself is still the ITEM's business: only a checkable row ever shows one, even though every
  * row in the menu reserves the space for it. */
@@ -1321,7 +1321,7 @@ dialog .__backdrop__ {
     top: 0;
     width: 100%;
     height: 100%;
-    background: #00000080;
+    background: var(--dialog-backdrop, #00000080);
 }
 
 /* An ellipsized title, and the one place in this sheet that truncates text by default.
@@ -1388,13 +1388,13 @@ dialog .__title-bar__ .__close__ {
     align-items: center;
     /* Same neutral raised grey the menu/dropdown chrome uses (`popover, menu, dropdown .__menu__`,
      * `--cfg-popup`) — not the title bar's own #55606E blue-grey, which was the last of it here. */
-    background: #4B4B4B;
+    background: var(--dialog-close-bg, #4B4B4B);
     /* The close button is still a `Button` underneath, and the base `button, dropdown { color: #222222 }`
      * rule is a SPECIFIED value on that element, not an inherited one — so the dark colour every unthemed
      * button gets by default wins over `dialog`'s inherited #DDDDDD regardless of how light the title bar
      * around it is. The "x" was rendering almost invisibly dark-on-dark; this restates the same light grey
      * the rest of the title bar already uses, matching the label instead of the base button rule. */
-    color: #DDDDDD;
+    color: var(--dialog-close-fg, #DDDDDD);
     text-align: center;
 }
 /* Centring the BOX (`justify-content`/`align-items` above) is not the same as centring the INK — a
@@ -1407,7 +1407,7 @@ dialog .__title-bar__ .__close__ text {
     text-offset-y: -1px;
 }
 dialog .__title-bar__ .__close__:hover {
-    background: #C05050;
+    background: var(--dialog-close-hover-bg, #C05050);
 }
 
 /* ── Resize handles ─────────────────────────────────────────────────────────────────────────────
@@ -1468,7 +1468,7 @@ dialog .__title-bar__ .__close__:hover {
  * same idea taken further: one visible grip says "this resizes" without ringing the element in four
  * marks that read as selection handles. A panel wearing all four looks selected rather than resizable. */
 .__resizer-bottom-right__ {
-    background: #FFFFFF40;
+    background: var(--resizer-grip, #FFFFFF40);
 }
 .__resizer-top-left__     { top: 0;    left: 0; }
 .__resizer-top-right__    { top: 0;    right: 0; }
@@ -1663,26 +1663,26 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
     /* The palette, sampled from the same reference. A theme may override every one of these; they are
      * here because the engine ships no inspector theme and a kit with no colours at all is unreviewable.
      * Same precedent as `textfield`'s own #2A2A2A further up this file. */
-    --cfg-panel: #2E2E2E;
-    --cfg-band: #383838;       /* a group header's strip — what marks it off from the rows above */
-    --cfg-field: #1E1E1E;      /* a recessed, typeable surface */
+    --cfg-panel: var(--configkit-panel-bg, #2E2E2E);
+    --cfg-band: var(--configkit-band-bg, #383838);       /* a group header's strip — what marks it off from the rows above */
+    --cfg-field: var(--configkit-field-bg, #1E1E1E);      /* a recessed, typeable surface */
     /* The inset bevel Unity draws on every text field — a near-black top edge, a lighter bottom one —
      * which is the actual reason theirs reads as a cut-in surface and a flat fill (however well the
      * fill colour itself matches) does not. See `border-top-color`/`border-bottom-color` on
      * `.__config-control__ textfield` below. */
-    --cfg-field-border-top: #121212;
-    --cfg-field-border-bottom: #545454;
+    --cfg-field-border-top: var(--configkit-field-border-top, #121212);
+    --cfg-field-border-bottom: var(--configkit-field-border-bottom, #545454);
     /* The SAME grey the open menu itself uses (`popover, menu, dropdown .__menu__ { background: #4B4B4B }`
      * above) — NOT the field colour, so it still reads as raised rather than recessed, but tied to the
      * menu's own value rather than an independent number that could drift out of step with it. A dropdown
      * that changes shade the instant it opens looks like two different materials; matching this exactly
      * is what keeps the closed face and the open popup read as one surface. Also deliberately NOT the
      * blue-tinted #46525F this briefly was — see the popover rule's own note on why that hue is gone. */
-    --cfg-popup: #4B4B4B;
-    --cfg-label-text: #D2D2D2;
-    --cfg-value-text: #E4E4E4;
-    --cfg-list-head: #353535;
-    --cfg-list-body: #414141;
+    --cfg-popup: var(--configkit-popup-bg, #4B4B4B);
+    --cfg-label-text: var(--configkit-label-fg, #D2D2D2);
+    --cfg-value-text: var(--configkit-value-fg, #E4E4E4);
+    --cfg-list-head: var(--configkit-list-head-bg, #353535);
+    --cfg-list-body: var(--configkit-list-body-bg, #414141);
     /* A checkbox is NOT the kit height. Unity keeps it ~13px inside a 20px row — stretching it to the
      * row makes it the loudest thing on the panel, and a checkbox is the quietest control there is. */
     --cfg-check: 13px;
@@ -2220,7 +2220,7 @@ nodecreationmenu .__entry__ .__category-segment__ {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    color: #7A7A7A;
+    color: var(--nodemenu-category-fg, #7A7A7A);
 }
 /* A DRAWN triangle, not a character. `MinecraftRegular.otf` has no U+25B8, and a missing glyph draws a
  * blank advance rather than failing — so a text separator rendered as a mystery gap. `CgUiShape` needs no
@@ -2233,7 +2233,7 @@ nodecreationmenu .__entry__ .__category-separator__ {
     margin-left: 3px;
     margin-right: 3px;
     overlay: shape("triangle-right");
-    color: #6E6E6E;
+    color: var(--nodemenu-separator-fg, #6E6E6E);
 }
 /* The matched characters, via the CSS Custom Highlight API — `UIText.highlights()` names the ranges in
  * Java, this decides what they look like. That split is the whole reason the tint is not a colour
@@ -2243,7 +2243,7 @@ nodecreationmenu .__entry__ .__category-separator__ {
  * Colour only. `::highlight()` refuses layout properties by design, and rightly — a highlight that could
  * set `font-size` would reflow the very text being searched, on every keystroke. */
 ::highlight(search-match) {
-    color: #E0A040;
+    color: var(--search-match-fg, #E0A040);
 }
 
 /* ── SearchField ────────────────────────────────────────────────────────────────────────────────
@@ -2269,7 +2269,7 @@ searchfield .__icon__ {
     margin-left: 3px;
     overlay: icon("crystalgui:general/search/search");
     overlay-fit: contain;
-    color: #8A8A8A;
+    color: var(--searchfield-icon-fg, #8A8A8A);
 }
 /* The field owns the slack; icon and clear keep their own size. */
 searchfield .__field__ {
@@ -2317,20 +2317,20 @@ texteditor .__fold-column__ {
 texteditor .__fold__ {
     justify-content: center;
     align-items: center;
-    color: #4A515C;
+    color: var(--editor-fold, #4A515C);
     cursor: pointer;
     z-index: 5;
     overlay: shape("chevron-down");
 }
 
 texteditor .__fold__:hover {
-    color: #A9B2BF;
+    color: var(--editor-fold-active, #A9B2BF);
 }
 
 /* A collapsed region's arrow stays lit whether or not it is hovered — it is now reporting state, not
  * offering an action, and a hidden block whose only marker faded out is a block you cannot find. */
 texteditor .__fold__.__collapsed__ {
-    color: #A9B2BF;
+    color: var(--editor-fold-active, #A9B2BF);
     overlay: shape("chevron-right");
 }
 
@@ -2340,8 +2340,8 @@ texteditor .__fold__.__collapsed__ {
  * A background as well as a colour, because it has to read as a CONTROL rather than as punctuation
  * someone typed. VS Code boxes it for the same reason. */
 texteditor .__fold-placeholder__ {
-    color: #8A94A3;
-    background-color: #2A303A;
+    color: var(--editor-fold-placeholder-fg, #8A94A3);
+    background-color: var(--editor-fold-placeholder-bg, #2A303A);
     /* Padding and corner radius are written by the widget, not declared here: they must scale with the
      * editor's font size, and this stylesheet has no font-relative unit to say that in. A fixed pixel is
      * half a line's height at 8px and invisible at 31px. See TextEditor.chipPadding.
@@ -2364,8 +2364,8 @@ texteditor .__fold-placeholder__ {
  * hover and so does this; the pointer cursor alone is not enough, because it only appears once you are
  * already on it and says nothing on the way there. */
 texteditor .__fold-placeholder__:hover {
-    color: #DCE1E8;
-    background-color: #3C4553;
+    color: var(--editor-fold-placeholder-hover-fg, #DCE1E8);
+    background-color: var(--editor-fold-placeholder-hover-bg, #3C4553);
 }
 
 /* ── ColorSelector ──────────────────────────────────────────────────────────────────────────────
@@ -2404,7 +2404,7 @@ colorselector {
      * window, not just ones opened from a node — which is why changing this value alone was completely
      * invisible no matter what it was set to, on any page, including ones with nothing to do with the
      * graph. Removed there; this value is the only one now. */
-    background: #1E1E1EDD;
+    background: var(--colorpicker-bg, #1E1E1EDD);
 }
 
 /* The picker's TYPE, and it has to be stated even with no theme loaded — this sheet's own
@@ -2510,7 +2510,7 @@ colorselector .__ring-handle__ {
     margin-top: -4px;
     border-radius: 5px;
     border-width: 1px;
-    border-color: #FFFFFF;
+    border-color: var(--colorpicker-handle-ring, #FFFFFF);
 }
 /* Much smaller: the square is a continuous field, so the handle marks a POINT rather than spanning
  * anything, and every pixel it covers is a colour you were trying to look at. */
@@ -2522,7 +2522,7 @@ colorselector .__square-handle__ {
     margin-top: -2px;
     border-radius: 3px;
     border-width: 1px;
-    border-color: #FFFFFF;
+    border-color: var(--colorpicker-handle-ring, #FFFFFF);
 }
 
 /* Right-aligned above the channels, which is where the reference puts it — it labels the four rows
@@ -2681,9 +2681,9 @@ colorselector .__channel-row__ slider .__thumb__ {
     margin-left: -1.5px;
     margin-right: -1.5px;
     border-width: 1px;
-    border-color: #C1C2C2;
+    border-color: var(--colorpicker-thumb-ring, #C1C2C2);
     border-radius: 1.5px;
-    background: #FFFFFF;
+    background: var(--colorpicker-thumb, #FFFFFF);
 }
 /* Sized to what a channel actually prints — "255", or "0.250" at its longest, which is the case that
  * sets this number. Anything narrower clips the 0-1.0 mode; anything wider steals from the bar beside
@@ -2849,7 +2849,7 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     background: var(--cfg-field);
     color: var(--cfg-value-text);
     border-width: 1px;
-    border-color: #343434;
+    border-color: var(--configkit-field-border, #343434);
     border-top-color: var(--cfg-field-border-top);
     border-bottom-color: var(--cfg-field-border-bottom);
     border-radius: 4px;
@@ -2882,15 +2882,15 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * face lightens the same way a button does. */
 .__config-control__ button:hover,
 .__config-control__ dropdown:hover {
-    background: #5A5A5A;
+    background: var(--configkit-dropdown-hover-bg, #5A5A5A);
 }
 .__config-control__ button:active,
 .__config-control__ dropdown:active {
-    background: #3D3D3D;
+    background: var(--configkit-dropdown-pressed-bg, #3D3D3D);
 }
 /* Unity does not colour-code a slider's fill; a saturated green track reads as a progress bar or as a
  * validation state rather than as a value being chosen. */
-.__config-control__.__slider__ slider .__fill__ { background: #6A6A6A; }
+.__config-control__.__slider__ slider .__fill__ { background: var(--configkit-slider-fill, #6A6A6A); }
 .__config-control__.__slider__ slider .__track__ { background: var(--cfg-field); }
 /* The exception, and a real one: a checkbox is SQUARE — its width is a function of its height, not of
  * the space available. So it does not fill, and sits at the left of its column with the rest empty.
@@ -2909,8 +2909,8 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * carries the on/off distinction — not a colour swap. */
 .__config-control__.__boolean__ checkbox .__mark__ { background: var(--cfg-field); }
 .__config-control__.__boolean__ checkbox:checked .__mark__ { overlay: shape("checkmark"); }
-.__config-control__.__boolean__ checkbox:hover .__mark__ { background: #3A3A3A; }
-.__config-control__.__boolean__ checkbox:checked:hover .__mark__ { background: #3A3A3A; }
+.__config-control__.__boolean__ checkbox:hover .__mark__ { background: var(--configkit-check-hover-bg, #3A3A3A); }
+.__config-control__.__boolean__ checkbox:checked:hover .__mark__ { background: var(--configkit-check-hover-bg, #3A3A3A); }
 
 /* ── Colour ─────────────────────────────────────────────────────────────────────────────────────
  * A colour bar with its alpha as a strip beneath — deliberately its own summary rendering, not
@@ -2924,7 +2924,7 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
     height: var(--cfg-ctrl-h);
     flex-direction: column;
     border-radius: 2px;
-    outline: 1px #1A1A1A;
+    outline: 1px var(--configkit-swatch-border, #1A1A1A);
     outline-offset: 0px;
     cursor: pointer;
 }
@@ -2939,11 +2939,11 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
 .__config-control__.__color__ .__alpha-bar__ {
     width: 100%;
     height: 3px;
-    background: #14140F;
+    background: var(--configkit-alpha-bg, #14140F);
 }
 .__config-control__.__color__ .__alpha-fill__ {
     height: 3px;
-    background: #FFFFFF;
+    background: var(--configkit-alpha-fill, #FFFFFF);
 }
 
 /* ── Mask ───────────────────────────────────────────────────────────────────────────────────────
@@ -2966,8 +2966,8 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * not on a `.__config-control__.__boolean__` wrapper the way a lone boolean row does. */
 .__config-control__.__mask__ .__mask-row__ .__mark__ { background: var(--cfg-field); }
 .__config-control__.__mask__ .__mask-row__:checked .__mark__ { overlay: shape("checkmark"); }
-.__config-control__.__mask__ .__mask-row__:hover .__mark__ { background: #3A3A3A; }
-.__config-control__.__mask__ .__mask-row__:checked:hover .__mark__ { background: #3A3A3A; }
+.__config-control__.__mask__ .__mask-row__:hover .__mark__ { background: var(--configkit-check-hover-bg, #3A3A3A); }
+.__config-control__.__mask__ .__mask-row__:checked:hover .__mark__ { background: var(--configkit-check-hover-bg, #3A3A3A); }
 
 /* ── Matrix ─────────────────────────────────────────────────────────────────────────────────────
  * A grid: one row per `.__matrix-row__`, cells stretching evenly across it. Unlabelled by design —
@@ -3350,7 +3350,7 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * 80px minimum broke "No properties yet" over three lines. */
 .__blackboard__ .__empty__ {
     font-size: var(--cfg-font);
-    color: #7A7A7A;
+    color: var(--blackboard-empty-fg, #7A7A7A);
     padding-left: var(--cfg-pad-x);
     padding-top: 4px;
     white-space: nowrap;
@@ -3479,7 +3479,7 @@ colorselector .__side__ dropdown .__menu__ menuitem text {
  * you can still see what you had selected while you carry it somewhere. The engine's outline is
  * inset by 1px on `*`, so it survives the panel's own clipping at the edges. */
 projectfiletree .__project-row__.__drop-target__ {
-    outline: 1px #4A90D9;
+    outline: 1px var(--tree-drop-border, #4A90D9);
 }
 
 /* THE DRAG GHOST. A loose copy of the capsule that follows the cursor -- sized to its own content
@@ -3508,7 +3508,7 @@ projectfiletree .__project-row__.__drop-target__ {
 }
 .__property-pill__ .__name__ {
     font-size: var(--cfg-font);
-    color: #E4E4E4;
+    color: var(--pill-name-fg, #E4E4E4);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3530,7 +3530,7 @@ projectfiletree .__project-row__.__drop-target__ {
      * Growing into slack is a separate axis and still works. */
     flex-shrink: 0;
     font-size: 8px;
-    color: #8C8C8C;
+    color: var(--pill-type-fg, #8C8C8C);
     text-align: right;
     white-space: nowrap;
     overflow: hidden;
@@ -3625,7 +3625,7 @@ dockarea {
 
 dockgroup {
     flex-direction: column;
-    background: #2B2B2B;
+    background: var(--dock-bg, #2B2B2B);
     /* The group is a positioned ancestor for its own overlay and insertion caret, both of which are
      * absolute and expect this box as their containing block. */
     position: relative;
@@ -3635,7 +3635,7 @@ dockgroup {
  * switched off in Java (setHitTest covers the whole subtree) rather than here — there is no
  * pointer-events property, and an overlay that takes the pointer ends the drag on top of itself. */
 dockgroup .__drop-overlay__ {
-    background: #4A88C766;
+    background: var(--dock-drop-overlay, #4A88C766);
     border-all-radius: 2px;
 }
 
@@ -3652,8 +3652,8 @@ dockgroup .__drop-overlay__ {
  * Outlined and barely filled, so whatever it overlaps still reads through it. Sized and placed from Java,
  * since it tracks a pointer; only the paint is here. */
 .__insertion__ {
-    background-color: #7EB6FF30;
-    outline: 1px #7EB6FF;
+    background-color: var(--dock-insertion-bg, #7EB6FF30);
+    outline: 1px var(--dock-insertion-border, #7EB6FF);
     border-radius: 2px;
     flex-shrink: 0;
 }
@@ -3669,14 +3669,14 @@ workbench .__activity-bar__ .__insertion__ {
  * repainted every time focus moves. */
 dockgroup.__active__ {
     outline-width: 1px;
-    outline-color: #4A88C7;
+    outline-color: var(--dock-active-border, #4A88C7);
 }
 
 /* A panel whose type is registered but has no factory. Visible on purpose: a tab with nothing behind
  * it is reportable, while a silently absent tab looks like the layout failed to restore. */
 dockgroup .__missing__ {
     flex-grow: 1;
-    background: #3A2B2B;
+    background: var(--dock-missing-bg, #3A2B2B);
 }
 
 /* A region -- sidebar, panel, auxiliary -- filling the SplitView pane it sits in.
@@ -3715,7 +3715,7 @@ dockgroup .__missing__ {
      * became the first thing flex took space from, and "Problems" rendered as "Pr" beside its own tabs. */
     flex-shrink: 0;
     font-size: 11px;
-    color: #A0A0A0;
+    color: var(--panel-header-fg, #A0A0A0);
     white-space: nowrap;
     text-overflow: ellipsis;
 }
@@ -3727,11 +3727,11 @@ dockgroup .__missing__ {
     flex-shrink: 0;
     overlay: icon("crystalgui:x");
     overlay-fit: contain;
-    color: #A0A0A0;
+    color: var(--panel-header-icon, #A0A0A0);
 }
 
 .__view-container__ .__header__ .__hide__:hover {
-    color: #E0E0E0;
+    color: var(--panel-header-icon-hover, #E0E0E0);
 }
 
 .__view-container__ .__view-content__ {
@@ -3759,7 +3759,7 @@ workbench .__activity-bar__ .__stripe-separator__ {
     flex-shrink: 0;
     margin-top: 3px;
     margin-bottom: 5px;
-    background-color: #4E5157;
+    background-color: var(--activitybar-separator, #4E5157);
 }
 
 .__activity-bar__ .__stripe-spacer__ {
@@ -3771,7 +3771,7 @@ workbench .__activity-bar__ .__stripe-separator__ {
 /* The count over a rail icon. */
 .__activity-bar__ .__badge__ {
     font-size: 9px;
-    color: #FFFFFF;
+    color: var(--activitybar-badge-fg, #FFFFFF);
 }
 
 /* THE DOT FORM — IntelliJ's unread mark on the bell, in the icon's top-right corner.
@@ -3829,7 +3829,7 @@ workbench .__activity-bar__ .__stripe-separator__ {
     padding: 4px 8px;
     flex-shrink: 0;
     border-bottom-width: 1px;
-    border-bottom-color: #00000040;
+    border-bottom-color: var(--banner-border, #00000040);
 }
 
 .__dock-banner__ .__message__ {
@@ -3845,22 +3845,22 @@ workbench .__activity-bar__ .__stripe-separator__ {
 
 /* Severity, as three classes rather than three colours in Java -- the project rule. */
 .__dock-banner__.__info__ {
-    background: #2D3A4A;
-    color: #C8D6E5;
+    background: var(--banner-info-bg, #2D3A4A);
+    color: var(--banner-info-fg, #C8D6E5);
 }
 
 .__dock-banner__.__warning__ {
-    background: #4A3F2D;
-    color: #E5D6A8;
+    background: var(--banner-warning-bg, #4A3F2D);
+    color: var(--banner-warning-fg, #E5D6A8);
 }
 
 .__dock-banner__.__error__ {
-    background: #4A2D2D;
-    color: #E5B4B4;
+    background: var(--banner-error-bg, #4A2D2D);
+    color: var(--banner-error-fg, #E5B4B4);
 }
 
 floatingdock {
-    background: #1E1E1EF0;
+    background: var(--dock-floating-bg, #1E1E1EF0);
     min-width: 160px;
     min-height: 120px;
 }
@@ -3869,7 +3869,7 @@ floatingdock {
  * exists rather than a pane that failed to collapse -- so it says so, instead of reading as a dead
  * grey box. VS Code draws a shortcut watermark here; a recessed panel is the same idea, cheaper. */
 dockgroup.__empty__ {
-    background: #232323;
+    background: var(--dock-empty-bg, #232323);
 }
 dockgroup.__empty__ .__strip__ {
     opacity: 0.5;
@@ -3881,9 +3881,9 @@ dockgroup.__empty__ .__strip__ {
  * computed from the window rather than authored. Everything else belongs here, per the widget rule.
  */
 quickpick {
-    background: #252526;
+    background: var(--palette-bg, #252526);
     outline-width: 1px;
-    outline-color: #454545;
+    outline-color: var(--palette-border, #454545);
     padding-all: 4px;
 }
 
@@ -3908,12 +3908,12 @@ quickpick .__search__ textfield {
     padding-left: 6px;
     padding-right: 6px;
     outline-width: 1px;
-    outline-color: #3C3C3C;
-    background: #1E1E1E;
+    outline-color: var(--palette-field-border, #3C3C3C);
+    background: var(--palette-field-bg, #1E1E1E);
 }
 
 quickpick .__search__ textfield:focus {
-    outline-color: #0078D4;
+    outline-color: var(--palette-field-focus-border, #0078D4);
 }
 
 /* AUTO, not SCROLL: SCROLL draws both bars unconditionally, which put a horizontal scrollbar across a
@@ -3943,17 +3943,17 @@ quickpick .__row__ {
  * one state: the blue row is what Enter will run, the green one is merely what the pointer is over. A
  * palette that painted both the same would make the mouse look like it had moved the selection. */
 quickpick .__row__.__selected__ {
-    background-color: #04395E;
+    background-color: var(--palette-selected-bg, #04395E);
 }
 
 quickpick .__row__:hover {
-    background-color: #2A3B2A;
+    background-color: var(--palette-hover-bg, #2A3B2A);
 }
 
 /* Selection wins where both apply -- the pointer resting over the selected row must not repaint it as
  * merely hovered, or the row Enter would run stops being identifiable. */
 quickpick .__row__.__selected__:hover {
-    background-color: #04395E;
+    background-color: var(--palette-selected-bg, #04395E);
 }
 
 /* Listed but not choosable. Dimmed rather than hidden: hiding is VS Code's rule and it does not survive
@@ -3965,11 +3965,11 @@ quickpick .__row__.__qp-disabled__ {
 
 /* Dimmer than the label, so "Dock: " reads as provenance rather than as part of the name. */
 quickpick .__qp-category__ {
-    color: #9D9D9D;
+    color: var(--palette-category-fg, #9D9D9D);
 }
 
 quickpick .__qp-label__ {
-    color: #CCCCCC;
+    color: var(--palette-label-fg, #CCCCCC);
 }
 
 quickpick .__qp-spacer__ {
@@ -3993,9 +3993,9 @@ quickpick .__qp-key__ {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    background-color: #3C3C3C;
+    background-color: var(--palette-key-bg, #3C3C3C);
     outline-width: 1px;
-    outline-color: #4A4A4A;
+    outline-color: var(--palette-key-border, #4A4A4A);
     border-radius: 3px;
     padding-left: 5px;
     padding-right: 5px;
@@ -4004,7 +4004,7 @@ quickpick .__qp-key__ {
 }
 
 quickpick .__qp-key__ text {
-    color: #CCCCCC;
+    color: var(--palette-key-fg, #CCCCCC);
 }
 
 /* On a highlighted row the fill goes and only the OUTLINE stays -- which is what VS Code does, and it
@@ -4013,12 +4013,12 @@ quickpick .__qp-key__ text {
 quickpick .__row__.__selected__ .__qp-key__,
 quickpick .__row__:hover .__qp-key__ {
     background-color: #00000000;
-    outline-color: #9BB8CC;
+    outline-color: var(--palette-key-hover-border, #9BB8CC);
 }
 
 quickpick .__row__.__selected__ .__qp-key__ text,
 quickpick .__row__:hover .__qp-key__ text {
-    color: #FFFFFF;
+    color: var(--palette-key-hover-fg, #FFFFFF);
 }
 
 /* The `+` is punctuation between keys, not a key. No box, and dimmer than one. */
@@ -4029,7 +4029,7 @@ quickpick .__row__:hover .__qp-key__ text {
  * the plus signs as slivers between correctly-sized boxes. A glyph this small and this fixed does not
  * need measuring at all, and stating the width means there is no first pass to get wrong. */
 quickpick .__qp-key-sep__ {
-    color: #8A8A8A;
+    color: var(--palette-key-sep-fg, #8A8A8A);
     width: 8px;
     flex-shrink: 0;
     text-align: center;
@@ -4038,7 +4038,7 @@ quickpick .__qp-key-sep__ {
 /* Which characters the query matched. Java says WHERE (QuickPickEntry's ranges); this says how it
  * looks -- the whole point of the Custom Highlight API. */
 quickpick ::highlight(quickpick-match) {
-    color: #2AAAFF;
+    color: var(--palette-match-fg, #2AAAFF);
 }
 
 /* ── Diagnostics ───────────────────────────────────────────────────────────────────────────────
@@ -4053,15 +4053,15 @@ quickpick ::highlight(quickpick-match) {
 }
 
 .__squiggle-error__ {
-    background-color: #F14C4C;
+    background-color: var(--squiggle-error, #F14C4C);
 }
 
 .__squiggle-warning__ {
-    background-color: #CCA700;
+    background-color: var(--squiggle-warning, #CCA700);
 }
 
 .__squiggle-information__ {
-    background-color: #3794FF;
+    background-color: var(--squiggle-info, #3794FF);
 }
 
 /* The error stripe — marks in the vertical scrollbar's groove, one per problem in the WHOLE document.
@@ -4077,15 +4077,15 @@ quickpick ::highlight(quickpick-match) {
 }
 
 .__error-stripe-error__ {
-    background-color: #F14C4C;
+    background-color: var(--stripe-error, #F14C4C);
 }
 
 .__error-stripe-warning__ {
-    background-color: #CCA700;
+    background-color: var(--stripe-warning, #CCA700);
 }
 
 .__error-stripe-information__ {
-    background-color: #3794FF;
+    background-color: var(--stripe-info, #3794FF);
 }
 
 /* The inspection widget — the problem readout in the editor's top-right corner.
@@ -4097,7 +4097,7 @@ quickpick ::highlight(quickpick-match) {
     padding-right: 4px;
     padding-top: 2px;
     padding-bottom: 2px;
-    background: #2D2D2DE0;
+    background: var(--inspection-bg, #2D2D2DE0);
     border-radius: 3px;
     z-index: 2;
 }
@@ -4107,9 +4107,9 @@ quickpick ::highlight(quickpick-match) {
     margin-right: 4px;
 }
 
-.__inspection-clean__ .__inspection-status__ { color: #6A9955; }
-.__inspection-errors__ .__inspection-status__ { color: #F14C4C; }
-.__inspection-warnings__ .__inspection-status__ { color: #CCA700; }
+.__inspection-clean__ .__inspection-status__ { color: var(--inspection-clean-fg, #6A9955); }
+.__inspection-errors__ .__inspection-status__ { color: var(--inspection-error-fg, #F14C4C); }
+.__inspection-warnings__ .__inspection-status__ { color: var(--inspection-warning-fg, #CCA700); }
 
 /* Drawn shapes, never glyphs: MinecraftRegular.otf has no U+25B2/U+25BC and a missing glyph renders as
  * a blank advance, so a text arrow would be an empty button that reads as a layout bug. */
@@ -4132,7 +4132,7 @@ quickpick ::highlight(quickpick-match) {
  * runs beside the tree only, which is IntelliJ's arrangement — the two axes cannot be one element. */
 problemspanel {
     flex-grow: 1;
-    background: #1E1E1E;
+    background: var(--problems-bg, #1E1E1E);
 }
 
 problemspanel .__problems-body__ {
@@ -4169,28 +4169,28 @@ problemspanel .__problems-body__ {
     /* SIZED LIKE THE ROWS BELOW, not like the title. A scope tab is a control on a header, and at the
      * title's weight it competes with the name of the panel it sits on. */
     font-size: 7px;
-    color: #9DA0A8;
+    color: var(--problems-tab-fg, #9DA0A8);
     cursor: pointer;
 }
 
 .__problem-tab__:hover {
-    background: #2F3133;
+    background: var(--problems-tab-hover-bg, #2F3133);
 }
 
 /* THE TAB IN FORCE, as a filled pill — IntelliJ's selected tab, and the reason the tabs exist at all. */
 .__problem-tab__.__selected__ {
-    background: #2F5C8F;
-    color: #DFE1E5;
+    background: var(--problems-tab-active-bg, #2F5C8F);
+    color: var(--problems-tab-active-fg, #DFE1E5);
 }
 
 .__problem-tab__ .__tab-count__ {
     font-size: 7px;
-    color: #7A7D85;
+    color: var(--problems-tab-count-fg, #7A7D85);
     flex-shrink: 0;
 }
 
 .__problem-tab__.__selected__ .__tab-count__ {
-    color: #B6C6DA;
+    color: var(--problems-tab-active-count-fg, #B6C6DA);
 }
 
 /* PADDED TO MEET THE FIRST ROW. The gutter's icon and the tree's first row are read as a pair, and four
@@ -4212,11 +4212,11 @@ problemspanel .__view-options__ {
     flex-shrink: 0;
     cursor: pointer;
     overlay: icon("crystalgui:general/show");
-    color: #8A8D94;
+    color: var(--problems-options-fg, #8A8D94);
 }
 
 problemspanel .__view-options__:hover {
-    color: #D5D7DB;
+    color: var(--problems-options-hover-fg, #D5D7DB);
 }
 
 /* THE CORNER MARK that says the eye opens a menu rather than toggling something. Its own element because
@@ -4229,11 +4229,11 @@ problemspanel .__view-options__ .__dropdown-gutter__ {
     width: 14px;
     height: 14px;
     overlay: icon("crystalgui:general/dropdownGutter");
-    color: #8A8D94;
+    color: var(--problems-options-fg, #8A8D94);
 }
 
 problemspanel .__view-options__:hover .__dropdown-gutter__ {
-    color: #D5D7DB;
+    color: var(--problems-options-hover-fg, #D5D7DB);
 }
 
 /* THE ROWS START LEVEL WITH THE EYE. The tree is absolutely positioned inside the content box, so the
@@ -4268,7 +4268,7 @@ problemspanel .__problems-empty__ {
     top: 0;
     width: 100%;
     padding-all: 8px;
-    color: #8A8A8A;
+    color: var(--problems-empty-fg, #8A8A8A);
 }
 
 /* ── Shader graph editor ──
@@ -4409,7 +4409,7 @@ workbench .__region-panel__ {
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    background-color: #2F5F9EC0;
+    background-color: var(--ghost-bg, #2F5F9EC0);
     border-radius: 2px;
 }
 
@@ -4430,9 +4430,9 @@ workbench .__region-panel__ {
     padding-bottom: 2px;
     padding-left: 6px;
     padding-right: 6px;
-    background-color: #3C3F41F0;
+    background-color: var(--ghost-label-bg, #3C3F41F0);
     border-radius: 3px;
-    color: #FFFFFF;
+    color: var(--ghost-label-fg, #FFFFFF);
     white-space: nowrap;
 }
 
@@ -4463,8 +4463,8 @@ workbench .__region-panel__ {
 }
 
 .__region-drop-preview__ {
-    background-color: #3574F055;
-    outline: 1px #3574F0;
+    background-color: var(--region-drop-bg, #3574F055);
+    outline: 1px var(--region-drop-border, #3574F0);
 }
 
 /* ── Activity bar ──────────────────────────────────────────────────────────────────────────────
@@ -4482,7 +4482,7 @@ workbench .__activity-bar__ {
     flex-shrink: 0;
     align-items: center;
     padding-top: 2px;
-    background: #2B2B2B;
+    background: var(--activitybar-bg, #2B2B2B);
 }
 
 
@@ -4542,7 +4542,7 @@ workbench .__activity-item__ .__pre-icon__ {
  * says something the layout has already said; the accent is better spent on the button under the pointer,
  * which is the one thing the layout cannot tell you. */
 workbench .__activity-item__:hover {
-    background: #3574F0;
+    background: var(--activitybar-item-hover-bg, #3574F0);
 }
 
 /* The OPEN panel's button, which is what :checked means here -- ActivityBar.ItemButton derives it from
@@ -4552,14 +4552,14 @@ workbench .__activity-item__:hover {
  * open" and "the pointer is over this" the same signal -- and open is the one you need to read across the
  * whole rail at a glance. Both editors use their selection accent here. */
 workbench .__activity-item__:checked {
-    background: #4E5157;
+    background: var(--activitybar-item-checked-bg, #4E5157);
 }
 
 /* Hover still wins on an open button. Without this the two rules tie on specificity and source order
  * decides, so pointing at an open panel's button would leave it looking untouched -- exactly when you are
  * reaching for it to close it, which is the one moment the hover feedback is load-bearing. */
 workbench .__activity-item__:checked:hover {
-    background: #3574F0;
+    background: var(--activitybar-item-hover-bg, #3574F0);
 }
 
 /* AN EDITOR OPENED FOR A FILE, which needs a size given to it because it has none of its own.
@@ -4595,7 +4595,7 @@ texteditor.__file-editor__ {
 
 projectfiletree {
     flex-grow: 1;
-    background: #252526;
+    background: var(--tree-bg, #252526);
     padding-all: 4px;
 }
 
@@ -4732,8 +4732,8 @@ projectfiletree .__project-row__ .__badge__ {
  * simply take turns being wrong. The answer is that a list with a selection does not need a hover state --
  * the cursor already says where the pointer is. */
 projectfiletree .__project-row__.__selected__ {
-    background-color: #2F5F9E;
-    color: #FFFFFF;
+    background-color: var(--tree-selected-bg, #2F5F9E);
+    color: var(--tree-selected-fg, #FFFFFF);
 }
 
 
@@ -4776,7 +4776,7 @@ crystaleditor > .__editor-content__ {
  * stopped reserving the gap while the menu was being measured, so the widest row -- the one with no free
  * space left to push with -- would have had its label touching its shortcut. */
 menuitem .__accelerator__ {
-    color: #8A8A8A;
+    color: var(--menu-accelerator, #8A8A8A);
     margin-left: auto;
     padding-left: 24px;
     white-space: nowrap;
@@ -4797,9 +4797,9 @@ menuitem .__accelerator__ {
 popover.__prompt__ {
     width: 280px;
     flex-direction: column;
-    background: #2E2E2E;
+    background: var(--prompt-bg, #2E2E2E);
     outline-width: 1px;
-    outline-color: #4A4A4A;
+    outline-color: var(--prompt-border, #4A4A4A);
     padding-all: 10px;
     gap-all: 6px;
 }
@@ -4810,7 +4810,7 @@ popover.__prompt__ .__prompt-caption__ {
     justify-content: center;
     align-items: center;
     text-align: center;
-    color: #C8C8C8;
+    color: var(--prompt-caption-fg, #C8C8C8);
 }
 
 /* NO border and NO background of its own: it takes the popup's. A field that draws its own box puts a
@@ -4818,9 +4818,9 @@ popover.__prompt__ .__prompt-caption__ {
 popover.__prompt__ textfield {
     width: 100%;
     height: 16px;
-    background: #2E2E2E;
+    background: var(--prompt-field-bg, #2E2E2E);
     border-width: 0px;
-    color: #DDDDDD;
+    color: var(--prompt-field-fg, #DDDDDD);
     padding-left: 2px;
 }
 
@@ -4907,7 +4907,7 @@ navigatorview .__nav-sidebar__ {
     height: 100%;
     padding-all: 4px;
     gap-all: 4px;
-    background: #252526;
+    background: var(--nav-sidebar-bg, #252526);
 }
 
 /* THE SEARCH BAR of a navigator — TreeSearch's, permanent, above the tree. It carries the box, the match
@@ -4993,14 +4993,14 @@ breadcrumbs .__crumb-icon__ {
 }
 
 breadcrumbs .__crumb__ {
-    color: #7CB7E8;
+    color: var(--breadcrumb-link-fg, #7CB7E8);
     flex-shrink: 0;
 }
 
 /* Where you ARE, so not a link: plain, and not coloured as one. A last segment that looked clickable
  * would be a control that does nothing. */
 breadcrumbs .__crumb__.__crumb-current__ {
-    color: #DDDDDD;
+    color: var(--breadcrumb-current-fg, #DDDDDD);
 }
 
 /* The chevron between two crumbs. A shape rather than a character — see Breadcrumbs for why a glyph in
@@ -5009,7 +5009,7 @@ breadcrumbs .__crumb-sep__ {
     width: 12px;
     height: 12px;
     flex-shrink: 0;
-    color: #7A7A7A;
+    color: var(--breadcrumb-sep-fg, #7A7A7A);
     overlay: shape("chevron-right");
 }
 
@@ -5027,7 +5027,7 @@ pagestack .__page__ {
 pagestack .__page-placeholder__ {
     width: 100%;
     padding-all: 8px;
-    color: #8A8A8A;
+    color: var(--pagestack-empty-fg, #8A8A8A);
 }
 
 /* A tree node. Height matches the palette's rows so the two windows read as one product, and the row is
@@ -5046,7 +5046,7 @@ navigatorview .__nav-node__ {
 /* Sized to its TEXT, not stretched: NavigatorView measures these to decide how wide the sidebar has to
  * be, and a label that fills the pane would only ever measure the pane. */
 navigatorview .__nav-label__ {
-    color: #CCCCCC;
+    color: var(--nav-label-fg, #CCCCCC);
     flex-shrink: 0;
 }
 
@@ -5066,20 +5066,20 @@ navigatorview .__nav-arrow__ {
  * with a sibling that has one. */
 navigatorview .__nav-node__.__collapsed__ > .__nav-arrow__ {
     overlay: shape("chevron-right");
-    color: #B0B0B0;
+    color: var(--nav-arrow-fg, #B0B0B0);
 }
 
 navigatorview .__nav-node__.__expanded__ > .__nav-arrow__ {
     overlay: shape("chevron-down");
-    color: #B0B0B0;
+    color: var(--nav-arrow-fg, #B0B0B0);
 }
 
 navigatorview treeview .__row__:hover {
-    background-color: #2A2D2E;
+    background-color: var(--list-hover-bg, #2A2D2E);
 }
 
 navigatorview treeview .__row__.__selected__ {
-    background-color: #04395E;
+    background-color: var(--list-selected-bg, #04395E);
 }
 
 /* ── Status bar ──────────────────────────────────────────────────────────────────────────────────────
@@ -5103,10 +5103,10 @@ statusbarview {
     /* THE SAME SURFACE AS THE RAILS, which is what makes it read as chrome rather than as the bottom of
      * whichever panel happens to sit above it. Without a band of its own the line looked like loose text
      * lying on the panel -- which is exactly how it first shipped. */
-    background: #2B2B2B;
-    color: #9DA0A8;
+    background: var(--statusbar-bg, #2B2B2B);
+    color: var(--statusbar-fg, #9DA0A8);
     border-width-top: 1px;
-    border-top-color: #1E1E1E;
+    border-top-color: var(--statusbar-border, #1E1E1E);
 }
 
 statusbarview .__left__,
@@ -5136,7 +5136,7 @@ statusbarview .__status-item__ {
     flex-shrink: 0;
     white-space: nowrap;
     font-size: 7px;
-    color: #9DA0A8;
+    color: var(--statusbar-item-fg, #9DA0A8);
 }
 
 /* The rule between two readouts. An ELEMENT, because a border cannot be asymmetric here: the paint path
@@ -5146,14 +5146,14 @@ statusbarview .__status-sep__ {
     width: 1px;
     height: 12px;
     flex-shrink: 0;
-    background-color: #3C3F41;
+    background-color: var(--statusbar-sep, #3C3F41);
 }
 
 /* The trail is quieter than the readouts: it says where you are, which you already know, while the
  * right-hand items are what you look down to check. IntelliJ draws the same difference. */
 statusbarview .__left__ breadcrumbs .__crumb__ {
     font-size: 7px;
-    color: #8A8D94;
+    color: var(--statusbar-crumb-fg, #8A8D94);
 }
 
 /* The trail gives way before the readouts do: a path is the one thing here that has a sensible short
@@ -5169,7 +5169,7 @@ statusbarview .__left__ breadcrumbs {
 notificationsview {
     flex-direction: column;
     flex-grow: 1;
-    background: #1E1E1E;
+    background: var(--notifications-bg, #1E1E1E);
     padding-all: 6px;
 }
 
@@ -5183,7 +5183,7 @@ notificationsview > .__head__ {
 
 notificationsview > .__head__ > .__title__ {
     font-size: 7px;
-    color: #9DA0A8;
+    color: var(--notifications-title-fg, #9DA0A8);
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0px;
@@ -5193,12 +5193,12 @@ notificationsview > .__head__ > .__title__ {
  * panel. A button here would out-weigh the actions on the notifications themselves. */
 notificationsview .__clear__ {
     font-size: 7px;
-    color: #4A88C7;
+    color: var(--notifications-link-fg, #4A88C7);
     flex-shrink: 0;
 }
 
 notificationsview .__clear__:hover {
-    color: #6BA5DE;
+    color: var(--notifications-link-hover-fg, #6BA5DE);
 }
 
 notificationsview > .__notification-list__ {
@@ -5218,7 +5218,7 @@ notificationsview > .__notification-list__ {
     flex-direction: column;
     width: 100%;
     flex-shrink: 0;
-    background: #2B2B2B;
+    background: var(--notification-bg, #2B2B2B);
     border-radius: 4px;
     padding-all: 8px;
     gap-all: 4px;
@@ -5229,7 +5229,7 @@ notificationsview > .__notification-list__ {
  * evaluated over the entered chain, not only the exact element hit, so the labels staying untargetable
  * costs nothing here. */
 .__notification__:hover {
-    background: #323232;
+    background: var(--notification-hover-bg, #323232);
 }
 
 /* Title and timestamp at opposite ends, with the title taking the slack. `min-width: 0` is what lets a
@@ -5243,7 +5243,7 @@ notificationsview > .__notification-list__ {
 
 .__notification__ .__message__ {
     font-size: 7px;
-    color: #DFE1E5;
+    color: var(--notification-message-fg, #DFE1E5);
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0px;
@@ -5253,14 +5253,14 @@ notificationsview > .__notification-list__ {
 
 .__notification__ .__time__ {
     font-size: 6px;
-    color: #787A80;
+    color: var(--notification-time-fg, #787A80);
     flex-shrink: 0;
     padding-right: 4px;
 }
 
 .__notification__ .__detail__ {
     font-size: 7px;
-    color: #9DA0A8;
+    color: var(--notification-detail-fg, #9DA0A8);
     width: 100%;
 }
 
@@ -5278,25 +5278,25 @@ notificationsview > .__notification-list__ {
  * links carry padding for the same reason. */
 .__notification__ .__action__ {
     font-size: 7px;
-    color: #4A88C7;
+    color: var(--notifications-link-fg, #4A88C7);
     flex-shrink: 0;
     padding-top: 2px;
     padding-bottom: 2px;
 }
 
 .__notification__ .__action__:hover {
-    color: #6BA5DE;
+    color: var(--notifications-link-hover-fg, #6BA5DE);
 }
 
 /* A SECONDARY ACTION, and "Don't show again". Quieter rather than hidden: VS Code puts its secondaries
  * behind a `...` menu, which costs a click to discover a verb that already fits on the card. Grey rather
  * than blue, so the row reads as one primary verb with alternatives beside it rather than three equals. */
 .__notification__ .__action__.__action-secondary__ {
-    color: #8A8D94;
+    color: var(--notification-secondary-fg, #8A8D94);
 }
 
 .__notification__ .__action__.__action-secondary__:hover {
-    color: #B4B7BE;
+    color: var(--notification-secondary-hover-fg, #B4B7BE);
 }
 
 /* THE SEVERITY GLYPH COMES FROM THE CLASS, never from Java — the same split graph.css makes for port
@@ -5313,11 +5313,11 @@ notificationsview > .__notification-list__ {
  * replaced by the next compile, so both belong in the bar — but rendered identically the failure reads as
  * a statistic. The same three severities, the same palette, the third surface to use it. */
 .__status-bar__ .__status-item__.severity-error {
-    color: #C75450;
+    color: var(--statusbar-error-fg, #C75450);
 }
 
 .__status-bar__ .__status-item__.severity-warning {
-    color: #C7A54A;
+    color: var(--statusbar-warning-fg, #C7A54A);
 }
 
 /* AN ENTRY THAT RUNS A COMMAND. Both references make most of the bar clickable — VS Code's encoding entry
@@ -5329,7 +5329,7 @@ notificationsview > .__notification-list__ {
 }
 
 .__status-bar__ .__status-item__.__clickable__:hover {
-    color: #D5D7DB;
+    color: var(--statusbar-hover-fg, #D5D7DB);
 }
 
 .__notification__ .__severity__.severity-info {
@@ -5342,12 +5342,12 @@ notificationsview > .__notification-list__ {
 
 .__notification__ .__severity__.severity-error {
     overlay: icon("crystalgui:general/errorDialog");
-    color: #C75450;
+    color: var(--notification-error-fg, #C75450);
 }
 
 notificationsview .__notifications-empty__ {
     font-size: 7px;
-    color: #6E7076;
+    color: var(--notifications-empty-fg, #6E7076);
     padding-all: 8px;
 }
 
@@ -5411,9 +5411,9 @@ notificationsview .__notifications-empty__ {
     min-width: 90px;
     flex-shrink: 0;
     opacity: 1;
-    background: #3C3F41;
+    background: var(--balloon-bg, #3C3F41);
     outline-width: 1px;
-    outline-color: #4E5254;
+    outline-color: var(--balloon-border, #4E5254);
     /* MUST MATCH NotificationBalloons.FADE_MS, which is how long it waits before detaching the element.
      * Detaching early cuts the fade off part-way through. */
     transition: opacity 150ms;
@@ -5454,13 +5454,13 @@ notificationsview .__notification__ .__message__ {
  * that rule and the balloon's own background rule have equal specificity (two class-weight components
  * each), so the later one in this file wins outright and the balloon would never highlight at all. */
 .__balloons__ > .__balloon__:hover {
-    background: #4A4E50;
+    background: var(--balloon-hover-bg, #4A4E50);
 }
 
 /* And the dismiss button lights on its own, so it reads as a control rather than as part of the text. */
 .__notification__ .__close__:hover {
-    color: #FFFFFF;
-    background-color: #5A5F62;
+    color: var(--notification-close-hover-fg, #FFFFFF);
+    background-color: var(--notification-close-hover-bg, #5A5F62);
     border-radius: 2px;
 }
 
@@ -5476,7 +5476,7 @@ notificationsview .__notification__ .__message__ {
     overlay: shape("cross");
     width: 12px;
     height: 12px;
-    color: #787A80;
+    color: var(--notification-close-fg, #787A80);
     flex-shrink: 0;
     margin-left: 4px;
 }
@@ -5503,7 +5503,7 @@ problemspanel .__problem__ {
 }
 
 problemspanel .__problem__:hover {
-    background: #2A2D2E;
+    background: var(--list-hover-bg, #2A2D2E);
 }
 
 /* Same class convention, same three glyphs, as the notification cards — a severity is a severity, and a
@@ -5529,7 +5529,7 @@ problemspanel .__problem__ .__severity__.severity-error {
 
 problemspanel .__problem__ .__message__ {
     font-size: 7px;
-    color: #DFE1E5;
+    color: var(--problems-message-fg, #DFE1E5);
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0px;
@@ -5549,7 +5549,7 @@ problemspanel .__h-scroll__ .__problem__ .__message__ {
  * nothing to point at renders it empty rather than reserving the space. */
 problemspanel .__problem__ .__line__ {
     font-size: 7px;
-    color: #6E7076;
+    color: var(--problems-line-fg, #6E7076);
     flex-shrink: 0;
 }
 
@@ -5558,7 +5558,7 @@ problemspanel .__problem__ .__line__ {
  * their producer gave them; folding these into the severity ladder would force a choice between showing a
  * squiggle you cannot act on and losing the rendering entirely. */
 .__problem__.tag-unnecessary .__message__ {
-    color: #6B6E76;
+    color: var(--problems-unnecessary-fg, #6B6E76);
 }
 
 .__problem__.tag-deprecated .__message__ {
@@ -5573,14 +5573,14 @@ problemspanel .__problem__ .__line__ {
  * is what you scan down when looking for a file, and the messages are what you read once you have found
  * it. VS Code and IntelliJ both weight the heading and quieten the children. */
 problemspanel .__problem__.__problem-file__ .__message__ {
-    color: #DFE1E5;
+    color: var(--problems-message-fg, #DFE1E5);
 }
 
 /* THE FOLDER, beside the filename — VS Code's second column, dim because it disambiguates rather than
  * identifies. The same slot carries `:591` on a problem row, which is why one rule serves both. */
 problemspanel .__problem__ .__line__ {
     font-size: 7px;
-    color: #6B6E76;
+    color: var(--problems-tree-line-fg, #6B6E76);
     flex-shrink: 0;
     padding-left: 4px;
 }
@@ -5589,7 +5589,7 @@ problemspanel .__problem__ .__line__ {
  * after a filename of unpredictable length. */
 problemspanel .__problem__ .__problem-count__ {
     font-size: 7px;
-    color: #6B6E76;
+    color: var(--problems-count-fg, #6B6E76);
     flex-shrink: 0;
     padding-left: 6px;
 }
@@ -5635,7 +5635,7 @@ problemspanel .__problem__.__problem-file__ .__message__ {
     flex-shrink: 0;
     height: 22px;
     padding-left: 4px;
-    background-color: #3C3F41;
+    background-color: var(--menubar-bg, #3C3F41);
 }
 
 .__menu-bar__ .__menu-title__ {
@@ -5645,7 +5645,7 @@ problemspanel .__problem__.__problem-file__ .__message__ {
     height: 22px;
     padding-left: 8px;
     padding-right: 8px;
-    color: #BBBBBB;
+    color: var(--menubar-fg, #BBBBBB);
     cursor: pointer;
 }
 
@@ -5664,15 +5664,15 @@ problemspanel .__problem__.__problem-file__ .__message__ {
 }
 
 .__menu-bar__ .__menu-title__:hover {
-    background-color: #4C5052;
+    background-color: var(--menubar-hover-bg, #4C5052);
 }
 
 /* THE OPEN TITLE STAYS LIT while its menu is down, which is the only thing on screen tying the popup
  * to the word it came from. A class rather than `:active`, which means "pressed" and would go out the
  * moment the button came up. */
 .__menu-bar__ .__menu-title__.__open__ {
-    background-color: #4C5052;
-    color: #FFFFFF;
+    background-color: var(--menubar-hover-bg, #4C5052);
+    color: var(--menubar-open-fg, #FFFFFF);
 }
 
 /* THE MNEMONIC UNDERLINE, drawn only while Alt is held. A text range rather than three elements: a
@@ -5698,14 +5698,14 @@ problemspanel .__problem__.__problem-file__ .__message__ {
 }
 
 .__menu-bar__ .__burger__:hover {
-    background-color: #4C5052;
+    background-color: var(--menubar-hover-bg, #4C5052);
 }
 
 .__menu-bar__ .__burger-bar__ {
     width: 12px;
     height: 2px;
     flex-shrink: 0;
-    background-color: #BBBBBB;
+    background-color: var(--menubar-fg, #BBBBBB);
 }
 
 /* ── The explorer's inline editor ───────────────────────────────────────────────────────────────
@@ -5722,9 +5722,9 @@ projectfiletree .__row-editor__ {
     padding-right: 2px;
     margin-left: 0px;
     font-size: 10;
-    background-color: #1E1F22;
+    background-color: var(--tree-editor-bg, #1E1F22);
     border-width: 1px;
-    border-color: #4A88C7;
+    border-color: var(--tree-editor-border, #4A88C7);
     border-radius: 2px;
 }
 
@@ -5765,14 +5765,14 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     height: 20px;
     padding-left: 6px;
     padding-right: 4px;
-    background-color: #2F3033;
+    background-color: var(--findbar-bg, #2F3033);
     border-width-bottom: 1px;
-    border-bottom-color: #3C3F41;
+    border-bottom-color: var(--findbar-border, #3C3F41);
 }
 
 .__find-bar__ text {
     font-size: 10;
-    color: #D0D2D6;
+    color: var(--findbar-fg, #D0D2D6);
     white-space: nowrap;
 }
 
@@ -5784,11 +5784,11 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
 /* THE COUNT REDS TOO. One fact, said everywhere it is visible: the query, the count and the arrows all
  * report "nothing" together rather than leaving the reader to notice a zero. */
 .__find-bar__ .__find-count__.__not-found__ {
-    color: #E06C6C;
+    color: var(--findbar-error-fg, #E06C6C);
 }
 
 .__find-bar__ .__find-count__ {
-    color: #8A8A8A;
+    color: var(--findbar-count-fg, #8A8A8A);
     /* CLIPPED, not merely ellipsised. `text-overflow` decides what the cut glyphs look like; it does not
      * itself cut anything -- without `overflow: hidden` the box shrinks correctly and the glyphs go on
      * painting at their full width, straight over the filter and close buttons beside them. The base
@@ -5817,14 +5817,14 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     background-color: transparent;
     overlay: icon("crystalgui:x");
     overlay-fit: contain;
-    color: #8A8A8A;
+    color: var(--findbar-button-fg, #8A8A8A);
     background: none;
     border-radius: 2px;
 }
 
 .__find-bar__ .__find-close__:hover {
-    color: #E0E0E0;
-    background-color: #4B4D50;
+    color: var(--findbar-button-hover-fg, #E0E0E0);
+    background-color: var(--findbar-close-hover-bg, #4B4D50);
 }
 
 /* A GLYPH, not a word. See TreeSearch's note: the words cost about fifty pixels of a bar that is as narrow
@@ -5840,19 +5840,19 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     overlay-fit: contain;
     background: none;
     background-color: transparent;
-    color: #9A9A9A;
+    color: var(--findbar-toggle-fg, #9A9A9A);
 }
 
 .__find-bar__ .__find-mode__:hover {
-    color: #E0E0E0;
+    color: var(--findbar-toggle-hover-fg, #E0E0E0);
     background: none;
-    background-color: #4E5157;
+    background-color: var(--findbar-button-hover-bg, #4E5157);
 }
 
 .__find-bar__ .__find-mode__.__on__ {
-    color: #FFFFFF;
+    color: var(--findbar-toggle-on-fg, #FFFFFF);
     background: none;
-    background-color: #3574F0;
+    background-color: var(--findbar-toggle-on-bg, #3574F0);
 }
 
 .__find-bar__ .__find-prev__,
@@ -5866,17 +5866,17 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     overlay-fit: contain;
     background: none;
     background-color: transparent;
-    color: #9A9A9A;
+    color: var(--findbar-arrow-fg, #9A9A9A);
 }
 
-.__find-bar__ .__find-prev__ { overlay: icon("crystalgui:general/search/up", #9A9A9A, monochrome); }
-.__find-bar__ .__find-next__ { overlay: icon("crystalgui:general/search/down", #9A9A9A, monochrome); }
+.__find-bar__ .__find-prev__ { overlay: icon("crystalgui:general/search/up", var(--findbar-icon, #9A9A9A), monochrome); }
+.__find-bar__ .__find-next__ { overlay: icon("crystalgui:general/search/down", var(--findbar-icon, #9A9A9A), monochrome); }
 
 .__find-bar__ .__find-prev__:hover,
 .__find-bar__ .__find-next__:hover {
-    color: #E0E0E0;
+    color: var(--findbar-button-hover-fg, #E0E0E0);
     background: none;
-    background-color: #4E5157;
+    background-color: var(--findbar-button-hover-bg, #4E5157);
 }
 
 /* NOTHING TO STEP THROUGH.
@@ -5903,21 +5903,21 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
 .__find-bar__ .__find-prev__.__off__ {
     background: none;
     background-color: transparent;
-    overlay: icon("crystalgui:general/search/up", #5A5D63, monochrome);
+    overlay: icon("crystalgui:general/search/up", var(--findbar-icon-off, #5A5D63), monochrome);
 }
 
 .__find-bar__ .__find-next__.__off__ {
     background: none;
     background-color: transparent;
-    overlay: icon("crystalgui:general/search/down", #5A5D63, monochrome);
+    overlay: icon("crystalgui:general/search/down", var(--findbar-icon-off, #5A5D63), monochrome);
 }
 
 .__find-bar__ .__find-prev__:hover {
-    overlay: icon("crystalgui:general/search/up", #E0E0E0, monochrome);
+    overlay: icon("crystalgui:general/search/up", var(--findbar-icon-hover, #E0E0E0), monochrome);
 }
 
 .__find-bar__ .__find-next__:hover {
-    overlay: icon("crystalgui:general/search/down", #E0E0E0, monochrome);
+    overlay: icon("crystalgui:general/search/down", var(--findbar-icon-hover, #E0E0E0), monochrome);
 }
 
 /* THE MATCHED CHARACTERS, NOT THE ROW -- IntelliJ's amber band behind the query span, and the reason
@@ -5927,20 +5927,20 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
  * The row itself is deliberately left alone. A whole-row mark says "something here matched" and leaves
  * the eye to find what -- which is exactly the work the band saves. */
 ::highlight(find-match) {
-    background-color: #C8873C;
-    color: #1B1B1B;
+    background-color: var(--find-match-bg, #C8873C);
+    color: var(--find-match-fg, #1B1B1B);
 }
 
 /* The row still says it matched, quietly, so a scan down the panel finds the hits before reading them. */
 .__match__ .__label__,
 .__match__ text {
-    color: #FFFFFF;
+    color: var(--tree-match-fg, #FFFFFF);
 }
 
 /* The third state, and the one that makes highlight usable: everything that is neither a match nor on
  * the way to one recedes. Removing them instead is the other mode. */
 .__dimmed__ text {
-    color: #6A6A6A;
+    color: var(--tree-dimmed-fg, #6A6A6A);
 }
 
 /* The search box. A real TextField, so it needs the geometry `textfield` gets everywhere else — the
@@ -5996,13 +5996,13 @@ problemspanel > .__find-bar__ {
     padding-left: 4px;
     padding-right: 3px;
     border-radius: 2px;
-    background: #1B1B1B;
+    background: var(--searchfield-bg, #1B1B1B);
     outline-width: 1px;
-    outline-color: #3C3C3C;
+    outline-color: var(--searchfield-border, #3C3C3C);
 }
 
 .__search-field__.__focused__ {
-    outline-color: #4A88C7;
+    outline-color: var(--searchfield-focus-border, #4A88C7);
 }
 
 .__search-field__ .__icon__ {
@@ -6011,7 +6011,7 @@ problemspanel > .__find-bar__ {
     flex-shrink: 0;
     overlay: icon("crystalgui:general/search/search");
     overlay-fit: contain;
-    color: #8A8A8A;
+    color: var(--searchfield-icon-fg, #8A8A8A);
 }
 
 .__search-field__ .__field__ {
@@ -6022,14 +6022,14 @@ problemspanel > .__find-bar__ {
     background: none;
     outline-width: 0px;
     font-size: 10;
-    color: #D0D2D6;
+    color: var(--searchfield-fg, #D0D2D6);
 }
 
 /* THE QUERY REDS, THE CARET DOES NOT. The red is a statement about the text -- it found nothing -- and a
  * red caret reads as the caret itself being wrong. `caret-color` is the web's answer and exists for this. */
 .__search-field__.__not-found__ .__field__ {
-    color: #E06C6C;
-    caret-color: #D0D2D6;
+    color: var(--searchfield-error-fg, #E06C6C);
+    caret-color: var(--searchfield-caret, #D0D2D6);
 }
 
 /* SMALL AND QUIET, and hard against the toggles. It is the least important control in the box -- it undoes
@@ -6042,16 +6042,16 @@ problemspanel > .__find-bar__ {
     flex-shrink: 0;
     overlay: icon("crystalgui:x");
     overlay-fit: contain;
-    color: #5F6265;
+    color: var(--searchfield-clear-fg, #5F6265);
 }
 
 .__search-field__ .__clear__:hover {
     color: #C0C0C0;
-        background-color: #393b40;
+        background-color: var(--searchfield-clear-hover-bg, #393b40);
 }
 
 .__search-field__ .__clear__:hover {
-    color: #E0E0E0;
+    color: var(--searchfield-clear-hover-fg, #E0E0E0);
 }
 
 /* ROOM TO BREATHE. At 1px the three glyphs ran together into one shape; IntelliJ spaces them by about a
@@ -6085,25 +6085,25 @@ problemspanel > .__find-bar__ {
     overlay-fit: contain;
     background: none;
     background-color: transparent;
-    color: #9A9A9A;
+    color: var(--searchfield-option-fg, #9A9A9A);
 }
 
 .__search-option__:hover {
-    color: #393b40;
-    background-color: #393b40;
+    color: var(--searchfield-option-hover-fg, #393b40);
+    background-color: var(--searchfield-option-hover-bg, #393b40);
 }
 
 /* ON IS BLUE, not a lighter grey. It is the one state that has to be readable at a glance across three
  * adjacent 13px glyphs, and grey-on-grey is not. An explicit class rather than `:checked` -- see
  * TreeSearch.addOption. */
 .__search-option__.__on__ {
-    color: #FFFFFF;
-    background-color: #375fad;
+    color: var(--searchfield-option-on-fg, #FFFFFF);
+    background-color: var(--searchfield-option-on-bg, #375fad);
 }
 
 .__search-option__.__on__:hover {
     background: none;
-    background-color: #4A82F2;
+    background-color: var(--searchfield-option-on-hover-bg, #4A82F2);
 }
 
 .__option-match-case__ { overlay: icon("crystalgui:general/search/matchCase"); }
@@ -6158,7 +6158,7 @@ problemspanel > .__find-bar__ {
     background-color: transparent;
     overlay: shape("chevron-right");
     overlay-fit: contain;
-    color: #9A9A9A;
+    color: var(--findbar-toggle-fg, #9A9A9A);
 }
 
 .__find-bar__ .__find-chevron__.__expanded__ {
@@ -6166,9 +6166,9 @@ problemspanel > .__find-bar__ {
 }
 
 .__find-bar__ .__find-chevron__:hover {
-    color: #E0E0E0;
+    color: var(--findbar-toggle-hover-fg, #E0E0E0);
     background: none;
-    background-color: #4E5157;
+    background-color: var(--findbar-button-hover-bg, #4E5157);
 }
 
 /* Replace / Replace All / Exclude. Text buttons rather than glyphs -- there is no icon for "replace all"
@@ -6183,26 +6183,26 @@ problemspanel > .__find-bar__ {
     flex-shrink: 0;
     border-radius: 3px;
     background: none;
-    background-color: #3C3F41;
+    background-color: var(--findbar-action-bg, #3C3F41);
 }
 
 .__find-bar__ .__find-action__ text {
     font-size: 10;
-    color: #C8C8C8;
+    color: var(--findbar-action-fg, #C8C8C8);
 }
 
 .__find-bar__ .__find-action__:hover {
     background: none;
-    background-color: #4E5157;
+    background-color: var(--findbar-button-hover-bg, #4E5157);
 }
 
 .__find-bar__ .__find-action__:disabled {
     background: none;
-    background-color: #2E3033;
+    background-color: var(--findbar-action-disabled-bg, #2E3033);
 }
 
 .__find-bar__ .__find-action__:disabled text {
-    color: #5A5D63;
+    color: var(--findbar-action-disabled-fg, #5A5D63);
 }
 
 .__option-preserve-case__ { overlay: icon("crystalgui:general/search/preserveCase"); }
@@ -6212,7 +6212,7 @@ problemspanel > .__find-bar__ {
  * name rather than a second mechanism -- highlights already carry text-decoration-line. */
 ::highlight(search-excluded) {
     text-decoration-line: line-through;
-    color: #7A7A7A;
+    color: var(--search-excluded-fg, #7A7A7A);
 }
 
 /* THE EDITOR'S BAR FLOATS over the text, so unlike the panel bars it has to paint its own ground and sit
@@ -6227,9 +6227,9 @@ problemspanel > .__find-bar__ {
     padding-left: 6px;
     padding-right: 6px;
     gap-all: 4px;
-    background-color: #303235;
+    background-color: var(--editorfind-bg, #303235);
     border-width-bottom: 1px;
-    border-bottom-color: #4A4D50;
+    border-bottom-color: var(--editorfind-border, #4A4D50);
     z-index: 20;
 }
 

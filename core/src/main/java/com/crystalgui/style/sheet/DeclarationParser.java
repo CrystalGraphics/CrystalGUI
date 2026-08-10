@@ -12,6 +12,7 @@ import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -42,7 +43,15 @@ public final class DeclarationParser {
     static final Pattern RULE_PATTERN = Pattern.compile("(?s)([^{}]+)\\{([^{}]*)}");
     static final Pattern DECL_PATTERN = Pattern.compile("(?m)\\s*([\\w-]+)\\s*:\\s*([^;]+)\\s*;?");
     static final Pattern IMPORTANT_SUFFIX = Pattern.compile("(?i)!\\s*important\\s*$");
-    static final Pattern VAR_REF = Pattern.compile("var\\(\\s*(--[\\w-]+)\\s*\\)");
+    /** The NAME inside a {@code var(} reference — used only to classify leftovers in
+     * {@link #resolveTable}; substitution itself is the scanner below, which a regex cannot be
+     * because a fallback may nest parentheses. */
+    static final Pattern VAR_NAME_REF = Pattern.compile("var\\(\\s*(--[\\w-]+)");
+
+    /** Hard cap on nested substitution — a fallback containing {@code var()}, a table chaining
+     * definition through definition. Past it the text is left literal and warned about, the same
+     * degrade-don't-break posture as every other malformed value. */
+    static final int MAX_VAR_DEPTH = 8;
 
     private DeclarationParser() {
     }
@@ -143,30 +152,142 @@ public final class DeclarationParser {
         return variables;
     }
 
-    /** Substitutes every {@code var(--name)} reference with the variable's raw (unparsed) text — no
-     * recursive re-substitution, and no {@code var(--name, fallback)} two-arg form; both are natural
-     * follow-ups if a real need shows up, not built speculatively. An undefined variable is left as
-     * literal {@code var(...)} text and warned about — it will then fail in whatever type-specific
-     * parser it reaches next, the same failure mode as any other malformed value. */
+    /**
+     * Substitutes every {@code var(--name)} / {@code var(--name, fallback)} reference with the
+     * variable's raw (unparsed) text.
+     *
+     * <p>The table handed in is expected to be <b>flat</b> — already run through
+     * {@link #resolveTable}, so a defined name substitutes in one step. The one place recursion
+     * remains is the <em>fallback</em>, which may itself be a {@code var()} chain
+     * ({@code var(--a, var(--b, 8px))}) and is resolved depth-first, capped at
+     * {@link #MAX_VAR_DEPTH}.</p>
+     *
+     * <p>An undefined variable with no fallback is left as literal {@code var(...)} text and warned
+     * about — it will then fail in whatever type-specific parser it reaches next, the same failure
+     * mode as any other malformed value.</p>
+     *
+     * <p>A scanner rather than a regex because a fallback nests parentheses, which no single
+     * regular expression can pair up.</p>
+     */
     static String substituteVariables(String rawValue, Map<String, String> variables) {
+        return substituteVariables(rawValue, variables, 0, true);
+    }
+
+    private static String substituteVariables(String rawValue, Map<String, String> variables,
+                                              int depth, boolean warnUndefined) {
         if (!rawValue.contains("var(")) return rawValue;
-        Matcher matcher = VAR_REF.matcher(rawValue);
-        StringBuilder out = new StringBuilder();
-        int last = 0;
-        while (matcher.find()) {
-            String varName = matcher.group(1);
-            String resolved = variables.get(varName);
-            out.append(rawValue, last, matcher.start());
+        if (depth > MAX_VAR_DEPTH) {
+            CrystalGuiCore.LOGGER.warn("var() fallbacks nested deeper than {} in '{}' — leaving as-is",
+                    MAX_VAR_DEPTH, rawValue);
+            return rawValue;
+        }
+        StringBuilder out = new StringBuilder(rawValue.length());
+        int i = 0;
+        while (true) {
+            int start = rawValue.indexOf("var(", i);
+            if (start < 0) {
+                out.append(rawValue, i, rawValue.length());
+                break;
+            }
+            out.append(rawValue, i, start);
+            int close = matchingParen(rawValue, start + 3); // start + 3 is the '('
+            if (close < 0) {
+                CrystalGuiCore.LOGGER.warn("Unbalanced parentheses in var() reference '{}' — leaving as-is", rawValue);
+                out.append(rawValue, start, rawValue.length());
+                break;
+            }
+            String inner = rawValue.substring(start + 4, close);
+            int comma = topLevelComma(inner);
+            String name = (comma < 0 ? inner : inner.substring(0, comma)).trim();
+            String fallback = comma < 0 ? null : inner.substring(comma + 1).trim();
+            String resolved = variables.get(name);
             if (resolved != null) {
                 out.append(resolved);
+            } else if (fallback != null) {
+                out.append(substituteVariables(fallback, variables, depth + 1, warnUndefined));
             } else {
-                CrystalGuiCore.LOGGER.warn("Undefined CSS variable '{}' referenced via var(...) — leaving as-is", varName);
-                out.append(matcher.group());
+                if (warnUndefined) {
+                    CrystalGuiCore.LOGGER.warn("Undefined CSS variable '{}' referenced via var(...) — leaving as-is", name);
+                }
+                out.append(rawValue, start, close + 1);
             }
-            last = matcher.end();
+            i = close + 1;
         }
-        out.append(rawValue, last, rawValue.length());
         return out.toString();
+    }
+
+    /**
+     * Resolves {@code var()} references <b>between a table's own definitions</b> to a fixed point,
+     * so a definition may derive from another definition through any sane depth of indirection —
+     * the mechanism that lets a component token say {@code --button-bg: var(--surface-raised)} and
+     * a theme override forty system tokens instead of four hundred component ones.
+     *
+     * <p>Iterates whole passes until nothing changes (or {@link #MAX_VAR_DEPTH} passes, which
+     * bounds legitimate chains and cycles alike). Afterwards a definition can still contain
+     * {@code var()} for exactly two reasons, told apart deliberately:</p>
+     * <ul>
+     *   <li><b>It references a name this table defines</b> — that is a cycle (an acyclic defined
+     *   reference would have resolved), warned about here and left literal.</li>
+     *   <li><b>It references a name nothing defines</b> — a legitimate resting state (a component
+     *   token waiting for a theme to supply its system token), left <em>silently</em>: the warning
+     *   belongs at the point of use, where the declaration pass already emits it, not once per
+     *   table rebind.</li>
+     * </ul>
+     *
+     * <p>Undefined-reference warnings are suppressed during resolution for the same reason.</p>
+     */
+    public static Map<String, String> resolveTable(Map<String, String> definitions) {
+        LinkedHashMap<String, String> resolved = new LinkedHashMap<>(definitions);
+        boolean changed = true;
+        for (int pass = 0; pass < MAX_VAR_DEPTH && changed; pass++) {
+            changed = false;
+            for (Map.Entry<String, String> entry : resolved.entrySet()) {
+                String value = entry.getValue();
+                if (!value.contains("var(")) continue;
+                String next = substituteVariables(value, resolved, 0, false);
+                if (!next.equals(value)) {
+                    entry.setValue(next);
+                    changed = true;
+                }
+            }
+        }
+        for (Map.Entry<String, String> entry : resolved.entrySet()) {
+            String value = entry.getValue();
+            if (!value.contains("var(")) continue;
+            Matcher ref = VAR_NAME_REF.matcher(value);
+            while (ref.find()) {
+                if (resolved.containsKey(ref.group(1))) {
+                    CrystalGuiCore.LOGGER.warn(
+                            "Cyclic CSS variable definition: '{}' still references '{}' after resolution — leaving literal",
+                            entry.getKey(), ref.group(1));
+                    break;
+                }
+            }
+        }
+        return resolved;
+    }
+
+    /** Index of the {@code ')'} matching the {@code '('} at {@code open}, or -1 if unbalanced. */
+    private static int matchingParen(String s, int open) {
+        int depth = 0;
+        for (int i = open; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(') depth++;
+            else if (c == ')' && --depth == 0) return i;
+        }
+        return -1;
+    }
+
+    /** First comma in {@code s} not inside parentheses, or -1 — the name/fallback split point. */
+    private static int topLevelComma(String s) {
+        int depth = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (c == ',' && depth == 0) return i;
+        }
+        return -1;
     }
 
     /** Strips {@code //} and comments from a source string. */

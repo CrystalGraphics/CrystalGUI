@@ -1,0 +1,5 @@
+/* Test fixture for UiThemeManagerTest — a REGISTRY-loaded sheet, because only registry sheets
+ * rebind on a theme swap. The fallback is the unthemed resting value the test asserts first. */
+.theme-probe {
+    opacity: var(--probe-opacity, 0.5);
+}

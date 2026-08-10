@@ -83,10 +83,20 @@ public final class StyleEngine {
      */
     public static int reloadStylesheets() {
         int reloaded = StyleSheetRegistry.reloadAll();
+        restyleAllWindows();
+        return reloaded;
+    }
+
+    /**
+     * Re-matches every element of every live window against the sheets' <b>current</b> contents —
+     * the second half of any in-place sheet mutation. {@code StyleSheetRegistry.reloadAll()} and
+     * {@code bindVariables()} both change what the sheets say without changing any engine's sheet
+     * list, so no per-window hook fires; whoever mutated the sheets calls this next.
+     */
+    public static void restyleAllWindows() {
         synchronized (LIVE) {
             for (StyleEngine engine : LIVE) engine.invalidateAllMatches();
         }
-        return reloaded;
     }
 
     public void addStylesheet(StyleSheet sheet) {

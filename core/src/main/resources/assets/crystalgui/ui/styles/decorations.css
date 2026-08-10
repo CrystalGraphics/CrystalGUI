@@ -20,25 +20,25 @@
  */
 
 /* Version control ---------------------------------------------------------------------------------- */
-.decoration-modified   { color: #E2C08D; }
-.decoration-added      { color: #81B88B; }
-.decoration-deleted    { color: #C74E39; text-decoration-line: line-through; }
-.decoration-renamed    { color: #73C991; }
-.decoration-untracked  { color: #73C991; }
-.decoration-conflict   { color: #E4676B; }
+.decoration-modified   { color: var(--decoration-modified, #E2C08D); }
+.decoration-added      { color: var(--decoration-added, #81B88B); }
+.decoration-deleted    { color: var(--decoration-deleted, #C74E39); text-decoration-line: line-through; }
+.decoration-renamed    { color: var(--decoration-renamed, #73C991); }
+.decoration-untracked  { color: var(--decoration-untracked, #73C991); }
+.decoration-conflict   { color: var(--decoration-conflict, #E4676B); }
 
 /* Ignored is the one that reads as ABSENCE rather than as a colour: it is dimmed, not tinted. A colour
  * would make an ignored file more prominent than a tracked one, which is backwards. */
-.decoration-ignored    { color: #6B6B6B; }
+.decoration-ignored    { color: var(--decoration-ignored, #6B6B6B); }
 
 /* Diagnostics -------------------------------------------------------------------------------------- */
-.decoration-error      { color: #F14C4C; }
-.decoration-warning    { color: #CCA700; }
-.decoration-info       { color: #3794FF; }
+.decoration-error      { color: var(--decoration-error, #F14C4C); }
+.decoration-warning    { color: var(--decoration-warning, #CCA700); }
+.decoration-info       { color: var(--decoration-info, #3794FF); }
 
 /* Editor state ------------------------------------------------------------------------------------- */
-.decoration-dirty      { color: #E2C08D; }
-.decoration-readonly   { color: #8A9199; }
+.decoration-dirty      { color: var(--decoration-dirty, #E2C08D); }
+.decoration-readonly   { color: var(--decoration-readonly, #8A9199); }
 
 /* The badge inherits the row's decoration colour through `color`, so it needs no rule per state --
  * only the shared shrink. Stated here rather than in default.css because a theme that wants no badges
