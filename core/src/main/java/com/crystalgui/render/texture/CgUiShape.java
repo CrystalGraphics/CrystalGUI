@@ -108,6 +108,13 @@ public final class CgUiShape implements CgUiDrawable {
         }
     }
 
+    /** A mark, not a picture: it has no palette, so the element's {@code color} is its colour.
+     * @see CgUiDrawable#followsTextColor() */
+    @Override
+    public boolean followsTextColor() {
+        return true;
+    }
+
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         int argb = ArgbMath.multiply(0xFFFFFFFF, ctx.getColor());

@@ -46,4 +46,24 @@ public interface CgUiDrawable {
     default float intrinsicHeight() {
         return -1f;
     }
+
+    /**
+     * Whether this drawable has <b>no colour of its own</b> and should therefore be painted in the
+     * element's {@code color}, the way a glyph is.
+     *
+     * <p>Default {@code false}: a textured sprite and a multi-colour icon carry a palette the author
+     * chose, and multiplying that by the surrounding text colour is how a file-type icon turns into
+     * mud. {@link CgUiShape} overrides it to {@code true} — a chevron, a checkmark or a cross is a
+     * mark, not a picture, and {@code color} is the only colour it could sensibly take.</p>
+     *
+     * <p><b>Why this exists at all.</b> {@code UIElement.paintOverlay} used to set the ambient tint to
+     * pure white before drawing, so a {@code shape()} overlay painted white <em>whatever the sheet
+     * said</em> — it could not be themed, and nobody noticed because white-on-dark is what it wanted
+     * to look like anyway. The light theme made every fold arrow in the file tree vanish. The tint is
+     * now the element's {@code color} for drawables that answer true here, and white for the rest,
+     * which keeps the existing {@code icon("…", #hex, monochrome)} call sites exactly as they were.</p>
+     */
+    default boolean followsTextColor() {
+        return false;
+    }
 }
