@@ -3,6 +3,7 @@ package com.crystalgui.style.sheet;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -14,6 +15,32 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class StyleSheetRegistry {
 
+    /** The key {@link StyleSheet#DEFAULT} is built from — named so the two cannot drift apart. */
+    static final String DEFAULT_SHEET = "crystalgui:default";
+
+    /**
+     * The user-agent sheet's parts, in concatenation order — <b>the one manifest</b>, read by
+     * {@link #fetchSource} and by {@code StyleGovernanceTest}, so the build fails if a part is
+     * renamed without both following.
+     *
+     * <p>default.css was split at its own section boundaries once it passed 6,000 lines
+     * (plan_styling.md step 8) — a pure move, contiguous by construction so rule order across the
+     * parts is exactly the old file's order. <b>Order here is load-bearing</b> the same way order
+     * within a file is: equal-specificity ties fall to source order, and the concatenation IS the
+     * source ({@code :disabled} after {@code :hover} being the classic casualty of a reorder).</p>
+     */
+    public static final List<String> DEFAULT_SHEET_PARTS = List.of(
+            "crystalgui:ua/core",
+            "crystalgui:ua/widgets",
+            "crystalgui:ua/editor",
+            "crystalgui:ua/overlays",
+            "crystalgui:ua/config-kit",
+            "crystalgui:ua/inspector",
+            "crystalgui:ua/workbench",
+            "crystalgui:ua/panels",
+            "crystalgui:ua/search"
+    );
+    
     private static final ConcurrentHashMap<String, StyleSheet> CACHE = new ConcurrentHashMap<>();
 
     /**
@@ -69,18 +96,44 @@ public final class StyleSheetRegistry {
     }
 
     private static StyleSheet load(String namespacedPath) {
-        String resourcePath = toResourcePath(namespacedPath);
-        String css = CgIO.loadSource(resourcePath);
+        String css = fetchSource(namespacedPath);
         if (css == null) {
-            CrystalGuiCore.LOGGER.warn("StyleSheetRegistry: no stylesheet found at '{}' (from '{}')", resourcePath, namespacedPath);
+            CrystalGuiCore.LOGGER.warn("StyleSheetRegistry: no stylesheet found for '{}'", namespacedPath);
             return null;
         }
         try {
             return StyleSheet.parse(css);
         } catch (Exception e) {
-            CrystalGuiCore.LOGGER.warn("StyleSheetRegistry: failed to parse '{}': {}", resourcePath, e.getMessage());
+            CrystalGuiCore.LOGGER.warn("StyleSheetRegistry: failed to parse '{}': {}", namespacedPath, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * The source text behind a registry key — one file for everything except {@link #DEFAULT_SHEET},
+     * which is the concatenation of {@link #DEFAULT_SHEET_PARTS} in manifest order.
+     *
+     * <p>A missing <em>part</em> warns and is skipped rather than blanking the whole sheet: nine
+     * files are nine chances for a packaging slip, and eight ninths of a user-agent sheet keeps most
+     * of the UI functional while the log names what is gone — where an empty sheet lays every widget
+     * out at 0x0 and points at nothing.</p>
+     */
+    private static String fetchSource(String namespacedPath) {
+        if (!DEFAULT_SHEET.equals(namespacedPath)) {
+            return CgIO.loadSource(toResourcePath(namespacedPath));
+        }
+        StringBuilder joined = new StringBuilder();
+        boolean anyPart = false;
+        for (String part : DEFAULT_SHEET_PARTS) {
+            String css = CgIO.loadSource(toResourcePath(part));
+            if (css == null) {
+                CrystalGuiCore.LOGGER.warn("StyleSheetRegistry: user-agent part '{}' is missing", part);
+                continue;
+            }
+            joined.append(css).append('\n');
+            anyPart = true;
+        }
+        return anyPart ? joined.toString() : null;
     }
 
     /**
@@ -113,12 +166,11 @@ public final class StyleSheetRegistry {
     public static int reloadAll() {
         int reloaded = 0;
         for (var entry : CACHE.entrySet()) {
-            String resourcePath = toResourcePath(entry.getKey());
-            String css = CgIO.loadSource(resourcePath);
+            String css = fetchSource(entry.getKey());
             if (css == null) {
                 CrystalGuiCore.LOGGER.warn(
                         "StyleSheetRegistry.reloadAll: '{}' is unreadable; keeping the rules already loaded",
-                        resourcePath);
+                        entry.getKey());
                 continue;
             }
             try {
@@ -129,7 +181,7 @@ public final class StyleSheetRegistry {
             } catch (Exception e) {
                 CrystalGuiCore.LOGGER.warn(
                         "StyleSheetRegistry.reloadAll: '{}' failed to parse ({}); keeping the previous rules",
-                        resourcePath, e.getMessage());
+                        entry.getKey(), e.getMessage());
             }
         }
         // The user-agent sheet, which is a copy of the cached one rather than the cached one -- see above.
@@ -141,9 +193,6 @@ public final class StyleSheetRegistry {
                 reloaded, CACHE.size());
         return reloaded;
     }
-
-    /** The path {@link StyleSheet#DEFAULT} is built from — named so the two cannot drift apart. */
-    static final String DEFAULT_SHEET = "crystalgui:default";
 
     /** {@code "namespace:path"} -> {@code "namespace:ui/styles/path.css"}. */
     private static String toResourcePath(String namespacedPath) {

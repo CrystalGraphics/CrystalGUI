@@ -1,0 +1,97 @@
+/* ua/core.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ *
+ * The user-agent sheet's contract (the header essay), base text metrics, corner policy, and the focus ring.
+ *
+ * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
+ * one sheet the engine loads — rule order across files is as load-bearing as within one
+ * (:disabled after :hover ties), so files split at section boundaries and never reorder.
+ * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
+ * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+
+/* CrystalGUI's user-agent stylesheet — the browser analogue.
+ *
+ * WHY THIS EXISTS: no widget sets any size in Java (only UIText, from measured text). Slider's
+ * 150x20, Switch's 25x14, Checkbox's 12x12 mark, SplitView's 4px divider — all of it lived only in
+ * a theme. Without one, a Slider is 0x0, a Switch is invisible and a SplitView's divider is 0px wide
+ * and literally ungrabbable. Everything below is what a widget needs to FUNCTION, not to look good.
+ *
+ * Apply it explicitly — it is never injected automatically:
+ *     window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+ *
+ * CASCADE: this sheet is applied at StyleOrigin.USER_AGENT, one step below STYLESHEET. Origin is the
+ * first thing StyleSlot.compareTo weighs, so ANY author rule beats anything here at ANY specificity,
+ * and the order you register the sheets in doesn't matter.
+ *
+ * THREE RULES FOR EDITING THIS FILE:
+ *   1. Never use !important. It escalates to StyleOrigin.IMPORTANT, jumping above every author sheet
+ *      and defeating the point of the file.
+ *   2. Never reference asset()/sprite(). This must stand alone with no texture pack loaded, so
+ *      backgrounds here are flat colours only. Themes supply the art.
+ *   3. Fill with `background:`, NEVER `background-color:`. They are not interchangeable here:
+ *      `background:` is the drawable (a theme's `background: asset(...)` replaces it outright),
+ *      while `background-color:` is a multiplicative TINT over whatever drawable is present, whose
+ *      unset value is white — the identity. Setting a grey background-color here therefore does not
+ *      paint grey over a theme, it MULTIPLIES the theme's sprite darker. Caught exactly that way:
+ *      the first draft used background-color and visibly darkened every Ore sprite in cgui-ore-theme.
+ */
+
+/* ── Text ──────────────────────────────────────────────────────────────────────────────────────
+ * font-size defaults to 16 in the property registry, which is huge next to Minecraft's own UI.
+ * These are inheritable, so setting them on the widgets reaches their labels. */
+
+* {
+    font-size: 10;
+    outline-offset: -1px;
+    /*border-radius: 2px;*/
+}
+
+/* ── Corners ────────────────────────────────────────────────────────────────────────────────────
+ * Rounding is applied PER WIDGET below, never on `*` — which is why the `border-radius` in the `*`
+ * rule above stays commented out. Two reasons, and the second is the real one:
+ *
+ *   1. resolveOverflowClip() picks the FBO MASK path over a cheap GL_SCISSOR_TEST rect whenever corner
+ *      radii are non-zero, since a rectangle can't clip a rounded shape. On `*` that silently drags
+ *      every scroll viewport and clipped pane onto the FBO path for corners nobody can see. Per-widget,
+ *      only `textfield` (which clips its own text) crosses over.
+ *   2. A `*` rule claims the property for every element in every consumer's tree, so a theme wanting
+ *      square corners has to fight it back with another `*` rule — and that second rule then squashes
+ *      radii the APP set on its own elements. Rounding only what this sheet actually draws keeps both
+ *      the theme's and the app's own declarations intact.
+ *
+ * Each value is tied to its widget's geometry: 50% on a square part is a circle, and a pill's radius is
+ * half its height. Change a widget's size and its radius moves with it. */
+
+/* ── Focus ──────────────────────────────────────────────────────────────────────────────────────
+ * The browser analogue: whatever holds focus gets a visible ring, so a themeless UI is navigable by
+ * keyboard at all. #0060df is Firefox's accent. Flat colour, not asset() — see rule 2 above.
+ *
+ * This is the SDF path (outline-width + outline-color), which already follows border-radius and
+ * expands it, so a rounded widget gets a rounded ring for free. It needs no Java support.
+ *
+ * A bare `:focus-visible` is a complete selector here (a lone pseudo-class needs no `*`), and
+ * `*:focus-visible` would compute to the identical specificity of 10 — so the shorter form is the one
+ * to use.
+ *
+ * `:focus-visible`, NOT `:focus` — the web's rule. An earlier version of this comment argued the
+ * opposite, on the grounds that hiding rings from mouse users inverts in a mouse-first UI. Trying it
+ * settled it: a ring on every click is noise, while a slider you tabbed to needs to say so. The
+ * pseudo-class is true for keyboard and programmatic focus and false after a click — except on
+ * elements that take text input, which always ring (see UIInputHandler's FocusSource). So: tab to a
+ * slider and it rings, click it and it doesn't, and a text field rings either way.
+ *
+ * The seven things this can match are the only focusable elements in core/: button, tab, checkbox,
+ * switch, slider, textfield, and SplitView's divider. A theme that rings a widget's CHILD instead must
+ * turn this off on the root with `outline: none`, or both rings draw — see ore.css.
+ *
+ * 1px, where the web's default ring is 2px: measured in cgui-gallery at uiScale 2 rather than
+ * assumed, and 2px was proportionally enormous against this engine's 10px default text (same reason
+ * font-size is set to 10 above).
+ *
+ * The offset is INWARD (-1px), set once on `*` at the top of this file rather than here. The web's
+ * ring is often offset outward; that was worse twice over — it made adjacent checkboxes' rings
+ * collide, and it draws beyond the border box, where any ancestor with `overflow: hidden` scissors
+ * it away (a focused row inside a ScrollerView would lose the edge of its own ring). Pulling the
+ * stroke inside the border box instead means it always survives the clip. */
+:focus-visible {
+    outline: 1px var(--focus-ring, #0060df);
+}

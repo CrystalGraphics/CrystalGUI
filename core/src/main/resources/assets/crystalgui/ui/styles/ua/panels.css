@@ -1,0 +1,551 @@
+/* ua/panels.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ *
+ * Status bar, notifications, balloons, the Problems rows and tree.
+ *
+ * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
+ * one sheet the engine loads — rule order across files is as load-bearing as within one
+ * (:disabled after :hover ties), so files split at section boundaries and never reorder.
+ * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
+ * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+
+/* ── Status bar ──────────────────────────────────────────────────────────────────────────────────────
+ *
+ * The line along the bottom of the workbench. GEOMETRY ONLY, like everything else in the user-agent
+ * sheet: a theme gives it a colour.
+ *
+ * A fixed height, and it is load-bearing rather than cosmetic — the bar sits in the shell's column above
+ * nothing, so a height that varied with its content would re-measure every region above it whenever a
+ * status item appeared. The same rule the plan states for the main toolbar's two states. */
+statusbarview {
+    flex-direction: row;
+    align-items: center;
+    height: 22px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    padding-left: 8px;
+    padding-right: 8px;
+    gap-all: 8px;
+    overflow: hidden;
+    /* THE SAME SURFACE AS THE RAILS, which is what makes it read as chrome rather than as the bottom of
+     * whichever panel happens to sit above it. Without a band of its own the line looked like loose text
+     * lying on the panel -- which is exactly how it first shipped. */
+    background: var(--statusbar-bg, #2B2B2B);
+    color: var(--statusbar-fg, #9DA0A8);
+    border-width-top: 1px;
+    border-top-color: var(--statusbar-border, #1E1E1E);
+}
+
+statusbarview .__left__,
+statusbarview .__right__ {
+    flex-direction: row;
+    align-items: center;
+    /* The ITEM carries its own leading space, so the gap only has to keep the divider off its neighbour;
+     * 12px in both would put 24px between every pair. */
+    gap-all: 12px;
+    flex-shrink: 0;
+}
+
+/* THE SPACER IS WHAT PUTS THE RIGHT GROUP AT THE TRAILING EDGE, rather than either group being
+ * positioned. `margin-left: auto` on the right group would do it with one item and not with two: auto
+ * margins SHARE the free space between every auto margin in the row, which is the trap the activity
+ * bar's groups already spent a session on. One growing spacer has exactly one claimant. */
+statusbarview .__spacer__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+}
+
+/* A DIVIDER BEFORE EVERY ITEM BUT THE FIRST, which is what makes four readouts read as four things
+ * rather than one run-on line: at 12px of gap alone, `6:1 UTF-8 LF 4 spaces` scanned as a single phrase.
+ * The divider itself is an element -- see `.__status-sep__` below for why it cannot be a border. */
+statusbarview .__status-item__ {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: 7px;
+    color: var(--statusbar-item-fg, #9DA0A8);
+}
+
+/* The rule between two readouts. An ELEMENT, because a border cannot be asymmetric here: the paint path
+ * takes border().left as the width and strokes a uniform box, so `border-width-left` drew a rectangle
+ * around every item instead of a line between two. Breadcrumbs spells its separators the same way. */
+statusbarview .__status-sep__ {
+    width: 1px;
+    height: 12px;
+    flex-shrink: 0;
+    background-color: var(--statusbar-sep, #3C3F41);
+}
+
+/* The trail is quieter than the readouts: it says where you are, which you already know, while the
+ * right-hand items are what you look down to check. IntelliJ draws the same difference. */
+statusbarview .__left__ breadcrumbs .__crumb__ {
+    font-size: 7px;
+    color: var(--statusbar-crumb-fg, #8A8D94);
+}
+
+/* The trail gives way before the readouts do: a path is the one thing here that has a sensible short
+ * form, and Breadcrumbs already elides its own middle. */
+statusbarview .__left__ breadcrumbs {
+    flex-shrink: 1;
+    min-width: 0px;
+}
+
+/* ── Notifications ───────────────────────────────────────────────────────────────────────────────────
+ *
+ * IntelliJ's Notifications tool window: a section head with Clear all, then a column of cards. */
+notificationsview {
+    flex-direction: column;
+    flex-grow: 1;
+    background: var(--notifications-bg, #1E1E1E);
+    padding-all: 6px;
+}
+
+notificationsview > .__head__ {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 0;
+    flex-shrink: 0;
+    padding-bottom: 6px;
+}
+
+notificationsview > .__head__ > .__title__ {
+    font-size: 7px;
+    color: var(--notifications-title-fg, #9DA0A8);
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+}
+
+/* A LINK, not a button — matching the entries' own actions, which is what IntelliJ does throughout this
+ * panel. A button here would out-weigh the actions on the notifications themselves. */
+notificationsview .__clear__ {
+    font-size: 7px;
+    color: var(--notifications-link-fg, #4A88C7);
+    flex-shrink: 0;
+}
+
+notificationsview .__clear__:hover {
+    color: var(--notifications-link-hover-fg, #6BA5DE);
+}
+
+notificationsview > .__notification-list__ {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+    flex-direction: column;
+    gap-all: 4px;
+}
+
+/* One card, WHEREVER IT IS DRAWN. Scoped to the card and not to the panel, because the history and the
+ * balloons share it: rules written as `notificationsview .__x__` reached the list and silently missed
+ * every balloon, which then fell back to the engine's COLUMN default and stacked its title, its timestamp
+ * and its close button one above the other. A shared widget's own look cannot be keyed to one of its
+ * hosts. */
+.__notification__ {
+    flex-direction: column;
+    width: 100%;
+    flex-shrink: 0;
+    background: var(--notification-bg, #2B2B2B);
+    border-radius: 4px;
+    padding-all: 8px;
+    gap-all: 4px;
+}
+
+/* HOVER HIGHLIGHTS THE WHOLE CARD, which is what tells you the entry is a thing rather than a paragraph
+ * — IntelliJ lifts the row the pointer is over. It works from anywhere inside the card because :hover is
+ * evaluated over the entered chain, not only the exact element hit, so the labels staying untargetable
+ * costs nothing here. */
+.__notification__:hover {
+    background: var(--notification-hover-bg, #323232);
+}
+
+/* Title and timestamp at opposite ends, with the title taking the slack. `min-width: 0` is what lets a
+ * long title give way rather than pushing the time off the card. */
+.__notification__ .__entry-head__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 6px;
+    width: 100%;
+}
+
+.__notification__ .__message__ {
+    font-size: 7px;
+    color: var(--notification-message-fg, #DFE1E5);
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.__notification__ .__time__ {
+    font-size: 6px;
+    color: var(--notification-time-fg, #787A80);
+    flex-shrink: 0;
+    padding-right: 4px;
+}
+
+.__notification__ .__detail__ {
+    font-size: 7px;
+    color: var(--notification-detail-fg, #9DA0A8);
+    width: 100%;
+}
+
+.__notification__ .__actions__ {
+    flex-direction: row;
+    gap-all: 12px;
+    flex-shrink: 0;
+}
+
+/* PADDING IS LOAD-BEARING, not spacing. A UIText has no MeasureFunc, so it is sized by its own
+ * post-layout recompute -- which only runs from onLayoutChanged, which only fires on a GENUINE geometry
+ * change. A link with no width, no padding and no content size computes 0x0, never changes, and therefore
+ * never gets measured at all: invisible, unhittable, and permanent. The sibling labels escape it only
+ * because `width: 100%` and `flex-grow: 1` hand them a box to start from. The dock banner's own action
+ * links carry padding for the same reason. */
+.__notification__ .__action__ {
+    font-size: 7px;
+    color: var(--notifications-link-fg, #4A88C7);
+    flex-shrink: 0;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+.__notification__ .__action__:hover {
+    color: var(--notifications-link-hover-fg, #6BA5DE);
+}
+
+/* A SECONDARY ACTION, and "Don't show again". Quieter rather than hidden: VS Code puts its secondaries
+ * behind a `...` menu, which costs a click to discover a verb that already fits on the card. Grey rather
+ * than blue, so the row reads as one primary verb with alternatives beside it rather than three equals. */
+.__notification__ .__action__.__action-secondary__ {
+    color: var(--notification-secondary-fg, #8A8D94);
+}
+
+.__notification__ .__action__.__action-secondary__:hover {
+    color: var(--notification-secondary-hover-fg, #B4B7BE);
+}
+
+/* THE SEVERITY GLYPH COMES FROM THE CLASS, never from Java — the same split graph.css makes for port
+ * types and filetypes.css for file icons. A dozen producers share three glyphs and each needs its own
+ * colour, which is the thing keying colour to the drawable cannot express. */
+.__notification__ .__severity__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+}
+
+/* A FAILING status item reads as a failure. "compiled 12n/9e" and "1 error(s)" are both ambient and both
+ * replaced by the next compile, so both belong in the bar — but rendered identically the failure reads as
+ * a statistic. The same three severities, the same palette, the third surface to use it. */
+.__status-bar__ .__status-item__.severity-error {
+    color: var(--statusbar-error-fg, #C75450);
+}
+
+.__status-bar__ .__status-item__.severity-warning {
+    color: var(--statusbar-warning-fg, #C7A54A);
+}
+
+/* AN ENTRY THAT RUNS A COMMAND. Both references make most of the bar clickable — VS Code's encoding entry
+ * runs `changeEncoding`, IntelliJ's line-separator widget opens a popup — so an entry carrying a command
+ * has to look different from the readouts beside it, which do nothing. Only the hover says so: a status
+ * bar that highlighted every actionable entry at rest would be louder than what it sits under. */
+.__status-bar__ .__status-item__.__clickable__ {
+    cursor: pointer;
+}
+
+.__status-bar__ .__status-item__.__clickable__:hover {
+    color: var(--statusbar-hover-fg, #D5D7DB);
+}
+
+.__notification__ .__severity__.severity-info {
+    overlay: icon("crystalgui:general/informationDialog");
+}
+
+.__notification__ .__severity__.severity-warning {
+    overlay: icon("crystalgui:general/warningDialog");
+}
+
+.__notification__ .__severity__.severity-error {
+    overlay: icon("crystalgui:general/errorDialog");
+    color: var(--notification-error-fg, #C75450);
+}
+
+notificationsview .__notifications-empty__ {
+    font-size: 7px;
+    color: var(--notifications-empty-fg, #6E7076);
+    padding-all: 8px;
+}
+
+/* ── Notification balloons ───────────────────────────────────────────────────────────────────────────
+ *
+ * The transient half. Anchored to the bottom-right corner of the workbench's content, above the status
+ * bar, which is where both references put them.
+ *
+ * SIZED TO ITS CONTENT, never to the corner it sits in: the layer is hit-testable (its balloons carry
+ * close buttons and action links, and setHitTest(false) would disable those too, since it applies to the
+ * whole subtree), so a layer stretched across the workbench would swallow every click in it. */
+.__balloons__ {
+    position: absolute;
+    /* INTO THE CORNER between the status bar and the right rail.
+     *
+     * The containing block is the workbench's CONTENT box, which spans the whole width — the right rail
+     * is a child of it, not something outside it — so anchoring to `right: 2px` puts the balloon
+     * underneath the rail. 22px is the rail's own 20px plus the 2px gap. The coupling is real and lives
+     * in this file twice; if `.__activity-bar__` ever changes width, this moves with it.
+     *
+     * `bottom: 2px` needs no such arithmetic: content's bottom edge already IS the status bar's top,
+     * because the workbench is a column with the bar below the content. */
+    right: 22px;
+    bottom: 2px;
+    flex-direction: column;
+    /* GROWS UP AND LEFT, NEVER DOWN OR RIGHT.
+     *
+     * Up is free: only `bottom` is anchored, so a taller stack extends away from the corner. Left is what
+     * `align-items: flex-end` buys — a balloon narrower than this layer sits against its trailing edge, so
+     * widening one moves its LEFT edge and leaves the corner where it is. Setting `top` or `left` here
+     * would pin the opposite edge and make a long message push out of the window instead. */
+    align-items: flex-end;
+    gap-all: 6px;
+    /* The cap a balloon may grow to, not the width it takes -- see the balloon rule. Sized against this
+     * sheet's own 7px text rather than a pixel count read off an IntelliJ screenshot, since the two are
+     * nowhere near the same scale.
+     *
+     * WIDE ENOUGH THAT SHORT MESSAGES DO NOT WRAP, and no wider. The text column is what is left after
+     * the icon and the close button, so the balloon's width and the length it can hold are not the same
+     * number — at 170 a three-word message broke across two lines, and at 240 the same message left half
+     * the card empty. Dropping the timestamp (below) is what made a sensible width possible at all.
+     *
+     * The binding case is the DETAIL line, not the title: titles here are one or two words ("Opened",
+     * "Save failed") while the detail is a filename, which is the longest thing a balloon routinely
+     * carries. 155 leaves that line about 110px, which covers an ordinary name and wraps a very long one
+     * — the right way round, since a wrapped balloon grows upward and costs nothing. */
+    width: 155px;
+}
+
+/* THE RESTING VALUE LIVES HERE, and that is what makes the fade work at all. A balloon arrives carrying
+ * `__hidden__`, and dropping that class on the next frame leaves the cascade easing from 0 to this 1.
+ *
+ * Writing the opaque value from Java instead would not animate: the write is itself transitionable, so
+ * the engine eases toward it and the cleanup retargets it back — an invariant this project already
+ * records, and one that fails silently with no test able to see it. */
+.__balloons__ > .__balloon__ {
+    /* SIZED TO ITS CONTENT, capped by the layer. `width: 100%` would make every balloon the full 170
+     * whatever it says, and a long one would then wrap rather than widen — which is the opposite of
+     * growing leftwards. `max-width` is what stops it growing past the layer and out of the corner. */
+    max-width: 100%;
+    min-width: 90px;
+    flex-shrink: 0;
+    opacity: 1;
+    background: var(--balloon-bg, #3C3F41);
+    outline-width: 1px;
+    outline-color: var(--balloon-border, #4E5254);
+    /* MUST MATCH NotificationBalloons.FADE_MS, which is how long it waits before detaching the element.
+     * Detaching early cuts the fade off part-way through. */
+    transition: opacity 150ms;
+}
+
+/* A NOTIFICATION CARD WRAPS ITS TITLE TOO, rather than gaining a horizontal scroller like the Problems
+ * rows next to it — and the difference is the shape of the thing, not an inconsistency. A problem is a
+ * dense single-line row in a column you scan down, where a wrapped entry breaks the rhythm and sideways is
+ * the only direction left. A notification is a card that already wraps its detail and grows downward, so a
+ * title that wraps costs nothing and a horizontal scrollbar under a stack of cards would be strange. */
+notificationsview .__notification__ .__message__ {
+    white-space: normal;
+    text-overflow: clip;
+}
+
+/* A BALLOON WRAPS; A LIST ROW ELLIPSIZES. The shared rule truncates, which is right in the panel — rows
+ * there are scanned down a fixed-width column and a wrapped one breaks that rhythm. A balloon has no
+ * column and no neighbours to line up with, so truncating just loses the message: "opened gradle...."
+ * told you nothing about which file. Wrapping is also what makes it grow UPWARD, away from the corner,
+ * which is the only direction it is allowed to grow. */
+.__balloons__ .__message__ {
+    white-space: normal;
+    text-overflow: clip;
+}
+
+/* NO TIMESTAMP ON A BALLOON. It is the one thing copied from the list that does not belong here: a
+ * balloon IS now — you are watching it arrive — so the time says nothing, while in the history "when" is
+ * the entire reason the column exists. Both references agree; IntelliJ's balloons carry a title, a body
+ * and actions, and no clock.
+ *
+ * It also cost about a third of the text column, which is what forced the balloon wider and wider while
+ * short messages still wrapped. */
+.__balloons__ .__time__ {
+    display: none;
+}
+
+/* HOVER LIFTS THE WHOLE BALLOON. It needs its own rule rather than inheriting `.__notification__:hover`:
+ * that rule and the balloon's own background rule have equal specificity (two class-weight components
+ * each), so the later one in this file wins outright and the balloon would never highlight at all. */
+.__balloons__ > .__balloon__:hover {
+    background: var(--balloon-hover-bg, #4A4E50);
+}
+
+/* And the dismiss button lights on its own, so it reads as a control rather than as part of the text. */
+.__notification__ .__close__:hover {
+    color: var(--notification-close-hover-fg, #FFFFFF);
+    background-color: var(--notification-close-hover-bg, #5A5F62);
+    border-radius: 2px;
+}
+
+.__balloons__ > .__balloon__.__hidden__ {
+    opacity: 0;
+}
+
+/* The dismiss cross. Only balloons draw one — the list dismisses with Clear all. */
+.__notification__ .__close__ {
+    /* A SHAPE, not the character U+2715. The bundled MinecraftRegular.otf has no such glyph and drew
+     * tofu -- the same trap the breadcrumb chevron was just moved off, and the reason UIText carries a
+     * whole ellipsis fallback path. */
+    overlay: shape("cross");
+    width: 12px;
+    height: 12px;
+    color: var(--notification-close-fg, #787A80);
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+/* A STATUS-BAR TOOLTIP GETS MORE ROOM. 170px is tuned for a label or a toolbar button, where the tooltip
+ * is a few words; a status item's tooltip is the sentence its four-word readout left out — a compile
+ * summary, a driver's refusal — and at the default width that is five or six lines of very short measure. */
+.__status-bar__ tooltip .__label__ {
+    max-width: 255px;
+}
+
+/* ── Problems rows ───────────────────────────────────────────────────────────────────────────────────
+ *
+ * IntelliJ's shape: one line per problem, not three columns. The severity is the icon, the message is the
+ * line, and the row it sits on is a dim suffix — which is the whole of what the header, the Severity
+ * column and the Line column were spending space to say. */
+problemspanel .__problem__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    gap-all: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+problemspanel .__problem__:hover {
+    background: var(--list-hover-bg, #2A2D2E);
+}
+
+/* Same class convention, same three glyphs, as the notification cards — a severity is a severity, and a
+ * second palette for it would drift the first time either was touched. */
+problemspanel .__problem__ .__severity__ {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+}
+
+problemspanel .__problem__ .__severity__.severity-info {
+    overlay: icon("crystalgui:general/informationDialog");
+}
+
+problemspanel .__problem__ .__severity__.severity-warning {
+    overlay: icon("crystalgui:general/warningDialog");
+}
+
+problemspanel .__problem__ .__severity__.severity-error {
+    overlay: icon("crystalgui:general/statusError");
+}
+
+problemspanel .__problem__ .__message__ {
+    font-size: 7px;
+    color: var(--problems-message-fg, #DFE1E5);
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* THE MESSAGE KEEPS ITS WIDTH once the list scrolls sideways, which is the whole of the switch: a
+ * shrinkable item contributes ZERO to its row's min-content width, so with it on there is never any
+ * overflow to scroll and the bar can never appear. `text-overflow` stays and simply never fires — nothing
+ * clamps the label now. Same pair, same reason, as the project tree's rows. */
+problemspanel .__h-scroll__ .__problem__ .__message__ {
+    flex-shrink: 0;
+}
+
+/* DIMMER, and it carries its own colon. It answers "where", which you read second — and a problem with
+ * nothing to point at renders it empty rather than reserving the space. */
+problemspanel .__problem__ .__line__ {
+    font-size: 7px;
+    color: var(--problems-line-fg, #6E7076);
+    flex-shrink: 0;
+}
+
+/* A TAGGED PROBLEM IS DRAWN DIFFERENTLY, not ranked differently — LSP's DiagnosticTag, VS Code's
+ * MarkerTag. Unused code fades and deprecated code is struck through, and both keep whatever severity
+ * their producer gave them; folding these into the severity ladder would force a choice between showing a
+ * squiggle you cannot act on and losing the rendering entirely. */
+.__problem__.tag-unnecessary .__message__ {
+    color: var(--problems-unnecessary-fg, #6B6E76);
+}
+
+.__problem__.tag-deprecated .__message__ {
+    text-decoration-line: line-through;
+}
+
+/* ── The Problems tree ──────────────────────────────────────────────────────────────────────────
+ * Two row kinds through one pooled template — a file heading and the problems under it. The heading
+ * carries `__problem-file__`, which is the only thing distinguishing them to the cascade. */
+
+/* A FILE HEADING READS AS A GROUP, not as a louder problem: brighter than the rows beneath, because it
+ * is what you scan down when looking for a file, and the messages are what you read once you have found
+ * it. VS Code and IntelliJ both weight the heading and quieten the children. */
+problemspanel .__problem__.__problem-file__ .__message__ {
+    color: var(--problems-message-fg, #DFE1E5);
+}
+
+/* THE FOLDER, beside the filename — VS Code's second column, dim because it disambiguates rather than
+ * identifies. The same slot carries `:591` on a problem row, which is why one rule serves both. */
+problemspanel .__problem__ .__line__ {
+    font-size: 7px;
+    color: var(--problems-tree-line-fg, #6B6E76);
+    flex-shrink: 0;
+    padding-left: 4px;
+}
+
+/* HOW MANY PROBLEMS ARE IN THIS FILE. Trailing, so it sits at a fixed place down the column rather than
+ * after a filename of unpredictable length. */
+problemspanel .__problem__ .__problem-count__ {
+    font-size: 7px;
+    color: var(--problems-count-fg, #6B6E76);
+    flex-shrink: 0;
+    padding-left: 6px;
+}
+
+
+/* THE CHEVRON, and it is its own hit target so a file folds on ONE click — IntelliJ's rule, and the
+ * affordance the first pass of this panel shipped without: the tree grouped correctly, and there was
+ * nothing to press. A problem row keeps the slot and draws nothing, so every message in the tree starts
+ * at the same x rather than stepping left of the headings above it. */
+problemspanel .__problem__ .__twisty__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+problemspanel .__problem__.__collapsed__ .__twisty__ {
+    overlay: shape("chevron-right");
+}
+
+problemspanel .__problem__.__expanded__ .__twisty__ {
+    overlay: shape("chevron-down");
+}
+
+problemspanel .__problem__.__leaf__ .__twisty__ {
+    overlay: none;
+}
+
+/* THE COUNT FOLLOWS THE FILENAME, not the row's trailing edge. Growing the label pushes it to the far
+ * right of a wide panel, where it reads as a column of its own rather than as a fact about the file
+ * beside it -- and at this panel's width that is most of a screen away from the name it belongs to. */
+problemspanel .__problem__.__problem-file__ .__message__ {
+    flex-grow: 0;
+}

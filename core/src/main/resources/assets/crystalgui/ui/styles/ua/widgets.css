@@ -1,0 +1,344 @@
+/* ua/widgets.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ *
+ * The atomic widgets: Button/Dropdown, Checkbox, Switch, Slider, SplitView, TabView.
+ *
+ * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
+ * one sheet the engine loads — rule order across files is as load-bearing as within one
+ * (:disabled after :hover ties), so files split at section boundaries and never reorder.
+ * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
+ * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+
+/* ── Button ─────────────────────────────────────────────────────────────────────────────────── */
+
+/* `dropdown` is listed alongside `button` throughout this section because a Dropdown IS a Button in
+ * Java — but a type selector matches the TAG, exactly as in CSS, and its tag is `dropdown`. Java
+ * inheritance is invisible to the cascade. Without this a dropdown laid out at ZERO HEIGHT, since
+ * min-height is where a Button gets its box from. Same trap `tab` avoids by having its own block. */
+button, dropdown {
+    min-height: 14px;
+    padding-left: 2px;
+    padding-top: 1px;
+    padding-right: 2px;
+    padding-bottom: 2px;
+    justify-content: center;
+    align-items: center;
+    background: var(--button-bg, #9A9A9A);
+    color: var(--button-fg, #222222);
+    text-shadow: false;
+    border-radius: 2px;
+}
+/* THE ROOT CAUSE, once: this is the one label every `Button`/`Dropdown` in the engine has (Button
+ * gives it no class of its own, hence the tag selector), so a config-kit dropdown squeezed to
+ * `width:0;flex-grow:1` and a node's title-bar squeezing its title are the SAME underlying gap, not
+ * two separate ones. Neither had `flex-shrink`, `white-space` or `text-overflow` — this engine's
+ * `flex-shrink: 0` default means the label never shrank at all, so a too-narrow box simply wrapped it
+ * instead of clipping. The bundled pixel font is narrow enough that this almost never triggered;
+ * ore.css's wider `MinecraftRegular.otf` and any long selected value (`World`, `View`) reliably do.
+ * `min-width: 0` is explicit rather than load-bearing here — this engine's `min-size` already
+ * defaults to 0, unlike real CSS's `auto` (see AGENTS.md's Taffy-divergence table), so `flex-shrink: 1`
+ * alone would already let the label shrink; stating it anyway documents the assumption this rule
+ * depends on rather than leaving it implicit.
+ *
+ * `overflow: hidden` is NOT optional, and was the actual bug in the first pass at this fix:
+ * `text-overflow` decides what the clipped GLYPHS look like, it does not itself clip anything —
+ * without `overflow: hidden` establishing the clip box, the label's own box shrinks correctly (that
+ * part genuinely worked) but the glyphs still paint at their full natural width, bleeding out past
+ * the now-tiny box exactly like `dialog .__title-bar__ .__label__`'s own comment already warned:
+ * "clips the glyphs the ellipsis stands in for, on exactly the box it measured against." A dropdown
+ * whose value text is longer than its row showed a near-invisible sliver of background with ghost
+ * text escaping past the node's edge — the box was right, the paint wasn't clipped to it. */
+button text, dropdown text {
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* A LIGHTER FACE, not a different colour. This was `#FF0000` -- a placeholder that shipped, and one nobody
+ * saw for as long as every button in the engine was a labelled rectangle somebody rarely hovered. It became
+ * unmissable the moment buttons were used as small glyphs in a row: the search toggles flashed red under the
+ * pointer and stayed red while focused. */
+button:hover, dropdown:hover {
+    background: var(--button-hover-bg, #B4B4B4);
+}
+button:active, dropdown:active {
+    background: var(--button-pressed-bg, #7A7A7A);
+}
+button:disabled, dropdown:disabled {
+    background: var(--button-disabled-bg, #6E6E6E);
+    color: var(--button-disabled-fg, #4A4A4A);
+}
+
+/* ── Checkbox ───────────────────────────────────────────────────────────────────────────────────
+ * align-self: flex-start is load-bearing, not cosmetic — see the matching note in ore.css. The root
+ * paints nothing, so a stretched root would hit-test far to the right of the visible content. */
+
+checkbox {
+    align-self: flex-start;
+    height: 12px;
+    padding-all: 1px;
+    gap-all: 2px;
+    align-items: center;
+    text-shadow: false;
+}
+checkbox .__mark__ {
+    width: 12px;
+    height: 12px;
+    background: var(--checkbox-mark-bg, #9A9A9A);
+    border-radius: 2px;
+}
+checkbox:hover .__mark__ {
+    background: var(--checkbox-mark-hover-bg, #B4B4B4);
+}
+checkbox:checked .__mark__ {
+    background: var(--checkbox-checked-bg, #3C8527);
+    /* A real vector checkmark, not a texture asset — default.css has no image assets to lean on and
+       previously drew nothing here at all beyond the colour change. shape("checkmark") needs no font
+       glyph and no sprite pack, so it works with literally nothing else loaded. */
+    overlay: shape("checkmark");
+}
+checkbox:disabled .__mark__ {
+    background: var(--checkbox-disabled-bg, #6E6E6E);
+}
+
+/* ── Switch ─────────────────────────────────────────────────────────────────────────────────────
+ * The knob is pushed across by __spacer__'s flex-grow, so the transition below is what makes it
+ * SLIDE. Without it a themeless switch teleports between states. Both endpoints must be plain
+ * numbers: the interpolator binary-snaps at the halfway point when the two differ in unit. */
+
+switch {
+    width: 25px;
+    height: 12px;
+    padding-all: 0;
+    align-items: center;
+    background: var(--switch-bg, #6E6E6E);
+    /* Half the height — a pill. Tied to `height` above; change one and change both. */
+    border-radius: 7px;
+}
+switch:checked {
+    background: var(--switch-checked-bg, #3C8527);
+}
+switch .__spacer__ {
+    flex-grow: 0;
+    transition: flex-grow 150ms ease;
+}
+switch:checked .__spacer__ {
+    flex-grow: 1;
+}
+switch .__knob__ {
+    height: 100%;
+    aspect-rate: 1;
+    background: var(--switch-knob, #D0D1D4);
+    /* Percentages resolve per axis, so 50% on a square (aspect-rate: 1) part is a circle regardless of
+     * how big the switch gets — which is why this isn't a px value like the track's. */
+    border-radius: 50%;
+}
+switch:disabled .__knob__ {
+    background: var(--switch-disabled-knob, #8C8C8C);
+}
+
+/* ── Slider ─────────────────────────────────────────────────────────────────────────────────────
+ * The horizontal padding must equal HALF the thumb's width, and the thumb's negative margins must be
+ * its exact negation — that pairing is what puts the thumb's centre on the value and hides the bar's
+ * ends underneath it. Change the thumb width and all three numbers move together. Full reasoning is
+ * in ore.css. No transition here on purpose: during a drag the thumb must track the cursor exactly. */
+
+slider {
+    width: 150px;
+    height: 20px;
+    padding-left: 5px;
+    padding-right: 5px;
+    align-items: center;
+    /* Shapes the FOCUS RING and nothing else — the root paints no background, so there is no fill for
+     * this to round. `paintOutline` derives the ring's corners from `border-radius` whatever the
+     * element draws, and without this the slider's ring is a hard rectangle where every other widget's
+     * is softened. Note this is only safe at all because `resolveRoundedFill` stopped treating "no
+     * background" as opaque white; before that, this line painted a white slab. */
+    border-radius: 4px;
+}
+/* 3px is half of the 6px bar height, so fill and track read as one rounded rail. */
+slider .__fill__ {
+    height: 6px;
+    background: var(--slider-fill, #3C8527);
+    border-radius: 3px;
+}
+slider .__spacer__ {
+    height: 6px;
+    background: var(--slider-track, #6E6E6E);
+    border-radius: 3px;
+}
+slider .__thumb__ {
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    margin-right: -5px;
+    /* Required: painter's order is insertion order, so __spacer__ would otherwise draw over the half
+     * of the thumb its negative right margin pulls underneath. */
+    z-index: 1;
+    background: var(--slider-thumb, #D0D1D4);
+    /* Square, so 50% is a circle — see the switch knob. */
+    border-radius: 50%;
+    /* Separates the thumb from the fill it sits on. border-color has NO currentColor equivalent here
+     * and defaults to black, so it must be stated alongside the width or the ring comes out dark.
+     *
+     * Sizing is unaffected: box-sizing is border-box engine-wide, so the outer box stays 10px and the
+     * padding/margin pairing above still holds. */
+    border-width: 2px;
+    border-color: var(--slider-thumb-ring, #FFFFFF);
+}
+slider:hover .__thumb__ {
+    background: var(--slider-thumb-hover, #E4E5E8);
+}
+slider:disabled .__fill__ {
+    background: var(--slider-disabled-fill, #5A6E5A);
+}
+slider:disabled .__thumb__ {
+    background: var(--slider-disabled-thumb, #8C8C8C);
+}
+
+/* ── SplitView ──────────────────────────────────────────────────────────────────────────────────
+ * The divider needs a real thickness here or it is 0px wide and cannot be grabbed at all. The cross
+ * axis stretches for free (flex default align-items: stretch), so each orientation only sets its own
+ * thickness — hence `width: auto` in the vertical rule, undoing the horizontal width. */
+
+splitview {
+    width: 100%;
+    height: 100%;
+}
+/* CHILD combinator on every one of these, and it is load-bearing.
+ *
+ * A SplitView nests: the dock puts a horizontal split inside a vertical one routinely. With a
+ * DESCENDANT selector, `splitview.__vertical__ .__divider__` matches the INNER split.s divider too and
+ * hands it `width: auto`, which in a row resolves to ZERO -- an invisible, ungrabbable divider between
+ * two panes that can then never be resized. Measured: 0.0 x 4.0 where 4.0 x 348 was wanted.
+ *
+ * Only shows up once a split is nested in a split, which is why it survived until the dock did it. */
+splitview > .__divider__ {
+    width: 4px;
+    background: var(--splitter-bg, #777777);
+}
+splitview > .__divider__:hover {
+    background: var(--splitter-hover-bg, #AAAAAA);
+}
+splitview > .__divider__:active {
+    background: var(--splitter-pressed-bg, #DDDDDD);
+}
+splitview.__vertical__ > .__divider__ {
+    width: auto;
+    height: 4px;
+}
+
+/* ── TabView ────────────────────────────────────────────────────────────────────────────────────
+ * The panes container gets its flex-grow from Java (this engine's flex-shrink/min-width defaults
+ * mean it would otherwise collapse to content size); everything here is thickness and colour.
+ *
+ * Selection is `tab:checked`, driven by Tab.isChecked() through the existing CHECKED pseudo-class —
+ * there is no `:selected` and no marker class to keep in sync. */
+
+tabview {
+    width: 100%;
+    height: 100%;
+}
+/* The strip must not stretch to fill: it takes the tabs' thickness and the panes take the rest.
+ *
+ * NOTE the alignment lives on the RAIL, not the strip. The strip is a COLUMN (rail above bar), so
+ * its cross axis is horizontal and an `align-items: flex-end` here would right-align the rail —
+ * which shrinks it to its content, so nothing ever overflows it, the bar hides itself and the wheel
+ * has nothing to scroll. The rail is the row of tabs, and there flex-end means what's intended:
+ * tabs sit on their bottom edge, at natural size, even when a raised :checked tab makes the rail
+ * taller than they are. */
+tabview .__strip__ {
+    flex-grow: 0;
+    background: var(--tab-strip-bg, #2A2A2A);
+}
+tabview .__rail__ {
+    align-items: flex-end;
+}
+tabview.__left__ .__rail__,
+tabview.__right__ .__rail__ {
+    align-items: stretch;
+}
+/* The strip's scrollbar is a REAL FLEX ITEM (see TabView), sitting after the rail — beneath a row of
+ * tabs, beside a column of them. That is why there is no reserved padding here and no absolute
+ * positioning to undo: it takes its own 2px and the tabs keep their edge against the panes.
+ *
+ * 2px is deliberately below the size at which step buttons are usable; they stay `display: none`
+ * from the scroller rules above. A theme wanting them thickens the bar and turns them on together. */
+tabview .__strip-bar__ {
+    height: 2px;
+}
+tabview.__left__ .__strip-bar__,
+tabview.__right__ .__strip-bar__ {
+    width: 2px;
+    height: auto;
+}
+
+tabview .__panes__ {
+    background: var(--tab-pane-bg, #3A3A3A);
+}
+tabview .__pane__ {
+    padding-all: 4px;
+}
+
+/* A tab is a Button, so it inherits nothing from `button` (type selectors don't cascade by
+ * inheritance) — it needs its own box. */
+tab {
+    height: 12px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 1px;
+    padding-bottom: 2px;
+    justify-content: center;
+    align-items: center;
+    background: var(--tab-bg, #6E6E6E);
+    color: var(--tab-fg, #DDDDDD);
+    text-shadow: false;
+    /* Rounded on the three OUTER edges only; the edge facing the panes stays square. The whole point of
+     * the `tab:checked` rule below is that the seam against the pane disappears, and rounding that edge
+     * would put two notches of pane colour back exactly where that rule works to hide them.
+     *
+     * Which edge that is depends on where the strip sits, so each side gets its own rule — TabView puts
+     * `__top__`/`__bottom__`/`__left__`/`__right__` on the tabview root for exactly this. The bare `tab`
+     * rule covers the TOP default; a left-side strip rounding its top corners (which is what a single
+     * `2px 2px 0 0` gives you) reads as plainly wrong in the sidebar layout the gallery uses. */
+    border-radius: 2px 2px 0 0;
+}
+tabview.__bottom__ tab {
+    border-radius: 0 0 2px 2px;
+}
+tabview.__left__ tab {
+    border-radius: 2px 0 0 2px;
+}
+tabview.__right__ tab {
+    border-radius: 0 2px 2px 0;
+}
+/* The file-type icon, when a tab has one. Sized here rather than inherited from the file tree's rule:
+ * that one is scoped to `projectfiletree .__project-row__`, so without this a tab's icon element exists,
+ * holds the right drawable, and lays out at zero by zero -- which reads as the icon never having been
+ * set at all.
+ *
+ * `contain`, so an icon whose art is not square keeps its aspect instead of being stretched to the box.
+ * `flex-shrink: 0`, because a strip full of tabs is exactly where the engine's shrink default would
+ * otherwise eat the icon before it touches the label. */
+tab .__pre-icon__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    margin-right: 3px;
+    overlay-fit: contain;
+}
+
+tab:hover {
+    background: var(--tab-hover-bg, #8C8C8C);
+}
+/* The selected tab reads as raised into the pane below it: taller, and the same colour as the pane
+ * so the seam between them disappears. LDLib's ore theme does the same with a padding shift. */
+tab:checked {
+    height: 16px;
+    background: var(--tab-active-bg, #3A3A3A);
+    color: var(--tab-active-fg, #FFFFFF);
+}
+tab:disabled {
+    background: var(--tab-disabled-bg, #4A4A4A);
+    color: var(--tab-disabled-fg, #6E6E6E);
+}

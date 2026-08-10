@@ -263,15 +263,12 @@ exceptions listed above (radii, fonts).
 ### 3.2 File layout, and the DEFAULT split decision
 
 ```
-assets/crystalgui/ui/styles/ua/       # FUNCTION — StyleSheet.DEFAULT, USER_AGENT origin
-    text.css  widgets.css  chrome.css  dock.css  editor.css  ...
-    # contract, enforced: geometry + behaviour only. NO colour-valued properties, no asset(),
-    # no !important. What a widget needs to FUNCTION — the original 2019-style promise, now a test.
-
-assets/crystalgui/ui/styles/look/     # APPEARANCE — StyleSheet.BASE_LOOK, USER_AGENT origin
-    widgets.css  chrome.css  dock.css  editor.css  ...
-    # contract, enforced: every colour is var(--component-token). No hex. This is "the base look":
-    # rules that SHAPE appearance (which part gets which token, hover/pressed/disabled states).
+assets/crystalgui/ui/styles/ua/       # StyleSheet.DEFAULT — the user-agent sheet, in 9 DOMAIN parts
+    core.css  widgets.css  editor.css  overlays.css  config-kit.css
+    inspector.css  workbench.css  panels.css  search.css
+    # One sheet, one parse, one variable scope — concatenated in the DEFAULT_SHEET_PARTS manifest
+    # order, which is load-bearing exactly as order within a file is. Contract, enforced: no
+    # !important, no asset(), colours only as var(--token, #fallback).
 
 assets/crystalgui/ui/themes/          # THE TABLES
     base.css                          # component tokens, COMPLETE, derived from system tokens
@@ -283,15 +280,20 @@ assets/crystalgui/ui/schemes/         # EDITOR COLOUR SCHEMES — the second axi
     dark-plus.css                     # today's values extracted: ::highlight() + --editor-* tokens
 ```
 
-**Why the appearance rules stay at USER_AGENT origin** (in a second sheet object, not a new origin):
-the requirement for a base look is precisely "loses to any theme or app rule at any specificity" —
-which *is* USER_AGENT's contract. Moving appearance to STYLESHEET origin would make it compete with
-app sheets on specificity+order, silently reshuffling winners across every scene and test; a new
-`BASE` origin between the two would be clean but is machinery we don't need until a concrete case
-beats the two-UA-sheets model. **Considered and deferred, on record.** The split into two *sheet
-objects* (DEFAULT = function, BASE_LOOK = look) is what matters: it makes the function/look contract
-per-file-enforceable, keeps `StyleSheet.DEFAULT`'s public surface unchanged (tests that install only
-DEFAULT keep testing pure function), and lets UiThemeManager own BASE_LOOK's installation.
+**REVISED at step 8 (2026-08-10): the split is by DOMAIN, not by function/look — `BASE_LOOK`
+deferred.** The plan's original two-sheet design (`DEFAULT` = function, `BASE_LOOK` = appearance)
+predates step 5's fallback-tokenization, which changed the calculus three ways. First, the benefit
+shrank: the look is already theme-overridable *in place* and governance already enforces at the
+value level (no bare hex, tokens defined), so a per-file function/look contract adds little. Second,
+the cost grew: most rules mix both kinds (`button` carries `min-height` *and* `background`), so the
+split would be declaration-level surgery over hundreds of rules — scattering each widget across two
+files and walking straight into the order-sensitive traps (`:disabled` after `:hover`, the
+menu-border outline that is both geometry and colour). Third, the domain split is what maintenance
+actually wants ("the tab strip's rules", not "the colour half of everything") and it can be done as
+a **contiguous partition** — the parts concatenated in manifest order ARE the old file, so the move
+is provably pure (verified declaration-identical against HEAD). `BASE_LOOK` stays deferred with a
+named trigger: revisit if a real consumer needs to install function-without-look (nothing does; the
+themeless fallbacks serve that today). The earlier `BASE`-origin deferral stands unchanged.
 
 **A theme file is ordinary CSS**: a `theme { }` block of variable definitions (convention — any rule
 works, `collectVariables` reads them all, but one uniform container keeps files greppable), plus
@@ -516,11 +518,12 @@ the migration itself. Each rule is one test, each failure names file/line:
 1. **No raw hex outside `themes/` and `schemes/`.** The single strongest anti-rot rule. Starts with
    a shrinking allowlist (the untokenized remainder during migration — the list *is* the migration's
    progress bar, and it reaching zero is step 5's exit criterion); after that, empty forever.
-2. **ua/ files contain no colour-valued properties** (`color`, `background`, `background-color`,
-   `outline-color`, `border-*-color`, `text-shadow`, `caret-color`, `selection-color`…), no
-   `asset()`, no `!important`. The original contract, finally with teeth.
-3. **look/ files reference component tokens only** — every colour value is `var(--…)`, and the
-   referenced name exists in `base.css`.
+2. **ua/ parts carry no `asset()`, no `!important`** — the original contract with teeth, enforced
+   per part. *(Revised with §3.2: the "no colour-valued properties in ua/" phrasing belonged to the
+   abandoned function/look split; colours in the ua/ parts are legal as `var(--token, #fallback)`
+   references, which rule 1 already polices.)*
+3. **Every colour value is `var(--…)`** with the referenced name defined in the shipped tables —
+   folded into rules 1 and 5 as implemented.
 4. **base.css is derivation-only**: every component token's value is a `var(--sys…)` reference into
    the system vocabulary (tiny explicit-literal allowlist for genuine constants like `transparent`).
 5. **No undefined references**: every `var()` in every shipped sheet resolves against
@@ -601,7 +604,7 @@ coexist freely, so step 5 can land section-by-section.
 | 5 | **Tokenize default.css in place**: hex → `var(--token)`, no rule moves, no value changes. Verified by pixel-identical harness captures (the one sanctioned screenshot-diff — asserting *identity*, not appearance). Same pass over graph/filetypes/decorations colours. Exit: allowlist empty. | L | Med |
 | 6 | **Extract the scheme**: editor `::highlight()` + surface colours → `schemes/dark-plus.css` (§3.6). First real two-axis swap end-to-end. | M | Med |
 | 7 | **Settings + Preferences ▸ Appearance page** (§3.7) + harness `--theme=` flag. | M | Low |
-| 8 | **Split the file**: default.css → `ua/*` + `look/*`, `DEFAULT`/`BASE_LOOK` as §3.2 — a *pure move* (comments travel, rule order preserved within each sheet), reviewed like the TextEditor view-part extraction. Governance rules 2–3 flip from partial to full. Write `docs/CGUI_THEMING.md` (generated token table + theme-author guide + scheme-author guide + the process rules) in the same commit. Size expectation, from measurement (6,242 lines = 2,609 comment / 3,190 code, ~388 colour-bearing declarations): `default.css` as a single artifact **ceases to exist**; ua/ totals ~3,500–4,000 (the essays are mostly about geometry and stay with it), look/ ~1,500–2,000, scheme ~200, base.css ~300, crystal-dark ~150. Hard rule: **no single sheet file over ~1,500 lines** — a file crossing it splits by domain, and the governance doc says so. | L | Med |
+| 8 | **Split the file** *(revised — see §3.2)*: default.css → nine `ua/` DOMAIN parts as a contiguous partition, proven declaration-identical to HEAD; `StyleSheetRegistry` grows the `DEFAULT_SHEET_PARTS` composite manifest (one sheet, one parse, one variable scope); `docs/CGUI_THEMING.md` written with its generated, machine-checked token table. `BASE_LOOK` deferred with a named trigger. Hard rule kept: **no single sheet file over ~1,500 lines** (largest shipped part: workbench.css at 1,475+header). | L | Med |
 | 9 | **`crystal-light.css`** — the acceptance test of the vocabulary. Every place light looks wrong is a rule that bypassed a token. Parity test (§4.2.8) turns on. Coherent, not necessarily beautiful. | M | Med |
 | 10 | **User override layer** — settings-backed token overrides merged last (§3.5). | S | Low |
 | 11a | **Islands structural prerequisites** (§6 header): dock `--panel-gap` gaps; rounded-chrome/rectangular-clip strategy validated in harness captures, with the FBO fallback measured before adoption. | M | Med |

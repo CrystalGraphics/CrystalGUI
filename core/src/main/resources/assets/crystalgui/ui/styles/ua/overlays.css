@@ -1,0 +1,684 @@
+/* ua/overlays.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ *
+ * TextField, the generic layout helpers, Tooltip, Dialog, popovers/menus/dropdowns, resize handles, cursors.
+ *
+ * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
+ * one sheet the engine loads — rule order across files is as load-bearing as within one
+ * (:disabled after :hover ties), so files split at section boundaries and never reorder.
+ * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
+ * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+
+/* ── TextField ──────────────────────────────────────────────────────────────────────────────────
+ * No internal children — caret, selection and placeholder are all painted, so `color` does double
+ * duty as the text and caret colour. Height is set here because a field with no content would
+ * otherwise collapse to nothing.
+ *
+ * Note the padding does NOT have to leave room for the text vertically: the field paints its text
+ * centred on the BORDER box and clips only horizontally, precisely because a one-line field is
+ * routinely shorter than its font's line box once padding comes out (Ore's 14px field with 3px
+ * padding leaves 8px for 10px text). The padding here positions the text's left edge and nothing
+ * more. */
+textfield {
+    height: 16px;
+    padding-all: 3px;
+    align-items: center;
+    background: var(--field-bg, #2A2A2A);
+    color: var(--field-fg, #EEEEEE);
+    /* The one rounded widget here that also CLIPS (it scissors its own text horizontally), so it is
+     * the only one this sheet moves onto resolveOverflowClip()'s FBO mask path. Worth it on a field,
+     * which is the widget a square corner reads worst on; not worth it on a scroll viewport, which is
+     * why the containers above stay square. */
+    border-radius: 2px;
+}
+/* :blank is driven by TextField.isBlank(), already wired into PseudoClasses — so the placeholder,
+ * which reuses `color`, dims itself with no widget-specific support. */
+textfield:blank {
+    color: var(--field-placeholder, #7A7A7A);
+}
+/* :invalid comes from TextField.isInvalid() — content that fails its validator, or a number outside
+ * its range. The value stays editable; only the styling changes. */
+textfield:invalid {
+    background: var(--field-invalid-bg, #4A2A2A);
+    color: var(--field-invalid-fg, #FF9A9A);
+}
+textfield:disabled {
+    background: var(--field-disabled-bg, #232323);
+    color: var(--field-disabled-fg, #6E6E6E);
+}
+
+/* ── Generic layout helpers ─────────────────────────────────────────────────────────────────────
+ * NOT a browser concept — these are a deliberate convenience so callers (and every harness scene)
+ * stop re-declaring the same three rules. Note that shipping them claims these class names for every
+ * consumer of the library, which is why the list is kept short and generic. */
+
+.row {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 8px;
+}
+.column {
+    flex-direction: column;
+    gap-all: 8px;
+}
+.label {
+    color: var(--label-fg, #FFFFFF);
+}
+/* Eats the leftover space in a row/column — the usual "push the rest to the far end" trick. */
+.spacer {
+    flex-grow: 1;
+}
+
+/* ── Tooltip ────────────────────────────────────────────────────────────────────────────────────
+ * A `tooltip` is promoted into the top layer (CSS Position 4 §top-layer, the mechanism behind
+ * <dialog> and popovers), so it is NOT clipped by an ancestor's `overflow` — that is the entire
+ * reason the top layer exists. Placement is computed per frame in Tooltip.reposition().
+ *
+ * `margin-top` is load-bearing, not decoration: Java positions the tooltip flush against the
+ * anchor's bottom edge and this is what creates the visual gap. Widgets write structure, the
+ * cascade writes geometry — so the gap is tunable here, per theme, without touching Java.
+ * A theme that flips a tooltip above its anchor will want margin-bottom instead. */
+
+tooltip {
+    background: var(--tooltip-bg, #1E1E1EF0);
+    outline: 1px var(--tooltip-border, #00000080);
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    margin-top: 3px;
+}
+
+/* max-width goes on the LABEL, not on the tooltip box. UIText wraps against a width it can see on
+ * itself — an ancestor's max-width is not one, because a self-sizing UIText reports its full
+ * unwrapped run and the ancestor would only ever clip the box while the glyphs spilled out of it.
+ * Bounding the label instead makes it wrap, and the tooltip box then shrink-wraps the wrapped text,
+ * which is also what keeps edge-clamping honest — placement measures the box, so the box has to be
+ * the size of what actually draws. */
+tooltip .__label__ {
+    color: var(--tooltip-fg, #FFFFFF);
+    max-width: 170px;
+    /* SET EXPLICITLY, because `white-space` INHERITS and a tooltip lives as an internal child of the thing
+     * it describes. Anchor it to a status-bar item, a table header, a graph node title — anything that
+     * carries `white-space: nowrap` so its own label ellipsizes — and the tooltip inherits the prohibition
+     * and lays its whole sentence out on one line. `max-width` then clamps the BOX while the glyphs run
+     * straight past it, which is a background two thirds the length of its own text.
+     *
+     * No amount of sizing fixes that from the tooltip's side: you cannot wrap text that has been told not
+     * to wrap. A tooltip is not part of its anchor's text flow — it only lives there so the cascade gives
+     * it colour and font — so the one thing it must not inherit is how that anchor breaks lines. */
+    white-space: normal;
+    /* NEVER SHRUNK. The box shrink-wraps the label, so a label that gives way leaves the background
+     * narrower than the glyphs drawn on it — which is what a tooltip on a short status item looked like.
+     * The wrap is `max-width`'s job; shrinking is nobody's. */
+    flex-shrink: 0;
+}
+
+/* ── Resize handle ──────────────────────────────────────────────────────────────────────────────
+ * The `__resizer__` internal child, added to any element whose `resize` is not `none`. CSS UI 4
+ * leaves the grabber's size, position and appearance entirely to the UA, so all of it is here.
+ *
+ * Pinned to the bottom-right corner via `position: absolute` (set in Java, since being out of flow
+ * is structural — a handle that took a slot in its parent's layout would reflow the content the
+ * moment `resize` was set). Everything else is a theme's to change.
+ *
+ * Deliberately square and small: it has to be grabbable without covering content, and it is drawn
+ * INSIDE the element (unlike a browser's, which lives in the scrollbar gutter — see Resize's
+ * javadoc for why we don't inherit that constraint). */
+
+/* ── Dialog ─────────────────────────────────────────────────────────────────────────────────────
+ * A floating, movable panel — the web's `<dialog>`, modeless form. `position: absolute` is set in
+ * Java because being out of flow is structural, not cosmetic: a dialog that participated in its
+ * parent's layout would shove siblings around every time it moved.
+ *
+ * Deliberately NOT in the top layer. Per the HTML spec only showModal() promotes; a modeless dialog
+ * stacks normally, which is what lets several editor panels coexist and order among each other and
+ * ordinary content via z-index.
+ *
+ * The title bar is the drag handle, so it needs enough height to be grabbable — that is functional
+ * geometry, which is why it lives here rather than in a theme. */
+
+/* NEUTRAL grey throughout — not the earlier #2A2F36/#3A4450 blue-grey. Same reasoning as the popover
+ * and config-kit repaint: a dialog is chrome the same way a menu or a dropdown's face is, and it was
+ * the last widget left in its own tinted family after those moved to grayscale.
+ *
+ * `color` is stated explicitly here rather than left to the property's own inherited default (white) —
+ * that default is what the title label was quietly relying on, and an inherited value a widget merely
+ * happens to agree with is not the same as one it actually states; see `dialog .__close__` below for
+ * exactly the case where relying on it silently goes wrong. */
+dialog {
+    min-width: 80px;
+    min-height: 40px;
+    background: var(--dialog-bg, #2E2E2E);
+    outline: 1px var(--dialog-border, #1A1A1A);
+    color: var(--dialog-fg, #DDDDDD);
+    z-index: 5;
+}
+/* `ColorControl`'s popup only. Translucent-over-OPAQUE composites right back to opaque (tinted, but
+ * alpha 1.0) — colorselector's own `#1E1E1E76` sitting directly on this element's normal `#2E2E2E`
+ * (full alpha) had nothing behind IT to show through either, so nothing ever read as see-through no
+ * matter what colorselector's own alpha was. This is the layer that has to give first: with the root
+ * itself translucent too, both layers now compound against whatever is actually behind the dialog —
+ * the same two-layer shape `graphnode`'s fully transparent root plus its translucent `.__inputs__`/
+ * `.__outputs__` bands already uses. Scoped to `.__picker__` so every other `Dialog` in the engine
+ * (draggable panels, etc.) stays fully opaque; `.__title-bar__` keeps its own separate `#393939`. */
+dialog.__picker__ {
+    background: var(--dialog-picker-bg, #2E2E2E76);
+}
+
+/* 14px, not 16 — matches the base `button, dropdown` row height already used everywhere else in this
+ * sheet, rather than a number picked just for this one bar. Against a 10px title, 16 read as a band of
+ * dead air above and below the text; 14 is the smallest this convention already commits to. */
+dialog .__title-bar__ {
+    height: 16px;
+    width: 100%;
+    padding-left: 4px;
+    /* 7px, not 2 — the close button sat flush enough against the bar's own edge that it read as
+     * overflowing past it rather than sitting inside it. 5px more breathing room pulls it in. */
+    padding-right: 4px;
+    padding-top: 1px;
+    /* Explicit `row`: this engine's Taffy default is COLUMN, not CSS's `row` (see AGENTS.md), so
+     * without this the close button stacks underneath the title instead of beside it. */
+    flex-direction: row;
+    align-items: center;
+    /* Title left, close button hard right, whatever the dialog's width. */
+    justify-content: space-between;
+    background: var(--dialog-title-bg, #393939);
+}
+
+/* ── Popovers, menus and dropdowns ──────────────────────────────────────────────────────────────
+ * `position: absolute` is forced at IMPORTANT origin by top-layer promotion, and `left`/`top` are written
+ * by AnchoredPlacement — so nothing here may set either, or it would fight placement every frame.
+ *
+ * A popover is a bare box on the web (the UA sheet gives `<dialog>`/`[popover]` little more than borders),
+ * so this is our chrome: enough for a menu to be legible with no theme loaded. */
+popover, menu, dropdown .__menu__ {
+    min-width: 60px;
+    /* LIGHTER than the panels it floats over, with a LIGHT hairline. Both matter, and the first version
+     * got both backwards: #2A2F36 with a #00000060 outline is within a few points of every dark surface in
+     * this sheet, so a menu rendered perfectly and was simply invisible — reported from the harness as
+     * "I right-clicked but no menu". A popup that cannot be told apart from what is behind it has failed at
+     * the one job it has, so being separable is a functional requirement here, not styling.
+     *
+     * NEUTRAL grey, not the earlier #3F4A57 blue-grey — a dropdown's closed face (`--cfg-popup`, the
+     * config kit and every graph node share it) is the same grayscale family as this open menu, and a
+     * tinted menu on top of a grayscale face read as two different materials the instant it opened. */
+    background: var(--menu-bg, #4B4B4B);
+    outline: 1px var(--menu-border, #8C8C8C);
+    /* Light text, set on the POPOVER so it inherits to every item and to arbitrary popover content.
+     * Needed because a Dropdown is a Button, so its menu — an internal child — inherits the button's dark
+     * `color: #222222`, which on this surface renders as barely-legible grey. Colour is inheritable, so the
+     * fix belongs at the top of the popover rather than repeated on each item. */
+    color: var(--menu-fg, #DDDDDD);
+    /* Transparent while closed, opaque once `__open__` lands — see the rule below. The pair is what gives the
+     * transition a real value to start from; a popover coming out of `display: none` otherwise has no previous
+     * opacity to interpolate from, which is the problem `@starting-style` exists to solve on the web.
+     *
+     * QUICK, deliberately: the pause before a submenu appears is the hover delay doing its job, and a slow
+     * fade stacked on top of it reads as lag rather than polish. The timing lives here and not in Java because
+     * the stylesheet owns durations — drop this line and popovers snap in, with nothing broken. */
+    opacity: 0;
+    transition: opacity 120ms ease;
+    padding-all: 2px;
+    flex-direction: column;
+    /* A long menu must scroll rather than run off the screen. AnchoredPlacement clamps the BOX into the
+     * containing block, which without this would just squash the items instead. */
+    overflow: hidden;
+}
+
+/* NO `width: 100%` on the items container or the items, deliberately. A percentage width against a
+ * shrink-to-fit parent cannot contribute to that parent's intrinsic size, so the menu had no way to learn
+ * how wide its items wanted to be and collapsed to `min-width` — clipping every label. Letting the default
+ * `align-items: stretch` do the work instead means the menu sizes to its widest item and the items then
+ * fill it, which is the standard CSS idiom for exactly this and the reason the idiom exists. */
+popover.__open__, menu.__open__, dropdown .__menu__.__open__ {
+    opacity: 1;
+}
+
+menu .__items__ {
+    flex-direction: column;
+    gap-all: 1px;
+}
+
+/* A grouping rule, as every native context menu uses. Margins rather than padding on the neighbours:
+ * the rule belongs to the GAP between two groups, and giving it to the rows either side means every row
+ * has to know whether it happens to sit next to one.
+ *
+ * Inset from the menu's edges — a rule running the full width reads as the bottom of the menu rather
+ * than as a divider inside it, which is why Windows insets its own. */
+menu .__separator__ {
+    height: 1px;
+    min-height: 1px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    margin-left: 6px;
+    margin-right: 6px;
+    background: var(--menu-separator, #6E6E6E);
+}
+
+/* Items are Buttons, so they inherit the button rule above; these overrides make them read as rows
+ * rather than as a stack of separate controls — full width, left-aligned, no rounding between them. */
+menuitem {
+    min-height: 13px;
+    padding-left: 6px;
+    padding-right: 6px;
+    justify-content: flex-start;
+    background: #00000000;
+    border-radius: 0;
+}
+/* The active row is highlighted by :focus and DELIBERATELY NOT by :hover.
+ *
+ * There is exactly one active row in a menu, and hover cannot express that: CSS `:hover` correctly stays on
+ * whatever the mouse is over, so hovering one row and then arrowing down lit up two at once — reported from
+ * the harness as "I hover Add node, press down, and can still focus the ones below". Since Menu does
+ * focus-follows-hover, the hovered row IS the focused row in the normal case, which makes a :hover rule pure
+ * redundancy that can only ever disagree with the truth. Focus is the single source of it.
+ *
+ * A disabled row therefore shows no highlight at all, which is right — it cannot be focused, and inviting a
+ * click on something inert would be worse than being unresponsive.
+ *
+ * The highlight is also the ONLY focus affordance here: no ring. A ring would trail the mouse across every
+ * row it passed over, which is the noise :focus-visible exists to avoid, so it is suppressed explicitly
+ * rather than left to depend on which focus path happened to fire.
+ *
+ * NEUTRAL grey, not the earlier #4A6E9A blue — same reasoning as the menu's own background above: a
+ * saturated blue highlight on an otherwise grayscale popup was the one part of the whole widget that
+ * still looked like a leftover accent colour. Lighter than the #4B4B4B menu surface is what still reads
+ * as "raised" without reaching for hue. */
+menuitem:focus {
+    background: var(--menu-item-focus-bg, #606060);
+}
+/* A row that leads somewhere: label left, arrow hard right, and a gap so the two never touch on a short
+ * label. `space-between` overrides the `flex-start` above, which is why this rule follows it. */
+/* NOT `space-between`, which is what this said and what centred the label. That distributes ALL the
+ * children, and a menu row has THREE rather than two -- every item carries a `__mark__` pre-icon
+ * unconditionally, zero-width until a checkable menu gives it a size. So the mark took the left edge, the
+ * arrow took the right, and the label was spaced into the MIDDLE: `New` came out centred while every
+ * plain row beside it stayed left. It read as a rule about the label, and the label had nothing to do
+ * with it.
+ *
+ * `margin-left: auto` on the arrow alone is the fix and the general form of it -- an auto margin absorbs
+ * the free space at ONE point rather than dividing it between however many children happen to exist, so
+ * a fourth slot added later cannot move the label again.
+ *
+ * There is deliberately NO `gap-all` beside it either. A gap applies between every pair, so it
+ * spaced the zero-width mark away from the label as well, and the label stayed indented after
+ * `space-between` was gone -- the same too-broad-a-lever mistake in a second form. An auto
+ * margin already guarantees the arrow cannot touch the label, because it absorbs whatever free
+ * space is left. */
+/* Dimmer than the label — it is an affordance, not content. Colour is inheritable, so this only needs to
+ * override, not restate. */
+menuitem .__submenu-arrow__ {
+    margin-left: auto;
+    width: 8px;
+    height: 8px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    color: var(--menu-arrow, #A8B0B8);
+    overlay: shape("chevron-right");
+}
+menuitem:focus-visible {
+    outline: 0;
+}
+/* `Menu.onOpened` parks focus on the menu itself so nothing looks pre-selected on open (see that
+ * method's doc) — but `requestFocus` RINGS by default, and a ring around the whole popup the instant
+ * it appears is exactly the affordance this was trying to avoid. Every real highlight in a menu is the
+ * row's own `menuitem:focus` background; the container never needs a ring of its own.
+ *
+ * RESTATES the border rather than zeroing it, and that is the whole point of this rule now.
+ * `outline: 0` suppressed the focus ring correctly and took the menu's own 1px chrome with it, because
+ * in this engine they are the same property — so a menu opened straight into focus had NO border, and
+ * grew one the moment you hovered a row and focus moved off the container. It read as "the border only
+ * appears on hover", which points at `:hover` and is nowhere near the cause.
+ *
+ * The value is repeated literally from the base rule above rather than shared through a custom property:
+ * `outline` is a shorthand, and a `var()` inside a shorthand silently resolves to nothing here — the
+ * same trap that produced zero padding on the main preview's header. */
+menu:focus-visible {
+    outline: 1px var(--menu-border, #8C8C8C);
+}
+menuitem:disabled {
+    background: #00000000;
+    color: var(--menu-item-disabled-fg, #6E6E6E);
+}
+/* Zero footprint outside a selectable context — see MenuItem's "Selection mark" javadoc. A plain
+ * context-menu row ("Cut", "Copy") never calls `setSelected`, so this never draws for it, and giving
+ * it zero width here (rather than leaving the check up to `dropdown .__menu__` alone) means an ordinary
+ * menu's rows stay exactly as wide as their label, with no dead gutter reserved for a checkmark that
+ * item can never show. */
+menuitem .__mark__ {
+    width: 0;
+    margin-right: 0;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+/* `Dropdown`'s own menu, however, IS a selectable context — every row is a candidate value, so the
+ * gutter is reserved for ALL of them, checked or not. Without a shared gutter the checked row's label
+ * would sit one glyph to the right of every other row's, which reads as misaligned text rather than as
+ * "this one has a mark". `:checked` only ever changes the overlay, never the box. */
+dropdown .__menu__ menuitem .__mark__ {
+    width: 12px;
+    height: 12px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    /* menuitem's own cross-axis alignment is engine-default `stretch`, which — for a child with an
+     * explicit, non-auto cross size like this one — degenerates to top-aligned rather than centred, so
+     * without this the mark sat flush with the row's top edge instead of level with the label's text. */
+    align-self: center;
+    margin-right: 1px;
+    color: var(--menu-mark, #DDDDDD);
+}
+dropdown .__menu__ menuitem:checked .__mark__ {
+    overlay: shape("checkmark");
+}
+
+/* A menu containing a toggle — a context menu's "Lighting", say. Same gutter and same mark as a
+ * dropdown's rows, granted to the WHOLE menu rather than to the checkable row alone.
+ *
+ * Menu-level is the only alignment that works. Reserving the gutter on just the checkable item indents
+ * that one row against its neighbours, which reads as broken alignment rather than as a checkmark — and
+ * reserving it on every menu would carry a dead column through ordinary context menus whose rows can
+ * never show a mark. Windows does exactly this: its context menu reserves one icon column, so `Refresh`
+ * and `Paste` line up with the rows that have icons.
+ *
+ * The gutter is reserved whether or not a row is currently checked, so ticking one does not shift its
+ * label sideways. */
+menu.__has-checkable__ menuitem .__mark__ {
+    width: 12px;
+    height: 12px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    align-self: center;
+    margin-right: 1px;
+    color: var(--menu-mark, #DDDDDD);
+}
+/* The mark itself is still the ITEM's business: only a checkable row ever shows one, even though every
+ * row in the menu reserves the space for it. */
+menu.__has-checkable__ menuitem.__checkable__:checked .__mark__ {
+    overlay: shape("checkmark");
+}
+/* The base `menuitem` rule's 6px left padding was sized for a bare label with no mark before it — once
+ * the 12px gutter above sits in front of it, the checkmark reads as floating well clear of the row's
+ * edge rather than beside it. Tightened for every row in a dropdown's menu (checked or not), so the
+ * whole column — mark and label alike — shifts left together instead of the mark alone moving and
+ * throwing off the shared gutter's alignment. */
+dropdown .__menu__ menuitem {
+    padding-left: 1px;
+    /* Same trim on the trailing edge — the base sheet's 6px was sized for a generic context-menu row
+     * with a submenu arrow to clear; a dropdown row has neither, so it just left dead air between the
+     * label and the menu's own edge. */
+    padding-right: 2px;
+}
+
+/* The closed-state marker on the button, so a theme can point an arrow at it. */
+dropdown {
+    justify-content: space-between;
+}
+/* `__chevron__` is Dropdown's post-icon (Button.setPostIcon) — a real element, not a pseudo-element,
+ * for the same reason every other twisty in this sheet is one: no ::after exists in this engine. Fixed
+ * width and `flex-shrink: 0` so a long selected label ellipsizes before it ever pushes the chevron off
+ * the button. Always chevron-DOWN: unlike a foldout, a dropdown's popup can open above or below
+ * depending on room, so there is no "open" direction for the glyph to point at (see
+ * AnchoredPlacement's flip). */
+dropdown .__chevron__ {
+    width: 8px;
+    height: 8px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    overlay: shape("chevron-down");
+}
+
+/* The modal scrim — our stand-in for `::backdrop`, which cannot exist here because the style engine has
+ * no pseudo-elements (the same divergence recorded for the top layer). It is an internal child promoted
+ * to the top layer alongside its dialog, so `100%` resolves against the initial containing block — the
+ * whole window — rather than against the dialog's own box.
+ *
+ * `left`/`top` are set explicitly rather than relying on `position: absolute`'s static position: the top
+ * layer forces `position: absolute` at IMPORTANT origin, and an absolutely positioned box with all-auto
+ * offsets sits where it would have been in flow, which for an internal child of a moved dialog is the
+ * dialog's corner. Pinning both to zero is what makes it cover the viewport.
+ *
+ * Deliberately semi-transparent rather than opaque: the point of a modal backdrop is to say "that is
+ * still there but not yours right now", which needs the content to remain visible. */
+dialog .__backdrop__ {
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--dialog-backdrop, #00000080);
+}
+
+/* An ellipsized title, and the one place in this sheet that truncates text by default.
+ *
+ * CSS does NOT do this for you: `text-overflow`'s initial value is `clip`, and no browser user-agent
+ * sheet ellipsizes generic text — overflowing content spilling is the correct CSS default, because
+ * content is the author's and silently hiding it would be a worse failure than an ugly one.
+ *
+ * A title bar is not content, though. It is chrome: a fixed 16px strip with a close button pinned to
+ * its right edge, and a title long enough to reach that button paints straight over it. Every native
+ * window manager ellipsizes window titles for exactly this reason, and a widget user-agent sheet is
+ * the right layer to encode it — an author who wants the full title can still override, which is what
+ * makes this a default rather than a policy.
+ *
+ * This is the web's canonical truncation recipe verbatim — `flex: 1 1 0; min-width: 0; overflow: hidden;
+ * text-overflow: ellipsis` — and every part of it is load-bearing:
+ *   flex-grow/basis — sizes the label to WHAT IS LEFT after the close button, not to its own text. The
+ *                     obvious alternative (`flex-shrink: 1` and let it shrink from its intrinsic width)
+ *                     works but makes the label's box depend on its own measured glyphs, so a title that
+ *                     fits by a fraction of a pixel truncates anyway and loses a whole character to an
+ *                     ellipsis it did not need. Growing from zero has no such edge.
+ *   min-width       — a flex item's automatic minimum is its min-content size, which for a nowrap line is
+ *                     the entire line; 0 is what allows the box to be smaller than its text at all.
+ *   white-space     — ellipsis only means something on a line that does not wrap.
+ *   overflow        — clips the glyphs the ellipsis stands in for, on exactly the box it measured
+ *                     against. */
+dialog .__title-bar__ .__label__ {
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+dialog .__content__ {
+    flex-grow: 1;
+    width: 100%;
+    padding-all: 6px;
+    /* A dialog contains its content: it is user-movable and user-resizable, and an unclipped panel
+     * spills the moment either shrinks it below the content. Same lesson as the resize page. */
+    overflow: hidden;
+}
+
+/* The dialog's close affordance. Browsers ship no dialog chrome at all — a `<dialog>` is a bare box —
+ * so this is ours. A floating panel with a draggable title bar and no way to dismiss it is simply
+ * broken, and Escape is not the answer: only a MODAL dialog establishes a close watcher, so a
+ * modeless one does not respond to Escape on the web either.
+ *
+ * Scoped through `.__title-bar__`, not just `dialog .__close__` — that shorter form ties on specificity
+ * (11) with the config kit's `.__config-control__ button { height: var(--cfg-ctrl-h) }` (also 11), and a
+ * `Dialog` opened from `ColorControl` (this one) is a genuine DOM descendant of `.__config-control__`:
+ * promotion to the top layer moves the dialog's Taffy parent, never its DOM parent, so the cascade
+ * still reaches straight through. On a tie the LATER rule in source order wins, and the kit section is
+ * declared after this one — so the close button silently inherited an 18px floor no edit here appeared
+ * to touch, the same "won a specificity fight nobody knew was happening" trap `colorselector`'s own
+ * comments document repeatedly. One more class component (specificity 21) settles it outright. */
+dialog .__title-bar__ .__close__ {
+    width: 10px;
+    min-height: 11px;
+    height: 11px;
+    padding-all: 0;
+    justify-content: center;
+    align-items: center;
+    /* Same neutral raised grey the menu/dropdown chrome uses (`popover, menu, dropdown .__menu__`,
+     * `--cfg-popup`) — not the title bar's own #55606E blue-grey, which was the last of it here. */
+    background: var(--dialog-close-bg, #4B4B4B);
+    /* The close button is still a `Button` underneath, and the base `button, dropdown { color: #222222 }`
+     * rule is a SPECIFIED value on that element, not an inherited one — so the dark colour every unthemed
+     * button gets by default wins over `dialog`'s inherited #DDDDDD regardless of how light the title bar
+     * around it is. The "x" was rendering almost invisibly dark-on-dark; this restates the same light grey
+     * the rest of the title bar already uses, matching the label instead of the base button rule. */
+    color: var(--dialog-close-fg, #DDDDDD);
+    text-align: center;
+}
+/* Centring the BOX (`justify-content`/`align-items` above) is not the same as centring the INK — a
+ * pixel font's glyph carries its own asymmetric leading inside its line box (see ore.css's own
+ * `text-offset-y` note, which measures the same effect on a 14px button), so a perfectly centred text
+ * box still shows the "x" sitting visibly high. `text-offset-y` nudges the glyph itself at paint time
+ * without moving the box or the click target. Scoped to just this button — default.css otherwise stays
+ * font-agnostic and applies no such correction globally; retune this if the bundled font ever changes. */
+dialog .__title-bar__ .__close__ text {
+    text-offset-y: -1px;
+}
+dialog .__title-bar__ .__close__:hover {
+    background: var(--dialog-close-hover-bg, #C05050);
+}
+
+/* ── Resize handles ─────────────────────────────────────────────────────────────────────────────
+ * Eight of them: four edges and four corners, added to any element whose `resize` is not `none`.
+ * Which ones exist depends on the axes the mode allows, so `resize: horizontal` gets the two side
+ * edges only.
+ *
+ * NOT a divergence from CSS UI 4, despite browsers shipping a single corner grabber: the spec says
+ * only that the UA "presents a bidirectional resizing mechanism" and leaves the mechanism entirely
+ * open. Browsers have one because theirs is drawn in the scrollbar gutter and has nowhere else to
+ * go — ours are our own elements, so edges cost nothing.
+ *
+ * Edges are deliberately invisible: a background is not what makes something hittable, so a bare
+ * grab strip works and does not put four bars around every resizable panel. Corners are tinted,
+ * because a corner is the one people look for.
+ *
+ * `position: absolute` comes from Java (structural — a handle in flow would reflow the content).
+ * Everything else, including which handles are visible at all, is a theme's to change. */
+
+.__resizer__ {
+    /* Above content, or a filled panel buries its own handles. Corners raise further, below. */
+    z-index: 10;
+}
+
+/* Edges: full-length grab strips, 4px thick. */
+.__resizer-top__,
+.__resizer-bottom__ {
+    width: 100%;
+    height: 4px;
+    left: 0;
+}
+.__resizer-left__,
+.__resizer-right__ {
+    width: 4px;
+    height: 100%;
+    top: 0;
+}
+.__resizer-top__    { top: 0; }
+.__resizer-bottom__ { bottom: 0; }
+.__resizer-left__   { left: 0; }
+.__resizer-right__  { right: 0; }
+
+/* Corners sit ON TOP of the edges they overlap — dragging a corner must resize both axes, so it has
+ * to win the hit test against the two edge strips crossing underneath it. */
+.__resizer-top-left__,
+.__resizer-top-right__,
+.__resizer-bottom-left__,
+.__resizer-bottom-right__ {
+    width: 8px;
+    height: 8px;
+    z-index: 11;
+}
+
+/* ONLY the bottom-right corner draws a grip. The other three stay full-size and fully draggable —
+ * this is `background`, not `display` or `width`, so the hit area is untouched.
+ *
+ * That asymmetry is the convention every desktop toolkit landed on, and the web's single grabber is the
+ * same idea taken further: one visible grip says "this resizes" without ringing the element in four
+ * marks that read as selection handles. A panel wearing all four looks selected rather than resizable. */
+.__resizer-bottom-right__ {
+    background: var(--resizer-grip, #FFFFFF40);
+}
+.__resizer-top-left__     { top: 0;    left: 0; }
+.__resizer-top-right__    { top: 0;    right: 0; }
+.__resizer-bottom-left__  { bottom: 0; left: 0; }
+.__resizer-bottom-right__ { bottom: 0; right: 0; }
+
+/* ── Cursors ────────────────────────────────────────────────────────────────────────────────────
+ * CSS `cursor`, assigned to the things whose affordance is otherwise invisible. `cursor` INHERITS,
+ * so setting it on a container would leak into its whole subtree — every rule here targets the exact
+ * element that owns the affordance.
+ *
+ * The bidirectional keywords are the right ones for handles: a handle resizes in both directions
+ * along its axis, so `ew-resize` rather than `e-resize`. The four single-direction diagonal keywords
+ * (`nw-resize` and friends) exist in CSS but say less than `nwse-resize` does.
+ *
+ * Whether any of this is VISIBLE is a platform question — see UICursorService. LWJGL3/GLFW has
+ * standard cursors for all of these; LWJGL2 has none at all and needs bitmaps. The property still
+ * cascades and resolves correctly either way. */
+
+.__resizer-left__,
+.__resizer-right__   { cursor: ew-resize; }
+.__resizer-top__,
+.__resizer-bottom__  { cursor: ns-resize; }
+/* Diagonals: top-left/bottom-right share an axis, as do top-right/bottom-left. */
+.__resizer-top-left__,
+.__resizer-bottom-right__ { cursor: nwse-resize; }
+.__resizer-top-right__,
+.__resizer-bottom-left__  { cursor: nesw-resize; }
+
+/* A dialog is a WINDOW, so it starts the cursor afresh rather than inheriting one.
+ *
+ * This is the exception the note above implies but does not spell out. `cursor` inherits, and a dialog
+ * keeps its DOM parent when it is promoted to the top layer — promotion moves the Taffy parent, the
+ * transform and the paint entry, never the cascade. So a dialog opened from anything carrying an
+ * affordance inherits it across the whole picker, list or form inside: the Color node's swatch says
+ * `cursor: pointer`, quite correctly, and every control in the colour picker it summons then claimed to
+ * be a button — ring, square, sliders and text fields alike.
+ *
+ * On the dialog rather than at each summoning site, because the summoning site is not wrong: the rule
+ * is that a window does not inherit its opener's cursor, and stating it once is the difference between
+ * a property of dialogs and a fix every future caller has to remember. Controls inside still declare
+ * their own — this is the floor, not a lid.
+ *
+ * `auto`, NOT `default`, and the difference is load-bearing: `auto` is the property's initial value, so
+ * this restores what an un-inherited element would have had. `default` is the arrow specifically, and
+ * would defeat the rule below that `textfield` deliberately declares nothing because "`auto` already
+ * resolves to `text` over an editable element" — every field in a dialog would lose its caret cursor,
+ * trading one wrong cursor for another. */
+dialog { cursor: auto; }
+/* A title bar is the drag handle for the whole dialog, so it advertises a move rather than a grab. */
+dialog .__title-bar__ { cursor: move; }
+/* SplitView's divider resizes its two panes along one axis.
+ *
+ * The `__dragging__` rules keep that cursor up for the whole gesture. The drag captures the pointer on the
+ * SplitView ROOT rather than on the divider — the drag maths live in the root's local space — and the cursor
+ * resolves from the capture target, so without these the cursor reverts to the arrow the instant you press
+ * and only returns if you happen to release back over the divider. */
+splitview > .__divider__ { cursor: ew-resize; }
+splitview.__dragging__ { cursor: ew-resize; }
+splitview.__vertical__ > .__divider__ { cursor: ns-resize; }
+splitview.__vertical__.__dragging__ { cursor: ns-resize; }
+
+/* A canvas advertises the grab only while it is actually being panned. Deliberately NOT `cursor: grab`
+ * on the canvas at rest: a bare left-drag does not pan (that gesture is reserved for the marquee), so a
+ * permanent open-hand would promise a drag that does nothing. The class goes on while the pan drag is
+ * live, and the pointer is captured for its duration, so the cursor holds even when the drag leaves the
+ * canvas — the same reason splitview repeats its cursor on `.__dragging__` above. */
+/* `graphview` is named alongside `canvasview` for the reason this file keeps repeating: a widget's
+ * cascade identity is its TAG, never its Java supertype. GraphView extends CanvasView and matches none
+ * of its rules. */
+canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
+
+/* A drag-scrub handle — the `X` letter beside a vector component, an inspector row's label.
+ *
+ * `slide-arrow` is the one cursor keyword in this engine with no CSS behind it. The gesture has no web
+ * equivalent, so CSS never had reason to name a shape for it; every desktop tool that HAS the gesture
+ * ships one. Deliberately not `ew-resize`: in a node editor a scrubbable number sits inside a resizable
+ * panel, so "this value slides" and "this edge moves" appear pixels apart and have to be distinguishable.
+ *
+ * No `.__scrubbing__` companion rule here, unlike splitview and canvasview above — and the difference is
+ * worth stating because those two look like precedent. Their gestures capture the pointer on a parent
+ * (the SplitView root, the canvas), so the cursor resolves from an element that never carried the
+ * keyword. A scrub captures on the HANDLE ITSELF, which is the element this rule already matches, so it
+ * holds for the whole drag no matter how far outside the letter the pointer travels. The class is still
+ * set, as a hook for a theme that wants to show the gesture. */
+.__scrub-handle__ { cursor: slide-arrow; }

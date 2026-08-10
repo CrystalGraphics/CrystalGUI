@@ -1,0 +1,621 @@
+/* ua/search.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ *
+ * The main menu bar, the explorer's inline editor, the tree find bar, the search box, the editor's find & replace bar.
+ *
+ * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
+ * one sheet the engine loads — rule order across files is as load-bearing as within one
+ * (:disabled after :hover ties), so files split at section boundaries and never reorder.
+ * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
+ * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+
+/* ── The main menu bar ──────────────────────────────────────────────────────────────────────────
+ *
+ * A row of titles above everything, and — like the status bar — it must keep its height at every
+ * window size, or opening a menu would reflow every region below it. `flex-shrink: 0` is what states
+ * that; nothing here is positioned. */
+.__menu-bar__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    height: 22px;
+    padding-left: 4px;
+    background-color: var(--menubar-bg, #3C3F41);
+}
+
+.__menu-bar__ .__menu-title__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    height: 22px;
+    padding-left: 8px;
+    padding-right: 8px;
+    color: var(--menubar-fg, #BBBBBB);
+    cursor: pointer;
+}
+
+/* THE SIZE GOES ON THE TEXT ELEMENT, NEVER ON THE TITLE, and this is not a style preference.
+ *
+ * `* { font-size: 10 }` at the top of this file gives EVERY element a candidate at STYLESHEET origin --
+ * and inheritance only applies where there is no candidate at any origin. So font-size does not
+ * inherit anywhere in this engine, whatever `setInheritable(true)` says on the property. Declared on
+ * the title it computes correctly on the title and the label beside it still renders at 10.
+ *
+ * `statusbarview .__status-item__` works only because the status item IS its text element; a widget that
+ * wraps its label -- as this one does, to give the title padding and a hover fill -- has to say it twice
+ * or say it here. 10 to match `menuitem`, which is what these open. */
+.__menu-bar__ .__menu-title__ text {
+    font-size: 10;
+}
+
+.__menu-bar__ .__menu-title__:hover {
+    background-color: var(--menubar-hover-bg, #4C5052);
+}
+
+/* THE OPEN TITLE STAYS LIT while its menu is down, which is the only thing on screen tying the popup
+ * to the word it came from. A class rather than `:active`, which means "pressed" and would go out the
+ * moment the button came up. */
+.__menu-bar__ .__menu-title__.__open__ {
+    background-color: var(--menubar-hover-bg, #4C5052);
+    color: var(--menubar-open-fg, #FFFFFF);
+}
+
+/* THE MNEMONIC UNDERLINE, drawn only while Alt is held. A text range rather than three elements: a
+ * split label would reflow the bar on every Alt press, and — worse — would re-shape across two span
+ * boundaries, so every title would shift by a fraction of a pixel. `::highlight()` exists precisely so
+ * a range can be styled without being wrapped. */
+::highlight(mnemonic) {
+    text-decoration-line: underline;
+}
+
+/* THE BURGER — the collapsed bar. Three boxes rather than a ☰ glyph: the bundled Minecraft fonts have
+ * no U+2630 and it renders as tofu, the same trap UIText records for U+2026 and ViewContainer for its
+ * close mark. Geometry, so it works with no theme loaded, and every part is still themeable. */
+.__menu-bar__ .__burger__ {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    gap-all: 3px;
+    cursor: pointer;
+}
+
+.__menu-bar__ .__burger__:hover {
+    background-color: var(--menubar-hover-bg, #4C5052);
+}
+
+.__menu-bar__ .__burger-bar__ {
+    width: 12px;
+    height: 2px;
+    flex-shrink: 0;
+    background-color: var(--menubar-fg, #BBBBBB);
+}
+
+/* ── The explorer's inline editor ───────────────────────────────────────────────────────────────
+ *
+ * A real input IN the row -- VS Code's FilesRenderer.renderInputBox. Built in createTemplate and hidden,
+ * because an element created during bind lands after that frame's layout pass; ProjectFileTree writes
+ * `display` at IMPORTANT to show it, so nothing here needs to. */
+projectfiletree .__row-editor__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    height: 16px;
+    padding-left: 2px;
+    padding-right: 2px;
+    margin-left: 0px;
+    font-size: 10;
+    background-color: var(--tree-editor-bg, #1E1F22);
+    border-width: 1px;
+    border-color: var(--tree-editor-border, #4A88C7);
+    border-radius: 2px;
+}
+
+/* The row being edited stops advertising anything else: a badge or a decoration colour beside a live
+ * input reads as validation feedback about the name, which it is not. */
+projectfiletree .__project-row__.__editing__ .__badge__ {
+    display: none;
+}
+
+/* ── A tree's find bar ──────────────────────────────────────────────────────────────────────────
+ *
+ * Shown only while a search is live -- TreeSearch writes `display` at IMPORTANT. UNSCOPED, because the
+ * bar belongs to any TreeView that opts in: scoping it to `projectfiletree` would leave the Problems
+ * panel's identical bar unstyled, which is the second-consumer test this generalisation exists to pass.
+ * Its whole job is to make the search VISIBLE: the panel's own note recorded the defect it fixes, which is that typing
+ * narrowed the tree with nothing on screen to say why. */
+.__find-bar__ {
+    flex-direction: row;
+    align-items: center;
+    /* THE BAR SPANS ITS HOST. Without this it is sized to its own children, so its width IS their width and
+     * there is no free space in it -- which made every attempt to widen the box inside it do nothing at
+     * all, whatever flex property was tried. The row was never short of a rule; it was short of a parent. */
+    width: 100%;
+    flex-shrink: 0;
+    /* CLIPS ITS OWN CHILDREN. At a narrow panel the row genuinely does not fit -- measured at 112px wide
+     * with the mode button laid out at x=146 and the close at x=162, both past the bar's right edge of 144,
+     * and both still painting. That is what "the count overlaps the buttons" actually was: not a text
+     * overflow, but the whole row spilling out of a box that never clipped it. A control drawn outside its
+     * own bar is worse than one missing, because it lands on top of whatever is there.
+     *
+     * A backstop rather than the fix -- the floor below is what keeps the row fitting in the first place. */
+    overflow: hidden;
+    /* SMALL, because the row is now icons rather than words and every gap is space the box cannot have.
+     * At 6px the children plus the gaps came to ~2px MORE than the panel, so the box shrank to its
+     * min-width and stayed there however wide the panel got -- a two-pixel overflow reading as "the search
+     * box never grows". */
+    gap-all: 4px;
+    height: 20px;
+    padding-left: 6px;
+    padding-right: 4px;
+    background-color: var(--findbar-bg, #2F3033);
+    border-width-bottom: 1px;
+    border-bottom-color: var(--findbar-border, #3C3F41);
+}
+
+.__find-bar__ text {
+    font-size: 10;
+    color: var(--findbar-fg, #D0D2D6);
+    white-space: nowrap;
+}
+
+/* BESIDE THE FIELD, not at the far edge. The count answers a question about what was just typed, and
+ * pinning it to the right of a panel-wide bar put it a whole window away from the caret — read as
+ * belonging to the panel rather than to the query. The auto margin moved to the close button, which is
+ * the one control that does belong at the edge; it must stay the ONLY claimant, since auto margins share
+ * the slack rather than the first one taking it. */
+/* THE COUNT REDS TOO. One fact, said everywhere it is visible: the query, the count and the arrows all
+ * report "nothing" together rather than leaving the reader to notice a zero. */
+.__find-bar__ .__find-count__.__not-found__ {
+    color: var(--findbar-error-fg, #E06C6C);
+}
+
+.__find-bar__ .__find-count__ {
+    color: var(--findbar-count-fg, #8A8A8A);
+    /* CLIPPED, not merely ellipsised. `text-overflow` decides what the cut glyphs look like; it does not
+     * itself cut anything -- without `overflow: hidden` the box shrinks correctly and the glyphs go on
+     * painting at their full width, straight over the filter and close buttons beside them. The base
+     * `button text` rule carries the same warning, and this is the same trap one row up. */
+    overflow: hidden;
+    /* SHRINKS, and it is the only thing in the row that may. flex-shrink defaults to 0 here (not 1, as on
+     * the web), so in a narrow host every sibling is rigid and the input -- the one element that does
+     * shrink -- collapsed to about 40px in the Preferences sidebar, with four characters of query showing
+     * as "nt". The count is the one part that can be lost without losing the control. */
+    flex-shrink: 1;
+    min-width: 0px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* NO AUTO MARGIN. An auto margin absorbs the row's free space BEFORE flex-grow gets any, so the box could
+ * never grow past its minimum however wide the panel was -- the close button quietly took all of it. The
+ * box grows instead, which puts the close at the right edge anyway in every panel narrower than its cap. */
+.__find-bar__ .__find-close__ {
+    width: 12px;
+    height: 10px;
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:x");
+    overlay-fit: contain;
+    color: var(--findbar-button-fg, #8A8A8A);
+    background: none;
+    border-radius: 2px;
+}
+
+.__find-bar__ .__find-close__:hover {
+    color: var(--findbar-button-hover-fg, #E0E0E0);
+    background-color: var(--findbar-close-hover-bg, #4B4D50);
+}
+
+/* A GLYPH, not a word. See TreeSearch's note: the words cost about fifty pixels of a bar that is as narrow
+ * as its panel, which left the box pinned at its minimum with the count truncated to an ellipsis. */
+.__find-bar__ .__find-mode__ {
+    width: 12px;
+    height: 10px;
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    overlay: icon("crystalgui:general/search/filter");
+    overlay-fit: contain;
+    background: none;
+    background-color: transparent;
+    color: var(--findbar-toggle-fg, #9A9A9A);
+}
+
+.__find-bar__ .__find-mode__:hover {
+    color: var(--findbar-toggle-hover-fg, #E0E0E0);
+    background: none;
+    background-color: var(--findbar-button-hover-bg, #4E5157);
+}
+
+.__find-bar__ .__find-mode__.__on__ {
+    color: var(--findbar-toggle-on-fg, #FFFFFF);
+    background: none;
+    background-color: var(--findbar-toggle-on-bg, #3574F0);
+}
+
+.__find-bar__ .__find-prev__,
+.__find-bar__ .__find-next__ {
+    width: 11px;
+    height: 10px;
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    overlay-fit: contain;
+    background: none;
+    background-color: transparent;
+    color: var(--findbar-arrow-fg, #9A9A9A);
+}
+
+.__find-bar__ .__find-prev__ { overlay: icon("crystalgui:general/search/up", var(--findbar-icon, #9A9A9A), monochrome); }
+.__find-bar__ .__find-next__ { overlay: icon("crystalgui:general/search/down", var(--findbar-icon, #9A9A9A), monochrome); }
+
+.__find-bar__ .__find-prev__:hover,
+.__find-bar__ .__find-next__:hover {
+    color: var(--findbar-button-hover-fg, #E0E0E0);
+    background: none;
+    background-color: var(--findbar-button-hover-bg, #4E5157);
+}
+
+/* NOTHING TO STEP THROUGH.
+ *
+ * AFTER the hover rule, and repeated for the hovered case. `:disabled` and `:hover` are both one
+ * pseudo-class, so they tie on specificity and the later rule wins -- written above, a disabled arrow still
+ * lit up under the pointer and looked live. `button:disabled` also repaints the whole face grey, which is
+ * right for a labelled button and wrong for a glyph, so the glyph itself dims instead. */
+/* NOTHING TO STEP THROUGH.
+ *
+ * An explicit class rather than `:disabled`, which was styled correctly and still lost -- the same answer
+ * the option toggles use, and for the same reason: a pseudo-class is re-evaluated on the engine's terms and
+ * a class on ours. The buttons also leave hit testing when this is on, so no hover state can reach them. */
+/* THE TINT IS ON THE DRAWABLE, not on `color`.
+ *
+ * The dead tint is #5A5D63 rather than something darker: the bar's own background is #2F3033, so a very
+ * dark glyph loses contrast against it and reads as smudged rather than disabled. Recessed means clearly
+ * below the live #9A9A9A while still clearly ABOVE the surface it sits on.
+ *
+ * `currentColor` is not reaching these files -- an explicit `icon(..., #RRGGBB, monochrome)` recolours them
+ * and `color` alone does nothing, which is why three rounds of setting `color` changed nothing visible. So
+ * each state redeclares the overlay with its own tint. Verbose, and honest about what actually works; the
+ * `currentColor` gap is worth fixing in the SVG layer, and when it is these collapse back to `color`. */
+.__find-bar__ .__find-prev__.__off__ {
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:general/search/up", var(--findbar-icon-off, #5A5D63), monochrome);
+}
+
+.__find-bar__ .__find-next__.__off__ {
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:general/search/down", var(--findbar-icon-off, #5A5D63), monochrome);
+}
+
+.__find-bar__ .__find-prev__:hover {
+    overlay: icon("crystalgui:general/search/up", var(--findbar-icon-hover, #E0E0E0), monochrome);
+}
+
+.__find-bar__ .__find-next__:hover {
+    overlay: icon("crystalgui:general/search/down", var(--findbar-icon-hover, #E0E0E0), monochrome);
+}
+
+/* THE MATCHED CHARACTERS, NOT THE ROW -- IntelliJ's amber band behind the query span, and the reason
+ * ::highlight() exists at all: what is being styled is a range inside a string, so wrapping it would put
+ * a real Taffy node around three characters of every filename.
+ *
+ * The row itself is deliberately left alone. A whole-row mark says "something here matched" and leaves
+ * the eye to find what -- which is exactly the work the band saves. */
+::highlight(find-match) {
+    background-color: var(--find-match-bg, #C8873C);
+    color: var(--find-match-fg, #1B1B1B);
+}
+
+/* The row still says it matched, quietly, so a scan down the panel finds the hits before reading them. */
+.__match__ .__label__,
+.__match__ text {
+    color: var(--tree-match-fg, #FFFFFF);
+}
+
+/* The third state, and the one that makes highlight usable: everything that is neither a match nor on
+ * the way to one recedes. Removing them instead is the other mode. */
+.__dimmed__ text {
+    color: var(--tree-dimmed-fg, #6A6A6A);
+}
+
+/* The search box. A real TextField, so it needs the geometry `textfield` gets everywhere else — the
+ * first version drew the query with a UIText, which looked identical and could not be clicked into. */
+/* THE BOX'S PLACE IN THE ROW. Everything it looks like is on `.__search-field__` below -- this rule says
+ * only how it shares the bar, which is the one thing the bar gets to decide.
+ *
+ * A FLOOR as well as a cap: shrinking to nothing is worse than overflowing, since it is the only element
+ * in the row that may shrink at all. Capped because the bar is as wide as its panel and a query is not --
+ * stretched across the Problems panel it ran the full width of the window with four characters in it. */
+.__find-bar__ .__find-input__ {
+    /* WIDTH PLUS SHRINK, not flex-grow. flex-grow divides only what is left after every basis is laid out,
+     * and with a content basis the box simply kept its content width while the row carried slack. A 100%
+     * basis that is allowed to shrink fills the row exactly. */
+    /* THE FILL IDIOM: a ZERO basis plus flex-grow, which AGENTS.md states outright and which I reached for
+     * last. `flex-grow` alone divides only what is left after every basis is laid out, so with a content
+     * basis the box kept its content width while the row carried slack; `width: 100%` is not honoured here
+     * at all. `width: 0; flex-grow: 1` is the spelling that works, and it is the one `searchfield .__field__`
+     * two hundred lines up was already using. */
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    /* LOW ENOUGH THAT THE REST STILL FITS. At 100px the box alone exceeded what a squeezed panel had to
+     * give -- 112px of bar against 100 + two 12px buttons + 20 of gaps + 10 of padding -- so the row
+     * overflowed however far it was dragged. A search box needs to show a few characters, not a query. */
+    min-width: 52px;
+    max-width: 320px;
+}
+
+/* The Problems panel's bar sits in the panel's own column, between the tabs and the body — see
+ * TreeSearch.installOn(index). It must not stretch the row the tabs live in. */
+problemspanel > .__find-bar__ {
+    flex-shrink: 0;
+}
+
+
+/* ── The search box, with its toggles inside the border ─────────────────────────────────────────────
+ *
+ * ONE CONTROL. IntelliJ's focus ring encloses the magnifier, the text, the clear button and the toggles
+ * together, and the text may only occupy what is left between them.
+ *
+ * THE FIELD IS THE ONLY THING IN THE ROW THAT MAY SHRINK. flex-shrink defaults to 0 here (not 1, as on the
+ * web), so everything is rigid unless it says so -- and a rigid text box would push the toggles out of the
+ * border instead of scrolling inside it. Same trap the find bar hit one level up (plan.md 29.12).
+ *
+ * `.__focused__` rather than `:focus-within`: this engine has no such pseudo-class, and an unknown one
+ * POISONS THE SHEET rather than being ignored -- see SearchField.FOCUSED_CLASS. */
+.__search-field__ {
+    flex-direction: row;
+    align-items: center;
+    height: 16px;
+    gap-all: 3px;
+    padding-left: 4px;
+    padding-right: 3px;
+    border-radius: 2px;
+    background: var(--searchfield-bg, #1B1B1B);
+    outline-width: 1px;
+    outline-color: var(--searchfield-border, #3C3C3C);
+}
+
+.__search-field__.__focused__ {
+    outline-color: var(--searchfield-focus-border, #4A88C7);
+}
+
+.__search-field__ .__icon__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    overlay: icon("crystalgui:general/search/search");
+    overlay-fit: contain;
+    color: var(--searchfield-icon-fg, #8A8A8A);
+}
+
+.__search-field__ .__field__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    height: 14px;
+    background: none;
+    outline-width: 0px;
+    font-size: 10;
+    color: var(--searchfield-fg, #D0D2D6);
+}
+
+/* THE QUERY REDS, THE CARET DOES NOT. The red is a statement about the text -- it found nothing -- and a
+ * red caret reads as the caret itself being wrong. `caret-color` is the web's answer and exists for this. */
+.__search-field__.__not-found__ .__field__ {
+    color: var(--searchfield-error-fg, #E06C6C);
+    caret-color: var(--searchfield-caret, #D0D2D6);
+}
+
+/* SMALL AND QUIET, and hard against the toggles. It is the least important control in the box -- it undoes
+ * something you can also undo by selecting and typing -- so it should read as an affordance you can find
+ * rather than one competing with the glyphs beside it. IntelliJ draws it dimmer than everything else in the
+ * field and tucks it against the option group. */
+.__search-field__ .__clear__ {
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    overlay: icon("crystalgui:x");
+    overlay-fit: contain;
+    color: var(--searchfield-clear-fg, #5F6265);
+}
+
+.__search-field__ .__clear__:hover {
+    color: var(--searchfield-clear-hover-fg, #E0E0E0);
+    background-color: var(--searchfield-clear-hover-bg, #393b40);
+}
+
+/* ROOM TO BREATHE. At 1px the three glyphs ran together into one shape; IntelliJ spaces them by about a
+ * third of their own width, which is what makes them read as three controls. */
+.__search-field__ .__options__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    gap-all: 2px;
+    margin-left: 2px;
+}
+
+/* NO FILL AT REST. `button` gives every button a background, and inherited here it drew each toggle as a
+ * grey chip -- three of them in a row read as a segmented control rather than as glyphs in a text field.
+ * IntelliJ's sit on the field's own background until you hover one. */
+/* SHORTER THAN THE ROW. The lit background is the whole point of the on-state, and at the field's own inner
+ * height it ran edge to edge and read as a band rather than as a chip on a control -- IntelliJ leaves clear
+ * space above and below so the blue is obviously ON THE GLYPH. Width stays wider than height for the same
+ * reason: `.*` and `Cc` are wide glyphs and a square would crop them. */
+.__search-option__ {
+    width: 12px;
+    height: 10px;
+    /* MIN-HEIGHT, NOT HEIGHT, is what was holding these open. `button` sets `min-height: 14px` plus its own
+     * padding, and a minimum is a different property from a size -- so every `height` written here lost to
+     * it silently and the chip stayed exactly as tall as the field's interior however small the number got.
+     * Clearing both is what lets the lit background sit INSIDE the border with space above and below. */
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    overlay-fit: contain;
+    background: none;
+    background-color: transparent;
+    color: var(--searchfield-option-fg, #9A9A9A);
+}
+
+.__search-option__:hover {
+    color: var(--searchfield-option-hover-fg, #393b40);
+    background-color: var(--searchfield-option-hover-bg, #393b40);
+}
+
+/* ON IS BLUE, not a lighter grey. It is the one state that has to be readable at a glance across three
+ * adjacent 13px glyphs, and grey-on-grey is not. An explicit class rather than `:checked` -- see
+ * TreeSearch.addOption. */
+.__search-option__.__on__ {
+    color: var(--searchfield-option-on-fg, #FFFFFF);
+    background-color: var(--searchfield-option-on-bg, #375fad);
+}
+
+.__search-option__.__on__:hover {
+    background: none;
+    background-color: var(--searchfield-option-on-hover-bg, #4A82F2);
+}
+
+.__option-match-case__ { overlay: icon("crystalgui:general/search/matchCase"); }
+.__option-words__      { overlay: icon("crystalgui:general/search/exactWords"); }
+.__option-regex__      { overlay: icon("crystalgui:general/search/regex"); }
+
+
+/* ── The editor's find & replace bar ────────────────────────────────────────────────────────────────
+ *
+ * The same chrome as the tree's, by construction: it carries `__find-bar__`, its boxes carry
+ * `__find-input__`, and its toggles carry `__search-option__`, so everything above already styles it. What
+ * is new is the shape -- a chevron and a CLOSE on the outside, and one or two ROWS between them, because
+ * the replace row has to line up under the find row rather than beside it. */
+.__find-bar__ .__find-rows__ {
+    flex-direction: column;
+    width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    gap-all: 3px;
+}
+
+/* SAME WIDTH ON BOTH ROWS, which is the whole reason it exists — see SearchReplaceBar. Wide enough for
+ * Replace / Replace All / Exclude, and the find row simply leaves the remainder empty. */
+.__find-bar__ .__find-trailing__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    width: 210px;
+    gap-all: 4px;
+}
+
+.__find-bar__ .__find-row__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    gap-all: 4px;
+}
+
+/* THE CHEVRON, which is the only affordance for the replace row. Vertically centred against the FIRST row
+ * rather than the pair, so it does not drift downward when the second appears -- IntelliJ's sits beside the
+ * search box in both states. */
+.__find-bar__ .__find-chevron__ {
+    width: 12px;
+    height: 12px;
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 2px;
+    border-radius: 3px;
+    background: none;
+    background-color: transparent;
+    overlay: shape("chevron-right");
+    overlay-fit: contain;
+    color: var(--findbar-toggle-fg, #9A9A9A);
+}
+
+.__find-bar__ .__find-chevron__.__expanded__ {
+    overlay: shape("chevron-down");
+}
+
+.__find-bar__ .__find-chevron__:hover {
+    color: var(--findbar-toggle-hover-fg, #E0E0E0);
+    background: none;
+    background-color: var(--findbar-button-hover-bg, #4E5157);
+}
+
+/* Replace / Replace All / Exclude. Text buttons rather than glyphs -- there is no icon for "replace all"
+ * that anyone reads correctly, and IntelliJ spells them out for the same reason. */
+.__find-bar__ .__find-action__ {
+    height: 14px;
+    min-height: 0px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    background: none;
+    background-color: var(--findbar-action-bg, #3C3F41);
+}
+
+.__find-bar__ .__find-action__ text {
+    font-size: 10;
+    color: var(--findbar-action-fg, #C8C8C8);
+}
+
+.__find-bar__ .__find-action__:hover {
+    background: none;
+    background-color: var(--findbar-button-hover-bg, #4E5157);
+}
+
+.__find-bar__ .__find-action__:disabled {
+    background: none;
+    background-color: var(--findbar-action-disabled-bg, #2E3033);
+}
+
+.__find-bar__ .__find-action__:disabled text {
+    color: var(--findbar-action-disabled-fg, #5A5D63);
+}
+
+.__option-preserve-case__ { overlay: icon("crystalgui:general/search/preserveCase"); }
+
+/* AN EXCLUDED MATCH IS STRUCK THROUGH, not hidden and not un-highlighted: it is still one of the matches
+ * and still counted, and the strike is the whole of what "excluded" looks like. A second `::highlight()`
+ * name rather than a second mechanism -- highlights already carry text-decoration-line. */
+::highlight(search-excluded) {
+    text-decoration-line: line-through;
+    color: var(--search-excluded-fg, #7A7A7A);
+}
+
+/* THE EDITOR'S BAR FLOATS over the text, so unlike the panel bars it has to paint its own ground and sit
+ * above the content. Monaco's find widget does the same -- the alternative, stacking it above and pushing
+ * the text down, puts the bar inside every one of the editor's layout sums (view lines, gutter, scroll
+ * extents). */
+.__editor-find__ {
+    height: auto;
+    align-items: flex-start;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-left: 6px;
+    padding-right: 6px;
+    gap-all: 4px;
+    background-color: var(--editorfind-bg, #303235);
+    border-width-bottom: 1px;
+    border-bottom-color: var(--editorfind-border, #4A4D50);
+    z-index: 20;
+}
+
+/* The close sits against the FIRST row rather than centred on the pair, so it does not drift downward when
+ * the replace row appears -- the same reason the chevron is top-aligned. */
+.__editor-find__ .__find-close__ {
+    align-self: flex-start;
+    margin-top: 2px;
+}
