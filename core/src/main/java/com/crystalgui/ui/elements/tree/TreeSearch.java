@@ -1,5 +1,10 @@
 package com.crystalgui.ui.elements.tree;
 
+import java.util.function.BooleanSupplier;
+import java.util.Set;
+import java.util.EnumSet;
+import java.util.EnumMap;
+import java.util.Collections;
 import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.elements.SearchField;
@@ -325,10 +330,10 @@ public final class TreeSearch<T> {
      */
     private static final String MODE_IS_NOT_A_CONTROL = "";
 
-    private final java.util.EnumSet<Control> controls = java.util.EnumSet.allOf(Control.class);
+    private final EnumSet<Control> controls = EnumSet.allOf(Control.class);
 
     /** The three option toggles, so {@link #setControls} can reach the ones inside the box. */
-    private final java.util.EnumMap<Control, Button> optionButtons = new java.util.EnumMap<>(Control.class);
+    private final EnumMap<Control, Button> optionButtons = new EnumMap<>(Control.class);
 
     private Presentation presentation = Presentation.TRANSIENT;
 
@@ -535,13 +540,13 @@ public final class TreeSearch<T> {
      */
     public TreeSearch<T> setControls(Control... shown) {
         controls.clear();
-        if (shown != null) java.util.Collections.addAll(controls, shown);
+        if (shown != null) Collections.addAll(controls, shown);
         refreshControls();
         return this;
     }
 
-    public java.util.Set<Control> controls() {
-        return java.util.Collections.unmodifiableSet(controls);
+    public Set<Control> controls() {
+        return Collections.unmodifiableSet(controls);
     }
 
     private void refreshControls() {
@@ -671,8 +676,8 @@ public final class TreeSearch<T> {
      * is on: the pseudo-class comes for free and the sheet draws the state. @see PseudoClasses</p>
      */
     private void addOption(Control control, String styleClass, String title, String accelerator, int key,
-                           java.util.function.BooleanSupplier get,
-                           java.util.function.Consumer<Boolean> set) {
+                           BooleanSupplier get,
+                           Consumer<Boolean> set) {
         Button option = new Button("");
         // NAMED, because three glyphs reading Cc / W / .* are only obvious to somebody who already knows
         // them. IntelliJ's own tooltip is the title, the accelerator, and one line of instruction -- and
