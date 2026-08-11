@@ -419,6 +419,9 @@ theme {
     --tab-focused-border: var(--accent);
     --tab-focused-fg: var(--fg);
 
+    /* THE GLYPH'S RESTING COLOUR. There was none: the icons are currentColor chrome marks and painted
+     * hard white, which is the right answer on a dark rail and invisible on a light one. */
+    --activitybar-item-fg: var(--fg-secondary);
     --activitybar-item-focused-bg: var(--accent);
     --activitybar-item-focused-fg: var(--fg-on-accent);
 }

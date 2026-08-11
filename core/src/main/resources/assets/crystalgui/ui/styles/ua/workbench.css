@@ -1187,6 +1187,9 @@ workbench .__workbench-regions__ {
 workbench .__activity-item__ {
     width: 16px;
     height: 16px;
+    /* THE ICONS TAKE THIS, now that CgUiSvg follows text colour when it carries no tint of its own.
+     * Before that they were painted against a hard white context colour whatever any sheet said. */
+    color: var(--activitybar-item-fg, #9A9A9A);
     flex-shrink: 0;
     margin-bottom: 2px;
     /* NO `top` OFFSET HERE, deliberately — see the rail's padding above. A relative offset on the button
