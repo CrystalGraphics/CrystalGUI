@@ -122,6 +122,11 @@ public class StyleGovernanceTest {
             "accent", "accent-hover", "accent-soft",
             "hover-bg", "pressed-bg", "selection-bg", "selection-inactive-bg", "focus-ring",
             "error", "warning", "info", "success", "modified", "link",
+            // The saturated counterparts, for a filled MARK rather than for a word. The pair above is
+            // darkened until a sentence in it reads on the theme's surface -- which is why light's
+            // --warning is an olive -- and a severity ICON wants the amber the artwork used to carry.
+            // Two roles rather than one because the two jobs genuinely disagree, most visibly in light.
+            "error-icon", "warning-icon", "info-icon",
             // Non-colour, and themeable for the same reason IntelliJ's themes set arcs and insets:
             // "Islands" IS these three plus a palette, and a flat theme is them zeroed.
             "radius-panel", "radius-control", "panel-gap");

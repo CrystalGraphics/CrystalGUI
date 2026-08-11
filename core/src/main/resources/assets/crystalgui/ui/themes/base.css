@@ -247,9 +247,9 @@ theme {
      * exists — the title only names it. Same promotion --configkit-label-fg took, for the same reason:
      * --fg-secondary was doing duty for both "supporting text" and "the actual thing to read". */
     --notification-detail-fg: var(--fg);
-    --notification-error-fg: var(--error);
-    --notification-info-fg: var(--info);
-    --notification-warning-fg: var(--warning);
+    --notification-error-fg: var(--error-icon);
+    --notification-info-fg: var(--info-icon);
+    --notification-warning-fg: var(--warning-icon);
     --notification-hover-bg: var(--hover-bg);
     --notification-message-fg: var(--fg);
     --notification-secondary-fg: var(--fg-secondary);
@@ -309,9 +309,9 @@ theme {
      * abstract, and it still read as greyed-out beside an Inspector that had just been promoted. One
      * rule across the panels beats a per-panel judgement about how loud each message deserves to be. */
     --problems-empty-fg: var(--fg);
-    --problems-error-fg: var(--error);
-    --problems-info-fg: var(--info);
-    --problems-warning-fg: var(--warning);
+    --problems-error-fg: var(--error-icon);
+    --problems-info-fg: var(--info-icon);
+    --problems-warning-fg: var(--warning-icon);
     --problems-line-fg: var(--fg-hint);
     --problems-message-fg: var(--fg);
     --problems-options-fg: var(--fg-secondary);

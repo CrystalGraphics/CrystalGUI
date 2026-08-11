@@ -94,7 +94,8 @@ public final class CgUiSvg implements CgUiDrawable {
                 variantOverride != null ? variantOverride : FileIconTheme.getVariant();
         if (current != resolvedFor) {
             resolvedFor = current;
-            document = SvgDocument.of(FileIconTheme.toResourcePath(FileIconTheme.withVariant(iconName)));
+            document = SvgDocument.of(
+                    FileIconTheme.toResourcePath(FileIconTheme.withVariant(iconName, current)));
         }
         return document;
     }
