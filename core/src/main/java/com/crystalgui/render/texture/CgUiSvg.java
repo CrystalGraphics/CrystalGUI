@@ -60,10 +60,38 @@ public final class CgUiSvg implements CgUiDrawable {
      * document by construction — {@code icon()} in a stylesheet, a sprite, anything with no light/dark
      * pair — and must not start guessing at variants of a path a caller chose deliberately.</p>
      */
+    /**
+     * Forces a variant for this drawable alone, or {@code null} to follow the theme.
+     *
+     * <p><b>For an icon drawn on an accented chip.</b> The variant is otherwise a property of the whole
+     * application — one switch saying "everything is light" or "everything is dark" — and that is right
+     * until a control paints a saturated fill under its own icon. A selected activity-rail button is blue
+     * in both themes, so in a LIGHT theme its icon is suddenly the one thing on screen sitting on a dark
+     * ground, and the light drawing goes muddy on it. IntelliJ flips exactly these to the dark variant
+     * for the same reason.</p>
+     *
+     * <p>Only palette icons need this. A {@code currentColor} mark takes the element's {@code color}
+     * (see {@link #followsTextColor()}) and a rule can simply make it white — which is what the folder
+     * glyph beside these does. This exists for the two-tone IntelliJ icons that carry their own literal
+     * colours and cannot be tinted at all.</p>
+     */
+    public CgUiSvg setVariantOverride(@Nullable FileIconTheme.Variant variant) {
+        if (variantOverride == variant) return this;
+        variantOverride = variant;
+        // Force the next document() to re-resolve. Not a direct reload: this is called from state changes
+        // (a panel gaining focus) that can fire several times a frame, and SvgDocument.of caches anyway.
+        resolvedFor = null;
+        return this;
+    }
+
+    @Nullable
+    private FileIconTheme.Variant variantOverride;
+
     @Nullable
     private SvgDocument document() {
         if (iconName == null) return document;
-        FileIconTheme.Variant current = FileIconTheme.getVariant();
+        FileIconTheme.Variant current =
+                variantOverride != null ? variantOverride : FileIconTheme.getVariant();
         if (current != resolvedFor) {
             resolvedFor = current;
             document = SvgDocument.of(FileIconTheme.toResourcePath(FileIconTheme.withVariant(iconName)));
