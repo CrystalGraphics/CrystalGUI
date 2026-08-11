@@ -182,6 +182,19 @@ public final class FileIconTheme {
      */
     @Nullable
     public static String withVariant(@Nullable String iconName) {
+        return withVariant(iconName, variant);
+    }
+
+    /**
+     * The same, against an explicitly supplied variant rather than the global one.
+     *
+     * <p>Exists for {@code CgUiSvg.setVariantOverride}, and its absence was a real bug: the drawable
+     * worked out which variant it wanted and then called the no-argument form, which reads the static.
+     * In a light theme that returns the base name unconditionally, so an override asking for the dark
+     * drawing got the light one and the focused rail button stayed muddy — the override resolved, was
+     * stored, and decided nothing.</p>
+     */
+    public static String withVariant(@Nullable String iconName, Variant variant) {
         if (iconName == null || variant == Variant.LIGHT) return iconName;
         String candidate = iconName + variant.suffix();
         return DARK_VARIANTS.computeIfAbsent(candidate, FileIconTheme::resourceExists)

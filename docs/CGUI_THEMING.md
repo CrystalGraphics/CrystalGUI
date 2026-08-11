@@ -231,6 +231,7 @@ editor scheme's.
 | `--editorfind-bg` | `var(--surface-panel)` | base.css |
 | `--editorfind-border` | `var(--surface-base)` | base.css |
 | `--error` | `#F14C4C` | crystal-dark.css |
+| `--error-icon` | `#E55765` | crystal-dark.css |
 | `--fg` | `#DFE1E5` | crystal-dark.css |
 | `--fg-disabled` | `#5A5D63` | crystal-dark.css |
 | `--fg-hint` | `#7A7A7A` | crystal-dark.css |
@@ -303,6 +304,7 @@ editor scheme's.
 | `--graph-title-bg` | `#56565676` | crystal-dark.css |
 | `--hover-bg` | `#2E3033` | crystal-dark.css |
 | `--info` | `#3794FF` | crystal-dark.css |
+| `--info-icon` | `#548AF7` | crystal-dark.css |
 | `--inspection-arrow-fg` | `var(--fg-secondary)` | base.css |
 | `--inspection-arrow-hover-bg` | `var(--border-base)` | base.css |
 | `--inspection-arrow-hover-fg` | `var(--fg)` | base.css |
@@ -347,14 +349,14 @@ editor scheme's.
 | `--notification-close-hover-bg` | `var(--hover-bg)` | base.css |
 | `--notification-close-hover-fg` | `var(--fg)` | base.css |
 | `--notification-detail-fg` | `var(--fg)` | base.css |
-| `--notification-error-fg` | `var(--error)` | base.css |
+| `--notification-error-fg` | `var(--error-icon)` | base.css |
 | `--notification-hover-bg` | `var(--hover-bg)` | base.css |
-| `--notification-info-fg` | `var(--info)` | base.css |
+| `--notification-info-fg` | `var(--info-icon)` | base.css |
 | `--notification-message-fg` | `var(--fg)` | base.css |
 | `--notification-secondary-fg` | `var(--fg-secondary)` | base.css |
 | `--notification-secondary-hover-fg` | `var(--fg)` | base.css |
 | `--notification-time-fg` | `var(--fg-hint)` | base.css |
-| `--notification-warning-fg` | `var(--warning)` | base.css |
+| `--notification-warning-fg` | `var(--warning-icon)` | base.css |
 | `--notifications-bg` | `#00000000` | base.css |
 | `--notifications-empty-fg` | `var(--fg)` | base.css |
 | `--notifications-link-fg` | `var(--link)` | base.css |
@@ -391,8 +393,8 @@ editor scheme's.
 | `--problems-bg` | `#00000000` | base.css |
 | `--problems-count-fg` | `var(--fg-hint)` | base.css |
 | `--problems-empty-fg` | `var(--fg)` | base.css |
-| `--problems-error-fg` | `var(--error)` | base.css |
-| `--problems-info-fg` | `var(--info)` | base.css |
+| `--problems-error-fg` | `var(--error-icon)` | base.css |
+| `--problems-info-fg` | `var(--info-icon)` | base.css |
 | `--problems-line-fg` | `var(--fg-hint)` | base.css |
 | `--problems-message-fg` | `var(--fg)` | base.css |
 | `--problems-options-fg` | `var(--fg-secondary)` | base.css |
@@ -401,7 +403,7 @@ editor scheme's.
 | `--problems-tab-count-fg` | `var(--fg-hint)` | base.css |
 | `--problems-tree-line-fg` | `var(--fg-hint)` | base.css |
 | `--problems-unnecessary-fg` | `var(--fg-hint)` | base.css |
-| `--problems-warning-fg` | `var(--warning)` | base.css |
+| `--problems-warning-fg` | `var(--warning-icon)` | base.css |
 | `--prompt-bg` | `var(--surface-panel)` | base.css |
 | `--prompt-border` | `var(--border-base)` | base.css |
 | `--prompt-caption-fg` | `var(--fg)` | base.css |
@@ -508,5 +510,6 @@ editor scheme's.
 | `--tree-selected-fg` | `var(--fg-on-accent)` | base.css |
 | `--tree-twisty-fg` | `var(--fg-secondary)` | base.css |
 | `--warning` | `#CCA700` | crystal-dark.css |
+| `--warning-icon` | `#FFAF0F` | crystal-dark.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
 <!-- TOKENS:END -->

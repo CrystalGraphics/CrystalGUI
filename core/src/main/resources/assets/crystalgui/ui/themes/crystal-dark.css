@@ -43,6 +43,15 @@ theme {
     --info: #3794FF;
     --success: #3C8527;
     --modified: #E2C08D;
+    /* FULL-STRENGTH SEVERITY, for a filled MARK rather than for a word. --error/--warning/--info above
+     * are text colours: they are darkened until a sentence in them is readable on this theme's surface,
+     * which is why --warning is an olive rather than an amber. A severity icon is a solid shape and wants
+     * the saturated version -- these are the values the artwork itself carried before the icons became
+     * currentColor, and they are the reason that conversion needed somewhere to put them. */
+    --error-icon: #E55765;
+    --warning-icon: #FFAF0F;
+    --info-icon: #548AF7;
+
     --link: #4A88C7;
 
     /* ── Islands geometry. Same in both themes: a theme changes the LOOK, and a flat theme is
