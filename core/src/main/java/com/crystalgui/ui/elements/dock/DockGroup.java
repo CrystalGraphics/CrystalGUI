@@ -288,7 +288,7 @@ public class DockGroup extends UIElement {
      */
     private static void applyIcon(Tab tab, @Nullable String iconName) {
         if (iconName == null) return;
-        CgUiSvg glyph = CgUiSvg.of(FileIconTheme.toResourcePath(FileIconTheme.withVariant(iconName)));
+        CgUiSvg glyph = CgUiSvg.ofIcon(iconName);
         if (glyph == null) return;
         UIElement slot = new UIElement();
         // Unhittable, like every other composite part: click-focus targets the exact element hit rather

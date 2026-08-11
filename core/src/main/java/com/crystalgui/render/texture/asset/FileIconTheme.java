@@ -3,7 +3,6 @@ package com.crystalgui.render.texture.asset;
 import com.crystalgraphics.util.io.CgIO;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiSvg;
 
 import com.google.gson.Gson;
@@ -142,9 +141,14 @@ public final class FileIconTheme {
      * <p>{@code volatile} because a theme switch does not happen on the render thread and a stale read
      * would show one row's icon from the old variant.</p>
      *
-     * <p><b>A change here needs the rows rebound to be seen</b> — the icon name is chosen in {@code bind},
-     * not by the cascade, so restyling alone will not repaint it. {@code WorkbenchSettings.apply} refreshes
-     * the file tree immediately after applying the theme, which is what makes the swap visible.</p>
+     * <p><b>A change here is picked up without rebinding anything</b>, and that is deliberate. It used to
+     * need it — the variant was applied when a drawable was built, so an icon outlived the theme it was
+     * resolved under, and the answer was for {@code WorkbenchSettings.apply} to refresh the file tree by
+     * hand. That is a contract whose second half fails silently: it covered the one consumer somebody
+     * remembered, while the editor tabs, the rail, the breadcrumbs and the Problems panel all kept the
+     * old drawing. {@link CgUiSvg#ofIcon} resolves the variant at DRAW time instead, so every consumer is
+     * correct without knowing this field exists — the same late-binding {@code currentColor} already
+     * uses, and for the same reason: the drawable outlives the state it depends on.</p>
      */
     private static volatile Variant variant = Variant.DARK;
 
@@ -155,25 +159,8 @@ public final class FileIconTheme {
         return variant;
     }
 
-    /**
-     * Fires when {@link #setVariant} actually changes the variant — never on a no-op swap.
-     *
-     * <p><b>Why a signal rather than the caller refreshing what it knows about.</b> An icon name is chosen
-     * in binding code, not by the cascade, so restyling repaints nothing here — and the previous answer to
-     * that was for {@code WorkbenchSettings.apply} to refresh the file tree by hand. That is a contract
-     * whose second half fails silently: it worked for the one consumer somebody remembered, and the editor
-     * tabs, the breadcrumbs and the status bar kept the old variant's drawing with nothing to report it.
-     * The list of consumers is not knowable from here, which is exactly the case a broadcast exists for —
-     * a new one subscribes once at construction instead of the theme code having to learn about it.</p>
-     */
-    public static final Signal.Action onVariantChanged = new Signal.Action();
-
     public static void setVariant(Variant newVariant) {
-        Variant previous = variant;
         variant = Objects.requireNonNull(newVariant, "variant");
-        // NOT unconditionally: every consumer's handler rebuilds drawables, and a theme swap that leaves
-        // light-vs-dark alone (Crystal Dark to any other dark theme) has nothing for them to redo.
-        if (previous != variant) onVariantChanged.emit();
     }
 
     /**
@@ -263,8 +250,10 @@ public final class FileIconTheme {
      */
     @Nullable
     public CgUiSvg drawableFor(String name, boolean directory, boolean expanded) {
-        String icon = withVariant(iconFor(name, directory, expanded));
-        return icon == null ? null : CgUiSvg.of(toResourcePath(icon));
+        // THE UN-SUFFIXED NAME goes to the drawable, which resolves the variant itself and keeps
+        // resolving it. Applying withVariant here instead baked the current variant in at the moment the
+        // row was bound, so anything not rebound after a theme swap kept the old drawing.
+        return CgUiSvg.ofIcon(iconFor(name, directory, expanded));
     }
 
     /**
