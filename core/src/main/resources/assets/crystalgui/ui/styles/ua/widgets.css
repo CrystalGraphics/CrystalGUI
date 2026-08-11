@@ -254,6 +254,18 @@ tabview .__strip__ {
     flex-grow: 0;
     background: var(--tab-strip-bg, #2A2A2A);
 }
+/* A STRIP WITH NO TABS TAKES NO ROW. It has a min-height of one chrome row -- so a panel's tabs line up
+ * with every other panel's title -- and it kept that height with nothing in it, leaving a blank band
+ * between the panel header's hairline and the content's. That reads as a second separator with a gap
+ * where a control should be, and it was invisible in dark for the usual reason: the band was the same
+ * colour as everything around it.
+ *
+ * `display: none` rather than a zero height, so the strip contributes nothing at all -- a zero-height box
+ * still sits in the column and still draws its own background. The class comes from TabView, since CSS
+ * here cannot ask whether an element has children. */
+tabview .__strip__.__empty__ {
+    display: none;
+}
 tabview .__rail__ {
     align-items: flex-end;
 }

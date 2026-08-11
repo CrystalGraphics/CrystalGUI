@@ -462,8 +462,8 @@ problemspanel > .__find-bar__ {
  * space above and below so the blue is obviously ON THE GLYPH. Width stays wider than height for the same
  * reason: `.*` and `Cc` are wide glyphs and a square would crop them. */
 .__search-option__ {
-    width: 16px;
-    height: 16px;
+    width: 12px;
+    height: 10px;
     /* MIN-HEIGHT, NOT HEIGHT, is what was holding these open. `button` sets `min-height: 14px` plus its own
      * padding, and a minimum is a different property from a size -- so every `height` written here lost to
      * it silently and the chip stayed exactly as tall as the field's interior however small the number got.

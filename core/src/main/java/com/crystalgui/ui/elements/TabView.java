@@ -62,6 +62,19 @@ public class TabView extends UIElement {
     }
 
     public static final String STRIP_CLASS = "__strip__";
+    /**
+     * On the strip while this view holds no tabs, so a sheet can take the row out of the layout.
+     *
+     * <p>The strip has a {@code min-height} of its own — one chrome row, so a panel's tabs line up with
+     * every other panel's title — and it keeps that height with nothing in it. The result is a blank band
+     * between the panel's header hairline and its content's, reading as a second separator with a gap
+     * where a control should be. Invisible in dark, where the band is the same colour as everything
+     * around it; obvious the moment panels went white.</p>
+     *
+     * <p>A CLASS from here rather than a rule, because CSS cannot ask "does this element have children" —
+     * there is no {@code :empty} in this engine and a count is not something a selector can see.</p>
+     */
+    public static final String EMPTY_CLASS = "__empty__";
     /** The scrolling rail inside the strip that actually holds the tabs. */
     public static final String RAIL_CLASS = "__rail__";
     /** The strip's scrollbar — a normal flex item, not an overlay. */
@@ -97,6 +110,8 @@ public class TabView extends UIElement {
         // selected tab's seam. A laid-out bar simply takes its own few pixels.
         this.strip = new UIElement();
         this.strip.addClass(STRIP_CLASS);
+        // Starts empty, and a TabView built and never filled must not reserve the row either.
+        this.strip.addClass(EMPTY_CLASS);
         addInternalChild(this.strip);
 
         // Scrolls, but shows nothing: the visible bar is the sibling below.
@@ -213,6 +228,7 @@ public class TabView extends UIElement {
 
         if (selectedTab == null) selectTab(tab);
         else updateTabStops(); // a fresh Tab arrives tabbable (Button's default) — demote it
+        syncStripEmptiness();
         return tab;
     }
 
@@ -246,7 +262,14 @@ public class TabView extends UIElement {
         } else {
             updateTabStops(); // it may have been holding the no-selection fallback stop
         }
+        syncStripEmptiness();
         return true;
+    }
+
+    /** Keeps {@link #EMPTY_CLASS} in step with the tab count. Called from both mutators, never inferred. */
+    private void syncStripEmptiness() {
+        if (tabs.isEmpty()) strip.addClass(EMPTY_CLASS);
+        else strip.removeClass(EMPTY_CLASS);
     }
 
     public void clearTabs() {
