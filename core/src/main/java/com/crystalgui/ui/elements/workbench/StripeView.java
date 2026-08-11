@@ -427,7 +427,7 @@ public class StripeView extends UIElement {
         // of eight buttons is one Tab press to skip past, not eight -- and every one of them is reachable
         // from the command palette anyway, which is the accessible path that matters.
         button.setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
-        applyIcon(button, descriptor.icon());
+        button.glyph = applyIcon(button, descriptor.icon());
         // The label is the tooltip, because the button is icon-only. Without it the rail is a column of
         // glyphs with no way to learn what they are -- the one complaint the New UI's icon-only stripe
         // reliably attracts.
@@ -821,6 +821,10 @@ public class StripeView extends UIElement {
             return false;
         }
 
+        /** Retained so the focused state can flip its variant. @see #revalidate */
+        @Nullable
+        CgUiSvg glyph;
+
         void revalidate() {
             boolean open = workbench.isPanelOpen(typeId);
             boolean focused = isPanelFocused();
@@ -832,19 +836,33 @@ public class StripeView extends UIElement {
             // to look again. The same reason the search toggles use `__on__`.
             if (focused) addClass(PANEL_FOCUSED_CLASS);
             else removeClass(PANEL_FOCUSED_CLASS);
+            // AND THE ICON FLIPS TO ITS DARK DRAWING, because the focused chip is the ACCENT in both
+            // themes -- so in a light theme this button is the one place on screen where a light-theme
+            // icon is being asked to sit on a dark ground, and the two-tone toolwindow icons go muddy on
+            // it. IntelliJ ships problems_dark.svg and selects it for exactly this state.
+            //
+            // Only the palette icons care: a currentColor mark takes the button's own `color`, which the
+            // .__panel-focused__ rule already sets to white, so it needs nothing from here. Calling this
+            // for both kinds is harmless -- an icon with no dark variant on disk falls back to its base
+            // file, which is how a variant-neutral icon ships once.
+            if (glyph != null) {
+                glyph.setVariantOverride(focused ? FileIconTheme.Variant.DARK : null);
+            }
             invalidateStyleMatch();
         }
     }
 
-    private static void applyIcon(Button button, @Nullable String iconName) {
-        if (iconName == null) return;
+    @Nullable
+    private static CgUiSvg applyIcon(Button button, @Nullable String iconName) {
+        if (iconName == null) return null;
         CgUiSvg glyph = CgUiSvg.ofIcon(iconName);
-        if (glyph == null) return;
+        if (glyph == null) return null;
         UIElement slot = new UIElement();
         // Unhittable, so the press lands on the button rather than on its own icon -- click-focus targets
         // the exact element hit, never the nearest focusable ancestor.
         slot.setHitTest(false);
         StyleGroup.defaultPipeline(slot.getStyle().getGeneralGroup(), g -> g.overlay(glyph));
         button.setPreIcon(slot);
+        return glyph;
     }
 }
