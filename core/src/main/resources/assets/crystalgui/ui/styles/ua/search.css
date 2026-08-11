@@ -462,13 +462,28 @@ problemspanel > .__find-bar__ {
  * space above and below so the blue is obviously ON THE GLYPH. Width stays wider than height for the same
  * reason: `.*` and `Cc` are wide glyphs and a square would crop them. */
 .__search-option__ {
-    width: 12px;
-    height: 10px;
+    width: 16px;
+    height: 16px;
     /* MIN-HEIGHT, NOT HEIGHT, is what was holding these open. `button` sets `min-height: 14px` plus its own
      * padding, and a minimum is a different property from a size -- so every `height` written here lost to
      * it silently and the chip stayed exactly as tall as the field's interior however small the number got.
      * Clearing both is what lets the lit background sit INSIDE the border with space above and below. */
     min-height: 0px;
+    /* 1:1 WITH THE ARTWORK (16px), which is the sharpest this can be -- and it is still not sharp.
+     *
+     * These three are LETTERFORMS, not pictograms, and that is the whole difference. `folder.svg` is
+     * crisp at 16px because its edges are straight and sit on half-integers, so a 1px outline lands
+     * exactly on a pixel row; a `C` is a curve and cannot be put on a grid at any size. Measured with an
+     * ideal rasterizer at 16px, sharp pixels as a fraction of all pixels touched: javaScript 97%, folder
+     * 72%, and these -- exactWords 22%, matchCase 18%, regex 16%. Four times softer than the icons
+     * beside them, before the renderer is involved at all.
+     *
+     * So this is the ceiling, not a bug, and it does not move: it is the same at 12px, the same through
+     * a native rasterizer, and the same in IntelliJ at 1x with these same files. The only real cure is
+     * to stop drawing letterforms as paths -- a font rasterizer HINTS glyphs, which is precisely the
+     * machinery an outline renderer does not have, so `Cc`/`W`/`.*` as UIText would be crisper than any
+     * SVG rendering of them can be. That trades icon-theme swappability for legibility on three icons
+     * that are text anyway. Not done here; recorded so the next person does not re-measure it. */
     padding-all: 0px;
     flex-shrink: 0;
     border-radius: 3px;

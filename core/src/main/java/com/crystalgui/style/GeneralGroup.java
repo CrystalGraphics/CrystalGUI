@@ -6,6 +6,8 @@ import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgui.style.property.visual.text.FontStyle;
+import com.crystalgui.style.property.visual.text.FontWeight;
 import com.crystalgui.style.property.visual.text.TextAlign;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
@@ -167,6 +169,26 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     public GeneralGroup fontSize(float fontSize) {
         set(StylePropertyRegistry.FONT_SIZE, fontSize);
+        return this;
+    }
+
+    /** CSS {@code font-weight} — inherited. Drawn by {@code UIText} only; see the registry entry. */
+    public FontWeight fontWeight() {
+        return getValueSave(StylePropertyRegistry.FONT_WEIGHT);
+    }
+
+    public GeneralGroup fontWeight(FontWeight weight) {
+        set(StylePropertyRegistry.FONT_WEIGHT, weight);
+        return this;
+    }
+
+    /** CSS {@code font-style} — inherited. Drawn by {@code UIText} only; see the registry entry. */
+    public FontStyle fontStyle() {
+        return getValueSave(StylePropertyRegistry.FONT_STYLE);
+    }
+
+    public GeneralGroup fontStyle(FontStyle style) {
+        set(StylePropertyRegistry.FONT_STYLE, style);
         return this;
     }
 
