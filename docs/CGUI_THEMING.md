@@ -171,7 +171,7 @@ editor scheme's.
 | `--configkit-field-border` | `var(--border-field)` | base.css |
 | `--configkit-field-border-bottom` | `var(--border-base)` | base.css |
 | `--configkit-field-border-top` | `var(--border-field)` | base.css |
-| `--configkit-label-fg` | `var(--fg-secondary)` | base.css |
+| `--configkit-label-fg` | `var(--fg)` | base.css |
 | `--configkit-list-body-bg` | `var(--surface-panel)` | base.css |
 | `--configkit-list-head-bg` | `var(--surface-raised)` | base.css |
 | `--configkit-panel-bg` | `var(--surface-panel)` | base.css |
@@ -301,6 +301,9 @@ editor scheme's.
 | `--graph-title-bg` | `#56565676` | crystal-dark.css |
 | `--hover-bg` | `#2E3033` | crystal-dark.css |
 | `--info` | `#3794FF` | crystal-dark.css |
+| `--inspection-arrow-fg` | `var(--fg-secondary)` | base.css |
+| `--inspection-arrow-hover-bg` | `var(--border-base)` | base.css |
+| `--inspection-arrow-hover-fg` | `var(--fg)` | base.css |
 | `--inspection-bg` | `#2D2D2DE0` | crystal-dark.css |
 | `--inspection-clean-fg` | `var(--success)` | base.css |
 | `--inspection-error-fg` | `var(--error)` | base.css |
@@ -341,7 +344,7 @@ editor scheme's.
 | `--notification-close-fg` | `var(--fg-hint)` | base.css |
 | `--notification-close-hover-bg` | `var(--hover-bg)` | base.css |
 | `--notification-close-hover-fg` | `var(--fg)` | base.css |
-| `--notification-detail-fg` | `var(--fg-secondary)` | base.css |
+| `--notification-detail-fg` | `var(--fg)` | base.css |
 | `--notification-error-fg` | `var(--error)` | base.css |
 | `--notification-hover-bg` | `var(--hover-bg)` | base.css |
 | `--notification-message-fg` | `var(--fg)` | base.css |
@@ -349,7 +352,7 @@ editor scheme's.
 | `--notification-secondary-hover-fg` | `var(--fg)` | base.css |
 | `--notification-time-fg` | `var(--fg-hint)` | base.css |
 | `--notifications-bg` | `#00000000` | base.css |
-| `--notifications-empty-fg` | `var(--fg-hint)` | base.css |
+| `--notifications-empty-fg` | `var(--fg)` | base.css |
 | `--notifications-link-fg` | `var(--link)` | base.css |
 | `--notifications-link-hover-fg` | `var(--accent-hover)` | base.css |
 | `--notifications-title-fg` | `var(--fg-secondary)` | base.css |
@@ -383,7 +386,7 @@ editor scheme's.
 | `--preview-surface-bg` | `var(--surface-editor)` | base.css |
 | `--problems-bg` | `#00000000` | base.css |
 | `--problems-count-fg` | `var(--fg-hint)` | base.css |
-| `--problems-empty-fg` | `var(--fg-hint)` | base.css |
+| `--problems-empty-fg` | `var(--fg)` | base.css |
 | `--problems-line-fg` | `var(--fg-hint)` | base.css |
 | `--problems-message-fg` | `var(--fg)` | base.css |
 | `--problems-options-fg` | `var(--fg-secondary)` | base.css |
@@ -449,7 +452,7 @@ editor scheme's.
 | `--statusbar-fg` | `var(--fg-secondary)` | base.css |
 | `--statusbar-hover-fg` | `var(--fg)` | base.css |
 | `--statusbar-item-fg` | `var(--fg-secondary)` | base.css |
-| `--statusbar-sep` | `var(--divider)` | base.css |
+| `--statusbar-sep` | `var(--border-base)` | base.css |
 | `--statusbar-warning-fg` | `var(--warning)` | base.css |
 | `--stripe-error` | `var(--error)` | base.css |
 | `--stripe-info` | `var(--info)` | base.css |

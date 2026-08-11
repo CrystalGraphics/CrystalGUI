@@ -61,7 +61,7 @@ statusbarview .__spacer__ {
 statusbarview .__status-item__ {
     flex-shrink: 0;
     white-space: nowrap;
-    font-size: 7px;
+    font-size: 9px;
     color: var(--statusbar-item-fg, #9DA0A8);
 }
 
@@ -77,8 +77,11 @@ statusbarview .__status-sep__ {
 
 /* The trail is quieter than the readouts: it says where you are, which you already know, while the
  * right-hand items are what you look down to check. IntelliJ draws the same difference. */
+/* RAISED WITH THE READOUTS, deliberately -- the two halves of the bar were both 7px and the difference
+ * between them is COLOUR, which is what the note above describes. Lifting only the right-hand items
+ * would have introduced a size split nobody chose, on a single line of chrome. */
 statusbarview .__left__ breadcrumbs .__crumb__ {
-    font-size: 7px;
+    font-size: 8px;
     color: var(--statusbar-crumb-fg, #8A8D94);
 }
 
@@ -146,7 +149,13 @@ notificationsview > .__notification-list__ {
     flex-shrink: 0;
     background: var(--notification-bg, #2B2B2B);
     border-radius: 4px;
+    /* TIGHTER VERTICALLY THAN HORIZONTALLY. A card is a stack of short lines, so 8px above and below the
+     * first and last of them reads as a gap the card cannot fill, while the same 8px at the sides is the
+     * margin that keeps text off the rounded corner. `padding-all` could not express the difference — it
+     * is one number for four edges — which is why they were equal rather than chosen. */
     padding-all: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
     gap-all: 4px;
 }
 
