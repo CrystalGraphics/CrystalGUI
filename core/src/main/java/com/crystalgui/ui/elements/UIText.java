@@ -144,6 +144,20 @@ public final class UIText extends UIElement {
         StylePropertyRegistry.FONT_FAMILY.addListener((element, prop, oldVal, newVal) -> {
             if (element instanceof UIText t) t.invalidateForFontChange();
         });
+        // AND THE TWO FACE PROPERTIES, for a reason the family listener above does NOT cover. Weight is
+        // carried on the SPANS rather than on the resolved family -- synthesis happens per span, and the
+        // family a bold label resolves is the same instance as a regular one's. So the retained
+        // paragraph's own "has the family changed?" check answers no, and a label switched to bold would
+        // keep its old glyphs and its old measured width until something else happened to dirty it.
+        //
+        // Synthetic bold is WIDER than regular (that is what emboldening does), so the stale measurement
+        // is not cosmetic: the box stays sized for the thin version and the text truncates inside it.
+        StylePropertyRegistry.FONT_WEIGHT.addListener((element, prop, oldVal, newVal) -> {
+            if (element instanceof UIText t) t.invalidateForFontChange();
+        });
+        StylePropertyRegistry.FONT_STYLE.addListener((element, prop, oldVal, newVal) -> {
+            if (element instanceof UIText t) t.invalidateForFontChange();
+        });
     }
 
     private void invalidateForFontChange() {
@@ -431,6 +445,21 @@ public final class UIText extends UIElement {
         // decoration is actually set, so ordinary labels are untouched.
         Set<CgTextDecoration> base = toCgDecorations(ownDecorations());
 
+        // THE ELEMENT'S OWN font-weight/font-style, and they ride on EVERY span rather than only the
+        // uncovered ones. A decoration is a property of the range it was asked for; a weight is a property
+        // of the whole label, so a bold title with a search match in it must not go thin for the three
+        // matched characters. That is the one way these two differ from `base` below, and it is why they
+        // are threaded into `toCgSpan` as well.
+        var general = getStyle().getGeneralGroup();
+        boolean bold = general.fontWeight().isBold();
+        boolean italic = general.fontStyle().isItalic();
+
+        // Whether an UNHIGHLIGHTED stretch still needs a span of its own. It used to be `!base.isEmpty()`
+        // -- true when a decoration was set and nothing else. With a weight in play that is no longer the
+        // whole question: a bold label with a highlight in the middle would emit a span for the match and
+        // none for the text around it, so the two halves would shape at different weights.
+        boolean baseSpanNeeded = !base.isEmpty() || bold || italic;
+
         // CLEARED FIRST, because the two early returns below are the case where a label that USED to carry
         // a band no longer does -- and leaving the old array in place is not a stale style, it is a band
         // over the wrong text entirely. `paintHighlightBands` reads `perChar[run.sourceStart()]` and an
@@ -442,10 +471,10 @@ public final class UIText extends UIElement {
         // count said "1 of 1" the whole time -- the model was right and only the paint was wrong.
         if (!shadow) this.highlightPerChar = null;
 
-        if (styles.isEmpty() && base.isEmpty()) return Collections.emptyList();
+        if (styles.isEmpty() && !baseSpanNeeded) return Collections.emptyList();
         if (styles.isEmpty()) {
             return limit <= 0 ? Collections.emptyList()
-                    : List.of(new CgStyleSpan(0, limit, false, false, base, 0, null, 0f));
+                    : List.of(new CgStyleSpan(0, limit, bold, italic, base, 0, null, 0f));
         }
 
         // Winner per character, then run-length encoded — the only way to get disjoint spans out of
@@ -472,16 +501,16 @@ public final class UIText extends UIElement {
             if (here == previous) continue;
             if (previous != null) {
                 // Anything between the last highlight and this one carries the element's own decoration.
-                if (!base.isEmpty() && runStart > uncoveredFrom) {
-                    out.add(new CgStyleSpan(uncoveredFrom, runStart, false, false, base, 0, null, 0f));
+                if (baseSpanNeeded && runStart > uncoveredFrom) {
+                    out.add(new CgStyleSpan(uncoveredFrom, runStart, bold, italic, base, 0, null, 0f));
                 }
-                out.add(toCgSpan(previous, runStart, i, shadow));
+                out.add(toCgSpan(previous, runStart, i, shadow, bold, italic));
                 uncoveredFrom = i;
             }
             runStart = here == null ? -1 : i;
         }
-        if (!base.isEmpty() && uncoveredFrom < limit) {
-            out.add(new CgStyleSpan(uncoveredFrom, limit, false, false, base, 0, null, 0f));
+        if (baseSpanNeeded && uncoveredFrom < limit) {
+            out.add(new CgStyleSpan(uncoveredFrom, limit, bold, italic, base, 0, null, 0f));
         }
         return out;
     }
@@ -493,13 +522,20 @@ public final class UIText extends UIElement {
         return lines == null ? Collections.emptySet() : lines;
     }
 
-    private static CgStyleSpan toCgSpan(HighlightStyle style, int start, int end, boolean shadow) {
+    private static CgStyleSpan toCgSpan(HighlightStyle style, int start, int end, boolean shadow,
+                                        boolean bold, boolean italic) {
         // 0 is the backend's "inherit the draw colour" sentinel, and on the shadow pass the draw colour
         // already IS the shadow — so a background-only highlight needs no help. Only an explicit colour
         // has to be darkened, or a red keyword would paint its shadow bright red.
         int color = style.color(0);
         if (shadow && color != 0) color = shadowColorFor(color);
-        return new CgStyleSpan(start, end, false, false, toCgDecorations(style.decorations()), color,
+        // THE ELEMENT'S WEIGHT CARRIES THROUGH THE HIGHLIGHT. `::highlight()` is deliberately barred from
+        // setting bold or italic -- CSS Pseudo-Elements 4 allows it only properties that cannot reflow the
+        // text it highlights, which is why HighlightStyle has no such field. That says a highlight may not
+        // CHANGE the weight; it does not say the highlighted characters stop having one. Passing the
+        // element's own through is what keeps a bold label bold across the three characters a search
+        // happened to match.
+        return new CgStyleSpan(start, end, bold, italic, toCgDecorations(style.decorations()), color,
                 null, 0f);
     }
 
@@ -910,8 +946,29 @@ public final class UIText extends UIElement {
                 : ELLIPSIS_FALLBACK;
     }
 
-    /** {@code keep} is always within {@code source} — the search bounds it at {@code source.length()}. */
+    /**
+     * {@code keep} is always within {@code source} — the search bounds it at {@code source.length()}.
+     *
+     * <p><b>Measures at the element's own weight</b>, which is the whole reason this is not a bare
+     * {@code CgTextLayout.of(text, family)}. The ellipsis search is a binary search over widths, so it is
+     * only correct if the width it probes is the width that will be painted — and synthetic bold is wider
+     * than regular. Measured thin and painted bold, every truncation would cut a character or two late
+     * and the ellipsis would sit outside the box it was computed to fit.</p>
+     *
+     * <p>Stays on the plain path when the element is neither bold nor italic, so ordinary labels keep
+     * measuring through the unspanned shaper exactly as before — the divergence AGENTS.md records between
+     * the two paths is a fraction of a pixel, but it is a fraction of a pixel this method compares
+     * against a box.</p>
+     */
     private CgTextLayout measureEllipsised(CgFontFamily family, String source, int keep, String ellipsis) {
-        return CgTextLayout.of(source.substring(0, keep) + ellipsis, family).build();
+        String probe = source.substring(0, keep) + ellipsis;
+        var general = getStyle().getGeneralGroup();
+        boolean bold = general.fontWeight().isBold();
+        boolean italic = general.fontStyle().isItalic();
+        if (!bold && !italic) return CgTextLayout.of(probe, family).build();
+        return CgTextLayout.of(
+                new CgStyledText(probe, List.of(
+                        new CgStyleSpan(0, probe.length(), bold, italic, null, 0, null, 0f))),
+                resolveGroup()).build();
     }
 }

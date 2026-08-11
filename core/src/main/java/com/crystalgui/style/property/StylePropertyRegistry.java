@@ -16,6 +16,9 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.border.LengthPercentProperty;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.text.FontFamilyValue;
+import com.crystalgui.style.property.visual.text.FontStyle;
+import com.crystalgui.style.property.visual.text.FontWeight;
+import com.crystalgui.style.property.visual.text.FontWeightValue;
 import com.crystalgui.style.property.visual.text.TextAlign;
 import com.crystalgui.style.property.visual.text.TextDecorationLine;
 import com.crystalgui.style.property.visual.text.TextDecorationLineValue;
@@ -197,6 +200,33 @@ public class StylePropertyRegistry {
      */
     public static final StyleProperty<CgCursor> CURSOR =
             create("cursor", CgCursor.class, CgCursor.AUTO).setInheritable(true);
+
+    /**
+     * CSS {@code font-weight}. Inherited, initial {@code normal}. @see FontWeight
+     *
+     * <p><b>This one actually inherits</b>, which {@code font-size} beside it does not — and the
+     * difference is worth stating because it looks like an inconsistency. Inheritance applies only where
+     * there is no candidate at any origin, and {@code ua/core.css} opens with {@code * { font-size: 10 }},
+     * which puts a candidate on every element in the tree. Nothing writes a universal {@code font-weight},
+     * so a rule on a wrapper does reach the label inside it.</p>
+     *
+     * <p><b>Consumed by {@code UIText} only.</b> {@code TextField} and {@code TextEditor} draw through
+     * {@code CgTextRenderer.Draw.text(String)} with a bare family rather than a styled paragraph, and
+     * synthesis lives on the span path — so this resolves on them and paints nothing. Stated here rather
+     * than left to be discovered, since a property that cascades correctly and does not draw is the
+     * hardest kind of gap to find.</p>
+     */
+    public static final StyleProperty<FontWeight> FONT_WEIGHT =
+            create("font-weight", FontWeight.class, FontWeight.NORMAL, FontWeightValue::new)
+                    .setInheritable(true);
+    /**
+     * CSS {@code font-style}. Inherited, initial {@code normal}. @see FontStyle
+     *
+     * <p>Same consumer boundary as {@link #FONT_WEIGHT}: {@code UIText} draws it, the two editable
+     * widgets do not.</p>
+     */
+    public static final StyleProperty<FontStyle> FONT_STYLE =
+            create("font-style", FontStyle.class, FontStyle.NORMAL).setInheritable(true);
 
     /** CSS {@code text-align} (CSS Text 3). Inherited, initial {@code left}. @see TextAlign */
     public static final StyleProperty<TextAlign> TEXT_ALIGN =
