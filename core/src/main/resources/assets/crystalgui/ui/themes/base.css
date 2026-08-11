@@ -13,9 +13,7 @@
 
 theme {
     --activitybar-badge-fg: var(--fg-on-accent);
-    --activitybar-bg: var(--surface-panel);
-    --activitybar-item-checked-bg: var(--selection-inactive-bg);
-    --activitybar-item-hover-bg: var(--accent);
+    --activitybar-bg: var(--surface-base);
     --activitybar-separator: var(--divider);
 
     --balloon-bg: var(--surface-raised);
@@ -91,8 +89,33 @@ theme {
     --dock-insertion-border: var(--accent);
     --dock-missing-bg: var(--surface-raised);
 
+    /* THE BAR IS A PANEL HEADER, so it is the panel surface with a separator under it — the same
+     * arrangement every tool window uses, where the header and its content are BOTH --surface-panel and
+     * the only thing between them is a --surface-base hairline.
+     *
+     * This briefly became --surface-base on the diagnosis that the bar was indistinguishable from the
+     * document because it shared its colour. That was the wrong cause. The bar had a `border-bottom` all
+     * along and it had never once painted: the rounded-background path takes its stroke width from
+     * `border().left` ALONE, so a bottom-only hairline resolves, lays out, and draws nothing. What was
+     * missing was the line, not the contrast — and changing the surface hid that, because a bar in a
+     * different colour looks separated whether or not its separator works.
+     *
+     * Restoring the surface also makes "the same colour as the panel header separators" mean something:
+     * with the bar at --surface-base the separator was --surface-base against --surface-base, and no
+     * value of that token could ever have been visible. */
     --editorfind-bg: var(--surface-panel);
-    --editorfind-border: var(--divider);
+    /* THE SAME LINE THE PANELS DRAW. This was --divider, a different value from --panel-header-sep, so
+     * the boundary under the find bar and the boundary under every panel header were two unrelated
+     * colours sitting a few points apart.
+     *
+     * --surface-base rather than `var(--panel-header-sep)`, which is what this said first and what
+     * baseIsDerivationOnly correctly refused: a component token derives from the SYSTEM vocabulary, never
+     * from another component token. The rule is what stops component→component chains forming, where
+     * moving one token silently drags a dozen unrelated ones with it. The cost is that "same as the panel
+     * separator" is expressed by deriving from the same source rather than by pointing at it — so the two
+     * lines stay equal through a theme that moves --surface-base, and diverge if a theme overrides one of
+     * them directly, which is the theme author's call to make. */
+    --editorfind-border: var(--surface-base);
 
     --field-bg: var(--surface-recessed);
     --field-disabled-bg: var(--surface-base);
@@ -101,8 +124,26 @@ theme {
     --field-invalid-fg: var(--error);
     --field-placeholder: var(--fg-hint);
 
-    --findbar-action-bg: var(--surface-raised);
-    --findbar-action-disabled-bg: var(--surface-panel);
+    /* OUTLINE ONLY, no fill — IntelliJ's find actions are a border and a label on the bar's own ground.
+     * Left as a token rather than hard-coded transparent in the sheet so a theme that wants filled
+     * buttons still has the hook; the UA sheet states the shape, the theme states whether it is filled. */
+    --findbar-action-bg: #00000000;
+    /* THE RING IS THE BORDER, recoloured. `outline` is one property in this engine — chrome and focus
+     * ring are the same declaration — so a button that already carries a border cannot grow a second
+     * one for focus. Changing its colour is the whole affordance, and it is what the reference does. */
+    --findbar-action-focus-border: var(--accent);
+    /* A BORDER, because every surface in this palette is within a few points of every other — raised
+     * (#2B2B2B) against the bar (#26282B) is a 2% step, which is not enough on its own to say "this is
+     * a button". IntelliJ outlines these for the same reason. */
+    --findbar-action-border: var(--border-base);
+    /* NO FILL AT ALL, rather than a darker one. This was --surface-panel, which is the value
+     * --editorfind-bg used to carry too, so a disabled button was painted in exactly the bar's own
+     * colour and vanished into it — Replace / Replace All / Exclude read as three grey words floating
+     * in the bar. Giving it a *different* fill trades one problem for the opposite one: the only
+     * surfaces darker than the bar are far enough from it that a dead button would out-contrast a live
+     * one. An empty outlined chip is quieter than a filled chip by construction, which is the way round
+     * it needs to be. */
+    --findbar-action-disabled-bg: #00000000;
     --findbar-action-disabled-fg: var(--fg-disabled);
     --findbar-action-fg: var(--fg);
     --findbar-arrow-fg: var(--fg-secondary);
@@ -125,7 +166,7 @@ theme {
 
     --ghost-label-fg: var(--fg-on-accent);
 
-    --graph-canvas: var(--surface-base);
+    --graph-canvas: var(--surface-editor);
     --graph-collapse-fg: var(--fg-secondary);
     --graph-collapse-hover-fg: var(--fg);
     --graph-control-fg: var(--fg-secondary);
@@ -160,9 +201,9 @@ theme {
     --menu-item-disabled-fg: var(--fg-disabled);
     --menu-item-focus-bg: var(--hover-bg);
     --menu-mark: var(--fg);
-    --menu-separator: var(--divider);
+    --menu-separator: var(--border-base);
 
-    --menubar-bg: var(--surface-raised);
+    --menubar-bg: var(--surface-base);
     --menubar-fg: var(--fg-secondary);
     --menubar-hover-bg: var(--hover-bg);
     --menubar-open-fg: var(--fg);
@@ -195,7 +236,7 @@ theme {
     --notification-secondary-hover-fg: var(--fg);
     --notification-time-fg: var(--fg-hint);
 
-    --notifications-bg: var(--surface-panel);
+    --notifications-bg: #00000000;
     --notifications-empty-fg: var(--fg-hint);
     --notifications-link-fg: var(--link);
     --notifications-link-hover-fg: var(--accent-hover);
@@ -220,28 +261,28 @@ theme {
     --palette-match-fg: var(--accent);
     --palette-selected-bg: var(--selection-bg);
 
-    --panel-header-fg: var(--fg-secondary);
+    --panel-header-fg: var(--fg);
     --panel-header-icon: var(--fg-secondary);
     --panel-header-icon-hover: var(--fg);
+    /* The chip behind the hide mark while the pointer is on it. --border-base rather than --hover-bg:
+     * the header sits on --surface-panel, which --hover-bg is only a couple of points from, so the usual
+     * hover fill was invisible on exactly this row. */
+    --panel-header-icon-hover-bg: var(--border-base);
 
     --pill-name-fg: var(--fg);
     --pill-type-fg: var(--fg-secondary);
 
-    --preview-surface-bg: var(--surface-base);
+    --preview-surface-bg: var(--surface-editor);
 
-    --problems-bg: var(--surface-panel);
+    --problems-bg: #00000000;
     --problems-count-fg: var(--fg-hint);
     --problems-empty-fg: var(--fg-hint);
     --problems-line-fg: var(--fg-hint);
     --problems-message-fg: var(--fg);
     --problems-options-fg: var(--fg-secondary);
     --problems-options-hover-fg: var(--fg);
-    --problems-tab-active-bg: var(--accent-soft);
-    --problems-tab-active-count-fg: var(--fg-on-accent);
-    --problems-tab-active-fg: var(--fg-on-accent);
+    --problems-tab-active-count-fg: var(--fg-secondary);
     --problems-tab-count-fg: var(--fg-hint);
-    --problems-tab-fg: var(--fg-secondary);
-    --problems-tab-hover-bg: var(--hover-bg);
     --problems-tree-line-fg: var(--fg-hint);
     --problems-unnecessary-fg: var(--fg-hint);
 
@@ -255,13 +296,8 @@ theme {
 
     --resizer-grip: var(--border-strong);
 
-    --scrollbar-corner: var(--surface-base);
-    --scrollbar-tail: var(--surface-raised);
-    --scrollbar-tail-hover: var(--border-base);
-    --scrollbar-thumb: var(--border-base);
-    --scrollbar-thumb-hover: var(--border-strong);
-    --scrollbar-thumb-pressed: var(--fg-secondary);
-    --scrollbar-track: var(--surface-base);
+    --scrollbar-corner: #00000000;
+    --scrollbar-track: #00000000;
 
     --search-match-fg: var(--modified);
 
@@ -298,7 +334,7 @@ theme {
     --squiggle-info: var(--info);
     --squiggle-warning: var(--warning);
 
-    --statusbar-bg: var(--surface-panel);
+    --statusbar-bg: var(--surface-base);
     --statusbar-border: var(--divider);
     --statusbar-crumb-fg: var(--fg-hint);
     --statusbar-error-fg: var(--error);
@@ -317,15 +353,15 @@ theme {
     --switch-disabled-knob: var(--fg-disabled);
     --switch-knob: var(--fg);
 
-    --tab-active-bg: var(--surface-panel);
+    --tab-active-bg: var(--surface-raised);
     --tab-active-fg: var(--fg);
-    --tab-bg: var(--surface-raised);
+    --tab-bg: #00000000;
     --tab-disabled-bg: var(--surface-raised);
     --tab-disabled-fg: var(--fg-disabled);
     --tab-fg: var(--fg-secondary);
     --tab-hover-bg: var(--hover-bg);
-    --tab-pane-bg: var(--surface-panel);
-    --tab-strip-bg: var(--surface-base);
+    --tab-pane-bg: #00000000;
+    --tab-strip-bg: #00000000;
 
     --tooltip-fg: var(--fg);
 
@@ -340,4 +376,14 @@ theme {
     --tree-fg: var(--fg);
     --tree-twisty-fg: var(--fg-secondary);
     --workbench-bg: var(--surface-base);
+    --panel-header-sep: var(--surface-base);
+
+    --tab-active-border: var(--border-base);
+
+    --tab-focused-bg: var(--accent-soft);
+    --tab-focused-border: var(--accent);
+    --tab-focused-fg: var(--fg);
+
+    --activitybar-item-focused-bg: var(--accent);
+    --activitybar-item-focused-fg: var(--fg-on-accent);
 }

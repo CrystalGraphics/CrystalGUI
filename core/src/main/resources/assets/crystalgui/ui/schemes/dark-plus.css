@@ -3,8 +3,11 @@
  * @kind   dark
  * @author crystalgui
  *
- * The editor colour scheme extracted from default.css — VS Code's Dark+ values, which is what the
- * engine has always rendered (default.css:616 cites them). The SECOND, independently-selectable
+ * VS Code's Dark+ SYNTAX palette, on a surface tuned to the Islands frame. The two halves are
+ * separable on purpose: the token colours are Dark+'s and are what people recognise, while the
+ * paper they sit on has to agree with whatever theme surrounds it — a document darker than the
+ * panels around it inverts the Islands reading, where the editor is the LIGHTEST island rather
+ * than a hole in the middle of the frame. The SECOND, independently-selectable
  * axis (plan_styling.md §3.6): a scheme is a variable table over the editor's already-tokenized
  * rules, exactly as a theme is over the chrome's. The rules themselves stay in default.css — the
  * widget publishes its ranges whether or not anything styles them, and a themeless editor that
@@ -17,19 +20,25 @@
  */
 
 theme {
-    /* ── The editor's surfaces ── */
-    --editor-bg: #1E1E1E;
+    /* ── The editor's surfaces ──
+     * TRANSPARENT, not #191A1C, though they resolve to the same pixels: an opaque document fill is
+     * a SQUARE that paints over the rounded island beneath it, which is how the editor lost its
+     * corners the moment the ring that used to trace them was removed. The same trap the file tree
+     * hit. A scheme whose document genuinely differs from the panel sets a colour here and accepts
+     * square corners (or a theme matches it); a scheme that agrees with the panel says so by
+     * staying out of the way. */
+    --editor-bg: #00000000;
     --editor-fg: #D4D4D4;
     --editor-caret: #FF0000;
-    --editor-current-line: #232830;
+    --editor-current-line: #1F2124;
     --editor-selection-bg: #2C5A8C;
-    --editor-gutter-bg: #1E1E1E;
-    --editor-gutter-edge: #2F3540;
-    --editor-line-number: #5C6570;
-    --editor-indent-guide: #2F3540;
+    --editor-gutter-bg: #191A1C;
+    --editor-gutter-edge: #2B2D30;
+    --editor-line-number: #6B6E76;
+    --editor-indent-guide: #2B2D30;
     --editor-indent-guide-active: #6E7A8A;
     --editor-whitespace: #454C57;
-    --editor-ruler: #2F3540;
+    --editor-ruler: #2B2D30;
 
     /* ── Folding ── */
     --editor-fold: #4A515C;

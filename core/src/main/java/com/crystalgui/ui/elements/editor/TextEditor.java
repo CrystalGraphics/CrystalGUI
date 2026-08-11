@@ -2781,6 +2781,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
                         .left(left).top(0f).width(width).height(height));
     }
 
+    /**
+     * Starts the vertical scrollbar below whatever chrome is floating at the editor's top edge.
+     *
+     * <p>The find bar already displaces the <em>text</em>, by writing this element's {@code padding-top} —
+     * see {@code SearchReplaceBar.syncEditorInset}. The scrollbar does not follow, because it is pinned to
+     * the padding box with {@code top: 0} and padding is exactly what it is pinned <em>inside</em>. So the
+     * bar kept covering the top of the bar you would drag to reach the first line — the one place the
+     * scrollbar is most likely to be grabbed while a search is open.</p>
+     *
+     * <p>IMPORTANT origin, and package-private rather than public, for the same two reasons
+     * {@code ScrollerView.reserveCorner} gives when it writes the opposite edges: whether the strip exists
+     * is <b>runtime state</b> a stylesheet cannot know, and only the bar itself knows how tall it is this
+     * frame. The two writes do not collide — that one owns {@code bottom} and {@code right}, this owns
+     * {@code top}.</p>
+     */
+    void setTopChromeInset(float inset) {
+        StyleGroup.importantPipeline(verticalScroller().getStyle().getLayoutGroup(), l -> l.top(inset));
+    }
+
     /** The document row showing at the top of the viewport — what a zoom keeps still. */
     public int rowAtTopOfViewport() {
         float height = lineHeight();

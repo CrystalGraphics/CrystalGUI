@@ -464,9 +464,45 @@ public class SearchReplaceBar extends UIElement {
         if (Math.abs(inset - appliedInset) < 0.5f) return;
         appliedInset = inset;
         StyleGroup.importantPipeline(editor.getStyle().getLayoutGroup(), l -> l.paddingTop(inset));
+        // AND THE SCROLLBAR, which padding alone does not move. The bar is pinned to the editor's padding
+        // box with `top: 0`, so growing the padding pushes the text down and leaves the scrollbar starting
+        // where it always did -- underneath this widget, with its top section unreachable. Both halves of
+        // "the editor starts below the bar" belong to the same measurement, so they are written together;
+        // splitting them is how one of the two silently stops being updated.
+        editor.setTopChromeInset(inset);
     }
 
     private float appliedInset = -1f;
+
+    /**
+     * Lines the two boxes up by matching the find row's trailing group to the replace row's.
+     *
+     * <p>The two rows carry different things after the box — a count and two arrows on one, three text
+     * buttons on the other — so left alone the boxes are sized by whatever happens to sit beside them and
+     * never line up. A fixed width in the stylesheet was the first answer and cannot work: the right
+     * number is whatever <em>Replace / Replace All / Exclude</em> happen to measure, which depends on the
+     * font, the theme's padding and the labels themselves.</p>
+     *
+     * <h3>One direction only, which is what makes it terminate</h3>
+     *
+     * <p>The replace group is never written to — it stays content-sized and therefore truthful — and the
+     * find group's minimum follows it. Measuring both and applying the max to both would feed each
+     * group's own written width back into the next frame's measurement, which is the monotonic ratchet
+     * {@code NavigatorView} records: it can only ever grow, so one long label pins the floor for the
+     * session. Here the input is a measurement of something this method never touches.</p>
+     *
+     * <p>When the replace row is collapsed its group measures zero, so the find box takes the whole bar —
+     * which is what it should do when there is nothing to line up with.</p>
+     */
+    private void syncTrailingWidths() {
+        float target = replaceShown
+                ? Math.max(0f, replaceTrailing.getRuntimeCache().getWidth()) : 0f;
+        if (Math.abs(target - appliedTrailing) < 0.5f) return;
+        appliedTrailing = target;
+        StyleGroup.importantPipeline(findTrailing.getStyle().getLayoutGroup(), l -> l.minWidth(target));
+    }
+
+    private float appliedTrailing = -1f;
 
     /**
      * Registers the inset ticker once the bar is in a window.
@@ -482,6 +518,7 @@ public class SearchReplaceBar extends UIElement {
         ticking = true;
         getAttachedWindow().registerTicker(delta -> {
             syncEditorInset();
+            syncTrailingWidths();
             // FROM HERE TOO, and not from the constructor: `Keymap.acceleratorFor` walks up from this
             // element, so it can only answer once the bar is in a tree whose editor has installed its
             // keymap. Cheap to re-ask -- `refreshTooltips` compares the text it last wrote and does

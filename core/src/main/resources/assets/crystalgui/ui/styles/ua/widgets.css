@@ -279,42 +279,107 @@ tabview.__right__ .__strip-bar__ {
 tabview .__panes__ {
     background: var(--tab-pane-bg, #3A3A3A);
 }
+/* THE INSET AROUND A TAB'S CONTENT. Small on purpose: it exists so the document does not sit flush
+ * against the panel's edge, not to frame it — 4px read as a border once the panel around it went
+ * dark, because the content and its surround were different colours with a visible band between. */
 tabview .__pane__ {
-    padding-all: 4px;
+    padding-all: 2px;
+
+    /* AND IT FILLS THE PANES BOX. Without this the pane is sized by its content, so a document inside it
+     * has nothing to grow INTO — `flex-grow` divides free space, and a content-sized parent has none. The
+     * editor's own fill rule was therefore correct and did nothing, which is the confusing half: the
+     * child looks like the thing that is short, and the parent is what is missing the idiom.
+     *
+     * The same omission the dock, a RegionHost and a ViewContainer each had to be given in turn — this is
+     * the fourth. flex-shrink stays untouched, as it does in all four. */
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* ...AND THE CONTENT IS ROUNDED, matching the island it sits in. A graph canvas or an editor is the
+ * one thing in a panel that paints its own full-bleed surface, so a square one inside a rounded
+ * panel is the only place the two disagree — everything else in a panel is transparent and lets the
+ * island draw its own corners (see the note on `.__view-content__` in ua/workbench.css).
+ *
+ * Free, like the island's own rounding: these do not clip, so no FBO layer is involved. A widget
+ * that DOES clip its own content (texteditor) keeps square corners and is unaffected — see
+ * resolveOverflowClip(). */
+tabview .__pane__ > graphview,
+tabview .__pane__ > canvasview {
+    border-radius: var(--radius-panel, 0px);
 }
 
 /* A tab is a Button, so it inherits nothing from `button` (type selectors don't cascade by
  * inheritance) — it needs its own box. */
-tab {
-    height: 12px;
-    padding-left: 6px;
-    padding-right: 6px;
+/* ── EVERY REGION TAB, from one definition ────────────────────────────────────────────────────────
+ *
+ * `tab` is the TabView widget (editor groups, tool windows); `.__problem-tab__` is the Problems
+ * panel's scope row. They are two different ELEMENTS on purpose and cannot become one, which is
+ * worth writing down because "just use the Tab widget" is the obvious fix and it is wrong:
+ *
+ *   - A `Tab` owns a CONTENT PANE and switches between panes. The Problems tabs switch a FILTER over
+ *     one shared tree — there is no second pane for a TabView to swap to.
+ *   - `Tab.setSelected` is package-private BY DESIGN ("selection is a TabView-wide invariant... a Tab
+ *     restoring `selected` on its own could leave two tabs checked at once"), so a bare Tab outside a
+ *     TabView cannot even drive `:checked`.
+ *
+ * So they stay two elements and share one RULE instead. Listing both selectors on one block is what
+ * actually removes the duplication — the previous arrangement had them naming the same tokens, which
+ * still meant every change had to be made twice and had already let them drift to opposite
+ * treatments (a filled accent pill in one, an invisible fill in the other). */
+tab,
+.__problem-tab__ {
+    /* NO FIXED HEIGHT — the pill is sized by its own padding, exactly as `.__problem-tab__` is.
+     * A hard 12px was shorter than the text's line box, so the highlight hugged the glyphs and the
+     * editor's tabs read as cramped next to the Problems panel's, which had never had one. It was a
+     * leftover of the browser-tab shape above, where the selected tab grew to 16px to meet the pane;
+     * with a pill there is nothing for a fixed height to coordinate with.
+     *
+     * SYMMETRIC vertical padding for the same reason: the old 1px/2px split leaned the label toward
+     * the top edge because the bottom edge was the one that met the content. */
+    padding-left: 4px;
+    padding-right: 4px;
     padding-top: 1px;
-    padding-bottom: 2px;
+    padding-bottom: 1px;
     justify-content: center;
     align-items: center;
+    /* ROW, and it belongs on the SHARED rule rather than on whichever tab happens to need it. This
+     * engine's flex-direction default is COLUMN (the Taffy divergence most likely to bite), so any
+     * tab with more than one child stacks them: the Problems tab put its count UNDER its label the
+     * moment its own copy of this declaration was deleted. A single-label tab cannot tell the
+     * difference, which is exactly why the missing case has to be covered here — the tab that needs
+     * it is not the one you are looking at while writing the rule. */
+    flex-direction: row;
     background: var(--tab-bg, #6E6E6E);
     color: var(--tab-fg, #DDDDDD);
+    /* A TAB IS A PILL, selected or not — the shape is constant and only the FILL changes, so a tab
+     * does not move or resize when it becomes current. Same radius as a button, because at this
+     * size a tab IS a button (it is literally a Button subclass) and two radii on the same row is
+     * the kind of half-millimetre difference that reads as sloppiness without being nameable. */
+    border-radius: var(--radius-control, 0px);
     text-shadow: false;
-    /* Rounded on the three OUTER edges only; the edge facing the panes stays square. The whole point of
-     * the `tab:checked` rule below is that the seam against the pane disappears, and rounding that edge
-     * would put two notches of pane colour back exactly where that rule works to hide them.
-     *
-     * Which edge that is depends on where the strip sits, so each side gets its own rule — TabView puts
-     * `__top__`/`__bottom__`/`__left__`/`__right__` on the tabview root for exactly this. The bare `tab`
-     * rule covers the TOP default; a left-side strip rounding its top corners (which is what a single
-     * `2px 2px 0 0` gives you) reads as plainly wrong in the sidebar layout the gallery uses. */
-    border-radius: 2px 2px 0 0;
+
+    /* A TRANSPARENT BORDER AT REST, coloured only when selected (see `tab:checked`). It has to exist
+     * in BOTH states or the tab grows by 2px the moment it becomes current and every tab beside it
+     * shifts — a whole row twitching on each click. Reserving the space always and changing only the
+     * colour is the standard fix, and the same reason the radius lives here rather than on :checked. */
+    border-width: 1px;
+    border-color: #00000000;
 }
-tabview.__bottom__ tab {
-    border-radius: 0 0 2px 2px;
-}
-tabview.__left__ tab {
-    border-radius: 2px 0 0 2px;
-}
-tabview.__right__ tab {
-    border-radius: 0 2px 2px 0;
-}
+
+/* THE TAB IS A PILL, NOT A BROWSER TAB — and this replaced four rules plus a `height` jump.
+ *
+ * It used to be rounded on three OUTER edges with the pane-facing edge left square, so that a
+ * selected tab's seam against the pane disappeared and it read as "raised into" the content: a
+ * browser's metaphor, and it needed one rule per strip side (`__top__`/`__bottom__`/`__left__`/
+ * `__right__`) because which edge faces the pane depends on where the strip sits. The selected tab
+ * also grew from 12px to 16px to complete the illusion.
+ *
+ * Every modern IDE has abandoned that. A tab is a LABEL on a strip and the selection is a pill drawn
+ * behind it — which is why the shape is now uniform, constant in size, and needs no per-side rules
+ * at all. The four they required are gone with it: less to keep in step, and a strip on any side
+ * looks the same without anyone having to remember to add a case. */
 /* The file-type icon, when a tab has one. Sized here rather than inherited from the file tree's rule:
  * that one is scoped to `projectfiletree .__project-row__`, so without this a tab's icon element exists,
  * holds the right drawable, and lays out at zero by zero -- which reads as the icon never having been
@@ -331,16 +396,49 @@ tab .__pre-icon__ {
     overlay-fit: contain;
 }
 
-tab:hover {
+tab:hover,
+.__problem-tab__:hover {
     background: var(--tab-hover-bg, #8C8C8C);
 }
-/* The selected tab reads as raised into the pane below it: taller, and the same colour as the pane
- * so the seam between them disappears. LDLib's ore theme does the same with a padding shift. */
-tab:checked {
-    height: 16px;
+/* THE SELECTED TAB: a lighter fill with a LIGHTER-STILL border, which is what gives IntelliJ's tab
+ * its lifted, bubble-like read instead of a flat swatch. No height change — the row must not resize
+ * when the selection moves; the space for the border is already reserved on the base rule. */
+tab:checked,
+.__problem-tab__.__selected__ {
     background: var(--tab-active-bg, #3A3A3A);
     color: var(--tab-active-fg, #FFFFFF);
+    border-color: var(--tab-active-border, #4A4A4A);
 }
+/* ── THE SELECTED TAB OF THE FOCUSED GROUP ───────────────────────────────────────────────────────
+ *
+ * IntelliJ tints the current tab of the group that has focus and leaves every other split's current
+ * tab grey, which is how you can tell — with two editors side by side — which one a keystroke will
+ * go to. That question is worth answering; a ring around the whole pane was just the wrong way to
+ * answer it (see `dockgroup.__active__` in ua/workbench.css, now off by default).
+ *
+ * THE SIGNAL IS `:focus-within`, and getting here took two wrong turns worth recording. First
+ * `dockgroup.__active__` — which works, for the editor, and ONLY the editor: there is exactly one
+ * DockGroup in the workbench (a probe over the live tree said so), because tool windows are
+ * ViewContainers sitting in regions. A rule written against it silently covers a third of the app.
+ * Then a `__focused__` class added by hand to both host types — the same behaviour with a worse
+ * name, two copies to keep in step, and nothing for the next container that wants it.
+ *
+ * What this actually is, is the focus owner having an ancestor — which CSS named `:focus-within`
+ * long ago, and which IntelliJ answers the same way (its "active tool window" is the one owning
+ * focus). So the pseudo-class is registered properly in PseudoClasses now and any container can ask.
+ *
+ * BOTH tab families again, for the reason the shared rule above exists: the Problems panel's scope
+ * row is not made of `tab` elements, so a rule naming only `tab` reaches the editor's tabs and
+ * silently skips every panel that builds its own row. Any rule that styles a tab STATE has to list
+ * the pair, which is precisely why the base pill lists them on one block rather than twice. */
+dockgroup:focus-within tab:checked,
+viewcontainer:focus-within tab:checked,
+viewcontainer:focus-within .__problem-tab__.__selected__ {
+    background: var(--tab-focused-bg, #2F5F9E);
+    color: var(--tab-focused-fg, #FFFFFF);
+    border-color: var(--tab-focused-border, #4A88C7);
+}
+
 tab:disabled {
     background: var(--tab-disabled-bg, #4A4A4A);
     color: var(--tab-disabled-fg, #6E6E6E);

@@ -452,6 +452,29 @@ public class UIElement implements SettingsScope, DataProvider {
         this.isFocusVisible = nextVisible;
         onStyleChanged();
         invalidateStyleMatch();
+        // :focus-within is an ANCESTOR'S state, so this element alone re-matching is not enough --
+        // the whole chain above it changed too. Cheap and bounded: focus moves rarely and a path is
+        // a few dozen links, where the alternative (invalidating everything) is the whole tree.
+        // Both the losing and the gaining element run this, which is what covers both chains.
+        for (UIElement ancestor = getParent(); ancestor != null; ancestor = ancestor.getParent()) {
+            ancestor.invalidateStyleMatch();
+        }
+    }
+
+    /**
+     * Whether the focus owner is this element or a descendant of it — CSS's {@code :focus-within}.
+     *
+     * <p>Walks up from the FOCUSED element rather than down from this one: the focus path is one
+     * chain of at most a few dozen links, while a subtree is unbounded. So the cost is the depth of
+     * the focused element and is the same whichever element asks.</p>
+     */
+    public boolean isFocusWithin() {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return false;
+        for (UIElement e = window.getInputHandler().getFocusedElement(); e != null; e = e.getParent()) {
+            if (e == this) return true;
+        }
+        return false;
     }
 
     public void setHovered(boolean hovered) {

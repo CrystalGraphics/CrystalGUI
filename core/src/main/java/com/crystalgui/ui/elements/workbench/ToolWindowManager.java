@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockPanelRegistry;
@@ -155,6 +156,20 @@ public final class ToolWindowManager {
         host.show(side, typeId, container);
         regions.sync();
         toolWindows.put(placementOf(typeId).withVisible(true));
+
+        // SHOWING A TOOL WINDOW FOCUSES IT, which is what both references do and what makes the rail
+        // usable from the keyboard: Alt+6 opens Problems AND puts you in it, rather than opening it
+        // and leaving the caret wherever it was.
+        //
+        // It is also the only way the rail's own button can ever light up. Clicking the button focuses
+        // THE BUTTON -- a rail button is an ordinary focusable Button -- which is in the stripe, not in
+        // the panel, so `__panel-focused__` was correctly false for the very gesture that opened it.
+        // Focus follows the thing you asked for, not the control you asked with.
+        //
+        // requestPointerFocus, never requestFocus: the latter rings, and a panel outlined on every
+        // open is exactly the noise :focus-visible exists to remove.
+        UIWindow window = container.getAttachedWindow();
+        if (window != null) window.getInputHandler().requestPointerFocus(container);
         return true;
     }
 

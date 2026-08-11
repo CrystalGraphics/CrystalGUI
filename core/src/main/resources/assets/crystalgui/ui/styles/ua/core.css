@@ -95,3 +95,27 @@
 :focus-visible {
     outline: 1px var(--focus-ring, #0060df);
 }
+
+/* ── ...EXCEPT ON ANYTHING PANE-SIZED ────────────────────────────────────────────────────────────
+ *
+ * A focus ring answers "where will my typing go" for a CONTROL. Around a whole editor, canvas or
+ * tree it answers a question nobody asked, in the loudest way available — a rectangle the width of
+ * the window — and these are exactly the widgets you sit focused in for hours, so it is not a
+ * transient hint but permanent furniture.
+ *
+ * Neither reference outlines a pane. IntelliJ and VS Code both mark the active editor through its
+ * TAB: a mark you are already looking at, which costs nothing when it is not needed.
+ *
+ * The rule above is untouched for real controls — a slider you tabbed to still rings, and a text
+ * FIELD rings whether you tabbed or clicked. This is a carve-out for containers, listed by tag
+ * rather than inferred, because "is this pane-sized" is a judgement about what the widget is FOR
+ * and not something the engine can measure. */
+texteditor:focus-visible,
+graphview:focus-visible,
+canvasview:focus-visible,
+scrollerview:focus-visible,
+listview:focus-visible,
+treeview:focus-visible,
+tableview:focus-visible {
+    outline-width: 0px;
+}

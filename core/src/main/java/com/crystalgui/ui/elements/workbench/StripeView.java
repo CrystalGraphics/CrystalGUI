@@ -107,6 +107,9 @@ public class StripeView extends UIElement {
 
     /** One tool-window button. */
     public static final String ITEM_CLASS = "__activity-item__";
+    /** On the rail button whose panel currently owns the focus — at most one at a time, and none at
+     * all while the editor is focused, since the editor region has no rail button. */
+    public static final String PANEL_FOCUSED_CLASS = "__panel-focused__";
 
     /**
      * The stretch between the two groups, which is what pushes the bottom one to the foot of the rail.
@@ -198,6 +201,7 @@ public class StripeView extends UIElement {
 
     @Nullable
     private Connection placementSubscription;
+    private Connection focusSubscription;
 
     /** The registry a deferred sync runs against. @see #requestSync */
     @Nullable
@@ -335,6 +339,27 @@ public class StripeView extends UIElement {
         if (panelSubscription != null) panelSubscription.disconnect();
         sync(commands);
         panelSubscription = registry.onDidRegister.connect(descriptor -> sync(commands));
+    }
+
+    /**
+     * Subscribes to focus so the rail can light the button whose panel owns it.
+     *
+     * <p><b>Takes the window rather than reaching for {@code getAttachedWindow()}</b>, which returned
+     * null here and left the subscription silently unmade: this runs from {@code onWindowChanged},
+     * during the very attach that sets those references, so the rail does not yet know its own window
+     * while the caller has had it all along. Passing what the caller holds removes the ordering
+     * question instead of timing around it.</p>
+     *
+     * <p>Straight from the input handler's announcement rather than polled per frame — the shape
+     * {@code onDidChangeFocus} exists to delete, and one this class already refuses elsewhere ("a
+     * rail that nothing is moving costs no per-frame work at all"). {@code refresh()} is a
+     * comparison per button and re-matches only the ones that changed, so a focus move restyles the
+     * two buttons involved and nothing else.</p>
+     */
+    void listenToFocus(UIWindow window) {
+        if (focusSubscription != null) focusSubscription.disconnect();
+        focusSubscription = window.getInputHandler().onDidChangeFocus.connect(focused -> refresh());
+        refresh();
     }
 
     /**
@@ -722,6 +747,7 @@ public class StripeView extends UIElement {
         private final String typeId;
         private final String title;
         private boolean lastKnownOpen;
+        private boolean lastKnownFocused;
 
         /**
          * Its hover label — kept, because a drag has to dismiss it.
@@ -777,10 +803,35 @@ public class StripeView extends UIElement {
             return workbench.isPanelOpen(typeId);
         }
 
+        /**
+         * Whether the focus owner is inside THIS button's panel — the rail's half of the same
+         * question {@code :focus-within} answers for a container.
+         *
+         * <p>A pseudo-class cannot express it: {@code :focus-within} is true for ANCESTORS of the
+         * focus owner, and a rail button is nowhere near the panel it opens — it is in a different
+         * subtree entirely. So the relationship is by ID, and the walk stops at the FIRST
+         * ViewContainer found so a panel nested inside another cannot light both their icons.</p>
+         */
+        private boolean isPanelFocused() {
+            UIWindow window = getAttachedWindow();
+            if (window == null) return false;
+            for (UIElement e = window.getInputHandler().getFocusedElement(); e != null; e = e.getParent()) {
+                if (e instanceof ViewContainer container) return typeId.equals(container.containerId());
+            }
+            return false;
+        }
+
         void revalidate() {
             boolean open = workbench.isPanelOpen(typeId);
-            if (open == lastKnownOpen) return;
+            boolean focused = isPanelFocused();
+            if (open == lastKnownOpen && focused == lastKnownFocused) return;
             lastKnownOpen = open;
+            lastKnownFocused = focused;
+            // A CLASS, not a pseudo-class -- the engine re-evaluates a pseudo-class on its terms and
+            // this state depends on an element in a different subtree, so nothing would ever tell it
+            // to look again. The same reason the search toggles use `__on__`.
+            if (focused) addClass(PANEL_FOCUSED_CLASS);
+            else removeClass(PANEL_FOCUSED_CLASS);
             invalidateStyleMatch();
         }
     }

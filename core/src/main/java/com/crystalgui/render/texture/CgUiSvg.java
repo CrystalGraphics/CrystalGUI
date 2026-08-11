@@ -8,7 +8,7 @@ import javax.annotation.Nullable;
 /**
  * Draws an {@link SvgDocument} into a rect — the drawable face of the SVG stack.
  *
- * <h3>Why this is not {@code SvgDocument} implementing the interface directly</h3>
+ * <h3>Why this is not {@code SvgDocument} plementing the interface directly</h3>
  *
  * <p>The obvious move is to put {@code draw} on the document and be done. It does not work, and the reason
  * is the same one that makes {@code currentColor} late-bound in the first place: <b>a document is a shared,

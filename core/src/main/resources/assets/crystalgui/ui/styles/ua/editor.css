@@ -49,6 +49,7 @@ texteditor {
 texteditor {
     overflow: auto;
     line-height: 1.4;
+
     /* Text must not sit flush against the editor's own edge. At uiScale 2 a 1px border is two physical
      * pixels, and a Minecraft-font `l` is about that wide of actual ink -- so a flush first glyph is
      * painted over by the border and the line reads as ".ine 0" instead of "line 0". This is geometry,
@@ -379,8 +380,20 @@ tableview .__cell__ {
     overflow: hidden;
 }
 
+/* NO TRACK BY DEFAULT. A scrollbar that paints a full-height rail is a permanent stripe down the
+ * edge of every panel, and it is the single loudest thing in a quiet UI — IntelliJ, VS Code and
+ * every modern OS draw the thumb alone and let the content show through. The token survives so a
+ * theme that wants a visible gutter can still ask for one. */
+/* The bar's thickness, and the thumb's radius as HALF of it. Two names rather than one because
+ * this engine has no calc(): the pairing has to be maintained by hand, so it is stated in one place
+ * where the two are visibly next to each other rather than 90 lines apart. */
+* {
+    --scrollbar-size: 4px;
+    --scrollbar-radius: 3px;
+}
+
 scroller .__track__ {
-    background: var(--scrollbar-track, #2A2A2A);
+    background: var(--scrollbar-track, #00000000);
 }
 /* Only the CROSS axis is set here. The main axis (length + position) is written from Java at
  * IMPORTANT origin, since it's runtime state, and would override anything declared here anyway.
@@ -388,9 +401,10 @@ scroller .__track__ {
 scroller .__thumb__ {
     height: 100%;
     background: var(--scrollbar-thumb, #6E6E6E);
-    /* Half the 8px bar thickness set on the ScrollerView rules below. Deliberately on the thumb only —
-     * the track stays square so the bar keeps a crisp edge against the content it overlays. */
-    border-radius: 4px;
+    /* HALF THE BAR'S THICKNESS, derived rather than restated: a fixed 4px against the old 8px bar
+     * was already a pill, and it stayed 4px when the bar narrowed — which turns a pill into a
+     * lozenge with flat sides. Both now come from --scrollbar-size. */
+    border-radius: var(--scrollbar-radius, 3px);
 }
 scroller.__vertical__ .__thumb__ {
     width: 100%;
@@ -468,14 +482,37 @@ texteditor .__corner__ {
  * is both narrower in intent and wider in reach. Per-widget rules that genuinely differ -- texteditor's
  * z-index above -- stay tag-scoped. */
 .__v-scroller__ {
-    width: 8px;
+    width: var(--scrollbar-size, 6px);
     top: 0;
     right: 0;
     bottom: 0;
 }
 .__h-scroller__ {
-    height: 8px;
+    height: var(--scrollbar-size, 6px);
     left: 0;
     right: 0;
     bottom: 0;
+}
+
+/* ── AN EDITOR OPENED AS A DOCUMENT FILLS ITS PANE ───────────────────────────────────────────────
+ *
+ * The fill idiom, and the same one the shader graph editor needed for the same reason: a dock pane is a
+ * flex COLUMN whatever the split's orientation, so a document grows by HEIGHT. This engine defaults
+ * flex-shrink to 0, so a child with a content basis keeps its content size and the pane simply carries
+ * slack below it — which is the editor sitting in the top of its tab with dock showing underneath.
+ * `height: 0` is the basis that lets flex-grow do the work.
+ *
+ * SCOPED TO THE DOCK, not written on `texteditor` itself. Unscoped it also reaches every editor embedded
+ * in something that sizes it deliberately — a form field, a preview, a harness scene — and forces it to
+ * eat the container. `scrollingMovesTheTextAndTheGutterTogether` is what caught that: with the widget
+ * suddenly filling its host, the viewport changed and the same scroll landed on a different first line,
+ * so the gutter and the text moved opposite ways. Filling is a statement about being a DOCUMENT in a
+ * pane, which is what this selector says and what the bare tag cannot.
+ *
+ * flex-shrink is deliberately untouched — overriding it to 1 is the "help" that collapses the box, since
+ * the 0 default is what stops content being compressed below its own size. */
+dockgroup texteditor {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
 }

@@ -3,6 +3,7 @@ package com.crystalgui.render.texture.asset;
 import com.crystalgraphics.util.io.CgIO;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiSvg;
 
 import com.google.gson.Gson;
@@ -154,8 +155,25 @@ public final class FileIconTheme {
         return variant;
     }
 
+    /**
+     * Fires when {@link #setVariant} actually changes the variant — never on a no-op swap.
+     *
+     * <p><b>Why a signal rather than the caller refreshing what it knows about.</b> An icon name is chosen
+     * in binding code, not by the cascade, so restyling repaints nothing here — and the previous answer to
+     * that was for {@code WorkbenchSettings.apply} to refresh the file tree by hand. That is a contract
+     * whose second half fails silently: it worked for the one consumer somebody remembered, and the editor
+     * tabs, the breadcrumbs and the status bar kept the old variant's drawing with nothing to report it.
+     * The list of consumers is not knowable from here, which is exactly the case a broadcast exists for —
+     * a new one subscribes once at construction instead of the theme code having to learn about it.</p>
+     */
+    public static final Signal.Action onVariantChanged = new Signal.Action();
+
     public static void setVariant(Variant newVariant) {
+        Variant previous = variant;
         variant = Objects.requireNonNull(newVariant, "variant");
+        // NOT unconditionally: every consumer's handler rebuilds drawables, and a theme swap that leaves
+        // light-vs-dark alone (Crystal Dark to any other dark theme) has nothing for them to redo.
+        if (previous != variant) onVariantChanged.emit();
     }
 
     /**

@@ -52,7 +52,7 @@ theme {
      * expressed by zeroing these rather than by shipping different structure. ── */
     --radius-panel: 8px;
     --radius-control: 4px;
-    --panel-gap: 6px;
+    --panel-gap: 3px;
 
 }
 
@@ -103,4 +103,13 @@ theme {
 
     --tooltip-bg: #FFFFFFF5;
     --tooltip-border: #00000030;
+
+    --scrollbar-thumb: #5A5D6355;
+    --scrollbar-thumb-hover: #5A5D6399;
+    --scrollbar-thumb-pressed: #5A5D63CC;
+    --scrollbar-tail: #00000000;
+    --scrollbar-tail-hover: #5A5D6333;
+
+    --activitybar-item-hover-bg: #D5D5DB;
+    --activitybar-item-checked-bg: #DCDCE2;
 }

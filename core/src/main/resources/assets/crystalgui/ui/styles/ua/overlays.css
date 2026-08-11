@@ -408,6 +408,18 @@ menu.__has-checkable__ menuitem .__mark__ {
 menu.__has-checkable__ menuitem.__checkable__:checked .__mark__ {
     overlay: shape("checkmark");
 }
+/* Same trim the dropdown rule below makes, and for the same reason: the base `menuitem` rule's 6px
+ * left padding was sized for a bare label sitting straight against the row's edge. Put a 12px gutter
+ * in front of it and the two stack — the mark floats clear of the edge and the label ends up 19px in,
+ * which reads as the menu being indented rather than as a column of marks.
+ *
+ * On the ROW, never on the mark. Narrowing `__mark__` would shrink the checkmark glyph itself, and
+ * trimming its margin alone would move the mark without moving the label — either one breaks the
+ * shared gutter that is the whole point of reserving it at menu level. Padding shifts mark and label
+ * together, so every row in the menu keeps the same left edge. */
+menu.__has-checkable__ menuitem {
+    padding-left: 0px;
+}
 /* The base `menuitem` rule's 6px left padding was sized for a bare label with no mark before it — once
  * the 12px gutter above sits in front of it, the checkmark reads as floating well clear of the row's
  * edge rather than beside it. Tightened for every row in a dropdown's menu (checked or not), so the

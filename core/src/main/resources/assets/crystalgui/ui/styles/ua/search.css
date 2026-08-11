@@ -18,7 +18,7 @@
     align-items: center;
     flex-shrink: 0;
     height: 22px;
-    padding-left: 4px;
+    padding-left: 24px;
     background-color: var(--menubar-bg, #3C3F41);
 }
 
@@ -27,8 +27,8 @@
     align-items: center;
     flex-shrink: 0;
     height: 22px;
-    padding-left: 8px;
-    padding-right: 8px;
+    padding-left: 4px;
+    padding-right: 4px;
     color: var(--menubar-fg, #BBBBBB);
     cursor: pointer;
 }
@@ -42,7 +42,14 @@
  *
  * `statusbarview .__status-item__` works only because the status item IS its text element; a widget that
  * wraps its label -- as this one does, to give the title padding and a hover fill -- has to say it twice
- * or say it here. 10 to match `menuitem`, which is what these open. */
+ * or say it here.
+ *
+ * SMALLER THAN THE MENU IT OPENS, deliberately, which is the one thing here that looks like a mistake
+ * and is not. It was 10 to match `menuitem`, on the reasoning that a title and its rows are one
+ * control. But the bar is not read the way a menu is: a menu is a list you scan once it is open,
+ * while the bar is permanent chrome sitting above the work area all the time, and at the same size as
+ * the rows it opens it competed with the panel titles beside it. Both references set the bar below
+ * their menu body for the same reason. The rows stay at 10 -- nothing about this rule reaches them. */
 .__menu-bar__ .__menu-title__ text {
     font-size: 10;
 }
@@ -379,7 +386,10 @@ problemspanel > .__find-bar__ {
     gap-all: 3px;
     padding-left: 4px;
     padding-right: 3px;
-    border-radius: 2px;
+    /* FROM THE THEME, not a literal. This was a hardcoded 2px while `textfield` beside it already read
+     * `var(--radius-control)`, so the two most similar controls in the engine rounded differently and a
+     * theme could only reach one of them — which is the exact rot the token pass exists to stop. */
+    border-radius: var(--radius-control, 2px);
     background: var(--searchfield-bg, #1B1B1B);
     outline-width: 1px;
     outline-color: var(--searchfield-border, #3C3C3C);
@@ -507,11 +517,17 @@ problemspanel > .__find-bar__ {
 
 /* SAME WIDTH ON BOTH ROWS, which is the whole reason it exists — see SearchReplaceBar. Wide enough for
  * Replace / Replace All / Exclude, and the find row simply leaves the remainder empty. */
+/* CONTENT-SIZED, with the matching done in Java — see SearchReplaceBar.syncTrailingWidths.
+ *
+ * This used to be a hard 210px on both rows, to line the two boxes up. The number could only ever be
+ * wrong in one direction or the other, and it was wrong in BOTH at once: Replace / Replace All /
+ * Exclude measure well past it, so the replace row's group overflowed its own declared width, while the
+ * find row reserved the full 210 for a count and two arrows and left most of it empty. That empty
+ * reservation is what made the search box start shrinking with half the bar still unused. */
 .__find-bar__ .__find-trailing__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    width: 210px;
     gap-all: 4px;
 }
 
@@ -554,20 +570,39 @@ problemspanel > .__find-bar__ {
 /* Replace / Replace All / Exclude. Text buttons rather than glyphs -- there is no icon for "replace all"
  * that anyone reads correctly, and IntelliJ spells them out for the same reason. */
 .__find-bar__ .__find-action__ {
-    height: 14px;
+    height: 16px;
+    /* MIN-HEIGHT, NOT HEIGHT, is what holds these open: `button` sets `min-height: 14px`, and a minimum
+     * is a different property from a size — so every `height` written here loses to it silently and the
+     * chip stays 14px however small the number gets. The search toggles paid for this rule twice. */
     min-height: 0px;
-    padding-left: 6px;
-    padding-right: 6px;
+    padding-left: 5px;
+    padding-right: 5px;
     padding-top: 0px;
     padding-bottom: 0px;
     flex-shrink: 0;
-    border-radius: 3px;
+    border-radius: var(--radius-control, 3px);
     background: none;
     background-color: var(--findbar-action-bg, #3C3F41);
+    /* OUTLINED AS WELL AS FILLED. Every surface in the dark palette sits within a few points of every
+     * other, so the fill alone is a ~2% step against the bar and these read as three words rather than
+     * as three buttons — which is exactly how they looked. The border is what carries the affordance,
+     * and it is also what survives the disabled state once the fill goes.
+     *
+     * LONGHANDS, not `outline: 1px var(...)`: a var() inside a shorthand silently resolves to nothing
+     * in this engine, the same trap that produced zero padding on the main preview's header.
+     *
+     * The cost is that `outline` IS the focus ring here — one property, as `menu:focus-visible` records
+     * — so a focused action no longer gains a ring it did not already have. Acceptable for a labelled
+     * button in a bar reached by mouse; the alternative is a ring that cannot be told from the chrome. */
+    outline-width: 1px;
+    outline-color: var(--findbar-action-border, #4A4D50);
 }
 
+/* ON THE TEXT ELEMENT, because `* { font-size: 10 }` puts a candidate on every element and inheritance
+ * only applies where there is no candidate at any origin — so a size written on the button computes
+ * correctly on the button and the label inside it still renders at 10. */
 .__find-bar__ .__find-action__ text {
-    font-size: 10;
+    font-size: 9;
     color: var(--findbar-action-fg, #C8C8C8);
 }
 
@@ -583,6 +618,19 @@ problemspanel > .__find-bar__ {
 
 .__find-bar__ .__find-action__:disabled text {
     color: var(--findbar-action-disabled-fg, #5A5D63);
+}
+
+/* THE FOCUS RING, and it is the button's own border in the accent colour rather than a second outline.
+ * `outline` is one property here — the menu's own note records losing its chrome to an `outline: 0` that
+ * was only meant to suppress a ring — so with a permanent border there is nothing to add, only something
+ * to recolour.
+ *
+ * `:focus`, deliberately NOT `:focus-visible`. That pseudo-class exists precisely to ring keyboard focus
+ * and not clicks, which is the right default nearly everywhere and the wrong one here: these three are
+ * the controls you press repeatedly, and which of them you last pressed is what says where a repeat of
+ * the key would land. AFTER the disabled rules, so a dead button cannot be the one showing a ring. */
+.__find-bar__ .__find-action__:focus {
+    outline-color: var(--findbar-action-focus-border, #3574F0);
 }
 
 .__option-preserve-case__ { overlay: icon("crystalgui:general/search/preserveCase"); }
@@ -608,9 +656,60 @@ problemspanel > .__find-bar__ {
     padding-right: 6px;
     gap-all: 4px;
     background-color: var(--editorfind-bg, #303235);
-    border-width-bottom: 1px;
-    border-bottom-color: var(--editorfind-border, #4A4D50);
+    /* CONTROL RADIUS, NOT PANEL RADIUS. --radius-panel is 8px — the corner an island the size of the
+     * Project tree carries — and on a 40px-tall toolbar the same number is a proportion, not a style:
+     * it eats most of the bar's own height and reads as a pill. This is chrome sized like a control, so
+     * it rounds like one.
+     *
+     * COSTS THE FBO MASK PATH, knowingly: `.__find-bar__` sets `overflow: hidden` as a narrow-panel
+     * backstop, and rounding + clipping is what resolveOverflowClip() promotes to a layer. One small
+     * element, only while the bar is open — the same trade `textfield` documents for the same reason. */
+    border-radius: var(--radius-control, 0px);
+
+    /* THE SAME HAIRLINE EVERY PANEL DRAWS between its chrome and its content, from the same token —
+     * this bar is chrome sitting above the document exactly as a header sits above a tree.
+     *
+     * A UNIFORM WIDTH WITH THREE TRANSPARENT EDGES, which is not a flourish: the rounded-background
+     * path takes its stroke width from `border().left` ALONE and colours the edges separately, so
+     * `border-bottom-width` on its own resolves, lays out, and paints nothing. Every bottom-only
+     * hairline in this sheet was invisible for that reason until the panel rule spelled it this way.
+     * `.__view-container__ > .__view-content__` in ua/workbench.css is the reference spelling. */
+    border-width: 1px;
+    border-color: #00000000;
+    border-top-color: #00000000;
+    border-bottom-color: var(--editorfind-border, #00000000);
     z-index: 20;
+}
+
+/* THE COUNT AND ITS ARROWS SIT 2px IN from the box beside them.
+ *
+ * On the COUNT rather than on `.__find-trailing__`, which is the group that holds them: both rows carry
+ * that class, so padding there would walk Replace / Replace All / Exclude along with it. The count is the
+ * first thing in the find row's group and the only one of the two groups that has one, so a margin here
+ * moves that run and nothing else — the arrows follow ecause they are laid out after it.
+ *
+ * Scoped to the editor's bar. `.__find-count__` is a tree find bar's count too, and that one is packed
+ * against a panel edge where 2px it does not have is 2px off the query. */
+/* A FLOOR THAT CLEARS THE BOX'S OWN CONTENTS.
+ *
+ * The shared 52px floor above is deliberately low and must stay low — it is sized for a tree's bar
+ * squeezed into a 112px panel, where the whole row overflows if the box asks for more. The editor's bar
+ * is never that narrow, and its box carries more: a magnifier, a clear button and three toggles, none of
+ * which shrink. Below about this width the box is smaller than the things inside it, so they lay out
+ * past its border and go on painting — `Cc` half outside the field, `W` and `.*` on top of the count.
+ *
+ * The number is the sum of what cannot give: the icon, the clear, three toggles, their gaps and the
+ * field's padding, plus a few characters of query — the least a search box can usefully show.
+ *
+ * NOT `overflow: hidden` on the field, which is the other way to stop a spill: that clips the toggles
+ * rather than the text, cutting off the controls instead of the thing they control, and the box is
+ * rounded — so clipping also moves it onto resolveOverflowClip()'s FBO layer for no gain. */
+.__editor-find__ .__find-input__ {
+    min-width: 96px;
+}
+
+.__editor-find__ .__find-count__ {
+    margin-left: 3px;
 }
 
 /* The close sits against the FIRST row rather than centred on the pair, so it does not drift downward when
