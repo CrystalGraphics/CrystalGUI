@@ -366,11 +366,20 @@ public final class SvgDocument {
      */
     @Nullable
     private SvgDocument coarsestBuilt() {
-        for (int steps : LOD_STEPS) {
-            SvgDocument tier = lods.get(steps);
-            if (tier != null) return tier;
+        // Over the MAP, not over LOD_STEPS. The parse tier is keyed by PARSE_STEPS, which is deliberately
+        // not one of the drawn tiers -- parse resolves as cheaply as possible to get something on the
+        // first frame, while the coarsest tier anything actually DRAWS with is set by quality. Walking
+        // LOD_STEPS instead made the one mesh that always exists invisible to this, so the budget-
+        // exhausted path found no fallback and built anyway -- the exact overshoot it exists to avoid.
+        SvgDocument coarsest = null;
+        int coarsestSteps = Integer.MAX_VALUE;
+        for (Map.Entry<Integer, SvgDocument> tier : lods.entrySet()) {
+            if (tier.getKey() < coarsestSteps) {
+                coarsestSteps = tier.getKey();
+                coarsest = tier.getValue();
+            }
         }
-        return null;
+        return coarsest;
     }
 
     private boolean cullable(CgUiPaintContext ctx, float x, float y, float scale, float extra) {
@@ -508,8 +517,9 @@ public final class SvgDocument {
         List<SvgScanner.Tag> tags = SvgScanner.scan(svg);
         SvgDocument document = fromScene(SvgResolver.resolve(tags, PARSE_STEPS));
         document.tags = tags;
-        // The root IS the coarsest tier, registered as such so lodFor finds it rather than resolving a
-        // second, identical copy of it.
+        // Registered under its own resolution so coarsestBuilt() can hand it to a budget-exhausted frame.
+        // It is NOT one of the drawn tiers any more -- LOD_STEPS starts at 8, because 3 is too coarse for
+        // a stroked circle -- so this is the first-frame mesh and the fallback, and nothing else.
         document.lods.put(PARSE_STEPS, document);
         return document;
     }
@@ -556,7 +566,33 @@ public final class SvgDocument {
     private static final int PARSE_STEPS = 3;
 
     private static final int[] LOD_MAX_DEVICE_PX = {24, 64, 160, Integer.MAX_VALUE};
-    private static final int[] LOD_STEPS = {PARSE_STEPS, 5, 9, REFERENCE_STEPS};
+
+    /**
+     * Curve resolution per tier — and the coarsest one is <b>not</b> {@link #PARSE_STEPS}.
+     *
+     * <h3>Why the coarsest DRAWN tier is 8 and not 3</h3>
+     *
+     * <p>Three steps was tuned against FILLED artwork, where it is genuinely free: a fill's silhouette is
+     * a couple of pixels of coverage either way and a flattening error of a fifth of a pixel disappears
+     * into it. Measured on a filled icon, 3 steps and 32 steps produce the same picture.</p>
+     *
+     * <p><b>A STROKED circle is not that shape.</b> The chords of the flattened polygon sit inside the
+     * true circle, so the stroke's centreline moves inward by up to the sagitta — and against a 1px
+     * stroke a fifth of a pixel is a fifth of the whole mark, which reads as a visibly polygonal ring
+     * rather than as slight blur. Measured on {@code problems.svg}, a 1px stroked circle at 16px, peak
+     * ring coverage by tier: <b>0.91 at 3 steps, 0.93 at 5, 0.96 at 9, 0.98 at 16</b> — and at 3 the
+     * facets are plain to the eye. Eight puts the sagitta at ~0.05px across this tier's whole size
+     * range, which is below anything a stroke can show.</p>
+     *
+     * <p>The tiers still climb with size because steps are counted per curve <em>segment</em>, so the
+     * polygon is fixed while its error in device pixels grows with the drawn size.</p>
+     *
+     * <p>This costs no load time. {@link #PARSE_STEPS} is unchanged, so parse still produces the cheapest
+     * possible mesh for the first frame; every tier here is built lazily under
+     * {@code LOD_BUILD_BUDGET_NANOS}, and {@link #coarsestBuilt} keeps the parse tier reachable as the
+     * fallback while they are being built.</p>
+     */
+    private static final int[] LOD_STEPS = {8, 10, 12, REFERENCE_STEPS};
 
     /**
      * The scanned document, retained so a coarser mesh can be built on demand.
@@ -851,6 +887,25 @@ public final class SvgDocument {
             int[] caps = op.segmentCaps();
             int packed = caps == null ? op.cap() : caps[i / 4];
             ctx.curve()
+                    // NO FEATHER, for the same reason SILHOUETTE_FEATHER is zero on the fill path: the
+                    // whole UI tree paints into a multisampled target, so coverage is already being
+                    // computed by the sample grid. An analytic ramp on top of that is not extra quality,
+                    // it is the SECOND application of an antialiasing this pixel has already had --
+                    // CgVectorRenderer's default feather of 1 spreads the edge across a pixel, and MSAA
+                    // then averages that spread across the pixel again.
+                    //
+                    // The cost is exact and was visible on every stroked icon in the set. A 1px stroke
+                    // whose centreline sits on a half-integer -- which is how the JetBrains icons are
+                    // drawn, deliberately -- covers exactly one pixel row. With the ramp, that row's
+                    // samples span coverage 1.0 down to 0.5 and average ~0.75 while both neighbours pick
+                    // up ~0.15, so a crisp 1px outline renders as three rows of grey. Hence "our folder
+                    // icon is fat and blurry and IntelliJ's is one solid pixel": ours was drawing the
+                    // antialiasing twice.
+                    //
+                    // stroke.glsl clamps the ramp to 1e-4, so this is a hard step and not a divide by
+                    // zero. On a driver with no real multisampling the frame FBO resolves to one sample
+                    // and these edges harden -- the same trade the fill path already makes.
+                    .feather(0f)
                     .line(x + s[i] * scale, y + s[i + 1] * scale,
                             x + s[i + 2] * scale, y + s[i + 3] * scale)
                     .width(halfWidth)
