@@ -1,6 +1,6 @@
 # CrystalGUI
 
-A UI engine for Minecraft shaped like a lightweight web browser: a DOM-like `UIElement` tree, Taffy
+A general platform-agnostic UI engine for shaped like a lightweight web browser: a DOM-like `UIElement` tree, Taffy
 flexbox layout, a real CSS cascade with selectors and transitions, and twelve widgets — all
 loader-blind, and able to run headless on a dedicated server.
 
