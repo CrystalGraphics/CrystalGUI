@@ -871,3 +871,19 @@ projectfiletree .__project-row__.__drop-target__ {
 }
 
 .__main-preview__.__orbiting__ .__surface__ { cursor: grabbing; }
+
+/* ── THE SCROLLING HOST INSIDE EACH INSPECTOR TAB ────────────────────────────────────────────────
+ *
+ * The fill idiom, because a scroller that is sized to its content can never overflow and therefore
+ * never shows a bar -- which is indistinguishable from having no scroller at all, and is exactly how
+ * this looked. A pane is a flex COLUMN, so the height-zero-plus-grow spelling is the one that works;
+ * flex-shrink stays untouched, as everywhere else this idiom appears.
+ *
+ * `overflow: auto` states the capability explicitly rather than leaning on whatever ScrollerView
+ * happens to default to -- a bar is only drawn for an axis whose overflow actually scrolls. */
+.__inspector-scroll__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    overflow: auto;
+}

@@ -10,6 +10,7 @@ import com.crystalgui.ui.elements.config.ConfigControl;
 import java.util.ArrayList;
 import com.crystalgui.ui.elements.config.ConfiguratorPanel;
 import com.crystalgui.ui.elements.Tab;
+import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.TabView;
 
 import javax.annotation.Nullable;
@@ -55,6 +56,21 @@ public class Inspector extends UIElement implements UIFrameTicker {
 
     /** Tab label → its holder, so a rebuild can keep the selection when the tab is still there. */
     private final Map<String, Tab> tabsByName = new LinkedHashMap<>();
+
+    /**
+     * The scrolling host inside each tab, created with the tab.
+     *
+     * <p><b>A ScrollerView and not just {@code overflow: auto}.</b> Scrolling is an ordinary element
+     * capability here, driven by the property — so a plain content box can already be scrolled by wheel.
+     * What it cannot do is show a BAR: that is the whole of what ScrollerView adds. An inspector is the
+     * one panel whose content is unbounded by construction (however many sections a subject declares) in
+     * a region whose height is whatever the user dragged it to, so it is the one that most needs to say
+     * how much more there is.</p>
+     */
+    private final Map<String, ScrollerView> hostsByName = new LinkedHashMap<>();
+
+    /** On each tab's scrolling host. */
+    public static final String SCROLL_CLASS = "__inspector-scroll__";
 
     public Inspector() {
         addClass(INSPECTOR_CLASS);
@@ -263,6 +279,7 @@ public class Inspector extends UIElement implements UIFrameTicker {
 
         tabs.clearTabs();
         tabsByName.clear();
+        hostsByName.clear();
         removeClass(EMPTY_CLASS);
 
         if (context == null) {
@@ -284,7 +301,7 @@ public class Inspector extends UIElement implements UIFrameTicker {
         for (Map.Entry<String, InspectorForm> entry : forms.entrySet()) {
             InspectorForm form = entry.getValue();
             if (!form.wroteAnything()) continue;
-            tabFor(entry.getKey()).content().addChild(form.panel());
+            hostFor(entry.getKey()).addChild(form.panel());
             livePanels.add(form.panel());
         }
 
@@ -402,7 +419,20 @@ public class Inspector extends UIElement implements UIFrameTicker {
     }
 
     private Tab tabFor(String name) {
-        return tabsByName.computeIfAbsent(name, tabs::addTab);
+        return tabsByName.computeIfAbsent(name, n -> {
+            Tab tab = tabs.addTab(n);
+            ScrollerView host = new ScrollerView();
+            host.addClass(SCROLL_CLASS);
+            tab.content().addChild(host);
+            hostsByName.put(n, host);
+            return tab;
+        });
+    }
+
+    /** The tab's scrolling host, creating the tab if this is the first section to claim it. */
+    private ScrollerView hostFor(String name) {
+        tabFor(name);
+        return hostsByName.get(name);
     }
 
     @Nullable
