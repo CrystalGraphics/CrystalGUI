@@ -268,15 +268,19 @@ outstanding one, tracked in `CrystalGUI_P6_TODO.md` under 6.1.7 step 8"*.
 step 2. The `lib.rs/crates/tree-sitter-glsl` crate is the **Rust** packaging of the same grammar and
 is not usable from the JVM; it is worth naming only so nobody reaches for it twice.
 
+**The Zig cross-compile is confirmed reproducible locally** (decided 2026-08-11), which is what turns
+this from a risk into a cost. All four languages get real grammars; there is no fallback branch.
+
 **Consequence for the migration.** Steps 3–5 each carry a grammar-jar build, and that is the bulk of
 their cost — not the `highlights.scm`, not the registry entry. Sequence them so one jar is built and
-proven end-to-end (`css` is the smallest grammar and has no injections) before committing to four.
+proven end-to-end (`css` is the smallest grammar and has no injections) before committing to four:
+the recipe being reproducible is not the same as it being *written down*, and the second jar should
+cost an hour rather than a day.
 
-**The GLSL fallback stands** if the Zig build proves unreasonable: keep `KeywordTokenizer.glsl()` and
-widen it. It already handles comments, strings, numbers and word lists, and GLSL's builtins (`vec3`,
-`texture`, `gl_Position`) are a genuinely closed set that a word list can cover. That is a much
-smaller loss than it sounds, and it is the only one of the four languages where it is true — CSS, JS
-and HTML all have real nesting a word list cannot see.
+> The abandoned alternative, recorded so it is not re-proposed: keep `KeywordTokenizer.glsl()` and
+> widen its word lists. GLSL's builtins are a genuinely closed set, so this would have worked for
+> GLSL alone — and for nothing else, since CSS, JS and HTML all have nesting a word list cannot see.
+> Moot now, and it was never the general answer.
 
 ---
 
@@ -290,9 +294,9 @@ Ordered so each step is separately verifiable, and so the blocking decision land
 | 1 | **Widen the vocabulary**: give every capture name in §3.1 a `--syntax-*` token in both schemes, plus the governance test in §6.1 | no capture in any shipped `highlights.scm` lacks a colour or a coloured general form |
 | 2 | **Author Islands Dark** as `schemes/islands-dark.css` (+ light pair), mapped from IntelliJ's scheme against §3.3's honest subset | side-by-side with IntelliJ on the same Java file |
 | 3 | **`css`** — first grammar jar through the Zig build end-to-end (§4.3), then `javascript` | a `.css` and a `.js` file highlight, and the jar recipe is proven |
-| 4 | **`glsl`** — jar via the same route, else widen `KeywordTokenizer.glsl()` (§4.3) | `.glsl`/`.vert`/`.frag`/`.shader` distinguish builtins from user symbols |
+| 4 | **`glsl`** — jar via the same route (§4.3) | `.glsl`/`.vert`/`.frag`/`.shader` distinguish builtins from user symbols, swizzles from fields |
 | 5 | **`html` + injections** in `TreeSitterTokenizer` | `<style>`/`<script>` bodies highlight as CSS/JS |
-| 6 | **Retire or keep `KeywordTokenizer`** — decide whether it stays as the fallback for unknown extensions | stated either way |
+| 6 | **Keep `KeywordTokenizer`**, and say why in its javadoc | it is named as the no-natives path, not left looking like dead code |
 
 Steps 3–5 are independent of each other once 1–2 land.
 
@@ -329,6 +333,12 @@ schemes must be added to the pair check, or a light scheme silently drifts — t
 - **User-authored grammars at runtime.** Grammars are checked-in jars; a resource-pack grammar would
   mean loading native code from a pack.
 - **Re-litigating tree-sitter vs a lexer** (§2.4).
+
+> **`KeywordTokenizer` is not a non-goal and does not get retired.** Once every shipped language has a
+> grammar it looks like dead code, and deleting it would break the case it exists for: `core/` must
+> load with no natives at all — a dedicated server builds and edits documents without `syntax-treesitter`
+> on the classpath. It is also what an unregistered extension falls back to. Step 6 is to write that
+> down where someone tidying up will read it.
 
 ---
 
@@ -367,8 +377,8 @@ rediscovered.
 ## 9. Open questions
 
 1. ~~§4.1 bold/italic~~, ~~§4.2 HTML ordering~~, ~~§4.3 grammar sourcing~~ — **all decided**, see §4.
-2. Is the Zig cross-compile for a new grammar reproducible on this machine, or does it need the
-   fork's CI? *Answering this is step 3's real content.*
+2. ~~Is the Zig cross-compile reproducible here?~~ **Yes** — confirmed 2026-08-11. Step 3 is now about
+   *documenting* the recipe, not discovering whether there is one.
 3. Does Islands Dark ship a light counterpart we should match, or is the light scheme ours to author?
 4. Should `islands-dark` become the *default* scheme, replacing `dark-plus` as `crystal-dark`'s
    `@editor-scheme`, or ship alongside it?
