@@ -267,12 +267,18 @@ notificationsview > .__notification-list__ {
     color: var(--statusbar-hover-fg, #D5D7DB);
 }
 
+/* THE SEVERITY MARK CARRIES ITS OWN COLOUR, now that the dialog icons are drawn in currentColor instead
+ * of a literal red/amber/blue apiece. That is the upgrade the conversion buys: a severity colour is the
+ * THEME's to decide -- it already owns --error/--warning/--info for every other consumer -- where before
+ * it was baked into two drawings per icon that differed only in the shade each theme wanted. */
 .__notification__ .__severity__.severity-info {
     overlay: icon("crystalgui:general/informationDialog");
+    color: var(--notification-info-fg, #4682FA);
 }
 
 .__notification__ .__severity__.severity-warning {
     overlay: icon("crystalgui:general/warningDialog");
+    color: var(--notification-warning-fg, #FFAF0F);
 }
 
 .__notification__ .__severity__.severity-error {
@@ -452,14 +458,17 @@ problemspanel .__problem__ .__severity__ {
 
 problemspanel .__problem__ .__severity__.severity-info {
     overlay: icon("crystalgui:general/informationDialog");
+    color: var(--problems-info-fg, #4682FA);
 }
 
 problemspanel .__problem__ .__severity__.severity-warning {
     overlay: icon("crystalgui:general/warningDialog");
+    color: var(--problems-warning-fg, #FFAF0F);
 }
 
 problemspanel .__problem__ .__severity__.severity-error {
     overlay: icon("crystalgui:general/statusError");
+    color: var(--problems-error-fg, #DB5C5C);
 }
 
 problemspanel .__problem__ .__message__ {

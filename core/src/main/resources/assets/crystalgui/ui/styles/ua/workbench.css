@@ -333,8 +333,11 @@ workbench .__activity-bar__ .__stripe-separator__ {
  * The drawing is JetBrains' own `general/modified` — a filled blue circle, which is exactly this mark. It
  * carries its own colour, so nothing here tints it; the size is what makes a 16px source read as a dot.
  *
- * The `_dark` variant is deliberately NOT selected here: `icon()` in a stylesheet has no variant machinery
- * (only FileIconTheme.withVariant does, from Java), and the two drawings of a blue dot do not differ. */
+ * THERE IS NO LONGER A `_dark` VARIANT to select, and the note that used to sit here -- that `icon()` in a
+ * stylesheet has no variant machinery, and that the two drawings of a blue dot did not differ anyway --
+ * was describing the symptom. Two identical drawings is what a one-colour icon's light/dark pair always
+ * is: the twin exists only to restate a colour, which is what `color` says. The drawing is currentColor
+ * now and the pair is gone. */
 .__activity-bar__ .__badge__.__dot__ {
     position: absolute;
     right: -0px;
@@ -345,6 +348,10 @@ workbench .__activity-bar__ .__stripe-separator__ {
     width: 10px;
     height: 10px;
     overlay: icon("crystalgui:general/modified");
+    /* ITS OWN COLOUR, and it must be stated: the rail button around it now sets a grey `color` for its
+     * glyph, and this drawing is currentColor, so without this the unread dot would inherit that grey
+     * and stop reading as a mark at all. */
+    color: var(--activitybar-dot-fg, #3574F0);
     overlay-fit: contain;
 }
 
