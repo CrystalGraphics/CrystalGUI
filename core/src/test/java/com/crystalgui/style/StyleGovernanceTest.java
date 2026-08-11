@@ -407,6 +407,91 @@ public class StyleGovernanceTest {
         return css.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("//[^\\n]*", "");
     }
 
+    // ── rule 12: a line is never the colour of what it is drawn on ──────────────────────────────
+
+    /**
+     * <b>Within one component's token group, nothing that MARKS may resolve to the value of what it is
+     * marked on.</b>
+     *
+     * <p>This is the single most repeated defect in the styling work, and it never once looked like a
+     * colour mistake. Four separate times a token was derived to a role whose value happened to equal the
+     * surface it sits on, and each time the result was a control that resolved correctly, cascaded
+     * correctly, painted correctly, and was invisible:</p>
+     *
+     * <ul>
+     *   <li>{@code --menu-separator} came from {@code --divider}, which equals {@code --surface-overlay} —
+     *       so every section break in every menu was drawn in the menu's own fill.</li>
+     *   <li>{@code --editorfind-bg} came from {@code --surface-panel}, which equals {@code --surface-editor}
+     *       — a bar whose own comment says it "has to paint its own ground" painting it in the document's.</li>
+     *   <li>{@code --findbar-action-disabled-bg} was that same value, so disabled actions vanished into the
+     *       bar and read as three grey words.</li>
+     *   <li>{@code --statusbar-sep} came from {@code --divider}, ~5 points from {@code --surface-base} —
+     *       painted, and effectively absent.</li>
+     * </ul>
+     *
+     * <h3>Pairing by name prefix, which is what makes it checkable at all</h3>
+     *
+     * <p>The general question — "is this element's line the colour of its parent's fill?" — needs the DOM,
+     * and a stylesheet has no DOM. But component tokens are already grouped by prefix ({@code --menu-*},
+     * {@code --statusbar-*}, {@code --editorfind-*}), and a group's {@code -bg} IS the surface its own
+     * {@code -fg}/{@code -sep}/{@code -border} are drawn on. That convention is not enforced anywhere and
+     * does not need to be: where it holds, this catches the bug; where a group has no {@code -bg}, there
+     * is simply nothing to compare and the test says nothing.</p>
+     *
+     * <p>Equality only, deliberately — no perceptual threshold. A near-miss is a judgement call about how
+     * visible is visible enough, and a test that fails on a judgement call gets tuned until it stops
+     * failing. Exact equality is never intentional, so it never needs arguing about.</p>
+     */
+    @Test
+    public void nothingIsDrawnInTheColourOfWhatItSitsOn() {
+        for (String theme : List.of("crystal-dark.css", "crystal-light.css")) {
+            Map<String, String> defs = new HashMap<>(definitionsOf(load(THEMES + "base.css")));
+            defs.putAll(definitionsOf(load(THEMES + theme)));
+
+            List<String> clashes = new ArrayList<>();
+            for (String name : defs.keySet()) {
+                String suffix = markSuffixOf(name);
+                if (suffix == null) continue;
+                String background = name.substring(0, name.length() - suffix.length()) + "-bg";
+                String mark = resolveToken(name, defs);
+                String surface = resolveToken(background, defs);
+                if (mark == null || surface == null) continue;
+                // A deliberate no-fill is not a clash: it is the absence of a mark, not a mark that
+                // happens to match. Same constant the derivation rule already exempts.
+                if (mark.equalsIgnoreCase("#00000000")) continue;
+                if (mark.equalsIgnoreCase(surface)) {
+                    clashes.add(name + " resolves to " + mark + ", the same as " + background);
+                }
+            }
+            assertTrue(theme + " draws something in the colour of what it sits on:" + NL
+                    + String.join(NL, clashes), clashes.isEmpty());
+        }
+    }
+
+    private static final String NL = System.lineSeparator();
+    private static final Pattern VAR_REF_ONE = Pattern.compile("var\\(\\s*(--[\\w-]+)");
+
+    /** The part of a token name that says "this MARKS a surface", or null if it does not. */
+
+    private static String markSuffixOf(String name) {
+        for (String suffix : List.of("-fg", "-sep", "-separator", "-border")) {
+            if (name.endsWith(suffix)) return suffix;
+        }
+        return null;
+    }
+
+    /** Follows {@code var(--x)} chains to a literal, or null if the name is undefined or cyclic. */
+
+    private static String resolveToken(String name, Map<String, String> defs) {
+        String value = defs.get(name);
+        for (int hops = 0; value != null && hops < 8; hops++) {
+            Matcher ref = VAR_REF_ONE.matcher(value);
+            if (!ref.find()) return value.trim();
+            value = defs.get(ref.group(1));
+        }
+        return null;
+    }
+
     private static Map<String, String> definitionsOf(String css) {
         Map<String, String> defs = new HashMap<>();
         Matcher def = VAR_DEF.matcher(stripComments(css));
