@@ -167,6 +167,18 @@ dockgroup > tabview > .__strip__ > .__rail__,
     align-items: center;
 }
 
+/* A PANEL'S TABS LINE UP UNDER ITS TITLE, and the number is derived rather than nudged: the header
+ * carries `padding-left: 8px` and a `tab` carries its own `padding-left: 4px`, so 4px here puts the
+ * tab's LABEL on the same x as the title's. Measured at 40 for both.
+ *
+ * Scoped to the panel case and deliberately NOT applied to `dockgroup`. An editor group's strip IS its
+ * header — there is no title above it to line up with — so the same 4px there would just inset the
+ * first tab from the pane edge for no reason. The two strips share every other rule; this is the one
+ * place their situations genuinely differ. */
+.__view-content__ tabview > .__strip__ > .__rail__ {
+    padding-left: 5px;
+}
+
 /* ── THE ONE SEPARATOR, and it is on the CONTENT rather than on the chrome above it ──────────────
  *
  * Every panel draws exactly one hairline between its chrome and what it contains, and this is the
@@ -223,7 +235,8 @@ dockgroup > tabview > .__panes__,
     /* NEVER SHRINKS. With the title growing, ellipsis was its own protection; once it stopped growing it
      * became the first thing flex took space from, and "Problems" rendered as "Pr" beside its own tabs. */
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: 10px;
+    font-weight: bold;
     color: var(--panel-header-fg, #A0A0A0);
     white-space: nowrap;
     text-overflow: ellipsis;
