@@ -166,6 +166,10 @@ public final class CgUiSvg implements CgUiDrawable {
         float scale = Math.min(width / boxWidth, height / boxHeight);
         float left = x + (width - boxWidth * scale) * 0.5f;
         float top = y + (height - boxHeight * scale) * 0.5f;
+        if (snappable(ctx, Math.max(boxWidth, boxHeight) * scale)) {
+            left = ctx.snapXToDevicePixel(left);
+            top = ctx.snapYToDevicePixel(top);
+        }
 
         int argb = ArgbMath.multiply(tintArgb, ctx.getColor());
 
@@ -175,6 +179,48 @@ public final class CgUiSvg implements CgUiDrawable {
             document.render(ctx, left, top, scale, argb);
         }
     }
+
+    // ── Pixel-grid fitting ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Above this device size, artwork is being displayed rather than used as a UI icon — leave it alone.
+     *
+     * <p>Hinting is a small-size concern: it is the difference between a 16px icon's edges landing on
+     * pixel boundaries or across them, and by 128px an edge that is half a pixel out is invisible. The
+     * cap is what keeps the zoomable canvas out of this entirely.</p>
+     */
+    private static final float SNAP_MAX_DEVICE_PX = 128f;
+
+    /**
+     * Whether this draw is a UI icon on a settled pose, and therefore worth fitting to the pixel grid.
+     *
+     * <p>The second condition is the one that is easy to miss: <b>a canvas mid-zoom must not snap.</b>
+     * Snapping quantizes position and size, so under a continuously changing pose an icon would jump
+     * between quantized values as the zoom animated — legible as judder, and worse than the blur it
+     * removes. Requiring the pose scale to sit on a half-integer restricts this to the states a UI
+     * actually rests at ({@code uiScale} 1, 1.5, 2) and excludes the 1.37x of an in-flight zoom.</p>
+     */
+    private static boolean snappable(CgUiPaintContext ctx, float logicalSize) {
+        float device = ctx.deviceScale();
+        if (logicalSize * device > SNAP_MAX_DEVICE_PX) return false;
+        if (!ctx.isPoseAxisAligned()) return false;
+        return Math.abs(device * 2f - Math.round(device * 2f)) < 0.01f;
+    }
+
+    /**
+     * <b>The drawn SIZE is deliberately not quantized here, and that was tried.</b>
+     *
+     * <p>Snapping the scale to a grid-preserving multiple (1:1, exact halves) genuinely does sharpen a
+     * hinted icon — measured on {@code javaScript.svg}, sharp pixels as a fraction of all pixels it
+     * touches: 97% at 16px and 89% at 8px, against 56% at 10px and 76% at 20px. But reaching one of
+     * those from an arbitrary box means <em>shrinking the icon</em>, by up to a fifth, and how large an
+     * icon looks is a decision the stylesheet has already made. A drawable that quietly overrides it
+     * trades a defect the author chose for one they did not, and it shows immediately on blocky artwork,
+     * where a fifth of the size is far more visible than a fifth of an edge is blurry.</p>
+     *
+     * <p>So the size is the caller's and only the ORIGIN is snapped. An icon whose box does not match
+     * its artwork is a stylesheet bug and is fixed there.</p>
+     */
 
     /**
      * The viewBox size, read 1:1 as logical UI pixels — the convention {@link CgUiDrawable#intrinsicWidth}

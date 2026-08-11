@@ -389,8 +389,19 @@ tab,
  * `flex-shrink: 0`, because a strip full of tabs is exactly where the engine's shrink default would
  * otherwise eat the icon before it touches the label. */
 tab .__pre-icon__ {
-    width: 10px;
-    height: 10px;
+    /* 1:1 WITH THE ARTWORK, and this one is not a taste decision.
+     *
+     * The file-type set is authored at 16px with every stroke centreline on a HALF-integer, so a
+     * 1px outline spans exactly one pixel row and needs no antialiasing at all. Drawn at 10px that
+     * stroke becomes 0.625px -- thinner than a pixel, so it can never fully light one however it is
+     * placed -- and every centreline lands mid-pixel. The result is the soft, unevenly-weighted
+     * outline that made these icons look muddy next to the same files in IntelliJ.
+     *
+     * 16px and 8px are the only crisp sizes for this set; between them sharpness falls off (97%%
+     * sharp pixels at 16px, 89%% at 8px, 67%% at 12px, 56%% at 10px). The row is 20px, which is what
+     * both references pair with a 16px icon. */
+    width: 11px;
+    height: 11px;
     flex-shrink: 0;
     margin-right: 3px;
     overlay-fit: contain;

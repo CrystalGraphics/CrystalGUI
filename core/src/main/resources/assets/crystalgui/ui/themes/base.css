@@ -58,7 +58,16 @@ theme {
     --configkit-field-border: var(--border-field);
     --configkit-field-border-bottom: var(--border-base);
     --configkit-field-border-top: var(--border-field);
-    --configkit-label-fg: var(--fg-secondary);
+    /* A FORM LABEL IS CONTENT, not chrome. "Vertex Format" is half of the information in its row — the
+     * other half being the value beside it, which is already --fg — so the pair reading at two different
+     * weights says the name matters less than the setting, which is backwards while you are looking for
+     * the setting BY its name.
+     *
+     * Promoted here rather than by brightening --fg-secondary, which is the tempting one-line version and
+     * would take the STATUS BAR with it: both derived from that token, and the status bar is genuinely
+     * secondary — it is glanced at, not read. One token doing two jobs is why the whole panel looked
+     * uniformly dim; the fix is to stop sharing, not to move the shared value. */
+    --configkit-label-fg: var(--fg);
     --configkit-list-body-bg: var(--surface-panel);
     --configkit-list-head-bg: var(--surface-raised);
     --configkit-panel-bg: var(--surface-panel);
@@ -184,6 +193,11 @@ theme {
     --graph-text: var(--fg-secondary);
     --graph-text-bright: var(--fg);
 
+    /* The step-through arrows: a glyph on the widget's own ground, lit only under the pointer. Same
+     * arrangement every other bare-glyph button in the shell uses. */
+    --inspection-arrow-fg: var(--fg-secondary);
+    --inspection-arrow-hover-bg: var(--border-base);
+    --inspection-arrow-hover-fg: var(--fg);
     --inspection-clean-fg: var(--success);
     --inspection-error-fg: var(--error);
     --inspection-warning-fg: var(--warning);
@@ -228,7 +242,11 @@ theme {
     --notification-close-fg: var(--fg-hint);
     --notification-close-hover-bg: var(--hover-bg);
     --notification-close-hover-fg: var(--fg);
-    --notification-detail-fg: var(--fg-secondary);
+    /* THE MESSAGE BODY IS CONTENT, so it reads like the title above it rather than like the timestamp
+     * beside it. "Error during compilation: no such symbol 'foo'" is the entire reason the notification
+     * exists — the title only names it. Same promotion --configkit-label-fg took, for the same reason:
+     * --fg-secondary was doing duty for both "supporting text" and "the actual thing to read". */
+    --notification-detail-fg: var(--fg);
     --notification-error-fg: var(--error);
     --notification-hover-bg: var(--hover-bg);
     --notification-message-fg: var(--fg);
@@ -237,7 +255,10 @@ theme {
     --notification-time-fg: var(--fg-hint);
 
     --notifications-bg: #00000000;
-    --notifications-empty-fg: var(--fg-hint);
+    /* Matches --problems-empty-fg. An empty state is the panel's whole content while it shows, and the
+     * two panels sit one above the other -- reading at different weights for the same kind of message is
+     * what makes the pair look unfinished. */
+    --notifications-empty-fg: var(--fg);
     --notifications-link-fg: var(--link);
     --notifications-link-hover-fg: var(--accent-hover);
     --notifications-title-fg: var(--fg-secondary);
@@ -276,7 +297,16 @@ theme {
 
     --problems-bg: #00000000;
     --problems-count-fg: var(--fg-hint);
-    --problems-empty-fg: var(--fg-hint);
+    /* AN EMPTY STATE IS THE PANEL'S WHOLE CONTENT while it shows, so --fg-hint was the wrong shelf: hint
+     * is for text sitting BESIDE something else and deferring to it — a placeholder in a field, a
+     * subtitle under a name. "No problems in Main.java" has nothing to defer to; it is the only thing in
+     * the panel, and at #7A7A7A it read as disabled rather than as an answer.
+     *
+     * FULL --fg, matching every other panel's body text. It was moved to --fg-secondary first, on the
+     * reasoning that reporting an absence should be quieter than reporting a problem — true in the
+     * abstract, and it still read as greyed-out beside an Inspector that had just been promoted. One
+     * rule across the panels beats a per-panel judgement about how loud each message deserves to be. */
+    --problems-empty-fg: var(--fg);
     --problems-line-fg: var(--fg-hint);
     --problems-message-fg: var(--fg);
     --problems-options-fg: var(--fg-secondary);
@@ -341,7 +371,12 @@ theme {
     --statusbar-fg: var(--fg-secondary);
     --statusbar-hover-fg: var(--fg);
     --statusbar-item-fg: var(--fg-secondary);
-    --statusbar-sep: var(--divider);
+    /* --border-base, not --divider. A divider separates two SURFACES and only has to be visible against
+     * both; these sit ON one surface, and --divider resolves within about five points of --surface-base,
+     * so the rules between the readouts were technically painted and effectively absent. The third time
+     * this shape has turned up (the menu's separators, the find bar's hairline) and always the same
+     * cause: a line derived from a value close to the thing it is drawn on. */
+    --statusbar-sep: var(--border-base);
     --statusbar-warning-fg: var(--warning);
 
     --stripe-error: var(--error);

@@ -400,8 +400,8 @@ problemspanel > .__find-bar__ {
 }
 
 .__search-field__ .__icon__ {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
     overlay: icon("crystalgui:general/search/search");
     overlay-fit: contain;

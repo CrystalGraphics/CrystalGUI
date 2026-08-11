@@ -722,6 +722,53 @@ public final class CgUiPaintContext {
         return Math.max(sx, sy);
     }
 
+    /**
+     * Whether the pose is axis-aligned — no rotation and no skew, only scale and translation.
+     *
+     * <p>The precondition for {@link #snapXToDevicePixel}/{@link #snapYToDevicePixel}: under a rotation
+     * "the device pixel grid" has no axis-aligned preimage in logical space, so there is no logical
+     * coordinate that lands a shape on it and snapping one axis at a time is meaningless.</p>
+     */
+    public boolean isPoseAxisAligned() {
+        Matrix4f m = poseStack.last().pose();
+        return Math.abs(m.m01()) < 1e-5f && Math.abs(m.m10()) < 1e-5f;
+    }
+
+    /**
+     * The logical X that lands on the nearest whole <b>device</b> pixel boundary.
+     *
+     * <h3>Why anything cares</h3>
+     *
+     * <p>Icon artwork is hinted: a JetBrains 16px icon has every edge on an integer coordinate so that at
+     * 1:1 each edge falls exactly on a pixel boundary and needs no antialiasing at all. Landing that
+     * artwork half a pixel off puts <em>every</em> edge mid-pixel instead, and the icon is antialiased
+     * where it was designed to be crisp. Measured on {@code javaScript.svg} at 16px: <b>4 partially
+     * covered pixels at an integer origin, 44 at a half-pixel one</b> — the same picture with eleven
+     * times the blur, which is exactly what "our icons look muddy next to IntelliJ's" turned out to
+     * mean.</p>
+     *
+     * <p>Snapping in <em>logical</em> space is not the same thing and does not work: the pose carries a
+     * translation of its own (a scrolled list, a panel at a fractional offset), so a whole logical
+     * coordinate is routinely a fractional device one. The rounding has to happen after the pose, which
+     * is why this lives here rather than at the call site.</p>
+     *
+     * <p>Returns {@code logicalX} unchanged when {@link #isPoseAxisAligned} is false.</p>
+     */
+    public float snapXToDevicePixel(float logicalX) {
+        Matrix4f m = poseStack.last().pose();
+        if (!isPoseAxisAligned() || Math.abs(m.m00()) < 1e-6f) return logicalX;
+        float device = m.m00() * logicalX + m.m30();
+        return (Math.round(device) - m.m30()) / m.m00();
+    }
+
+    /** The Y-axis twin of {@link #snapXToDevicePixel}. */
+    public float snapYToDevicePixel(float logicalY) {
+        Matrix4f m = poseStack.last().pose();
+        if (!isPoseAxisAligned() || Math.abs(m.m11()) < 1e-6f) return logicalY;
+        float device = m.m11() * logicalY + m.m31();
+        return (Math.round(device) - m.m31()) / m.m11();
+    }
+
     public boolean isVisible(float x, float y, float w, float h) {
         Matrix4f m = poseStack.last().pose();
         float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;

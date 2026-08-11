@@ -653,15 +653,65 @@ quickpick ::highlight(quickpick-match) {
 .__inspection-previous__, .__inspection-next__ {
     width: 11px;
     height: 11px;
+    /* BOTH PROPERTIES, and `min-height`, and a colour — the three ways a `button` restyled into a bare
+     * glyph goes wrong, all present here at once and each one silent on its own.
+     *
+     *   `background: none` drops the DRAWABLE and leaves `background-color` untouched, because they are
+     *   separate properties — so the base button fill stayed and drew a chip behind each arrow.
+     *
+     *   `min-height` is a different property from `height`, so `button`'s 14px minimum beat the 11px
+     *   above and stretched an 11-wide button to 14 tall. That is what made the pair read as two dark
+     *   capsules rather than two arrows: they were the right width and the wrong height, filled.
+     *
+     *   `shape()` overlays multiply by the element's `color`, so without one they took whatever the
+     *   editor's chrome happened to inherit — dark ink on a dark chip. */
+    min-height: 0px;
+    padding-all: 0px;
     background: none;
+    background-color: transparent;
+    color: var(--inspection-arrow-fg, #9DA0A8);
     overlay-fit: contain;
+}
+
+.__inspection-previous__:hover, .__inspection-next__:hover {
+    background: none;
+    background-color: var(--inspection-arrow-hover-bg, #393B40);
+    color: var(--inspection-arrow-hover-fg, #DFE1E5);
 }
 
 .__inspection-previous__ { overlay: shape("triangle-up"); }
 .__inspection-next__ { overlay: shape("triangle-down"); }
 
+/* THE DISABLED FACE HAS TO BE CLEARED AGAIN, and this is the rule that was actually drawing the chips.
+ *
+ * `button:disabled` weighs 11 — a type selector plus a pseudo-class — and the rule above weighs 10, so
+ * the base sheet repaints the whole face with --button-disabled-bg and wins. Clearing the fill up there
+ * fixed nothing while the arrows were disabled, which is exactly when this widget is normally seen: with
+ * no problems there is nothing to step to, so both buttons are dead and both wore a grey capsule.
+ *
+ * AGENTS.md already states the general form — "`button:disabled` repaints the whole face, which is right
+ * for a labelled button and wrong for a glyph — dim the glyph instead" — and that is what the opacity
+ * here was for. It was correct and it was being drawn on top of a background it could not remove. */
 .__inspection-previous__:disabled, .__inspection-next__:disabled {
     opacity: 0.3;
+    background: none;
+    background-color: transparent;
+}
+
+/* A CLEAN FILE SHOWS NO ARROWS AT ALL, rather than two dimmed ones.
+ *
+ * `:disabled` above is for the meaningful case — there ARE problems and you are standing on the last of
+ * them — where a greyed arrow says "this direction is exhausted" and the other one is still live. With
+ * nothing detected there is no such thing as a direction: both are dead permanently, and two ghosts
+ * beside the word "No problems" read as controls that failed to load rather than as controls with
+ * nothing to do. IntelliJ's widget collapses to the check and the label for the same reason.
+ *
+ * `display: none` and not opacity, because at zero opacity they would still take their slots and still
+ * hit-test — a dead target you cannot see is worse than one you can. The widget shrink-wraps its row, so
+ * dropping them is also what closes the gap after the label. */
+.__inspection-clean__ .__inspection-previous__,
+.__inspection-clean__ .__inspection-next__ {
+    display: none;
 }
 
 /* The Problems panel. Sized by its dock pane, so it only has to fill it. */
@@ -1136,6 +1186,17 @@ workbench .__activity-item__ {
 }
 
 workbench .__activity-item__ .__pre-icon__ {
+    /* 1:1 WITH THE ARTWORK, and this one is not a taste decision.
+     *
+     * The file-type set is authored at 16px with every stroke centreline on a HALF-integer, so a
+     * 1px outline spans exactly one pixel row and needs no antialiasing at all. Drawn at 10px that
+     * stroke becomes 0.625px -- thinner than a pixel, so it can never fully light one however it is
+     * placed -- and every centreline lands mid-pixel. The result is the soft, unevenly-weighted
+     * outline that made these icons look muddy next to the same files in IntelliJ.
+     *
+     * 16px and 8px are the only crisp sizes for this set; between them sharpness falls off (97%%
+     * sharp pixels at 16px, 89%% at 8px, 67%% at 12px, 56%% at 10px). The row is 20px, which is what
+     * both references pair with a 16px icon. */
     width: 12px;
     height: 12px;
     flex-shrink: 0;
@@ -1308,8 +1369,19 @@ projectfiletree .__project-row__.__leaf__ .__twisty__ {
 }
 
 projectfiletree .__project-row__ .__pre-icon__ {
-    width: 10px;
-    height: 10px;
+    /* 1:1 WITH THE ARTWORK, and this one is not a taste decision.
+     *
+     * The file-type set is authored at 16px with every stroke centreline on a HALF-integer, so a
+     * 1px outline spans exactly one pixel row and needs no antialiasing at all. Drawn at 10px that
+     * stroke becomes 0.625px -- thinner than a pixel, so it can never fully light one however it is
+     * placed -- and every centreline lands mid-pixel. The result is the soft, unevenly-weighted
+     * outline that made these icons look muddy next to the same files in IntelliJ.
+     *
+     * 16px and 8px are the only crisp sizes for this set; between them sharpness falls off (97%%
+     * sharp pixels at 16px, 89%% at 8px, 67%% at 12px, 56%% at 10px). The row is 20px, which is what
+     * both references pair with a 16px icon. */
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
     margin-right: 2px;
     overlay-fit: contain;
