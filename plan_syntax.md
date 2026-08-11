@@ -382,3 +382,100 @@ rediscovered.
 3. Does Islands Dark ship a light counterpart we should match, or is the light scheme ours to author?
 4. Should `islands-dark` become the *default* scheme, replacing `dark-plus` as `crystal-dark`'s
    `@editor-scheme`, or ship alongside it?
+
+---
+
+## 10. What else a production editor needs — and what must be decided NOW
+
+Added after asking what a foundational stage is supposed to settle. Ranked by **retrofit cost**, not
+by visibility: the top three are cheap now and a rewrite later, because they change the *shape* of
+code that already exists.
+
+### 10.1 Tier 1 — decide now or rewrite
+
+**A. Multiple cursors, and therefore a selection SET.**
+The single largest gap, and it is not a feature — it is a signature change. Every editing operation
+in `text/cursor/` (`MoveOperations`, `TypeOperations`, `LineOperations`) is written against one
+caret. VS Code has `cursorCollection.ts` and `oneCursor.ts` for exactly this reason, and `AGENTS.md`
+already records them as the orchestration layer we did **not** port. Retrofitting means rewriting
+every command to take a set, coalesce overlapping results, and emit **one** `Edit` so undo stays one
+step. Clipboard inherits it too (N copied selections paste into N cursors, paired up).
+*Decide the signature now even if the UI ships later.*
+
+**B. A general decoration model, with ranges that survive edits.**
+Today every range-owning feature is bespoke: search matches, `::highlight()` syntax spans, folding
+marks, the current-line band. Monaco has one `IModelDecoration` — a range plus options (inline class,
+gutter mark, overview-ruler lane, minimap mark) — and one **marker/interval tree** that adjusts every
+range as text changes, with stickiness rules for insertions at a boundary.
+
+We have `TextRange` and no tracking. That is the load-bearing half: an error squiggle, a bracket
+match, a breakpoint and a git-gutter mark are all "a range that must still be right after you type
+above it". Without it every feature re-derives its ranges after every edit, which is what search
+already does (`AGENTS.md`: offsets must be re-run from the buffer's change signal) — correct for
+search, and not affordable for a hundred diagnostics.
+
+**C. A token cache keyed by line, invalidated by edit.**
+`SyntaxTokenizer.tokenize` is range-scoped, and `edited()` exists so a stateful backend can update.
+Neither helps if the *editor* re-queries every frame. Monaco and Zed both keep a per-line token cache
+and invalidate from the edit. This is the difference between highlighting costing a parse per frame
+and costing one per change.
+
+### 10.2 Tier 2 — expensive but contained
+
+**D. The other tree-sitter query families.** `highlights.scm` is one of five. Plan the **loader** for
+all of them now, so a grammar directory is a folder of queries rather than a special case per file:
+
+| Query | Gives |
+|---|---|
+| `highlights.scm` | colour (§3) |
+| `injections.scm` | embedded languages (§4.2) |
+| `folds.scm` | **syntax-aware folding** — upgrades `IndentRangeProvider`, which is Monaco's default too |
+| `indents.scm` | auto-indent that knows a block from a continuation |
+| `locals.scm` | **scope analysis — see §10.3** |
+
+**E. Large files and long lines.** Monaco stops tokenizing beyond a line-length limit and degrades
+deliberately. A minified 5MB `.js` is the classic killer, and `.shader` output can be generated and
+wide. The tokenizer contract should permit "I decline this line" rather than discovering the limit as
+a freeze.
+
+**F. Read-only regions.** Directly relevant here: the shader graph's `showCompiled()` opens
+*generated* source. An editor that lets you type into generated output and silently discards it is
+worse than one that refuses.
+
+### 10.3 The correction to §3.3 — `locals.scm` recovers part of the ❌ list
+
+§3.3 says instance-field-vs-local-vs-parameter needs resolve and is therefore unreachable. **That is
+too pessimistic.** Tree-sitter's `locals.scm` does exactly this kind of within-file scope analysis —
+`@local.scope`, `@local.definition`, `@local.reference` — and Zed and Neovim both use it to colour a
+parameter differently from a field with no language server at all.
+
+It does not recover everything: cross-file resolve, deprecation, unused-symbol and overload
+resolution still need a compiler. But "which of these identifiers is a parameter" is a `locals.scm`
+away, and **that is most of what makes IntelliJ's highlighting look richer than a grammar's.**
+
+*Revise §3.3's ❌ rows when `locals.scm` lands, and design the capture vocabulary (§3.1) to include
+`variable.parameter` / `variable.member` from the start — they are already in the list for this reason.*
+
+### 10.4 Decide as non-goals, explicitly, now
+
+Naming these is the point: each is cheap to *declare* and expensive to discover.
+
+- **IME / composition input.** Chinese, Japanese and Korean need a preedit string and a candidate
+  window. `CgSystemInput` has no composition concept, so every text-input path assumes a keypress is
+  a character. Adding it later touches all of them. **State it as unsupported** rather than letting it
+  be found.
+- **Bidi / RTL.** Shaping is fine (HarfBuzz), but caret movement through direction runs and selection
+  rectangles spanning them are genuinely hard and reach the coordinate model.
+- **Screen-reader accessibility.** Monaco keeps a hidden textarea and ARIA live regions.
+- **Minimap and diff view.** Both are *consumers* of the decoration model (B) rather than independent
+  work — worth naming so B is designed with a ruler/minimap lane in its options from the start.
+- **Atomic tab stops and column/box selection.** `AGENTS.md` already records both as unported gaps
+  (`cursorAtomicMoveOperations.ts`, `cursorColumnSelection.ts`). Column selection is a **multi-cursor
+  consumer** — it falls out of (A) nearly free, and is impossible without it.
+
+### 10.5 Sequencing against §5
+
+None of §10 blocks this plan's steps 0–6, and that is worth stating so the plan is not held hostage.
+But **(A) and (B) should be settled before the editor gains more range-owning features**, because
+each new one written against the bespoke model is another thing to convert. Syntax highlighting is
+itself a range-owning feature — it is the natural moment.
