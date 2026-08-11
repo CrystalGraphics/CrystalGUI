@@ -22,7 +22,23 @@ public enum PseudoClasses {
      * the element takes text input, which browsers always ring. See {@code UIInputHandler}'s
      * {@code FocusSource} for where that is decided.</p>
      */
-    FOCUS_VISIBLE(UIElement::isFocusVisible);
+    FOCUS_VISIBLE(UIElement::isFocusVisible),
+    /**
+     * True for the focused element AND every ancestor of it — the web's {@code :focus-within}.
+     *
+     * <p>The state a container needs to say "the focus is in me": which editor group a keystroke
+     * goes to, which tool window is current. Both references answer that question this way — CSS
+     * names it {@code :focus-within}, and IntelliJ's "active tool window" is defined as the one
+     * owning the focus — and both mark it on the TAB rather than by outlining the whole region.</p>
+     *
+     * <p>It was very nearly a {@code __focused__} class maintained by hand in ViewContainer and
+     * DockGroup instead. That is the same behaviour with a worse name, two copies to keep in step,
+     * and no answer for the next container that wants it. The invariant that an unknown pseudo-class
+     * poisons the whole sheet is an argument for EXTENDING this set deliberately, not for routing
+     * around it — a {@code :focus-within} rule is exactly what once took six unrelated panels down,
+     * because it was not registered here.</p>
+     */
+    FOCUS_WITHIN(UIElement::isFocusWithin);
 
     final Predicate<UIElement> elementPredicate;
     PseudoClasses(Predicate<UIElement> predicate) {

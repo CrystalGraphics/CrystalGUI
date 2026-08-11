@@ -301,7 +301,12 @@ public class Workbench extends UIElement {
         // second workbench would silently reuse the first's command and toggle a panel in a window
         // nobody was looking at. That is the rule step 2.5 wrote down after the suite caught it, and
         // routing these through the global registry walks straight back into it.
-        for (StripeView stripe : stripes()) stripe.listenToPanels(registry, current.getCommands());
+        for (StripeView stripe : stripes()) {
+            stripe.listenToPanels(registry, current.getCommands());
+            // The window is passed rather than looked up: this runs DURING the attach that sets the
+            // stripe's own window reference, so it does not have one yet. @see StripeView#listenToFocus
+            stripe.listenToFocus(current);
+        }
     }
 
     /** The explorer's verbs come with the explorer. Global, so no window is needed. */

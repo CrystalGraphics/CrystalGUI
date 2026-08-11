@@ -193,6 +193,13 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         // is configuration rather than code, and it is what every file command that acts on "the
         // selection" rather than "the selected path" needs.
         tree.setSelectionMode(SelectionMode.MULTIPLE);
+        // A TIGHTER ROW than ListView's 16px default. A file tree is the densest list in the
+        // application -- it is read as a column of names, not browsed a row at a time -- and both
+        // references set it tighter than their generic lists for exactly that reason. This is the
+        // sanctioned place for the number: row height belongs to the size STRATEGY rather than to
+        // CSS (a virtualised list positions rows from it), which is why ListView documents
+        // setItemHeight as the way to say it and the sheet deliberately declares no height.
+        tree.setItemHeight(14f);
         // A DEEP TREE IS THE CASE horizontal scrolling exists for: every level of nesting spends indent
         // the name then has to fit inside, so the panel width a name has to survive shrinks as you go
         // down. Truncating alone left a name unreadable with no way to reach the rest of it.

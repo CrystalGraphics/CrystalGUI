@@ -1,6 +1,8 @@
 package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Tab;
 import com.crystalgui.ui.elements.TabView;
@@ -75,6 +77,30 @@ public class ViewContainer extends UIElement {
 
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
+
+        // ── A TOOL WINDOW TAKES FOCUS WHEN YOU CLICK IT ──────────────────────────────────────────
+        //
+        // Both references do this, and it is why "the focused region's tab is tinted" works there for
+        // every region rather than only the ones that happen to contain something focusable. An empty
+        // Inspector was the case that exposed it here: clicking it focused NOTHING -- emitMouseDown
+        // blurs before it dispatches, so a press landing on an unfocusable body clears focus outright
+        // -- and the container's `:focus-within` was correctly false while the panel looked current.
+        //
+        // The listener is needed as well as the policy, because click-focus targets the EXACT element
+        // hit and never walks up to a focusable ancestor (AGENTS.md; GraphNode already carries its own
+        // copy of this workaround for the same reason). So: if the press left the focus somewhere
+        // inside us, respect it -- a click on a tree row must focus the ROW -- and only claim it when
+        // it landed on nothing.
+        //
+        // requestPointerFocus, never requestFocus: the latter is programmatic and therefore RINGS,
+        // which would outline the whole panel on every click -- exactly the noise :focus-visible
+        // exists to avoid.
+        setFocusPolicy(FocusPolicy.CLICK);
+        onMouseDown.attachListener((element, event) -> {
+            UIWindow window = getAttachedWindow();
+            if (window == null || isFocusWithin()) return;
+            window.getInputHandler().requestPointerFocus(this);
+        }, false, true);
     }
 
     public String containerId() {

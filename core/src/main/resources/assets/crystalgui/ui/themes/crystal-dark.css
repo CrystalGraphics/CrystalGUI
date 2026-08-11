@@ -15,16 +15,16 @@
 
 /* ── The system vocabulary ─────────────────────────────────────────────────────────────────── */
 theme {
-    --surface-base: #1E1E1E;
-    --surface-panel: #2B2B2B;
-    --surface-raised: #3A3A3A;
-    --surface-recessed: #1E1E1E;
-    --surface-editor: #1E1E1E;
-    --surface-overlay: #4B4B4B;
-    --border-base: #4A4A4A;
-    --border-strong: #8C8C8C;
-    --border-field: #3C3C3C;
-    --divider: #3C3F41;
+    --surface-base: #26282B;
+    --surface-panel: #191A1C;
+    --surface-raised: #2B2B2B;
+    --surface-recessed: #131416;
+    --surface-editor: #191A1C;
+    --surface-overlay: #2B2D30;
+    --border-base: #393B40;
+    --border-strong: #5A5D63;
+    --border-field: #393B40;
+    --divider: #2B2D30;
     --fg: #DFE1E5;
     --fg-secondary: #9DA0A8;
     --fg-hint: #7A7A7A;
@@ -32,11 +32,11 @@ theme {
     --fg-on-accent: #FFFFFF;
     --accent: #3574F0;
     --accent-hover: #4A82F2;
-    --accent-soft: #2F5F9E;
-    --hover-bg: #2A2D2E;
-    --pressed-bg: #26282A;
+    --accent-soft: #2E436E;
+    --hover-bg: #2E3033;
+    --pressed-bg: #35373B;
     --selection-bg: #04395E;
-    --selection-inactive-bg: #37373D;
+    --selection-inactive-bg: #2E3033;
     --focus-ring: #0060DF;
     --error: #F14C4C;
     --warning: #CCA700;
@@ -49,7 +49,7 @@ theme {
      * expressed by zeroing these rather than by shipping different structure. ── */
     --radius-panel: 8px;
     --radius-control: 4px;
-    --panel-gap: 6px;
+    --panel-gap: 3px;
 
 }
 
@@ -100,4 +100,13 @@ theme {
 
     --tooltip-bg: #1E1E1EF0;
     --tooltip-border: #00000080;
+
+    --scrollbar-thumb: #8C8C8C55;
+    --scrollbar-thumb-hover: #8C8C8C99;
+    --scrollbar-thumb-pressed: #8C8C8CCC;
+    --scrollbar-tail: #00000000;
+    --scrollbar-tail-hover: #8C8C8C33;
+
+    --activitybar-item-hover-bg: #46484b;
+    --activitybar-item-checked-bg: #46484b;
 }

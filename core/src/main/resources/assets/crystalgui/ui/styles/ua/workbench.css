@@ -77,7 +77,14 @@ workbench .__activity-bar__ .__insertion__ {
 /* Which group commands act on. An outline rather than a background, so a panel's own colour is not
  * repainted every time focus moves. */
 dockgroup.__active__ {
-    outline-width: 1px;
+    /* OFF BY DEFAULT. A ring around the pane you are working in is on screen permanently and says
+     * something you already know from the tab you clicked -- and at pane size a 1px stroke is the
+     * largest single shape in the window. Neither reference draws one.
+     *
+     * The rule stays rather than being deleted, and so does the token: which group commands act on
+     * is real information, and a theme that wants it back sets --dock-active-ring-width. Deleting
+     * the rule would take the hook with it and leave nothing for such a theme to name. */
+    outline-width: var(--dock-active-ring-width, 0px);
     outline-color: var(--dock-active-border, #4A88C7);
 }
 
@@ -119,8 +126,89 @@ dockgroup .__missing__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    padding: 2px 4px 2px 8px;
+    min-height: var(--panel-header-h, 22px);
+    /* NO VERTICAL PADDING — the row's height comes from --panel-header-h alone, and `align-items:
+     * center` above places the content inside it. With padding here the header was
+     * `max(22, content + 4)`, so the Problems panel — whose header carries TAB PILLS rather than a
+     * bare title — grew to 26px while every title-only header stayed at 22, and the band across the
+     * window broke at exactly one panel. A minimum that anything taller than the padding can defeat
+     * is not a shared height. */
+    padding: 0px 4px 0px 8px;
     gap: 4px;
+}
+
+/* ── ONE HEIGHT FOR EVERY PANEL'S CHROME ROW ─────────────────────────────────────────────────────
+ *
+ * A tool window's title row and an editor group's tab row are the same thing wearing different
+ * content, and in IntelliJ they are exactly the same height — which is what makes a row of panels
+ * read as one band across the window rather than as a ragged edge. They had drifted to 20px and
+ * 18px respectively, because each grew out of its own content's padding and nothing tied them.
+ *
+ * A local variable rather than a theme token: this is functional geometry, which is the user-agent
+ * sheet's job, and a theme that wants taller chrome can still override the two rules below. */
+* {
+    --panel-header-h: 22px;
+}
+
+/* ── THE RAIL FILLS ITS STRIP ────────────────────────────────────────────────────────────────────
+ *
+ * Give the strip a taller min-height and the rail keeps its own content height, leaving a dead band
+ * between the last tab and the separator below. Two pixels of it, plus the 1px hairline, is what
+ * read as "the editor's separator is much thicker than the other panels'" — the line was always 1px
+ * and identical to theirs; what differed was the gap sitting on top of it.
+ *
+ * Centred rather than bottom-aligned, which is the other half: `flex-end` parks the tabs on the
+ * strip's bottom edge, and that is a browser's tab metaphor (a chip growing out of the page). These
+ * tabs are labels on one continuous surface, so they belong centred in their row like every other
+ * panel's title. */
+dockgroup > tabview > .__strip__ > .__rail__,
+.__view-content__ tabview > .__strip__ > .__rail__ {
+    height: 100%;
+    align-items: center;
+}
+
+/* ── THE ONE SEPARATOR, and it is on the CONTENT rather than on the chrome above it ──────────────
+ *
+ * Every panel draws exactly one hairline between its chrome and what it contains, and this is the
+ * only rule that draws it. Putting it on the chrome instead needs one rule per KIND of chrome — a
+ * title header here, a tab strip there — and the two then disagree: a tool window has BOTH rows, so
+ * both fired and the Inspector grew a double line, while the editor has only a strip and a rule
+ * written for headers missed it entirely. Anchoring to the content inverts that: whatever chrome is
+ * above it, there is one content box and therefore one line, aligned to the full panel width.
+ *
+ * TWO SELECTORS, ONE RULE, and the pair is not a special case — it is the same statement made about
+ * the two shapes a panel actually takes. A tool window is a ViewContainer (header + view-content);
+ * an editor group has no ViewContainer at all, it is a dockgroup holding a TabView (strip + panes).
+ * Measured, not assumed: a probe over the live tree is what showed the editor never matched the
+ * container selector, which is why its separator was missing while every tool window had one.
+ *
+ * The class is `__view-content__`, NOT `__content__` — reaching for the obvious name matched
+ * nothing and the separator silently vanished from every tool window. `__content__` is what
+ * ConfiguratorGroup names its body, which is exactly why ViewContainer does not use it (AGENTS.md
+ * records the release where a `.__content__` descendant selector zeroed every group in every panel
+ * below it). The child combinator stays regardless: a panel nested in a panel gets its own line
+ * from its own container, never one inherited through a descendant match. */
+/* BOTH tab strips, from one rule: a dock group's (which IS its panel's header) and a container's
+ * own (the second chrome row a tool window grows when it holds more than one view — the Inspector's
+ * Graph/Shader pair). They are the same object doing the same job at different depths, so they take
+ * the same height from the same token rather than one of them being talked into looking like the
+ * other. */
+dockgroup > tabview > .__strip__,
+.__view-content__ tabview > .__strip__ {
+    min-height: var(--panel-header-h, 22px);
+}
+
+.__view-container__ > .__view-content__,
+dockgroup > tabview > .__panes__,
+.__view-content__ tabview > .__panes__ {
+    /* A uniform width with three transparent edges. The rounded-background path takes its stroke
+     * width from `border().left` ALONE and colours the edges separately, so `border-top-width` on
+     * its own resolves, lays out, and paints nothing — which is why every bottom-only hairline in
+     * this sheet, `.__dock-banner__`'s included, has been silently invisible. */
+    border-width: 1px;
+    border-color: #00000000;
+    border-bottom-color: #00000000;
+    border-top-color: var(--panel-header-sep, #00000000);
 }
 
 /* ONE LINE, ELLIPSIZED -- never wrapped. A header that wraps turns "Services" into "Servic / es" and
@@ -141,18 +229,46 @@ dockgroup .__missing__ {
     text-overflow: ellipsis;
 }
 
+/* HIDE, NOT CLOSE — a minus, and the glyph is the whole argument. A tool window is not closed and
+ * discarded; it is collapsed back to its rail button, which is exactly what a minimise mark means and
+ * exactly what an X does not. IntelliJ draws a minus here and reserves the X for things that go away.
+ *
+ * IT APPEARS ON PANEL HOVER, which is why the resting opacity is 0 rather than `display: none`: a box
+ * that comes and goes reflows the header every time the pointer crosses the panel, moving the title
+ * under the cursor. Opacity keeps the slot and costs nothing when it is zero.
+ *
+ * The hover that reveals it is the CONTAINER'S, not the button's — the button is invisible until the
+ * pointer is somewhere in the panel, so a rule keyed to its own :hover could never fire in the first
+ * place. Ancestor-state descendant matching is what makes that expressible (`checkbox:hover .__mark__`
+ * is the same shape), and the transition then runs on the way out too.
+ *
+ * NO FILL AT REST. `button` gives every button a background, and inherited here it drew the mark as a
+ * grey chip in the corner of every header — read as a control that was already pressed. */
 .__view-container__ .__header__ .__hide__ {
     margin-left: auto;
     width: 16px;
     height: 16px;
     flex-shrink: 0;
-    overlay: icon("crystalgui:x");
+    min-height: 0px;
+    padding-all: 0px;
+    border-radius: var(--radius-control, 3px);
+    background: none;
+    background-color: transparent;
+    overlay: shape("minus");
     overlay-fit: contain;
     color: var(--panel-header-icon, #A0A0A0);
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.__view-container__:hover .__header__ .__hide__ {
+    opacity: 1;
 }
 
 .__view-container__ .__header__ .__hide__:hover {
     color: var(--panel-header-icon-hover, #E0E0E0);
+    background: none;
+    background-color: var(--panel-header-icon-hover-bg, #393B40);
 }
 
 .__view-container__ .__view-content__ {
@@ -572,36 +688,26 @@ problemspanel .__problems-body__ {
     flex-shrink: 0;
     align-items: center;
     padding-left: 6px;
-    padding-top: 4px;
-    padding-bottom: 4px;
+    /* NO VERTICAL PADDING. This row is a CONTRIBUTOR to a panel header, not a strip of its own, so
+     * its height has to come from --panel-header-h like every other header's — 4px here added
+     * straight onto the tallest pill and pushed the Problems header to 26px while every title-only
+     * header sat at 22, which is the one panel that broke the band across the window. Vertical
+     * placement is `align-items: center` above, and the header's own centring, not padding. */
+    padding-top: 0px;
+    padding-bottom: 0px;
     gap-all: 4px;
 }
 
+/* ONLY WHAT IS THE PROBLEMS PANEL'S OWN. The pill — shape, padding, fill, border, hover and
+ * selected states — is defined once in ua/widgets.css beside `tab`, which lists both selectors on
+ * one rule; see the note there for why these cannot become a single element. What is left here is
+ * the count badge and the smaller type this row uses, which a TabView tab has no equivalent of. */
 .__problem-tab__ {
-    flex-direction: row;
-    align-items: center;
-    flex-shrink: 0;
-    gap-all: 4px;
-    padding-left: 5px;
-    padding-right: 5px;
-    padding-top: 1px;
-    padding-bottom: 1px;
-    border-radius-all: 3px;
     /* SIZED LIKE THE ROWS BELOW, not like the title. A scope tab is a control on a header, and at the
      * title's weight it competes with the name of the panel it sits on. */
     font-size: 7px;
-    color: var(--problems-tab-fg, #9DA0A8);
+    gap-all: 4px;
     cursor: pointer;
-}
-
-.__problem-tab__:hover {
-    background: var(--problems-tab-hover-bg, #2F3133);
-}
-
-/* THE TAB IN FORCE, as a filled pill — IntelliJ's selected tab, and the reason the tabs exist at all. */
-.__problem-tab__.__selected__ {
-    background: var(--problems-tab-active-bg, #2F5C8F);
-    color: var(--problems-tab-active-fg, #DFE1E5);
 }
 
 .__problem-tab__ .__tab-count__ {
@@ -811,24 +917,49 @@ workbench .__region-panel__ {
  *
  * A divider IS the gap: it already sits between exactly the two things that need separating, it is
  * already the drag target, and it is already sized. So the Islands look is this rule and nothing
- * structural — the divider stops painting a line and starts showing the ground through, and the
- * width comes from --panel-gap.
+ * structural — the divider stops painting a line and starts showing the ground through.
+ *
+ * ONE AXIS PER ORIENTATION, mirroring the base rules above, and getting this wrong is silent: set
+ * both `width` and `height` and a side-by-side split's divider becomes a 6x6 SQUARE instead of a
+ * full-height bar — invisible, unhoverable, and impossible to drag. The stacked split kept working
+ * throughout, which made it look like an orientation bug in SplitView rather than a stray property:
+ * the base `.__vertical__` rule outranks a workbench-scoped one (21 vs 12), so it was quietly
+ * repairing the cross axis for that case only.
  *
  * Scoped to the workbench, deliberately. A SplitView inside a panel (the graph's inspector, a
  * settings navigator) is dividing CONTENT rather than separating islands, and there the visible
- * line is the right affordance — which is why the generic rule in ua/widgets.css keeps it.
+ * line is the right affordance — which is why the generic rule keeps it.
  *
- * The hover state stays, because an invisible divider you cannot find is a worse trade than a
- * visible one: at rest it is a gap, under the pointer it is a control. IntelliJ does exactly this. */
+ * NO HOVER STATE, and the earlier version that had one was wrong about the trade. The worry was
+ * that an invisible divider cannot be found — but the CURSOR already answers that: `ew-resize` /
+ * `ns-resize` are set on these same elements below, so the pointer changes shape the moment it is
+ * over one, which is the affordance every desktop app relies on. A colour flash on top of it just
+ * puts a bright bar through the gap the Islands look exists to keep quiet, and IntelliJ does not
+ * draw one either. The divider is a gap you can grab, not a control that lights up. */
 workbench splitview > .__divider__ {
     width: var(--panel-gap, 4px);
-    height: var(--panel-gap, 4px);
     background: none;
 }
 
-workbench splitview > .__divider__:hover {
-    background: var(--splitter-hover-bg, #AAAAAA);
+/* Specificity 22 against the base rule's 21 — enough to win, and it has to, or a stacked split's
+ * divider keeps the base 4px instead of the theme's gap. */
+/* Suppressing the rest state is NOT enough — the generic `:hover` and `:active` rules in
+ * ua/widgets.css weigh 21 against this scope's 12, so they kept lighting the gap up while the
+ * divider sat correctly invisible at rest. Restating both states here at 22 is what actually turns
+ * them off. The pseudo-class pair has to be named explicitly; there is no "inherit the rest state"
+ * to fall back on. */
+workbench splitview > .__divider__:hover,
+workbench splitview > .__divider__:active,
+workbench splitview.__vertical__ > .__divider__:hover,
+workbench splitview.__vertical__ > .__divider__:active {
+    background: none;
 }
+
+workbench splitview.__vertical__ > .__divider__ {
+    width: auto;
+    height: var(--panel-gap, 4px);
+}
+
 
 /* And the same floor one level down, so a region's two halves cannot squeeze each other out either. */
 .__region-half__ {
@@ -926,12 +1057,33 @@ workbench splitview > .__divider__:hover {
  *
  * Deliberately narrow and fixed. It is chrome that must never compete with the work area, and both
  * originals keep it under three characters wide. */
+/* THE RAIL'S WIDTH IS ALSO THE LEFT MARGIN OF THE WHOLE WORKBENCH, so it is named rather than
+ * repeated. A panel sits flush against the rail — measured, there is no gap — which makes this the x
+ * of every panel's left edge, and therefore the offset anything above the workbench has to match to
+ * line up with one. ua/search.css indents the menu bar by exactly this so `File` sits over `Project`.
+ *
+ * A UA-local variable, not a theme token, for the same reason --panel-header-h is one: functional
+ * geometry is the user-agent sheet's job, and the parts share one variable scope (see the file
+ * header), so a definition here is visible to every part after it in the manifest. */
+* {
+    --activity-bar-w: 20px;
+}
 workbench .__activity-bar__ {
-    width: 20px;
+    width: var(--activity-bar-w, 20px);
     height: 100%;
     flex-shrink: 0;
     align-items: center;
-    padding-top: 2px;
+    /* THE TWO GROUPS ARE TIGHTENED FROM OPPOSITE ENDS, and padding is the only lever that can say that.
+     *
+     * The rail holds two runs anchored to opposite edges: the top group starts at the content box's top,
+     * and __stripe-spacer__ eats the slack so the bottom group ends at its foot. Padding therefore moves
+     * them TOWARDS each other — 2px off the top pushes the top group down, 2px off the bottom pulls the
+     * bottom group up — which is a different operation from an offset on the buttons themselves. A `top`
+     * on `.__activity-item__` moves all four groups the same way and slides the whole rail instead.
+     *
+     * Base 2px, plus 2px of tightening on each edge. Change either number alone to move one group. */
+    padding-top: 4px;
+    padding-bottom: -1px;
     background: var(--activitybar-bg, #2B2B2B);
 }
 
@@ -974,6 +1126,9 @@ workbench .__activity-item__ {
     height: 16px;
     flex-shrink: 0;
     margin-bottom: 2px;
+    /* NO `top` OFFSET HERE, deliberately — see the rail's padding above. A relative offset on the button
+     * reaches every button, which is right for "move the icons" and exactly wrong for "close the gap":
+     * it slid the bottom group down along with the top one, so the column travelled instead of tightening. */
     justify-content: center;
     align-items: center;
     background: none;
@@ -1010,6 +1165,28 @@ workbench .__activity-item__:checked {
  * reaching for it to close it, which is the one moment the hover feedback is load-bearing. */
 workbench .__activity-item__:checked:hover {
     background: var(--activitybar-item-hover-bg, #3574F0);
+}
+
+/* ── THE RAIL BUTTON OF THE FOCUSED PANEL ────────────────────────────────────────────────────────
+ *
+ * At most one at a time, and NONE while the editor is focused — the editor region has no rail
+ * button, which is not a gap to paper over: the rail lists tool windows, and "no icon is lit" is a
+ * true statement about where you are.
+ *
+ * FULL accent here, washed accent on the tab. Deliberate, and the reference's own split: the fill's
+ * AREA decides. See --activitybar-item-focused-bg.
+ *
+ * A CLASS rather than a pseudo-class, and the reason is structural: `:focus-within` answers this for
+ * a container because a container is an ANCESTOR of the focus owner. A rail button is in a different
+ * subtree from the panel it opens, so no relationship the engine can walk exists — StripeView
+ * resolves it by panel id and stamps the result (see ItemButton#isPanelFocused).
+ *
+ * AFTER the hover rules on purpose: `.__panel-focused__` and `:hover` are both one class-weight, so
+ * source order is what decides, and being current outranks being under the pointer. */
+workbench .__activity-item__.__panel-focused__,
+workbench .__activity-item__.__panel-focused__:hover {
+    background: var(--activitybar-item-focused-bg, #2F5F9E);
+    color: var(--activitybar-item-focused-fg, #FFFFFF);
 }
 
 /* AN EDITOR OPENED FOR A FILE, which needs a size given to it because it has none of its own.
@@ -1169,6 +1346,15 @@ projectfiletree .__project-row__ {
  * that keep their width are the only rows there is anything to scroll. */
 projectfiletree .__h-scroll__ .__project-row__ text {
     flex-shrink: 0;
+}
+
+/* ...AND THE ROW STILL SPANS THE VIEWPORT. `width: 100%` resolves against the scroll CONTENT box,
+ * which once rows keep their own width is the WIDEST row — so every shorter row drew a highlight
+ * that stopped at its own text, and the selection read as ragged rather than as a bar. A floor of
+ * 100% keeps a long row free to exceed the viewport (there would be nothing to scroll otherwise)
+ * while never letting a short one fall below it. */
+projectfiletree .__h-scroll__ .__project-row__ {
+    min-width: 100%;
 }
 
 /* AND THE BADGE FOLLOWS THE NAME rather than the row's trailing edge.

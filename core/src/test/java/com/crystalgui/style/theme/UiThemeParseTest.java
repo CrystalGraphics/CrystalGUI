@@ -98,6 +98,13 @@ public class UiThemeParseTest {
      * <b>The poison check.</b> An unknown pseudo-class poisons a whole sheet at parse — one
      * {@code :focus-within} rule once broke six unrelated panels. For a theme that must surface at
      * REGISTRATION as a refusal, not at apply as a blank window.
+     *
+     * <p>The example is {@code :nth-child} because {@code :focus-within} is <b>supported now</b> —
+     * registered in {@code PseudoClasses} when the workbench needed "the focus is inside me" to tint
+     * the focused region's tab. This test failing on that change was the correct outcome and not a
+     * nuisance: the guard is about UNKNOWN names, so the moment a name joins the set it stops being
+     * an example of one. {@code :nth-child} is still genuinely unimplemented (see AGENTS.md's
+     * unsupported-selector list), which is what makes it a valid stand-in.</p>
      */
     @Test
     public void poisonedCssIsRefusedAtRegistration() {
@@ -105,7 +112,7 @@ public class UiThemeParseTest {
                 /* @theme Poisoned
                  * @id    test:poisoned
                  * @kind  dark */
-                :focus-within { opacity: 0.5; }
+                :nth-child(2) { opacity: 0.5; }
                 """));
         assertNull("a refused theme must not be offered", ThemeRegistry.get("test:poisoned"));
     }

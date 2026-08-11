@@ -71,7 +71,12 @@ public class StyleGovernanceTest {
      * theme that genuinely wants a recessed well behind its file list still has a name to say so
      * with. An undefined reference with a no-op fallback is an offer, not a typo.</p>
      */
-    private static final Set<String> OPTIONAL_HOOK_TOKENS = Set.of("--tree-bg");
+    private static final Set<String> OPTIONAL_HOOK_TOKENS = Set.of(
+            "--tree-bg",
+            // The active-group ring: off at 0px, because a permanent rectangle round the pane you
+            // are working in says what its own tab already says. The token survives so a theme that
+            // wants the affordance back has a name for it — deleting the rule would take the hook.
+            "--dock-active-ring-width");
 
     private static boolean isFallbackOnly(String token) {
         if (FALLBACK_ONLY_EXCEPTIONS.contains(token)) return false;
@@ -232,6 +237,11 @@ public class StyleGovernanceTest {
     public void baseIsDerivationOnly() {
         List<String> offences = new ArrayList<>();
         definitionsOf(load(THEMES + "base.css")).forEach((name, value) -> {
+            // THE ONE LITERAL ALLOWED HERE, and it is not a colour: fully transparent means "this
+            // component paints NOTHING", which no system role can express — every one of them names
+            // a colour. It is what an element filling an island edge to edge must say so the island's
+            // own fill draws the rounded corner instead of being squared off by it.
+            if (value.trim().equalsIgnoreCase("#00000000")) return;
             Matcher ref = VAR_ANY.matcher(value.trim());
             if (!ref.matches() && !value.trim().matches("var\\(\\s*--[\\w-]+\\s*\\)")) {
                 offences.add(name + ": " + value);

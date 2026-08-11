@@ -174,6 +174,18 @@ public class MenuBarView extends UIElement implements UIFrameTicker {
         close();
 
         Menu menu = MenuBuilder.build(title.id, registry, contextSource(window));
+        // EVERY BAR MENU RESERVES THE MARK GUTTER, whether or not it holds a toggle.
+        //
+        // Reserving it per-menu is right for a CONTEXT menu — a standalone popup with no toggles
+        // should not carry a dead column, which is the trade Menu#HAS_CHECKABLE_CLASS documents. A
+        // menu BAR is the case that argument does not cover: its menus are a set the user opens one
+        // after another in the same place, so Edit's labels starting 12px left of View's reads as a
+        // wobble in the bar rather than as two menus with different contents. Both references align
+        // them across the whole bar for that reason.
+        //
+        // The existing class rather than a new one: it already means "reserve the gutter", and the
+        // per-item opt-in stays exactly as it was for everyone else.
+        menu.addClass(Menu.HAS_CHECKABLE_CLASS);
         // AN EMPTY MENU IS NOT OPENED. A top-level title whose commands are all contributed by a feature
         // that is not loaded would otherwise open a zero-height popover -- which reads as the bar being
         // broken rather than as the menu being empty, because there is nothing on screen to see.
