@@ -118,6 +118,7 @@ editor scheme's.
 | `--accent-soft` | `#2E436E` | crystal-dark.css |
 | `--activitybar-badge-fg` | `var(--fg-on-accent)` | base.css |
 | `--activitybar-bg` | `var(--surface-base)` | base.css |
+| `--activitybar-dot-fg` | `var(--accent)` | base.css |
 | `--activitybar-item-checked-bg` | `#46484b` | crystal-dark.css |
 | `--activitybar-item-fg` | `var(--fg-secondary)` | base.css |
 | `--activitybar-item-focused-bg` | `var(--accent)` | base.css |
@@ -348,10 +349,12 @@ editor scheme's.
 | `--notification-detail-fg` | `var(--fg)` | base.css |
 | `--notification-error-fg` | `var(--error)` | base.css |
 | `--notification-hover-bg` | `var(--hover-bg)` | base.css |
+| `--notification-info-fg` | `var(--info)` | base.css |
 | `--notification-message-fg` | `var(--fg)` | base.css |
 | `--notification-secondary-fg` | `var(--fg-secondary)` | base.css |
 | `--notification-secondary-hover-fg` | `var(--fg)` | base.css |
 | `--notification-time-fg` | `var(--fg-hint)` | base.css |
+| `--notification-warning-fg` | `var(--warning)` | base.css |
 | `--notifications-bg` | `#00000000` | base.css |
 | `--notifications-empty-fg` | `var(--fg)` | base.css |
 | `--notifications-link-fg` | `var(--link)` | base.css |
@@ -388,6 +391,8 @@ editor scheme's.
 | `--problems-bg` | `#00000000` | base.css |
 | `--problems-count-fg` | `var(--fg-hint)` | base.css |
 | `--problems-empty-fg` | `var(--fg)` | base.css |
+| `--problems-error-fg` | `var(--error)` | base.css |
+| `--problems-info-fg` | `var(--info)` | base.css |
 | `--problems-line-fg` | `var(--fg-hint)` | base.css |
 | `--problems-message-fg` | `var(--fg)` | base.css |
 | `--problems-options-fg` | `var(--fg-secondary)` | base.css |
@@ -396,6 +401,7 @@ editor scheme's.
 | `--problems-tab-count-fg` | `var(--fg-hint)` | base.css |
 | `--problems-tree-line-fg` | `var(--fg-hint)` | base.css |
 | `--problems-unnecessary-fg` | `var(--fg-hint)` | base.css |
+| `--problems-warning-fg` | `var(--warning)` | base.css |
 | `--prompt-bg` | `var(--surface-panel)` | base.css |
 | `--prompt-border` | `var(--border-base)` | base.css |
 | `--prompt-caption-fg` | `var(--fg)` | base.css |
