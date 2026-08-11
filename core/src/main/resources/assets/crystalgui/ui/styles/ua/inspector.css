@@ -255,7 +255,19 @@
     align-items: center;
     gap-all: 2px;
 }
-.__config-control__.__vector__ .__axis__ { flex-grow: 0; flex-shrink: 0; }
+/* THE AXIS LETTER NEEDS A COLOUR OF ITS OWN, and the reason it survived this long is that its absence
+ * was invisible in dark. It had no `color` rule anywhere, so it fell through inheritance to the COLOR
+ * property's initial value — which is white. White on a dark panel is what the letter should be, so the
+ * bug rendered correctly for as long as there was only a dark theme; on a white panel the `X Y Z W`
+ * simply vanished and the row read as four bare numbers.
+ *
+ * The label token rather than the value one: an axis letter names the field beside it, exactly as the
+ * row's own label names the control. */
+.__config-control__.__vector__ .__axis__ {
+    flex-grow: 0;
+    flex-shrink: 0;
+    color: var(--cfg-label-text);
+}
 .__config-control__.__vector__ .__number__ { width: 0; flex-grow: 1; }
 
 /* Track and value field on one row, the field sized to its digits rather than sharing the slack —

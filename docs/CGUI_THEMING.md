@@ -119,6 +119,7 @@ editor scheme's.
 | `--activitybar-badge-fg` | `var(--fg-on-accent)` | base.css |
 | `--activitybar-bg` | `var(--surface-base)` | base.css |
 | `--activitybar-item-checked-bg` | `#46484b` | crystal-dark.css |
+| `--activitybar-item-fg` | `var(--fg-secondary)` | base.css |
 | `--activitybar-item-focused-bg` | `var(--accent)` | base.css |
 | `--activitybar-item-focused-fg` | `var(--fg-on-accent)` | base.css |
 | `--activitybar-item-hover-bg` | `#46484b` | crystal-dark.css |

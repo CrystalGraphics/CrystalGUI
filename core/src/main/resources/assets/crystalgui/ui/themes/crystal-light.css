@@ -18,8 +18,14 @@
 
 /* ── The system vocabulary ─────────────────────────────────────────────────────────────────── */
 theme {
-    --surface-base: #E8E8EC;
-    --surface-panel: #F2F2F4;
+    /* THE GROUND EVERYTHING SITS ON -- menu bar, status bar, the activity rails, and every gap between
+     * islands. IntelliJ Light's own frame colour. */
+    --surface-base: #EBECF0;
+    /* AND THE ISLANDS ARE WHITE. This was #F2F2F4, a grey a shade off the frame, so the panels barely
+     * separated from the ground they float on and the whole window read as one flat sheet -- the exact
+     * thing the Islands look exists to avoid, and it is far more obvious in light than in dark because
+     * the two greys are closer together at the top of the range. */
+    --surface-panel: #FFFFFF;
     --surface-raised: #E4E4E8;
     --surface-recessed: #FFFFFF;
     --surface-editor: #FFFFFF;
@@ -74,6 +80,18 @@ theme {
 
     --dialog-backdrop: #00000040;
     --dialog-picker-bg: #F2F2F4D0;
+
+    /* THE EDITOR'S FIND BAR, and it has to be pinned here rather than derived.
+     *
+     * base.css derives it from --surface-panel on the reasoning that the bar is a panel header — true in
+     * dark, where panels and the editor are the same colour and a hairline is what separates chrome from
+     * content. In light the panels went white and so did the editor, so that derivation puts a white bar
+     * on a white document and the separator does all the work alone. IntelliJ Light gives the bar its own
+     * shade instead, sitting between the frame and the page.
+     *
+     * Exactly the kind of value the pins block exists for: not any of the ~30 system roles, and true of
+     * this theme rather than of the vocabulary. */
+    --editorfind-bg: #F7F8FA;
 
     --dock-drop-overlay: #3574F033;
     --dock-floating-bg: #F2F2F4F5;

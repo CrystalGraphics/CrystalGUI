@@ -124,6 +124,31 @@ public final class CgUiSvg implements CgUiDrawable {
         return document();
     }
 
+    /**
+     * Follows the element's {@code color} only when nothing gave this drawable a tint of its own.
+     *
+     * <p><b>Not a blanket yes, and not a blanket no.</b> A no is what shipped, and it made the whole
+     * {@code currentColor} story a lie: the chrome marks in {@code ui/icons/} are Feather glyphs authored
+     * as {@code stroke="currentColor"} precisely so the cascade can colour them, and they were painted
+     * against a hard white context colour instead. Harmless while every surface was dark and the answer
+     * was meant to be white anyway — the light theme is what makes it a bug, and the focused activity
+     * rail button is where it shows first, since that one has a blue chip under it.</p>
+     *
+     * <p>A yes would have been a different bug. {@code icon(path, #RRGGBB, monochrome)} in a stylesheet
+     * sets a tint HERE, and {@link #draw} multiplies tint by context colour — so an icon that was already
+     * given a colour, on an element that also sets {@code color}, would come out as the product of the
+     * two. The find bar's arrows set both and would have gone from grey to near-black.</p>
+     *
+     * <p>Hence the test: an <em>untinted</em> drawable has nothing of its own to protect and takes the
+     * cascade's colour; a tinted one keeps what it was given. Multi-colour art is safe either way —
+     * outside {@linkplain #setMonochrome monochrome} mode the file's literal colours are never touched,
+     * and only its {@code currentColor} elements resolve against this.</p>
+     */
+    @Override
+    public boolean followsTextColor() {
+        return tintArgb == 0xFFFFFFFF;
+    }
+
     /** What {@code currentColor} resolves to. The file's own literal colours are left alone — see {@link #setMonochrome}. */
     public CgUiSvg setTint(int argb) {
         this.tintArgb = argb;

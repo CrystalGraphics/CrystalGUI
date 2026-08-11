@@ -72,6 +72,17 @@ theme {
     --dialog-backdrop: #00000080;
     --dialog-picker-bg: #2E2E2E76;
 
+    /* THE EDITOR'S FIND BAR. Pinned to exactly what base.css derives for it (--surface-panel), so this
+     * changes nothing here — it is stated because its light pair has to diverge, and
+     * eachThemeAndSchemePairDefinesTheSameKeys requires the two files to define the same set.
+     *
+     * That rule is doing real work rather than being satisfied: an override one theme has and the other
+     * does not is exactly how a pair drifts, and the failure mode is that the theme nobody is currently
+     * looking at quietly stops matching the design. Writing both makes the divergence a visible, paired
+     * decision — dark keeps the panel-header derivation, light needs its own shade because its panels
+     * and its editor are both white. */
+    --editorfind-bg: #191A1C;
+
     --dock-drop-overlay: #4A88C766;
     --dock-floating-bg: #1E1E1EF0;
     --dock-insertion-bg: #7EB6FF30;
