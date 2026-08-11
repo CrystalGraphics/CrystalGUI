@@ -479,3 +479,88 @@ None of §10 blocks this plan's steps 0–6, and that is worth stating so the pl
 But **(A) and (B) should be settled before the editor gains more range-owning features**, because
 each new one written against the bespoke model is another thing to convert. Syntax highlighting is
 itself a range-owning feature — it is the natural moment.
+
+---
+
+## 11. Runtime scripting (Nashorn / Janino) — what it changes
+
+FYI from 2026-08-11: scripts will be authored **in-process**, compiled and run by Nashorn (JS) and
+Janino (Java) inside the same JVM that hosts the classes being scripted, with IDE-grade type
+resolution and error reporting driven by **the running program** rather than by a language server.
+
+This does not overturn §2–§10. It sharpens three things and makes one of them mandatory.
+
+### 11.1 You have something better than an LSP, for this case
+
+§3.3 and §10.3 draw the line at "needs a compiler / needs cross-file resolve". **You will have a
+compiler in the process.** Janino reports real diagnostics; the live `ClassLoader` answers what a type
+is and what members it has by reflection. That is strictly *more* than an LSP gives, because the
+answer is the actual runtime rather than a model of it — it is how JShell, Godot's built-in editor and
+IntelliJ's own expression evaluator work.
+
+So most of §3.3's ❌ rows dissolve: field vs local, unknown symbol, wrong argument type, deprecation
+(it is an annotation on a live `Method`). Not by adding an LSP, and not through tree-sitter — through a
+second, independent source of truth.
+
+### 11.2 The seam that does not exist yet
+
+`SyntaxTokenizer` is currently the only producer of `SyntaxToken`. A runtime resolver produces two
+things it cannot:
+
+- **semantic tokens** — "this identifier resolves to a field of type `Vec3`", refining a grammar's
+  guess, and
+- **diagnostics** — a range, a severity and a message.
+
+**Define both seams now, shaped like LSP's contract even though there is no LSP.** VS Code merges
+TextMate tokens with semantic tokens, semantic winning; the identical merge applies with a runtime
+resolver in that slot, and designing it that way keeps the option of a real LSP later without a
+second merge path. A resolver is a separate SPI from `SyntaxTokenizer` — different lifecycle,
+different failure modes, and it must be absent on a dedicated server exactly as the grammars are.
+
+### 11.3 This makes §10.1 B mandatory, not merely important
+
+A compiler diagnostic is *a range with a severity that must stay attached to its text while the user
+keeps typing*. That is the marker/interval-tree use case exactly, and it is the argument that settles
+it: without tracked ranges every squiggle jumps on the next keystroke, and re-deriving them means
+recompiling on every edit.
+
+**Corollary — async results must carry the document version they were computed against.** Compiling
+on the UI thread will freeze it, so resolution is debounced and backgrounded; by the time it returns
+the buffer has moved on. Monaco and LSP both version-stamp for this and discard stale results. Getting
+this wrong puts diagnostics a few characters off in a way that looks like an off-by-one in the
+compiler rather than a race.
+
+### 11.4 It also justifies tree-sitter's error tolerance
+
+Half of what you type is not valid while you are typing it. Tree-sitter parses broken input into a
+tree with error nodes and keeps going; a lexer would too, but neither TextMate nor a hand-written
+parser recovers as gracefully into a *structure* you can still query. Highlighting has to stay stable
+across the intermediate states, and the runtime resolver has to be told "this does not compile yet"
+rather than the editor going blank. §2.4's choice was made for other reasons and this reinforces it.
+
+### 11.5 Language priorities move
+
+The plan treats `css`, `js`, `html`, `glsl` as one batch. With scripting in play they are two:
+
+| | Grammar | Semantic layer |
+|---|---|---|
+| **`java`** (Janino) | ✅ have | **yes** — the point |
+| **`js`** (Nashorn) | needed | **yes** — the point |
+| `glsl` | needed | maybe, from the shader compiler's own errors |
+| `css`, `html` | needed | no — viewed, not authored |
+
+So `js` moves ahead of `css` in §5 step 3, and `css`/`html` become the *cheap* half rather than
+peers. GLSL is interesting: the shader compiler already reports errors (`--mode=shader-compile-audit`
+collects them), so the same diagnostics seam serves it with no new machinery.
+
+### 11.6 What to add to the foundation because of this
+
+1. **A `SemanticTokenProvider` seam** beside `SyntaxTokenizer`, merged with semantic winning (§11.2).
+2. **A `Diagnostic` model** — range, severity, message, source — as a decoration kind, so squiggles,
+   the gutter mark, the overview-ruler lane and the Problems panel are one thing (§10.1 B).
+   *The Problems panel already exists and already renders severities; it should be the consumer.*
+3. **Document versioning on every async result** (§11.3).
+4. **A "resolve the symbol at this offset" query** — the shared primitive under hover, go-to-definition
+   and completion. Cheap to define now; awkward to bolt onto a token stream later.
+5. **Read-only regions** (§10.2 F) get more urgent: generated GLSL is opened for reading, script
+   buffers are opened for writing, and they will sit in the same editor.
