@@ -230,7 +230,7 @@ public class DragGhost extends UIElement {
         CgUiDrawable glyph = CgUiDrawable.EMPTY;
         if (iconName != null && !iconName.isEmpty()) {
             CgUiSvg resolved =
-                    CgUiSvg.of(FileIconTheme.toResourcePath(FileIconTheme.withVariant(iconName)));
+                    CgUiSvg.ofIcon(iconName);
             if (resolved != null) glyph = resolved;
         }
         CgUiDrawable applied = glyph;

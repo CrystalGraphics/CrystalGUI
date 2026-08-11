@@ -1,6 +1,7 @@
 package com.crystalgui.render.texture;
 
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
 
 import javax.annotation.Nullable;
@@ -29,7 +30,46 @@ import javax.annotation.Nullable;
  */
 public final class CgUiSvg implements CgUiDrawable {
 
-    private final SvgDocument document;
+    private SvgDocument document;
+
+    /**
+     * The un-suffixed icon name when this drawable was built from one, otherwise null.
+     *
+     * <p><b>Late-bound like {@code currentColor}, and for the same reason.</b> An icon ships as two
+     * drawings — {@code java.svg} and {@code java_dark.svg} — and which one applies is a property of the
+     * active theme, not of the drawable. Resolving it at construction bakes in whatever variant happened
+     * to be current, so every icon built before a theme swap keeps the old drawing: the editor tabs, the
+     * breadcrumbs and the status bar all did.</p>
+     *
+     * <p>The alternative was a broadcast every consumer subscribes to, which is a contract whose second
+     * half fails silently — it worked for the file tree, the one consumer somebody remembered to refresh
+     * by hand. Resolving here makes every consumer correct without knowing this exists, including ones
+     * written later. {@code SvgDocument.of} caches, so a re-resolve is a map lookup rather than a parse.</p>
+     */
+    @Nullable
+    private final String iconName;
+
+    /** The variant {@link #document} was resolved for, so a swap is detected rather than polled. */
+    @Nullable
+    private FileIconTheme.Variant resolvedFor;
+
+    /**
+     * The document to draw, re-resolved if the icon variant has moved under us.
+     *
+     * <p>Only ever does work for a drawable built from an icon NAME. One built from a path is a fixed
+     * document by construction — {@code icon()} in a stylesheet, a sprite, anything with no light/dark
+     * pair — and must not start guessing at variants of a path a caller chose deliberately.</p>
+     */
+    @Nullable
+    private SvgDocument document() {
+        if (iconName == null) return document;
+        FileIconTheme.Variant current = FileIconTheme.getVariant();
+        if (current != resolvedFor) {
+            resolvedFor = current;
+            document = SvgDocument.of(FileIconTheme.toResourcePath(FileIconTheme.withVariant(iconName)));
+        }
+        return document;
+    }
 
     /**
      * What {@code currentColor} resolves to, multiplied by the context colour at draw time.
@@ -46,6 +86,11 @@ public final class CgUiSvg implements CgUiDrawable {
 
     public CgUiSvg(SvgDocument document) {
         this.document = document;
+        this.iconName = null;
+    }
+
+    private CgUiSvg(String iconName) {
+        this.iconName = iconName;
     }
 
     /** Loads and wraps in one step, sharing the parsed document via {@link SvgDocument#of}. */
@@ -55,8 +100,28 @@ public final class CgUiSvg implements CgUiDrawable {
         return document == null ? null : new CgUiSvg(document);
     }
 
+    /**
+     * Wraps an icon by NAME, following the light/dark variant for as long as the drawable lives.
+     *
+     * <p>The variant-aware counterpart to {@link #of(String)}, and what anything holding an icon across a
+     * theme swap wants: a tab, a rail button, a breadcrumb. Takes the un-suffixed name — {@code
+     * "crystalgui:code"} — and does its own {@code withVariant} + {@code toResourcePath}, so a caller that
+     * applies either itself is bypassing the very thing this exists for.</p>
+     *
+     * <p>Null when the icon resolves to nothing in the CURRENT variant, matching {@code of}. A name whose
+     * dark drawing is missing is not that case — {@code withVariant} already falls back to the base file,
+     * which is how a variant-neutral icon ships once.</p>
+     */
+    @Nullable
+    public static CgUiSvg ofIcon(@Nullable String iconName) {
+        if (iconName == null) return null;
+        CgUiSvg svg = new CgUiSvg(iconName);
+        return svg.document() == null ? null : svg;
+    }
+
+    @Nullable
     public SvgDocument getDocument() {
-        return document;
+        return document();
     }
 
     /** What {@code currentColor} resolves to. The file's own literal colours are left alone — see {@link #setMonochrome}. */
@@ -93,6 +158,7 @@ public final class CgUiSvg implements CgUiDrawable {
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
+        SvgDocument document = document();
         if (document == null || document.isEmpty()) return;
         float boxWidth = document.width(), boxHeight = document.height();
         if (boxWidth <= 0f || boxHeight <= 0f || width <= 0f || height <= 0f) return;
@@ -117,11 +183,13 @@ public final class CgUiSvg implements CgUiDrawable {
      */
     @Override
     public float intrinsicWidth() {
+        SvgDocument document = document();
         return document == null ? -1f : document.width();
     }
 
     @Override
     public float intrinsicHeight() {
+        SvgDocument document = document();
         return document == null ? -1f : document.height();
     }
 }

@@ -838,7 +838,7 @@ public class StripeView extends UIElement {
 
     private static void applyIcon(Button button, @Nullable String iconName) {
         if (iconName == null) return;
-        CgUiSvg glyph = CgUiSvg.of(FileIconTheme.toResourcePath(FileIconTheme.withVariant(iconName)));
+        CgUiSvg glyph = CgUiSvg.ofIcon(iconName);
         if (glyph == null) return;
         UIElement slot = new UIElement();
         // Unhittable, so the press lands on the button rather than on its own icon -- click-focus targets
