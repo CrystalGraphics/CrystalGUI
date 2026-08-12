@@ -3,6 +3,7 @@ package com.crystalgui.text.lang;
 import com.crystalgui.text.Change;
 
 import java.util.List;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -54,13 +55,19 @@ import javax.annotation.Nullable;
  *                            registry and an unregistered id is simply not run
  * @param insertTextFormat    whether {@link #insertText} is literal or a snippet
  * @param deprecated          drawn struck through, like {@link SymbolModifier#DEPRECATED}
+ * @param modifiers           what the symbol is, beyond its kind — {@code static}, {@code abstract}.
+ *                            Kind and modifier are <b>orthogonal</b> axes and an icon needs both: a static
+ *                            method and an instance method are the same kind and draw differently, so
+ *                            folding {@code static} into {@link SymbolKind} would double every entry in it.
+ *                            Never null
  */
 public record CompletionItem(String label, SymbolKind kind, @Nullable String detail,
                              @Nullable String documentation, @Nullable String sortText,
                              @Nullable String filterText, @Nullable String insertText,
                              @Nullable Change textEdit, List<Change> additionalTextEdits,
                              List<String> commitCharacters, @Nullable String command,
-                             InsertTextFormat insertTextFormat, boolean deprecated) {
+                             InsertTextFormat insertTextFormat, boolean deprecated,
+                             Set<SymbolModifier> modifiers) {
 
     /**
      * How {@link CompletionItem#insertText} should be read.
@@ -85,6 +92,7 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
         commitCharacters = commitCharacters == null || commitCharacters.isEmpty()
                 ? List.of() : List.copyOf(commitCharacters);
         if (insertTextFormat == null) insertTextFormat = InsertTextFormat.PLAIN;
+        modifiers = modifiers == null || modifiers.isEmpty() ? Set.of() : Set.copyOf(modifiers);
     }
 
     /** The simplest item: a word, and what it is. */
@@ -92,11 +100,21 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
         return builder(label, kind).build();
     }
 
-    /** An item built from a resolved symbol — the path every engine-backed provider takes. */
+    /**
+     * An item built from a resolved symbol — the path every engine-backed provider takes.
+     *
+     * <p><b>The label carries the signature and the filter does not</b>, which is the four-field design
+     * doing the one job it exists for: {@code getProperty(String, String)} is shown, {@code getProperty} is
+     * typed, and two overloads stop being two identical rows the user cannot choose between.</p>
+     */
     public static CompletionItem from(SymbolInfo symbol) {
-        return builder(symbol.name(), symbol.kind())
+        return builder(symbol.name() + symbol.parameterList(), symbol.kind())
                 .detail(symbol.type() == null ? symbol.container() : symbol.type().displayName())
                 .documentation(symbol.documentation())
+                .filterText(symbol.name())
+                .sortText(symbol.name())
+                .insertText(symbol.name())
+                .modifiers(symbol.modifiers())
                 .deprecated(symbol.is(SymbolModifier.DEPRECATED))
                 .build();
     }
@@ -122,6 +140,11 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
         return insertText == null ? label : insertText;
     }
 
+    /** Whether this symbol carries {@code modifier} — what the icon's second axis is chosen from. */
+    public boolean is(SymbolModifier modifier) {
+        return modifiers.contains(modifier);
+    }
+
     /** Whether {@link CompletionProvider#resolveItem} could still add anything. */
     public boolean needsResolution() {
         return documentation == null;
@@ -129,7 +152,8 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
 
     public CompletionItem withDocumentation(@Nullable String docs) {
         return new CompletionItem(label, kind, detail, docs, sortText, filterText, insertText,
-                textEdit, additionalTextEdits, commitCharacters, command, insertTextFormat, deprecated);
+                textEdit, additionalTextEdits, commitCharacters, command, insertTextFormat, deprecated,
+                modifiers);
     }
 
     /**
@@ -153,6 +177,7 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
         private String command;
         private InsertTextFormat insertTextFormat = InsertTextFormat.PLAIN;
         private boolean deprecated;
+        private Set<SymbolModifier> modifiers = Set.of();
 
         private Builder(String label, SymbolKind kind) {
             this.label = label;
@@ -214,10 +239,15 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
             return this;
         }
 
+        public Builder modifiers(Set<SymbolModifier> value) {
+            this.modifiers = value == null ? Set.of() : value;
+            return this;
+        }
+
         public CompletionItem build() {
             return new CompletionItem(label, kind, detail, documentation, sortText, filterText,
                     insertText, textEdit, additionalTextEdits, commitCharacters, command,
-                    insertTextFormat, deprecated);
+                    insertTextFormat, deprecated, modifiers);
         }
     }
 }

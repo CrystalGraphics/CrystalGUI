@@ -52,17 +52,13 @@ public class StyleGovernanceTest {
      * would force every other theme to restate them (and a light theme that forgot would silently
      * lose Java's orange). They live as their sheet's {@code var()} fallback and nowhere else.
      *
-     * <p>{@code --kind-} is the completion popup's per-symbol-kind palette — one colour per
-     * {@code SymbolKind}, with no meaning a theme could re-derive, exactly as the graph's port
-     * colours have none. A method being purple is not a fact about the surface it is drawn on.</p>
-     *
      * <p>Named here rather than left to look like a typo, and deliberately by PREFIX with an
      * exception list: {@code --graph-port-vec3} is palette, {@code --graph-port-label-hover-fg} is
      * the band's own chrome and must derive like any other surface — a prefix rule alone captured
      * it once and quietly deleted its derivation.</p>
      */
     private static final List<String> FALLBACK_ONLY_PREFIXES =
-            List.of("--filetype-", "--graph-port-", "--kind-");
+            List.of("--filetype-", "--graph-port-");
     private static final Set<String> FALLBACK_ONLY_EXCEPTIONS =
             Set.of("--graph-port-label-hover-fg");
     private static final Set<String> FALLBACK_ONLY_EXACT = Set.of(

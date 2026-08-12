@@ -499,7 +499,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 if (!seen.add(signature)) continue;
                 into.add(new SymbolInfo(method.getName(), SymbolKind.METHOD,
                         typeRef(method.getReturnType()), owner.getQualifiedName(), null,
-                        modifiersOf(method), null));
+                        modifiersOf(method), null, parameterTypesOf(method)));
             }
             for (IVariableBinding field : owner.getDeclaredFields()) {
                 if (field.isSynthetic()) continue;
@@ -510,6 +510,26 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         typeRef(field.getType()), owner.getQualifiedName(), null,
                         modifiersOf(field), null));
             }
+        }
+
+        /**
+         * A method's declared parameter types, already generic-substituted by JDT.
+         *
+         * <p>Types rather than names, and that is a limit rather than a choice: JDT reports real parameter
+         * names only where it has source or a {@code -parameters} build, and answers {@code arg0} otherwise
+         * — which is most of the classpath. A label reading {@code getProperty(String, String)} is what
+         * Eclipse itself shows and is honest; {@code getProperty(String arg0, String arg1)} is confidently
+         * wrong and takes up more room saying it.</p>
+         *
+         * <p>The <b>varargs</b> tail keeps its array type here. Rendering it as {@code String...} is a
+         * display decision and belongs where the label is built, not in what the engine reports.</p>
+         */
+        private static List<TypeRef> parameterTypesOf(IMethodBinding method) {
+            ITypeBinding[] declared = method.getParameterTypes();
+            if (declared.length == 0) return List.of();
+            List<TypeRef> types = new ArrayList<>(declared.length);
+            for (ITypeBinding parameter : declared) types.add(typeRef(parameter));
+            return types;
         }
 
         /** JLS 6.6, asked of the bindings rather than reimplemented. */

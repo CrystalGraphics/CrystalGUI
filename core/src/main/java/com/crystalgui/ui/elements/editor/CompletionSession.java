@@ -205,16 +205,33 @@ public final class CompletionSession {
     /**
      * Re-ranks the held list against the current prefix.
      *
-     * <p><b>An empty prefix keeps everything</b>, unranked by match quality — there is nothing to rank by,
-     * and the provider's own order is a real signal (it put members of the receiver first). Running an empty
-     * query through the matcher would return null for every row and empty the list, which is the shape this
-     * has to be written to avoid.</p>
+     * <p><b>An empty prefix skips the MATCHER but not the ranking</b>, and the distinction is the whole of
+     * this method. There is nothing to match against, and running an empty query through the matcher returns
+     * null for every row — which would empty the list rather than show it. But the rows still have to be
+     * <em>ordered</em>, and this is exactly the case where the order matters most, because an empty prefix
+     * is the moment the popup opens and the user is reading rather than typing.</p>
+     *
+     * <h3>The provider's own order is not a signal, and assuming it was hid three rows</h3>
+     *
+     * <p>This used to hand the list through untouched on the grounds that the engine had put the useful
+     * things first. It had not: {@code collectMembers} walks every declared <em>method</em> and then every
+     * declared <em>field</em>, which is an artefact of two loops, not a judgement. So {@code System.} opened
+     * with forty methods and put {@code out}, {@code err} and {@code in} at position forty-one — below an
+     * eleven-row window, and therefore invisible. It read as the fields being missing entirely, and a test
+     * asserting the list was non-empty passed straight through it.</p>
+     *
+     * <p>Ranked, the same list opens with the three fields, because {@code CompletionRanking} scores a field
+     * nearer than a method. That is not a coincidence — it is the weigher chain doing the job the provider
+     * was wrongly credited with.</p>
      */
     private void refilter() {
         String prefix = prefix();
         List<Row> next = new ArrayList<>();
         if (prefix.isEmpty()) {
             for (CompletionItem item : unfiltered) next.add(new Row(item, null));
+            // Every row ties on match tier (there is no match), so the chain falls straight through to
+            // deprecation, then proximity, then the provider's sortText -- which is the order to show.
+            next.sort(CompletionRanking.byQuality());
         } else {
             SearchQuery query = SearchQuery.of(prefix);
             for (CompletionItem item : unfiltered) {

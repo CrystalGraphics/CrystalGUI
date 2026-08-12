@@ -4,7 +4,7 @@ import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.lang.CompletionItem;
-import com.crystalgui.text.lang.SymbolKind;
+import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Popover;
@@ -59,6 +59,8 @@ public final class CompletionPopup extends Popover {
     public static final String POPUP_CLASS = "__completion__";
     public static final String ROW_CLASS = "__completion-row__";
     public static final String ICON_CLASS = "__completion-icon__";
+    public static final String STATIC_MARK_CLASS = "__completion-mark-static__";
+    public static final String FINAL_MARK_CLASS = "__completion-mark-final__";
     public static final String LABEL_CLASS = "__completion-label__";
     public static final String DETAIL_CLASS = "__completion-detail__";
     public static final String DEPRECATED_CLASS = "__completion-deprecated__";
@@ -183,6 +185,15 @@ public final class CompletionPopup extends Popover {
             list.setFocusedIndex(selected);
             list.select(selected);
             list.scrollToIndex(selected);
+            // AND THEN PIN IT, when the selection is on the first page.
+            //
+            // setFocusedIndex defers a focus restore that scrolls the row into view, and on the frame a
+            // popup opens there is no laid-out viewport to compute that against -- so the list came to rest
+            // exactly one row down, which hides the SELECTED row off the top. The symptom is not "the list
+            // is scrolled": it is a popup with no visible selection at all, opening on the second-best
+            // match. QuickPick.refresh carries the same two lines for the same reason, measured there at
+            // scrollTop=22 in a viewport whose only valid offset was 0.
+            if (selected < MAX_VISIBLE_ROWS) list.setScrollImmediate(0f, 0f);
         } else {
             list.setFocusedIndex(-1);
             list.clearSelection();
@@ -244,6 +255,17 @@ public final class CompletionPopup extends Popover {
             row.icon.addClass(ICON_CLASS);
             row.icon.setHitTest(false);
             row.addChild(row.icon);
+            // MODIFIER MARKS ARE FULL-SIZE LAYERS OVER THE ICON, not small badges in a corner box.
+            // JetBrains draws each mark on its own 16x16 canvas with the glyph already in the right corner
+            // -- staticMark bottom-left, finalMark top-left -- so they compose by being stacked at the same
+            // size, and they can both show at once because they occupy different corners. Scaling one into
+            // a 9px box instead re-does positioning the artwork already did, badly.
+            row.staticMark.addClass(STATIC_MARK_CLASS);
+            row.staticMark.setHitTest(false);
+            row.icon.addChild(row.staticMark);
+            row.finalMark.addClass(FINAL_MARK_CLASS);
+            row.finalMark.setHitTest(false);
+            row.icon.addChild(row.finalMark);
 
             row.label.addClass(LABEL_CLASS);
             row.label.setHitTest(false);
@@ -265,11 +287,19 @@ public final class CompletionPopup extends Popover {
             Row row = (Row) template;
             CompletionItem item = value.item();
 
-            row.icon.setText(glyphFor(item.kind()));
-            // SWAPPED, not added -- a template is a different row every time the view reuses it, so a kind
-            // class left behind from the last binding would join the new one and the cascade would resolve
-            // whichever it preferred. Same rule ProjectFileTree.swapPrefixedClass states.
-            swapKindClass(row.icon, item.kind());
+            // SWAPPED, not added -- a template is a different row every time the view reuses it, so a
+            // kind class left behind from the last binding would join the new one and the cascade would
+            // resolve whichever it preferred. Same rule ProjectFileTree.swapPrefixedClass states.
+            swapPrefixed(row.icon, KIND_CLASS_PREFIX,
+                    KIND_CLASS_PREFIX + (item.kind() == null ? "unknown"
+                            : item.kind().name().toLowerCase(java.util.Locale.ROOT)));
+            // KIND AND MODIFIER ARE ORTHOGONAL, so abstract is a second class rather than a second kind --
+            // an abstract method and a concrete one are the same kind and draw differently. Folding it into
+            // SymbolKind would double every entry in that enum for one bit.
+            swapPrefixed(row.icon, MODIFIER_CLASS_PREFIX,
+                    item.is(SymbolModifier.ABSTRACT) ? MODIFIER_CLASS_PREFIX + "abstract" : null);
+            row.staticMark.setDisplayed(item.is(SymbolModifier.STATIC));
+            row.finalMark.setDisplayed(item.is(SymbolModifier.FINAL));
 
             row.label.setText(item.label());
             row.detail.setText(item.detail() == null ? "" : item.detail());
@@ -305,69 +335,31 @@ public final class CompletionPopup extends Popover {
             row.label.highlights().remove(MATCH_HIGHLIGHT);
         }
 
-        private static void swapKindClass(UIElement icon, SymbolKind kind) {
-            List<String> existing = new ArrayList<>(icon.getClasses());
-            for (String name : existing) {
-                if (name.startsWith(KIND_CLASS_PREFIX)) icon.removeClass(name);
-            }
-            icon.addClass(KIND_CLASS_PREFIX + (kind == null ? "unknown" : kind.name().toLowerCase()));
-        }
-
         /**
-         * One character standing for the kind.
+         * Puts exactly one {@code prefix}-class on {@code element}, or none.
          *
-         * <p>Glyphs rather than the SVG icon set, deliberately for now: the file-icon theme is keyed on file
-         * type and has nothing for "a method", so using it would mean inventing a parallel icon theme before
-         * there is anything to put in it. The letter carries the same information IntelliJ's coloured badge
-         * does, and the <em>colour</em> — which is the half that actually distinguishes them at a glance —
-         * comes from the {@code completion-kind-*} class and lives in the sheet, exactly as the node graph's
-         * per-type port palette does.</p>
+         * <p>Swap rather than add: a pooled row that drew a method and is reused for a field would
+         * otherwise carry both classes and the cascade would resolve whichever it preferred — which reads
+         * as a random icon rather than as a stale class.</p>
          */
-        private static String glyphFor(@Nullable SymbolKind kind) {
-            if (kind == null) return "?";
-            switch (kind) {
-                case METHOD:
-                case FUNCTION:
-                    return "m";
-                case CONSTRUCTOR:
-                    return "c";
-                case FIELD:
-                case PROPERTY:
-                    return "f";
-                case CONSTANT:
-                    return "k";
-                case LOCAL_VARIABLE:
-                case PARAMETER:
-                    return "v";
-                case CLASS:
-                case RECORD:
-                    return "C";
-                case INTERFACE:
-                    return "I";
-                case ENUM:
-                    return "E";
-                case ENUM_MEMBER:
-                    return "e";
-                case ANNOTATION:
-                    return "@";
-                case TYPE_PARAMETER:
-                    return "T";
-                case PACKAGE:
-                case MODULE:
-                    return "p";
-                case KEYWORD:
-                    return "K";
-                default:
-                    return "?";
+        private static void swapPrefixed(UIElement element, String prefix, @Nullable String wanted) {
+            for (String name : new ArrayList<>(element.getClasses())) {
+                if (name.startsWith(prefix) && !name.equals(wanted)) element.removeClass(name);
             }
+            if (wanted != null) element.addClass(wanted);
         }
 
         private static final String KIND_CLASS_PREFIX = "completion-kind-";
+        private static final String MODIFIER_CLASS_PREFIX = "completion-mod-";
     }
 
     /** The row element, holding its slots so {@code bind} never searches for them. */
     private static final class Row extends UIElement {
-        final UIText icon = new UIText("");
+        /** A box with a background, not a glyph -- the drawing comes from the cascade. */
+        final UIElement icon = new UIElement();
+        /** Modifier overlays, parented to the icon so they follow it. */
+        final UIElement staticMark = new UIElement();
+        final UIElement finalMark = new UIElement();
         final UIText label = new UIText("");
         final UIElement spacer = new UIElement();
         final UIText detail = new UIText("");

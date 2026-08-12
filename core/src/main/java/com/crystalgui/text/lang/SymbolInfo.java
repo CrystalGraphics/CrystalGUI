@@ -1,5 +1,6 @@
 package com.crystalgui.text.lang;
 
+import java.util.List;
 import java.util.Set;
 
 import javax.annotation.Nullable;
@@ -37,12 +38,65 @@ import javax.annotation.Nullable;
  */
 public record SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type,
                          @Nullable String container, @Nullable String documentation,
-                         Set<SymbolModifier> modifiers, @Nullable DeclarationSite declaration) {
+                         Set<SymbolModifier> modifiers, @Nullable DeclarationSite declaration,
+                         List<TypeRef> parameters) {
 
     public SymbolInfo {
         if (name == null) name = "";
         if (kind == null) kind = SymbolKind.UNKNOWN;
         modifiers = modifiers == null || modifiers.isEmpty() ? Set.of() : Set.copyOf(modifiers);
+        parameters = parameters == null || parameters.isEmpty() ? List.of() : List.copyOf(parameters);
+    }
+
+    /**
+     * The seven-component shape, for everything that is not a method.
+     *
+     * <p>Kept as an overload rather than making every existing construction site pass {@code List.of()}:
+     * a parameter list is a fact about a <em>method</em>, and a field being asked to declare it has none
+     * is noise at a dozen call sites. {@link #parameters()} answering empty for a field is the same
+     * statement, made once.</p>
+     */
+    public SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type, @Nullable String container,
+                      @Nullable String documentation, Set<SymbolModifier> modifiers,
+                      @Nullable DeclarationSite declaration) {
+        this(name, kind, type, container, documentation, modifiers, declaration, List.of());
+    }
+
+    /**
+     * The declared parameter types, empty for anything that is not a method.
+     *
+     * <p><b>Structured, not a rendered string</b>, because generic substitution is the engine's answer and
+     * nobody else's: ask {@code List<String>} for {@code get} and JDT reports {@code (int)} returning
+     * {@code String}, where a name-based render would have said {@code E}. Handing over text would throw
+     * that away at the one seam that has it.</p>
+     *
+     * <p><b>Types, not names.</b> JDT reports real parameter names only when it has source or a
+     * {@code -parameters} build; for an ordinary classpath class it answers {@code arg0}. So a label built
+     * from this reads {@code getProperty(String, String)} — which is what Eclipse itself shows, and is
+     * better than confidently printing {@code arg0}.</p>
+     */
+    @Override
+    public List<TypeRef> parameters() {
+        return parameters;
+    }
+
+    /** {@code (String, int)} — or {@code ()} for a method with none, and {@code ""} for a non-method. */
+    public String parameterList() {
+        if (kind != SymbolKind.METHOD && kind != SymbolKind.CONSTRUCTOR && kind != SymbolKind.FUNCTION) {
+            return "";
+        }
+        StringBuilder rendered = new StringBuilder("(");
+        for (int i = 0; i < parameters.size(); i++) {
+            if (i > 0) rendered.append(", ");
+            TypeRef parameter = parameters.get(i);
+            rendered.append(parameter == null ? "?" : parameter.displayName());
+        }
+        return rendered.append(')').toString();
+    }
+
+    public SymbolInfo withParameters(List<TypeRef> newParameters) {
+        return new SymbolInfo(name, kind, type, container, documentation, modifiers, declaration,
+                newParameters);
     }
 
     /** The common shape: a name and what it is. */
