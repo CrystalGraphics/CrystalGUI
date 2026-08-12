@@ -52,10 +52,33 @@ theme {
 
     /* ── Syntax — the six general names every tokenizer falls back to ── */
     --syntax-keyword: #0000FF;
+    --syntax-keyword-control: #AF00DB;
+    --syntax-keyword-operator: #0000FF;
     --syntax-type: #267F99;
+    --syntax-type-builtin: #0000FF;
     --syntax-function: #795E26;
+    --syntax-function-builtin: #795E26;
+    --syntax-function-method: #795E26;
     --syntax-string: #A31515;
+    --syntax-string-escape: #EE0000;
+    --syntax-string-special: #EE0000;
     --syntax-number: #098658;
+    --syntax-boolean: #0000FF;
+    --syntax-constant: #0070C1;
+    --syntax-constant-builtin: #0000FF;
     --syntax-comment: #008000;
+    --syntax-comment-doc: #008000;
+    --syntax-variable: #001080;
+    --syntax-variable-builtin: #0000FF;
+    --syntax-variable-parameter: #001080;
+    --syntax-variable-member: #001080;
+    --syntax-property: #001080;
+    --syntax-attribute: #E50000;
+    --syntax-tag: #800000;
+    --syntax-operator: #000000;
+    --syntax-punctuation: #383838;
+    --syntax-punctuation-bracket: #383838;
+    --syntax-punctuation-delimiter: #383838;
+    --syntax-comment-style: normal;
     --syntax-bracket: #267F99;
 }

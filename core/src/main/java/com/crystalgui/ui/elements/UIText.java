@@ -529,14 +529,14 @@ public final class UIText extends UIElement {
         // has to be darkened, or a red keyword would paint its shadow bright red.
         int color = style.color(0);
         if (shadow && color != 0) color = shadowColorFor(color);
-        // THE ELEMENT'S WEIGHT CARRIES THROUGH THE HIGHLIGHT. `::highlight()` is deliberately barred from
-        // setting bold or italic -- CSS Pseudo-Elements 4 allows it only properties that cannot reflow the
-        // text it highlights, which is why HighlightStyle has no such field. That says a highlight may not
-        // CHANGE the weight; it does not say the highlighted characters stop having one. Passing the
-        // element's own through is what keeps a bold label bold across the three characters a search
-        // happened to match.
-        return new CgStyleSpan(start, end, bold, italic, toCgDecorations(style.decorations()), color,
-                null, 0f);
+        // THE HIGHLIGHT'S OWN WEIGHT WINS, AND THE ELEMENT'S CARRIES THROUGH WHERE IT SAYS NOTHING.
+        //
+        // `::highlight()` may now set bold and italic -- a deliberate divergence from CSS Pseudo-Elements
+        // 4, argued at HighlightStyle.ALLOWED. What has not changed is the fallback: a highlight that is
+        // silent about weight must not make its range lighter than the text around it, which is what keeps
+        // a bold label bold across the three characters a search happened to match.
+        return new CgStyleSpan(start, end, style.isBold(bold), style.isItalic(italic),
+                toCgDecorations(style.decorations()), color, null, 0f);
     }
 
     private static Set<CgTextDecoration> toCgDecorations(Set<TextDecorationLine> source) {

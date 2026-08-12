@@ -1,0 +1,100 @@
+/* @scheme Islands Light
+ * @id     crystalgui:islands-light
+ * @kind   light
+ * @author crystalgui
+ *
+ * The light half of the Islands pair, from IntelliJ Light.
+ *
+ * It exists because a scheme without a counterpart is a trap rather than a saving: switching the theme to
+ * light and leaving a dark scheme selected gives grey-on-white comments and a nearly invisible caret, and
+ * the user's conclusion is that the light theme is broken. StyleGovernanceTest pins the two together —
+ * every key defined in one must be defined in the other, which is the same rule the themes already follow
+ * and the exact failure --editorfind-bg produced once already.
+ *
+ * The mapping decisions are Islands Dark's, inverted rather than re-argued: keywords carry the weight,
+ * class names stay at the default foreground because position already says "type", and the identifier
+ * rows stay neutral until a semantic layer can tell a parameter from a field. See islands-dark.css for
+ * why each of those is deliberate. */
+
+theme {
+    /* ── Surfaces ──
+     * Opaque here, unlike the dark pair. A light document on the light panel needs to be the LIGHTER of
+     * the two or the editor stops reading as an island at all — and at this end of the range there is no
+     * room to do that with transparency. The corners are the price, and the theme's panel is matched to
+     * it so the seam does not show. */
+    --editor-bg: #FFFFFF;
+    --editor-fg: #000000;
+    --editor-caret: #000000;
+    --editor-current-line: #FCFAED;
+    --editor-selection-bg: #A6D2FF;
+    --editor-gutter-bg: #F7F8FA;
+    --editor-gutter-edge: #EBECF0;
+    --editor-line-number: #9A9DA1;
+    --editor-indent-guide: #EBECF0;
+    --editor-indent-guide-active: #9A9DA1;
+    --editor-whitespace: #C9CCD0;
+    --editor-ruler: #EBECF0;
+
+    /* ── Folding ── */
+    --editor-fold: #9A9DA1;
+    --editor-fold-active: #000000;
+    --editor-fold-placeholder-bg: #EBECF0;
+    --editor-fold-placeholder-fg: #6C707E;
+    --editor-fold-placeholder-hover-bg: #DFE1E5;
+    --editor-fold-placeholder-hover-fg: #000000;
+
+    /* ── The zoom indicator ── */
+    --editor-zoom-bg: #F7F8FA;
+    --editor-zoom-fg: #000000;
+    --editor-zoom-link: #2E55A3;
+    --editor-zoom-link-pressed: #1E3C78;
+
+    /* ── Find & replace, in the document ── */
+    --find-match-bg: #FFD08A;
+    --find-match-fg: #000000;
+    --search-excluded-fg: #9A9DA1;
+
+    /* ── Syntax ── */
+    --syntax-keyword: #0033B3;
+    --syntax-keyword-control: #0033B3;
+    --syntax-keyword-operator: #0033B3;
+
+    /* Default foreground, for the reason islands-dark.css sets out: IntelliJ does not tint class names. */
+    --syntax-type: #000000;
+    --syntax-type-builtin: #0033B3;
+
+    --syntax-function: #00627A;
+    --syntax-function-builtin: #00627A;
+    --syntax-function-method: #00627A;
+
+    --syntax-string: #067D17;
+    --syntax-string-escape: #0037A6;
+    --syntax-string-special: #0037A6;
+
+    --syntax-number: #1750EB;
+    --syntax-boolean: #0033B3;
+    --syntax-constant: #871094;
+    --syntax-constant-builtin: #0033B3;
+
+    --syntax-comment: #8C8C8C;
+    --syntax-comment-doc: #3D3D3D;
+
+    /* Neutral until a semantic layer can separate them — see islands-dark.css. */
+    --syntax-variable: #000000;
+    --syntax-variable-builtin: #0033B3;
+    --syntax-variable-parameter: #000000;
+    --syntax-variable-member: #871094;
+
+    --syntax-property: #871094;
+    --syntax-attribute: #9E880D;
+    --syntax-tag: #0033B3;
+
+    --syntax-operator: #000000;
+    --syntax-punctuation: #000000;
+    --syntax-punctuation-bracket: #000000;
+    --syntax-punctuation-delimiter: #000000;
+
+    --syntax-comment-style: italic;
+
+    --syntax-bracket: #067D17;
+}

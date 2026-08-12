@@ -408,8 +408,13 @@ public class UiThemeManagerTest extends UiTestBase {
     @Test
     public void theShippedThemeSuggestsItsScheme() {
         ThemeRegistry.registerBuiltins();
-        assertEquals("crystalgui:dark-plus",
+        // Islands, because the chrome draws IntelliJ's frame and the document used to be painted in VS
+        // Code's palette. Dark+ is still registered and still selectable — the suggestion is the theme's
+        // opinion, not a restriction, which is the whole reason the two axes are separate.
+        assertEquals("crystalgui:islands-dark",
                 ThemeRegistry.get("crystalgui:crystal-dark").editorScheme());
+        assertEquals("crystalgui:islands-light",
+                ThemeRegistry.get("crystalgui:crystal-light").editorScheme());
     }
 
     // ── late arrivals ───────────────────────────────────────────────────────────────────────────

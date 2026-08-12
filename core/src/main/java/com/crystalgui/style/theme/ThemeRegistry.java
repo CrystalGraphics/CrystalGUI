@@ -57,6 +57,11 @@ public final class ThemeRegistry {
     public static void registerBuiltins() {
         registerTheme("crystalgui:crystal-dark");
         registerTheme("crystalgui:crystal-light");
+        // Islands first, because registration order is what a picker lists in and these are the pair the
+        // shipped themes suggest. Dark+/Light+ stay registered rather than being replaced: they are what a
+        // VS Code user recognises, and the whole point of the second axis is that the choice is theirs.
+        registerScheme("crystalgui:islands-dark");
+        registerScheme("crystalgui:islands-light");
         registerScheme("crystalgui:dark-plus");
         registerScheme("crystalgui:light-plus");
     }
