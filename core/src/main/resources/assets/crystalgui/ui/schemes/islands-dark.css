@@ -76,25 +76,25 @@ theme {
     --syntax-type: #BCBEC4;
     --syntax-type-builtin: #CF8E6D;
 
-    /* METHODS ARE THE DEFAULT FOREGROUND, and this is a compromise rather than a preference.
+    /* A DECLARATION is blue and a CALL is not — DEFAULT_FUNCTION_DECLARATION 56a8f5 against
+     * DEFAULT_FUNCTION_CALL, which the exported scheme leaves at baseAttributes="DEFAULT_IDENTIFIER"
+     * with no colour of its own. The vendored query captured both as @function.method, so
+     * Queries.splitMethodDeclarationsFromCalls re-captures the invocation to make the distinction
+     * expressible here at all.
      *
-     * IntelliJ colours a method DECLARATION blue (DEFAULT_FUNCTION_DECLARATION 56a8f5) and leaves every
-     * CALL at the default — its exported scheme says so outright: DEFAULT_FUNCTION_CALL carries
-     * baseAttributes="DEFAULT_IDENTIFIER" and no colour of its own.
+     * BARE `function` IS THE DEFAULT FOREGROUND, and only the DECLARATION is blue.
      *
-     * The vendored Java grammar cannot express that distinction. Its highlights.scm captures both under
-     * one name:
-     *     (method_declaration name: (identifier) @function.method)
-     *     (method_invocation  name: (identifier) @function.method)
-     * so anything set here applies to both. Calls outnumber declarations several times over in real code,
-     * which made blue the WRONG half to pick: every `.get()`, `.add()` and `.equals()` on screen lit up,
-     * and the result read as a different product rather than as IntelliJ.
+     * `function` is what a producer emits when it cannot tell a declaration from a call — which is every
+     * token the built-in lexer produces, since all it knows is "an identifier followed by a paren". Calls
+     * outnumber declarations several times over, so the unqualified name has to take the call colour;
+     * blue here lights up every TRACE(...), every .trim() and every constructor on screen, and the file
+     * stops looking like IntelliJ at a glance.
      *
-     * The honest fix is to split the capture (see plan_syntax.md) and colour declarations blue again;
-     * until then, matching the common case is closer than matching the rare one. */
+     * A producer that CAN tell them apart says so with the specific name, and gets the blue. */
     --syntax-function: #BCBEC4;
     --syntax-function-builtin: #CF8E6D;
-    --syntax-function-method: #BCBEC4;
+    --syntax-function-method: #56A8F5;
+    --syntax-function-call: #BCBEC4;
 
     --syntax-string: #6AAB73;
     --syntax-string-escape: #CF8E6D;
@@ -126,6 +126,7 @@ theme {
     /* ITALIC, which is the whole reason ::highlight() had to start accepting font-style. Islands does
      * this, every reference scheme does this, and the engine refused to express it until now. */
     --syntax-comment-style: italic;
+    --syntax-constant-style: italic;
 
     /* The bracket-MATCH pair under the caret — not a capture. IntelliJ tints the brace itself rather than
      * painting a box behind it, because a fill loses to the current-line band it sits on. */

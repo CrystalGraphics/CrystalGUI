@@ -65,7 +65,8 @@ theme {
 
     --syntax-function: #080808;
     --syntax-function-builtin: #0033B3;
-    --syntax-function-method: #080808;
+    --syntax-function-method: #00627A;
+    --syntax-function-call: #080808;
 
     --syntax-string: #067D17;
     --syntax-string-escape: #0037A6;
@@ -95,6 +96,7 @@ theme {
     --syntax-punctuation-delimiter: #000000;
 
     --syntax-comment-style: italic;
+    --syntax-constant-style: italic;
 
     --syntax-bracket: #067D17;
 }

@@ -1549,11 +1549,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     int end = Math.min(rowStart + token.end(), lineEnd);
                     if (end <= start) continue;
                     TextRange range = TextRange.of(start - lineStart, end - lineStart);
-                    byName.computeIfAbsent(token.name(), key -> new ArrayList<>()).add(range);
+                    // THE GENERAL FORM GOES IN FIRST, and the order is the whole of its meaning.
+                    //
+                    // A dotted capture is published under both names so a theme that has not styled
+                    // `function.call` still colours it as `function`. That is a FALLBACK -- but these end
+                    // up in one insertion-ordered map, and whichever name is written last wins the
+                    // character. Publishing the specific name first therefore inverted it: every
+                    // specialisation was overwritten by its own stem, so `function.call` resolved
+                    // correctly and then took `function`'s colour anyway, and the distinction the query
+                    // was adjusted to make disappeared before it reached the screen.
                     String general = token.generalName();
-                    if (general != null) {
-                        byName.computeIfAbsent(general, key -> new ArrayList<>()).add(range);
-                    }
+                    if (general != null) addRange(byName, general, range);
+                    addRange(byName, token.name(), range);
                 }
             }
 
@@ -1576,14 +1583,47 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
             byName.values().removeIf(List::isEmpty);
 
+            // CLEARED AND REBUILT, so the ORDER is this line's and not the previous occupant's.
+            //
+            // Order is not cosmetic here: a character covered by two names takes the colour of whichever
+            // was registered LAST, and tree-sitter's convention is that a later pattern refines an earlier
+            // one. The Java grammar leans on it — `(identifier) @variable` is its first pattern and matches
+            // everything, with @constant, @type and @function.method arriving later to say what a given
+            // identifier actually is.
+            //
+            // Removing the absent names and re-setting the rest looked equivalent and was not: setting an
+            // existing key in a LinkedHashMap keeps its ORIGINAL position, so a name kept whatever slot it
+            // had been given by whichever line this pooled element rendered before. `variable` outranked
+            // `constant` or not depending on scroll history, which is as close to random as makes no
+            // difference — and it presented as constants simply never being purple.
             HighlightRegistry highlights = textOf(entry.getValue()).highlights();
-            for (String name : new ArrayList<>(highlights.names())) {
-                if (!byName.containsKey(name)) highlights.remove(name);
-            }
+            highlights.clear();
             for (Map.Entry<String, List<TextRange>> named : byName.entrySet()) {
                 highlights.set(named.getKey(), named.getValue());
             }
         }
+    }
+
+    /**
+     * Files one range under one highlight name, dropping it if that name already covers the text.
+     *
+     * <p><b>A highlight refuses overlapping ranges</b>, and nesting is ordinary rather than exceptional:
+     * a grammar captures a string literal and then captures the escape sequence <em>inside</em> it. The
+     * two are different names and coexist happily — until the dotted fallback republishes
+     * {@code string.escape}'s range under {@code string}, which is already covering those characters. The
+     * result is a hard failure from {@code HighlightRegistry.set}, and it only became reachable when a
+     * real grammar replaced the word-list lexer, because a lexer never nests.</p>
+     *
+     * <p>Dropping is the correct resolution rather than a workaround: the outer range and the inner one
+     * carry <em>the same name</em>, so they resolve to the same colour, and the fallback exists only to
+     * cover what a specific name did not. Anything it duplicates is by definition already handled.</p>
+     */
+    private static void addRange(Map<String, List<TextRange>> byName, String name, TextRange range) {
+        List<TextRange> ranges = byName.computeIfAbsent(name, key -> new ArrayList<>());
+        for (TextRange existing : ranges) {
+            if (range.start() < existing.end() && existing.start() < range.end()) return;
+        }
+        ranges.add(range);
     }
 
     /**

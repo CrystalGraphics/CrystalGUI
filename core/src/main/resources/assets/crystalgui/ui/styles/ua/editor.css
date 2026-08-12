@@ -253,6 +253,14 @@ texteditor text::highlight(function.method) {
     color: var(--syntax-function-method, #DCDCAA);
 }
 
+/* A method CALL, distinct from a declaration — see Queries.splitMethodDeclarationsFromCalls for why the
+ * vendored query is adjusted to tell them apart. Every reference scheme colours these differently, and
+ * with one name a scheme has to pick a side: blue everywhere lights up every .get() on screen, plain
+ * everywhere leaves the document with only keywords and strings tinted. */
+texteditor text::highlight(function.call) {
+    color: var(--syntax-function-call, #DCDCAA);
+}
+
 texteditor text::highlight(string) {
     color: var(--syntax-string, #CE9178);
 }
@@ -273,8 +281,14 @@ texteditor text::highlight(boolean) {
     color: var(--syntax-boolean, #569CD6);
 }
 
+/* ITALIC, from the same mechanism the comment rules use. IntelliJ's exported scheme sets FONT_TYPE 2 on
+ * both DEFAULT_CONSTANT and DEFAULT_STATIC_FIELD, and it is doing real work rather than decoration: a
+ * grammar cannot tell a static field from an instance one, so slant is the only channel left that says
+ * "this name does not belong to the object in front of you". A scheme that wants them upright says so
+ * with --syntax-constant-style rather than by overriding the rule. */
 texteditor text::highlight(constant) {
     color: var(--syntax-constant, #4FC1FF);
+    font-style: var(--syntax-constant-style, normal);
 }
 
 texteditor text::highlight(constant.builtin) {
