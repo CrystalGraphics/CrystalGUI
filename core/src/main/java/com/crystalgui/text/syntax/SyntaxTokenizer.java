@@ -53,6 +53,24 @@ public interface SyntaxTokenizer {
         // Stateless by default. A lexer re-reads the text it is given and has nothing to update.
     }
 
+    /**
+     * Called when a tokenizer's answers have changed without the document changing — i.e. work it was
+     * doing in the background has landed.
+     *
+     * <p>Needed because {@link #tokenize} is synchronous and an expensive backend cannot be. A tree-sitter
+     * parse of a large file is far past a frame budget (measured: ~100ms cold, ~17ms per keystroke on a
+     * 5,000-line file), so an implementation may answer from a stale-but-positionally-correct tree and
+     * finish the real parse off-thread. When it lands, nothing about the <em>document</em> has changed, so
+     * no existing signal would tell the view to ask again — and the highlighting would simply stay one
+     * edit behind until the next unrelated repaint.</p>
+     *
+     * <p>Invoked on the <b>UI thread</b>. Implementations that never work in the background never call
+     * it, which is why this has a default and costs a synchronous tokenizer nothing.</p>
+     */
+    default void setInvalidationListener(Runnable listener) {
+        // Synchronous by default: a lexer's answer is complete by the time tokenize() returns.
+    }
+
     /** Releases anything native. Called when the editor goes away; a no-op for pure-Java tokenizers. */
     default void close() {
     }

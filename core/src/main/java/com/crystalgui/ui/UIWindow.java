@@ -4,6 +4,7 @@ import com.crystalgraphics.api.PoseStack;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.style.StyleEngine;
@@ -498,6 +499,16 @@ public final class UIWindow {
         long now = System.nanoTime();
         float deltaSeconds = (now - lastFrameNanos) / 1_000_000_000f;
         lastFrameNanos = now;
+
+        // BACKGROUND RESULTS FIRST, for the same reason calculateStyle runs before calculateLayout: a
+        // landed result is an input to this frame, and applying it after the passes that read it lands it
+        // one frame late. A reparse that arrives here marks its editor's highlights dirty, and the refresh
+        // below is the pass that acts on that.
+        //
+        // hasShared() rather than shared(): asking whether there is work must never be the thing that
+        // spawns a thread pool. A window in a headless test that schedules nothing creates nothing —
+        // the same guard, for the same reason, as CgUiPaintContext.hasInstance().
+        if (JobScheduler.hasShared()) JobScheduler.shared().drain();
 
         styleEngine.calculateStyle(deltaSeconds);
         tickAnimations(deltaSeconds);
