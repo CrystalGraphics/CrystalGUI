@@ -1,7 +1,12 @@
 package com.crystalgui.text.lang;
 
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextBuffer;
+import com.crystalgui.text.diagnostic.Diagnostic;
+
+import java.util.List;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -35,14 +40,15 @@ import javax.annotation.Nullable;
  * service does not: "this language offers no completion" is a fact about the language, while "this
  * platform has no clipboard" is usually a fact about someone forgetting to write one.</p>
  *
- * <h3>Diagnostics are not here, because they already have a home</h3>
+ * <h3>Diagnostics are PUSHED, not held — they already have a home</h3>
  *
  * <p>The obvious fourth accessor would be {@code diagnostics()}, and it would be a second place for
  * something that already exists: every document has a {@link com.crystalgui.text.diagnostic.DiagnosticSet}
  * with a per-owner model, precisely so independent producers can publish without clobbering each other.
- * An engine publishes with {@code set.changeOne(services.id(), list)} and the Problems panel, the
- * inspection widget and the status bar all read it through paths that already work. Mirroring the list
- * here would mean two copies with no rule about which is authoritative.</p>
+ * Mirroring the list here would mean two copies with no rule about which is authoritative. So
+ * {@link #onDiagnostics} is a signal rather than a getter: the engine announces, the document's owner
+ * writes it into the set under {@link #id()}, and the Problems panel, the inspection widget and the
+ * status bar all keep reading the path they already read.</p>
  */
 public interface LanguageServices extends AutoCloseable {
 
@@ -85,6 +91,29 @@ public interface LanguageServices extends AutoCloseable {
     /** What could go here. @see CompletionProvider */
     default CompletionProvider completion() {
         return CompletionProvider.NONE;
+    }
+
+    /**
+     * Told when the engine has a new set of problems for this document.
+     *
+     * <h3>Why a signal and not a {@code diagnostics()} accessor</h3>
+     *
+     * <p>Every document already has a {@link com.crystalgui.text.diagnostic.DiagnosticSet} with a
+     * per-owner model, built so independent producers can publish without erasing each other. An
+     * accessor here would be a <em>second</em> home for the same list, with no rule about which is
+     * authoritative — so instead the engine <b>pushes</b> and whoever owns the set writes it there with
+     * {@code set.changeOne(services.id(), list)}. One list, one owner, and the Problems panel, the
+     * inspection widget and the status bar all keep reading the path they already read.</p>
+     *
+     * <p>The list <b>replaces</b> the previous one for this engine and is always complete. A producer
+     * that emitted deltas would need the consumer to keep a shadow copy, which is the same second home
+     * arriving by a different route.</p>
+     *
+     * <p>Invoked on the <b>UI thread</b>. The default subscribes nothing and returns a connection that
+     * is already disconnected, which is the honest answer for an engine that never reports problems.</p>
+     */
+    default Connection onDiagnostics(Consumer<List<Diagnostic>> listener) {
+        return Connection.DISCONNECTED;
     }
 
     /**
