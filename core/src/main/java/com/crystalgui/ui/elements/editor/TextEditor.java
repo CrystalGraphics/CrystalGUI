@@ -1764,8 +1764,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             completion.moveSelection(-1);
             return true;
         }
-        if (key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_TAB) {
-            return acceptCompletion();
+        // FROM THE POPUP'S OWN TABLE, so the strip at its foot cannot promise a key this does not take.
+        for (CompletionPopup.AcceptKey accept : CompletionPopup.ACCEPT_KEYS) {
+            if (key == accept.keyCode()) return acceptCompletion(accept.replaces());
         }
         if (key == CgKeyCodes.KEY_ESCAPE) {
             closeCompletion();
@@ -1775,7 +1776,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** Applies the selected item and puts the caret after what was inserted. */
-    private boolean acceptCompletion() {
+    private boolean acceptCompletion(boolean replace) {
         if (completion == null) return false;
         CompletionItem item = completion.selectedItem();
         if (item == null) {
@@ -1785,7 +1786,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int caretAfter = completion.caretAfterAccept(item, getCaret());
         // The accept is ONE ChangeSet, so this is one undo step -- the name and the import it brought go
         // together on Ctrl+Z. See CompletionSession.accept.
-        completion.accept();
+        completion.accept(replace);
         setCaret(Math.max(0, Math.min(caretAfter, buffer.length())));
         closeCompletion();
         return true;

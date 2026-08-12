@@ -166,9 +166,12 @@ editor scheme's.
 | `--colorpicker-thumb-ring` | `var(--border-strong)` | base.css |
 | `--completion-deprecated` | `var(--fg-hint)` | base.css |
 | `--completion-detail` | `var(--fg-hint)` | base.css |
+| `--completion-hint` | `var(--fg-hint)` | base.css |
 | `--completion-icon` | `var(--fg-hint)` | base.css |
 | `--completion-label` | `var(--fg)` | base.css |
 | `--completion-match` | `var(--link)` | base.css |
+| `--completion-params` | `var(--fg-hint)` | base.css |
+| `--completion-selected-bg` | `var(--accent-soft)` | base.css |
 | `--configkit-alpha-bg` | `#14140F` | crystal-dark.css |
 | `--configkit-alpha-fill` | `var(--fg-on-accent)` | base.css |
 | `--configkit-band-bg` | `var(--surface-raised)` | base.css |

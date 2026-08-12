@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.style.StyleGroup;
@@ -62,8 +63,43 @@ public final class CompletionPopup extends Popover {
     public static final String STATIC_MARK_CLASS = "__completion-mark-static__";
     public static final String FINAL_MARK_CLASS = "__completion-mark-final__";
     public static final String LABEL_CLASS = "__completion-label__";
+    public static final String PARAMS_CLASS = "__completion-params__";
     public static final String DETAIL_CLASS = "__completion-detail__";
     public static final String DEPRECATED_CLASS = "__completion-deprecated__";
+    public static final String HINT_CLASS = "__completion-hint__";
+
+    /**
+     * A key that accepts, and the word the strip uses for it.
+     *
+     * <h3>One table, read by both halves</h3>
+     *
+     * <p>The strip at the bottom of the popup exists to tell you which key does what, so it must be built
+     * from the same list the key handler consults — a strip written as a literal string is a promise that
+     * stops being kept the first time a binding moves, and nothing fails when it does.</p>
+     *
+     * <p>These are the popup's <b>own</b> keys rather than registered commands, so there is nothing for
+     * {@code Keymap.acceleratorFor} to resolve and the usual "read the accelerator from the keymap" rule
+     * does not apply here. Stating that is better than leaving the next reader to wonder why it was
+     * skipped.</p>
+     */
+    public record AcceptKey(int keyCode, String keyName, String verb, boolean replaces) {
+    }
+
+    /** Enter inserts, Tab replaces — IntelliJ's pairing, and VS Code's. */
+    public static final List<AcceptKey> ACCEPT_KEYS = List.of(
+            new AcceptKey(CgKeyCodes.KEY_RETURN, "Enter", "insert", false),
+            new AcceptKey(CgKeyCodes.KEY_TAB, "Tab", "replace", true));
+
+    /** {@code Press Enter to insert, Tab to replace} — derived, never written out. */
+    static String hintText() {
+        StringBuilder built = new StringBuilder("Press ");
+        for (int i = 0; i < ACCEPT_KEYS.size(); i++) {
+            if (i > 0) built.append(", ");
+            AcceptKey key = ACCEPT_KEYS.get(i);
+            built.append(key.keyName()).append(" to ").append(key.verb());
+        }
+        return built.toString();
+    }
 
     /** The highlight name a stylesheet targets with {@code ::highlight(completion-match)}. */
     public static final String MATCH_HIGHLIGHT = "completion-match";
@@ -73,18 +109,58 @@ public final class CompletionPopup extends Popover {
      * the reason {@code QuickPick} states: a virtualised list needs the number in Java to turn an index into
      * a scroll offset, and it cannot read the cascade.
      */
-    private static final float ROW_HEIGHT = 18f;
+    private static final float ROW_HEIGHT = 16f;
 
-    /** How many rows before it scrolls. IntelliJ shows about this many; more is a wall rather than a list. */
-    private static final int MAX_VISIBLE_ROWS = 11;
+    /**
+     * How many rows before it scrolls.
+     *
+     * <p>IntelliJ shows about nineteen. Eleven was chosen when the rows were taller and it made the popup
+     * shorter than its own scrollbar was useful for — you could see a sixth of a member list at a time.</p>
+     */
+    private static final int MAX_VISIBLE_ROWS = 19;
 
-    private static final float PREFERRED_WIDTH = 340f;
+    /** Used until the probe has measured, and as the floor afterwards. */
+    private static final float MIN_WIDTH = 260f;
+
+    /** Past this a signature is truncated rather than allowed to span the window. */
+    private static final float MAX_WIDTH = 620f;
+
+    /** Room for the scrollbar and a little air at the right edge, added to whatever the probe measures. */
+    private static final float WIDTH_SLACK = 24f;
 
     /** Kept off the window edges when the popup would otherwise hang past them. */
     private static final float MARGIN = 8f;
 
+    /** The bottom strip's height, paired with {@code .__completion-hint__} in the sheet — the flip-vs-drop
+     * decision in {@link #reposition} is computed from the popup's total height and cannot read the cascade. */
+    private static final float HINT_HEIGHT = 16f;
+
     private final ObservableList<CompletionSession.Row> rows = new ObservableList<>();
     private final ListView<CompletionSession.Row> list = new ListView<>(rows);
+    private final RowRenderer renderer = new RowRenderer();
+
+    /**
+     * An off-list row, laid out but never painted, bound to the longest item so its natural width can be
+     * read back.
+     *
+     * <h3>Why a probe rather than measuring the strings</h3>
+     *
+     * <p>The row's width is glyph advances through a resolved font stack, and <b>synthetic bold is wider
+     * than the regular face</b> — so any measurement not taken on the painting path is short by exactly the
+     * emphasis, and truncates a few pixels early. {@code UIText.measureEllipsised} already paid for this
+     * once. Binding the real template and letting the layout engine size it means there is one measurement
+     * path, not two that can disagree.</p>
+     *
+     * <p><b>Absolutely positioned</b>, so it takes part in layout without contributing to the popup's own
+     * box — an in-flow probe would make the popup as tall as its rows plus one.</p>
+     */
+    private UIElement widthProbe;
+
+    /** The bottom strip. See {@link #ACCEPT_KEYS} — its text is derived from the same list the editor reads. */
+    private final UIText hint = new UIText(hintText());
+
+    /** What the probe last measured, so the width only moves when the content does. */
+    private float measuredWidth;
 
     @Nullable
     private CompletionSession session;
@@ -104,8 +180,21 @@ public final class CompletionPopup extends Popover {
         list.setSelectionMode(SelectionMode.SINGLE);
         list.setItemHeight(ROW_HEIGHT);
         list.setFocusPolicy(FocusPolicy.NONE);
-        list.setRenderer(new RowRenderer());
+        list.setRenderer(renderer);
         addInternalChild(list);
+
+        hint.addClass(HINT_CLASS);
+        hint.setHitTest(false);
+        addInternalChild(hint);
+
+        widthProbe = renderer.createTemplate();
+        widthProbe.setHitTest(false);
+        // Laid out, never seen: opacity rather than display, because display:none is skipped by Taffy
+        // entirely and a box that is not laid out cannot be measured.
+        StyleGroup.importantPipeline(widthProbe.getStyle().getLayoutGroup(),
+                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE));
+        widthProbe.generalStyle(g -> g.opacity(0f));
+        addInternalChild(widthProbe);
 
         // A click still accepts. The press lands on the row, focus never moves (the list refuses it), and
         // the editor's caret is untouched -- which is why this can be wired without fighting the rule above.
@@ -180,6 +269,7 @@ public final class CompletionPopup extends Popover {
         rows.clear();
         for (CompletionSession.Row row : session.visibleRows()) rows.add(row);
         sizeToContent(rows.size());
+        bindWidthProbe(session.visibleRows());
         int selected = session.selectedIndex();
         if (selected >= 0 && selected < rows.size()) {
             list.setFocusedIndex(selected);
@@ -213,6 +303,29 @@ public final class CompletionPopup extends Popover {
     }
 
     /**
+     * Points the probe at the row most likely to be the widest.
+     *
+     * <p>Chosen by <b>character count</b>, which is a proxy and is stated as one: in a proportional font
+     * {@code IIIIIIII} is narrower than {@code mmmm}, so the pick can be off by a row. The <em>measurement</em>
+     * is real either way, and {@link #WIDTH_SLACK} covers the difference — the alternative is measuring
+     * every item on every keystroke to choose which one to measure.</p>
+     */
+    private void bindWidthProbe(List<CompletionSession.Row> candidates) {
+        if (widthProbe == null || candidates.isEmpty()) return;
+        CompletionSession.Row widest = null;
+        int longest = -1;
+        for (CompletionSession.Row row : candidates) {
+            String detail = row.item().detail();
+            int length = row.item().label().length() + (detail == null ? 0 : detail.length());
+            if (length > longest) {
+                longest = length;
+                widest = row;
+            }
+        }
+        if (widest != null) renderer.bind(widest, -1, widthProbe);
+    }
+
+    /**
      * Below the word, flipped above when there is no room — the same rule every anchored popup follows.
      *
      * <p>Written here rather than through {@code moveTo}, so this stays the single writer of
@@ -225,8 +338,15 @@ public final class CompletionPopup extends Popover {
         UIWindow window = getAttachedWindow();
         if (window == null) return;
 
-        float width = Math.max(0f, Math.min(PREFERRED_WIDTH, window.getScreenWidth() - 2f * MARGIN));
-        float height = Math.min(Math.max(rows.size(), 1), MAX_VISIBLE_ROWS) * ROW_HEIGHT;
+        // The probe's natural width, read a frame after it was bound. One frame late is invisible; a
+        // synchronous read would be of the PREVIOUS content, which is worse and looks the same.
+        if (widthProbe != null) {
+            float probed = widthProbe.getRuntimeCache().getWidth();
+            if (Float.isFinite(probed) && probed > 0f) measuredWidth = probed + WIDTH_SLACK;
+        }
+        float wanted = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, measuredWidth));
+        float width = Math.max(0f, Math.min(wanted, window.getScreenWidth() - 2f * MARGIN));
+        float height = Math.min(Math.max(rows.size(), 1), MAX_VISIBLE_ROWS) * ROW_HEIGHT + HINT_HEIGHT;
 
         float left = Math.max(MARGIN, Math.min(anchorX, window.getScreenWidth() - width - MARGIN));
         float below = anchorY + anchorLineHeight;
@@ -271,6 +391,10 @@ public final class CompletionPopup extends Popover {
             row.label.setHitTest(false);
             row.addChild(row.label);
 
+            row.params.addClass(PARAMS_CLASS);
+            row.params.setHitTest(false);
+            row.addChild(row.params);
+
             // The spacer is what right-aligns the detail: it is the only thing in the row allowed to grow.
             row.spacer.layout(l -> l.width(0f).flexGrow(1f));
             row.spacer.setHitTest(false);
@@ -301,7 +425,16 @@ public final class CompletionPopup extends Popover {
             row.staticMark.setDisplayed(item.is(SymbolModifier.STATIC));
             row.finalMark.setDisplayed(item.is(SymbolModifier.FINAL));
 
-            row.label.setText(item.label());
+            // THE NAME AND ITS PARAMETER LIST ARE TWO ELEMENTS, because IntelliJ draws them in two
+            // weights: the name bright and bold, the parameters dimmed. One UIText cannot say that, and
+            // the split is free -- filterText is ALREADY the bare name, so the boundary is known exactly
+            // rather than found by hunting for a bracket. A label that does not start with its own filter
+            // text (a keyword, an unimported type) simply has no parameter half, which is correct.
+            String whole = item.label();
+            String name = item.filterKey();
+            boolean splittable = !name.isEmpty() && whole.startsWith(name) && whole.length() > name.length();
+            row.label.setText(splittable ? name : whole);
+            row.params.setText(splittable ? whole.substring(name.length()) : "");
             row.detail.setText(item.detail() == null ? "" : item.detail());
 
             if (item.deprecated()) row.addClass(DEPRECATED_CLASS);
@@ -361,6 +494,8 @@ public final class CompletionPopup extends Popover {
         final UIElement staticMark = new UIElement();
         final UIElement finalMark = new UIElement();
         final UIText label = new UIText("");
+        /** The dimmed parameter list, when the label has one. */
+        final UIText params = new UIText("");
         final UIElement spacer = new UIElement();
         final UIText detail = new UIText("");
     }

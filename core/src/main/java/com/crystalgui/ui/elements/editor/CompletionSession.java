@@ -312,12 +312,25 @@ public final class CompletionSession {
      * @return false when there was nothing selected to accept
      */
     public boolean accept() {
+        return accept(false);
+    }
+
+    /**
+     * @param replace whether to consume the rest of the identifier the caret sits in — Tab's behaviour,
+     *                against Enter's insert. Editing {@code getNa|meOf} and accepting {@code getName}
+     *                leaves {@code getNameOf} on insert and {@code getName} on replace, and both are
+     *                wanted often enough that every reference implementation binds a key to each. The
+     *                strip at the bottom of the popup says which key does which, so this must actually
+     *                differ or the strip is a promise the widget does not keep.
+     */
+    public boolean accept(boolean replace) {
         CompletionItem item = selectedItem();
         if (item == null) {
             close();
             return false;
         }
         int caret = Math.max(wordStart, Math.min(lastKnownCaret, buffer.length()));
+        if (replace) caret = Math.max(caret, identifierEndAt(caret));
         Change primary = item.textEdit() != null
                 ? item.textEdit()
                 : new Change(wordStart, caret, item.textToInsert());
@@ -333,6 +346,14 @@ public final class CompletionSession {
         buffer.edit(ChangeSet.of(buffer.length(), changes));
         close();
         return true;
+    }
+
+    /** The end of the identifier {@code from} sits inside — where a replacing accept consumes to. */
+    private int identifierEndAt(int from) {
+        String text = buffer.toString();
+        int end = Math.max(0, Math.min(from, text.length()));
+        while (end < text.length() && WordClassifier.DEFAULT.isWordPart(text.charAt(end))) end++;
+        return end;
     }
 
     /** Where the caret should land after {@link #accept} — the end of the inserted text. */
