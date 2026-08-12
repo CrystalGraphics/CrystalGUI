@@ -745,8 +745,22 @@ public final class CompletionPopup extends Popover {
             String name = item.filterKey();
             boolean splittable = !name.isEmpty() && whole.startsWith(name) && whole.length() > name.length();
             row.label.setText(splittable ? name : whole);
-            row.params.setText(splittable ? whole.substring(name.length()) : "");
-            row.detail.setText(item.detail() == null ? "" : item.detail());
+            String detail = item.detail() == null ? "" : item.detail();
+
+            // A TYPE'S PACKAGE GOES BESIDE ITS NAME; everything else's detail is right-aligned.
+            //
+            // Two different facts drawn in the same column, and IntelliJ separates them: a method's return
+            // type belongs at the far edge, where the eye reads down a column of `void`/`String`, while a
+            // type's package qualifies the name and belongs against it. Right-aligning the package puts
+            // `com.crystalgraphics.gl.render` an inch from the class it names and, in a narrow popup,
+            // truncates the half that distinguishes two same-named types.
+            //
+            // Keyed on kind rather than on "does the detail look like a package": the kind is a fact the
+            // engine reported, and sniffing the string would misread a method returning a lower-case type.
+            boolean packageBesideName = isTypeKind(item.kind());
+            row.params.setText(splittable ? whole.substring(name.length())
+                    : packageBesideName ? " " + detail : "");
+            row.detail.setText(packageBesideName ? "" : detail);
 
             if (item.deprecated()) row.addClass(DEPRECATED_CLASS);
             else row.removeClass(DEPRECATED_CLASS);
@@ -787,6 +801,22 @@ public final class CompletionPopup extends Popover {
          * otherwise carry both classes and the cascade would resolve whichever it preferred — which reads
          * as a random icon rather than as a stale class.</p>
          */
+        /** Whether this is a type — the kinds whose detail is a package rather than a return type. */
+        private static boolean isTypeKind(@Nullable com.crystalgui.text.lang.SymbolKind kind) {
+            if (kind == null) return false;
+            switch (kind) {
+                case CLASS:
+                case INTERFACE:
+                case ENUM:
+                case RECORD:
+                case ANNOTATION:
+                case TYPE_PARAMETER:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private static void swapPrefixed(UIElement element, String prefix, @Nullable String wanted) {
             for (String name : new ArrayList<>(element.getClasses())) {
                 if (name.startsWith(prefix) && !name.equals(wanted)) element.removeClass(name);

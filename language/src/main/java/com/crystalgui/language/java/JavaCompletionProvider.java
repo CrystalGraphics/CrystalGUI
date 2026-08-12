@@ -64,8 +64,8 @@ final class JavaCompletionProvider implements CompletionProvider {
     private final Supplier<SourceAnalyzer.Analysis> analysis;
     private final TypeIndex types;
 
-    /** Set by {@link #openCodeItems} when the index had more names than it would hand over. */
-    private boolean typesTruncated;
+    /** Set by {@link #openCodeItems} whenever the answer drew on the type index. */
+    private boolean typesSampled;
 
     JavaCompletionProvider(TextBuffer buffer, Supplier<SourceAnalyzer.Analysis> analysis, TypeIndex types) {
         this.buffer = buffer;
@@ -90,8 +90,8 @@ final class JavaCompletionProvider implements CompletionProvider {
         if (truncated) items = items.subList(0, MAX_ITEMS);
         // Either kind of truncation makes this a partial answer: too many items to send, or an index that
         // had more to give. Both mean "ask me again when you know more".
-        boolean partial = truncated || typesTruncated;
-        typesTruncated = false;
+        boolean partial = truncated || typesSampled;
+        typesSampled = false;
         answer.accept(Versioned.of(current.version(),
                 partial ? CompletionList.partial(items) : CompletionList.complete(items)));
     }
@@ -155,11 +155,19 @@ final class JavaCompletionProvider implements CompletionProvider {
         if (!request.prefix().isEmpty()) {
             TypeIndex.Match matched = types.matching(request.prefix());
             for (TypeIndex.Entry type : matched.entries()) items.add(unimportedTypeItem(type));
+            // ANY index-backed list is a SAMPLE. matching() caps what it returns whether or not it noticed
+            // running out, so "it gave me thirty" does not mean thirty is all there is at a narrower query
+            // -- the cap is on the ANSWER, not on the question. Reporting complete here let the session
+            // filter a forty-name sample locally for the rest of the session.
+            //
+            // The cost is one index scan per keystroke, which is a linear pass with no allocation over
+            // names already in memory. That is the right price for a list that is actually about what was
+            // typed.
+            typesSampled = true;
             // THE INDEX HAD MORE, so this list is a sample rather than the answer -- and the session must
             // ask again as the query narrows. Without it the popup, which now opens on the FIRST character
             // typed, asked once for "C", kept the forty shortest names starting with C, and filtered those
             // locally forever: typing CgTex found nothing, because CgTexture was never in the forty.
-            typesTruncated = matched.truncated();
         }
         return items;
     }
