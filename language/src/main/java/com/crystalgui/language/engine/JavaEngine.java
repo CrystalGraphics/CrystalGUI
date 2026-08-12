@@ -1,6 +1,7 @@
 package com.crystalgui.language.engine;
 
 import com.crystalgui.language.engine.bridge.ScriptCompiler;
+import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -39,17 +40,21 @@ import java.util.List;
  */
 public final class JavaEngine implements Closeable {
 
-    /** Where the adapter lives, by name. Reached reflectively because the host cannot see the type. */
-    private static final String ADAPTER = "com.crystalgui.language.java.EcjScriptCompiler";
+    /** The adapters, by name. Reached reflectively because the host cannot see their types. */
+    private static final String COMPILER = "com.crystalgui.language.java.EcjScriptCompiler";
+    private static final String ANALYZER = "com.crystalgui.language.java.EcjSourceAnalyzer";
 
     private final EngineClassLoader loader;
     private final ScriptCompiler compiler;
+    private final SourceAnalyzer analyzer;
     private final EngineBand band;
 
-    private JavaEngine(EngineBand band, EngineClassLoader loader, ScriptCompiler compiler) {
+    private JavaEngine(EngineBand band, EngineClassLoader loader,
+                       ScriptCompiler compiler, SourceAnalyzer analyzer) {
         this.band = band;
         this.loader = loader;
         this.compiler = compiler;
+        this.analyzer = analyzer;
     }
 
     /**
@@ -63,24 +68,47 @@ public final class JavaEngine implements Closeable {
         ClassLoader host = JavaEngine.class.getClassLoader();
         EngineClassLoader loader = EngineClassLoader.over(band, withOwnClasses(source), host);
         try {
-            Class<?> adapter = Class.forName(ADAPTER, true, loader);
-            Object instance = adapter.getDeclaredConstructor().newInstance();
-            // THE CAST THAT PROVES THE BRIDGE. Both sides resolved ScriptCompiler through the parent,
+            // THE CASTS THAT PROVE THE BRIDGE. Both sides resolved these interfaces through the parent,
             // so they are one type. Without the carve-out this is where it would fail, with the least
             // helpful message the JVM produces.
-            return new JavaEngine(band, loader, (ScriptCompiler) instance);
-        } catch (ReflectiveOperationException unreachable) {
-            loader.close();
-            throw new IllegalStateException("engine band " + band + " loaded, but " + ADAPTER
-                    + " could not be instantiated inside it", unreachable);
+            ScriptCompiler compiler = (ScriptCompiler) instantiate(loader, COMPILER);
+            SourceAnalyzer analyzer = (SourceAnalyzer) instantiate(loader, ANALYZER);
+            return new JavaEngine(band, loader, compiler, analyzer);
         } catch (RuntimeException failed) {
             loader.close();
             throw failed;
         }
     }
 
-    /** The band's jars, plus the jar or directory this class itself came from. See the class note. */
-    private static EngineSource withOwnClasses(EngineSource engines) {
+    private static Object instantiate(EngineClassLoader loader, String className) {
+        try {
+            Class<?> adapter = Class.forName(className, true, loader);
+            // WHICH LOADER DEFINED IT IS THE ASSERTION, not a diagnostic nicety. `loadChildFirst` falls
+            // back to the parent when the child has no such class -- which is right for an engine's own
+            // dependencies and catastrophic here: the parent CAN load this class and cannot load ECJ, so
+            // the fallback succeeds and the failure surfaces much later as `NoClassDefFoundError:
+            // org/eclipse/jdt/core/dom/AST` from inside a method that plainly imports it. Caught once
+            // already, from a caller that put the wrong directory on the child's URLs.
+            if (adapter.getClassLoader() != loader) {
+                throw new IllegalStateException(className + " was loaded by "
+                        + adapter.getClassLoader() + " rather than the engine loader — its own classes "
+                        + "are missing from the engine's URLs, so it cannot see the engine");
+            }
+            return adapter.getDeclaredConstructor().newInstance();
+        } catch (ReflectiveOperationException unreachable) {
+            throw new IllegalStateException("the engine band loaded, but " + className
+                    + " could not be instantiated inside it", unreachable);
+        }
+    }
+
+    /**
+     * The band's jars, plus the code source this class itself came from.
+     *
+     * <p><b>Read from a class in this module's MAIN output</b>, which is the whole subtlety: an adapter
+     * lives beside this class, so pointing at any other directory — a test's output, say — leaves the
+     * child unable to find it. See {@link #instantiate} for what that failure looks like.</p>
+     */
+    public static EngineSource withOwnClasses(EngineSource engines) {
         return band -> {
             List<java.net.URL> urls = new ArrayList<>(engines.jarsFor(band));
             if (urls.isEmpty()) return urls;
@@ -97,6 +125,11 @@ public final class JavaEngine implements Closeable {
     /** The compiler, on the far side of the bridge. */
     public ScriptCompiler compiler() {
         return compiler;
+    }
+
+    /** The analyser — diagnostics, semantic tokens and resolution. @see SourceAnalyzer */
+    public SourceAnalyzer analyzer() {
+        return analyzer;
     }
 
     /**

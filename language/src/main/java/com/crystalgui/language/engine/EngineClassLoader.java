@@ -60,6 +60,20 @@ public final class EngineClassLoader extends URLClassLoader {
             "jdk.",
             "sun.",
             BridgePackage.NAME + ".",
+            // THE DOCUMENT MODEL AND THE LANGUAGE SPI, added when the analyzer landed. An engine
+            // produces `SyntaxToken`s and `Diagnostic`s and `SymbolInfo`s -- that is the vocabulary the
+            // whole stack speaks -- so those types must mean the same thing on both sides or every
+            // result would have to be translated through a parallel set of bridge-only copies.
+            //
+            // It is a real widening of the shared surface and it is affordable for one reason: this
+            // package tree is pure Java with no natives, no GL and no engine, which is the same
+            // property that lets it live in `core/` at all. Nothing here can drag an engine across.
+            //
+            // WITHOUT THIS the failure is the confusing one: JavaEngine puts our own code source on the
+            // child's URLs so the adapter can be found, so the child would happily define its OWN
+            // SyntaxToken -- and a perfectly correct assignment fails with
+            // `SyntaxToken cannot be cast to SyntaxToken`.
+            "com.crystalgui.text.",
     };
 
     private final EngineBand band;
