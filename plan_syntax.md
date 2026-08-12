@@ -61,7 +61,7 @@ would have failed late instead of early.
 | 3 | "ECJ runs on 8 and 25" | **ECJ ≥ 4.28 (June 2023) requires Java 17 to run.** The 4.17–4.27 line runs on 11. Only the ≤ 4.16 era (mid-2020, compiles up to Java 14) runs on 8 | same consequence: banding, §6 — and it is *fine*, because a Java 8 host cannot load newer bytecode anyway |
 | 4 | "ECJ is a single ~3MB jar" exposing `ITypeBinding` | the slim `org.eclipse.jdt:ecj` jar is the **batch compiler only — no DOM, no bindings API**. `ASTParser`/`ITypeBinding` live in `org.eclipse.jdt:org.eclipse.jdt.core` plus a handful of transitive `org.eclipse.platform` jars (~10–15MB total) | real dependency weight; isolated classloader per band, §6.3; never near `core/` |
 | 5 | "each grammar needs a subproject added to the fork" — priced as the bulk of steps 3–5 | upstream `tree-sitter-ng` **already ships `tree-sitter-css`, `tree-sitter-javascript`, `tree-sitter-html`** (31 grammars, Zig cross-compile, 6 platforms, plus a codegen task for new ones). Only **GLSL** is genuinely new | grammar cost collapses: three languages are a fork-sync and a build; one is a codegen'd subproject. §12 |
-| 6 | (unexamined) tokenizer converts every offset UTF-16↔UTF-8 | the vendored binding exposes **`parseStringEncoding(tree, source, TSInputEncoding)`** — tree-sitter parses UTF-16 natively | the entire conversion layer is deletable; byte offset = 2 × UTF-16 index, exactly. §9.2 |
+| 6 | (unexamined) tokenizer converts every offset UTF-16↔UTF-8 | the binding exposes `parseStringEncoding(tree, source, TSInputEncoding)`, so this looked like a free win — **and it does not work.** Measured 2026-08-12 against the Java grammar: both `UTF16LE` and `UTF16BE` report a byte length matching the *UTF-8* encoding and produce a tree containing `ERROR` nodes, i.e. the string reaches the native side as UTF-8 whatever it is told | the conversion layer **stays** and is made fast instead (ASCII fast path + per-line index). See §9.2 A |
 
 Method note for future revisions: every claim above was one search or one `javap` away. Verify
 before designing, not after.
@@ -296,13 +296,15 @@ compiler. Version stamps are how it never has to be debugged.
 
 ### 9.2 The fixes
 
-**A. Parse UTF-16.** `parseStringEncoding(oldTree, source, UTF-16)` exists in the vendored binding
-(§2.6). Every byte offset becomes exactly `2 × utf16Index`; every `TSPoint` column likewise. The
-whole conversion layer — both offset functions, both point functions — is deleted, not optimized.
-Verify once that the JNI path and query cursor byte ranges agree on the encoding (one test with a
-non-ASCII fixture, which is precisely the test the current code never had). Investigate the
-`TSReader`-based `parse` overload for feeding rope chunks without materializing one big `String`;
-adopt if it works, don't block on it.
+**A. Make the conversion fast — UTF-16 parsing is not available.** ~~Parse UTF-16.~~ Probed and
+disproven (§2 row 6): the binding accepts the encoding argument and ignores it. So the conversion
+layer stays, and the actual defect — that it was O(n) *per token* — is fixed directly, in
+`Utf8Offsets`: an **ASCII fast path** (checked once per parse; source code is overwhelmingly ASCII,
+and when it is both directions are the identity) plus a **per-line index** otherwise (two ints per
+line; a conversion binary-searches the line then walks within it). Memory is sized by line count
+rather than character count. The non-ASCII fixture test is written first regardless — it is what the
+old code never had, and it must assert captured *text*, not merely that ranges are in bounds, since
+a range shifted by the encoding delta is still a valid range.
 
 **B. Reparse off-thread, double-buffered — Zed's actual model, which v1 only cited.**
 - On edit (UI thread, synchronous, cheap): apply `TSInputEdit` to the *current* tree —
@@ -314,7 +316,19 @@ adopt if it works, don't block on it.
   through the drain. Landing swaps the buffer's tree and invalidates the token cache for lines
   whose tokens changed (tree-sitter's `changedRanges(old, new)` gives them precisely).
 
-**C. A per-line token cache in the editor.** Steady state: painting reads compact per-line arrays
+**C. A per-line token cache in the editor.** ⚠️ **Outstanding — the one M1 item not yet landed**, and
+measurement says it is required rather than optional. On a 5,000-line file the async path costs
+~4.2ms avg / ~13ms worst on the UI thread against a §7.3 budget of 2ms/8ms, and the remainder is
+almost entirely the viewport query itself (**3.3ms each**, paid on every keystroke and every scroll
+step). Interning the capture names — thousands of JNI `String` builds per query — changed it by under
+2%, which localises the cost to tree-sitter's own `exec` and match iteration. Nothing but not running
+the query removes it.
+
+Invalidation follows the rule `measuredRows` already uses: one line at a time **only** when the edit
+left the line count alone, because adding or removing a line renumbers every row below it. On a
+reparse landing, `TSTree.getChangedRanges(old, new)` gives the changed lines precisely.
+
+Steady state: painting reads compact per-line arrays
 (`int start, int end, short vocabularyId` — capture names interned to a vocabulary table, §10) and
 touches the tokenizer not at all. Invalidation from exactly two sources: the edit (the touched
 lines) and reparse-landing (`changedRanges`). `refreshHighlights` then updates only invalidated

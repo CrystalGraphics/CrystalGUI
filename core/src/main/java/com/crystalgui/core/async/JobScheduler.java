@@ -99,6 +99,29 @@ public final class JobScheduler implements Disposable {
     }
 
     /**
+     * The application-wide scheduler, created on first use.
+     *
+     * <p>One pool, not one per feature — three pools compete for the same cores and none of them knows
+     * it. Tests construct their own instead, which is what the injecting constructor is for; this is the
+     * wiring for everything that just wants the shared one.</p>
+     *
+     * <p>Guarded by {@link #hasShared()} at the drain site for the same reason {@code CgUiPaintContext}
+     * has {@code hasInstance()}: merely asking whether there is work to do must not be what spawns a
+     * thread pool. A headless process that never schedules anything never creates one.</p>
+     */
+    public static JobScheduler shared() {
+        if (shared == null) shared = new JobScheduler();
+        return shared;
+    }
+
+    /** Whether {@link #shared()} has been created — checked before draining, so asking never constructs. */
+    public static boolean hasShared() {
+        return shared != null;
+    }
+
+    private static JobScheduler shared;
+
+    /**
      * @param executor      where work runs. A same-thread executor makes every test deterministic
      * @param clockMillis   the time source debounce is measured against — an input, never read directly,
      *                      for the reason {@code TextBuffer} already records about {@code TransitionEngine}

@@ -1,5 +1,6 @@
 package com.crystalgui.syntax.treesitter;
 
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.Rope;
@@ -193,5 +194,248 @@ public class TreeSitterTokenizerTest {
         List<String> types = textsCaptured(source, tokens, "type");
         assertTrue("expected the trailing declaration to be captured correctly, got " + types,
                 types.isEmpty() || types.stream().noneMatch(t -> t.contains("\"")));
+    }
+
+    /**
+     * <b>The strong form of the test above.</b> Asserting only that tokens are in bounds passes against
+     * offsets that are wrong by exactly the UTF-8/UTF-16 delta, because a shifted range is still a valid
+     * range. This asserts the captured <em>text</em>, which is the only thing that cannot be accidentally
+     * right.
+     *
+     * <p>The fixture covers all three widths that differ between the encodings — two bytes (accented
+     * Latin), three (CJK), and four (an emoji, which is also a UTF-16 surrogate <em>pair</em> and so
+     * differs in both directions at once). Anything after them is where a miscount shows.</p>
+     */
+    @Test
+    public void everyCaptureLandsOnTheTextItNamesAcrossMultiByteCharacters() {
+        TreeSitterTokenizer tokenizer = javaTokenizer();
+        String source = ""
+                + "// café 日本語 🎉 comment\n"
+                + "class Ünïcode {\n"
+                + "    String s = \"日本語 🎉 literal\";\n"
+                + "    Widget trailing = null;\n"
+                + "}\n";
+
+        List<SyntaxToken> tokens = tokenizer.tokenize(Rope.of(source), 0, source.length());
+        assertFalse(tokens.isEmpty());
+
+        // Every capture must name text that actually exists where it says it does.
+        for (SyntaxToken token : tokens) {
+            assertTrue(token + " runs past a " + source.length() + "-unit document",
+                    token.end() <= source.length());
+            String captured = source.substring(token.start(), token.end());
+            assertFalse("a capture should not be empty: " + token, captured.isEmpty());
+            assertFalse("a capture should not straddle a line break: " + captured,
+                    captured.contains("\n") && !token.name().startsWith("comment"));
+        }
+
+        // And specifically: the type declared AFTER all the multi-byte content. If offsets drifted by the
+        // encoding delta this is the capture that lands somewhere else, and it lands somewhere plausible.
+        List<String> types = textsCaptured(source, tokens, "type");
+        assertTrue("expected 'Widget' to be captured exactly, got " + types, types.contains("Widget"));
+
+        // The comment is the other end of the same check: it starts at 0 and its length is measured in
+        // UTF-16 units, so a byte-length would run it into the class declaration.
+        List<String> comments = textsCaptured(source, tokens, "comment");
+        assertTrue("expected the comment captured exactly, got " + comments,
+                comments.contains("// café 日本語 🎉 comment"));
+    }
+
+    /**
+     * The same, after an edit — because interpolation converts offsets against the OLD text, and getting
+     * that the wrong way round is invisible until the document contains something multi-byte.
+     */
+    @Test
+    public void offsetsSurviveAnEditNextToMultiByteText() {
+        TreeSitterTokenizer tokenizer = javaTokenizer();
+        String before = "class A {\n    String s = \"日本語 🎉\";\n}\n";
+        Rope document = Rope.of(before);
+        tokenizer.tokenize(document, 0, before.length());
+
+        // Insert AFTER the multi-byte literal, so the edit's own offsets are past it.
+        int at = before.indexOf("}\n");
+        ChangeSet change = ChangeSet.of(before.length(), Change.insert(at, "    Widget w = null;\n"));
+        Rope after = change.apply(document);
+        tokenizer.edited(after, change);
+
+        String text = after.toString();
+        List<SyntaxToken> tokens = tokenizer.tokenize(after, 0, text.length());
+
+        for (SyntaxToken token : tokens) {
+            assertTrue(token + " is outside the edited document", token.end() <= text.length());
+        }
+        assertTrue("the newly typed type should be captured exactly, got "
+                        + textsCaptured(text, tokens, "type"),
+                textsCaptured(text, tokens, "type").contains("Widget"));
+    }
+
+    // ── Cost ────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A query must not re-parse when nothing changed.</b> This used to flatten the rope and compare it
+     * to the last parsed text on every call, so a viewport repaint of an untouched document did two O(n)
+     * passes to discover it had nothing to do. Asserted by cost rather than by instrumentation: a
+     * thousand repeat queries over a large document finish in well under the time a thousand parses of it
+     * would take.
+     */
+    @Test
+    public void repeatQueriesOnAnUnchangedDocumentDoNotReparse() {
+        TreeSitterTokenizer tokenizer = javaTokenizer();
+        StringBuilder builder = new StringBuilder("class Big {\n");
+        for (int i = 0; i < 2_000; i++) {
+            builder.append("    int field").append(i).append(" = ").append(i).append(";\n");
+        }
+        builder.append("}\n");
+        Rope document = Rope.of(builder.toString());
+
+        long parseStart = System.nanoTime();
+        tokenizer.tokenize(document, 0, 200);
+        long firstQueryNanos = System.nanoTime() - parseStart;
+
+        long repeatStart = System.nanoTime();
+        for (int i = 0; i < 1_000; i++) tokenizer.tokenize(document, 0, 200);
+        long repeatNanos = System.nanoTime() - repeatStart;
+
+        // A thousand small bounded queries must cost far less than a thousand parses of a 2,000-line file.
+        // Deliberately a loose bound -- this is a guard against a return to O(document) per query, not a
+        // benchmark, and it must not fail on a slow or contended machine.
+        assertTrue("1000 repeat queries took " + (repeatNanos / 1_000_000) + "ms against a first query of "
+                        + (firstQueryNanos / 1_000_000) + "ms -- that looks like a reparse per query",
+                repeatNanos < firstQueryNanos * 200L);
+    }
+
+    // ── Reparsing off the frame ─────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>With a scheduler, an edit must not parse on the calling thread.</b> Measured at ~17ms average and
+     * ~26ms worst per keystroke on a 5,000-line file, against a 2ms budget — so this is the difference
+     * between typing being smooth and not.
+     *
+     * <p>Driven with a same-thread executor and a manual clock, so "the work has not run yet" and "the
+     * work has landed" are two distinct, exact states rather than a sleep.</p>
+     */
+    @Test
+    public void withASchedulerAnEditDefersTheParseAndLandsItOnADrain() {
+        List<Runnable> pending = new ArrayList<>();
+        JobScheduler scheduler = new JobScheduler(pending::add, () -> 0L, 2);
+        TreeSitterTokenizer tokenizer;
+        try {
+            tokenizer = TreeSitterTokenizer.java(scheduler);
+        } catch (Throwable nativeUnavailable) {
+            Assume.assumeNoException(nativeUnavailable);
+            return;
+        }
+
+        String before = "class A { int x = 1; }";
+        Rope document = Rope.of(before);
+        tokenizer.tokenize(document, 0, before.length());       // cold parse, synchronous by necessity
+
+        List<String> invalidations = new ArrayList<>();
+        tokenizer.setInvalidationListener(() -> invalidations.add("refresh"));
+
+        ChangeSet change = ChangeSet.of(before.length(), Change.insert(10, "String s = \"hi\"; "));
+        Rope after = change.apply(document);
+        tokenizer.edited(after, change);
+
+        // The edit interpolated and queued; nothing has parsed.
+        assertTrue("the edit must not have parsed on the calling thread", pending.isEmpty());
+        scheduler.drain();
+        assertFalse("a reparse should have been scheduled", pending.isEmpty());
+        assertTrue("and it must not have landed yet", invalidations.isEmpty());
+
+        // Queries meanwhile still answer -- from the interpolated tree, in bounds of the NEW text.
+        String text = after.toString();
+        for (SyntaxToken token : tokenizer.tokenize(after, 0, text.length())) {
+            assertTrue(token + " is outside the edited document", token.end() <= text.length());
+        }
+
+        pending.forEach(Runnable::run);
+        scheduler.drain();
+
+        assertEquals("landing a reparse must tell the view to ask again", 1, invalidations.size());
+        assertTrue("the newly typed type should now be captured, got "
+                        + textsCaptured(text, tokenizer.tokenize(after, 0, text.length()), "type"),
+                textsCaptured(text, tokenizer.tokenize(after, 0, text.length()), "type").contains("String"));
+
+        tokenizer.close();
+        scheduler.dispose();
+    }
+
+    /** A burst of keystrokes must collapse to one parse, not queue one per key. */
+    @Test
+    public void aBurstOfEditsCollapsesToASingleReparse() {
+        List<Runnable> pending = new ArrayList<>();
+        JobScheduler scheduler = new JobScheduler(pending::add, () -> 0L, 2);
+        TreeSitterTokenizer tokenizer;
+        try {
+            tokenizer = TreeSitterTokenizer.java(scheduler);
+        } catch (Throwable nativeUnavailable) {
+            Assume.assumeNoException(nativeUnavailable);
+            return;
+        }
+
+        Rope document = Rope.of("class A {}");
+        tokenizer.tokenize(document, 0, document.length());
+
+        for (int i = 0; i < 20; i++) {
+            ChangeSet change = ChangeSet.of(document.length(), Change.insert(9, "int f" + i + "; "));
+            document = change.apply(document);
+            tokenizer.edited(document, change);
+        }
+
+        scheduler.drain();
+        assertEquals("twenty keystrokes must leave one parse, not twenty", 1, pending.size());
+
+        pending.forEach(Runnable::run);
+        scheduler.drain();
+
+        String text = document.toString();
+        List<SyntaxToken> tokens = tokenizer.tokenize(document, 0, text.length());
+        assertFalse(tokens.isEmpty());
+        for (SyntaxToken token : tokens) {
+            assertTrue(token + " is outside the document", token.end() <= text.length());
+        }
+
+        tokenizer.close();
+        scheduler.dispose();
+    }
+
+    // ── Native lifetime ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A tokenizer is per document, so opening and closing files must not accumulate native memory.</b>
+     * {@code close()} used to null the tree and nothing else, leaving a parser and a compiled query alive
+     * for every file ever opened — invisible from Java, because none of it is on the heap.
+     *
+     * <p>Asserted by surviving the cycle rather than by counting handles: the binding exposes no handle
+     * count, and a native leak's real symptom is the hundredth iteration crashing or slowing, not a
+     * number being wrong. A hundred open/parse/close rounds is enough to turn a per-document leak into a
+     * failure while staying quick.</p>
+     */
+    @Test
+    public void openingAndClosingManyDocumentsDoesNotAccumulateNatives() {
+        try {
+            TreeSitterTokenizer.java().close();
+        } catch (Throwable nativeUnavailable) {
+            Assume.assumeNoException(nativeUnavailable);
+            return;
+        }
+
+        for (int i = 0; i < 100; i++) {
+            TreeSitterTokenizer tokenizer = TreeSitterTokenizer.java();
+            String source = "class Doc" + i + " { int x = " + i + "; }";
+            List<SyntaxToken> tokens = tokenizer.tokenize(Rope.of(source), 0, source.length());
+            assertFalse("round " + i + " produced no tokens", tokens.isEmpty());
+            tokenizer.close();
+        }
+    }
+
+    /** Closing twice must be safe — the tree is dropped on close and a second call must not chase it. */
+    @Test
+    public void closingIsIdempotent() {
+        TreeSitterTokenizer tokenizer = javaTokenizer();
+        tokenizer.tokenize(Rope.of("class A {}"), 0, 10);
+        tokenizer.close();
+        tokenizer.close();
     }
 }

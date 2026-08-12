@@ -1438,7 +1438,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Sets the language. Pass {@link SyntaxTokenizer#NONE} for plain text. */
     public TextEditor setTokenizer(SyntaxTokenizer newTokenizer) {
         if (this.tokenizer == newTokenizer) return this;
+        // Detach the old one's listener before dropping it, or a tokenizer that is still finishing work
+        // keeps marking THIS editor dirty about a document it no longer shows.
+        this.tokenizer.setInvalidationListener(null);
         this.tokenizer = newTokenizer == null ? SyntaxTokenizer.NONE : newTokenizer;
+        // A backend that parses in the background has no other way to say "ask me again": the document
+        // did not change when its work landed, so nothing else would ever prompt a re-query and the
+        // highlighting would sit one edit behind until something unrelated repainted.
+        this.tokenizer.setInvalidationListener(() -> highlightsDirty = true);
         highlightsDirty = true;
         highlightedFrom = -1;
         highlightedTo = -1;

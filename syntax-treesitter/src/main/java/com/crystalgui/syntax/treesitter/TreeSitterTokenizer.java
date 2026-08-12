@@ -1,5 +1,8 @@
 package com.crystalgui.syntax.treesitter;
 
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.Rope;
@@ -40,9 +43,15 @@ import java.util.List;
  * writing one line that does both.</p>
  *
  * <h3>Everything is UTF-8 byte offsets</h3>
- * <p>tree-sitter counts bytes; this engine counts UTF-16 code units. Every crossing is converted. They
- * coincide for ASCII, which is exactly how a missing conversion survives every test anyone writes and
- * then breaks on the first accented character.</p>
+ * <p>tree-sitter counts bytes; this engine counts UTF-16 code units. Every crossing is converted, through
+ * {@link Utf8Offsets} — which also records why parsing UTF-16 directly is not available here, and why the
+ * conversion this class used to do inline was quadratic.</p>
+ *
+ * <h3>Reparsing is gated on identity, not on comparison</h3>
+ * <p>{@link #tokenize} used to flatten the rope with {@code toString()} and compare it to the last parsed
+ * text on <b>every query</b> — an O(n) copy plus an O(n) compare per viewport repaint, to answer a
+ * question the caller already knew the answer to. The document announces its changes through
+ * {@link #edited}; a query now trusts that and re-parses only when something said so.</p>
  */
 public final class TreeSitterTokenizer implements SyntaxTokenizer {
 
@@ -59,36 +68,106 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
     private final TSQuery query;
     private final TSParser parser;
 
+    /**
+     * Where reparses run, or {@code null} to parse on the calling thread.
+     *
+     * <p>Opt-in rather than mandatory: a caller that just wants tokens out of a string — every test in
+     * this module, and the shader graph validating a snippet — should not have to own a scheduler and
+     * pump a frame loop to get an answer.</p>
+     */
+    private final JobScheduler scheduler;
+
+    /**
+     * The parser reparses run on, distinct from {@link #parser} because the two are used from different
+     * threads. Never shared: {@code TSParser} holds mutable native state for the parse in progress.
+     *
+     * <p>One is enough, and only because the scheduler guarantees single-flight per key — at most one
+     * reparse for this tokenizer is ever in flight, so this needs no lock of its own. If that guarantee
+     * ever weakens, this becomes a race that manifests as a JVM crash rather than an exception.</p>
+     */
+    private TSParser workerParser;
+
+    private Runnable invalidationListener;
+
+    /**
+     * Capture names by index, resolved once.
+     *
+     * <p>{@code getCaptureNameForId} is a JNI call that builds a {@code String}, and it was being made
+     * <b>per captured token</b> — thousands of times per viewport query — to look up one of a dozen fixed
+     * names that cannot change for the life of the query. Interning them here also means the strings
+     * handed out are reference-equal, which is what lets a consumer key a cache on them.</p>
+     */
+    private final String[] captureNames;
+
     private TSTree tree;
-    private String source = "";
-    private byte[] sourceBytes = new byte[0];
+
+    /** The text the current {@link #tree} describes, and the offset index over it. */
+    private Utf8Offsets offsets = Utf8Offsets.EMPTY;
+
+    /**
+     * Whether the tree is known to be behind the document.
+     *
+     * <p>Set by {@link #edited}, cleared by a reparse. This is what replaced comparing the whole document
+     * against the last parsed text on every query — the caller already tells us when it changes, so
+     * asking the text again was answering a question we had been handed.</p>
+     */
+    private boolean stale = true;
 
     /** Reused across queries — cursors are not cheap and there is one per query per frame. */
     private final TSQueryCursor cursor = new TSQueryCursor();
 
     public TreeSitterTokenizer(TSLanguage language, String highlightQuery) {
+        this(language, highlightQuery, null);
+    }
+
+    /**
+     * @param scheduler where reparses run. With one, {@link #edited} returns as soon as the tree has been
+     *                  interpolated and the parse lands a few frames later; without one, everything is
+     *                  synchronous. See the field note.
+     */
+    public TreeSitterTokenizer(TSLanguage language, String highlightQuery, JobScheduler scheduler) {
         this.language = language;
         this.parser = new TSParser();
         this.parser.setLanguage(language);
         this.query = new TSQuery(language, highlightQuery);
+        this.scheduler = scheduler;
+
+        this.captureNames = new String[query.getCaptureCount()];
+        for (int i = 0; i < captureNames.length; i++) {
+            String name = query.getCaptureNameForId(i);
+            captureNames[i] = name == null ? null : name.intern();
+        }
     }
 
     /** Java, with the grammar's own {@code highlights.scm} vendored alongside. */
     public static TreeSitterTokenizer java() {
+        return java(null);
+    }
+
+    /** Java, reparsing on {@code scheduler}. */
+    public static TreeSitterTokenizer java(JobScheduler scheduler) {
         return new TreeSitterTokenizer(new org.treesitter.TreeSitterJava(),
-                Queries.load("assets/crystalgui/syntax/java/highlights.scm"));
+                Queries.load("assets/crystalgui/syntax/java/highlights.scm"), scheduler);
+    }
+
+    @Override
+    public void setInvalidationListener(Runnable listener) {
+        this.invalidationListener = listener;
     }
 
     // ── Parsing ─────────────────────────────────────────────────────────────────────────────────
 
     @Override
     public List<SyntaxToken> tokenize(Rope document, int from, int to) {
-        String text = document.toString();
-        if (tree == null || !text.equals(source)) reparse(text);
+        // With a scheduler, a stale tree is answered from anyway: it was interpolated on the keystroke, so
+        // it is structurally behind but positionally correct, which is exactly what every editor shows for
+        // the handful of frames a parse takes. Blocking here instead would put the whole ~17ms back on the
+        // frame and defeat the point of having somewhere else to run it.
+        if (tree == null || (stale && scheduler == null)) reparse(document.toString());
         if (tree == null) return List.of();
 
-        int startByte = utf8Offset(text, Math.max(0, Math.min(from, text.length())));
-        int endByte = utf8Offset(text, Math.max(0, Math.min(to, text.length())));
+        int startByte = offsets.toUtf8(from);
+        int endByte = offsets.toUtf8(to);
         endByte = Math.min(endByte, startByte + MAX_BYTES_TO_QUERY);
 
         cursor.setByteRange(startByte, endByte);
@@ -98,11 +177,12 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
         TSQueryMatch match = new TSQueryMatch();
         while (cursor.nextMatch(match)) {
             for (TSQueryCapture capture : match.getCaptures()) {
-                TSNode node = capture.getNode();
-                String name = query.getCaptureNameForId(capture.getIndex());
+                int index = capture.getIndex();
+                String name = index >= 0 && index < captureNames.length ? captureNames[index] : null;
                 if (name == null || name.isEmpty()) continue;
-                int start = utf16Offset(node.getStartByte());
-                int end = utf16Offset(node.getEndByte());
+                TSNode node = capture.getNode();
+                int start = offsets.toUtf16(node.getStartByte());
+                int end = offsets.toUtf16(node.getEndByte());
                 if (end > start) tokens.add(new SyntaxToken(start, end, name));
             }
         }
@@ -111,71 +191,97 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
 
     @Override
     public void edited(Rope after, ChangeSet change) {
-        if (tree == null || change == null || change.isEmpty()) return;
+        if (change == null || change.isEmpty()) return;
 
         // PHASE 1 -- interpolate. Move every existing node's coordinates so the tree still describes the
         // text, without parsing anything. Cheap, and what keeps highlights attached to the right
         // characters the instant a key lands.
-        for (Change one : change.changes()) {
-            tree.edit(inputEditFor(one));
+        //
+        // Applied against the offsets of the text the tree currently describes, and in the order the
+        // changes were made, because each edit's coordinates are relative to the document the previous
+        // one left behind.
+        if (tree != null) {
+            for (Change one : change.changes()) {
+                tree.edit(inputEditFor(one));
+            }
         }
 
-        // PHASE 2 -- reparse. The expensive half, deliberately a separate statement: this is what moves to
-        // a worker thread when documents get big enough to need it.
-        String text = after.toString();
-        reparse(text);
+        // PHASE 2 -- reparse. The expensive half: measured at ~17ms average and ~26ms worst per keystroke
+        // on a 5,000-line file, against a budget of 2ms. It goes to a worker when there is one, and is
+        // otherwise deferred to the next query so that a burst of keystrokes still costs one parse rather
+        // than one per key.
+        stale = true;
+        if (scheduler != null) scheduleReparse(after);
+    }
+
+    /**
+     * Parses off-thread and swaps the result in.
+     *
+     * <p><b>The tree handed to the worker is a copy.</b> {@code ts_tree_copy} exists precisely so a tree
+     * can be used from another thread, and the copy is cheap — trees share their nodes. Handing over the
+     * live one instead would let the UI thread call {@code edit()} on it, which <em>mutates</em>, while
+     * the worker is reading it: a data race in native memory, which surfaces as a JVM crash rather than an
+     * exception.</p>
+     *
+     * <p>Single-flight on the key is what makes one worker parser enough, and it is also what makes a
+     * burst of keystrokes collapse to one parse: each new edit replaces the queued job and asks the
+     * running one to stop.</p>
+     */
+    private void scheduleReparse(Rope document) {
+        String text = document.toString();
+        TSTree snapshot = tree == null ? null : tree.copy();
+        scheduler.job(JobKey.of(this, "reparse"), JobLane.LATENCY, context -> {
+            if (workerParser == null) {
+                workerParser = new TSParser();
+                workerParser.setLanguage(language);
+            }
+            TSTree parsed = workerParser.parseString(snapshot, text);
+            // Built here rather than on delivery: it is an O(n) pass over the document and belongs on the
+            // thread that already has the document in hand, not on the frame that receives the answer.
+            return new Parsed(parsed, Utf8Offsets.of(text));
+        }).onDone(result -> {
+            if (result == null) return;
+            this.tree = result.tree();
+            this.offsets = result.offsets();
+            this.stale = false;
+            // Nothing about the DOCUMENT changed, so no existing signal would tell the view to re-query --
+            // the highlighting would just stay one edit behind until something else happened to repaint.
+            if (invalidationListener != null) invalidationListener.run();
+        }).submit();
+    }
+
+    /** A finished parse and the offset index over the text it describes — swapped in together. */
+    private record Parsed(TSTree tree, Utf8Offsets offsets) {
     }
 
     private void reparse(String text) {
-        this.source = text;
-        this.sourceBytes = text.getBytes(StandardCharsets.UTF_8);
         TSTree previous = tree;
         this.tree = previous == null
                 ? parser.parseString(null, text)
                 : parser.parseString(previous, text);
+        // AFTER the parse: the interpolated edits above were expressed in the OLD text's coordinates, so
+        // replacing the index first would convert them against a document the tree had not seen yet.
+        this.offsets = Utf8Offsets.of(text);
+        this.stale = false;
     }
 
     /** Converts one change from UTF-16 offsets into the byte offsets and points tree-sitter wants. */
     private TSInputEdit inputEditFor(Change change) {
-        int startByte = utf8Offset(source, change.from());
-        int oldEndByte = utf8Offset(source, change.to());
+        int startByte = offsets.toUtf8(change.from());
+        int oldEndByte = offsets.toUtf8(change.to());
         int newEndByte = startByte + change.insert().getBytes(StandardCharsets.UTF_8).length;
         return new TSInputEdit(startByte, oldEndByte, newEndByte,
-                pointAt(source, change.from()), pointAt(source, change.to()),
-                pointAfterInsert(source, change.from(), change.insert()));
+                pointAt(change.from()), pointAt(change.to()),
+                pointAfterInsert(change.from(), change.insert()));
     }
 
-    // ── Offsets ─────────────────────────────────────────────────────────────────────────────────
-
-    /** UTF-16 index to UTF-8 byte offset. */
-    private static int utf8Offset(String text, int utf16Index) {
-        int limit = Math.max(0, Math.min(utf16Index, text.length()));
-        return text.substring(0, limit).getBytes(StandardCharsets.UTF_8).length;
+    private TSPoint pointAt(int utf16Index) {
+        return new TSPoint(offsets.rowAt(utf16Index), offsets.byteColumnAt(utf16Index));
     }
 
-    /** UTF-8 byte offset back to UTF-16 index, against the text last parsed. */
-    private int utf16Offset(int byteOffset) {
-        int limit = Math.max(0, Math.min(byteOffset, sourceBytes.length));
-        return new String(sourceBytes, 0, limit, StandardCharsets.UTF_8).length();
-    }
-
-    private static TSPoint pointAt(String text, int utf16Index) {
-        int limit = Math.max(0, Math.min(utf16Index, text.length()));
-        int row = 0;
-        int lastBreak = -1;
-        for (int i = 0; i < limit; i++) {
-            if (text.charAt(i) == '\n') {
-                row++;
-                lastBreak = i;
-            }
-        }
-        // Points carry BYTE columns, not character columns -- the same trap as the offsets above.
-        int columnBytes = text.substring(lastBreak + 1, limit).getBytes(StandardCharsets.UTF_8).length;
-        return new TSPoint(row, columnBytes);
-    }
-
-    private static TSPoint pointAfterInsert(String text, int utf16Index, String inserted) {
-        TSPoint start = pointAt(text, utf16Index);
+    /** Where the caret lands after {@code inserted} is typed at {@code utf16Index}, in tree-sitter's terms. */
+    private TSPoint pointAfterInsert(int utf16Index, String inserted) {
+        TSPoint start = pointAt(utf16Index);
         int newlines = 0;
         int lastBreak = -1;
         for (int i = 0; i < inserted.length(); i++) {
@@ -194,9 +300,36 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
 
     @Override
     public void close() {
-        // The tree and parser hold native memory. Zed drops deep trees on a background thread because it
-        // is slow enough to be felt; at our document sizes it is not, but the note belongs here for
-        // whoever finds a frame spike on closing a large file and starts looking at the renderer.
+        // The tree, the parser, the query and the cursor all hold native memory, and this class is created
+        // per document -- so "closed when the document closes" is the whole lifecycle. Dropping only the
+        // tree, as this used to, left a parser and a compiled query per file ever opened.
+        //
+        // Zed drops deep trees on a background thread because it is slow enough to be felt; at our
+        // document sizes it is not, but the note belongs here for whoever finds a frame spike on closing a
+        // large file and starts looking at the renderer.
         tree = null;
+        offsets = Utf8Offsets.EMPTY;
+        stale = true;
+        closeQuietly(cursor);
+        closeQuietly(query);
+        closeQuietly(parser);
+    }
+
+    /**
+     * Releases a native handle if the binding exposes a way to.
+     *
+     * <p>Reflective because {@code tree-sitter-ng}'s types do not share a common closeable supertype and
+     * not all of them expose the same method — and a binding upgrade that adds one should start being used
+     * without this class needing to hear about it. A handle that cannot be released is left to the
+     * binding's own finalization rather than being an error: leaking it is the status quo, and throwing
+     * here would turn closing a tab into a crash.</p>
+     */
+    private static void closeQuietly(Object nativeHolder) {
+        if (nativeHolder == null) return;
+        try {
+            if (nativeHolder instanceof AutoCloseable closeable) closeable.close();
+        } catch (Exception ignored) {
+            // Nothing actionable: the process is either exiting or the handle was already released.
+        }
     }
 }
