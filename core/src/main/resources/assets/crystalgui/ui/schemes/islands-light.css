@@ -23,13 +23,13 @@ theme {
      * room to do that with transparency. The corners are the price, and the theme's panel is matched to
      * it so the seam does not show. */
     --editor-bg: #FFFFFF;
-    --editor-fg: #000000;
+    --editor-fg: #080808;
     --editor-caret: #000000;
-    --editor-current-line: #FCFAED;
+    --editor-current-line: #F5F8FE;
     --editor-selection-bg: #A6D2FF;
     --editor-gutter-bg: #F7F8FA;
     --editor-gutter-edge: #EBECF0;
-    --editor-line-number: #9A9DA1;
+    --editor-line-number: #AEB3C2;
     --editor-indent-guide: #EBECF0;
     --editor-indent-guide-active: #9A9DA1;
     --editor-whitespace: #C9CCD0;
@@ -63,9 +63,9 @@ theme {
     --syntax-type: #000000;
     --syntax-type-builtin: #0033B3;
 
-    --syntax-function: #00627A;
-    --syntax-function-builtin: #00627A;
-    --syntax-function-method: #00627A;
+    --syntax-function: #080808;
+    --syntax-function-builtin: #0033B3;
+    --syntax-function-method: #080808;
 
     --syntax-string: #067D17;
     --syntax-string-escape: #0037A6;
@@ -77,7 +77,7 @@ theme {
     --syntax-constant-builtin: #0033B3;
 
     --syntax-comment: #8C8C8C;
-    --syntax-comment-doc: #3D3D3D;
+    --syntax-comment-doc: #8C8C8C;
 
     /* Neutral until a semantic layer can separate them — see islands-dark.css. */
     --syntax-variable: #000000;

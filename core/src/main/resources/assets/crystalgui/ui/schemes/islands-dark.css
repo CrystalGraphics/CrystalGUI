@@ -33,15 +33,15 @@ theme {
     --editor-bg: #00000000;
     --editor-fg: #BCBEC4;
     --editor-caret: #CED0D6;
-    --editor-current-line: #26282E;
+    --editor-current-line: #1F2024;
     --editor-selection-bg: #214283;
     --editor-gutter-bg: #1E1F22;
     --editor-gutter-edge: #303236;
     --editor-line-number: #4B5059;
-    --editor-indent-guide: #303236;
+    --editor-indent-guide: #323438;
     --editor-indent-guide-active: #6F737A;
-    --editor-whitespace: #45484D;
-    --editor-ruler: #303236;
+    --editor-whitespace: #6F737A;
+    --editor-ruler: #323438;
 
     /* ── Folding ── */
     --editor-fold: #5A5D63;
@@ -76,9 +76,25 @@ theme {
     --syntax-type: #BCBEC4;
     --syntax-type-builtin: #CF8E6D;
 
-    --syntax-function: #56A8F5;
-    --syntax-function-builtin: #56A8F5;
-    --syntax-function-method: #56A8F5;
+    /* METHODS ARE THE DEFAULT FOREGROUND, and this is a compromise rather than a preference.
+     *
+     * IntelliJ colours a method DECLARATION blue (DEFAULT_FUNCTION_DECLARATION 56a8f5) and leaves every
+     * CALL at the default — its exported scheme says so outright: DEFAULT_FUNCTION_CALL carries
+     * baseAttributes="DEFAULT_IDENTIFIER" and no colour of its own.
+     *
+     * The vendored Java grammar cannot express that distinction. Its highlights.scm captures both under
+     * one name:
+     *     (method_declaration name: (identifier) @function.method)
+     *     (method_invocation  name: (identifier) @function.method)
+     * so anything set here applies to both. Calls outnumber declarations several times over in real code,
+     * which made blue the WRONG half to pick: every `.get()`, `.add()` and `.equals()` on screen lit up,
+     * and the result read as a different product rather than as IntelliJ.
+     *
+     * The honest fix is to split the capture (see plan_syntax.md) and colour declarations blue again;
+     * until then, matching the common case is closer than matching the rare one. */
+    --syntax-function: #BCBEC4;
+    --syntax-function-builtin: #CF8E6D;
+    --syntax-function-method: #BCBEC4;
 
     --syntax-string: #6AAB73;
     --syntax-string-escape: #CF8E6D;
