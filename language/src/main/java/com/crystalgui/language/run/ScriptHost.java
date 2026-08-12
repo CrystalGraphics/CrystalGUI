@@ -10,6 +10,7 @@ import com.crystalgui.language.map.MappingSet;
 
 import java.io.Closeable;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -91,6 +92,19 @@ public final class ScriptHost implements Closeable {
      * <p>Returns the compile output — pre-remap and pre-instrumentation — because that is what the
      * cache key describes and what a caller inspecting diagnostics wants to see.</p>
      */
+    /**
+     * Compiles a source file, picking its shape.
+     *
+     * <p>A file that already declares a type is compiled as-is; anything else is a snippet and gets the
+     * prelude. The decision is made once, here, so the editor and the Run command cannot disagree about
+     * what a given file is — which they would the moment each asked separately.</p>
+     */
+    public Compiled compileSource(String className, String source, Map<String, String> bindingTypes) {
+        return compile(ScriptPrelude.declaresType(source)
+                ? ScriptPrelude.compilationUnit(className, source)
+                : preludeFor(className, bindingTypes).wrap(source));
+    }
+
     public Compiled compile(ScriptPrelude.Wrapped wrapped) {
         ScriptCacheKey key = ScriptCacheKey.of(wrapped.unitSource(), mappingsId,
                 engine.band().minimumFeatureVersion());
@@ -222,10 +236,57 @@ public final class ScriptHost implements Closeable {
         Map<String, byte[]> instrumented = Safepoints.inject(remapped);
 
         ScriptClassLoader loader = new ScriptClassLoader(instrumented, hostLoader);
-        Class<?> type = Class.forName(compiled.wrapped().className(), true, loader);
-        Object instance = type.getDeclaredConstructor().newInstance();
-        applyBindings(type, instance, bindings);
-        return new Running(loader, type.getMethod(ENTRY_POINT), instance);
+        // THE BINARY NAME, which for a file declaring a package is not the file stem. Asking for
+        // the stem compiles fine and then throws ClassNotFoundException for a class that is
+        // plainly in the output -- see ScriptPrelude.Wrapped.binaryName.
+        Class<?> type = Class.forName(compiled.wrapped().binaryName(), true, loader);
+        return entryPointOf(type, loader, bindings);
+    }
+
+    /**
+     * Finds how to start this class, and prepares whatever that needs.
+     *
+     * <p><b>Two shapes, because a script is written two ways.</b> A snippet wrapped by
+     * {@link ScriptPrelude} exposes {@code run()} on an instance whose fields are the host bindings. A
+     * file the author wrote as an ordinary class — their own {@code Main.java} — has a
+     * {@code static void main(String[])} and no such fields.</p>
+     *
+     * <p>{@code run()} is tried first and that order matters: a wrapped snippet could legally declare
+     * its own {@code main}, and the prelude's entry point is the one that carries the bindings. A file
+     * with both is a file the author meant to run as a class, and it will be reached only if the
+     * prelude did not wrap it — in which case there is no {@code run()} to find.</p>
+     */
+    private Running entryPointOf(Class<?> type, ScriptClassLoader loader, Map<String, Object> bindings)
+            throws Throwable {
+        Method entry = methodOrNull(type, ENTRY_POINT);
+        if (entry != null && !java.lang.reflect.Modifier.isStatic(entry.getModifiers())) {
+            Object instance = type.getDeclaredConstructor().newInstance();
+            applyBindings(type, instance, bindings);
+            return new Running(loader, entry, instance, null);
+        }
+        if (entry != null) {
+            applyBindings(type, null, bindings);
+            return new Running(loader, entry, null, null);
+        }
+
+        Method main = methodOrNull(type, "main", String[].class);
+        if (main != null && java.lang.reflect.Modifier.isStatic(main.getModifiers())) {
+            // BINDINGS ARE SKIPPED, not forced in. A file with a `main` was written as a program, not as
+            // a script body, so it has no fields for them -- and setting statics that happen to share a
+            // name would be reaching into somebody's class on a guess.
+            return new Running(loader, main, null, new Object[]{new String[0]});
+        }
+
+        throw new IllegalStateException(type.getName() + " has neither a no-argument " + ENTRY_POINT
+                + "() nor a static main(String[]) — nothing to run");
+    }
+
+    private static Method methodOrNull(Class<?> type, String name, Class<?>... parameters) {
+        try {
+            return type.getMethod(name, parameters);
+        } catch (NoSuchMethodException absent) {
+            return null;
+        }
     }
 
     /**
@@ -277,18 +338,20 @@ public final class ScriptHost implements Closeable {
         final ScriptClassLoader loader;
         private final Method entryPoint;
         private final Object instance;
+        private final Object[] arguments;
         volatile Thread thread;
 
-        Running(ScriptClassLoader loader, Method entryPoint, Object instance) {
+        Running(ScriptClassLoader loader, Method entryPoint, Object instance, Object[] arguments) {
             this.loader = loader;
             this.entryPoint = entryPoint;
             this.instance = instance;
+            this.arguments = arguments == null ? new Object[0] : arguments;
         }
 
         Object invoke() throws Throwable {
             try {
-                return entryPoint.invoke(instance);
-            } catch (java.lang.reflect.InvocationTargetException wrapped) {
+                return entryPoint.invoke(instance, arguments);
+            } catch (InvocationTargetException wrapped) {
                 // UNWRAPPED. A script's own exception is what a caller wants to see and what the
                 // prelude's line mapping describes; InvocationTargetException is an artefact of how it
                 // was called and names nothing useful.

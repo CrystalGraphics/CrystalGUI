@@ -7,6 +7,7 @@ somebody's scratch directory.
 | File | Exercises |
 |---|---|
 | `Main.java` | Every construct the Java `highlights.scm` attaches a capture to — literal forms, sealed hierarchies, generics and wildcards, lambdas and method references, switch patterns, nested and anonymous classes, annotations, text blocks |
+| `RunTest.java` | **For running, not reading.** An ordinary compilation unit with a `static void main`, whose nineteen sections each log what they did — so the console is a transcript of which language features executed. Open it and press **Shift+F10**; **Mod+F2** stops a runaway. Unlike `Main.java` this one is *tested* (`RunTestFixtureTest`), because a fixture nobody runs for a month is a fixture whose next reader concludes the engine is broken |
 
 ## Why they are here and not in `src/main/java`
 

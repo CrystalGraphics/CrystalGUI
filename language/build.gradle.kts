@@ -405,6 +405,38 @@ val smokeBand8 = registerBandSmoke("8", 8, engineBand8)
 val smokeBand11 = registerBandSmoke("11", 17, engineBand11)
 val smokeBand17 = registerBandSmoke("17", 17, engineBand17)
 
+// ── Staging the engines where a running application can find them ───────────────────────────────
+//
+// One directory per band, named by its minimum feature version -- exactly the layout
+// `EngineSource.directory` reads. That shape is not a convenience for the harness: it is what a real
+// deployment looks like, so the dev run exercises the same code path a shipped jar will, rather than a
+// second one that only ever works here.
+//
+// This is what M7a needed and nothing had: the engineBand configurations are resolvable and consumed by
+// NOTHING, which is correct for the compile classpath and left the running application with no engine to
+// open. `EngineSource.NONE` is a real deployment, so the absence produced no error anywhere -- the
+// editor simply had no diagnostics and no Run command, which reads as the feature not existing.
+val stageEngines = tasks.register<Sync>("stageEngines") {
+    group = "harness"
+    description = "Copies each engine band's jars into build/engines/<band>/ for a dev run."
+    into(layout.buildDirectory.dir("engines"))
+    into("8") { from(engineBand8) }
+    into("11") { from(engineBand11) }
+    into("17") { from(engineBand17) }
+}
+
+/** Where {@code stageEngines} puts them — read by the harness's run task. */
+val stagedEnginesDir: Provider<Directory> = layout.buildDirectory.dir("engines")
+
+// Exposed so another project can depend on the staged layout without reaching into this one's tasks.
+val engineStage: Configuration by configurations.creating {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+}
+artifacts {
+    add(engineStage.name, stagedEnginesDir) { builtBy(stageEngines) }
+}
+
 tasks.register("smokeEngineBands") {
     group = "verification"
     description = "Runs every engine band under a JVM of its own era."
@@ -457,6 +489,14 @@ tasks.test {
     systemProperty("cgui.test.engineBand8", provider { engineBand8.asPath }.get())
     systemProperty("cgui.test.engineBand11", provider { engineBand11.asPath }.get())
     systemProperty("cgui.test.engineBand17", provider { engineBand17.asPath }.get())
+
+    // THE STAGED DIRECTORY, so a test can exercise the route an application actually takes.
+    // `cgui.test.engineBand*` above is a path list, which is convenient and is NOT how anything ships;
+    // `JavaLanguage.defaultSource()` reads this property and `EngineSource.directory` reads the layout.
+    // Without it the registration test would prove the API works while the deployment shape went
+    // unexercised — which is exactly the gap M7a exists to close.
+    dependsOn(stageEngines)
+    systemProperty("crystalgui.engines.dir", stagedEnginesDir.get().asFile.absolutePath)
 
     // The pins, so a test can hold EngineBand to what the build actually resolves. Two copies of a
     // version number is a real hazard: bump one and the build downloads 3.46.0 while the runtime asks
