@@ -91,6 +91,8 @@ theme {
     --syntax-property: #9CDCFE;
     --syntax-attribute: #9CDCFE;
     --syntax-tag: #569CD6;
+    --syntax-constructor: #4EC9A0;
+    --syntax-embedded: #D4D4D4;
     --syntax-operator: #D4D4D4;
     --syntax-punctuation: #808080;
     --syntax-punctuation-bracket: #808080;

@@ -117,6 +117,8 @@ theme {
     --syntax-property: #C77DBB;
     --syntax-attribute: #B3AE60;
     --syntax-tag: #CF8E6D;
+    --syntax-constructor: #BCBEC4;
+    --syntax-embedded: #BCBEC4;
 
     --syntax-operator: #BCBEC4;
     --syntax-punctuation: #BCBEC4;

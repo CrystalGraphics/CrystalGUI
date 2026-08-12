@@ -162,8 +162,26 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
 
     /** Java, reparsing on {@code scheduler}. */
     public static TreeSitterTokenizer java(JobScheduler scheduler) {
-        return new TreeSitterTokenizer(new org.treesitter.TreeSitterJava(),
-                Queries.loadForHighlighting("assets/crystalgui/syntax/java/highlights.scm"), scheduler);
+        return of(new org.treesitter.TreeSitterJava(), "java", scheduler);
+    }
+
+    public static TreeSitterTokenizer css(JobScheduler scheduler) {
+        return of(new org.treesitter.TreeSitterCss(), "css", scheduler);
+    }
+
+    public static TreeSitterTokenizer javascript(JobScheduler scheduler) {
+        return of(new org.treesitter.TreeSitterJavascript(), "javascript", scheduler);
+    }
+
+    public static TreeSitterTokenizer html(JobScheduler scheduler) {
+        return of(new org.treesitter.TreeSitterHtml(), "html", scheduler);
+    }
+
+    /** One grammar plus its vendored query directory — the shape every language here shares. */
+    private static TreeSitterTokenizer of(TSLanguage language, String directory, JobScheduler scheduler) {
+        return new TreeSitterTokenizer(language,
+                Queries.loadForHighlighting("assets/crystalgui/syntax/" + directory + "/highlights.scm"),
+                scheduler);
     }
 
     @Override

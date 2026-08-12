@@ -54,5 +54,18 @@ public final class TreeSitterLanguages {
         LanguageRegistry.registerExtensions(
                 new LanguageRegistry.Entry(Language.JAVA, () -> TreeSitterTokenizer.java(scheduler)),
                 "java");
+        LanguageRegistry.registerExtensions(
+                new LanguageRegistry.Entry(Language.PLAIN, () -> TreeSitterTokenizer.css(scheduler)),
+                "css");
+        LanguageRegistry.registerExtensions(
+                new LanguageRegistry.Entry(Language.PLAIN, () -> TreeSitterTokenizer.javascript(scheduler)),
+                "js", "mjs", "cjs");
+        // HTML is registered LAST and deliberately: without injections its <style> and <script> bodies
+        // colour as markup text, which is worse than plain. Registering it anyway because a tag-coloured
+        // document is still an improvement on none, and injections is the next step rather than a
+        // prerequisite -- see plan_syntax.md §12.
+        LanguageRegistry.registerExtensions(
+                new LanguageRegistry.Entry(Language.PLAIN, () -> TreeSitterTokenizer.html(scheduler)),
+                "html", "htm");
     }
 }

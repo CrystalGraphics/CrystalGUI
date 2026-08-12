@@ -486,6 +486,8 @@ editor scheme's.
 | `--syntax-constant` | `#4FC1FF` | dark-plus.css |
 | `--syntax-constant-builtin` | `#569CD6` | dark-plus.css |
 | `--syntax-constant-style` | `normal` | dark-plus.css |
+| `--syntax-constructor` | `#4EC9A0` | dark-plus.css |
+| `--syntax-embedded` | `#D4D4D4` | dark-plus.css |
 | `--syntax-function` | `#DCDCAA` | dark-plus.css |
 | `--syntax-function-builtin` | `#DCDCAA` | dark-plus.css |
 | `--syntax-function-call` | `#DCDCAA` | dark-plus.css |
