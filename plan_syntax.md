@@ -14,7 +14,8 @@ verifying every external fact that carries weight. Companion to `plan_styling.md
    `css`, `html`, `glsl`, sitting on the same seams so the semantic layer refines rather than
    replaces it.
 
-**Standing rule**: nothing here is committed until explicitly asked.
+**Progress**: M0–M2 complete, M3 three languages of four. See §1's progress note for what landed and
+what was learned; milestone rows in §20 carry ✅ / ◐ / (blank).
 
 ---
 
@@ -38,16 +39,33 @@ direction it wastes a milestone. Re-audited:
 | `Language` / `LanguageRegistry` | ✅ | comments, bracket pairs, extension→entry |
 | `KeywordTokenizer` | ✅ keep | the no-natives fallback; `core/` must load on a dedicated server |
 | `TreeSitterTokenizer` | ⚠️ **works, does not scale** | four concrete defects, §9.1 |
-| Grammars | ⚠️ java only | `lib/tree-sitter/`: binding jar + java jar, 5 platforms |
-| Schemes | ⚠️ Dark+ (7 colours), not Islands | `ui/schemes/dark-plus.css` — its own header says so |
+| Grammars | ✅ **java, css, javascript, html** (M3) | `lib/tree-sitter/`, 5 platform/arch pairs each. **glsl outstanding** — the only one the fork has no subproject for |
+| Schemes | ✅ **Islands Dark/Light** (M2), default | authored from the exported `ij-scheme/`; Dark+/Light+ still shipped and selectable |
 | Paint path | ✅ | captures → `::highlight(name)` → `CgStyleSpan`; per-view-line clipping in `refreshHighlights` |
-| **Background work model** | ❌ **does not exist** | the only executor in `core/` is an SVG preload pool. No job queue, no cancellation, no versioned results |
-| **Tracked ranges (decorations)** | ❌ does not exist | every range-owner is bespoke; nothing survives an edit except by re-derivation |
-| **Per-line token cache** | ❌ does not exist | `refreshHighlights` re-queries and re-registers every realised line on every change |
+| **Background work model** | ✅ **M0** | `com.crystalgui.core.async` — lanes, keyed single-flight, debounce, cancellation, drain-on-tick |
+| **Tracked ranges (decorations)** | ❌ still does not exist | every range-owner is bespoke; nothing survives an edit except by re-derivation. **M7** |
+| **Per-row token cache** | ✅ **M1b** | keyed by model row; idle frames and scroll-back ask nothing |
 | **Semantic layer** (resolver, diagnostics, completion) | ❌ does not exist | no SPI, no engine, no UI |
 | Bold/italic in `::highlight()` | ❌ deliberately refused | `HighlightStyle.ALLOWED` = `{color, background-color, text-decoration-line}`; §11 carves the editor exception |
 
-The three ❌ rows in bold are the real foundation work. Everything else is filling in.
+The remaining ❌ rows are the foundation work still outstanding. Everything else is filling in.
+
+> **Progress, 2026-08-12.** M0–M2 landed and M3 is three languages of four. Keystroke cost on a
+> 5,000-line file went **16.9ms → 0.63ms**, inside the §7.3 budget. The editor is painted in Islands
+> Dark, and `java`/`css`/`javascript`/`html` have real grammars.
+>
+> Four bugs in the capture→colour seam were found and fixed along the way, and they are worth
+> remembering as a class rather than individually: **the harness never had tree-sitter on its
+> classpath** (so a whole round of scheme tuning was aimed at a grammar that was not running);
+> **predicate-carrying query patterns never fire** through this binding, which silently deleted the
+> SCREAMING_CASE test that identifies a constant; **the dotted general-form fallback overrode instead
+> of falling back**; and **capture precedence came from emission order rather than pattern index**,
+> which is why fixing constants kept breaking method declarations and back again.
+>
+> Every one of them was invisible when wrong — the colours resolved correctly the whole time, and it
+> was the *tokens* that were wrong. The lesson that generalises: **when highlighting looks wrong,
+> dump the captures and the resolved colours before touching a scheme value.** Two rounds were lost
+> to reasoning from screenshots.
 
 ## 2. Facts that died under verification
 
@@ -395,15 +413,24 @@ can be fixed without touching a vendored file.
 
 ## 11. Schemes — Islands Dark, and the font-style carve-out
 
-### 11.1 Step 0 — the carve-out (blocking, decided in v1, unchanged)
+### 11.1 Step 0 — the carve-out ✅ done (M2), and cheaper than planned
 
-Islands italicises comments and bolds keywords; `HighlightStyle.ALLOWED` refuses `font-style`/
-`font-weight` because a synthetic-bold highlight reflows wrapped text. The carve-out —
-`ALLOWED_IN_EDITOR`, permitted because the editor lays one row per line under `nowrap`, where a
-wider row changes `getScrollWidth` and nothing else — with the spec's reasoning written at the
-definition. Then move `TextEditor`'s draw calls onto styled paragraphs, **including its measurement
-caches**: measure on the paint path or the caret drifts under synthetic bold (the `AGENTS.md`
-rule about `measureEllipsised`, same trap).
+Islands italicises comments and bolds keywords; `HighlightStyle.ALLOWED` refused `font-style`/
+`font-weight` because a synthetic-bold highlight reflows wrapped text.
+
+**Landed differently from the plan, in both directions.** There is **no `ALLOWED_IN_EDITOR`**: the
+two properties are simply in `ALLOWED`, one rule everywhere, because the spec's premise is false
+here. On the web a highlight is a pure overlay over already-laid-out glyphs, so a wider face could
+move the text it highlights; in this engine a highlight **already re-shapes** (a span boundary is a
+shaping-run boundary), so the restriction protects a property we do not have. Allowing them and
+then dropping them where reflow is possible would be the *resolves-but-paints-nothing* class this
+file exists to prevent — and a scoped variant is a rule somebody has to remember.
+
+**And the `TextEditor` migration was unnecessary.** The plan budgeted moving its draw calls onto
+styled paragraphs including the measurement caches; in fact editor lines are already `UIText`
+elements and `UIText` *is* the styled path, threading the element's weight through every
+`CgStyleSpan`. The only gap was the **highlight's own** weight — two entries in `ALLOWED` and one
+line in `toCgSpan`. The caret-drift trap was never reached.
 
 ### 11.2 The schemes
 
@@ -425,8 +452,8 @@ subprojects with the same Zig cross-compile the vendored jars came from. Per lan
 
 | Language | Work | Cost class |
 |---|---|---|
-| `css`, `javascript`, `html` | sync the fork with upstream's existing subprojects, build, vendor jar + author's `highlights.scm` + licence | hours each, mostly build verification |
-| `glsl` | new subproject via upstream's codegen task from `tree-sitter-grammars/tree-sitter-glsl` (the C parser; the lib.rs crate is Rust packaging of the same grammar — not usable, named so nobody reaches for it twice) | the one real build task |
+| `css`, `javascript`, `html` | ✅ **done (M3)** — two `include` lines in the fork's `settings.gradle`, a `jar` task, vendor the jar and the author's query | cheaper than priced: the natives were already built for all five platform/arch pairs, and `downloadSource` supplies `queries/` intact |
+| `glsl` | ❌ **outstanding** — the fork has no subproject, so it needs generating from `tree-sitter-grammars/tree-sitter-glsl` (the C parser; the lib.rs crate is Rust packaging of the same grammar — not usable, named so nobody reaches for it twice) and cross-compiling | the one real build task. **Zig is available**: CrystalGraphics' `freetype-msdfgen-harfbuzz-bindings/native-build.gradle.kts` has a `downloadZig` task and a working cross-compile recipe to copy |
 
 First jar through the pipe (css — smallest, no injections) writes the recipe into
 `lib/tree-sitter/README.md` so the second costs an hour, not a day. The Zig cross-compile is
@@ -435,9 +462,15 @@ confirmed reproducible locally (2026-08-11).
 **Injections** (`html` blocker, decided v1): host tree → `injections.scm` → child parser per
 injected range (tree-sitter's included-ranges API) → merged token list. Entirely inside
 `language/.grammar`; `SyntaxTokenizer`'s flat document-offset token list is already the right
-return shape, so no `core/` change. `html` ships only when `<style>`/`<script>` bodies highlight
-as CSS/JS — an HTML file is mostly not markup, and the interim version reads as broken rather
-than incomplete.
+return shape, so no `core/` change. `tree-sitter-html` ships its own `injections.scm` and it is
+already vendored, so the remaining work is entirely in the tokenizer.
+
+> **Revised at M3: `html` ships now, before injections.** The original rule was that it should wait,
+> because `<style>` and `<script>` bodies colouring as markup text reads as broken rather than
+> incomplete. That argument still holds — but a tag-coloured document is an improvement on an
+> uncoloured one, and shipping it makes the gap *visible in a fixture* rather than theoretical in a
+> plan. `workspace/src/index.html` puts its style and script blocks last on purpose, so the gap is
+> the thing you scroll to. The note lives at the registration in `TreeSitterLanguages`.
 
 ## 13. The other query families
 
@@ -763,10 +796,10 @@ user-visible value lands early.
 
 | M | Delivers | Depends on | Exit criteria |
 |---|---|---|---|
-| **M0** | Scheduler + version spine: service-layer scheduler (lanes, keyed single-flight, debounce, cancellation, drain-on-tick), `TextBuffer.version()`, `WORKBENCH_SERVICES.md` updated | — | deterministic tests: superseded, cancelled, stale-discarded, drained-on-tick — all under manual clock |
-| **M1** | Tokenizer rewrite (§9): UTF-16 parse, conversion layer deleted, off-thread double-buffered reparse, per-line interned token cache, native lifecycle per document | M0 | non-ASCII fixture correct; typing a 5k-line file: UI cost within §7.3 budgets, measured and recorded; 100-open/close leak test |
-| **M2** | The scheme axis (§11): `ALLOWED_IN_EDITOR` carve-out, styled-paragraph editor draw path (+measurement), full `--syntax-*` vocabulary, `islands-dark` + light, default swap | — (parallel to M0/M1) | side-by-side with IntelliJ on the same Java fixture; italic comments; caret does not drift under bold; governance tests green |
-| **M3** | Grammars (§12–13): fork sync; `css` → recipe documented → `javascript` → `glsl` (codegen) → `html` + injections; normalization maps; `locals.scm` wired | M1 | one golden-fixture highlight test per language; html `<style>`/`<script>` bodies coloured as CSS/JS |
+| **M0** ✅ | Scheduler + version spine: service-layer scheduler (lanes, keyed single-flight, debounce, cancellation, drain-on-tick), `TextBuffer.version()`, `WORKBENCH_SERVICES.md` updated | — | deterministic tests: superseded, cancelled, stale-discarded, drained-on-tick — all under manual clock |
+| **M1** ✅ | Tokenizer rewrite (§9): UTF-16 parse, conversion layer deleted, off-thread double-buffered reparse, per-line interned token cache, native lifecycle per document | M0 | non-ASCII fixture correct; typing a 5k-line file: UI cost within §7.3 budgets, measured and recorded; 100-open/close leak test |
+| **M2** ✅ | The scheme axis (§11): font-style carve-out in `HighlightStyle.ALLOWED` — no scoped variant and no editor migration needed, see §11.1 — full `--syntax-*` vocabulary, `islands-dark` + light authored from the exported scheme, default swap | — (parallel to M0/M1) | side-by-side with IntelliJ on the same Java fixture; italic comments and constants; governance tests green |
+| **M3** ◐ | Grammars (§12–13). ✅ `css`, `javascript`, `html` vendored, registered and fixtured; `EveryShippedGrammarTest` covers parse + capture + registration. ❌ remaining: **`glsl`** (needs `downloadZig`, then codegen from `tree-sitter-grammars/tree-sitter-glsl`), **`injections.scm`** wired in the tokenizer, **normalization maps** (§10.2 — not yet needed, the three vendored queries happen to speak the standard dialect), **`locals.scm`** | M1 | one fixture per language in `workspace/src/`; html `<style>`/`<script>` bodies coloured as CSS/JS |
 | **M4** | Module reshape (§5): `language/` rename + sub-packages, `text.lang` SPIs in `core/`, `LanguageServices` per-document façade, editor consumes-if-present | — | `core:headlessTest` green with no new deps; harness wires Java end-to-end unchanged |
 | **M5** | Engine loading (§6): band detection, isolated child-first loaders, pinned ECJ+Rhino per band, `THIRD-PARTY.md` | M4 | band-selection unit tests; smoke compile+eval on a Java 8 toolchain and on 17+ (Gradle toolchains — no MC needed); §23 verifications closed |
 | **M6** | Java semantics (§15): ECJ diagnostics + semantic tokens + `resolveAt`/`expectedTypeAt`, prelude mapper, classpath probe, reflection overlay, **live name environment + mapping boundary (§15.5)** | M0, M4, M5 | fixture script: param/field/local coloured, unresolved flagged, deprecated struck; broken-code partial answers pass the §13-checklist tests; **remap round-trip: a script authored in readable names compiles, links and runs against a fixture class whose runtime members carry synthetic "obfuscated" names, through a fake mapping set** — all headless |
@@ -837,12 +870,12 @@ rules, and it is also the enforcement of them.
 
 | # | Question | Blocks | How |
 |---|---|---|---|
-| 1 | UTF-16 encoding agreement across `parseStringEncoding`, `TSInputEdit`, and query-cursor byte ranges in the vendored binding | M1 | the non-ASCII fixture test, written first |
-| 2 | `TSReader` chunked parse works (nice-to-have; String path is the fallback) | M1 | spike |
+| 1 | ~~UTF-16 encoding agreement in the vendored binding~~ | ~~M1~~ | **Answered: it does not work** (§2 row 6). Probed before building on it, which is what this row existed for. The conversion layer stays and was made fast instead |
+| 2 | `TSReader` chunked parse works (nice-to-have; String path is the fallback) | — | not attempted; the String path is adequate and the rope is now handed to the worker rather than flattened on the frame |
 | 3 | Exact pinned versions per band: last ECJ line running on 8 and on 11; last Rhino on 8 (1.7.15) — and that the DOM adapter compiles against the oldest band's API | M5 | resolve artifacts, compile the adapter three times in CI-style toolchain matrix |
 | 4 | Old-band ECJ (≤4.16 era) honours `setBindingsRecovery` well enough for §15.1's broken-code story | M5/M6 | the §13-checklist tests run against *each* band's jar |
 | 5 | Classpath discovery on each loader (`LaunchClassLoader.getSources()`, Knot, ModDev, harness) | M6 | per-platform probe with a unit test where reachable; harness first |
-| 6 | Fork-sync effort for upstream's css/js/html subprojects (upstream moved since the fork) | M3 | attempt css first — it is also the recipe-writing step |
+| 6 | ~~Fork-sync effort for upstream's css/js/html subprojects~~ | ~~M3~~ | **Answered.** Two lines in the fork's `settings.gradle` and a `jar` task; natives were already built for all five pairs, and `downloadSource` supplies the authors' `queries/`. Cheaper than the plan priced it |
 | 7 | Type-index scale on a real large modpack (count, scan time, table size vs §7.3 budget) | M9 | measure during M9, not before |
 | 8 | Rhino 1.7.15 ↔ 1.9.x API intersection for the single adapter (ClassShutter, scope, Context factory) | M5 | compile the adapter against both |
 | 9 | Per-loader route to **post-transform class bytes** (1.7.10 `LaunchClassLoader` + transformer chain; Fabric launcher; Forge/Neo SecureJar) | M6 | probe per platform, 1.7.10 first — it is the hardest and the one that motivated §15.5 |
