@@ -739,6 +739,29 @@ served by the **reflection overlay** — the second provider behind the same res
 also what answers *after a script has run* (§16.3). Two sources of truth, one seam, semantic
 merge order: reflection-of-the-live-object wins where both answer.
 
+✅ **Built** (`ReflectionOverlay`). A `Class` is read reflectively and a class *file* is synthesized
+with the same supertypes, members and signatures and **no method bodies** — the compiler resolves
+against the stub, the JVM links against the real one, and nothing has to generate code. The
+load-bearing test is §16.3's actual question: **a script written against a type a previous script
+defined**, which exists, has no file anywhere, and is on no classpath.
+
+Three decisions inside it worth naming:
+
+- **"Already resolvable" is decided by the code source, not the package name.** A class from a jar or
+  a directory has a `CodeSource` with a location; one defined from bytes does not. That answers
+  correctly for a script's class and for a runtime proxy regardless of what they are called, where a
+  package-prefix test would not.
+- **Generic signatures are reconstructed, not erased.** Reflection retains them, and emitting only
+  descriptors would make a script's own type raw — so `get(0)` would answer `Object` where the author
+  wrote `List<String>`, the script would *still compile*, and completion would be useless on exactly
+  the types scripts define. The rebuild is mechanical (JVMS 4.7.9.1 from `java.lang.reflect`) and it
+  is the difference between the overlay being useful and being a fallback.
+- **Supertypes are stubbed transitively.** A stub whose superclass cannot be found is worse than no
+  stub: the compiler reports an error about a class the author never mentioned.
+
+The merge order is the caller's — the overlay's directory goes first on the classpath, so where a
+type is both on disk and live, the live view wins.
+
 On Minecraft hosts, file-based entries are only the baseline — §15.5 replaces them with a live
 name environment, because on MC the disk view is a lie.
 
@@ -1030,7 +1053,7 @@ user-visible value lands early.
 | **M3** ✅ | Grammars (§12–13): **six** — `css`, `javascript`, `html`, `glsl`, `xml` beside `java` — vendored with all five platform/arch pairs, registered by extension, fixtured; `injections.scm` wired (html hosts css + js); §10.2's normalization landed as **seven load-time query rewrites**, not a rename map; `EveryShippedGrammarTest` covers parse + capture + registration per grammar. `locals.scm` deferred to M11 with a reason (§13) | M1 | ✅ one fixture per language in `workspace/src/`; html `<style>`/`<script>` bodies coloured as CSS/JS |
 | **M4** ✅ | Module reshape (§5): `language/` rename + `.grammar`, `text.lang` SPIs in `core/` (12 types, interfaces and records only), `LanguageServices` per-document façade, editor consumes-if-present and **overlays semantic tokens over grammar tokens**, document-owned lifecycle (which also fixed `SyntaxTokenizer.close()` never being called), six registrations collapsed to a `Grammar` table | — | ✅ `core:headlessTest` green with no new deps — `LanguageSpiTest` runs the whole SPI with no engine and no grammar on the classpath; harness wires Java end-to-end unchanged; `SemanticOverlayTest` proves absent-services behaves exactly as before |
 | **M5** ✅ | Engine loading (§6): band detection (`EngineBand`), isolated child-first loader with a parent-delegated bridge (`EngineClassLoader`), jar-location seam (`EngineSource`), runtime JLS discovery (`JlsLevel`), pinned ECJ+Rhino per band **including all 13 transitive platform artifacts, constrained by signing era as well as by class-file major**, `checkEngineBands` (floor + signer) in `:language:check`, `smokeEngineBands` under real per-era launchers, `THIRD-PARTY.md` | M4 | ✅ band-selection unit tests incl. the `"1.8"` trap; ✅ isolation proven with two real Rhinos; ✅ **smoke compile+eval green on a real Java 8 JVM and on 17** — Rhino arithmetic, ES2015 and a working `ClassShutter` refusal; JDT resolving `java.util.List<java.lang.String>` against the running VM, and doing it **from broken source**; ✅ **and a script compiles to bytecode and RUNS on each band's own JVM**, through the bridge (`ScriptCompiler` → `EcjScriptCompiler` → `ScriptClassLoader`), including a call back into a host class; ✅ §23 rows 3, 4 and 8 closed |
-| **M6** ◐ | Java semantics (§15): ✅ ECJ diagnostics with real ranges, ✅ semantic tokens, ✅ `resolveAt`/`expectedTypeAt`/`membersOf`, ✅ `JavaLanguageServices` on the scheduler with diagnostics pushed into the document's `DiagnosticSet`, ✅ prelude mapper (`ScriptPrelude`), ✅ classpath probe (`HostClasspath`). ✅ §15.5's **mapping boundary** (`MappingSet`, `ReadableView`, `InheritanceAwareRemapper` on plain ASM). ❌ remaining: **reflection overlay**, and §15.5's **live name environment** — see §15.5 | M0, M4, M5 | ✅ param/field/local coloured, unresolved flagged, deprecated struck; ✅ **the §13 checklist is twelve tests** (`BindingChecklistTest`), all passing, including on broken source; ✅ **the remap round-trip runs** — readable-named script → compiled → remapped → linked against `m_1234`, with an override staying an override and a negative control proving a naive remapper does not |
+| **M6** ◐ | Java semantics (§15): ✅ ECJ diagnostics with real ranges, ✅ semantic tokens, ✅ `resolveAt`/`expectedTypeAt`/`membersOf`, ✅ `JavaLanguageServices` on the scheduler with diagnostics pushed into the document's `DiagnosticSet`, ✅ prelude mapper (`ScriptPrelude`), ✅ classpath probe (`HostClasspath`). ✅ reflection overlay (`ReflectionOverlay`), ✅ §15.5's **mapping boundary** (`MappingSet`, `ReadableView`, `InheritanceAwareRemapper` on plain ASM). ❌ remaining: **only** §15.5's **live name environment**, which needs a Minecraft platform to write or validate — see §15.5 | M0, M4, M5 | ✅ param/field/local coloured, unresolved flagged, deprecated struck; ✅ **the §13 checklist is twelve tests** (`BindingChecklistTest`), all passing, including on broken source; ✅ **the remap round-trip runs** — readable-named script → compiled → remapped → linked against `m_1234`, with an override staying an override and a negative control proving a naive remapper does not |
 | **M7** | **Java execution service — the product**: per-script child classloader over the band loader (§6.3), prelude/host-binding injection at runtime, compile-always/run-explicit lifecycle, the output remap pass wired for real (not just M6's fixture) including safepoint injection + host kill switch (§19.3), compiled-script cache `(source hash, mappings hash, band)` (§15.5 D.3), run/stop commands via `CommandRegistry`, disposal — a re-run replaces the loader and nothing pins the old one | M5, M6 | a script authored in the editor runs on explicit command, effect observable in the harness; re-run replaces the instance; kill interrupts a deliberate infinite loop; 100 compile/run/dispose cycles leak no classloaders (heap assertion); the §5.3 proof — compile-and-run with the grammar jars absent, headless |
 | **M8** | Decorations + diagnostics UI (§17): tracked ranges with stickiness, squiggle view part, Problems wiring | M0; M6 for real input | stickiness golden tests (Monaco's cases); squiggles stay attached while typing above them; Problems row ↔ document range round-trip |
 | **M9** | Completion (§18): substrate generalisation, matcher+ranking ports, Java providers, type index + auto-import | M6, M8 | `list.forEach(x -> x.|)` completes String members; unimported `ArrayList` inserts import as one undo step; latency within budget on the indexed modpack fixture |
