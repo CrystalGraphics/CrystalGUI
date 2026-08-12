@@ -56,6 +56,23 @@ public record Language(
     /** No comments, no pairs — plain text, where every editing aid should stay out of the way. */
     public static final Language PLAIN = new Language("plain", null, null, null, List.of());
 
+    /**
+     * Whether typing {@code c} should open a completion list — §18.1's trigger characters.
+     *
+     * <p>Derived rather than declared, because this is a <b>record</b> and a sixth component would have to
+     * be supplied at every construction site including a caller's own custom language — which is how a
+     * field ends up defaulted to the empty set everywhere except the two places somebody remembered.</p>
+     *
+     * <p>Only {@code .} today, and only for a language that has punctuation at all. It is the one trigger
+     * §18.1 names and the one every reference implementation agrees on. {@code ::}, {@code ->} and
+     * {@code @} are real triggers in real editors and are deliberately absent: each needs a provider that
+     * answers them <em>differently</em> from a plain member access, and adding the trigger before the answer
+     * exists produces a popup listing the wrong things rather than no popup at all.</p>
+     */
+    public boolean isCompletionTrigger(char c) {
+        return c == '.' && !brackets.isEmpty();
+    }
+
     /** C-family: Java, GLSL, C, and anything close enough to share the punctuation. */
     public static Language cFamily(String name) {
         return new Language(name, "//", "/*", "*/", List.of(

@@ -80,7 +80,7 @@ public class JavaLanguageServicesTest {
         List<List<Diagnostic>> announced = new ArrayList<>();
         JavaLanguageServices services = servicesFor(buffer);
         try {
-            services.onDiagnostics(announced::add);
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
             assertFalse("a listener attached after the first analysis heard nothing",
                     announced.isEmpty());
             assertTrue("well-formed source reported problems: " + announced,
@@ -98,7 +98,7 @@ public class JavaLanguageServicesTest {
         List<List<Diagnostic>> announced = new ArrayList<>();
         JavaLanguageServices services = servicesFor(buffer);
         try {
-            services.onDiagnostics(announced::add);
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
             announced.clear();
 
             // Break it: replace the literal with a call to something that does not exist.
@@ -124,7 +124,7 @@ public class JavaLanguageServicesTest {
         JavaLanguageServices services = servicesFor(buffer);
         try {
             List<List<Diagnostic>> announced = new ArrayList<>();
-            services.onDiagnostics(announced::add);
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
             announced.clear();
 
             for (int i = 0; i < 20; i++) {
@@ -241,7 +241,7 @@ public class JavaLanguageServicesTest {
         TextBuffer buffer = new TextBuffer("public class Script { }\n");
         List<List<Diagnostic>> announced = new ArrayList<>();
         JavaLanguageServices services = servicesFor(buffer);
-        Connection connection = services.onDiagnostics(announced::add);
+        Connection connection = services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
         announced.clear();
 
         services.close();
@@ -265,7 +265,7 @@ public class JavaLanguageServicesTest {
                 new JavaLanguageServices(buffer, engine, null, "Script", List.of());
         try {
             List<List<Diagnostic>> announced = new ArrayList<>();
-            services.onDiagnostics(announced::add);
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
             assertFalse(announced.isEmpty());
             assertFalse("a broken document reported nothing", announced.get(0).isEmpty());
         } finally {

@@ -365,6 +365,12 @@ theme {
     --splitter-hover-bg: var(--border-strong);
     --splitter-pressed-bg: var(--fg);
 
+    --completion-deprecated: var(--fg-hint);
+    --completion-detail: var(--fg-hint);
+    --completion-icon: var(--fg-hint);
+    --completion-label: var(--fg);
+    --completion-match: var(--link);
+
     --squiggle-error: var(--error);
     --squiggle-info: var(--info);
     --squiggle-warning: var(--warning);

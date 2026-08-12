@@ -109,10 +109,24 @@ public interface LanguageServices extends AutoCloseable {
      * that emitted deltas would need the consumer to keep a shadow copy, which is the same second home
      * arriving by a different route.</p>
      *
+     * <h3>{@link Versioned}, and why this one is gated where semantic tokens are not</h3>
+     *
+     * <p>A {@link Diagnostic} names a <b>row and column</b>, which is what every compiler reports and what
+     * survives an edit elsewhere in the file. Turning that into the offsets a squiggle is drawn from is a
+     * question about a <em>specific</em> document, so it can only be asked of the text the analysis actually
+     * saw. Announce a list without its version and the consumer converts row/column against whatever the
+     * document is now — silently, and wrongly in exactly the amount the user typed while the compile ran.</p>
+     *
+     * <p>So a stale list is <b>discarded</b> here, which is the opposite of the keep-per-line policy
+     * {@link SemanticTokenProvider} uses, and both are right: a colour on an untouched line is still correct
+     * when the document moves on, and an <em>offset</em> never is. Discarding does not starve the view —
+     * the job is debounced and keyed, so a list only lands after a pause, and a keystroke during a compile
+     * queues the next one. This is the choice {@link Versioned} exists to let a consumer make.</p>
+     *
      * <p>Invoked on the <b>UI thread</b>. The default subscribes nothing and returns a connection that
      * is already disconnected, which is the honest answer for an engine that never reports problems.</p>
      */
-    default Connection onDiagnostics(Consumer<List<Diagnostic>> listener) {
+    default Connection onDiagnostics(Consumer<Versioned<List<Diagnostic>>> listener) {
         return Connection.DISCONNECTED;
     }
 
