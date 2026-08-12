@@ -51,6 +51,7 @@ public final class BandSmoke {
             rhinoClassShutterRefuses(engines);
             jdtResolvesABindingAgainstTheRunningVm(engines);
             jdtRecoversBindingsFromBrokenSource(engines);
+            jdtCompilesAndTheScriptActuallyRuns(engines);
         } finally {
             engines.close();
         }
@@ -201,6 +202,84 @@ public final class BandSmoke {
         String qualified = qualifiedNameOf(engines, typeOfFirstField(engines, unit));
         check("jdt still resolves bindings in BROKEN source (setBindingsRecovery)",
                 "java.util.List<java.lang.String>".equals(qualified), qualified);
+    }
+
+    /**
+     * <b>A script compiles to bytecode and runs</b> — on this band's own JVM.
+     *
+     * <p>Everything above this proves the engine <em>analyses</em>. This is the one that proves it
+     * produces something the host can execute, which is the actual product. It matters most here
+     * rather than in a JUnit test on a modern JVM: the class files are targeted at this JVM's version,
+     * loaded by this JVM's loader, and running them is the only way to find out that the target level
+     * was spelled correctly. A wrong one fails as {@code UnsupportedClassVersionError}, which names a
+     * number and says nothing about the script.</p>
+     *
+     * <p>Uses {@code BatchCompiler} — public API present in all three bands — for the same reason the
+     * adapter does: {@code EclipseCompiler}, ECJ's {@code javax.tools.JavaCompiler}, is <b>absent from
+     * band 8</b>, so the standard-API route would compile, pass on a modern JVM, and fail exactly here.</p>
+     */
+    private static void jdtCompilesAndTheScriptActuallyRuns(ClassLoader engines) throws Exception {
+        java.io.File work = java.io.File.createTempFile("cgui-band-smoke", "");
+        if (!work.delete() || !work.mkdirs()) throw new IllegalStateException("no temp dir");
+        java.io.File sources = new java.io.File(work, "src");
+        java.io.File output = new java.io.File(work, "out");
+        sources.mkdirs();
+        output.mkdirs();
+
+        java.io.File source = new java.io.File(sources, "Smoke.java");
+        String text = "import java.util.ArrayList;\n"
+                + "import java.util.List;\n"
+                + "public class Smoke {\n"
+                + "    public static String run() {\n"
+                + "        List<String> parts = new ArrayList<String>();\n"
+                + "        for (int i = 1; i <= 3; i++) parts.add(String.valueOf(i * i));\n"
+                + "        StringBuilder out = new StringBuilder();\n"
+                + "        for (String part : parts) out.append(part).append('-');\n"
+                + "        return out.toString();\n"
+                + "    }\n"
+                + "}\n";
+        java.io.OutputStream stream = new java.io.FileOutputStream(source);
+        try {
+            stream.write(text.getBytes("UTF-8"));
+        } finally {
+            stream.close();
+        }
+
+        // The level this JVM can LOAD, which is the binding constraint -- not the level the compiler
+        // could reach.
+        String spec = System.getProperty("java.specification.version");
+        int feature = spec.startsWith("1.") ? Integer.parseInt(spec.substring(2))
+                : Integer.parseInt(spec.split("[^0-9]")[0]);
+        String level = feature <= 8 ? "1." + feature : String.valueOf(feature);
+
+        Class<?> batch = Class.forName("org.eclipse.jdt.core.compiler.batch.BatchCompiler", true, engines);
+        Class<?> progress = Class.forName("org.eclipse.jdt.core.compiler.CompilationProgress", true, engines);
+        Method compile = batch.getMethod("compile", String.class,
+                java.io.PrintWriter.class, java.io.PrintWriter.class, progress);
+
+        java.io.StringWriter out = new java.io.StringWriter();
+        java.io.StringWriter err = new java.io.StringWriter();
+        String command = "-source " + level + " -target " + level + " -proc:none -nowarn"
+                + " -d \"" + output.getAbsolutePath() + "\" \"" + source.getAbsolutePath() + "\"";
+        Object ok = compile.invoke(null, command,
+                new java.io.PrintWriter(out), new java.io.PrintWriter(err), null);
+        // stderr is shown ONLY on failure. With no -classpath given, ECJ inherits java.class.path and
+        // warns about entries that do not exist -- true, harmless, and nothing to do with the script.
+        // Printing it on success makes a passing check look like a failing one.
+        check("ecj compiles a script to bytecode", Boolean.TRUE.equals(ok),
+                Boolean.TRUE.equals(ok) ? null : err.toString().trim());
+
+        java.io.File produced = new java.io.File(output, "Smoke.class");
+        check("the class file exists", produced.isFile(), produced.length() + " bytes");
+
+        URLClassLoader scripts = new URLClassLoader(
+                new URL[]{output.toURI().toURL()}, BandSmoke.class.getClassLoader());
+        try {
+            Object answer = Class.forName("Smoke", true, scripts).getMethod("run").invoke(null);
+            check("THE SCRIPT RUNS on this JVM", "1-4-9-".equals(String.valueOf(answer)), answer);
+        } finally {
+            scripts.close();
+        }
     }
 
     /**
