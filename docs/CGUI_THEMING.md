@@ -170,6 +170,7 @@ editor scheme's.
 | `--completion-icon` | `var(--fg-hint)` | base.css |
 | `--completion-label` | `var(--fg)` | base.css |
 | `--completion-match` | `var(--link)` | base.css |
+| `--completion-options-hover-bg` | `var(--hover-bg)` | base.css |
 | `--completion-params` | `var(--fg-hint)` | base.css |
 | `--completion-selected-bg` | `var(--accent-soft)` | base.css |
 | `--configkit-alpha-bg` | `#14140F` | crystal-dark.css |

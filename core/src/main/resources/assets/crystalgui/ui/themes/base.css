@@ -371,6 +371,7 @@ theme {
     --completion-detail: var(--fg-hint);
     --completion-hint: var(--fg-hint);
     --completion-icon: var(--fg-hint);
+    --completion-options-hover-bg: var(--hover-bg);
     --completion-label: var(--fg);
     --completion-match: var(--link);
 

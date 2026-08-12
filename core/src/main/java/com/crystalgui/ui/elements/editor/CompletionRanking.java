@@ -51,13 +51,53 @@ final class CompletionRanking {
      * already — adding it twice is how a tier gap gets crossed by accident.</p>
      */
     static Comparator<CompletionSession.Row> byQuality() {
+        if (sortByName) return byNameOnly();
         return Comparator
                 .comparingInt(CompletionRanking::tierOf)
                 .thenComparingInt(row -> row.item().deprecated() ? 1 : 0)
                 .thenComparingInt(row -> proximityOf(row.item().kind()))
+                // RECENCY, after proximity and before the positional bonuses -- §18.3's ordering. It only
+                // ever separates items that already matched and are already equally near, which is the
+                // whole reason it can be this crude without being disruptive.
+                .thenComparingInt(row -> -CompletionRecency.shared().rankOf(row.item()))
                 .thenComparingInt(row -> -matchScore(row))
                 .thenComparing(row -> row.item().sortKey())
                 .thenComparing(row -> row.item().label());
+    }
+
+    /**
+     * Plain alphabetical — IntelliJ's "Sort by Name", offered from the popup's own menu.
+     *
+     * <p>It deliberately drops <em>everything</em> else, relevance included. That is the point of the
+     * option: a ranked list is better nearly always and impossible to predict when you already know the
+     * name you want and just need to find it. Keeping the tier as a first key would make it "sort by name
+     * within relevance bands", which is neither thing and would be the version nobody asked for.</p>
+     *
+     * <p>Case-insensitive, so {@code PRECISION_LIMIT} files beside {@code precision} rather than in a
+     * separate upper-case block — the sorted-by-name view exists to be scanned by eye.</p>
+     */
+    private static Comparator<CompletionSession.Row> byNameOnly() {
+        return Comparator
+                .comparing((CompletionSession.Row row) -> row.item().filterKey(),
+                        String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(row -> row.item().label());
+    }
+
+    /**
+     * Whether the list is ordered by name rather than by relevance.
+     *
+     * <p>Application-wide and in memory, matching where the toggle lives: it is offered from the popup's
+     * menu and applies to the next popup too, because a sort order you chose once and had to choose again
+     * is worse than not offering it.</p>
+     */
+    private static volatile boolean sortByName;
+
+    static boolean isSortByName() {
+        return sortByName;
+    }
+
+    static void setSortByName(boolean value) {
+        sortByName = value;
     }
 
     /**
