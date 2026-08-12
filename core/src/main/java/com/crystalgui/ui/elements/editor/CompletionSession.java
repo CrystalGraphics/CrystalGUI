@@ -258,6 +258,11 @@ public final class CompletionSession {
         return rows;
     }
 
+    /** Re-runs the filter and the ranking — what a sort-order change needs, with no re-query. */
+    public void reorder() {
+        if (!closed) refilter();
+    }
+
     public int selectedIndex() {
         return selected;
     }
@@ -344,6 +349,9 @@ public final class CompletionSession {
         changes.sort(Comparator.comparingInt(Change::from));
 
         buffer.edit(ChangeSet.of(buffer.length(), changes));
+        // AFTER the edit, so a refused change set (overlapping edits) does not teach the ranking that
+        // something was chosen when nothing was.
+        CompletionRecency.shared().note(item);
         close();
         return true;
     }

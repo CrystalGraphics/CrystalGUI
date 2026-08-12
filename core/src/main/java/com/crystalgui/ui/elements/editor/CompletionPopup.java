@@ -8,6 +8,9 @@ import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.Menu;
+import com.crystalgui.ui.elements.MenuItem;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.list.ListRenderer;
@@ -67,6 +70,8 @@ public final class CompletionPopup extends Popover {
     public static final String DETAIL_CLASS = "__completion-detail__";
     public static final String DEPRECATED_CLASS = "__completion-deprecated__";
     public static final String HINT_CLASS = "__completion-hint__";
+    public static final String HINT_TEXT_CLASS = "__completion-hint-text__";
+    public static final String OPTIONS_CLASS = "__completion-options__";
 
     /**
      * A key that accepts, and the word the strip uses for it.
@@ -157,7 +162,24 @@ public final class CompletionPopup extends Popover {
     private UIElement widthProbe;
 
     /** The bottom strip. See {@link #ACCEPT_KEYS} — its text is derived from the same list the editor reads. */
-    private final UIText hint = new UIText(hintText());
+    private final UIElement hint = new UIElement();
+    private final UIText hintLabel = new UIText(hintText());
+
+    /**
+     * The overflow button, and the reason it exists at all.
+     *
+     * <p>IntelliJ puts two marks at this end of the strip: a lightbulb and a kebab. <b>Only the kebab is
+     * here</b>, because only it has something to do — its menu carries "Sort by Name", which is a real
+     * toggle we can honour. The lightbulb offers quick-fixes, and we have none; a mark that does nothing
+     * when pressed is worse than an absent one, so it stays absent until there is something behind it.</p>
+     *
+     * <p><b>An icon rather than a glyph.</b> The obvious spelling is a {@code U+22EE} vertical ellipsis in
+     * the label, and the bundled {@code MinecraftRegular.otf} does not have one \u2014 it draws tofu, exactly as
+     * a {@code U+2026} horizontal ellipsis does, which {@code UIText} already carries a whole fallback for.
+     * Three dots are not creative work, so the icon is ours and needs no attribution; it is drawn in
+     * {@code currentColor}, so it inherits this button's hover state like every other chrome mark.</p>
+     */
+    private final Button options = new Button("");
 
     /** What the probe last measured, so the width only moves when the content does. */
     private float measuredWidth;
@@ -184,7 +206,21 @@ public final class CompletionPopup extends Popover {
         addInternalChild(list);
 
         hint.addClass(HINT_CLASS);
-        hint.setHitTest(false);
+        hintLabel.addClass(HINT_TEXT_CLASS);
+        hintLabel.setHitTest(false);
+        hint.addChild(hintLabel);
+
+        UIElement hintSpacer = new UIElement();
+        hintSpacer.layout(l -> l.width(0f).flexGrow(1f));
+        hintSpacer.setHitTest(false);
+        hint.addChild(hintSpacer);
+
+        options.addClass(OPTIONS_CLASS);
+        // FocusPolicy.NONE, like everything else in here: pressing it must not take the caret out of the
+        // document, which is the one thing this popup may never do.
+        options.setFocusPolicy(FocusPolicy.NONE);
+        options.onPressed.connect(this::openOptionsMenu);
+        hint.addChild(options);
         addInternalChild(hint);
 
         widthProbe = renderer.createTemplate();
@@ -262,6 +298,27 @@ public final class CompletionPopup extends Popover {
 
     public float anchorY() {
         return anchorY;
+    }
+
+    /**
+     * The sort menu — IntelliJ's own, which offers exactly this one toggle.
+     *
+     * <p>Built fresh each time rather than retained, so its checked state cannot drift from the preference
+     * it displays. A menu is a handful of elements and this opens on a deliberate press, not per frame.</p>
+     */
+    private void openOptionsMenu() {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        Menu menu = new Menu();
+        MenuItem sortByName = menu.addCheckableItem("Sort by Name");
+        sortByName.setSelected(CompletionRanking.isSortByName());
+        sortByName.onPressed.connect(() -> {
+            CompletionRanking.setSortByName(!CompletionRanking.isSortByName());
+            // The live list re-sorts without re-querying -- the items have not changed, only their order.
+            if (session != null) session.reorder();
+        });
+        window.addOverlay(menu, this);
+        menu.showAt(options.getWindowX(), options.getWindowY() + HINT_HEIGHT, options);
     }
 
     private void refresh() {

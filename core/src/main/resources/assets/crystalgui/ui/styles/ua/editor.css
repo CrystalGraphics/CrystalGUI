@@ -744,7 +744,11 @@ completionpopup {
     flex-direction: row;
     align-items: center;
     padding-left: 4px;
-    padding-right: 6px;
+    /* Clears the scrollbar. The bar is an absolute OVERLAY -- it takes no layout width -- so a row whose
+     * padding merely matched --scrollbar-size left the type column running exactly up to it and, once the
+     * list scrolled, underneath it. Reserving the bar's width plus a little air is what the overlay model
+     * needs from anything drawing to the right edge. */
+    padding-right: 12px;
 }
 
 /* NO `gap-all` on the row, and that is the point: a gap applies between EVERY pair of children, so it put
@@ -885,9 +889,34 @@ completionpopup text::highlight(completion-match) {
  * popup's total height in Java and cannot read the cascade. */
 .__completion-hint__ {
     height: 16px;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 6px;
+    padding-right: 4px;
+}
+
+.__completion-hint-text__ {
     font-size: 9px;
     color: var(--completion-hint, #6E7681);
-    padding-left: 6px;
-    padding-right: 6px;
-    text-align: left;
+}
+
+/* The overflow button. `button` carries a min-height and padding of its own, and BOTH have to be cleared
+ * -- min-height is a different property from height, so a base rule's minimum beats any size set here at
+ * higher specificity. The search toggles cost three rounds of shrinking `height` before that was noticed.
+ *
+ * `background: none` as well as a colour: they are separate properties, and a rule setting only the colour
+ * is painted over by whatever drawable won. */
+.__completion-options__ {
+    width: 14px;
+    height: 14px;
+    min-height: 0;
+    min-width: 0;
+    padding-all: 0;
+    background: icon("crystalgui:more-vertical");
+    color: var(--completion-hint, #6E7681);
+}
+
+.__completion-options__:hover {
+    background-color: var(--completion-options-hover-bg, #3A3D41);
+    color: var(--completion-label, #D4D4D4);
 }

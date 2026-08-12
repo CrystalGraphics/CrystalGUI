@@ -8,6 +8,8 @@ import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.Versioned;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -29,6 +31,18 @@ import static org.junit.Assert.assertTrue;
  * reached through pixels.</p>
  */
 public class CompletionSessionTest {
+
+    /**
+     * Recency and the sort mode are <b>application-wide</b>, which is right for the feature and hostile to
+     * tests — a run that left either set would silently reorder every list asserted on afterwards. Cleared
+     * on both sides of every test rather than only before, so a failing test cannot poison its neighbours.
+     */
+    @Before
+    @After
+    public void resetGlobalPreferences() {
+        CompletionRecency.shared().clear();
+        CompletionRanking.setSortByName(false);
+    }
 
     /** A provider that answers from a fixed list and counts how often it was asked. */
     private static final class StubProvider implements CompletionProvider {
@@ -407,5 +421,94 @@ public class CompletionSessionTest {
                 CompletionProvider.TriggerKind.EXPLICIT, null);
         assertFalse(session.accept());
         assertEquals("abc", buffer.toString());
+    }
+
+    // ── Recency and the sort mode ───────────────────────────────────────────────────────────────
+
+    /**
+     * Something accepted before rises above something equally good that was not.
+     *
+     * <p>Recency sits after proximity, so this can only ever separate items that already matched equally
+     * well and are already equally near — which is why it can be this crude without making the order
+     * unpredictable. Two fields tie on everything else, so the alphabet decides until one is chosen.</p>
+     */
+    @Test
+    public void anAcceptedItemIsOfferedSoonerNextTime() {
+        StubProvider provider = new StubProvider();
+        provider.items.add(item("err", SymbolKind.FIELD));
+        provider.items.add(item("out", SymbolKind.FIELD));
+
+        TextBuffer first = new TextBuffer("System.");
+        CompletionSession before = CompletionSession.open(first, provider, 7,
+                CompletionProvider.TriggerKind.CHARACTER, ".");
+        assertEquals("the alphabet decides while nothing has been chosen",
+                List.of("err", "out"), labelsOf(before));
+        before.setSelectedIndex(1);
+        assertTrue(before.accept());
+
+        TextBuffer second = new TextBuffer("System.");
+        CompletionSession after = CompletionSession.open(second, provider, 7,
+                CompletionProvider.TriggerKind.CHARACTER, ".");
+        assertEquals("the one just accepted now leads", "out", labelsOf(after).get(0));
+    }
+
+    @Test
+    public void recencyNeverOutranksABetterMatch() {
+        // The ordering that makes recency safe: it is consulted only among items of the same match tier,
+        // so a thing accepted a hundred times still loses to what the user is actually typing.
+        StubProvider provider = new StubProvider();
+        provider.items.add(item("zzzOther", SymbolKind.METHOD));
+        provider.items.add(item("alpha", SymbolKind.METHOD));
+
+        TextBuffer priming = new TextBuffer("");
+        CompletionSession prime = CompletionSession.open(priming, provider, 0,
+                CompletionProvider.TriggerKind.EXPLICIT, null);
+        prime.setSelectedIndex(labelsOf(prime).indexOf("zzzOther"));
+        assertTrue(prime.accept());
+
+        TextBuffer typed = new TextBuffer("alp");
+        CompletionSession session = CompletionSession.open(typed, provider, 3,
+                CompletionProvider.TriggerKind.EXPLICIT, null);
+        assertEquals("a prefix hit beats any amount of recency", "alpha", labelsOf(session).get(0));
+    }
+
+    /**
+     * "Sort by Name" drops relevance entirely, which is the point of offering it.
+     *
+     * <p>Keeping the match tier as a first key would make it "sort by name within relevance bands" — which
+     * is neither thing, and is the version nobody asked for.</p>
+     */
+    @Test
+    public void sortByNameOrdersAlphabeticallyAndIgnoresProximity() {
+        StubProvider provider = new StubProvider();
+        provider.items.add(item("zebra", SymbolKind.LOCAL_VARIABLE));
+        provider.items.add(item("alpha", SymbolKind.CLASS));
+
+        CompletionRanking.setSortByName(true);
+        TextBuffer buffer = new TextBuffer("x.");
+        CompletionSession session = CompletionSession.open(buffer, provider, 2,
+                CompletionProvider.TriggerKind.CHARACTER, ".");
+
+        assertEquals("a class before a local, because A comes before Z",
+                List.of("alpha", "zebra"), labelsOf(session));
+    }
+
+    @Test
+    public void reorderRerunsTheRankingWithoutAskingTheProviderAgain() {
+        StubProvider provider = new StubProvider();
+        provider.items.add(item("zebra", SymbolKind.LOCAL_VARIABLE));
+        provider.items.add(item("alpha", SymbolKind.CLASS));
+
+        TextBuffer buffer = new TextBuffer("x.");
+        CompletionSession session = CompletionSession.open(buffer, provider, 2,
+                CompletionProvider.TriggerKind.CHARACTER, ".");
+        assertEquals("the local is nearer", "zebra", labelsOf(session).get(0));
+        assertEquals(1, provider.requests);
+
+        CompletionRanking.setSortByName(true);
+        session.reorder();
+
+        assertEquals("alpha", labelsOf(session).get(0));
+        assertEquals("the items did not change, only their order", 1, provider.requests);
     }
 }
