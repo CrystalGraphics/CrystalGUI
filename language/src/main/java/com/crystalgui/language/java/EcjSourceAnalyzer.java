@@ -17,7 +17,11 @@ import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Assignment;
+import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.CatchClause;
 import org.eclipse.jdt.core.dom.CompilationUnit;
+import org.eclipse.jdt.core.dom.EnhancedForStatement;
+import org.eclipse.jdt.core.dom.ForStatement;
 import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
@@ -27,7 +31,10 @@ import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.NodeFinder;
 import org.eclipse.jdt.core.dom.ReturnStatement;
 import org.eclipse.jdt.core.dom.SimpleName;
+import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
+import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
+import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -517,6 +524,118 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             // package, which two types share only if neither has one.
             return owner.getPackage() != null && asking.getPackage() != null
                     && owner.getPackage().getName().equals(asking.getPackage().getName());
+        }
+
+        /**
+         * Everything usable unqualified at {@code offset}, nearest scope first.
+         *
+         * <h3>Walking out from the caret, not down from the unit</h3>
+         *
+         * <p>A visitor over the whole compilation unit would collect every local in every method and then
+         * have to work out which are in scope — which is the same walk, done backwards, with a filter that
+         * is easy to get subtly wrong. Starting at the node under the caret and walking to the root visits
+         * exactly the enclosing scopes and nothing else, and the order it produces is already the proximity
+         * order the ranking wants.</p>
+         *
+         * <h3>"Declared before the caret" is a real filter, and only for locals</h3>
+         *
+         * <p>A local is in scope from its declaration to the end of its block, so a local declared below the
+         * caret must not be offered — completing it produces "cannot be resolved" on a name the list just
+         * suggested. Fields and methods have no such rule: JLS lets a method refer to a field declared later
+         * in the class, so filtering them by position would hide half of a class from itself.</p>
+         */
+        @Override
+        public List<SymbolInfo> symbolsInScope(int offset) {
+            List<SymbolInfo> found = new ArrayList<>();
+            CompilationUnit resolved = unit;
+            if (resolved == null) return found;
+
+            java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+            ASTNode node = NodeFinder.perform(resolved, Math.max(0, Math.min(offset, resolved.getLength())), 0);
+            for (ASTNode walk = node; walk != null; walk = walk.getParent()) {
+                collectLocalsDeclaredIn(walk, offset, seen, found);
+                if (walk instanceof org.eclipse.jdt.core.dom.MethodDeclaration) {
+                    org.eclipse.jdt.core.dom.MethodDeclaration method =
+                            (org.eclipse.jdt.core.dom.MethodDeclaration) walk;
+                    for (Object parameter : method.parameters()) {
+                        addVariable((SingleVariableDeclaration) parameter, SymbolKind.PARAMETER, seen, found);
+                    }
+                }
+                if (walk instanceof org.eclipse.jdt.core.dom.AbstractTypeDeclaration) {
+                    ITypeBinding type = ((org.eclipse.jdt.core.dom.AbstractTypeDeclaration) walk).resolveBinding();
+                    // THE SAME collector the dot path uses, so a field is described identically whether it
+                    // was reached by name or through a receiver. Two describers is two answers to what a
+                    // member's detail column says.
+                    if (type != null) collectMembers(type, type, seen, found);
+                }
+            }
+            return found;
+        }
+
+        /**
+         * Locals declared directly in {@code scope}, before {@code offset}.
+         *
+         * <p>Direct children only, deliberately: a nested block's locals are not in scope out here, and
+         * recursing would offer them. The enclosing walk visits each scope in turn, so every level is
+         * reached exactly once and nothing is missed by not recursing.</p>
+         */
+        private static void collectLocalsDeclaredIn(ASTNode scope, int offset,
+                                                    java.util.Set<String> seen, List<SymbolInfo> into) {
+            if (scope instanceof Block) {
+                for (Object statement : ((Block) scope).statements()) {
+                    if (!(statement instanceof VariableDeclarationStatement)) continue;
+                    VariableDeclarationStatement declaration = (VariableDeclarationStatement) statement;
+                    if (declaration.getStartPosition() > offset) continue;
+                    for (Object fragment : declaration.fragments()) {
+                        addFragment((VariableDeclarationFragment) fragment, seen, into);
+                    }
+                }
+                return;
+            }
+            // The three declaring statements that are not blocks. Each binds a name for the body it
+            // heads, and each is otherwise invisible to the walk above -- a for-loop's index is the
+            // single most likely thing to be completed inside its own body.
+            if (scope instanceof EnhancedForStatement) {
+                addVariable(((EnhancedForStatement) scope).getParameter(),
+                        SymbolKind.LOCAL_VARIABLE, seen, into);
+            } else if (scope instanceof CatchClause) {
+                addVariable(((CatchClause) scope).getException(), SymbolKind.LOCAL_VARIABLE, seen, into);
+            } else if (scope instanceof ForStatement) {
+                for (Object initialiser : ((ForStatement) scope).initializers()) {
+                    if (!(initialiser instanceof VariableDeclarationExpression)) continue;
+                    for (Object fragment : ((VariableDeclarationExpression) initialiser).fragments()) {
+                        addFragment((VariableDeclarationFragment) fragment, seen, into);
+                    }
+                }
+            } else if (scope instanceof org.eclipse.jdt.core.dom.LambdaExpression) {
+                for (Object parameter : ((org.eclipse.jdt.core.dom.LambdaExpression) scope).parameters()) {
+                    if (parameter instanceof SingleVariableDeclaration) {
+                        addVariable((SingleVariableDeclaration) parameter, SymbolKind.PARAMETER, seen, into);
+                    } else if (parameter instanceof VariableDeclarationFragment) {
+                        addFragment((VariableDeclarationFragment) parameter, seen, into);
+                    }
+                }
+            }
+        }
+
+        private static void addFragment(VariableDeclarationFragment fragment,
+                                        java.util.Set<String> seen, List<SymbolInfo> into) {
+            IVariableBinding binding = fragment.resolveBinding();
+            String name = fragment.getName().getIdentifier();
+            if (!seen.add(name)) return;
+            into.add(new SymbolInfo(name, SymbolKind.LOCAL_VARIABLE,
+                    binding == null ? null : typeRef(binding.getType()), null, null,
+                    binding == null ? java.util.Set.of() : modifiersOf(binding), null));
+        }
+
+        private static void addVariable(SingleVariableDeclaration declaration, SymbolKind kind,
+                                        java.util.Set<String> seen, List<SymbolInfo> into) {
+            IVariableBinding binding = declaration.resolveBinding();
+            String name = declaration.getName().getIdentifier();
+            if (!seen.add(name)) return;
+            into.add(new SymbolInfo(name, kind,
+                    binding == null ? null : typeRef(binding.getType()), null, null,
+                    binding == null ? java.util.Set.of() : modifiersOf(binding), null));
         }
 
         /** The type a caret sits inside, which is what accessibility is judged from. */

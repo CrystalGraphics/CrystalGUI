@@ -111,6 +111,7 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
+
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -163,6 +164,11 @@ editor scheme's.
 | `--colorpicker-handle-shadow` | `#00000080` | crystal-dark.css |
 | `--colorpicker-thumb` | `var(--fg-on-accent)` | base.css |
 | `--colorpicker-thumb-ring` | `var(--border-strong)` | base.css |
+| `--completion-deprecated` | `var(--fg-hint)` | base.css |
+| `--completion-detail` | `var(--fg-hint)` | base.css |
+| `--completion-icon` | `var(--fg-hint)` | base.css |
+| `--completion-label` | `var(--fg)` | base.css |
+| `--completion-match` | `var(--link)` | base.css |
 | `--configkit-alpha-bg` | `#14140F` | crystal-dark.css |
 | `--configkit-alpha-fill` | `var(--fg-on-accent)` | base.css |
 | `--configkit-band-bg` | `var(--surface-raised)` | base.css |
@@ -546,4 +552,5 @@ editor scheme's.
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
+
 <!-- TOKENS:END -->

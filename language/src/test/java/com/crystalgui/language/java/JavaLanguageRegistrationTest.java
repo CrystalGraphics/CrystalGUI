@@ -8,6 +8,7 @@ import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.lang.Versioned;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
@@ -113,7 +114,7 @@ public class JavaLanguageRegistrationTest {
         assertNotNull(services);
         try {
             List<List<Diagnostic>> announced = new ArrayList<>();
-            services.onDiagnostics(announced::add);
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
 
             assertFalse("nothing was announced — the analysis never ran", announced.isEmpty());
             List<Diagnostic> problems = announced.get(announced.size() - 1);
@@ -225,7 +226,7 @@ public class JavaLanguageRegistrationTest {
         assertNotNull(services);
         try {
             List<List<Diagnostic>> announced = new ArrayList<>();
-            services.onDiagnostics(announced::add);
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
             for (Diagnostic problem : announced.get(announced.size() - 1)) {
                 assertFalse("a packaged file did not analyse clean: " + problem,
                         problem.severity() == DiagnosticSeverity.ERROR);

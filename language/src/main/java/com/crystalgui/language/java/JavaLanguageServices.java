@@ -8,6 +8,7 @@ import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.lang.LanguageServices;
 import com.crystalgui.text.lang.Resolver;
 import com.crystalgui.text.lang.SemanticTokenProvider;
@@ -19,7 +20,9 @@ import com.crystalgui.text.syntax.SyntaxTokenizer;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -77,7 +80,7 @@ public final class JavaLanguageServices implements LanguageServices {
     private final List<String> classpath;
 
     private final Connection bufferSubscription;
-    private final List<Consumer<List<Diagnostic>>> diagnosticListeners = new ArrayList<>();
+    private final List<Consumer<Versioned<List<Diagnostic>>>> diagnosticListeners = new ArrayList<>();
     private final SemanticTokens tokens = new SemanticTokens();
 
     /** The most recent analysis, and the only mutable state here. UI thread only. */
@@ -91,6 +94,7 @@ public final class JavaLanguageServices implements LanguageServices {
         this.scheduler = scheduler;
         this.className = className;
         this.classpath = classpath == null ? Collections.emptyList() : new ArrayList<>(classpath);
+        this.completion = new JavaCompletionProvider(buffer, () -> current, typeIndexFor(this.classpath));
         this.bufferSubscription = buffer.onChanged.connect(change -> schedule());
         // ONE ANALYSIS AT CONSTRUCTION, undebounced. A document that is opened and not typed in would
         // otherwise have no colours and no problems until the first keystroke -- which is exactly the
@@ -114,14 +118,40 @@ public final class JavaLanguageServices implements LanguageServices {
     }
 
     @Override
-    public Connection onDiagnostics(Consumer<List<Diagnostic>> listener) {
+    public CompletionProvider completion() {
+        return completion;
+    }
+
+    /**
+     * Built once per document, reading {@code current} through a supplier.
+     *
+     * <p>A supplier rather than the analysis itself, because {@code current} is swapped on every compile and
+     * a provider holding the instance would answer from whichever analysis existed when it was built —
+     * silently going stale after the first edit, which is the worst version: the list is plausible and
+     * describes a document from thirty seconds ago.</p>
+     */
+    private final JavaCompletionProvider completion;
+
+    @Override
+    public Connection onDiagnostics(Consumer<Versioned<List<Diagnostic>>> listener) {
         if (listener == null || closed) return Connection.DISCONNECTED;
         diagnosticListeners.add(listener);
         // FIRED IMMEDIATELY IF THERE IS ALREADY AN ANSWER. A view attached after the first analysis
         // landed would otherwise show nothing until the next edit -- and for a file nobody types in,
         // that is forever.
-        if (current != null) listener.accept(current.diagnostics());
+        if (current != null) listener.accept(announcement(current));
         return () -> diagnosticListeners.remove(listener);
+    }
+
+    /**
+     * The analysis's problems, stamped with the document version they describe.
+     *
+     * <p>The version is the <b>analysis's</b>, never {@code buffer.version()} read at announce time. Those
+     * differ by exactly the typing that happened while the compile ran, which is the whole quantity the
+     * stamp exists to measure — reading it here would make every list look fresh and the gate a no-op.</p>
+     */
+    private static Versioned<List<Diagnostic>> announcement(SourceAnalyzer.Analysis analysis) {
+        return Versioned.of(analysis.version(), analysis.diagnostics());
     }
 
     // ── Scheduling ──────────────────────────────────────────────────────────────────────────────
@@ -141,6 +171,22 @@ public final class JavaLanguageServices implements LanguageServices {
                 .onDone(this::install)
                 .submit();
     }
+
+    /**
+     * One index per distinct classpath, shared by every document that has it.
+     *
+     * <p>Per-document would rescan tens of thousands of jar entries for every file opened, for an answer
+     * that cannot differ — the classpath does not change while the process runs. Keyed on the list itself
+     * rather than on the engine, because two engines on one classpath should still share one scan.</p>
+     *
+     * <p>Unbounded, and that is fine: a process has one or two classpaths, so this is a map with one or two
+     * entries whose lifetime is the process's. Evicting would mean rescanning.</p>
+     */
+    private static synchronized TypeIndex typeIndexFor(List<String> classpath) {
+        return TYPE_INDICES.computeIfAbsent(classpath, TypeIndex::new);
+    }
+
+    private static final Map<List<String>, TypeIndex> TYPE_INDICES = new HashMap<>();
 
     /** Analyses on the calling thread — construction, and any caller with no scheduler. */
     private void analyzeNow() {
@@ -163,8 +209,9 @@ public final class JavaLanguageServices implements LanguageServices {
         if (previous != null) previous.close();
 
         tokens.adopt(analysis);
-        for (Consumer<List<Diagnostic>> listener : new ArrayList<>(diagnosticListeners)) {
-            listener.accept(analysis.diagnostics());
+        Versioned<List<Diagnostic>> announced = announcement(analysis);
+        for (Consumer<Versioned<List<Diagnostic>>> listener : new ArrayList<>(diagnosticListeners)) {
+            listener.accept(announced);
         }
     }
 

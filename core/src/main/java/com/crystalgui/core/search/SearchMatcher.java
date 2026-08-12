@@ -55,6 +55,25 @@ public final class SearchMatcher {
      */
     @Nullable
     public static SearchMatch match(SearchQuery query, @Nullable String candidate, int fieldWeight) {
+        return match(query, candidate, fieldWeight, false);
+    }
+
+    /**
+     * As {@link #match(SearchQuery, String, int)}, with the scattered-subsequence tier switched on.
+     *
+     * <p>{@code allowSubsequence} is a property of the <b>consumer</b>, not of what the user typed, which is
+     * why it is an argument here rather than a fourth {@link SearchQuery.Options} field. A completion list
+     * wants {@code fMS} to reach {@code fooMethodStuff}; a create menu deliberately does not, because over a
+     * few hundred short labels the same rule returns a long tail nobody meant. See
+     * {@link SearchMatch.Kind#SUBSEQUENCE}.</p>
+     *
+     * <p>It is the <b>last</b> tier tried, so nothing above it changes behaviour: an exact, prefix, acronym
+     * or substring hit is found and returned before this is reached. Switching it on can only add matches
+     * that would otherwise have been {@code null}, never re-rank existing ones.</p>
+     */
+    @Nullable
+    public static SearchMatch match(SearchQuery query, @Nullable String candidate, int fieldWeight,
+                                    boolean allowSubsequence) {
         if (query.isEmpty() || candidate == null || candidate.isEmpty()) return null;
 
         // REGEX IS ITS OWN PATH and returns early: none of the ladder below means anything for a pattern,
@@ -102,8 +121,118 @@ public final class SearchMatcher {
             return scored(SearchMatch.Kind.SUBSTRING, fieldWeight, candidate, at,
                     List.of(new SearchMatch.Range(at, at + needle.length())));
         }
+
+        if (allowSubsequence) {
+            Subsequence scattered = matchSubsequence(needle, candidate, query.options().matchCase());
+            if (scattered != null) {
+                return scored(SearchMatch.Kind.SUBSEQUENCE, fieldWeight, candidate,
+                        scattered.ranges().get(0).start(), scattered.ranges(), scattered.quality());
+            }
+        }
         return null;
     }
+
+    /** A scattered match and how well its characters landed. @see #matchSubsequence */
+    private record Subsequence(List<SearchMatch.Range> ranges, int quality) {
+    }
+
+    /**
+     * The scattered-subsequence match — VS Code's {@code fuzzyScore}, in the shape this codebase needs.
+     *
+     * <h3>Optimal rather than greedy, and the reason is the highlight</h3>
+     *
+     * <p>A greedy leftmost walk finds <em>a</em> subsequence and usually the wrong one: {@code fMS} against
+     * {@code fooMethodStuff} greedily takes the {@code f} of {@code foo}, then the first {@code M} — fine —
+     * then the {@code s} of… there is none before {@code Stuff}, so it works here and fails on the next
+     * name along. The visible symptom is not a missing match but a <b>wrong band</b>: the highlighted
+     * characters are not the ones a reader would say matched, which reads as the highlighting being broken
+     * rather than the matching.</p>
+     *
+     * <p>So this is a small dynamic program over (pattern index, candidate index) maximising a score that
+     * rewards word-start hits and contiguity, exactly the two bonuses VS Code's version has. Bounded
+     * because it is quadratic: both a query and an identifier are short, and anything longer falls back to
+     * no match rather than to a slow one — a completion list is redrawn on every keystroke.</p>
+     */
+    @Nullable
+    private static Subsequence matchSubsequence(String needle, String candidate, boolean matchCase) {
+        int patternLength = needle.length();
+        int candidateLength = candidate.length();
+        if (patternLength == 0 || patternLength > candidateLength) return null;
+        if (patternLength > MAX_SUBSEQUENCE_PATTERN || candidateLength > MAX_SUBSEQUENCE_CANDIDATE) return null;
+
+        // best[p][c] = the best score for matching needle[p..] starting the search at candidate[c..],
+        // or MIN_VALUE for "impossible". Walked backwards so each cell only reads cells already filled.
+        int[][] best = new int[patternLength + 1][candidateLength + 1];
+        int[][] take = new int[patternLength + 1][candidateLength + 1];
+        for (int c = 0; c <= candidateLength; c++) best[patternLength][c] = 0;
+        for (int p = patternLength - 1; p >= 0; p--) {
+            best[p][candidateLength] = Integer.MIN_VALUE;
+            for (int c = candidateLength - 1; c >= 0; c--) {
+                int skip = best[p][c + 1];
+                int match = Integer.MIN_VALUE;
+                if (equalsAt(needle.charAt(p), candidate.charAt(c), matchCase)) {
+                    int rest = best[p + 1][c + 1];
+                    if (rest != Integer.MIN_VALUE) {
+                        match = rest + characterBonus(candidate, c)
+                                // Contiguity: the next pattern character landing immediately after this one.
+                                + (p + 1 < patternLength && take[p + 1][c + 1] == c + 1 ? CONTIGUOUS_BONUS : 0);
+                    }
+                }
+                if (match >= skip) {
+                    best[p][c] = match;
+                    take[p][c] = c;
+                } else {
+                    best[p][c] = skip;
+                    take[p][c] = take[p][c + 1];
+                }
+            }
+        }
+        if (best[0][0] == Integer.MIN_VALUE) return null;
+
+        // Walk the decisions back out into ranges, merging adjacent hits so a contiguous run is one band
+        // rather than four one-character ones -- which is what a reader sees as "it matched this word".
+        List<SearchMatch.Range> ranges = new ArrayList<>();
+        int cursor = 0;
+        int rangeStart = -1;
+        int rangeEnd = -1;
+        for (int p = 0; p < patternLength; p++) {
+            int hit = take[p][cursor];
+            if (hit == rangeEnd) {
+                rangeEnd = hit + 1;
+            } else {
+                if (rangeStart >= 0) ranges.add(new SearchMatch.Range(rangeStart, rangeEnd));
+                rangeStart = hit;
+                rangeEnd = hit + 1;
+            }
+            cursor = hit + 1;
+        }
+        if (rangeStart >= 0) ranges.add(new SearchMatch.Range(rangeStart, rangeEnd));
+        return new Subsequence(ranges, best[0][0]);
+    }
+
+    /** Rewards a hit at a word start — index 0, a camel hump, or just after a separator. */
+    private static int characterBonus(String candidate, int index) {
+        if (index == 0) return WORD_START_BONUS;
+        char previous = candidate.charAt(index - 1);
+        char here = candidate.charAt(index);
+        if (!isWordChar(previous)) return WORD_START_BONUS;
+        if (Character.isLowerCase(previous) && Character.isUpperCase(here)) return WORD_START_BONUS;
+        return 0;
+    }
+
+    private static boolean equalsAt(char a, char b, boolean matchCase) {
+        return matchCase ? a == b
+                : Character.toLowerCase(a) == Character.toLowerCase(b);
+    }
+
+    /** Quadratic, and both inputs are identifiers. Past these it declines rather than stalls a keystroke. */
+    private static final int MAX_SUBSEQUENCE_PATTERN = 32;
+    private static final int MAX_SUBSEQUENCE_CANDIDATE = 256;
+
+    /** Deliberately smaller than {@link #MAX_POSITION_BONUS}'s tier gap: these order ties WITHIN
+     * {@link SearchMatch.Kind#SUBSEQUENCE} and must never let a scattered hit reach the substring tier. */
+    private static final int WORD_START_BONUS = 3;
+    private static final int CONTIGUOUS_BONUS = 2;
 
     /** The first occurrence of {@code needle} with a non-word character (or an end) on both sides. */
     private static int indexOfWord(String haystack, String needle) {
@@ -221,8 +350,27 @@ public final class SearchMatcher {
      */
     private static SearchMatch scored(SearchMatch.Kind kind, int fieldWeight, String candidate,
                                       int firstMatchAt, List<SearchMatch.Range> ranges) {
+        return scored(kind, fieldWeight, candidate, firstMatchAt, ranges, 0);
+    }
+
+    /**
+     * @param qualityBonus an extra within-tier bonus — the subsequence matcher's own score for how well
+     *                     the characters landed. <b>Clamped</b>, because the tier gaps are the ranking's
+     *                     load-bearing property: {@link SearchMatch.Kind#SUBSEQUENCE} sits 80 below
+     *                     {@link SearchMatch.Kind#SUBSTRING} and the positional bonuses already spend 40 of
+     *                     that, so anything able to spend the other 40 would let a scattered hit outrank a
+     *                     real substring — silently, and only for some inputs
+     */
+    private static SearchMatch scored(SearchMatch.Kind kind, int fieldWeight, String candidate,
+                                      int firstMatchAt, List<SearchMatch.Range> ranges, int qualityBonus) {
         int earliness = Math.max(0, MAX_POSITION_BONUS / 2 - firstMatchAt);
         int brevity = Math.max(0, MAX_POSITION_BONUS / 2 - candidate.length() / 4);
-        return new SearchMatch(fieldWeight + kind.score() + earliness + brevity, kind, fieldWeight, ranges);
+        int quality = Math.max(0, Math.min(MAX_QUALITY_BONUS, qualityBonus));
+        return new SearchMatch(fieldWeight + kind.score() + earliness + brevity + quality,
+                kind, fieldWeight, ranges);
     }
+
+    /** See {@link #scored(SearchMatch.Kind, int, String, int, List, int)} — the remaining headroom below
+     * the next tier, minus one so the arithmetic is visibly not exactly on the boundary. */
+    private static final int MAX_QUALITY_BONUS = 39;
 }

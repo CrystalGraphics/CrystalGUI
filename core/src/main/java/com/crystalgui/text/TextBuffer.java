@@ -3,6 +3,8 @@ package com.crystalgui.text;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.text.decoration.DecorationSet;
+import com.crystalgui.text.decoration.TrackedRange;
 
 import java.util.function.LongSupplier;
 
@@ -186,11 +188,31 @@ public final class TextBuffer {
      *
      * <p>Bumped <em>before</em> the signal, so a listener reading {@link #version()} from inside
      * {@code onChanged} sees the version its change produced rather than the one it replaced.</p>
+     *
+     * <p>And the decorations move <em>before</em> the signal too, for a stronger reason than tidiness: every
+     * listener here repaints, and a listener that reads a {@link TrackedRange} before it has been adjusted
+     * reads an offset into the document that this edit just replaced. There is no ordering among listeners
+     * to rely on, so the adjustment cannot be one of them.</p>
      */
     private void applied(ChangeSet change) {
         version++;
+        decorations.adjust(change);
         onChanged.emit(change);
     }
+
+    /**
+     * The ranges tracking this document — §17.1's primitive.
+     *
+     * <p>On the <b>document</b>, not on the editor, and it is the same boundary the undo stack draws: two
+     * split panes onto one file are one document, so a diagnostic squiggle exists once and both views paint
+     * the same one. Putting it on the widget would give the two views separate sets that drift apart the
+     * moment either is typed in.</p>
+     */
+    public DecorationSet decorations() {
+        return decorations;
+    }
+
+    private final DecorationSet decorations = new DecorationSet();
 
     /**
      * The document's current version — see the field note. Compare with {@code ==} against the version an

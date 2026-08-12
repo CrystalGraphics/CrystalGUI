@@ -88,6 +88,24 @@ public interface SourceAnalyzer {
          */
         List<SymbolInfo> membersOf(TypeRef type, int contextOffset);
 
+        /**
+         * Every name usable unqualified at {@code offset} — what completion in open code is built from.
+         *
+         * <p>The counterpart to {@link #membersOf}, and it has to exist separately because the two
+         * questions have different answers from the same place: after a dot the only sensible list is the
+         * receiver's members, and in open code it is locals, then parameters, then fields, then everything
+         * in scope by name. A provider that could not tell them apart would flood a member list with
+         * locals, which is §18.1's stated reason for {@code TriggerKind}.</p>
+         *
+         * <p><b>Declaration order matters and is preserved</b>: nearest scope first. The ranking chain above
+         * this re-sorts by match quality, but ties fall back to the order this returns, so an inner local
+         * arriving before an outer field is a real signal rather than an accident.</p>
+         *
+         * <p>Only what is <em>declared</em>. Unimported types are a different question with a different
+         * answer — they cost an import to accept — and they come from an index rather than from an AST.</p>
+         */
+        List<SymbolInfo> symbolsInScope(int offset);
+
         /** Releases the AST. Idempotent. */
         @Override
         void close();

@@ -19,6 +19,9 @@ import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.text.decoration.DecorationSet;
+import com.crystalgui.text.decoration.Stickiness;
+import com.crystalgui.text.decoration.TrackedRange;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
@@ -26,12 +29,18 @@ import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.Change;
+import com.crystalgui.text.Rope;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.SelectionModel;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.syntax.SyntaxToken;
+import com.crystalgui.text.lang.CompletionItem;
+import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.lang.LanguageServices;
 import com.crystalgui.text.lang.SemanticTokenProvider;
+import com.crystalgui.text.lang.Versioned;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.text.HighlightRegistry;
@@ -473,6 +482,94 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return diagnostics;
     }
 
+    /** The decoration lane every diagnostic squiggle is tracked in. @see #installDiagnostics */
+    public static final String DIAGNOSTIC_LANE = "diagnostic";
+
+    /**
+     * Files an announced list under its engine's owner key, if it still describes this document.
+     *
+     * <h3>The version gate decides whether a list is shown at all</h3>
+     *
+     * <p>Deliberately here rather than at the tracking below, because it is not really a question about
+     * offsets — it is a question about whether these problems are <em>about</em> the text on screen. A list
+     * computed against three keystrokes ago is as wrong in the Problems panel as it is under the text, so
+     * gating at the point of entry means one rule covers both. The list is dropped rather than reconciled;
+     * the job is debounced and keyed, so a fresh one is already queued.</p>
+     */
+    private void installDiagnostics(String owner, @Nullable Versioned<List<Diagnostic>> announced) {
+        if (announced == null) return;
+        if (!announced.isFresh(buffer.version())) return;
+        diagnostics.changeOne(owner, announced.orElse(List.of()));
+    }
+
+    /**
+     * Rebuilds the tracked range behind every diagnostic — §17.1's primitive, applied.
+     *
+     * <h3>Driven by the SET, not by the engine that announced</h3>
+     *
+     * <p>Subscribing to the engine's push instead would track only engine-reported problems, and this
+     * document has other producers: the shader graph writes four owners of its own on every compile, and a
+     * future linter will write a fifth. Every one of them wants its marks to stay under their words, and
+     * none of them has a version to offer. Keying the tracking to the set means one path covers all of
+     * them and there is no producer that silently gets the untracked behaviour.</p>
+     *
+     * <h3>What the tracking buys, concretely</h3>
+     *
+     * <p>Between one compile and the next the user keeps typing, and each edit moves the text a mark sits
+     * on. The range moves with it — synchronously, inside the buffer's own change signal — so the squiggle
+     * stays under its word for the whole 300ms the recompile takes rather than sliding off it. Before this,
+     * every mark below the caret pointed at whatever had shifted into its offsets.</p>
+     *
+     * <p>Rebuilt wholesale rather than diffed. The set replaces per owner and announces once, so there is no
+     * such thing as one diagnostic changing on its own — and a list is tens of entries.</p>
+     */
+    private void retrackDiagnostics() {
+        List<Diagnostic> problems = diagnostics.all();
+        List<DecorationSet.Entry> entries = new ArrayList<>(problems.size());
+        for (Diagnostic problem : problems) {
+            int from = offsetOfPoint(problem.start());
+            int to = Math.max(from, offsetOfPoint(problem.end()));
+            entries.add(DecorationSet.Entry.of(from, to, problem));
+        }
+        // ALWAYS_GROWS: type at the start or the end of an underlined word and the new character is part of
+        // the same mistake -- the mark should cover it, not sit beside it. Every other stickiness makes the
+        // squiggle drift off the token it is about as the token is extended.
+        buffer.decorations().replaceLane(DIAGNOSTIC_LANE,
+                Stickiness.ALWAYS_GROWS_WHEN_TYPING_AT_EDGES, entries);
+    }
+
+    /**
+     * Where {@code problem} is <b>now</b>, or null when nothing is tracking it.
+     *
+     * <p>The round-trip a Problems row needs: the row holds a diagnostic reported at some past version, and
+     * this answers where that text has since moved to. Null is a real answer — a diagnostic can be handed
+     * in from outside the set — and a caller falls back to the reported row/column, which is what it would
+     * have used anyway.</p>
+     */
+    @Nullable
+    public TrackedRange trackedRangeFor(@Nullable Diagnostic problem) {
+        if (problem == null) return null;
+        for (TrackedRange range : buffer.decorations().inLane(DIAGNOSTIC_LANE)) {
+            if (range.payload() == problem) return range;
+        }
+        return null;
+    }
+
+    /**
+     * A row/column against the live document, clamping a column past its row's end.
+     *
+     * <p>Clamping rather than refusing, because {@code Diagnostic.onRow} deliberately produces a column past
+     * the end to mean "the whole row", and because a compiler occasionally reports one character past the
+     * last. Both are the same clamp and neither is worth losing a mark over.</p>
+     */
+    private int offsetOfPoint(TextPoint point) {
+        Rope document = buffer.document();
+        int row = Math.max(0, Math.min(point.row(), document.lineCount() - 1));
+        int rowStart = document.lineStartOffset(row);
+        int rowEnd = document.lineEndOffset(row);
+        return Math.min(rowEnd, rowStart + Math.max(0, point.column()));
+    }
+
     /** Moves the caret to the next problem after it, wrapping. False when there are none. */
     public boolean goToNextProblem() {
         return goToProblem(diagnostics.nextFrom(caretPoint()));
@@ -497,6 +594,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private boolean goToProblem(@Nullable Diagnostic target) {
         if (target == null) return false;
+        // THE TRACKED RANGE FIRST -- it is where the text went, and the reported row/column is where it was
+        // when the compiler last looked. They differ by exactly the edits made since, so "take me to the
+        // error" landed a few lines off during the 300ms before a recompile, which is the moment somebody is
+        // most likely to be using it.
+        TrackedRange tracked = trackedRangeFor(target);
+        if (tracked != null && !tracked.isRemoved()) {
+            int offset = Math.min(tracked.from(), buffer.length());
+            revealRow(buffer.offsetToPoint(offset).row());
+            setCaret(offset);
+            return true;
+        }
         int row = Math.max(0, Math.min(target.start().row(), buffer.lineCount() - 1));
         revealRow(row);
         int rowStart = buffer.document().lineStartOffset(row);
@@ -655,6 +763,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
             onChanged.emit(buffer.toString());
         });
+
+        // EVERY producer's problems get tracked ranges, not only the engine's. See retrackDiagnostics.
+        diagnostics.onChanged.connect(this::retrackDiagnostics);
+
+        // The one place the caret settles. A session must end on a plain arrow-key move, which changes no
+        // text and would therefore never reach a buffer listener.
+        onSelectionChanged.connect(this::notifyCompletionOfCaret);
 
         previousLineCount = buffer.lineCount();
         projections.rebuild(buffer.document());
@@ -859,6 +974,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private void installInput() {
         events.getGroup(KeyboardEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled()) return;
+            // THE POPUP GETS THE KEYS FIRST, and only the four it owns. Arrows, Enter, Tab and Escape mean
+            // something different while a list is open, and the editor's own handler would consume them
+            // before any listener downstream could -- so the interception has to be here rather than on the
+            // popup, which never holds focus and therefore never receives a key at all.
+            if (handleCompletionKey(event.getKeyCode(), event.getModifiers())) {
+                event.stopPropagation();
+                return;
+            }
             if (handleKey(event.getKeyCode(), event.getModifiers())) {
                 event.stopPropagation();
                 return;
@@ -1536,7 +1659,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // which is the whole reason DiagnosticSet is keyed by owner. From here the Problems panel,
             // the inspection widget and the status bar all light up through paths that already work.
             languageDiagnostics = services.onDiagnostics(
-                    problems -> diagnostics.changeOne(services.id(), problems));
+                    announced -> installDiagnostics(services.id(), announced));
         }
         rowSyntax.clear();
         highlightsDirty = true;
@@ -1549,6 +1672,203 @@ public class TextEditor extends ScrollerView implements UndoScope {
     @Nullable
     public LanguageServices languageServices() {
         return languageServices;
+    }
+
+    // ── Completion ──────────────────────────────────────────────────────────────────────────────
+
+    @Nullable
+    private CompletionSession completion;
+    @Nullable
+    private CompletionPopup completionPopup;
+    private static float finiteOrZero(float value) {
+        return Float.isFinite(value) ? value : 0f;
+    }
+
+    /** The live session, or null. Exposed so a test can assert on the model without going through pixels. */
+    @Nullable
+    public CompletionSession completionSession() {
+        return completion;
+    }
+
+    /**
+     * Opens a completion session at the caret — Ctrl+Space, or a trigger character.
+     *
+     * <h3>Grammar-level suppression first (§18.1)</h3>
+     *
+     * <p>No session inside a comment or a string. It is one tokenizer query and it is the cheapest
+     * wrong-popup filter there is: without it, typing a {@code .} in a javadoc sentence or a file path opens
+     * a member list over prose. Asked of the <em>grammar</em> rather than the engine because the engine is
+     * 300ms behind and this has to answer on the keystroke.</p>
+     *
+     * @return false when nothing opened — no engine, or the caret is somewhere completion has no business
+     */
+    public boolean openCompletion(CompletionProvider.TriggerKind trigger, @Nullable String triggerCharacter) {
+        if (languageServices == null) return false;
+        if (isInCommentOrString(getCaret())) return false;
+
+        closeCompletion();
+        CompletionSession opened = CompletionSession.open(buffer, languageServices.completion(),
+                getCaret(), trigger, triggerCharacter);
+        if (opened == null) return false;
+        completion = opened;
+        opened.caretMoved(getCaret());
+        opened.onClosed.connect(() -> {
+            if (completion == opened) completion = null;
+        });
+
+        UIWindow window = getAttachedWindow();
+        if (window != null) {
+            if (completionPopup == null) completionPopup = new CompletionPopup();
+            updateCompletionAnchor();
+            completionPopup.attach(window, opened);
+        }
+        return true;
+    }
+
+    public void closeCompletion() {
+        if (completion != null) completion.close();
+        if (completionPopup != null) completionPopup.detach();
+    }
+
+    /** The popup, built on first use. Null until a session has opened in an attached window. */
+    @Nullable
+    public CompletionPopup completionPopup() {
+        return completionPopup;
+    }
+
+    /**
+     * The four keys a live list owns, and no others.
+     *
+     * <p>Deliberately short. Every key taken here is a key that stops doing its normal job while a popup is
+     * open, and the popup is open more often than the user is thinking about it — the same reasoning that
+     * keeps a search box from taking Left, Right, Home and End.</p>
+     *
+     * <p><b>Tab accepts, like Enter.</b> Both references do it and the reason is that Tab is what a person
+     * reaches for when the intent is "finish this word" rather than "and now a new line".</p>
+     */
+    private boolean handleCompletionKey(int key, int modifiers) {
+        // Ctrl+Space opens, whether or not one is already open -- re-asking is how you get a full list after
+        // a trigger character gave you a narrow one.
+        if (key == CgKeyCodes.KEY_SPACE
+                && (CgModifiers.hasCtrl(modifiers) || CgModifiers.hasSuper(modifiers))) {
+            openCompletion(CompletionProvider.TriggerKind.EXPLICIT, null);
+            return true;
+        }
+        if (completion == null || completion.isClosed()) return false;
+
+        if (key == CgKeyCodes.KEY_DOWN) {
+            completion.moveSelection(1);
+            return true;
+        }
+        if (key == CgKeyCodes.KEY_UP) {
+            completion.moveSelection(-1);
+            return true;
+        }
+        if (key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_TAB) {
+            return acceptCompletion();
+        }
+        if (key == CgKeyCodes.KEY_ESCAPE) {
+            closeCompletion();
+            return true;
+        }
+        return false;
+    }
+
+    /** Applies the selected item and puts the caret after what was inserted. */
+    private boolean acceptCompletion() {
+        if (completion == null) return false;
+        CompletionItem item = completion.selectedItem();
+        if (item == null) {
+            closeCompletion();
+            return false;
+        }
+        int caretAfter = completion.caretAfterAccept(item, getCaret());
+        // The accept is ONE ChangeSet, so this is one undo step -- the name and the import it brought go
+        // together on Ctrl+Z. See CompletionSession.accept.
+        completion.accept();
+        setCaret(Math.max(0, Math.min(caretAfter, buffer.length())));
+        closeCompletion();
+        return true;
+    }
+
+    /**
+     * Keeps a live session in step with the caret, and re-anchors the popup.
+     *
+     * <p>Called from the one place the caret settles rather than subscribed to the buffer: a session must
+     * end on a plain arrow-key move, which changes no text and would therefore never reach a buffer
+     * listener.</p>
+     */
+    private void notifyCompletionOfCaret() {
+        if (completion == null || completion.isClosed()) return;
+        completion.caretMoved(getCaret());
+        updateCompletionAnchor();
+    }
+
+    /**
+     * Points the popup at the <b>word being completed</b>, in window coordinates.
+     *
+     * <p>The word, not the caret — anchored to the caret the list steps right one character per keystroke,
+     * which reads as the popup running away from the word it is completing. Converted through the element's
+     * own transform rather than by adding up offsets, because that chain is the single definition of where
+     * this editor is on screen and a second one drifts by exactly {@code uiScale}.</p>
+     *
+     * <h3>Summed from the LAYOUT chain, not from the transform chain</h3>
+     *
+     * <p>The obvious implementation is {@code localToWorld}, and it is wrong here twice over. It is in
+     * <b>surface</b> pixels — the root transform is baked into it — while the popup's {@code left}/{@code
+     * top} are ordinary style values in logical pixels that the paint scales <em>again</em>, so the anchor
+     * comes out multiplied by {@code uiScale}. And it is populated <b>during {@code drawSubtree}</b>, so
+     * anything asking before this element has painted reads an identity matrix and gets the window's corner.
+     * Both faults produce a popup that is neatly placed somewhere wrong, which is the hardest kind to
+     * notice: it looks like a placement policy rather than a bad number.</p>
+     *
+     * <p>Summing {@code getLayoutX()}/{@code getLayoutY()} to the root gives the position in exactly the
+     * space {@code left}/{@code top} are interpreted in, with no scale in it and no dependency on having
+     * painted. The cost is that it ignores {@code transform:} — which is correct rather than a limitation,
+     * because a transformed editor's popup should follow its layout box, not its visual one.</p>
+     */
+    private void updateCompletionAnchor() {
+        if (completionPopup == null || completion == null) return;
+        int anchorOffset = Math.max(0, Math.min(completion.replacementStart(), buffer.length()));
+        int viewLine = viewLineOf(anchorOffset, LineProjection.Affinity.RIGHT);
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        int rowStart = buffer.document().lineStartOffset(model.row());
+        LineProjection.ViewPosition view = projectionAt(viewLine)
+                .toViewPosition(anchorOffset - rowStart, LineProjection.Affinity.RIGHT);
+
+        // THE SCROLL OFFSET CAN BE NaN, and this is the seam where that stops being someone else's problem.
+        //
+        // A NaN scroll poisons everything downstream silently: it propagates through the subtraction, then
+        // through the min/max in the placement, and lands the popup at the window's corner looking
+        // deliberately placed. Treating a non-finite offset as zero is right rather than merely defensive —
+        // "scrolled by an unknown amount" and "not scrolled" are the same picture for a document that has
+        // not been scrolled, and the alternative is a popup nobody can find.
+        float localX = textOriginX() + xOfView(viewLine, view.column()) - finiteOrZero(getScrollLeft());
+        float localY = textOriginY() + viewLine * lineHeight() - finiteOrZero(getScrollTop());
+        if (!Float.isFinite(localX) || !Float.isFinite(localY)) return;
+        completionPopup.setAnchor(getWindowX() + localX, getWindowY() + localY, lineHeight());
+    }
+
+    /**
+     * Whether {@code offset} is inside a comment or a string, per the grammar.
+     *
+     * <p>Read from the tokenizer's capture names, which is the vocabulary §10.1 already fixes — so this
+     * needs no per-language table and a new grammar gets the suppression for free. A language with no
+     * tokenizer answers false, which is the right default: it means the popup opens, and an unwanted popup
+     * is recoverable in a way that a popup that refuses to open is not.</p>
+     */
+    private boolean isInCommentOrString(int offset) {
+        int from = Math.max(0, offset - 1);
+        for (SyntaxToken token : tokenizer.tokenize(buffer.document(), from, offset + 1)) {
+            if (token.start() > offset || token.end() < offset) continue;
+            String capture = token.name();
+            if (capture == null) continue;
+            if (capture.equals("comment") || capture.startsWith("comment.")
+                    || capture.equals("string") || capture.startsWith("string.")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -2071,6 +2391,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
             return;
         }
         insertAtCaret(String.valueOf(typed));
+        maybeTriggerCompletion(typed);
+    }
+
+    /**
+     * Opens a session when a trigger character is typed — §18.1.
+     *
+     * <p>After the insertion, not before: the request carries the caret, and a provider asked to complete
+     * {@code foo} where the {@code .} has not landed yet resolves the expression as if there were no member
+     * access at all. Every reference implementation triggers on the character having been typed.</p>
+     *
+     * <p>Only when no session is live. Typing {@code .} inside an open list is a commit character's job, and
+     * re-opening would discard the list mid-keystroke.</p>
+     */
+    private void maybeTriggerCompletion(char typed) {
+        if (completion != null && !completion.isClosed()) return;
+        if (languageServices == null) return;
+        if (!language.isCompletionTrigger(typed)) return;
+        openCompletion(CompletionProvider.TriggerKind.CHARACTER, String.valueOf(typed));
     }
 
 
@@ -3541,6 +3879,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
             part.render(first, last);
             part.onDidRender();
         }
+        // THE POPUP RE-ANCHORS HERE, once a frame, and not only when the caret moves.
+        //
+        // The anchor is derived from measured row widths, and those are computed in this very method --
+        // so asking for it at the moment a session opens reads whatever the last frame happened to have
+        // measured, which for text edited since is NOTHING. It came back NaN, the popup fell back to the
+        // origin, and it drew neatly over the editor's top-left corner: plausible enough to look like a
+        // placement policy rather than an unmeasured read. Re-anchoring per frame also keeps it correct
+        // through a scroll, which no caret-driven update would have caught either.
+        updateCompletionAnchor();
     }
 
     /**

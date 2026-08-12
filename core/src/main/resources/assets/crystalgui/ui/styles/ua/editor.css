@@ -715,3 +715,90 @@ dockgroup texteditor {
     height: 0;
     flex-grow: 1;
 }
+
+
+/* -- Completion popup ---------------------------------------------------------------------------
+ *
+ * left/top/width come from Java at IMPORTANT origin (CompletionPopup.reposition), because they are
+ * computed from the caret and the window. Everything below is appearance and belongs here.
+ *
+ * The anatomy is IntelliJ's, read off its own popup: kind icon, then the label with the matched
+ * characters banded, then the detail right-aligned at the far edge. The right alignment is done with a
+ * grow-only spacer rather than `text-align`, because the detail is its own element and a text alignment
+ * inside it would move the glyphs within a box that is still on the left.
+ */
+completionpopup {
+    background: var(--palette-bg, #252526);
+    outline-width: 1px;
+    outline-color: var(--palette-border, #454545);
+    padding-all: 2px;
+    z-index: 900;
+}
+
+.__completion-row__ {
+    height: 18px;
+    flex-direction: row;
+    align-items: center;
+    gap-all: 4px;
+    padding-left: 4px;
+    padding-right: 6px;
+}
+
+.__completion-row__.__selected__ {
+    background-color: var(--list-selected-bg, #04395E);
+}
+
+/* A fixed box so every label starts at the same x -- a ragged left edge is what makes a list of
+ * identifiers hard to scan, and it is the one thing the glyph placeholder must not cost. */
+.__completion-icon__ {
+    width: 12px;
+    font-size: 9px;
+    text-align: center;
+    color: var(--completion-icon, #808080);
+}
+
+.__completion-label__ {
+    font-size: 10px;
+    color: var(--completion-label, #D4D4D4);
+}
+
+/* Dimmed and shrinkable: when the row is tight the detail is what gives, because the NAME is the part
+ * that must stay whole -- a truncated identifier is unreadable and a truncated return type is merely
+ * less informative. */
+.__completion-detail__ {
+    font-size: 9px;
+    color: var(--completion-detail, #808080);
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.__completion-deprecated__ .__completion-label__ {
+    text-decoration-line: line-through;
+    color: var(--completion-deprecated, #808080);
+}
+
+/* The matched characters, banded rather than recoloured wholesale -- IntelliJ colours them blue and
+ * VS Code does the same. It says WHERE the query hit, which is information a rank cannot convey. */
+completionpopup text::highlight(completion-match) {
+    color: var(--completion-match, #2AAAFF);
+}
+
+/* Per-kind colour, which is the half of an icon that actually distinguishes at a glance. The letter is
+ * a placeholder for real artwork; the palette is not, and it lives here for the same reason the node
+ * graph's per-type port colours do -- adding a kind is a stylesheet edit. */
+.completion-kind-method,
+.completion-kind-function { color: var(--kind-method, #B180D7); }
+.completion-kind-constructor { color: var(--kind-method, #B180D7); }
+.completion-kind-field,
+.completion-kind-property { color: var(--kind-field, #75BEFF); }
+.completion-kind-constant,
+.completion-kind-enum_member { color: var(--kind-constant, #4FC1FF); }
+.completion-kind-local_variable,
+.completion-kind-parameter { color: var(--kind-variable, #9CDCFE); }
+.completion-kind-class,
+.completion-kind-record { color: var(--kind-class, #EE9D28); }
+.completion-kind-interface { color: var(--kind-interface, #75BEFF); }
+.completion-kind-enum { color: var(--kind-enum, #EE9D28); }
+.completion-kind-annotation { color: var(--kind-annotation, #B180D7); }
+.completion-kind-type_parameter { color: var(--kind-class, #EE9D28); }
+.completion-kind-keyword { color: var(--kind-keyword, #569CD6); }

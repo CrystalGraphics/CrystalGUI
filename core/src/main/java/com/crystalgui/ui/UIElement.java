@@ -1852,6 +1852,40 @@ public class UIElement implements SettingsScope, DataProvider {
         return getTaffyTree().getLayout(this.taffyNodeId);
     }
 
+    /**
+     * This element's top-left in the window's <b>logical</b> coordinates — the space {@code left} and
+     * {@code top} are written in.
+     *
+     * <h3>The layout chain, deliberately, and not {@code localToWorld}</h3>
+     *
+     * <p>{@code RuntimeCache.localToWorld} answers a different question and is the tempting wrong one for
+     * this. It is in <em>surface</em> pixels, with the root transform baked in — so handing its output to a
+     * style write scales the offset by {@code uiScale} a second time. And it is populated during
+     * {@code drawSubtree}, so anything asking before this element has painted reads an identity matrix and
+     * gets the window's corner. Both faults place a box neatly somewhere wrong, which is far harder to spot
+     * than a box that is obviously broken.</p>
+     *
+     * <p>The trade is that this <b>ignores {@code transform:}</b>. That is the right answer for positioning a
+     * sibling overlay against a box, and the wrong one for hit-testing — which is why the transform chain
+     * stays the definition for anything that has to agree with what was drawn.</p>
+     */
+    public final float getWindowX() {
+        float x = 0f;
+        for (UIElement walk = this; walk != null && walk.parent != null; walk = walk.parent) {
+            x += walk.getTaffyLayout().location().x;
+        }
+        return x;
+    }
+
+    /** The vertical half of {@link #getWindowX()}. */
+    public final float getWindowY() {
+        float y = 0f;
+        for (UIElement walk = this; walk != null && walk.parent != null; walk = walk.parent) {
+            y += walk.getTaffyLayout().location().y;
+        }
+        return y;
+    }
+
     protected final float getLayoutY() {
         return (parent == null ? (attachedWindow == null ? 0 : attachedWindow.getTopPos()) : getTaffyLayout().location().y);
     }
