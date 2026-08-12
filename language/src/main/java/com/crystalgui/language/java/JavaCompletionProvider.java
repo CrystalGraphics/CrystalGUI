@@ -153,22 +153,15 @@ final class JavaCompletionProvider implements CompletionProvider {
         return items;
     }
 
+    /**
+     * One row from one symbol — through {@link CompletionItem#from}, not a second builder here.
+     *
+     * <p>It was a second builder, and the duplication was already drifting: this one dropped the symbol's
+     * modifiers, which is exactly what the icon's static/abstract axis needs. One converter means a field
+     * added to {@link SymbolInfo} reaches every provider rather than the one somebody remembered.</p>
+     */
     private static CompletionItem itemFor(SymbolInfo symbol) {
-        String detail = symbol.type() != null ? symbol.type().displayName() : symbol.container();
-        return CompletionItem.builder(labelFor(symbol), symbol.kind())
-                .detail(detail)
-                // FILTERS ON THE BARE NAME, sorts on it too. The label may carry a parameter list, and a
-                // user typing `pr` must match `println(int)` -- which is the four-field split's whole point.
-                .filterText(symbol.name())
-                .sortText(symbol.name())
-                .insertText(symbol.name())
-                .deprecated(symbol.is(SymbolModifier.DEPRECATED))
-                .build();
-    }
-
-    /** A method shows its parameter count; anything else shows its name. */
-    private static String labelFor(SymbolInfo symbol) {
-        return symbol.name();
+        return CompletionItem.from(symbol);
     }
 
     /**

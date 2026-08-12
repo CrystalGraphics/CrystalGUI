@@ -748,14 +748,30 @@ completionpopup {
     background-color: var(--list-selected-bg, #04395E);
 }
 
-/* A fixed box so every label starts at the same x -- a ragged left edge is what makes a list of
- * identifiers hard to scan, and it is the one thing the glyph placeholder must not cost. */
+/* A fixed 16px box so every label starts at the same x -- a ragged left edge is what makes a list of
+ * identifiers hard to scan. The DRAWING comes from the kind class below; this only reserves the space. */
 .__completion-icon__ {
-    width: 12px;
-    font-size: 9px;
-    text-align: center;
-    color: var(--completion-icon, #808080);
+    width: 16px;
+    height: 16px;
 }
+
+/* Modifier marks: full-size layers over the icon, not badges in a corner box.
+ *
+ * JetBrains draws each mark on its own 16x16 canvas with the glyph already placed -- staticMark in the
+ * bottom-left, finalMark in the top-left -- so stacking them at the same size is what composes them, and
+ * both can show at once because they do not occupy the same corner. A `static final` field wears both,
+ * which is what System.out actually is. */
+.__completion-mark-static__,
+.__completion-mark-final__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 16px;
+    height: 16px;
+}
+
+.__completion-mark-static__ { background: icon("crystalgui:nodes/java/staticMark"); }
+.__completion-mark-final__  { background: icon("crystalgui:nodes/java/finalMark"); }
 
 .__completion-label__ {
     font-size: 10px;
@@ -783,22 +799,33 @@ completionpopup text::highlight(completion-match) {
     color: var(--completion-match, #2AAAFF);
 }
 
-/* Per-kind colour, which is the half of an icon that actually distinguishes at a glance. The letter is
- * a placeholder for real artwork; the palette is not, and it lives here for the same reason the node
- * graph's per-type port colours do -- adding a kind is a stylesheet edit. */
+/* Per-kind DRAWING. The IntelliJ Platform node icons (Apache 2.0) carry their own palette and ship as
+ * genuinely different drawings per background, so there is nothing here to recolour -- `icon()` resolves the
+ * light/dark pair at draw time. Adding a kind is a rule here, exactly as the graph's port palette is.
+ *
+ * KIND AND MODIFIER ARE TWO AXES. `abstract` is a compound selector rather than a kind of its own, because
+ * an abstract method and a concrete one are the same kind and simply draw differently; static is an overlay
+ * (see .__completion-badge__) for the same reason. */
 .completion-kind-method,
-.completion-kind-function { color: var(--kind-method, #B180D7); }
-.completion-kind-constructor { color: var(--kind-method, #B180D7); }
-.completion-kind-field,
-.completion-kind-property { color: var(--kind-field, #75BEFF); }
-.completion-kind-constant,
-.completion-kind-enum_member { color: var(--kind-constant, #4FC1FF); }
-.completion-kind-local_variable,
-.completion-kind-parameter { color: var(--kind-variable, #9CDCFE); }
-.completion-kind-class,
-.completion-kind-record { color: var(--kind-class, #EE9D28); }
-.completion-kind-interface { color: var(--kind-interface, #75BEFF); }
-.completion-kind-enum { color: var(--kind-enum, #EE9D28); }
-.completion-kind-annotation { color: var(--kind-annotation, #B180D7); }
-.completion-kind-type_parameter { color: var(--kind-class, #EE9D28); }
-.completion-kind-keyword { color: var(--kind-keyword, #569CD6); }
+.completion-kind-function       { background: icon("crystalgui:nodes/java/method"); }
+.completion-kind-constructor    { background: icon("crystalgui:nodes/java/constructor"); }
+.completion-kind-field          { background: icon("crystalgui:nodes/java/field"); }
+.completion-kind-property       { background: icon("crystalgui:nodes/java/field"); }
+.completion-kind-constant       { background: icon("crystalgui:nodes/java/field"); }
+.completion-kind-enum_member    { background: icon("crystalgui:nodes/java/enum"); }
+.completion-kind-local_variable { background: icon("crystalgui:nodes/java/variable"); }
+.completion-kind-parameter      { background: icon("crystalgui:nodes/java/parameter"); }
+.completion-kind-class          { background: icon("crystalgui:nodes/java/class"); }
+.completion-kind-record         { background: icon("crystalgui:nodes/java/record"); }
+.completion-kind-interface      { background: icon("crystalgui:nodes/java/interface"); }
+.completion-kind-enum           { background: icon("crystalgui:nodes/java/enum"); }
+.completion-kind-annotation     { background: icon("crystalgui:nodes/java/annotation"); }
+.completion-kind-type_parameter { background: icon("crystalgui:nodes/java/class"); }
+
+.completion-kind-method.completion-mod-abstract { background: icon("crystalgui:nodes/java/methodAbstract"); }
+.completion-kind-class.completion-mod-abstract  { background: icon("crystalgui:nodes/java/classAbstract"); }
+
+/* A keyword is not a node and JetBrains has no icon for one -- an empty box is the honest answer, and it
+ * keeps the labels aligned with every other row. */
+.completion-kind-keyword,
+.completion-kind-unknown        { background: none; }

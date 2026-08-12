@@ -26,6 +26,16 @@ licence, same "unmodified" statement, and reached through the same `FileIconThem
 convention as the file types; it is a separate directory only because a tool-window mark is not a file type
 and `default.json` should not have to say so.
 
+`nodes/java/` holds the same set's **node icons** — the badges a completion list and a structure view draw
+beside a symbol: `method`, `field`, `class`, `interface`, `enum`, `record`, `annotation`, `parameter`,
+`variable`, `constructor`, `lambda`, `exception`, and the abstract/anonymous variants of several. Same
+copyright, same licence, same "unmodified" statement, same `_dark` suffix convention.
+
+`staticMark` and `finalMark` are **overlays** rather than icons: each is drawn on its own 16x16 canvas with
+its glyph already placed in a corner — static bottom-left, final top-left — so they compose by being stacked
+over a base icon at the same size, and both can appear at once. That is JetBrains' own composition model,
+and it is why they are layered rather than scaled into a small corner box.
+
 > An earlier revision of this file described a 2021 set of 47 icons pulled from `platform/icons/src/` in
 > the `intellij-community` repository. That set was **replaced wholesale**, not extended: the 2023 icons
 > are a different drawing language — outlined and warm where the old ones were flat polygons in blue and

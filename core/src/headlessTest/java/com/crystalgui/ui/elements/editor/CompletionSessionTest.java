@@ -75,10 +75,10 @@ public class CompletionSessionTest {
     // ── Opening and filtering ───────────────────────────────────────────────────────────────────
 
     @Test
-    public void anEmptyPrefixKeepsEveryItemInTheProvidersOwnOrder() {
-        // The provider's order is a real signal -- it put the receiver's own members first -- and an
-        // empty query has nothing to rank by. Running one through the matcher returns null for every
-        // row, which would empty the list rather than showing it.
+    public void anEmptyPrefixKeepsEveryItemAndStillRanksThem() {
+        // An empty query has nothing to MATCH against -- running one through the matcher returns null for
+        // every row and would empty the list -- but the rows still have to be ordered, and this is the case
+        // where order matters most: it is the moment the popup opens and the user is reading.
         TextBuffer buffer = new TextBuffer("x.");
         StubProvider provider = new StubProvider();
         provider.items.add(item("zebra", SymbolKind.METHOD));
@@ -88,7 +88,34 @@ public class CompletionSessionTest {
                 CompletionProvider.TriggerKind.CHARACTER, ".");
 
         assertNotNull(session);
-        assertEquals(List.of("zebra", "alpha"), labelsOf(session));
+        assertEquals("nothing may be dropped", 2, session.visibleRows().size());
+        assertEquals(List.of("alpha", "zebra"), labelsOf(session));
+    }
+
+    /**
+     * The bug this pair of tests exists for, in miniature.
+     *
+     * <p>{@code collectMembers} walks every declared method and <em>then</em> every declared field, which is
+     * an artefact of two loops rather than a judgement. Trusting "the provider's own order" therefore put
+     * {@code System.out}, {@code err} and {@code in} at position forty-one — below an eleven-row window, and
+     * so invisible. It read as the fields being missing entirely, and the provider-level test that asked for
+     * them passed the whole time.</p>
+     */
+    @Test
+    public void withNoPrefixAFieldOutranksAMethodEvenWhenTheProviderListedItLast() {
+        TextBuffer buffer = new TextBuffer("System.");
+        StubProvider provider = new StubProvider();
+        for (String method : List.of("arraycopy", "currentTimeMillis", "exit", "gc")) {
+            provider.items.add(item(method, SymbolKind.METHOD));
+        }
+        provider.items.add(item("out", SymbolKind.FIELD));
+        provider.items.add(item("err", SymbolKind.FIELD));
+
+        CompletionSession session = CompletionSession.open(buffer, provider, 7,
+                CompletionProvider.TriggerKind.CHARACTER, ".");
+
+        assertEquals("the fields must come first -- they are nearer, and the walk order is not a signal",
+                List.of("err", "out"), labelsOf(session).subList(0, 2));
     }
 
     @Test
