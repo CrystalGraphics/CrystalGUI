@@ -15,6 +15,44 @@ Per-directory detail lives beside the assets it covers; this is the index.
 | Taffy | Gradle dependency `dev.vfyjxf:taffy` | — | Extracted sources checked in at `research_repos/taffy/` for reference only |
 | LDLib2 | `research_repos/LDLib2/` | — | In-repo checkout, read for pattern prior art. **Not** a dependency and nothing is copied from it |
 | Minecraft 1.20.1 sources | `research_repos/mc1201_sources/` | Proprietary | Decompiled reference. Not redistributed, not built |
+| tree-sitter binding + six grammars | `lib/tree-sitter/` | MIT | See [lib/tree-sitter/README.md](lib/tree-sitter/README.md) for per-jar provenance |
+| Eclipse JDT (`org.eclipse.jdt.core` + the platform closure) | `language/build.gradle.kts`, bands 8/11/17 | **EPL-2.0** | The Java engine. See [Engine bands](#engine-bands-ecj-and-rhino) |
+| Rhino | `language/build.gradle.kts`, bands 8/11/17 | **MPL-2.0** | The JavaScript engine. See [Engine bands](#engine-bands-ecj-and-rhino) |
+
+## Engine bands: ECJ and Rhino
+
+Three sets of jars, one per host-JVM band (`plan_syntax.md` §6). Declared in
+`language/build.gradle.kts` as resolvable configurations that **nothing consumes** — they are loaded
+reflectively into an isolated classloader at runtime, never onto a compile classpath.
+
+| Band | Host JVM | `org.eclipse.jdt:org.eclipse.jdt.core` | `org.mozilla:rhino` | Closure |
+|---|---|---|---|---|
+| 8 | Java 8–10 | 3.26.0 | 1.7.15.1 | 15 jars, ~13 MB |
+| 11 | Java 11–16 | 3.33.0 | 1.9.1 | 18 jars, ~12 MB |
+| 17 | Java 17+ | 3.46.0 | 1.9.1 | 20 jars, ~16 MB |
+
+The remaining jars in each closure are `org.eclipse.platform:*` (EPL-2.0), pulled in by JDT, plus
+`org.eclipse.jdt:ecj` (EPL-2.0) and — in band 17 only — `net.java.dev.jna:jna` and `jna-platform`
+(dual **Apache-2.0 / LGPL-2.1**; we take Apache-2.0). Every platform artifact is pinned explicitly
+rather than resolved through JDT's open version ranges; the reason is in the build file and it is a
+correctness one, not a licensing one.
+
+### What the two licences require
+
+| Licence | Obligation when we distribute a jar containing it |
+|---|---|
+| **EPL-2.0** (JDT, Eclipse platform, ECJ) | Ship the licence text; state that the code is available under EPL-2.0 and where to get the source (Maven Central, at the exact coordinates above); do not remove existing notices. EPL is file-level copyleft — **modifying** any of these files would oblige us to publish those files under EPL, which is why they are consumed as unmodified binaries |
+| **MPL-2.0** (Rhino) | The same shape: licence text, source availability for the covered files, notices intact. Also file-level, so the same "unmodified binary" reasoning applies |
+
+**Neither is viral into our code.** Both are file-level, and CrystalGUI calls them across a
+classloader boundary without linking against modified copies — which is a consequence of the
+isolation `EngineClassLoader` exists for, not a coincidence.
+
+> **This becomes a live obligation the moment a loader module ships.** Nothing in this build
+> distributes an engine today: the configurations resolve for tests and for the band-floor check, and
+> `mc1710/` and `mc1201/` are commented out of `settings.gradle.kts`. When one of them starts
+> bundling a band, the licence texts have to travel in the jar — a row in this table is the index, not
+> the discharge. Recorded here rather than left to be discovered at release.
 
 ## Ports, as opposed to assets
 

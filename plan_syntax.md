@@ -249,24 +249,90 @@ is "the newest engine that runs there", which is also "the newest language the h
 
 ### 6.2 The bands
 
-| Host JVM | ECJ line (runs there) | Compiles up to | Rhino | ES level |
-|---|---|---|---|---|
-| 8–10 | ≤ 4.16 era (2020-06) | Java 14 (target ≤ host) | 1.7.15 | most of ES2015 minus classes/modules |
-| 11–16 | 4.17 – 4.27 | Java 20 (target ≤ host) | 1.8.x+ | ES6 default level, still no classes/modules |
-| 17+ | newest | newest Java | newest (1.9.x+) | best available |
+✅ **Pinned and measured at M5.** Every version below is the newest whose *base* class files sit within
+the band's ceiling, found by reading the class-file major out of the published jar rather than from a
+compatibility statement. The table's shape survived; three of its numbers did not.
 
-Exact artifact versions pinned at M5 after the verification in §23; the table's shape is the decision.
+| Host JVM | `org.eclipse.jdt.core` | Compiles up to | Rhino | ES level |
+|---|---|---|---|---|
+| 8–10 | **3.26.0** (Eclipse 4.21, 2021-09) | **JLS16** (target ≤ host, so Java 8 in practice) | **1.7.15.1** | most of ES2015 minus classes/modules |
+| 11–16 | **3.33.0** (Eclipse 4.28, 2023-06) | **JLS19** | **1.9.1** | ES6 default level, still no classes/modules |
+| 17+ | **3.46.0** (newest, 2026-08) | **JLS26** | **1.9.1** | best available |
+
+**Four corrections, all in our favour except the last:**
+
+1. **Band 8 gets JDT 3.26.0, not the "≤ 4.16 era" the plan expected** — five more releases of fixes on
+   the oldest band, and JLS16 rather than the budgeted Java 14. (The ceiling argument still caps what a
+   Java 8 host can *execute* at Java 8; the extra levels buy analysis, not execution.)
+2. **"ECJ ≥ 4.28 requires Java 17" was wrong.** 4.28 *is* 3.33.0 and runs on Java 11 fine; **3.34.0**
+   (4.29) is where 17 becomes mandatory. §2 row 3's claim was off by one release.
+3. **Rhino 1.9.1's class files are Java 11, not 17**, so bands 11 and 17 share it: three bands, two
+   Rhinos. And 1.7.15 has a patch — **1.7.15.1** — which is the actual last Java 8 release.
+4. **The JLS level is discovered, never named** (§6.3's mechanism, now real as `JlsLevel`). Each band's
+   `AST.JLS*` constants are read reflectively and the highest non-deprecated one wins. Naming `JLS21`
+   would not compile against band 8; naming `JLS8` would compile everywhere and silently cap band 17 at
+   Java 8 syntax, which is worse because it *works*.
+
+> **The one that cost real time, and it is not about versions at all.** `org.eclipse.jdt.core` declares
+> its platform dependencies as **open ranges** — `[3.14.0,4.0.0)` — so pinning jdt.core alone is not a
+> pin. Band 8 resolved `org.eclipse.osgi-3.24.200` and `jna-5.18.1` beside it: 2024-era jars at class
+> major 53+, which cannot load on Java 8 at all. **The top artifact was correct and the closure was
+> unloadable**, and it would have failed only on a Java 8 host — nowhere near whoever built it. It also
+> means the same build resolves differently in six months with no commit to blame. Every transitive
+> platform artifact is therefore pinned explicitly per band (13 of them), and `checkEngineBands` runs as
+> part of `:language:check`, re-deriving each jar's floor from the bytes and failing the build.
+
+> **And then the fix's own fix, which is the more interesting bug.** Pinning each artifact to *the newest
+> version that loads on Java 8* is mechanically right and semantically wrong: **Eclipse rotated its
+> signing certificate between 4.19 and 4.20**, and the `org.eclipse.core.runtime` package is split across
+> `org.eclipse.core.runtime`, `org.eclipse.equinox.common` and `org.eclipse.equinox.registry`. The
+> per-artifact rule took jars from both sides of the rotation, and **a JVM refuses a package whose
+> classes come from differently-signed jars**. Everything resolved, every class file was major 52, the
+> ceiling check was green — and Java 8 threw `SecurityException: signer information does not match` on
+> the first `ASTParser` construction. Nowhere else, because that pairing can only arise in band 8.
+>
+> So `checkEngineBands` also groups classes by package and compares signing certificates, and pinning is
+> now constrained by *era* as well as by class-file major. Two things about writing that check are worth
+> keeping:
+> - **`JarEntry.getCertificates()` is the obvious API and it answers null** unless the entry's stream has
+>   been fully drained — and answered null even then for several of these jars. A check built on it
+>   reported every Eclipse jar as unsigned and passed unconditionally. The PKCS#7 block is read directly
+>   instead.
+> - **Hashing "the first certificate" made the check pass on the exact pin it was written to catch.** The
+>   block holds the leaf *and* its issuers, `generateCertificates` does not promise leaf-first, and both
+>   Eclipse eras share one DigiCert intermediate. It hashes the whole chain, order-independently. Proven
+>   by putting the bad pin back and watching it fail — a verification check that has never been seen to
+>   fail is a verification check that does not work, and this one silently did not, twice.
 
 ### 6.3 One adapter, isolated classloaders
 
-- **One adapter per engine**, compiled against the *oldest* band's API. Both APIs are stable enough
-  to make this real: the JDT DOM (`ASTParser`, `ITypeBinding`) has been source-stable for over a
-  decade; `org.mozilla.javascript` likewise. The JLS level passed to `ASTParser` is chosen at
-  runtime (highest constant present), so the adapter never names a level the old jar lacks.
-- **Each engine loads in an isolated, child-first classloader** over its band's jars. Three things
-  fall out: no dependency clash with mods that ship their own Rhino (several do), the sandbox has a
-  natural enforcement point, and an engine can be dropped wholesale.
-- Band selection is one `System.getProperty("java.specification.version")` read at startup.
+- **One adapter per engine**, compiled against the *oldest* band's API. ✅ **Verified at M5** rather
+  than assumed: `EngineApiSurfaceTest` loads each band's real jars and asserts the whole surface the
+  adapter will use — `ASTParser` including `setBindingsRecovery`/`setStatementsRecovery`/`setEnvironment`,
+  `ITypeBinding` including `isAssignmentCompatible`, and on the Rhino side `Context.setClassShutter`,
+  `ClassShutter.visibleToScripts`, `ContextFactory` and `VERSION_ES6`. That closes §23 rows 3 and 8.
+  The JLS level is chosen at runtime by `JlsLevel.highestAvailable`, so the adapter names no level.
+- **Each engine loads in an isolated, child-first classloader** over its band's jars ✅ —
+  `EngineClassLoader`. Three things fall out: no dependency clash with mods that ship their own Rhino
+  (several do), the sandbox has a natural enforcement point, and an engine can be dropped wholesale.
+  - **Child-first needs a parent-delegated list, and that list is the design.** A loader that asked its
+    own URLs for *everything* would load a second copy of the types host and engine must share, and a
+    correct cast then fails with `ClassCastException: X cannot be cast to X`. So the JDK and one
+    **bridge package** delegate upward; everything else does not. Anything added to that list stops
+    being isolated, which is why it is a constant with a warning on it rather than a convenience.
+  - **The adapter is loaded by the child, not the host** — it references engine types directly, so only
+    a loader that can see them can load it. Host loads the bridge interface, child loads the
+    implementation, and they meet at the one package they share.
+  - Resources follow the same rule: ECJ reads `messages.properties` for every diagnostic, and
+    parent-first there finds the host's copy if it has one — diagnostics rendering as raw keys rather
+    than anything that throws.
+- Band selection is one `System.getProperty("java.specification.version")` read at startup ✅
+  `EngineBand.detect()`. **The legacy spelling is the trap**: Java 8 reports `"1.8"`, so a naive parse
+  reads **1**, which is below every band's minimum and therefore *still selects band 8* — correct by
+  accident, and wrong from Java 9 onward, where `"9"` parses on a different scale.
+- **Where the jars come from is a separate question** — `EngineSource`, because the answer differs per
+  platform (bundled in a mod jar, a loader's `libraries/`, a Gradle configuration in a dev run, absent)
+  and none of those changes which version is correct. `EngineSource.NONE` is a real deployment.
 
 ### 6.4 The alternative, recorded and rejected
 
@@ -281,6 +347,17 @@ downgraded jar on a real Java 8 host end-to-end, collapse band 1 into it and del
 
 ECJ/JDT: EPL-2.0. Rhino: MPL-2.0. Both bundleable; both go in `THIRD-PARTY.md` with the vendored
 notice, same convention as the icons and grammars. This is an obligation, not documentation.
+
+✅ **Recorded at M5**, with the two things the one-liner above left out. Both licences are **file-level**
+copyleft, so the obligation attaches to *modifying* their files — consuming them as unmodified binaries
+across a classloader boundary is what keeps them out of our source, and that is a consequence of the
+isolation `EngineClassLoader` exists for rather than a coincidence. And band 17 pulls **JNA**
+(Apache-2.0 / LGPL-2.1 dual; we take Apache-2.0), which was not in the plan's accounting at all.
+
+> **Nothing distributes an engine yet**, so this is an obligation in waiting: the configurations resolve
+> for tests and for the band-floor check, and both loader modules are commented out of
+> `settings.gradle.kts`. The licence texts have to travel in the jar the moment one of them bundles a
+> band — said in `THIRD-PARTY.md` too, because a row in a table is an index and not a discharge.
 
 ## 7. The scheduler
 
@@ -880,7 +957,7 @@ user-visible value lands early.
 | **M2** ✅ | The scheme axis (§11): font-style carve-out in `HighlightStyle.ALLOWED` — no scoped variant and no editor migration needed, see §11.1 — full `--syntax-*` vocabulary, `islands-dark` + light authored from the exported scheme, default swap | — (parallel to M0/M1) | side-by-side with IntelliJ on the same Java fixture; italic comments and constants; governance tests green |
 | **M3** ✅ | Grammars (§12–13): **six** — `css`, `javascript`, `html`, `glsl`, `xml` beside `java` — vendored with all five platform/arch pairs, registered by extension, fixtured; `injections.scm` wired (html hosts css + js); §10.2's normalization landed as **seven load-time query rewrites**, not a rename map; `EveryShippedGrammarTest` covers parse + capture + registration per grammar. `locals.scm` deferred to M11 with a reason (§13) | M1 | ✅ one fixture per language in `workspace/src/`; html `<style>`/`<script>` bodies coloured as CSS/JS |
 | **M4** ✅ | Module reshape (§5): `language/` rename + `.grammar`, `text.lang` SPIs in `core/` (12 types, interfaces and records only), `LanguageServices` per-document façade, editor consumes-if-present and **overlays semantic tokens over grammar tokens**, document-owned lifecycle (which also fixed `SyntaxTokenizer.close()` never being called), six registrations collapsed to a `Grammar` table | — | ✅ `core:headlessTest` green with no new deps — `LanguageSpiTest` runs the whole SPI with no engine and no grammar on the classpath; harness wires Java end-to-end unchanged; `SemanticOverlayTest` proves absent-services behaves exactly as before |
-| **M5** | Engine loading (§6): band detection, isolated child-first loaders, pinned ECJ+Rhino per band, `THIRD-PARTY.md` | M4 | band-selection unit tests; smoke compile+eval on a Java 8 toolchain and on 17+ (Gradle toolchains — no MC needed); §23 verifications closed |
+| **M5** ✅ | Engine loading (§6): band detection (`EngineBand`), isolated child-first loader with a parent-delegated bridge (`EngineClassLoader`), jar-location seam (`EngineSource`), runtime JLS discovery (`JlsLevel`), pinned ECJ+Rhino per band **including all 13 transitive platform artifacts, constrained by signing era as well as by class-file major**, `checkEngineBands` (floor + signer) in `:language:check`, `smokeEngineBands` under real per-era launchers, `THIRD-PARTY.md` | M4 | ✅ band-selection unit tests incl. the `"1.8"` trap; ✅ isolation proven with two real Rhinos; ✅ **smoke compile+eval green on a real Java 8 JVM and on 17** — Rhino arithmetic, ES2015 and a working `ClassShutter` refusal; JDT resolving `java.util.List<java.lang.String>` against the running VM, and doing it **from broken source**; ✅ §23 rows 3, 4 and 8 closed |
 | **M6** | Java semantics (§15): ECJ diagnostics + semantic tokens + `resolveAt`/`expectedTypeAt`, prelude mapper, classpath probe, reflection overlay, **live name environment + mapping boundary (§15.5)** | M0, M4, M5 | fixture script: param/field/local coloured, unresolved flagged, deprecated struck; broken-code partial answers pass the §13-checklist tests; **remap round-trip: a script authored in readable names compiles, links and runs against a fixture class whose runtime members carry synthetic "obfuscated" names, through a fake mapping set** — all headless |
 | **M7** | **Java execution service — the product**: per-script child classloader over the band loader (§6.3), prelude/host-binding injection at runtime, compile-always/run-explicit lifecycle, the output remap pass wired for real (not just M6's fixture) including safepoint injection + host kill switch (§19.3), compiled-script cache `(source hash, mappings hash, band)` (§15.5 D.3), run/stop commands via `CommandRegistry`, disposal — a re-run replaces the loader and nothing pins the old one | M5, M6 | a script authored in the editor runs on explicit command, effect observable in the harness; re-run replaces the instance; kill interrupts a deliberate infinite loop; 100 compile/run/dispose cycles leak no classloaders (heap assertion); the §5.3 proof — compile-and-run with the grammar jars absent, headless |
 | **M8** | Decorations + diagnostics UI (§17): tracked ranges with stickiness, squiggle view part, Problems wiring | M0; M6 for real input | stickiness golden tests (Monaco's cases); squiggles stay attached while typing above them; Problems row ↔ document range round-trip |
@@ -933,6 +1010,13 @@ mostly invisible when wrong:
 11. ✅ **The grammar table is consistent** — every row registers every extension it claims and
     resolves to its own `Language`; no two rows claim one extension (registration *replaces*, so a
     collision is silent and the later row simply wins); an injecting row names grammars we ship.
+12. ✅ **An engine band is loadable, coherent and functional** — three checks, because each catches
+    something the others cannot. `checkEngineBands` reads class-file majors (loadable) and compares
+    signing certificates per package (coherent); `EngineApiSurfaceTest` reflects over the real jars
+    (the adapter's surface is present in every band); `smokeEngineBands` runs each band **under a
+    launcher of its own era** and compiles and evaluates for real. The middle one would have passed
+    the signer bug and the first would have passed the broken-source question — the point is that
+    "the jars are fine" is three different claims.
 
 Everything in `language/` tests headlessly — no GL, no MC. That is a consequence of the layer
 rules, and it is also the enforcement of them.
@@ -974,12 +1058,12 @@ rules, and it is also the enforcement of them.
 |---|---|---|---|
 | 1 | ~~UTF-16 encoding agreement in the vendored binding~~ | ~~M1~~ | **Answered: it does not work** (§2 row 6). Probed before building on it, which is what this row existed for. The conversion layer stays and was made fast instead |
 | 2 | `TSReader` chunked parse works (nice-to-have; String path is the fallback) | — | not attempted; the String path is adequate and the rope is now handed to the worker rather than flattened on the frame |
-| 3 | Exact pinned versions per band: last ECJ line running on 8 and on 11; last Rhino on 8 (1.7.15) — and that the DOM adapter compiles against the oldest band's API | M5 | resolve artifacts, compile the adapter three times in CI-style toolchain matrix |
-| 4 | Old-band ECJ (≤4.16 era) honours `setBindingsRecovery` well enough for §15.1's broken-code story | M5/M6 | the §13-checklist tests run against *each* band's jar |
+| 3 | ~~Exact pinned versions per band; the DOM adapter compiles against the oldest band's API~~ | ~~M5~~ | **Answered (§6.2).** Measured from class-file majors, not release notes: jdt.core **3.26.0 / 3.33.0 / 3.46.0**, Rhino **1.7.15.1 / 1.9.1 / 1.9.1**. `EngineApiSurfaceTest` asserts the adapter's whole surface exists in all three. **The toolchain matrix is still owed** — it needs an adapter, so it moves to M6 |
+| 4 | ~~Old-band ECJ honours `setBindingsRecovery` well enough for §15.1's broken-code story~~ | ~~M5/M6~~ | **Answered on the real JVM.** `BandSmoke` parses a class whose last statement is truncated mid-expression, on band 8 under a **Java 8 launcher**, and still resolves the field's binding to `java.util.List<java.lang.String>` — generic argument intact. The §13-checklist tests still run per band at M6; the story they depend on is no longer a guess |
 | 5 | Classpath discovery on each loader (`LaunchClassLoader.getSources()`, Knot, ModDev, harness) | M6 | per-platform probe with a unit test where reachable; harness first |
 | 6 | ~~Fork-sync effort for upstream's css/js/html subprojects~~ | ~~M3~~ | **Answered.** Two lines in the fork's `settings.gradle` and a `jar` task; natives were already built for all five pairs, and `downloadSource` supplies the authors' `queries/`. Cheaper than the plan priced it |
 | 7 | Type-index scale on a real large modpack (count, scan time, table size vs §7.3 budget) | M9 | measure during M9, not before |
-| 8 | Rhino 1.7.15 ↔ 1.9.x API intersection for the single adapter (ClassShutter, scope, Context factory) | M5 | compile the adapter against both |
+| 8 | ~~Rhino 1.7.15 ↔ 1.9.x API intersection for the single adapter (ClassShutter, scope, Context factory)~~ | ~~M5~~ | **Answered.** `EngineApiSurfaceTest` loads both real jars and asserts `Context.enter/exit/initStandardObjects/evaluateString/setLanguageVersion/setOptimizationLevel/setClassShutter`, `ClassShutter.visibleToScripts`, `ContextFactory.getGlobal/enterContext`, `ErrorReporter`, `EvaluatorException`, `ScriptableObject`, and `VERSION_ES6 == 200` — identical across 1.7.15.1 and 1.9.1. One adapter is real |
 | 9 | Per-loader route to **post-transform class bytes** (1.7.10 `LaunchClassLoader` + transformer chain; Fabric launcher; Forge/Neo SecureJar) | M6 | probe per platform, 1.7.10 first — it is the hardest and the one that motivated §15.5 |
 | 10 | Every band's ECJ accepts a custom `INameEnvironment` serving remapped/synthesized `IBinaryType`s | M5/M6 | the M6 remap-round-trip fixture, run against each band's jar |
 | 11 | Mapping data sourcing and licences (1.7.10 MCP CSVs incl. `params.csv`, Mojang official mappings terms, Parchment, Fabric tiny) | M6 | resolve, cache strategy decided, recorded in `THIRD-PARTY.md` |
