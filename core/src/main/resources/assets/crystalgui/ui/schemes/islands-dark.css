@@ -75,6 +75,7 @@ theme {
      * and capitalisation already say "type", and colouring them turns a screen of Java into stripes. */
     --syntax-type: #BCBEC4;
     --syntax-type-builtin: #CF8E6D;
+    --syntax-type-qualifier: #CF8E6D;
 
     /* A DECLARATION is blue and a CALL is not — DEFAULT_FUNCTION_DECLARATION 56a8f5 against
      * DEFAULT_FUNCTION_CALL, which the exported scheme leaves at baseAttributes="DEFAULT_IDENTIFIER"
@@ -93,6 +94,7 @@ theme {
      * A producer that CAN tell them apart says so with the specific name, and gets the blue. */
     --syntax-function: #BCBEC4;
     --syntax-function-builtin: #CF8E6D;
+    --syntax-function-special: #56A8F5;
     --syntax-function-method: #56A8F5;
     --syntax-function-call: #BCBEC4;
 
@@ -119,6 +121,7 @@ theme {
     --syntax-tag: #CF8E6D;
     --syntax-constructor: #BCBEC4;
     --syntax-embedded: #BCBEC4;
+    --syntax-label: #CF8E6D;
 
     --syntax-operator: #BCBEC4;
     --syntax-punctuation: #BCBEC4;

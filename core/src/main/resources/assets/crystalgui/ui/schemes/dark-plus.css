@@ -71,8 +71,10 @@ theme {
     --syntax-keyword-operator: #569CD6;
     --syntax-type: #4EC9A0;
     --syntax-type-builtin: #569CD6;
+    --syntax-type-qualifier: #569CD6;
     --syntax-function: #DCDCAA;
     --syntax-function-builtin: #DCDCAA;
+    --syntax-function-special: #DCDCAA;
     --syntax-function-method: #DCDCAA;
     --syntax-function-call: #DCDCAA;
     --syntax-string: #CE9178;
@@ -93,6 +95,7 @@ theme {
     --syntax-tag: #569CD6;
     --syntax-constructor: #4EC9A0;
     --syntax-embedded: #D4D4D4;
+    --syntax-label: #C586C0;
     --syntax-operator: #D4D4D4;
     --syntax-punctuation: #808080;
     --syntax-punctuation-bracket: #808080;

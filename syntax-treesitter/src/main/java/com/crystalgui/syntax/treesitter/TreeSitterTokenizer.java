@@ -110,6 +110,18 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
      */
     private final Map<String, Pattern> captureFilters;
 
+    /**
+     * The injections query, or {@code null} for a language that embeds nothing.
+     *
+     * <p>HTML is not one language: {@code <style>} is CSS and {@code <script>} is JavaScript, and a
+     * highlighter that colours those bodies as markup text is worse than one that leaves them plain —
+     * it asserts something false about them.</p>
+     */
+    private TSQuery injectionQuery;
+
+    /** Child tokenizers by injected language name, built on first use and reused. */
+    private final java.util.Map<String, TreeSitterTokenizer> injected = new java.util.HashMap<>();
+
     private TSTree tree;
 
     /** The text the current {@link #tree} describes, and the offset index over it. */
@@ -174,7 +186,30 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
     }
 
     public static TreeSitterTokenizer html(JobScheduler scheduler) {
-        return of(new org.treesitter.TreeSitterHtml(), "html", scheduler);
+        TreeSitterTokenizer host = of(new org.treesitter.TreeSitterHtml(), "html", scheduler);
+        host.withInjections("assets/crystalgui/syntax/html/injections.scm", scheduler);
+        return host;
+    }
+
+    /**
+     * Turns on embedded-language highlighting, using the grammar's own {@code injections.scm}.
+     *
+     * <p>Failure is deliberately quiet: a missing or unparseable injections query leaves the host
+     * highlighting exactly as it was, which is degraded rather than broken. The alternative is a language
+     * that fails to open because one of its two queries did not compile.</p>
+     */
+    private void withInjections(String resourcePath, JobScheduler scheduler) {
+        try {
+            this.injectionQuery = new TSQuery(language, Queries.load(resourcePath));
+            this.injected.put("css", css(scheduler));
+            this.injected.put("javascript", javascript(scheduler));
+        } catch (RuntimeException unavailable) {
+            this.injectionQuery = null;
+        }
+    }
+
+    public static TreeSitterTokenizer glsl(JobScheduler scheduler) {
+        return of(new org.treesitter.TreeSitterGlsl(), "glsl", scheduler);
     }
 
     /** One grammar plus its vendored query directory — the shape every language here shares. */
@@ -228,31 +263,89 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
                 int start = offsets.toUtf16(node.getStartByte());
                 int end = offsets.toUtf16(node.getEndByte());
                 if (end > start) {
-                    order.add(new int[]{patternIndex, tokens.size()});
+                    order.add(new int[]{patternIndex, tokens.size(), isCatchAll(name) ? 0 : 1});
                     tokens.add(new SyntaxToken(start, end, name));
                 }
             }
         }
 
-        // ORDERED BY PATTERN INDEX, because that is tree-sitter's precedence and the cursor's own order is
-        // not. A consumer resolves two captures on one node by taking the later one, and the query is
-        // written on that assumption: `(identifier) @variable` is the Java grammar's FIRST pattern and
-        // matches every identifier in the file, with @constant, @type and @function.method arriving later
-        // to say what a given identifier actually is.
+        // THE CATCH-ALL LOSES; everything else is ordered by pattern index.
         //
-        // The cursor yields matches in node order, which interleaves the two arbitrarily -- measured, the
-        // same document gave `label` as [function.method, variable] and `TRACE` as [variable, constant].
-        // Taking the last of those makes a method plain and a constant purple, which is one right answer
-        // and one wrong one from the same rule. Sorting restores the query's intent.
+        // A consumer resolves two captures on one node by taking the later one, so this order IS the
+        // precedence. The cursor's own order does not encode it -- it yields matches in node order, which
+        // interleaves patterns arbitrarily: measured, one document gave `label` as
+        // [function.method, variable] and `TRACE` as [variable, constant], so taking the last made a
+        // constant purple and a method plain from the same rule.
         //
-        // Stable on the original index, so tokens from one pattern keep the order the cursor found them
-        // in and the result is deterministic rather than merely correct on average.
-        order.sort((left, right) -> left[0] != right[0]
-                ? Integer.compare(left[0], right[0])
-                : Integer.compare(left[1], right[1]));
+        // Sorting by pattern index alone was the first attempt and is WRONG, because where a grammar puts
+        // its blanket capture is a matter of that author's taste rather than a convention. Java writes
+        // `(identifier) @variable` as its FIRST pattern and refines it afterwards; GLSL writes the same
+        // line 79th, AFTER the function and property patterns. Index order therefore made GLSL's catch-all
+        // outrank everything and the whole file went one colour -- a regression that looked exactly like
+        // the bug it was meant to fix, from the opposite direction.
+        //
+        // What both authors mean is the same thing: the catch-all is what a grammar says when it has
+        // nothing more specific to offer, so it must lose to anything that has. Encoding that is stating
+        // the convention rather than working around it, and it is stable under either house style.
+        //
+        // Stable on the original index within a rank, so the result is deterministic rather than merely
+        // correct on average.
+        order.sort((left, right) -> {
+            if (left[2] != right[2]) return Integer.compare(left[2], right[2]);
+            if (left[0] != right[0]) return Integer.compare(left[0], right[0]);
+            return Integer.compare(left[1], right[1]);
+        });
         List<SyntaxToken> sorted = new ArrayList<>(tokens.size());
         for (int[] entry : order) sorted.add(tokens.get(entry[1]));
+
+        // AFTER the host's own tokens, so an injected range wins on the shared last-write-wins rule. The
+        // host captures the whole <script> body as raw text; the injected language then says what is
+        // actually in it, and that is the more specific answer.
+        appendInjected(sorted, startByte, endByte);
         return sorted;
+    }
+
+    /**
+     * Runs each injected region through its own grammar and adds the result, rebased onto this document.
+     *
+     * <p><b>The injected text is tokenized standalone and its offsets shifted</b>, rather than parsed in
+     * place through tree-sitter's included-ranges API. Both are correct; this one is a great deal simpler,
+     * and the cost is re-parsing a region that is small by construction — a {@code <style>} or
+     * {@code <script>} body, not a document. Included ranges become worth it when a language injects
+     * hundreds of fragments (a templating language interleaving expressions with text), which none of the
+     * grammars here does.</p>
+     *
+     * <p>Bounded to the queried range for the same reason the host query is: an HTML file may hold several
+     * script blocks and only the visible one should be parsed.</p>
+     */
+    private void appendInjected(List<SyntaxToken> tokens, int startByte, int endByte) {
+        if (injectionQuery == null || tree == null) return;
+
+        TSQueryCursor injectionCursor = new TSQueryCursor();
+        injectionCursor.setByteRange(startByte, endByte);
+        injectionCursor.exec(injectionQuery, tree.getRootNode());
+
+        TSQueryMatch match = new TSQueryMatch();
+        while (injectionCursor.nextMatch(match)) {
+            String languageName = match.getMetadata() == null
+                    ? null : match.getMetadata().get("injection.language");
+            TreeSitterTokenizer child = languageName == null ? null : injected.get(languageName);
+            if (child == null) continue;
+
+            for (TSQueryCapture capture : match.getCaptures()) {
+                TSNode node = capture.getNode();
+                int from = offsets.toUtf16(node.getStartByte());
+                int to = offsets.toUtf16(node.getEndByte());
+                if (to <= from) continue;
+
+                String fragment = offsets.text().substring(from, to);
+                for (SyntaxToken token : child.tokenize(Rope.of(fragment), 0, fragment.length())) {
+                    // Rebased onto the host document. Without the shift every injected colour lands at the
+                    // top of the file, which reads as the injection working and the offsets being random.
+                    tokens.add(new SyntaxToken(from + token.start(), from + token.end(), token.name()));
+                }
+            }
+        }
     }
 
     /**
@@ -289,6 +382,18 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
             }
         }
         return true;
+    }
+
+    /**
+     * Whether a capture name is the vocabulary's catch-all — the thing a grammar says about an identifier
+     * when it has nothing more specific to say.
+     *
+     * <p>Exactly {@code variable}, and deliberately not its specialisations: {@code variable.builtin} and
+     * {@code variable.parameter} are statements, not shrugs, and must outrank the bare form the same way
+     * {@code constant} does.</p>
+     */
+    private static boolean isCatchAll(String captureName) {
+        return "variable".equals(captureName);
     }
 
     /** The source text a node covers, in the document last parsed. */
@@ -468,6 +573,12 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
         tree = null;
         offsets = Utf8Offsets.EMPTY;
         stale = true;
+        // The injected children are whole tokenizers, each with its own parser, query and cursor. Leaving
+        // them would leak one set per embedded language per HTML document opened -- the same per-document
+        // native leak close() was extended to fix, one level down.
+        for (TreeSitterTokenizer child : injected.values()) child.close();
+        injected.clear();
+        closeQuietly(injectionQuery);
         closeQuietly(cursor);
         closeQuietly(query);
         closeQuietly(parser);
