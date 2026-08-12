@@ -288,4 +288,55 @@ public class JavaMemberCompletionTest {
 
         assertTrue("java.lang.System is missing from the index: " + labels, labels.contains("System"));
     }
+
+    /**
+     * The index must match the way the RANKER matches, or its candidates never arrive.
+     *
+     * <p>Typing {@code CgRenderer} offered one row. Nothing on the machine <em>starts</em> with that, and
+     * the index filtered with {@code startsWith} while {@code SearchMatcher} — which ranks whatever the
+     * index hands over — matches scattered characters. So {@code CgBatchRenderer}, {@code CgQuadRenderer}
+     * and {@code CgTextRenderer} were rejected a step before anything could rank them, and the single row
+     * that did show had survived from an earlier, shorter query's batch.</p>
+     *
+     * <p>Asserted through the provider rather than on {@code TypeIndex} directly, because the defect was
+     * precisely that two layers disagreed: a test of either one alone passes.</p>
+     */
+    @Test
+    public void theIndexOffersScatteredMatchesAndNotOnlyPrefixes() {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run() {\n"
+                + "        CgRenderer\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("        CgRenderer") + "        CgRenderer".length();
+        List<String> labels = labelsOf(completeAt(source, caret, "CgRenderer", false));
+
+        // Whatever else is on the classpath, a name of the shape Cg<something>Renderer has to be reachable.
+        boolean anyScatteredRenderer = false;
+        for (String label : labels) {
+            if (label.startsWith("Cg") && label.endsWith("Renderer") && !label.equals("CgRenderer")) {
+                anyScatteredRenderer = true;
+                break;
+            }
+        }
+        assertTrue("no Cg*Renderer reached the list, so the index is still pre-filtering on startsWith: "
+                + labels, anyScatteredRenderer);
+    }
+
+    /** A camel-hump query is the everyday form of the same thing. */
+    @Test
+    public void aCamelHumpQueryReachesTheTypeItNames() {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run() {\n"
+                + "        AbsMeth\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("        AbsMeth") + "        AbsMeth".length();
+        List<String> labels = labelsOf(completeAt(source, caret, "AbsMeth", false));
+
+        assertTrue("AbstractMethodError is the JDK's own and should be reachable: " + labels,
+                labels.contains("AbstractMethodError"));
+    }
 }

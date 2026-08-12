@@ -80,24 +80,68 @@ final class TypeIndex {
     record Match(List<Entry> entries, boolean truncated) {
     }
 
-    /** Types whose simple name matches {@code prefix}, best first. */
+    /**
+     * Types whose simple name matches {@code prefix}, best first.
+     *
+     * <h3>Subsequence, not just prefix — because the consumer matches that way</h3>
+     *
+     * <p>This filtered with {@code startsWith} while {@link com.crystalgui.core.search.SearchMatcher},
+     * which ranks the list afterwards, matches scattered characters. An index that pre-filters more
+     * strictly than the thing consuming it is worse than no index: typing {@code CgRenderer} found nothing,
+     * because <em>nothing</em> starts with that — {@code CgBatchRenderer}, {@code CgQuadRenderer} and
+     * {@code CgTextRenderer} were never handed over to be ranked. The one row that did appear had survived
+     * from an earlier, shorter query's batch, which made it look like an index with a single entry in it.
+     * </p>
+     *
+     * <p>The two filters have to agree, and this is the side that moves: the matcher's rule is the one the
+     * user can see working on every other row in the popup.</p>
+     *
+     * <h3>A cheap test first, because this runs over every type on the machine</h3>
+     *
+     * <p>{@code SearchMatcher}'s subsequence tier is a small dynamic program — right for ranking forty
+     * candidates and far too much for fifty thousand on every keystroke. {@link #isSubsequence} is a single
+     * linear scan with no allocation, and it is <b>exactly the same predicate</b>: anything it rejects the
+     * DP would also reject, so nothing is lost by asking the cheap question first.</p>
+     */
     Match matching(String prefix) {
         if (prefix == null || prefix.isEmpty()) return new Match(List.of(), false);
         ensureBuilt();
         String needle = prefix.toLowerCase(Locale.ROOT);
-        List<Entry> hits = new ArrayList<>();
+        List<Entry> prefixed = new ArrayList<>();
+        List<Entry> scattered = new ArrayList<>();
         for (Entry entry : entries) {
-            if (entry.simpleName().toLowerCase(Locale.ROOT).startsWith(needle)) {
-                hits.add(entry);
-                if (hits.size() >= MAX_RESULTS * 4) break;
-            }
+            String candidate = entry.simpleName().toLowerCase(Locale.ROOT);
+            if (candidate.startsWith(needle)) prefixed.add(entry);
+            else if (isSubsequence(needle, candidate)) scattered.add(entry);
+            // Bounded on the WHOLE haystack, not per bucket: a one-character query matches most of the
+            // JDK, and collecting all of it to then keep forty is work nobody reads.
+            if (prefixed.size() + scattered.size() >= MAX_RESULTS * 8) break;
         }
-        // Shortest first, then alphabetical: a prefix hit on a short name is the likelier target, and the
-        // total order is what stops the list permuting between keystrokes.
-        hits.sort(Comparator.comparingInt((Entry e) -> e.simpleName().length())
-                .thenComparing(Entry::simpleName));
+
+        // A real prefix hit beats any scattered one, whatever their lengths -- the same tier ordering
+        // SearchMatcher applies, kept here so this list arrives already in the order the ranking will
+        // agree with rather than being reshuffled a step later.
+        prefixed.sort(BY_BREVITY);
+        scattered.sort(BY_BREVITY);
+        List<Entry> hits = new ArrayList<>(prefixed);
+        hits.addAll(scattered);
+
         boolean truncated = hits.size() > MAX_RESULTS;
-        return new Match(truncated ? hits.subList(0, MAX_RESULTS) : hits, truncated);
+        return new Match(truncated ? new ArrayList<>(hits.subList(0, MAX_RESULTS)) : hits, truncated);
+    }
+
+    /** Shortest first, then alphabetical — a total order, so the list cannot permute between keystrokes. */
+    private static final Comparator<Entry> BY_BREVITY =
+            Comparator.comparingInt((Entry e) -> e.simpleName().length()).thenComparing(Entry::simpleName);
+
+    /** Whether every character of {@code needle} appears in {@code candidate}, in order. Both lower-case. */
+    private static boolean isSubsequence(String needle, String candidate) {
+        if (needle.length() > candidate.length()) return false;
+        int at = 0;
+        for (int i = 0; i < candidate.length() && at < needle.length(); i++) {
+            if (candidate.charAt(i) == needle.charAt(at)) at++;
+        }
+        return at == needle.length();
     }
 
     private synchronized void ensureBuilt() {

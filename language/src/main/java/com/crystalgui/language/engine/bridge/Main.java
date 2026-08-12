@@ -270,7 +270,6 @@ public final class Main {
 
         Transformer<String, String> trimAndUpper = ((Transformer<String, String>) String::trim)
                 .then(String::toUpperCase); 
-
         List<String> words = supplier.get();
         words.add("  gamma ");
         words.add("alpha");
