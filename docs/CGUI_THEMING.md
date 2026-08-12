@@ -485,8 +485,10 @@ editor scheme's.
 | `--syntax-comment-style` | `normal` | dark-plus.css |
 | `--syntax-constant` | `#4FC1FF` | dark-plus.css |
 | `--syntax-constant-builtin` | `#569CD6` | dark-plus.css |
+| `--syntax-constant-style` | `normal` | dark-plus.css |
 | `--syntax-function` | `#DCDCAA` | dark-plus.css |
 | `--syntax-function-builtin` | `#DCDCAA` | dark-plus.css |
+| `--syntax-function-call` | `#DCDCAA` | dark-plus.css |
 | `--syntax-function-method` | `#DCDCAA` | dark-plus.css |
 | `--syntax-keyword` | `#569CD6` | dark-plus.css |
 | `--syntax-keyword-control` | `#C586C0` | dark-plus.css |

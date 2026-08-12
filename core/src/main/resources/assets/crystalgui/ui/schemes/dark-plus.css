@@ -74,6 +74,7 @@ theme {
     --syntax-function: #DCDCAA;
     --syntax-function-builtin: #DCDCAA;
     --syntax-function-method: #DCDCAA;
+    --syntax-function-call: #DCDCAA;
     --syntax-string: #CE9178;
     --syntax-string-escape: #D7BA7D;
     --syntax-string-special: #D7BA7D;
@@ -100,6 +101,7 @@ theme {
      * does not italicise, so this is the one place this scheme departs from VS Code — the alternative was
      * shipping the mechanism with nothing exercising it. */
     --syntax-comment-style: normal;
+    --syntax-constant-style: normal;
 
     /* The bracket-MATCH highlight, which is not a capture — it is the pair under the caret. */
     --syntax-bracket: #4EC9A0;

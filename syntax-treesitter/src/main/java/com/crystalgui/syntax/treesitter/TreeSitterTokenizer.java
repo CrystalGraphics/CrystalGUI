@@ -24,6 +24,8 @@ import org.treesitter.TSTree;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Syntax highlighting from a real parse tree.
@@ -101,6 +103,13 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
      */
     private final String[] captureNames;
 
+    /**
+     * Text conditions lifted out of the query, applied here because the pattern that carried them could
+     * not fire at all. See {@code Queries.liftUnambiguousPredicates} — a name is only in this map when
+     * every use of it in the query was guarded by the same test.
+     */
+    private final Map<String, Pattern> captureFilters;
+
     private TSTree tree;
 
     /** The text the current {@link #tree} describes, and the offset index over it. */
@@ -128,10 +137,15 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
      *                  synchronous. See the field note.
      */
     public TreeSitterTokenizer(TSLanguage language, String highlightQuery, JobScheduler scheduler) {
+        this(language, new Queries.Prepared(highlightQuery, java.util.Collections.emptyMap()), scheduler);
+    }
+
+    TreeSitterTokenizer(TSLanguage language, Queries.Prepared prepared, JobScheduler scheduler) {
         this.language = language;
         this.parser = new TSParser();
         this.parser.setLanguage(language);
-        this.query = new TSQuery(language, highlightQuery);
+        this.query = new TSQuery(language, prepared.text());
+        this.captureFilters = prepared.captureFilters();
         this.scheduler = scheduler;
 
         this.captureNames = new String[query.getCaptureCount()];
@@ -149,7 +163,7 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
     /** Java, reparsing on {@code scheduler}. */
     public static TreeSitterTokenizer java(JobScheduler scheduler) {
         return new TreeSitterTokenizer(new org.treesitter.TreeSitterJava(),
-                Queries.load("assets/crystalgui/syntax/java/highlights.scm"), scheduler);
+                Queries.loadForHighlighting("assets/crystalgui/syntax/java/highlights.scm"), scheduler);
     }
 
     @Override
@@ -175,21 +189,52 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
         cursor.setByteRange(startByte, endByte);
         cursor.exec(query, tree.getRootNode());
 
+        // Paired with their pattern index, because that -- not the order the cursor happens to yield
+        // them in -- is what decides precedence. See the sort below.
+        List<int[]> order = new ArrayList<>();
         List<SyntaxToken> tokens = new ArrayList<>();
         TSQueryMatch match = new TSQueryMatch();
         while (cursor.nextMatch(match)) {
             if (!predicatesHold(match)) continue;
+            int patternIndex = match.getPatternIndex();
             for (TSQueryCapture capture : match.getCaptures()) {
                 int index = capture.getIndex();
                 String name = index >= 0 && index < captureNames.length ? captureNames[index] : null;
                 if (name == null || name.isEmpty()) continue;
                 TSNode node = capture.getNode();
+                // The lifted predicate, re-applied. Without it the SCREAMING_CASE test that separates a
+                // constant from an ordinary identifier would be gone entirely, and every identifier in
+                // the file would be captured as a constant.
+                Pattern filter = captureFilters.get(name);
+                if (filter != null && !filter.matcher(textOf(node)).find()) continue;
                 int start = offsets.toUtf16(node.getStartByte());
                 int end = offsets.toUtf16(node.getEndByte());
-                if (end > start) tokens.add(new SyntaxToken(start, end, name));
+                if (end > start) {
+                    order.add(new int[]{patternIndex, tokens.size()});
+                    tokens.add(new SyntaxToken(start, end, name));
+                }
             }
         }
-        return tokens;
+
+        // ORDERED BY PATTERN INDEX, because that is tree-sitter's precedence and the cursor's own order is
+        // not. A consumer resolves two captures on one node by taking the later one, and the query is
+        // written on that assumption: `(identifier) @variable` is the Java grammar's FIRST pattern and
+        // matches every identifier in the file, with @constant, @type and @function.method arriving later
+        // to say what a given identifier actually is.
+        //
+        // The cursor yields matches in node order, which interleaves the two arbitrarily -- measured, the
+        // same document gave `label` as [function.method, variable] and `TRACE` as [variable, constant].
+        // Taking the last of those makes a method plain and a constant purple, which is one right answer
+        // and one wrong one from the same rule. Sorting restores the query's intent.
+        //
+        // Stable on the original index, so tokens from one pattern keep the order the cursor found them
+        // in and the result is deterministic rather than merely correct on average.
+        order.sort((left, right) -> left[0] != right[0]
+                ? Integer.compare(left[0], right[0])
+                : Integer.compare(left[1], right[1]));
+        List<SyntaxToken> sorted = new ArrayList<>(tokens.size());
+        for (int[] entry : order) sorted.add(tokens.get(entry[1]));
+        return sorted;
     }
 
     /**
