@@ -140,7 +140,19 @@ final class Utf8Offsets {
         return utf8At;
     }
 
-    /** UTF-8 byte offset back to UTF-16 index, clamped to the document. */
+    /**
+     * UTF-8 byte offset back to UTF-16 index, clamped to the document and <b>never inside a surrogate
+     * pair</b>.
+     *
+     * <p>The pair is the reason for the last step. A surrogate pair is four UTF-8 bytes and two UTF-16
+     * units, and the walk below counts the pair's whole width against its <em>high</em> surrogate — so an
+     * index arriving here can legitimately land on the low one. Returning it produces a substring that
+     * begins or ends with half a character, and the failure surfaces a long way away: the shaper's cluster
+     * map computes three bytes for a lone surrogate while the encoder writes one {@code '?'}, and the
+     * running total walks off the end of the map. It presented as an
+     * {@code ArrayIndexOutOfBoundsException} inside text layout on opening an HTML file, which says
+     * nothing about offsets at all.</p>
+     */
     int toUtf16(int byteOffset) {
         int limit = clamp(byteOffset, utf8Length);
         if (ascii) return limit;
@@ -151,6 +163,13 @@ final class Utf8Offsets {
         while (utf8At < limit && utf16At < text.length()) {
             utf8At += utf8LengthOf(text, utf16At);
             utf16At++;
+        }
+        // Backed onto the high surrogate rather than forward past the pair: a boundary that fell inside a
+        // character belongs at that character's start, which is what every other offset here means.
+        if (utf16At > 0 && utf16At < text.length()
+                && Character.isLowSurrogate(text.charAt(utf16At))
+                && Character.isHighSurrogate(text.charAt(utf16At - 1))) {
+            utf16At--;
         }
         return utf16At;
     }

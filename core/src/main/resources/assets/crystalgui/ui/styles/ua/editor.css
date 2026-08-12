@@ -241,12 +241,28 @@ texteditor text::highlight(type.builtin) {
     color: var(--syntax-type-builtin, #569CD6);
 }
 
+/* A STORAGE QUALIFIER IS A KEYWORD, not a type, and the dotted fallback gets this one wrong.
+ * GLSL's `uniform`, `layout`, `in`, `out`, `flat` and `noperspective` are captured as
+ * @type.qualifier, which falls back to `type` — and this scheme leaves types at the default
+ * foreground, so every qualifier in a shader went colourless. Reserved words read as keywords in
+ * IntelliJ's GLSL and in every other editor; the fallback is only ever a guess, and this is where it
+ * guesses wrong. */
+texteditor text::highlight(type.qualifier) {
+    color: var(--syntax-type-qualifier, #569CD6);
+}
+
 texteditor text::highlight(function) {
     color: var(--syntax-function, #DCDCAA);
 }
 
 texteditor text::highlight(function.builtin) {
     color: var(--syntax-function-builtin, #DCDCAA);
+}
+
+/* A function-like macro — `#define SATURATE(x)`. A DEFINITION, so it takes the declaration colour
+ * rather than the call one; the fallback would give it the call's, since its stem is `function`. */
+texteditor text::highlight(function.special) {
+    color: var(--syntax-function-special, #DCDCAA);
 }
 
 texteditor text::highlight(function.method) {
@@ -352,6 +368,13 @@ texteditor text::highlight(constructor) {
 
 texteditor text::highlight(embedded) {
     color: var(--syntax-embedded, #D4D4D4);
+}
+
+/* From GLSL: a `case` label. A genuinely new concept rather than a dialect spelling of an existing one,
+ * so it gets a token instead of being normalized onto a near-miss — see Queries.normalizeCaptureDialect
+ * for where synonyms are folded and why this is not one. */
+texteditor text::highlight(label) {
+    color: var(--syntax-label, #C586C0);
 }
 
 /* ── Punctuation ──

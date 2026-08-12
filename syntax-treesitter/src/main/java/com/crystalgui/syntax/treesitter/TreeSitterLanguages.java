@@ -67,5 +67,11 @@ public final class TreeSitterLanguages {
         LanguageRegistry.registerExtensions(
                 new LanguageRegistry.Entry(Language.PLAIN, () -> TreeSitterTokenizer.html(scheduler)),
                 "html", "htm");
+        // The same eight extensions core's GLSL lexer claims, so this REPLACES it rather than covering a
+        // subset -- a shader opened as .vert and the same shader opened as .glsl must not highlight
+        // differently depending on which registration won.
+        LanguageRegistry.registerExtensions(
+                new LanguageRegistry.Entry(Language.GLSL, () -> TreeSitterTokenizer.glsl(scheduler)),
+                "glsl", "vert", "frag", "geom", "tesc", "tese", "comp", "shader");
     }
 }

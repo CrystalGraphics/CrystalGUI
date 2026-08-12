@@ -454,7 +454,7 @@ public class StyleGovernanceTest {
                         .replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", "\"\"");
                 Matcher matcher = Pattern.compile("@([a-z][a-z.]*)").matcher(scm);
                 while (matcher.find()) {
-                    String capture = matcher.group(1);
+                    String capture = CAPTURE_DIALECT.getOrDefault(matcher.group(1), matcher.group(1));
                     if (styled.contains(capture) || styled.contains(generalNameOf(capture))) continue;
                     offences.add(file.getFileName() + " emits @" + capture
                             + " (" + file.getParent().getFileName() + "), which nothing styles");
@@ -465,6 +465,21 @@ public class StyleGovernanceTest {
         }
         assertTrue(String.join("\n", new TreeSet<>(offences)), offences.isEmpty());
     }
+
+    /**
+     * Capture synonyms folded before the query reaches a scheme.
+     *
+     * <p><b>Mirrors {@code Queries.normalizeCaptureDialect} in the syntax module</b>, which is not on this
+     * source set's classpath — `core/` must not depend on the grammar module, which is the same rule that
+     * keeps natives out of a dedicated server. The duplication is two entries and is preferable to the
+     * alternative: giving the synonym a `--syntax-*` token of its own, which every scheme would then have
+     * to define and keep identical to the name it is a synonym for, forever.</p>
+     *
+     * <p>If this map and that method disagree, this test reports a capture as uncoloured that the engine
+     * colours fine — a false alarm rather than a missed one, which is the right way round.</p>
+     */
+    private static final Map<String, String> CAPTURE_DIALECT =
+            Map.of("delimiter", "punctuation.delimiter");
 
     /** Mirrors {@code SyntaxToken.generalName()} — the dotted fallback a theme relies on. */
     private static String generalNameOf(String capture) {

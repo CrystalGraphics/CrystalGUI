@@ -39,6 +39,7 @@ dependencies {
     implementation(files(rootProject.file("lib/tree-sitter/tree-sitter-css-0.25.0.jar")))
     implementation(files(rootProject.file("lib/tree-sitter/tree-sitter-javascript-0.25.0.jar")))
     implementation(files(rootProject.file("lib/tree-sitter/tree-sitter-html-0.23.2.jar")))
+    implementation(files(rootProject.file("lib/tree-sitter/tree-sitter-glsl-0.2.0.jar")))
 
     testImplementation("junit:junit:4.13.2")
 }
