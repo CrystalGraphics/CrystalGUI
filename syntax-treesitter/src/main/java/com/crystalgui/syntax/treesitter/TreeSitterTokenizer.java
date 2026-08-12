@@ -17,6 +17,7 @@ import org.treesitter.TSQuery;
 import org.treesitter.TSQueryCapture;
 import org.treesitter.TSQueryCursor;
 import org.treesitter.TSQueryMatch;
+import org.treesitter.TSQueryPredicate;
 import org.treesitter.TSRange;
 import org.treesitter.TSTree;
 
@@ -177,6 +178,7 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
         List<SyntaxToken> tokens = new ArrayList<>();
         TSQueryMatch match = new TSQueryMatch();
         while (cursor.nextMatch(match)) {
+            if (!predicatesHold(match)) continue;
             for (TSQueryCapture capture : match.getCaptures()) {
                 int index = capture.getIndex();
                 String name = index >= 0 && index < captureNames.length ? captureNames[index] : null;
@@ -188,6 +190,51 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
             }
         }
         return tokens;
+    }
+
+    /**
+     * Whether a match's {@code #match?} / {@code #eq?} predicates hold.
+     *
+     * <h3>tree-sitter does not evaluate these, and that is not a gap in the binding</h3>
+     * <p>The C library matches <em>structure</em>; predicates are text conditions and are the client's
+     * job by design — every consumer (Neovim, Zed, the Rust {@code tree-sitter-highlight} crate) evaluates
+     * them itself. Skipping that step does not produce a warning; it produces a query that quietly means
+     * something else.</p>
+     *
+     * <p><b>What it cost here.</b> The Java grammar identifies constants with
+     * {@code ((identifier) @constant (#match? @constant "^_*[A-Z][A-Z\\d_]+$"))} — a SCREAMING_CASE test,
+     * because a grammar cannot otherwise tell {@code MAX_RETRIES} from {@code retries}. With the predicate
+     * unevaluated that pattern never contributed a usable capture, so every constant, enum constant and
+     * static field in the language rendered as a plain identifier. Against IntelliJ, whose palette makes
+     * those purple and italic, that is one of the most visible differences on screen — and it looked like
+     * a missing colour rather than a missing predicate.</p>
+     *
+     * <p>Text is fetched per node rather than handed the whole document: a predicate tests one identifier,
+     * and the alternative is materialising the file for every match.</p>
+     */
+    private boolean predicatesHold(TSQueryMatch match) {
+        List<TSQueryPredicate> predicates = query.getPredicatesForPattern(match.getPatternIndex());
+        if (predicates == null || predicates.isEmpty()) return true;
+        for (TSQueryPredicate predicate : predicates) {
+            try {
+                if (!predicate.test(match, this::textOf)) return false;
+            } catch (RuntimeException unsupported) {
+                // An unrecognised predicate must not delete the capture: over-reporting shows a colour
+                // that may be slightly wrong, under-reporting shows none at all and looks like the
+                // grammar failing. The same asymmetry the invalidation path already argues.
+                return true;
+            }
+        }
+        return true;
+    }
+
+    /** The source text a node covers, in the document last parsed. */
+    private String textOf(TSNode node) {
+        String source = offsets.text();
+        int start = offsets.toUtf16(node.getStartByte());
+        int end = offsets.toUtf16(node.getEndByte());
+        if (start < 0 || end > source.length() || end < start) return "";
+        return source.substring(start, end);
     }
 
     @Override

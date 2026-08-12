@@ -49,6 +49,7 @@ final class Utf8Offsets {
      */
     private final int utf8Length;
 
+
     /** True when every character is one byte, making both conversions the identity. */
     private final boolean ascii;
 
@@ -100,6 +101,11 @@ final class Utf8Offsets {
     static Utf8Offsets of(String text) {
         if (text == null || text.isEmpty()) return EMPTY;
         return new Utf8Offsets(text);
+    }
+
+    /** The document this index describes — what a {@code #match?} predicate tests a node's text against. */
+    String text() {
+        return text;
     }
 
     /**
