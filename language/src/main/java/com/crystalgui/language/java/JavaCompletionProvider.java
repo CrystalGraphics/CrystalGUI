@@ -64,6 +64,9 @@ final class JavaCompletionProvider implements CompletionProvider {
     private final Supplier<SourceAnalyzer.Analysis> analysis;
     private final TypeIndex types;
 
+    /** Set by {@link #openCodeItems} when the index had more names than it would hand over. */
+    private boolean typesTruncated;
+
     JavaCompletionProvider(TextBuffer buffer, Supplier<SourceAnalyzer.Analysis> analysis, TypeIndex types) {
         this.buffer = buffer;
         this.analysis = analysis;
@@ -85,8 +88,12 @@ final class JavaCompletionProvider implements CompletionProvider {
 
         boolean truncated = items.size() > MAX_ITEMS;
         if (truncated) items = items.subList(0, MAX_ITEMS);
+        // Either kind of truncation makes this a partial answer: too many items to send, or an index that
+        // had more to give. Both mean "ask me again when you know more".
+        boolean partial = truncated || typesTruncated;
+        typesTruncated = false;
         answer.accept(Versioned.of(current.version(),
-                truncated ? CompletionList.partial(items) : CompletionList.complete(items)));
+                partial ? CompletionList.partial(items) : CompletionList.complete(items)));
     }
 
     /**
@@ -146,9 +153,13 @@ final class JavaCompletionProvider implements CompletionProvider {
         // thousands of names and would bury the handful actually in scope -- IntelliJ gates them the same
         // way, behind a second Ctrl+Space, for the same reason.
         if (!request.prefix().isEmpty()) {
-            for (TypeIndex.Entry type : types.matching(request.prefix())) {
-                items.add(unimportedTypeItem(type));
-            }
+            TypeIndex.Match matched = types.matching(request.prefix());
+            for (TypeIndex.Entry type : matched.entries()) items.add(unimportedTypeItem(type));
+            // THE INDEX HAD MORE, so this list is a sample rather than the answer -- and the session must
+            // ask again as the query narrows. Without it the popup, which now opens on the FIRST character
+            // typed, asked once for "C", kept the forty shortest names starting with C, and filtered those
+            // locally forever: typing CgTex found nothing, because CgTexture was never in the forty.
+            typesTruncated = matched.truncated();
         }
         return items;
     }

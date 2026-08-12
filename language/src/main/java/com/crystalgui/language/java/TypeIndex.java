@@ -69,9 +69,20 @@ final class TypeIndex {
         this.classpath = classpath == null ? List.of() : List.copyOf(classpath);
     }
 
+    /**
+     * What {@link #matching} found, and whether there was more of it.
+     *
+     * <p>The second half is not bookkeeping. A completion list built from a truncated index must be
+     * reported {@link com.crystalgui.text.lang.CompletionList#incomplete}, or the session filters the forty
+     * names it was given locally and never asks again as the query narrows — so typing {@code CgTex} shows
+     * whatever forty things started with {@code C}, and the type actually being typed is not among them.</p>
+     */
+    record Match(List<Entry> entries, boolean truncated) {
+    }
+
     /** Types whose simple name matches {@code prefix}, best first. */
-    List<Entry> matching(String prefix) {
-        if (prefix == null || prefix.isEmpty()) return List.of();
+    Match matching(String prefix) {
+        if (prefix == null || prefix.isEmpty()) return new Match(List.of(), false);
         ensureBuilt();
         String needle = prefix.toLowerCase(Locale.ROOT);
         List<Entry> hits = new ArrayList<>();
@@ -85,7 +96,8 @@ final class TypeIndex {
         // total order is what stops the list permuting between keystrokes.
         hits.sort(Comparator.comparingInt((Entry e) -> e.simpleName().length())
                 .thenComparing(Entry::simpleName));
-        return hits.size() > MAX_RESULTS ? hits.subList(0, MAX_RESULTS) : hits;
+        boolean truncated = hits.size() > MAX_RESULTS;
+        return new Match(truncated ? hits.subList(0, MAX_RESULTS) : hits, truncated);
     }
 
     private synchronized void ensureBuilt() {
