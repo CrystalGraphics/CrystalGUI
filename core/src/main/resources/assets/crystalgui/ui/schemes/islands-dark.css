@@ -124,6 +124,10 @@ theme {
     --syntax-label: #CF8E6D;
     --syntax-markup: #BCBEC4;
     --syntax-error: #F75464;
+    /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
+     * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
+    --syntax-unresolved: #F75464;
+    --syntax-deprecated: #6F737A;
 
     --syntax-operator: #BCBEC4;
     --syntax-punctuation: #BCBEC4;

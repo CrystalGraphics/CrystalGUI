@@ -76,6 +76,18 @@ public interface SourceAnalyzer {
 
         TypeRef expectedTypeAt(int offset);
 
+        /**
+         * Everything reachable on {@code type} from {@code contextOffset} — what completion after a
+         * dot is built from.
+         *
+         * <p>Hand back a {@link TypeRef} this analysis produced, so the engine's binding is intact
+         * and generic substitution survives. {@code contextOffset} is not decoration: accessibility
+         * is a property of where you are asking from, and a list that ignored it would offer members
+         * that do not compile — worse than offering none, because the list looks authoritative and
+         * the error arrives after acceptance.</p>
+         */
+        List<SymbolInfo> membersOf(TypeRef type, int contextOffset);
+
         /** Releases the AST. Idempotent. */
         @Override
         void close();

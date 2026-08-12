@@ -187,8 +187,60 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                     }
                     return true;
                 }
+
+                /**
+                 * A name that resolves to nothing, and a name whose target is deprecated.
+                 *
+                 * <p>Emitted as a SECOND token over the same range rather than instead of the first,
+                 * because they answer a different question. {@code count} being a field and
+                 * {@code count} being unresolved are both worth saying, and a scheme draws the first
+                 * as a colour and the second as an underline — so replacing one with the other would
+                 * throw away the piece of information the highlighter actually had.</p>
+                 *
+                 * <p>The editor's merge takes the last overlapping token, so these are added after the
+                 * kind token above and win. That is the correct order: the more specific statement is
+                 * the one about the world, not the one about the shape.</p>
+                 */
+                @Override
+                public void endVisit(SimpleName name) {
+                    IBinding binding = name.resolveBinding();
+                    int start = name.getStartPosition();
+                    int end = start + name.getLength();
+                    if (binding == null) {
+                        // ONLY WHERE A NAME WAS EXPECTED TO RESOLVE. A label, a package fragment and
+                        // the name in a declaration position legitimately have no binding, and
+                        // underlining those would mark correct code as broken on every file.
+                        if (isResolvable(name)) tokens.add(new SyntaxToken(start, end, "unresolved"));
+                        return;
+                    }
+                    if (binding.isDeprecated()) {
+                        tokens.add(new SyntaxToken(start, end, "deprecated"));
+                    }
+                }
             });
             return tokens;
+        }
+
+        /**
+         * Whether a name with no binding is actually a failure.
+         *
+         * <p>Several names legitimately resolve to nothing and marking them would report correct code
+         * as broken in every file: the segments of a package or import path (each is a fragment, not a
+         * type), a label, and the {@code name} in a {@code MemberValuePair}. Being conservative here is
+         * the right direction — a missed underline is invisible, a false one is a red mark on working
+         * code, and the diagnostic already says the same thing where it matters.</p>
+         */
+        private static boolean isResolvable(SimpleName name) {
+            ASTNode parent = name.getParent();
+            if (parent == null) return false;
+            int type = parent.getNodeType();
+            return type != ASTNode.PACKAGE_DECLARATION
+                    && type != ASTNode.IMPORT_DECLARATION
+                    && type != ASTNode.QUALIFIED_NAME
+                    && type != ASTNode.LABELED_STATEMENT
+                    && type != ASTNode.BREAK_STATEMENT
+                    && type != ASTNode.CONTINUE_STATEMENT
+                    && type != ASTNode.MEMBER_VALUE_PAIR;
         }
 
         /**
@@ -380,6 +432,98 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 return typeRef(trailing.isArray() ? trailing.getComponentType() : trailing);
             }
             return typeRef(parameters[index]);
+        }
+
+        /**
+         * Every member of {@code type} visible from {@code contextOffset}.
+         *
+         * <h3>Three filters, and each one is a bug that a naive list ships</h3>
+         *
+         * <ul>
+         *   <li><b>Synthetic and bridge methods are dropped.</b> The compiler adds them — a bridge
+         *       exists so an overridden generic method links, and it has the <em>erased</em>
+         *       signature. Offering them shows {@code compareTo(Object)} beside
+         *       {@code compareTo(String)} on every {@code Comparable}, which is noise the author
+         *       cannot act on and cannot explain.</li>
+         *   <li><b>Accessibility is computed from the asking context</b>, not from the type. A private
+         *       member is a member from inside its own class and not from outside it, and a protected
+         *       one depends on the asking type's hierarchy. {@code isSubTypeCompatible} is the
+         *       binding's own answer, so the rule is JDT's rather than a reimplementation of JLS 6.6.</li>
+         *   <li><b>Superclasses and interfaces are walked</b>, because a member list that stopped at
+         *       the declared type would omit {@code toString} from everything.</li>
+         * </ul>
+         *
+         * <p>Generic substitution needs no work here and that is the whole point of {@link TypeRef}
+         * carrying a binding: ask {@code List<String>} for its methods and JDT answers
+         * {@code String get(int)}. Asking a name would have answered {@code E get(int)}.</p>
+         */
+        @Override
+        public List<SymbolInfo> membersOf(TypeRef type, int contextOffset) {
+            List<SymbolInfo> members = new ArrayList<>();
+            CompilationUnit resolved = unit;
+            if (resolved == null || !(type instanceof EcjTypeRef)) return members;
+
+            ITypeBinding asking = enclosingTypeAt(resolved, contextOffset);
+            java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+            for (ITypeBinding current = ((EcjTypeRef) type).binding();
+                 current != null; current = current.getSuperclass()) {
+                collectMembers(current, asking, seen, members);
+                for (ITypeBinding face : current.getInterfaces()) {
+                    collectMembers(face, asking, seen, members);
+                }
+            }
+            return members;
+        }
+
+        private static void collectMembers(ITypeBinding owner, ITypeBinding asking,
+                                           java.util.Set<String> seen, List<SymbolInfo> into) {
+            for (IMethodBinding method : owner.getDeclaredMethods()) {
+                if (method.isConstructor() || method.isSynthetic()) continue;
+                // A BRIDGE HAS THE ERASED SIGNATURE and exists only so an override links. JDT does not
+                // expose isBridge() on every band, so the synthetic flag plus the modifier bit is the
+                // portable test -- 0x0040 is ACC_BRIDGE, which is also ACC_VOLATILE for a field and
+                // therefore only meaningful on a method.
+                if ((method.getModifiers() & 0x0040) != 0) continue;
+                if (!isVisible(method, owner, asking)) continue;
+                String signature = method.getName() + "/" + method.getParameterTypes().length;
+                if (!seen.add(signature)) continue;
+                into.add(new SymbolInfo(method.getName(), SymbolKind.METHOD,
+                        typeRef(method.getReturnType()), owner.getQualifiedName(), null,
+                        modifiersOf(method), null));
+            }
+            for (IVariableBinding field : owner.getDeclaredFields()) {
+                if (field.isSynthetic()) continue;
+                if (!isVisible(field, owner, asking)) continue;
+                if (!seen.add("#" + field.getName())) continue;
+                into.add(new SymbolInfo(field.getName(),
+                        field.isEnumConstant() ? SymbolKind.ENUM_MEMBER : SymbolKind.FIELD,
+                        typeRef(field.getType()), owner.getQualifiedName(), null,
+                        modifiersOf(field), null));
+            }
+        }
+
+        /** JLS 6.6, asked of the bindings rather than reimplemented. */
+        private static boolean isVisible(IBinding member, ITypeBinding owner, ITypeBinding asking) {
+            int flags = member.getModifiers();
+            if (Modifier.isPublic(flags)) return true;
+            if (asking == null) return false;
+            if (asking.isEqualTo(owner)) return true;
+            if (Modifier.isPrivate(flags)) return false;
+            if (Modifier.isProtected(flags)) return asking.isSubTypeCompatible(owner);
+            // PACKAGE-PRIVATE. Same package, and a null package on either side means the default
+            // package, which two types share only if neither has one.
+            return owner.getPackage() != null && asking.getPackage() != null
+                    && owner.getPackage().getName().equals(asking.getPackage().getName());
+        }
+
+        /** The type a caret sits inside, which is what accessibility is judged from. */
+        private static ITypeBinding enclosingTypeAt(CompilationUnit unit, int offset) {
+            ASTNode node = NodeFinder.perform(unit, offset, 0);
+            while (node != null && !(node instanceof org.eclipse.jdt.core.dom.AbstractTypeDeclaration)) {
+                node = node.getParent();
+            }
+            return node == null ? null
+                    : ((org.eclipse.jdt.core.dom.AbstractTypeDeclaration) node).resolveBinding();
         }
 
         @Override

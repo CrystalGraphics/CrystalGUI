@@ -268,14 +268,12 @@ public final class JavaLanguageServices implements LanguageServices {
         @Override
         public void membersOf(TypeRef type, int contextOffset,
                               Consumer<Versioned<List<SymbolInfo>>> answer) {
-            // NOT YET, AND SAID SO. Enumerating a type's members with accessibility computed from the
-            // asking context is what completion after a dot is built from -- it needs the binding
-            // walked with bridges filtered, which is real work and belongs with the completion that
-            // consumes it (M9). An empty list is the honest answer meanwhile; a wrong one would be a
-            // list that compiles nowhere.
-            answer.accept(Versioned.of(
-                    current == null ? buffer.version() : current.version(),
-                    Collections.<SymbolInfo>emptyList()));
+            SourceAnalyzer.Analysis analysis = current;
+            if (analysis == null || type == null) {
+                answer.accept(Versioned.of(buffer.version(), Collections.<SymbolInfo>emptyList()));
+                return;
+            }
+            answer.accept(Versioned.of(analysis.version(), analysis.membersOf(type, contextOffset)));
         }
     }
 }

@@ -714,6 +714,15 @@ and accessibility computed, flow-sensitive pattern bindings, lambda target typin
 is retained as the acceptance checklist** — each row becomes "verify the binding answers this",
 not "build this". The one paragraph of v1 worth its length was this trade; it survives intact.
 
+✅ **The checklist is now twelve tests** (`BindingChecklistTest`), and the trade held on every row:
+`List<String>.get` answers `String`; nested arguments survive (`Map<String, List<Integer>>.get` →
+`List<Integer>`); overload resolution picks by argument type and puts **widening before boxing**;
+the compiler-generated `compareTo(Object)` bridge is filtered out; a library type's private fields
+are absent while its public members are present; inherited members are walked; a lambda parameter is
+typed from its target; an `instanceof` pattern variable is typed inside its scope. **And all of it
+again on source truncated mid-statement**, which is the row the whole works-while-typing story rests
+on. Nothing on that list is implemented in this repository — which was the point.
+
 Configuration that carries the whole works-while-typing story, so it is named here and not
 discovered: `ASTParser` with `setResolveBindings(true)`, **`setStatementsRecovery(true)`,
 `setBindingsRecovery(true)`** — JDT's shipped answer to "the file does not compile while it is
@@ -753,6 +762,19 @@ never advertises what execution refuses. On MC hosts the scan reads through §15
 views, so the index — like everything else — holds readable names.
 
 ### 15.5 Minecraft classes — compile against the live loader, author in readable names
+
+> ❌ **NOT BUILT, and it is the honest remainder of M6.** Everything else in §15 landed; this did not,
+> and it is a milestone-sized piece rather than a loose end. Three things it needs that nothing else in
+> the stack has yet: **ASM** (a new dependency, and §23 row 13's adopt-tiny-remapper-versus-write-it
+> question decided), an **inheritance-aware output remapper** — a naive `ClassRemapper` compiles clean
+> and silently stops an override being an override, which is the worst failure shape there is — and a
+> **per-platform post-transform bytecode probe**, which cannot be written or validated without the
+> platform. Headlessly the most that can be proven is the synthetic round-trip the exit criteria name,
+> and a round-trip against a fake mapping set does not exercise the part that is hard.
+>
+> What exists meanwhile is `HostClasspath` (§15.2), which is the file-based baseline this replaces on
+> MC hosts — and its javadoc says so, because a file list that looks complete is exactly how this gets
+> forgotten.
 
 **Scope hardened 2026-08-12: this is a Minecraft scripting engine.** MC classes, mod classes and
 mixin-added members referenced in a script must compile *and link* at runtime. That promotes the
@@ -986,7 +1008,7 @@ user-visible value lands early.
 | **M3** ✅ | Grammars (§12–13): **six** — `css`, `javascript`, `html`, `glsl`, `xml` beside `java` — vendored with all five platform/arch pairs, registered by extension, fixtured; `injections.scm` wired (html hosts css + js); §10.2's normalization landed as **seven load-time query rewrites**, not a rename map; `EveryShippedGrammarTest` covers parse + capture + registration per grammar. `locals.scm` deferred to M11 with a reason (§13) | M1 | ✅ one fixture per language in `workspace/src/`; html `<style>`/`<script>` bodies coloured as CSS/JS |
 | **M4** ✅ | Module reshape (§5): `language/` rename + `.grammar`, `text.lang` SPIs in `core/` (12 types, interfaces and records only), `LanguageServices` per-document façade, editor consumes-if-present and **overlays semantic tokens over grammar tokens**, document-owned lifecycle (which also fixed `SyntaxTokenizer.close()` never being called), six registrations collapsed to a `Grammar` table | — | ✅ `core:headlessTest` green with no new deps — `LanguageSpiTest` runs the whole SPI with no engine and no grammar on the classpath; harness wires Java end-to-end unchanged; `SemanticOverlayTest` proves absent-services behaves exactly as before |
 | **M5** ✅ | Engine loading (§6): band detection (`EngineBand`), isolated child-first loader with a parent-delegated bridge (`EngineClassLoader`), jar-location seam (`EngineSource`), runtime JLS discovery (`JlsLevel`), pinned ECJ+Rhino per band **including all 13 transitive platform artifacts, constrained by signing era as well as by class-file major**, `checkEngineBands` (floor + signer) in `:language:check`, `smokeEngineBands` under real per-era launchers, `THIRD-PARTY.md` | M4 | ✅ band-selection unit tests incl. the `"1.8"` trap; ✅ isolation proven with two real Rhinos; ✅ **smoke compile+eval green on a real Java 8 JVM and on 17** — Rhino arithmetic, ES2015 and a working `ClassShutter` refusal; JDT resolving `java.util.List<java.lang.String>` against the running VM, and doing it **from broken source**; ✅ **and a script compiles to bytecode and RUNS on each band's own JVM**, through the bridge (`ScriptCompiler` → `EcjScriptCompiler` → `ScriptClassLoader`), including a call back into a host class; ✅ §23 rows 3, 4 and 8 closed |
-| **M6** | Java semantics (§15): ECJ diagnostics + semantic tokens + `resolveAt`/`expectedTypeAt`, prelude mapper, classpath probe, reflection overlay, **live name environment + mapping boundary (§15.5)** | M0, M4, M5 | fixture script: param/field/local coloured, unresolved flagged, deprecated struck; broken-code partial answers pass the §13-checklist tests; **remap round-trip: a script authored in readable names compiles, links and runs against a fixture class whose runtime members carry synthetic "obfuscated" names, through a fake mapping set** — all headless |
+| **M6** ◐ | Java semantics (§15): ✅ ECJ diagnostics with real ranges, ✅ semantic tokens, ✅ `resolveAt`/`expectedTypeAt`/`membersOf`, ✅ `JavaLanguageServices` on the scheduler with diagnostics pushed into the document's `DiagnosticSet`, ✅ prelude mapper (`ScriptPrelude`), ✅ classpath probe (`HostClasspath`). ❌ remaining: **reflection overlay**, and **§15.5's live name environment + mapping boundary** — see below | M0, M4, M5 | ✅ param/field/local coloured, unresolved flagged, deprecated struck; ✅ **the §13 checklist is twelve tests** (`BindingChecklistTest`) and every one passes, including on broken source; ❌ the remap round-trip, which is §15.5's |
 | **M7** | **Java execution service — the product**: per-script child classloader over the band loader (§6.3), prelude/host-binding injection at runtime, compile-always/run-explicit lifecycle, the output remap pass wired for real (not just M6's fixture) including safepoint injection + host kill switch (§19.3), compiled-script cache `(source hash, mappings hash, band)` (§15.5 D.3), run/stop commands via `CommandRegistry`, disposal — a re-run replaces the loader and nothing pins the old one | M5, M6 | a script authored in the editor runs on explicit command, effect observable in the harness; re-run replaces the instance; kill interrupts a deliberate infinite loop; 100 compile/run/dispose cycles leak no classloaders (heap assertion); the §5.3 proof — compile-and-run with the grammar jars absent, headless |
 | **M8** | Decorations + diagnostics UI (§17): tracked ranges with stickiness, squiggle view part, Problems wiring | M0; M6 for real input | stickiness golden tests (Monaco's cases); squiggles stay attached while typing above them; Problems row ↔ document range round-trip |
 | **M9** | Completion (§18): substrate generalisation, matcher+ranking ports, Java providers, type index + auto-import | M6, M8 | `list.forEach(x -> x.|)` completes String members; unimported `ArrayList` inserts import as one undo step; latency within budget on the indexed modpack fixture |

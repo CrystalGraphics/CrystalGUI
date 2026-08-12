@@ -487,6 +487,7 @@ editor scheme's.
 | `--syntax-constant-builtin` | `#569CD6` | dark-plus.css |
 | `--syntax-constant-style` | `normal` | dark-plus.css |
 | `--syntax-constructor` | `#4EC9A0` | dark-plus.css |
+| `--syntax-deprecated` | `#808080` | dark-plus.css |
 | `--syntax-embedded` | `#D4D4D4` | dark-plus.css |
 | `--syntax-error` | `#F44747` | dark-plus.css |
 | `--syntax-function` | `#DCDCAA` | dark-plus.css |
@@ -512,6 +513,7 @@ editor scheme's.
 | `--syntax-type` | `#4EC9A0` | dark-plus.css |
 | `--syntax-type-builtin` | `#569CD6` | dark-plus.css |
 | `--syntax-type-qualifier` | `#569CD6` | dark-plus.css |
+| `--syntax-unresolved` | `#F44747` | dark-plus.css |
 | `--syntax-variable` | `#9CDCFE` | dark-plus.css |
 | `--syntax-variable-builtin` | `#569CD6` | dark-plus.css |
 | `--syntax-variable-member` | `#9CDCFE` | dark-plus.css |
