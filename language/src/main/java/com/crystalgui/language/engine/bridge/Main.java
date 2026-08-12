@@ -269,7 +269,7 @@ public final class Main {
                 .thenComparing(Comparator.naturalOrder());
 
         Transformer<String, String> trimAndUpper = ((Transformer<String, String>) String::trim)
-                .then(String::toUpperCase);
+                .then(String::toUpperCase); 
 
         List<String> words = supplier.get();
         words.add("  gamma ");
