@@ -1,6 +1,5 @@
 package com.crystalgui.syntax.treesitter;
 
-import java.nio.charset.StandardCharsets;
 
 /**
  * Converts between this engine's UTF-16 offsets and tree-sitter's UTF-8 byte offsets, in better than
@@ -37,10 +36,18 @@ import java.nio.charset.StandardCharsets;
 final class Utf8Offsets {
 
     /** The empty document — identity conversions, no arrays. */
-    static final Utf8Offsets EMPTY = new Utf8Offsets("", new byte[0]);
+    static final Utf8Offsets EMPTY = new Utf8Offsets("");
 
     private final String text;
-    private final byte[] utf8;
+
+    /**
+     * The document's length in UTF-8 bytes — a number, deliberately not the bytes.
+     *
+     * <p>This was {@code text.getBytes(UTF_8)}, a full document-sized copy built on every reparse to be
+     * asked only for its length. On a 200KB file that is 200KB of garbage per keystroke, which is exactly
+     * the kind of allocation that turns into a GC pause in the middle of typing.</p>
+     */
+    private final int utf8Length;
 
     /** True when every character is one byte, making both conversions the identity. */
     private final boolean ascii;
@@ -49,10 +56,22 @@ final class Utf8Offsets {
     private final int[] lineUtf8Starts;
     private final int[] lineUtf16Starts;
 
-    private Utf8Offsets(String text, byte[] utf8) {
+    private Utf8Offsets(String text) {
         this.text = text;
-        this.utf8 = utf8;
-        this.ascii = utf8.length == text.length();
+
+        // One allocation-free pass to answer both "is this ASCII" and "how many bytes". A char scan is far
+        // cheaper than encoding the document, and for the overwhelmingly common ASCII case it is all the
+        // work there is.
+        int bytes = 0;
+        boolean allAscii = true;
+        for (int i = 0; i < text.length(); i++) {
+            int width = utf8LengthOf(text, i);
+            bytes += width;
+            if (width != 1) allAscii = false;
+        }
+        this.utf8Length = bytes;
+        this.ascii = allAscii;
+
         if (ascii) {
             this.lineUtf8Starts = null;
             this.lineUtf16Starts = null;
@@ -80,15 +99,7 @@ final class Utf8Offsets {
 
     static Utf8Offsets of(String text) {
         if (text == null || text.isEmpty()) return EMPTY;
-        return new Utf8Offsets(text, text.getBytes(StandardCharsets.UTF_8));
-    }
-
-    String text() {
-        return text;
-    }
-
-    byte[] utf8() {
-        return utf8;
+        return new Utf8Offsets(text);
     }
 
     /**
@@ -125,7 +136,7 @@ final class Utf8Offsets {
 
     /** UTF-8 byte offset back to UTF-16 index, clamped to the document. */
     int toUtf16(int byteOffset) {
-        int limit = clamp(byteOffset, utf8.length);
+        int limit = clamp(byteOffset, utf8Length);
         if (ascii) return limit;
 
         int line = lineFor(lineUtf8Starts, limit);

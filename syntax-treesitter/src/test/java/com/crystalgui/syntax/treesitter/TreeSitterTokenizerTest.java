@@ -331,7 +331,7 @@ public class TreeSitterTokenizerTest {
         tokenizer.tokenize(document, 0, before.length());       // cold parse, synchronous by necessity
 
         List<String> invalidations = new ArrayList<>();
-        tokenizer.setInvalidationListener(() -> invalidations.add("refresh"));
+        tokenizer.setInvalidationListener((from, to) -> invalidations.add(from + ".." + to));
 
         ChangeSet change = ChangeSet.of(before.length(), Change.insert(10, "String s = \"hi\"; "));
         Rope after = change.apply(document);

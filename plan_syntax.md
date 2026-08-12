@@ -316,17 +316,38 @@ a range shifted by the encoding delta is still a valid range.
   through the drain. Landing swaps the buffer's tree and invalidates the token cache for lines
   whose tokens changed (tree-sitter's `changedRanges(old, new)` gives them precisely).
 
-**C. A per-line token cache in the editor.** ⚠️ **Outstanding — the one M1 item not yet landed**, and
-measurement says it is required rather than optional. On a 5,000-line file the async path costs
-~4.2ms avg / ~13ms worst on the UI thread against a §7.3 budget of 2ms/8ms, and the remainder is
+**C. A per-row token cache in the editor.** ✅ **Landed.** Measurement said it was required rather than
+optional: the async path cost ~4.2ms avg on the UI thread against a 2ms budget, and the remainder was
 almost entirely the viewport query itself (**3.3ms each**, paid on every keystroke and every scroll
-step). Interning the capture names — thousands of JNI `String` builds per query — changed it by under
-2%, which localises the cost to tree-sitter's own `exec` and match iteration. Nothing but not running
-the query removes it.
+step). Interning the capture names — thousands of JNI `String` builds per query — moved it under 2%,
+localising the cost to tree-sitter's own `exec`, so nothing but not asking could remove it.
 
-Invalidation follows the rule `measuredRows` already uses: one line at a time **only** when the edit
-left the line count alone, because adding or removing a line renumbers every row below it. On a
-reparse landing, `TSTree.getChangedRanges(old, new)` gives the changed lines precisely.
+Keyed by **model row**, not view line, which is what makes it survive folding, wrapping and resizes
+with no invalidation at all — those change which view line a row is drawn on and change nothing about
+the row's tokens. It is also `measuredRows`' key, so both invalidate on one rule. Offsets are stored
+row-relative so an edit on one row does not shift every entry below it. A row present with an empty
+list means "asked, nothing there", distinct from absent — conflating them re-queries blank lines
+forever.
+
+Invalidation follows `measuredRows`' rule: one row at a time **only** when the edit left the line
+count alone, because adding or removing a line renumbers every row below. On a reparse landing,
+`TSTree.getChangedRanges(old, new)` gives the changed span precisely — which is why the invalidation
+callback carries a range rather than being a bare "something changed": during a run of typing a
+reparse lands every few keystrokes, so re-querying the viewport each time would have bought almost
+nothing.
+
+Measured after (5,000-line file, 100 operations each):
+
+| | queries | text asked about |
+|---|---|---|
+| idle frames | **0** | 0 |
+| scroll steps | 8 | 344 chars |
+| scroll **back** over seen rows | **0** | 0 |
+| keystrokes | 100 | ~91 chars each — one row, not a viewport |
+
+Row-sized query **0.14ms** against a viewport-sized **3.7ms**. **Keystroke on the UI thread: 4.2ms →
+0.63ms**, inside the §7.3 budget. Pinned by `EditorHighlightCacheTest`, which counts queries rather
+than timing them — an integer is not flaky on someone else's machine.
 
 Steady state: painting reads compact per-line arrays
 (`int start, int end, short vocabularyId` — capture names interned to a vocabulary table, §10) and
