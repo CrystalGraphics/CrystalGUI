@@ -75,6 +75,21 @@ public final class CompletionSession {
     /** Whether any answer has landed. See {@link #caretMoved} — an empty list means nothing until one has. */
     private boolean answered;
 
+    /**
+     * The prefix the held list was fetched for.
+     *
+     * <p>Local filtering is only sound while the query is a <b>refinement</b> of this: a provider answers
+     * "everything matching P", so anything matching P+x is in the list and narrowing is free. It is not
+     * sound the other way. <b>Backspace makes the prefix shorter</b>, and the held list is then a subset of
+     * what the shorter query would return — filtering it can only ever hand back fewer rows, never the ones
+     * that were dropped.</p>
+     *
+     * <p>Which is exactly how it presented: type {@code CgRenderer}, backspace to {@code Cg}, type
+     * {@code Text}, and the popup offers the four types that contain <em>both</em> — every survivor of the
+     * first query that happens to match the second. It reads as a broken index, and the index is fine.</p>
+     */
+    private String queriedPrefix = "";
+
     /** Bumped per request; an answer stamped with anything else is stale. */
     private int requestSerial;
 
@@ -136,8 +151,9 @@ public final class CompletionSession {
 
     private void request(int caret, CompletionProvider.TriggerKind trigger, @Nullable String character) {
         final int serial = ++requestSerial;
-        CompletionProvider.Request ask = new CompletionProvider.Request(
-                caret, prefixAt(caret), trigger, character);
+        String prefix = prefixAt(caret);
+        queriedPrefix = prefix;
+        CompletionProvider.Request ask = new CompletionProvider.Request(caret, prefix, trigger, character);
         provider.complete(ask, answer -> accept(serial, answer));
     }
 
@@ -192,6 +208,12 @@ public final class CompletionSession {
         // that does not answer inline -- and without the guard the first keystroke after opening killed the
         // session before its first list ever arrived, which reads as the popup never appearing at all.
         if (!answered) return;
+        // NARROWING ONLY. See queriedPrefix: a list fetched for a longer query cannot answer a shorter one,
+        // so a backspace has to go back to the provider however complete the list claimed to be.
+        if (!prefix().startsWith(queriedPrefix)) {
+            request(caret, CompletionProvider.TriggerKind.RETRIGGER, null);
+            return;
+        }
         if (incomplete) {
             // The provider said it truncated. Narrowing the prefix can reach items it never sent, so the
             // only correct answer is to ask again -- a local filter over a truncated list silently omits

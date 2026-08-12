@@ -219,6 +219,50 @@ public class CompletionSessionTest {
                 "first", labelsOf(session).get(0));
     }
 
+    /**
+     * Backspacing must go back to the provider, however complete the held list claimed to be.
+     *
+     * <p>A provider answers "everything matching P", so filtering that locally for P+x is sound and
+     * narrowing is free. Widening is not: the held list is a <em>subset</em> of what the shorter query
+     * would return, so filtering it can only hand back fewer rows and never the ones that were dropped.</p>
+     *
+     * <p>Reported as: type {@code CgRenderer}, backspace to {@code Cg}, type {@code Text} — and the popup
+     * offers only the types containing <b>both</b>, every survivor of the first query that happens to match
+     * the second. It reads as a broken index while the index is perfectly fine.</p>
+     */
+    @Test
+    public void backspacingReQueriesInsteadOfFilteringTheHeldList() {
+        TextBuffer buffer = new TextBuffer("CgRenderer");
+        StubProvider provider = new StubProvider();
+        provider.items.add(item("CgTextRenderer", SymbolKind.CLASS));
+
+        CompletionSession session = CompletionSession.open(buffer, provider, 10,
+                CompletionProvider.TriggerKind.EXPLICIT, null);
+        assertEquals(1, provider.requests);
+
+        // Back to "Cg", which no longer extends the query the list was fetched for.
+        buffer.delete(2, 10);
+        session.caretMoved(2);
+
+        assertEquals("a widened query must be asked again", 2, provider.requests);
+    }
+
+    @Test
+    public void narrowingStillFiltersLocally() {
+        // The other half, so the fix above cannot quietly become "re-query on every keystroke".
+        TextBuffer buffer = new TextBuffer("Cg");
+        StubProvider provider = new StubProvider();
+        provider.items.add(item("CgTextRenderer", SymbolKind.CLASS));
+
+        CompletionSession session = CompletionSession.open(buffer, provider, 2,
+                CompletionProvider.TriggerKind.EXPLICIT, null);
+        buffer.insert(2, "Text");
+        session.caretMoved(6);
+
+        assertEquals("narrowing is a refinement and needs no round trip", 1, provider.requests);
+        assertEquals(List.of("CgTextRenderer"), labelsOf(session));
+    }
+
     // ── Ending ──────────────────────────────────────────────────────────────────────────────────
 
     @Test

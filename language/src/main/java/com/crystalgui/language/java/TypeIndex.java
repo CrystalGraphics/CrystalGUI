@@ -111,11 +111,20 @@ final class TypeIndex {
         List<Entry> scattered = new ArrayList<>();
         for (Entry entry : entries) {
             String candidate = entry.simpleName().toLowerCase(Locale.ROOT);
-            if (candidate.startsWith(needle)) prefixed.add(entry);
-            else if (isSubsequence(needle, candidate)) scattered.add(entry);
-            // Bounded on the WHOLE haystack, not per bucket: a one-character query matches most of the
-            // JDK, and collecting all of it to then keep forty is work nobody reads.
-            if (prefixed.size() + scattered.size() >= MAX_RESULTS * 8) break;
+            if (candidate.startsWith(needle)) {
+                if (prefixed.size() < MAX_RESULTS) prefixed.add(entry);
+            } else if (scattered.size() < MAX_RESULTS && isSubsequence(needle, candidate)) {
+                scattered.add(entry);
+            }
+            // BOUNDED PER BUCKET, and the scan stops only when BOTH are full.
+            //
+            // A single combined bound truncated by ALPHABET rather than by quality: entries are walked in
+            // name order, so a cheap query whose scattered matches fill the quota early ends the scan
+            // before the letter the user actually typed. `CgText` returned four rows and none of them was
+            // CgTexture -- a plain prefix hit, sitting past the cut-off because a few hundred unrelated
+            // subsequence matches had already used it up. `CgRenderer` was unaffected only because its
+            // longer, rarer character run matched almost nothing on the way.
+            if (prefixed.size() >= MAX_RESULTS && scattered.size() >= MAX_RESULTS) break;
         }
 
         // A real prefix hit beats any scattered one, whatever their lengths -- the same tier ordering
