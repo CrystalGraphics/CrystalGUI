@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.editor;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.property.ObservableList;
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.lang.CompletionItem;
@@ -16,8 +17,12 @@ import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.list.ListRenderer;
 import com.crystalgui.ui.elements.list.ListView;
 import com.crystalgui.ui.elements.list.SelectionMode;
+import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.ui.input.UIDragController;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.TextRange;
+import org.joml.Vector2f;
+import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,6 +77,7 @@ public final class CompletionPopup extends Popover {
     public static final String HINT_CLASS = "__completion-hint__";
     public static final String HINT_TEXT_CLASS = "__completion-hint-text__";
     public static final String OPTIONS_CLASS = "__completion-options__";
+    public static final String GRIP_CLASS = "__completion-grip__";
 
     /**
      * A key that accepts, and the word the strip uses for it.
@@ -140,6 +146,9 @@ public final class CompletionPopup extends Popover {
      * decision in {@link #reposition} is computed from the popup's total height and cannot read the cascade. */
     private static final float HINT_HEIGHT = 16f;
 
+    /** Two rows and the strip — below this the popup is a box with nothing readable in it. */
+    private static final float MIN_HEIGHT = 2f * ROW_HEIGHT + HINT_HEIGHT;
+
     private final ObservableList<CompletionSession.Row> rows = new ObservableList<>();
     private final ListView<CompletionSession.Row> list = new ListView<>(rows);
     private final RowRenderer renderer = new RowRenderer();
@@ -163,6 +172,9 @@ public final class CompletionPopup extends Popover {
 
     /** The bottom strip. See {@link #ACCEPT_KEYS} — its text is derived from the same list the editor reads. */
     private final UIElement hint = new UIElement();
+
+    /** The corner grab, at the strip's right-hand end. */
+    private final UIElement grip = new UIElement();
     private final UIText hintLabel = new UIText(hintText());
 
     /**
@@ -184,6 +196,27 @@ public final class CompletionPopup extends Popover {
     /** What the probe last measured, so the width only moves when the content does. */
     private float measuredWidth;
 
+    /**
+     * The size the user dragged this popup to, or {@code -1} while it is still automatic.
+     *
+     * <h3>Why the resize is driven here rather than by {@code resize:}</h3>
+     *
+     * <p>{@code UIResizer} writes at <b>INLINE</b> and {@link #reposition} writes width at
+     * <b>IMPORTANT</b>, which beats it — so the grabber could change the height (which nothing else wrote)
+     * and could never change the width at all. Half of a resize working is worse than none: it reads as a
+     * broken widget rather than an unsupported gesture.</p>
+     *
+     * <p>Owning the drag removes the origin fight and makes the latch honest at the same time — it is set
+     * from the pointer having <em>moved</em>, not from a press, which is the rule {@code NavigatorView}
+     * shipped backwards once.</p>
+     */
+    private float userWidth = -1f;
+    private float userHeight = -1f;
+
+    private boolean isUserSized() {
+        return userWidth > 0f && userHeight > 0f;
+    }
+
     @Nullable
     private CompletionSession session;
 
@@ -191,6 +224,30 @@ public final class CompletionPopup extends Popover {
     private float anchorX;
     private float anchorY;
     private float anchorLineHeight;
+
+    /**
+     * The last position {@link #reposition} resolved, and the origin a move-drag adds its delta to.
+     *
+     * <p><b>Not {@code getWindowX()}.</b> A promoted element's Taffy parent is the ROOT while its DOM parent
+     * is whatever hosts it, so a walk up the DOM chain reading Taffy locations counts the host's offset on
+     * top of a location that is already root-relative. The popup jumped by exactly that amount on the first
+     * mouse-move and then tracked correctly, which reads as the drag "snapping to the corner" rather than
+     * as a coordinate-space error. Remembering what we wrote sidesteps the question entirely.</p>
+     */
+    private float placedLeft;
+    private float placedTop;
+
+    /**
+     * Set once the strip has actually dragged the popup somewhere.
+     *
+     * <p>{@link #reposition} runs every frame from the placement ticker and writes {@code left}/{@code top}
+     * at IMPORTANT, so without standing down it puts the popup straight back at the caret on the very next
+     * frame — a move that visibly happens and is instantly undone. {@code Popover.moveTo} sets
+     * {@code freelyPositioned} for exactly this, but this class <b>overrides</b> {@code reposition} and so
+     * never consults it; the override is what {@code QuickPick} recommends for staying live through a
+     * resize, and this is the half of that trade it has to pay for itself.</p>
+     */
+    private boolean userMoved;
 
     public CompletionPopup() {
         setMode(Mode.MANUAL);
@@ -206,6 +263,8 @@ public final class CompletionPopup extends Popover {
         addInternalChild(list);
 
         hint.addClass(HINT_CLASS);
+        installStripDrag();
+        installGrip();
         hintLabel.addClass(HINT_TEXT_CLASS);
         hintLabel.setHitTest(false);
         hint.addChild(hintLabel);
@@ -221,6 +280,11 @@ public final class CompletionPopup extends Popover {
         options.setFocusPolicy(FocusPolicy.NONE);
         options.onPressed.connect(this::openOptionsMenu);
         hint.addChild(options);
+
+        // LAST, so it is the bottom-RIGHT corner. Added before the options button it sat inside the strip
+        // with the kebab to its right, which is not a corner and does not read as a grab.
+        grip.addClass(GRIP_CLASS);
+        hint.addChild(grip);
         addInternalChild(hint);
 
         widthProbe = renderer.createTemplate();
@@ -232,13 +296,9 @@ public final class CompletionPopup extends Popover {
         widthProbe.generalStyle(g -> g.opacity(0f));
         addInternalChild(widthProbe);
 
-        // A click still accepts. The press lands on the row, focus never moves (the list refuses it), and
-        // the editor's caret is untouched -- which is why this can be wired without fighting the rule above.
-        list.onRowActivated.connect(index -> {
-            if (session == null) return;
-            session.setSelectedIndex(index);
-            session.accept();
-        });
+        // ListView raises onRowActivated from ENTER, and the popup never holds focus, so it never fired
+        // at all. A click reaches the row itself; see RowRenderer.createTemplate.
+        list.onRowActivated.connect(onRowClicked::emit);
     }
 
     @Override
@@ -249,6 +309,16 @@ public final class CompletionPopup extends Popover {
     public ListView<CompletionSession.Row> rowList() {
         return list;
     }
+
+    /**
+     * A row was clicked, carrying its index.
+     *
+     * <p>Raised rather than handled here, because accepting is more than the edit: the caret has to be
+     * placed and <b>focus has to go back to the editor</b>, which this widget deliberately does not hold
+     * and cannot restore. {@code TextEditor} owns both, so it owns the acceptance — the same reason the key
+     * handling lives there too.</p>
+     */
+    public final Signal.Value<Integer> onRowClicked = new Signal.Value<>();
 
     /** The rows on screen, in rank order — the surface a test asserts on. */
     public List<CompletionSession.Row> visibleRows() {
@@ -265,6 +335,7 @@ public final class CompletionPopup extends Popover {
      */
     public void attach(UIWindow window, CompletionSession newSession) {
         this.session = newSession;
+        resetUserGeometry();
         if (getParent() == null) window.addOverlay(this, null);
         showAt(anchorX, anchorY, null);
         newSession.onChanged.connect(this::refresh);
@@ -276,6 +347,25 @@ public final class CompletionPopup extends Popover {
         session = null;
         rows.clear();
         if (isOpen()) hide();
+    }
+
+    /**
+     * Forgets a dragged size and position.
+     *
+     * <p>Called when a session opens, so a popup dragged somewhere for one list does not pin every later
+     * one to that spot — a completion list is anchored to a word, and the next word is somewhere else.
+     * IntelliJ keeps the SIZE across popups and not the position; ours keeps neither yet, which is the
+     * conservative half and is easy to relax once there is a preference to store it in.</p>
+     */
+    private void resetUserGeometry() {
+        userMoved = false;
+        if (!isUserSized()) return;
+        userWidth = -1f;
+        userHeight = -1f;
+        // The fill idiom has to be undone too, or the list keeps growing into a box that is once again
+        // sized to its content -- which resolves to zero and shows an empty popup.
+        StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(), l -> l.flexGrow(0f));
+        StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.heightAuto());
     }
 
     /** Told where the completed word is on screen, in the window's coordinates. */
@@ -298,6 +388,125 @@ public final class CompletionPopup extends Popover {
 
     public float anchorY() {
         return anchorY;
+    }
+
+    /**
+     * Dragging the bottom strip moves the popup.
+     *
+     * <h3>The drag's source is the popup's PARENT, never the popup</h3>
+     *
+     * <p>Every {@code DragListener} coordinate is converted through the source's own transform, so a drag
+     * sourced on something the drag itself moves measures its deltas in a frame that is moving with the
+     * cursor — the popup would accelerate away rather than follow. The canvas pan carries the same warning
+     * for the same reason. The parent is the overlay host and stays put.</p>
+     *
+     * <p>The press point is converted into the parent's space through {@code getWindowX/Y} rather than
+     * being passed along raw: the event arrives in the <em>strip's</em> coordinates, and handing those to a
+     * drag sourced on the parent offsets every delta by wherever the strip happens to sit.</p>
+     */
+    private void installStripDrag() {
+        hint.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
+            // The strip's own controls come first: a press on the options button must open the menu, not
+            // start dragging the window. Filtering on the target is what SplitView's divider does.
+            if (event.getTarget() != hint) return;
+            UIWindow window = getAttachedWindow();
+            UIElement host = getParent();
+            if (window == null || host == null) return;
+
+            float startLeft = placedLeft;
+            float startTop = placedTop;
+            float[] press = pressInHostSpace(hint, host, event.getPosition().x(), event.getPosition().y());
+            float pressX = press[0];
+            float pressY = press[1];
+
+            window.getInputHandler().getDragController().startDrag(host, pressX, pressY,
+                    new UIDragController.DragListener() {
+                        @Override
+                        public void onDragUpdate(float mx, float my, float sx, float sy,
+                                                 float dx, float dy) {
+                            // Latched by MOVEMENT, like the resize: a press that goes nowhere must leave
+                            // the popup anchored to its word.
+                            if (dx == 0f && dy == 0f) return;
+                            userMoved = true;
+                            placedLeft = startLeft + dx;
+                            placedTop = startTop + dy;
+                            StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
+                                    l -> l.left(placedLeft).top(placedTop));
+                        }
+                    });
+            event.stopPropagation();
+        }, false, false);
+    }
+
+    /**
+     * Dragging the grip resizes in <b>both</b> axes.
+     *
+     * <p>Sourced on the parent for the same reason the strip drag is: a drag sourced on something the drag
+     * itself resizes measures its deltas in a frame that is changing under it.</p>
+     */
+    private void installGrip() {
+        grip.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
+            UIWindow window = getAttachedWindow();
+            UIElement host = getParent();
+            if (window == null || host == null) return;
+
+            float startWidth = getRuntimeCache().getWidth();
+            float startHeight = getRuntimeCache().getHeight();
+            float[] press = pressInHostSpace(grip, host, event.getPosition().x(), event.getPosition().y());
+            float pressX = press[0];
+            float pressY = press[1];
+
+            window.getInputHandler().getDragController().startDrag(host, pressX, pressY,
+                    new UIDragController.DragListener() {
+                        @Override
+                        public void onDragUpdate(float mx, float my, float sx, float sy,
+                                                 float dx, float dy) {
+                            // Latched by MOVEMENT: a press that drags nowhere leaves the popup automatic.
+                            if (dx == 0f && dy == 0f) return;
+                            userWidth = Math.max(MIN_WIDTH, startWidth + dx);
+                            userHeight = Math.max(MIN_HEIGHT, startHeight + dy);
+                            applyUserSize();
+                        }
+                    });
+            event.stopPropagation();
+        }, false, false);
+    }
+
+    /**
+     * A press inside {@code from}, expressed in {@code host}'s coordinates.
+     *
+     * <p>Through the <b>transform</b> chain rather than the layout chain, because this popup is promoted:
+     * its Taffy parent is the root while its DOM parent is the overlay host, so summing layout offsets up
+     * the DOM chain double-counts. The transform chain is the single definition of where an element
+     * actually is on screen — the same one hit-testing uses, which is what makes it the right one for a
+     * pointer position.</p>
+     *
+     * <p>It matters because {@code UIDragController} reports deltas from the start point it was given: a
+     * start in the wrong space offsets every subsequent delta by a constant, so the popup jumps once and
+     * then tracks perfectly. That is a much harder symptom to read than one that never works.</p>
+     */
+    private static float[] pressInHostSpace(UIElement from, UIElement host, float localX, float localY) {
+        Vector3f world = from.getRuntimeCache().localToWorld.get()
+                .transformPosition(new Vector3f(localX, localY, 0f));
+        Vector2f inHost = host.screenToLocal(world.x, world.y);
+        return new float[] { inHost.x, inHost.y };
+    }
+
+    /**
+     * Writes a dragged size, and hands the leftover space to the list.
+     *
+     * <p>The second half is the one that was missing: growing the popup without growing the list left a
+     * taller box with the same nineteen rows in it and empty space underneath — the resize appeared to do
+     * nothing but add margin. The list takes {@code height: 0; flex-grow: 1}, which is the fill idiom, and
+     * it works here <em>because</em> the popup now has an explicit height: a popover sized by its own
+     * content has no free space to distribute, which is the trap {@code QuickPick.sizeListToContent}
+     * documents.</p>
+     */
+    private void applyUserSize() {
+        StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
+                l -> l.width(userWidth).height(userHeight));
+        StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(),
+                l -> l.height(0f).flexGrow(1f));
     }
 
     /**
@@ -355,6 +564,7 @@ public final class CompletionPopup extends Popover {
      * with nothing visible in it.</p>
      */
     private void sizeToContent(int rowCount) {
+        if (isUserSized()) return;
         float height = Math.min(rowCount, MAX_VISIBLE_ROWS) * ROW_HEIGHT;
         StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(), l -> l.height(height));
     }
@@ -363,9 +573,9 @@ public final class CompletionPopup extends Popover {
      * Points the probe at the row most likely to be the widest.
      *
      * <p>Chosen by <b>character count</b>, which is a proxy and is stated as one: in a proportional font
-     * {@code IIIIIIII} is narrower than {@code mmmm}, so the pick can be off by a row. The <em>measurement</em>
-     * is real either way, and {@link #WIDTH_SLACK} covers the difference — the alternative is measuring
-     * every item on every keystroke to choose which one to measure.</p>
+     * {@code IIIIIIII} is narrower than {@code mmmm}, so the pick can be off by a row. The
+     * <em>measurement</em> is real either way, and {@link #WIDTH_SLACK} covers the difference — the
+     * alternative is measuring every item on every keystroke to decide which one to measure.</p>
      */
     private void bindWidthProbe(List<CompletionSession.Row> candidates) {
         if (widthProbe == null || candidates.isEmpty()) return;
@@ -401,26 +611,61 @@ public final class CompletionPopup extends Popover {
             float probed = widthProbe.getRuntimeCache().getWidth();
             if (Float.isFinite(probed) && probed > 0f) measuredWidth = probed + WIDTH_SLACK;
         }
+        // THE USER OWNS WHAT THEY HAVE DRAGGED. Either latch stops this method writing anything, because
+        // both halves are written by the same IMPORTANT pipeline and this one runs every frame -- it would
+        // win every argument it is allowed to have.
+        if (isUserSized() || userMoved) return;
         float wanted = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, measuredWidth));
         float width = Math.max(0f, Math.min(wanted, window.getScreenWidth() - 2f * MARGIN));
         float height = Math.min(Math.max(rows.size(), 1), MAX_VISIBLE_ROWS) * ROW_HEIGHT + HINT_HEIGHT;
 
         float left = Math.max(MARGIN, Math.min(anchorX, window.getScreenWidth() - width - MARGIN));
+        // FIT, then flip, then SHRINK — and the third step is the one that was missing.
+        //
+        // Flip-or-clamp was fine at eleven rows and wrong at nineteen: a 320px popup near the bottom of the
+        // window has room on neither side, so the clamp pinned it to y=8 and it opened in the top-left
+        // corner of the screen while the caret was three hundred lines further down. It read as the anchor
+        // having been lost entirely, rather than as a list that did not fit.
+        //
+        // Capping the height to whichever side has more room keeps it attached to the word, which is the
+        // property that actually matters: a shorter list is a small cost, and an unanchored one is not a
+        // completion popup at all.
         float below = anchorY + anchorLineHeight;
-        // FLIP RATHER THAN CLAMP. Clamping would slide the list up over the line being typed, hiding the
-        // very text the completion is about -- the one thing that must stay visible.
-        float top = below + height + MARGIN > window.getScreenHeight()
-                ? Math.max(MARGIN, anchorY - height)
-                : below;
+        float roomBelow = window.getScreenHeight() - below - MARGIN;
+        float roomAbove = anchorY - MARGIN;
 
+        final float top;
+        final float fitted;
+        if (height <= roomBelow) {
+            top = below;
+            fitted = height;
+        } else if (height <= roomAbove) {
+            top = anchorY - height;
+            fitted = height;
+        } else if (roomBelow >= roomAbove) {
+            top = below;
+            fitted = Math.max(MIN_HEIGHT, roomBelow);
+        } else {
+            fitted = Math.max(MIN_HEIGHT, roomAbove);
+            top = Math.max(MARGIN, anchorY - fitted);
+        }
+
+        placedLeft = left;
+        placedTop = top;
         StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
                 l -> l.width(width).left(left).top(top));
+        // Only when it had to be cut. Otherwise the list keeps sizing itself to its rows, which is what
+        // makes a two-item popup two items tall rather than a mostly-empty box.
+        if (fitted < height) {
+            float listHeight = Math.max(ROW_HEIGHT, fitted - HINT_HEIGHT);
+            StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(), l -> l.height(listHeight));
+        }
     }
 
     // ── Rows ────────────────────────────────────────────────────────────────────────────────────
 
     /** Icon, banded label, right-aligned detail. See the class note for where the anatomy comes from. */
-    private static final class RowRenderer implements ListRenderer<CompletionSession.Row> {
+    private final class RowRenderer implements ListRenderer<CompletionSession.Row> {
 
         @Override
         public UIElement createTemplate() {
@@ -428,6 +673,14 @@ public final class CompletionPopup extends Popover {
             // pass -- the trap the command palette's key chips and the editor's gutter arrows each paid for.
             Row row = new Row();
             row.addClass(ROW_CLASS);
+            // THE ROW'S OWN INDEX IS READ AT CLICK TIME, never captured. A template is a different row every
+            // time the view reuses it, so a listener holding the index it was built with would accept
+            // whatever happened to be at that position when the popup opened -- the exact trap the editor's
+            // pooled gutter arrows already carry a warning about.
+            row.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
+                if (row.index >= 0) onRowClicked.emit(row.index);
+                event.stopPropagation();
+            }, false, false);
 
             row.icon.addClass(ICON_CLASS);
             row.icon.setHitTest(false);
@@ -466,6 +719,7 @@ public final class CompletionPopup extends Popover {
         @Override
         public void bind(CompletionSession.Row value, int index, UIElement template) {
             Row row = (Row) template;
+            row.index = index;
             CompletionItem item = value.item();
 
             // SWAPPED, not added -- a template is a different row every time the view reuses it, so a
@@ -522,6 +776,7 @@ public final class CompletionPopup extends Popover {
         @Override
         public void unbind(UIElement template) {
             Row row = (Row) template;
+            row.index = -1;
             row.label.highlights().remove(MATCH_HIGHLIGHT);
         }
 
@@ -545,6 +800,8 @@ public final class CompletionPopup extends Popover {
 
     /** The row element, holding its slots so {@code bind} never searches for them. */
     private static final class Row extends UIElement {
+        /** Which model row this template currently shows, or -1 while pooled. Read at click time. */
+        int index = -1;
         /** A box with a background, not a glyph -- the drawing comes from the cascade. */
         final UIElement icon = new UIElement();
         /** Modifier overlays, parented to the icon so they follow it. */

@@ -4,6 +4,9 @@ import com.crystalgui.text.lang.SymbolKind;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -88,6 +91,9 @@ final class TypeIndex {
     private synchronized void ensureBuilt() {
         if (entries != null) return;
         List<Entry> built = new ArrayList<>();
+        // THE PLATFORM FIRST, and first because of the cap: if anything is going to be dropped it must not
+        // be java.lang.
+        scanPlatform(built);
         for (String element : classpath) {
             if (built.size() >= MAX_TYPES) break;
             try {
@@ -107,6 +113,58 @@ final class TypeIndex {
         }
         built.sort(Comparator.comparing(Entry::simpleName));
         entries = Collections.unmodifiableList(built);
+    }
+
+    /**
+     * The JDK's own types, which are not on the classpath at all.
+     *
+     * <h3>The bug this exists for</h3>
+     *
+     * <p>Typing {@code System} offered {@code SystemClock}, {@code SystemUtils} and six more from log4j —
+     * and not {@code java.lang.System}. The index scanned {@link HostClasspath#detect()}, which is
+     * classpath entries, and since Java 9 the platform classes are in the <b>jrt image</b> rather than in
+     * any jar on it. So the index had never contained {@code List}, {@code Map} or {@code String} either;
+     * the omission was invisible because the only thing it feeds is unimported-type completion, and every
+     * type anyone actually reached for was already imported.</p>
+     *
+     * <p>ECJ resolves those types perfectly well, which is what made this hard to see: the analyser is
+     * given {@code includeRunningVMBootclasspath = true}, a different mechanism entirely.</p>
+     *
+     * <h3>Java 8 has no jrt, and says so by throwing</h3>
+     *
+     * <p>{@code FileSystems.getFileSystem("jrt:/")} raises {@code ProviderNotFoundException} on 8, which is
+     * the honest signal to fall back to {@code sun.boot.class.path}. Written as a catch rather than a
+     * version check because the version check would be a second way of asking the same question, and the
+     * two can disagree on a stripped or modular runtime.</p>
+     */
+    private static void scanPlatform(List<Entry> into) {
+        try {
+            FileSystem jrt = FileSystems.getFileSystem(URI.create("jrt:/"));
+            Path modules = jrt.getPath("/modules");
+            try (Stream<Path> walk = Files.walk(modules)) {
+                walk.filter(Files::isRegularFile).forEach(path -> {
+                    if (into.size() >= MAX_TYPES) return;
+                    // /modules/java.base/java/lang/System.class -> java/lang/System.class
+                    if (path.getNameCount() < 3) return;
+                    add(path.subpath(2, path.getNameCount()).toString().replace('\\', '/'), into);
+                });
+            }
+            return;
+        } catch (Exception noJrt) {
+            // Java 8, or a runtime with no jrt provider. Fall through.
+        }
+        String boot = System.getProperty("sun.boot.class.path");
+        if (boot == null) return;
+        for (String element : boot.split(File.pathSeparator)) {
+            if (into.size() >= MAX_TYPES) break;
+            try {
+                File file = new File(element);
+                if (file.isFile()) scanArchive(file, into);
+            } catch (IOException | RuntimeException unreadable) {
+                System.err.println("[crystalgui] type index skipped boot entry " + element
+                        + ": " + unreadable);
+            }
+        }
     }
 
     private static void scanArchive(File file, List<Entry> into) throws IOException {
@@ -138,6 +196,10 @@ final class TypeIndex {
         if (path.endsWith("package-info.class") || path.endsWith("module-info.class")) return;
 
         String binary = path.substring(0, path.length() - ".class".length()).replace('/', '.');
+        // NOT FOR USERS. `sun.` and anything with an `internal` package segment is implementation detail
+        // that the compiler will refuse or warn about; offering it is offering a mistake. IntelliJ hides
+        // the same set. Filtered here rather than per-source so the classpath gets it too.
+        if (binary.startsWith("sun.") || binary.contains(".internal.")) return;
         int lastDot = binary.lastIndexOf('.');
         String simple = lastDot < 0 ? binary : binary.substring(lastDot + 1);
         String packageName = lastDot < 0 ? "" : binary.substring(0, lastDot);

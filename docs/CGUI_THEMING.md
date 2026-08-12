@@ -166,6 +166,7 @@ editor scheme's.
 | `--colorpicker-thumb-ring` | `var(--border-strong)` | base.css |
 | `--completion-deprecated` | `var(--fg-hint)` | base.css |
 | `--completion-detail` | `var(--fg-hint)` | base.css |
+| `--completion-grip` | `var(--border-strong)` | base.css |
 | `--completion-hint` | `var(--fg-hint)` | base.css |
 | `--completion-icon` | `var(--fg-hint)` | base.css |
 | `--completion-label` | `var(--fg)` | base.css |

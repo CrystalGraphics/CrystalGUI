@@ -727,7 +727,15 @@ dockgroup texteditor {
  * grow-only spacer rather than `text-align`, because the detail is its own element and a text alignment
  * inside it would move the glyphs within a box that is still on the left.
  */
+/* RESIZABLE from the grip at the strip's right end, and DRAGGABLE by the strip itself.
+ *
+ * Not `resize:` -- UIResizer writes at INLINE and reposition() writes width at IMPORTANT, so the grabber
+ * could move the height and never the width. CompletionPopup owns the drag instead; see installGrip. */
 completionpopup {
+    /* CLIPPED, always. The list is sized independently of this box -- by row count normally, by the fill
+     * idiom once resized -- and any disagreement between the two painted rows straight over the editor
+     * below, outside the popup's own border. Overflow is the guarantee that cannot be got wrong twice. */
+    overflow: hidden;
     background: var(--palette-bg, #252526);
     outline-width: 1px;
     outline-color: var(--palette-border, #454545);
@@ -887,12 +895,24 @@ completionpopup text::highlight(completion-match) {
  *
  * 16px, paired with CompletionPopup.HINT_HEIGHT -- the flip-above-or-below decision is computed from the
  * popup's total height in Java and cannot read the cascade. */
+/* The drag handle: pressing it and moving takes the popup with you. `cursor` says so before the press,
+ * which is the only thing that makes a drag target discoverable. */
 .__completion-hint__ {
+    cursor: move;
     height: 16px;
     flex-direction: row;
     align-items: center;
     padding-left: 6px;
     padding-right: 4px;
+}
+
+/* The corner grab. Sized so it is hittable without crowding the options button beside it. */
+.__completion-grip__ {
+    width: 10px;
+    height: 10px;
+    margin-left: 2px;
+    cursor: nwse-resize;
+    background: var(--completion-grip, #55585C);
 }
 
 .__completion-hint-text__ {

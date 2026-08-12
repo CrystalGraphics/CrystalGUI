@@ -338,7 +338,7 @@ public final class CompletionSession {
         if (replace) caret = Math.max(caret, identifierEndAt(caret));
         Change primary = item.textEdit() != null
                 ? item.textEdit()
-                : new Change(wordStart, caret, item.textToInsert());
+                : new Change(wordStart, caret, insertionOf(item).text());
 
         List<Change> changes = new ArrayList<>(item.additionalTextEdits());
         changes.add(primary);
@@ -364,16 +364,51 @@ public final class CompletionSession {
         return end;
     }
 
-    /** Where the caret should land after {@link #accept} — the end of the inserted text. */
+    /**
+     * The text an item inserts, and where the caret goes inside it.
+     *
+     * <p>{@code $0} is stripped here rather than by the caller, so the document never contains it even
+     * momentarily and every consumer — the edit, the caret, the undo entry — agrees on one string.</p>
+     */
+    private Insertion insertionOf(CompletionItem item) {
+        String raw = item.textToInsert();
+        if (item.insertTextFormat() != CompletionItem.InsertTextFormat.SNIPPET) {
+            return new Insertion(raw, raw.length());
+        }
+        int at = raw.indexOf(CompletionItem.CARET);
+        if (at < 0) return new Insertion(raw, raw.length());
+        String stripped = raw.substring(0, at) + raw.substring(at + CompletionItem.CARET.length());
+        return new Insertion(stripped, at);
+    }
+
+    /** @param caretWithin an offset into {@link #text}, not into the document */
+    private record Insertion(String text, int caretWithin) {
+    }
+
+    /**
+     * Where the caret should land after {@link #accept}.
+     *
+     * <p>Inside the parentheses for a method that takes arguments, after them for one that does not —
+     * which is the point of {@code $0} and the difference between {@code println(|)} and
+     * {@code println()|}. Typing the argument immediately is the overwhelmingly common next act, and an
+     * editor that leaves the caret past the closing bracket makes you press Left to start.</p>
+     */
     public int caretAfterAccept(CompletionItem item, int caretBefore) {
-        Change primary = item.textEdit() != null
-                ? item.textEdit()
-                : new Change(wordStart, caretBefore, item.textToInsert());
+        if (item.textEdit() != null) {
+            Change edit = item.textEdit();
+            return edit.from() + edit.inserted() + importShift(item, edit.from());
+        }
+        Insertion insertion = insertionOf(item);
+        return wordStart + insertion.caretWithin() + importShift(item, wordStart);
+    }
+
+    /** How far the additional edits (the auto-import) push everything at or after {@code at}. */
+    private static int importShift(CompletionItem item, int at) {
         int shift = 0;
         for (Change extra : item.additionalTextEdits()) {
-            if (extra.from() <= primary.from()) shift += extra.delta();
+            if (extra.from() <= at) shift += extra.delta();
         }
-        return primary.from() + primary.inserted() + shift;
+        return shift;
     }
 
     public void close() {

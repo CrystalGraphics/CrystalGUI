@@ -369,6 +369,7 @@ theme {
     --completion-params: var(--fg-hint);
     --completion-selected-bg: var(--accent-soft);
     --completion-detail: var(--fg-hint);
+    --completion-grip: var(--border-strong);
     --completion-hint: var(--fg-hint);
     --completion-icon: var(--fg-hint);
     --completion-options-hover-bg: var(--hover-bg);
