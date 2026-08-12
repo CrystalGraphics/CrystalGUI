@@ -71,7 +71,10 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                             int releaseLevel, long version) {
         ASTParser parser = ASTParser.newParser(jlsLevel());
         parser.setSource(source.toCharArray());
-        parser.setUnitName(className.replace('.', '/') + ".java");
+        // THE PATH THE SOURCE ITSELF IMPLIES, not the caller's guess. A file declaring a package
+        // and named from its file stem makes ECJ report "the declared package does not match the
+        // expected package" on line 1 -- about its own bookkeeping, on the author's first line.
+        parser.setUnitName(SourcePackages.unitPath(className, source));
         parser.setKind(ASTParser.K_COMPILATION_UNIT);
         parser.setResolveBindings(true);
         // THE TWO THAT MATTER WHILE TYPING. Without them a half-written statement yields an AST with no

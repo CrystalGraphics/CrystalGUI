@@ -62,7 +62,9 @@ public final class EcjScriptCompiler implements ScriptCompiler {
             Path sources = Files.createDirectories(work.resolve("src"));
             Path output = Files.createDirectories(work.resolve("out"));
 
-            Path file = sourceFileFor(sources, className);
+            // The declared package decides the directory, or javac's own rule -- which ECJ
+            // enforces -- rejects a packaged file written at the root of the source tree.
+            Path file = sources.resolve(SourcePackages.unitPath(className, source));
             Files.createDirectories(file.getParent());
             Files.write(file, source.getBytes(Charset.forName("UTF-8")));
 
@@ -131,11 +133,6 @@ public final class EcjScriptCompiler implements ScriptCompiler {
     /** Quoted, because a Windows path contains spaces far more often than not. */
     private static String quote(String value) {
         return "\"" + value + "\"";
-    }
-
-    private static Path sourceFileFor(Path root, String className) {
-        String relative = className.replace('.', '/') + ".java";
-        return root.resolve(relative);
     }
 
     private static void addLines(List<String> messages, String text) {

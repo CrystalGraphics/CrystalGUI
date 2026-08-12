@@ -47,7 +47,11 @@ public final class ScriptCommands {
                                 Supplier<ScriptHost.Compiled> script,
                                 Supplier<Map<String, Object>> bindings,
                                 Consumer<Throwable> onFailure) {
+        // IntelliJ's own accelerators, because a Run button people have to find in a palette is a Run
+        // button nobody uses. Shift+F10 and Mod+F2 also avoid Mod+R, which the harness already takes for
+        // a stylesheet reload — a binding that silently loses to an existing one is worse than none.
         registry.register(Command.of(RUN, "Run Script")
+                .binding("Shift+F10")
                 .run(context -> {
                     ScriptHost.Compiled compiled = script.get();
                     if (compiled == null || !compiled.successful()) return;
@@ -62,6 +66,7 @@ public final class ScriptCommands {
                 }));
 
         registry.register(Command.of(STOP, "Stop Script")
+                .binding("Mod+F2")
                 .enabledWhen(context -> host.isRunning())
                 .run(host::stop));
     }

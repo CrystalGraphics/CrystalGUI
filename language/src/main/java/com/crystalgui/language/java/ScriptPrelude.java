@@ -92,6 +92,54 @@ public final class ScriptPrelude {
         }
     }
 
+    /**
+     * A source file that is ALREADY a compilation unit — wrapped by nothing.
+     *
+     * <p>A user's {@code Main.java} declares its own class, so there is nothing to synthesize: the
+     * prelude and the suffix are empty and every offset maps by zero. It goes through {@link Wrapped}
+     * anyway rather than round a separate path, because everything downstream — the compiler, the cache
+     * key, the diagnostic mapping — is written against that type, and a second shape would mean a second
+     * set of call sites that can drift.</p>
+     *
+     * <p><b>Wrapping one would not merely be unnecessary, it would not compile.</b> A prelude puts the
+     * text inside a method body, where a top-level {@code public class} is a local class — and a local
+     * class may not be {@code public}. The error names an access modifier the author wrote correctly,
+     * which is the worst kind of report.</p>
+     */
+    public static Wrapped compilationUnit(String className, String source) {
+        return new Wrapped(className, "", source == null ? "" : source, "");
+    }
+
+    /**
+     * Whether {@code source} already declares a top-level type, and so should be compiled as-is.
+     *
+     * <p>Deliberately shallow: a line whose first token, after modifiers, is {@code class},
+     * {@code interface}, {@code enum}, {@code record} or {@code @interface}. It is not a parser and does
+     * not need to be — the two shapes are a file somebody wrote as a class and a snippet somebody wrote
+     * as statements, and nothing in between is a case anybody produces. Getting it wrong in either
+     * direction produces a compile error the author can read, rather than silently doing the other thing.</p>
+     */
+    public static boolean declaresType(String source) {
+        if (source == null) return false;
+        return TOP_LEVEL_TYPE.matcher(stripComments(source)).find();
+    }
+
+    private static final Pattern TOP_LEVEL_TYPE = Pattern.compile(
+            "(?m)^[ \\t]*(?:(?:public|final|abstract|sealed|non-sealed|strictfp)\\s+)*"
+                    + "(?:class|interface|enum|record|@interface)\\s+\\w");
+
+    /**
+     * Comments removed before the scan.
+     *
+     * <p>Without it a file opening with a javadoc that says "class" — which is most of them in this
+     * repository — is read as declaring one. Strings are left alone: a string containing something that
+     * looks like a class declaration at the start of a line is not a thing anybody writes, and stripping
+     * them properly needs the lexer this deliberately is not.</p>
+     */
+    private static String stripComments(String source) {
+        return source.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("(?m)//.*$", "");
+    }
+
     /** Wraps {@code script} into a compilation unit and returns the mapping with it. */
     public Wrapped wrap(String script) {
         List<String> hoisted = new ArrayList<>();
@@ -160,6 +208,20 @@ public final class ScriptPrelude {
 
         public String className() {
             return className;
+        }
+
+        /**
+         * The name a loader must be asked for — {@code com.example.Main}, not {@code Main}.
+         *
+         * <p>Derived from the unit's own {@code package} declaration rather than from
+         * {@link #className()}, which is a file stem and knows nothing about packages. A caller that
+         * used the stem would compile a packaged file successfully and then fail to load it, with a
+         * {@code ClassNotFoundException} naming a class that is plainly right there in the output.</p>
+         *
+         * <p>For a prelude-wrapped snippet the two are the same: a synthesized unit declares no package.</p>
+         */
+        public String binaryName() {
+            return SourcePackages.binaryName(className, body);
         }
 
         /** Characters of synthesized text before the author's first character. */
