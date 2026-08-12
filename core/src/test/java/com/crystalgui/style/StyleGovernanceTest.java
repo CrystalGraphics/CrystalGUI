@@ -445,7 +445,13 @@ public class StyleGovernanceTest {
         List<String> offences = new ArrayList<>();
         try (Stream<Path> files = Files.walk(queries)) {
             for (Path file : files.filter(p -> p.getFileName().toString().equals("highlights.scm")).toList()) {
-                String scm = Files.readString(file, StandardCharsets.UTF_8);
+                // QUOTED STRINGS STRIPPED FIRST. A query matches literal tokens by writing them out, and
+                // CSS's at-rules are literally at-signs: `"@media" @keyword` names one capture and one
+                // keyword of the language. Scanning the raw text reports @media, @charset, @import,
+                // @keyframes, @namespace and @supports as captures nobody has coloured — six failures
+                // that are all the same misreading.
+                String scm = Files.readString(file, StandardCharsets.UTF_8)
+                        .replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", "\"\"");
                 Matcher matcher = Pattern.compile("@([a-z][a-z.]*)").matcher(scm);
                 while (matcher.find()) {
                     String capture = matcher.group(1);

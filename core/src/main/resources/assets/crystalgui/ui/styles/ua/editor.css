@@ -342,6 +342,18 @@ texteditor text::highlight(tag) {
     color: var(--syntax-tag, #569CD6);
 }
 
+/* From the CSS, JavaScript and HTML grammars, which name two things the Java one never needed.
+ * `constructor` is a class name in `new X()` or `class X`; `embedded` is the interpolated expression
+ * inside a template literal or an HTML attribute value. Both are identifier-shaped, so they take the
+ * type and default colours rather than inventing a hue nobody's reference scheme has. */
+texteditor text::highlight(constructor) {
+    color: var(--syntax-constructor, #4EC9A0);
+}
+
+texteditor text::highlight(embedded) {
+    color: var(--syntax-embedded, #D4D4D4);
+}
+
 /* ── Punctuation ──
  *
  * Dimmer than the code around it, deliberately: brackets and separators are structure the eye uses to
