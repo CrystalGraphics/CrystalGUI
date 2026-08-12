@@ -748,11 +748,21 @@ completionpopup {
     background-color: var(--list-selected-bg, #04395E);
 }
 
-/* A fixed 16px box so every label starts at the same x -- a ragged left edge is what makes a list of
+/* 12px, NOT the artwork's native 16.
+ *
+ * JetBrains draws these for a ~13px UI font; ours is 10px, so a 16px icon reads 1.6x the text where
+ * IntelliJ's reads 1.2x — the icon stops being a hint and starts being the loudest thing in the row. 12
+ * restores the ratio, and it is chosen over 13 because at uiScale 2 it is 24 device px against a 16-unit
+ * viewBox: an exact 1.5x, which is the half-integer CgUiSvg's pixel-grid snapping is looking for.
+ *
+ * The marks below MUST carry the same number. They are full-size layers, so a mark left at 16 in a 12px
+ * icon does not overflow -- it silently draws its corner glyph a third larger and in the wrong corner.
+ *
+ * A fixed box so every label starts at the same x -- a ragged left edge is what makes a list of
  * identifiers hard to scan. The DRAWING comes from the kind class below; this only reserves the space. */
 .__completion-icon__ {
-    width: 16px;
-    height: 16px;
+    width: 12px;
+    height: 12px;
 }
 
 /* Modifier marks: full-size layers over the icon, not badges in a corner box.
@@ -766,8 +776,8 @@ completionpopup {
     position: absolute;
     left: 0;
     top: 0;
-    width: 16px;
-    height: 16px;
+    width: 12px;
+    height: 12px;
 }
 
 .__completion-mark-static__ { background: icon("crystalgui:nodes/java/staticMark"); }
