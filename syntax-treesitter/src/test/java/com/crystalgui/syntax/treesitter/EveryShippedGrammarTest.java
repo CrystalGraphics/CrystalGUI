@@ -291,6 +291,32 @@ public class EveryShippedGrammarTest {
         tokenizer.close();
     }
 
+    @Test
+    public void xmlParsesAndCaptures() {
+        assumeNativeAvailable();
+        TreeSitterTokenizer tokenizer = TreeSitterTokenizer.xml(null);
+        Set<String> names = captures(tokenizer,
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                        + "<!-- a note -->\n"
+                        + "<root xmlns:x=\"urn:x\" id=\"1\">\n"
+                        + "  <x:child attr=\"v\">text</x:child>\n"
+                        + "  <![CDATA[ raw < & > ]]>\n"
+                        + "</root>\n");
+        assertFalse("the XML grammar produced nothing", names.isEmpty());
+        assertTrue("expected a tag capture, got " + names,
+                names.stream().anyMatch(n -> n.startsWith("tag")));
+        // An attribute NAME is @property here and @attribute in HTML — the same concept under two names,
+        // and deliberately NOT folded together like GLSL's @delimiter was. This grammar uses @attribute
+        // for something else of its own, so a fold would collide rather than translate; @property reads
+        // correctly for an XML attribute in its own right.
+        assertTrue("expected an attribute name capture, got " + names, names.contains("property"));
+        assertTrue("expected a comment capture, got " + names,
+                names.stream().anyMatch(n -> n.startsWith("comment")));
+        assertTrue("expected element text as markup, got " + names,
+                names.stream().anyMatch(n -> n.startsWith("markup")));
+        tokenizer.close();
+    }
+
     /**
      * <b>Registration is the half that fails silently.</b> A grammar can load perfectly and still never
      * reach an editor, which is exactly how the harness spent a whole session on the word-list lexer while
@@ -300,7 +326,7 @@ public class EveryShippedGrammarTest {
     public void registrationPutsEachGrammarInFrontOfTheLexer() {
         assumeNativeAvailable();
         TreeSitterLanguages.register(null);
-        for (String fileName : List.of("A.java", "a.css", "a.js", "a.html", "a.glsl", "a.frag")) {
+        for (String fileName : List.of("A.java", "a.css", "a.js", "a.html", "a.glsl", "a.frag", "a.xml", "a.svg")) {
             SyntaxTokenizer tokenizer = LanguageRegistry.forFileName(fileName).newTokenizer();
             assertTrue(fileName + " still resolves to " + tokenizer.getClass().getSimpleName(),
                     tokenizer instanceof TreeSitterTokenizer);

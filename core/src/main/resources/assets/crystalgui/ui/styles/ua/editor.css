@@ -377,6 +377,20 @@ texteditor text::highlight(label) {
     color: var(--syntax-label, #C586C0);
 }
 
+/* From XML. `markup` is document content as opposed to the tags around it — the text between elements,
+ * and its heading/link/raw specialisations. It reads as body text on purpose: in a markup document the
+ * content is the thing being read, and tinting it would invert the figure and ground. */
+texteditor text::highlight(markup) {
+    color: var(--syntax-markup, #D4D4D4);
+}
+
+/* MALFORMED MARKUP, which is the one capture in the vocabulary that reports a PROBLEM rather than
+ * naming a construct. A mismatched closing tag is the classic case, and a grammar can see it without
+ * any semantic layer — so this is the one place a red belongs in a scheme that otherwise has none. */
+texteditor text::highlight(error) {
+    color: var(--syntax-error, #F44747);
+}
+
 /* ── Punctuation ──
  *
  * Dimmer than the code around it, deliberately: brackets and separators are structure the eye uses to

@@ -81,6 +81,8 @@ theme {
     --syntax-constructor: #267F99;
     --syntax-embedded: #000000;
     --syntax-label: #AF00DB;
+    --syntax-markup: #000000;
+    --syntax-error: #E51400;
     --syntax-operator: #000000;
     --syntax-punctuation: #383838;
     --syntax-punctuation-bracket: #383838;

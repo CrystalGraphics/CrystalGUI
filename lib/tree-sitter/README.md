@@ -14,6 +14,7 @@ README with this.
 | `tree-sitter-javascript-0.25.0.jar` | The JavaScript grammar | MIT |
 | `tree-sitter-html-0.23.2.jar` | The HTML grammar. Its `injections.scm` is what makes `<style>` and `<script>` bodies highlight as CSS and JavaScript | MIT |
 | `tree-sitter-glsl-0.2.0.jar` | The GLSL grammar, from `tree-sitter-grammars/tree-sitter-glsl` rather than the `tree-sitter` org | MIT |
+| `tree-sitter-xml-0.7.0.jar` | The XML grammar, also from `tree-sitter-grammars`. Its repo ships **two** grammars (`xml` and `dtd`); only `xml` is built here | MIT |
 
 **All five cover the same platforms**: x86_64 Windows/Linux/macOS and aarch64 Linux/macOS. Worth
 checking rather than assuming when adding one — a jar with narrower coverage drops a platform
@@ -59,7 +60,12 @@ directory above. **The recipe, proven on all four of the 2026-08-12 additions:**
    emitted `build.gradle` carries a publishing block that wants `ossrhUsername` (delete it, leaving only
    the `downloadSource` url), and the emitted binding class says `implements TSLanguage` where this
    fork's `TSLanguage` is a *class* — copy `TreeSitterCss.java`'s shape instead.
-3. **`buildNative` must run before `jar`.** `jar` does not depend on it, so building only the jar
+3. **A multi-grammar repo needs its sources pointed at.** `tree-sitter-xml` ships `xml/` and `dtd/`
+   side by side with no top-level `src/`, so the default glob finds no parser, links a native
+   containing nothing, and fails as `undefined symbol: tree_sitter_xml`. `BuildNativeTask` exposes
+   `additionalCFiles` and `additionalIncludeDirs` for exactly this — see `tree-sitter-xml/build.gradle`
+   for the shape. Watch for a shared `common/` directory holding a `scanner.h` the parser includes.
+4. **`buildNative` must run before `jar`.** `jar` does not depend on it, so building only the jar
    produces one with no natives inside and no error — check with
    `unzip -l <jar> | grep -E '\.so|\.dll|\.dylib'` and expect five.
 4. **Get the query from the build, not by hand.** `:tree-sitter-<lang>:downloadSource` unpacks the

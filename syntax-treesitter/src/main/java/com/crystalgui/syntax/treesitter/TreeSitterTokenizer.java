@@ -212,6 +212,10 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
         return of(new org.treesitter.TreeSitterGlsl(), "glsl", scheduler);
     }
 
+    public static TreeSitterTokenizer xml(JobScheduler scheduler) {
+        return of(new org.treesitter.TreeSitterXml(), "xml", scheduler);
+    }
+
     /** One grammar plus its vendored query directory — the shape every language here shares. */
     private static TreeSitterTokenizer of(TSLanguage language, String directory, JobScheduler scheduler) {
         return new TreeSitterTokenizer(language,
