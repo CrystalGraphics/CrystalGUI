@@ -44,4 +44,24 @@ public interface Connection extends Disposable {
     default boolean isConnected() {
         return true; // overridden by concrete implementations
     }
+
+    /**
+     * A connection to nothing — what a subscribe method returns when there was nothing to subscribe to.
+     *
+     * <p>Exists so those methods can keep returning a {@code Connection} rather than null. A caller
+     * stores what it is given and disconnects it on teardown; handing back null puts a check at every
+     * one of those sites, and the one that gets forgotten throws at teardown, which is the worst
+     * possible moment for a surprise.</p>
+     */
+    Connection DISCONNECTED = new Connection() {
+        @Override
+        public void disconnect() {
+            // Already.
+        }
+
+        @Override
+        public boolean isConnected() {
+            return false;
+        }
+    };
 }

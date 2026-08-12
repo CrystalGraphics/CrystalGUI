@@ -328,6 +328,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
     @Nullable
     private LanguageServices languageServices;
 
+    /** The engine's diagnostics subscription, dropped when the services are replaced or disposed. */
+    @Nullable
+    private com.crystalgui.core.signal.Connection languageDiagnostics;
+
     /** Search hits, in document offsets. Published under {@code ::highlight(search)}. */
     private final List<TextRange> searchMatches = new ArrayList<>();
     private int currentMatch = -1;
@@ -1517,12 +1521,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
         if (this.languageServices != null) {
             this.languageServices.semanticTokens().setInvalidationListener(null);
         }
+        if (languageDiagnostics != null) {
+            languageDiagnostics.disconnect();
+            languageDiagnostics = null;
+        }
         this.languageServices = services;
         if (services != null) {
             services.semanticTokens().setInvalidationListener((fromOffset, toOffset) -> {
                 invalidateRowSyntax(fromOffset, toOffset);
                 highlightsDirty = true;
             });
+            // THE ENGINE ANNOUNCES, THIS DOCUMENT'S SET OWNS. Filed under the engine's own id so a
+            // second producer -- the shader compiler on a .glsl, a future linter -- cannot erase it,
+            // which is the whole reason DiagnosticSet is keyed by owner. From here the Problems panel,
+            // the inspection widget and the status bar all light up through paths that already work.
+            languageDiagnostics = services.onDiagnostics(
+                    problems -> diagnostics.changeOne(services.id(), problems));
         }
         rowSyntax.clear();
         highlightsDirty = true;
@@ -1552,6 +1566,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         tokenizer.setInvalidationListener(null);
         tokenizer.close();
         tokenizer = SyntaxTokenizer.NONE;
+        if (languageDiagnostics != null) {
+            languageDiagnostics.disconnect();
+            languageDiagnostics = null;
+        }
         if (languageServices != null) {
             languageServices.semanticTokens().setInvalidationListener(null);
             languageServices.close();
