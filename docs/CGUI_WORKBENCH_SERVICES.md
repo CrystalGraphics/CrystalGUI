@@ -28,6 +28,99 @@ looks like a needed helper is the symptom of one that does not — see
 | `Inspector` — one inspector, any subject | **shipped** | [Contributions](#contributions) |
 | `Notifications` / `StatusBar` — events and ambient text, plus their views (`StatusBarView`, `NotificationsView`, `NotificationBalloons`) | **shipped** | [Notifications and status](#notifications-and-status) |
 | `DockBannerProvider` — a strip above a panel | **shipped** | [Contributions](#contributions) |
+| `JobScheduler` — work off the UI thread | **shipped** | [Background work](#background-work) |
+
+---
+
+## Background work
+
+`com.crystalgui.core.async` — `JobScheduler`, `JobKey`, `JobLane`, `JobContext`.
+
+Runs work off the UI thread and hands the answers back on it. Until this landed, the only executor in
+`core/` was SVG preloading and everything else ran on the frame — which is fine until something wants
+to compile a script, scan a classpath or reparse a file, all of which are far past a frame budget.
+
+```java
+scheduler.job(JobKey.of(document, "diagnostics"), JobLane.LATENCY, context -> compile(snapshot, context))
+        .debounce(300)
+        .onDone(result -> install(result))
+        .submit();
+
+scheduler.drain();                     // once per frame, on the UI thread
+scheduler.cancelAll(document);         // closing a document
+```
+
+### The frame tick is the heartbeat
+
+**Every decision the scheduler makes happens on the UI thread inside `drain()`** — debounce windows are
+evaluated there against an injected clock, jobs are promoted there, results are delivered there. Only
+the job body runs elsewhere.
+
+That is what makes it testable: no timer threads, no scheduled futures, no sleeping, so a test with a
+same-thread executor and a hand-cranked clock exercises the identical code path the editor does. It is
+also what keeps the concurrency surface to exactly one object (the completion queue) — nothing else is
+touched by two threads, so no widget ever needs a lock.
+
+The cost is that a job starts on a frame boundary, up to ~16ms at 60fps. That is inside every budget in
+`plan_syntax.md` §7.3, and it buys determinism.
+
+`drain()` is **deliver → promote → deliver**. The second delivery catches a job that finished *during*
+promotion (always, on a same-thread executor; sometimes, on a real pool with short work) which would
+otherwise wait a whole extra frame. Deliberately two passes rather than a loop to quiescence: a
+completion handler that re-submits an undebounced job is an ordinary shape, and a loop would let it spin
+the frame instead of settling on the next one.
+
+### Single-flight is keyed, and both halves of the key matter
+
+A `JobKey` is `(owner, kind)`. Re-submitting a key that is **waiting** replaces it; re-submitting one
+that is **running** supersedes it — the runner is asked to stop and its result is dropped when it
+arrives. So a burst of keystrokes leaves one live job per key rather than one per keystroke, and the
+last submission always wins.
+
+- Keying on **kind alone** makes two open documents fight, and one editor of a split pair never updates.
+- Keying on **owner alone** makes a document's reparse cancel its own diagnostics.
+- The owner is compared by **identity**, never `equals` — two documents holding identical text are not
+  the same document.
+
+> **A superseded job's result is discarded even if the job never polled for cancellation.** Correctness
+> therefore does not depend on well-behaved job bodies; only responsiveness does.
+
+### Lanes, and the starvation guard
+
+`INTERACTIVE` (a human is blocked — completion) > `LATENCY` (visible, tolerates a few frames — reparse,
+semantic tokens) > `BACKGROUND` (nobody is watching — indexing, first compile).
+
+Strict priority **plus** a guard: a job that has waited past `DEFAULT_STARVATION_GUARD_MILLIS` is
+promoted regardless of lane. Without it, a document being typed in produces a steady stream of
+higher-lane work and a `BACKGROUND` index queued behind it is never built — and the symptom is not a
+hang but completion quietly never learning about unimported types, which reads as a missing feature
+rather than a scheduling bug.
+
+### Cancellation is cooperative
+
+`JobContext.isCancelled()` / `throwIfCancelled()`, polled at loop heads and between phases.
+`Thread.stop` is gone and interrupting a compiler mid-run leaves its state undefined, so there is no
+honest alternative. `throwIfCancelled` is control flow, not failure: the scheduler drops it silently
+without logging.
+
+### What it deliberately does not know
+
+**Document versions.** `TextBuffer.version()` is a monotonic counter bumped by every applied edit —
+*including undo and redo*, which move the text as surely as typing does. Staleness policy belongs to the
+consumer, because there are three legitimate answers (discard / keep-and-adjust / keep-per-line, see
+`plan_syntax.md` §8) and a scheduler deciding centrally would have to understand every consumer. It
+guarantees only that a superseded job's result never lands; comparing the stamp is the caller's job.
+
+### Rules
+
+- **`drain()` on the UI thread, once per frame.** It returns whether anything is outstanding, so a
+  ticker can stop when idle.
+- **Never touch UI or document state from a job body.** Return an immutable value; the `onDone` handler
+  runs on the UI thread.
+- **Snapshot what the job needs before submitting**, and stamp it with `buffer.version()`.
+- **`cancelAll(owner)` when a document closes**, or its work arrives for an editor that no longer exists.
+- **`dispose()` does not shut the executor down** — it may be injected or shared, and a scheduler does
+  not own what it was handed.
 
 ---
 

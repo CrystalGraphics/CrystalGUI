@@ -130,7 +130,14 @@ com.crystalgui.language
   .resolve      engine-neutral: type index, import table, fuzzy matcher, ranking, sandbox policy
 ```
 
-### 5.2 What `core/` gains (SPIs only — the full list, so scope creep is visible)
+### 5.2 What `core/` gains *for the language stack* (SPIs only — the full list, so scope creep is visible)
+
+> This is the language stack's footprint in `core/`, and it is interfaces only. It is **not** a claim
+> that `core/` gains nothing else: §7's scheduler and `TextBuffer.version()` are general infrastructure
+> that predate any language work in kind — file listing and shader compilation want both — and they live
+> in `core/` because the dependency runs one way. `core/` cannot reach into `language/`, so anything
+> `core/` itself consumes cannot live there.
+
 
 `com.crystalgui.text.syntax` already holds `SyntaxToken`/`SyntaxTokenizer`. A sibling package
 `com.crystalgui.text.lang` gains the L2 contracts:

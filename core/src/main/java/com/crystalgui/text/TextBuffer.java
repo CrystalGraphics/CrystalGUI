@@ -36,6 +36,20 @@ public final class TextBuffer {
     private Rope document;
 
     /**
+     * How many times this document has changed — the stamp every async result is compared against.
+     *
+     * <p>Monotonic, and deliberately not a hash or a timestamp: it only ever has to answer <em>"is this
+     * still the document that was snapshotted?"</em>, and equality on a counter is the cheapest honest
+     * answer. Two different edits can produce identical text (type a character, delete it) and a result
+     * computed against the text in between is still stale, which is why identity of content is the wrong
+     * question.</p>
+     *
+     * <p>It starts at 0 and is bumped by {@link #applied}, so a freshly loaded document and a heavily
+     * edited one are never confused. Nothing outside this class writes it.</p>
+     */
+    private int version;
+
+    /**
      * The history, shared with the rest of the engine rather than private to this class.
      *
      * <p>It used to be a pair of deques here. {@link UndoStack} is the same mechanism generalised, and
@@ -159,7 +173,31 @@ public final class TextBuffer {
         // would let redo replay a change against a document it was never described against, which the
         // length check above would then reject at some arbitrary later point rather than here.
         history.push(new ChangeSetEdit(this, change, inverse));
+        applied(change);
+    }
+
+    /**
+     * The single statement of "this document just changed": bump the version, then announce it.
+     *
+     * <p>Every mutation goes through here — the forward edit, and redo and undo on the recorded entry.
+     * <b>Undo and redo count.</b> They move the text as surely as typing does, so anything computed
+     * against the document before one of them is just as stale; a version that only advanced on forward
+     * edits would let a diagnostic list survive Ctrl+Z and be re-attached to text it never described.</p>
+     *
+     * <p>Bumped <em>before</em> the signal, so a listener reading {@link #version()} from inside
+     * {@code onChanged} sees the version its change produced rather than the one it replaced.</p>
+     */
+    private void applied(ChangeSet change) {
+        version++;
         onChanged.emit(change);
+    }
+
+    /**
+     * The document's current version — see the field note. Compare with {@code ==} against the version an
+     * async job snapshotted; anything else is stale and must be discarded rather than reconciled.
+     */
+    public int version() {
+        return version;
     }
 
     /**
@@ -174,13 +212,13 @@ public final class TextBuffer {
         @Override
         public void apply() {
             buffer.document = forward.apply(buffer.document);
-            buffer.onChanged.emit(forward);
+            buffer.applied(forward);
         }
 
         @Override
         public void undo() {
             buffer.document = inverse.apply(buffer.document);
-            buffer.onChanged.emit(inverse);
+            buffer.applied(inverse);
         }
 
         @Override

@@ -268,4 +268,78 @@ public class TextBufferTest {
             assertEquals("round " + round, full, buffer.toString());
         }
     }
+
+    // ── The version spine ───────────────────────────────────────────────────────────────────────
+
+    @Test
+    public void everyEditAdvancesTheVersion() {
+        TextBuffer buffer = buffer("");
+        int start = buffer.version();
+
+        buffer.insert(0, "a");
+        buffer.insert(1, "b");
+
+        assertEquals("each applied edit is one version", start + 2, buffer.version());
+    }
+
+    @Test
+    public void anEmptyOrRejectedEditDoesNotAdvanceTheVersion() {
+        TextBuffer buffer = buffer("hello");
+        int before = buffer.version();
+
+        buffer.edit(ChangeSet.empty(buffer.length()));
+
+        assertEquals("a no-op must not invalidate everything computed against the document",
+                before, buffer.version());
+    }
+
+    @Test
+    public void undoAndRedoAdvanceTheVersionToo() {
+        // The one that matters. Undo moves the text as surely as typing does, so anything computed
+        // against the document beforehand is equally stale -- a version that only advanced on forward
+        // edits would let a diagnostic list survive Ctrl+Z and be re-attached to text it never described.
+        TextBuffer buffer = buffer("");
+        buffer.setCoalesceWindowMillis(0);
+        now += 1000;
+        buffer.insert(0, "typed");
+
+        int afterTyping = buffer.version();
+        buffer.undo();
+        assertTrue("undo is a change", buffer.version() > afterTyping);
+
+        int afterUndo = buffer.version();
+        buffer.redo();
+        assertTrue("so is redo", buffer.version() > afterUndo);
+    }
+
+    @Test
+    public void theVersionNeverRepeatsWhenTheTextReturnsToAnEarlierValue() {
+        // Why this is a counter and not a hash of the content: typing a character and deleting it leaves
+        // identical text, and a result computed against the text in between is still describing a
+        // document that no longer exists. Identity of content is the wrong question.
+        TextBuffer buffer = buffer("x");
+        int start = buffer.version();
+
+        buffer.insert(1, "y");
+        buffer.delete(1, 2);
+
+        assertEquals("the text is back where it started", "x", buffer.toString());
+        assertTrue("the version is not", buffer.version() > start);
+    }
+
+    @Test
+    public void aListenerSeesTheVersionItsOwnChangeProduced() {
+        // Bumped before the signal, so onChanged can stamp a snapshot with the version it belongs to --
+        // reading the pre-edit version there would stamp every job one behind, and the symptom is every
+        // result being discarded as stale forever.
+        TextBuffer buffer = buffer("");
+        List<Integer> seen = new ArrayList<>();
+        buffer.onChanged.connect(change -> seen.add(buffer.version()));
+
+        buffer.insert(0, "a");
+
+        assertEquals(1, seen.size());
+        assertEquals("the listener must see the new version, not the one it replaced",
+                buffer.version(), (int) seen.get(0));
+    }
 }
