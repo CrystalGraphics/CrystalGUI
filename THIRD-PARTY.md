@@ -18,6 +18,7 @@ Per-directory detail lives beside the assets it covers; this is the index.
 | tree-sitter binding + six grammars | `lib/tree-sitter/` | MIT | See [lib/tree-sitter/README.md](lib/tree-sitter/README.md) for per-jar provenance |
 | Eclipse JDT (`org.eclipse.jdt.core` + the platform closure) | `language/build.gradle.kts`, bands 8/11/17 | **EPL-2.0** | The Java engine. See [Engine bands](#engine-bands-ecj-and-rhino) |
 | Rhino | `language/build.gradle.kts`, bands 8/11/17 | **MPL-2.0** | The JavaScript engine. See [Engine bands](#engine-bands-ecj-and-rhino) |
+| ASM (`asm`, `asm-commons`, `asm-tree`) | `language/build.gradle.kts` | **BSD-3-Clause** | © INRIA, France Télécom. The bytecode reader/writer behind the readable↔runtime mapping boundary. 0.24 MB, no transitive dependencies, real classes at class-file major 49 so it runs on every band |
 
 ## Engine bands: ECJ and Rhino
 

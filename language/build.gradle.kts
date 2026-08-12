@@ -53,6 +53,7 @@ val jdtBand8 = "3.26.0"        // Eclipse 4.21, 2021-09. 3.27.0 is the first tha
 val jdtBand11 = "3.33.0"       // Eclipse 4.28, 2023-06. 3.34.0 is the first that needs Java 17
 val jdtBand17 = "3.46.0"       // newest at 2026-08-12
 val rhinoBand8 = "1.7.15.1"    // last release whose class files are Java 8
+val asmVersion = "9.10"     // real classes are major 49; only module-info is 53
 val rhinoModern = "1.9.1"      // needs Java 11 -- so bands 11 and 17 SHARE it; see EngineBand
 
 // ── The Eclipse platform closure, pinned per band ───────────────────────────────────────────────
@@ -148,6 +149,21 @@ dependencies {
     // and are absent from a real deployment's loader.
     compileOnly("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8")
 
+    // ── ASM, for the mapping boundary (§15.5) ───────────────────────────────────────────────────
+    //
+    // A REAL DEPENDENCY, not compileOnly: the remapper runs wherever a script is compiled, so it ships.
+    // Chosen over tiny-remapper (§23 row 13) on three measurements rather than taste -- ASM's real
+    // classes are major 49 (Java 5), so it runs on every band; the three jars total 0.24 MB; and it has
+    // no transitive dependencies at all. tiny-remapper is a similar size on its own but pulls asm-util
+    // and mapping-io behind it, and its API is built around remapping jars on disk with a thread pool,
+    // which is a workflow rather than the one focused thing needed here.
+    //
+    // Only `module-info.class` in those jars is major 53, and a Java 8 JVM never reads it -- which is
+    // exactly the false positive `checkEngineBands` now skips.
+    api("org.ow2.asm:asm:$asmVersion")
+    api("org.ow2.asm:asm-commons:$asmVersion")
+    api("org.ow2.asm:asm-tree:$asmVersion")
+
     // ── The engine bands (plan_syntax.md §6) ────────────────────────────────────────────────────
     //
     // DELIBERATELY NOT ON ANY COMPILE OR RUNTIME CLASSPATH. These configurations are resolvable and
@@ -185,6 +201,12 @@ fun baseClassMajor(jar: File): Int {
             val entry = entries.nextElement()
             val name = entry.getName()
             if (!name.endsWith(".class") || name.startsWith("META-INF/versions/")) continue
+            // module-info.class IS ALWAYS MAJOR 53+, because modules are a Java 9 feature -- and a
+            // Java 8 JVM does not read it at all. Counting it reports every modern jar as needing
+            // Java 9 whatever its real classes are: ASM's are major 49 and it would have been rejected
+            // from band 8 on the strength of a file that band never opens. A check that fails falsely
+            // is as bad as one that passes falsely, and this one nearly cost a correct dependency.
+            if (name == "module-info.class" || name.endsWith("/module-info.class")) continue
             val stream = zip.getInputStream(entry)
             try {
                 val head = ByteArray(8)

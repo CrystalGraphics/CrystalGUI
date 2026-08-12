@@ -763,18 +763,40 @@ views, so the index — like everything else — holds readable names.
 
 ### 15.5 Minecraft classes — compile against the live loader, author in readable names
 
-> ❌ **NOT BUILT, and it is the honest remainder of M6.** Everything else in §15 landed; this did not,
-> and it is a milestone-sized piece rather than a loose end. Three things it needs that nothing else in
-> the stack has yet: **ASM** (a new dependency, and §23 row 13's adopt-tiny-remapper-versus-write-it
-> question decided), an **inheritance-aware output remapper** — a naive `ClassRemapper` compiles clean
-> and silently stops an override being an override, which is the worst failure shape there is — and a
-> **per-platform post-transform bytecode probe**, which cannot be written or validated without the
-> platform. Headlessly the most that can be proven is the synthetic round-trip the exit criteria name,
-> and a round-trip against a fake mapping set does not exercise the part that is hard.
+> ◐ **The mapping boundary is built and proven; the live name environment is not.**
 >
-> What exists meanwhile is `HostClasspath` (§15.2), which is the file-based baseline this replaces on
-> MC hosts — and its javadoc says so, because a file list that looks complete is exactly how this gets
-> forgotten.
+> ✅ **Built** (`com.crystalgui.language.map`): `MappingSet` — readable ⇄ runtime, keyed by owner
+> because a member name is only unique within its declaring type, and `IDENTITY` as the common case so
+> a dev environment pays nothing and takes the same path. `ReadableView` — the **in** direction,
+> generating readable types by remapping runtime bytes. `InheritanceAwareRemapper` — the **out**
+> direction, ~180 lines on plain ASM (§23 row 13).
+>
+> ✅ **The round-trip is nine tests.** A script authored in readable names compiles, links and runs
+> against a fixture whose runtime members are `m_1234`/`f_5678`; a script naming the runtime spelling
+> is *refused*, which is what makes it one authoring namespace rather than two; and an override stays
+> an override — **with a negative control against a real plain `ClassRemapper`**, which returns the
+> wrong string with no exception, no verify error and nothing to search for.
+>
+> > Writing that control taught something worth keeping. Its first form was our remapper with the
+> > hierarchy blinded, and it **did not fail** — `withLocalClasses` always reads the supertypes of the
+> > classes being remapped out of their own bytes, which is correct and load-bearing (it is what makes
+> > a script's nested class extending an MC type work) and meant the control proved nothing. Its
+> > second form failed *loudly* with `NoSuchMethodError`, because calling through `new Script()` makes
+> > the call site's owner the script class too. Only calling through a mapped-type reference isolates
+> > the override as the single difference. **A negative control that cannot fail is the same trap as
+> > an assertion that cannot** — the M5 lesson, arriving in a new shape.
+>
+> ❌ **Still outstanding: the live name environment.** `ReadableView` writes remapped classes to a
+> directory and hands the path to the compiler, because `ASTParser.setEnvironment` takes file paths.
+> That is correct anywhere bytes are obtainable and it is what the round-trip proves. It is **not**
+> what a live MC host needs: there the bytes come from the launch classloader through the transformer
+> chain, per platform, and feeding them to the compiler means an `INameEnvironment` rather than a
+> directory — no writing, no staleness, and it works for a class whose bytes exist only because a
+> mixin produced them. That piece cannot be written or validated without the platform. The remapping
+> itself — the part with the hard logic — is shared by both routes and is done.
+>
+> `HostClasspath` (§15.2) is the file-based baseline this replaces on MC hosts, and its javadoc says
+> so, because a file list that looks complete is exactly how this gets forgotten.
 
 **Scope hardened 2026-08-12: this is a Minecraft scripting engine.** MC classes, mod classes and
 mixin-added members referenced in a script must compile *and link* at runtime. That promotes the
@@ -1008,7 +1030,7 @@ user-visible value lands early.
 | **M3** ✅ | Grammars (§12–13): **six** — `css`, `javascript`, `html`, `glsl`, `xml` beside `java` — vendored with all five platform/arch pairs, registered by extension, fixtured; `injections.scm` wired (html hosts css + js); §10.2's normalization landed as **seven load-time query rewrites**, not a rename map; `EveryShippedGrammarTest` covers parse + capture + registration per grammar. `locals.scm` deferred to M11 with a reason (§13) | M1 | ✅ one fixture per language in `workspace/src/`; html `<style>`/`<script>` bodies coloured as CSS/JS |
 | **M4** ✅ | Module reshape (§5): `language/` rename + `.grammar`, `text.lang` SPIs in `core/` (12 types, interfaces and records only), `LanguageServices` per-document façade, editor consumes-if-present and **overlays semantic tokens over grammar tokens**, document-owned lifecycle (which also fixed `SyntaxTokenizer.close()` never being called), six registrations collapsed to a `Grammar` table | — | ✅ `core:headlessTest` green with no new deps — `LanguageSpiTest` runs the whole SPI with no engine and no grammar on the classpath; harness wires Java end-to-end unchanged; `SemanticOverlayTest` proves absent-services behaves exactly as before |
 | **M5** ✅ | Engine loading (§6): band detection (`EngineBand`), isolated child-first loader with a parent-delegated bridge (`EngineClassLoader`), jar-location seam (`EngineSource`), runtime JLS discovery (`JlsLevel`), pinned ECJ+Rhino per band **including all 13 transitive platform artifacts, constrained by signing era as well as by class-file major**, `checkEngineBands` (floor + signer) in `:language:check`, `smokeEngineBands` under real per-era launchers, `THIRD-PARTY.md` | M4 | ✅ band-selection unit tests incl. the `"1.8"` trap; ✅ isolation proven with two real Rhinos; ✅ **smoke compile+eval green on a real Java 8 JVM and on 17** — Rhino arithmetic, ES2015 and a working `ClassShutter` refusal; JDT resolving `java.util.List<java.lang.String>` against the running VM, and doing it **from broken source**; ✅ **and a script compiles to bytecode and RUNS on each band's own JVM**, through the bridge (`ScriptCompiler` → `EcjScriptCompiler` → `ScriptClassLoader`), including a call back into a host class; ✅ §23 rows 3, 4 and 8 closed |
-| **M6** ◐ | Java semantics (§15): ✅ ECJ diagnostics with real ranges, ✅ semantic tokens, ✅ `resolveAt`/`expectedTypeAt`/`membersOf`, ✅ `JavaLanguageServices` on the scheduler with diagnostics pushed into the document's `DiagnosticSet`, ✅ prelude mapper (`ScriptPrelude`), ✅ classpath probe (`HostClasspath`). ❌ remaining: **reflection overlay**, and **§15.5's live name environment + mapping boundary** — see below | M0, M4, M5 | ✅ param/field/local coloured, unresolved flagged, deprecated struck; ✅ **the §13 checklist is twelve tests** (`BindingChecklistTest`) and every one passes, including on broken source; ❌ the remap round-trip, which is §15.5's |
+| **M6** ◐ | Java semantics (§15): ✅ ECJ diagnostics with real ranges, ✅ semantic tokens, ✅ `resolveAt`/`expectedTypeAt`/`membersOf`, ✅ `JavaLanguageServices` on the scheduler with diagnostics pushed into the document's `DiagnosticSet`, ✅ prelude mapper (`ScriptPrelude`), ✅ classpath probe (`HostClasspath`). ✅ §15.5's **mapping boundary** (`MappingSet`, `ReadableView`, `InheritanceAwareRemapper` on plain ASM). ❌ remaining: **reflection overlay**, and §15.5's **live name environment** — see §15.5 | M0, M4, M5 | ✅ param/field/local coloured, unresolved flagged, deprecated struck; ✅ **the §13 checklist is twelve tests** (`BindingChecklistTest`), all passing, including on broken source; ✅ **the remap round-trip runs** — readable-named script → compiled → remapped → linked against `m_1234`, with an override staying an override and a negative control proving a naive remapper does not |
 | **M7** | **Java execution service — the product**: per-script child classloader over the band loader (§6.3), prelude/host-binding injection at runtime, compile-always/run-explicit lifecycle, the output remap pass wired for real (not just M6's fixture) including safepoint injection + host kill switch (§19.3), compiled-script cache `(source hash, mappings hash, band)` (§15.5 D.3), run/stop commands via `CommandRegistry`, disposal — a re-run replaces the loader and nothing pins the old one | M5, M6 | a script authored in the editor runs on explicit command, effect observable in the harness; re-run replaces the instance; kill interrupts a deliberate infinite loop; 100 compile/run/dispose cycles leak no classloaders (heap assertion); the §5.3 proof — compile-and-run with the grammar jars absent, headless |
 | **M8** | Decorations + diagnostics UI (§17): tracked ranges with stickiness, squiggle view part, Problems wiring | M0; M6 for real input | stickiness golden tests (Monaco's cases); squiggles stay attached while typing above them; Problems row ↔ document range round-trip |
 | **M9** | Completion (§18): substrate generalisation, matcher+ranking ports, Java providers, type index + auto-import | M6, M8 | `list.forEach(x -> x.|)` completes String members; unimported `ArrayList` inserts import as one undo step; latency within budget on the indexed modpack fixture |
@@ -1118,7 +1140,7 @@ rules, and it is also the enforcement of them.
 | 10 | Every band's ECJ accepts a custom `INameEnvironment` serving remapped/synthesized `IBinaryType`s | M5/M6 | the M6 remap-round-trip fixture, run against each band's jar |
 | 11 | Mapping data sourcing and licences (1.7.10 MCP CSVs incl. `params.csv`, Mojang official mappings terms, Parchment, Fabric tiny) | M6 | resolve, cache strategy decided, recorded in `THIRD-PARTY.md` |
 | 12 | Rhino member-lookup remapping route per band: patch `JavaMembers` in our shaded Rhino vs adopt KubeJS's fork (does it cover band 1?) | M5/M10 | compile both candidates against the band matrix; pick per band |
-| 13 | Output remapper with inheritance propagation: adopt (tiny-remapper — does it run on Java 8?) vs write the propagation walk on plain ASM | M6 | spike; the M6 remap-round-trip fixture includes an override case either way |
+| 13 | ~~Output remapper with inheritance propagation: adopt tiny-remapper vs write the propagation walk on plain ASM~~ | ~~M6~~ | **Answered: plain ASM**, on three measurements. ASM's real classes are class-file **major 49** (only `module-info.class` is 53, which a Java 8 JVM never reads), so it runs on every band; the three jars total **0.24 MB**; and it has **no transitive dependencies**. tiny-remapper is a similar size alone but pulls `asm-util` and `mapping-io` behind it, and its API is built around remapping jars on disk with a thread pool — a workflow, where what is needed is one focused walk. `InheritanceAwareRemapper` is ~180 lines and the round-trip includes the override case **with a negative control** |
 | 14 | Safepoint-injection overhead (§19.3) on a hot script loop | M7 | measure; one volatile read per backward branch should vanish in JIT — verify, don't assume |
 
 ---
