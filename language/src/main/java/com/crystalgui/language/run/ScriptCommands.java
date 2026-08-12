@@ -1,0 +1,74 @@
+package com.crystalgui.language.run;
+
+import com.crystalgui.core.command.Command;
+import com.crystalgui.core.command.CommandRegistry;
+
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+/**
+ * Run and Stop, as commands.
+ *
+ * <h3>Commands rather than buttons, and it is the same argument the editor's actions already made</h3>
+ *
+ * <p>A command is one named thing that a keybinding, a menu row, the palette and a toolbar button all
+ * point at. Wiring a Run button directly to {@link ScriptHost#run} would give exactly one way to run a
+ * script — no accelerator, no palette entry, nothing for a keymap to rebind — and the second affordance
+ * would then be a second call site that can drift from the first.</p>
+ *
+ * <h3>Stop is enabled only while something is running, and that is not decoration</h3>
+ *
+ * <p>{@code enabledWhen} is what makes the menu row dim and the accelerator inert. A Stop that is always
+ * live is a Stop that does nothing most of the time, which trains people not to trust it — and the
+ * registry <b>dims rather than hides</b> (an invariant this codebase already paid for), so the row stays
+ * where it was and simply reads as unavailable.</p>
+ */
+public final class ScriptCommands {
+
+    public static final String RUN = "script.run";
+    public static final String STOP = "script.stop";
+
+    private ScriptCommands() {
+    }
+
+    /**
+     * Registers both commands against a host.
+     *
+     * <p>The script and its bindings come from suppliers rather than being captured, because what "the
+     * current script" means belongs to the application — the active editor tab, a selected file, the
+     * graph being edited. Capturing one here would bind Run to whatever happened to be open at startup.</p>
+     *
+     * @param onFailure told about an exception thrown out of a script — a notification, a log line, a
+     *                  Problems row. Not handled here: what a failure should look like is the
+     *                  application's decision and it differs per host
+     */
+    public static void register(CommandRegistry registry, ScriptHost host,
+                                Supplier<ScriptHost.Compiled> script,
+                                Supplier<Map<String, Object>> bindings,
+                                Consumer<Throwable> onFailure) {
+        registry.register(Command.of(RUN, "Run Script")
+                .run(context -> {
+                    ScriptHost.Compiled compiled = script.get();
+                    if (compiled == null || !compiled.successful()) return;
+                    try {
+                        // ASYNC, ALWAYS. Running on the UI thread would mean a script with a slow loop
+                        // freezes the frame that is meant to offer the Stop button -- so the one
+                        // affordance that could rescue the situation is the one that cannot be reached.
+                        host.runAsync(compiled, bindings == null ? Map.of() : bindings.get(), onFailure);
+                    } catch (Throwable failed) {
+                        if (onFailure != null) onFailure.accept(failed);
+                    }
+                }));
+
+        registry.register(Command.of(STOP, "Stop Script")
+                .enabledWhen(context -> host.isRunning())
+                .run(host::stop));
+    }
+
+    /** Removes both — for a host that is torn down, and for a test that must not leak registrations. */
+    public static void unregister(CommandRegistry registry) {
+        registry.unregister(RUN);
+        registry.unregister(STOP);
+    }
+}

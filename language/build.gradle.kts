@@ -10,11 +10,16 @@
 //   .grammar   tree-sitter: tokenizer, query loading, injections            <- here today
 //   .java      the ECJ adapter: compile, bindings, diagnostics, completion  <- M5/M6
 //   .js        the Rhino adapter: execution, parse diagnostics              <- M10
+//   .map       readable <-> runtime mapping boundary, on plain ASM          <- M6
+//   .run       execution: lifecycle, safepoints, cache, run/stop commands   <- M7
 //   .resolve   engine-neutral: type index, fuzzy matcher, sandbox policy    <- M9
 //
 // AND ONE SPLIT INSIDE THIS MODULE: execution must not require the grammar natives. A dedicated server
-// runs scripts and has no editor, so `.java`/`.js`/`.resolve` must never touch `.grammar` — lazy class
-// init is the mechanism and an M7 headless test is the proof.
+// runs scripts and has no editor, so `.java`/`.js`/`.map`/`.run`/`.resolve` must never touch `.grammar`.
+// ExecutionNeedsNoGrammarTest is the proof, and it is a BYTECODE SCAN rather than a runtime check: a
+// reference in the constant pool is the real question, because if a class file names a tree-sitter type
+// at all then some input can reach it. It fails on the commit that adds the import rather than on a
+// server months later with a NoClassDefFoundError naming a native library.
 //
 // The tree-sitter binding is consumed as jars checked in under lib/, because the official `jtreesitter`
 // requires JDK 23+ and the Foreign Function & Memory API. See lib/tree-sitter/README.md for provenance and licence.
