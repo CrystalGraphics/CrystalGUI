@@ -67,8 +67,28 @@ public interface SyntaxTokenizer {
      * <p>Invoked on the <b>UI thread</b>. Implementations that never work in the background never call
      * it, which is why this has a default and costs a synchronous tokenizer nothing.</p>
      */
-    default void setInvalidationListener(Runnable listener) {
+    default void setInvalidationListener(InvalidationListener listener) {
         // Synchronous by default: a lexer's answer is complete by the time tokenize() returns.
+    }
+
+    /**
+     * Told which part of the document has new answers.
+     *
+     * <p><b>The range is the whole point.</b> A consumer caching tokens per line has to re-query the
+     * lines that actually changed and no others: during a run of typing a reparse lands every few
+     * keystrokes, so "something changed, re-query everything" would put the full viewport query back on
+     * the frame at almost the rate the cache was built to avoid. tree-sitter can answer this precisely —
+     * {@code ts_tree_get_changed_ranges} compares the old tree with the new one — so throwing that away
+     * at the seam would be discarding information the backend already has.</p>
+     */
+    @FunctionalInterface
+    interface InvalidationListener {
+
+        /** Offsets into the whole document, half-open. Pass {@link #EVERYTHING} when it is not known. */
+        void tokensChanged(int fromOffset, int toOffset);
+
+        /** The honest answer when a backend cannot say what changed — re-query it all. */
+        int EVERYTHING = Integer.MAX_VALUE;
     }
 
     /** Releases anything native. Called when the editor goes away; a no-op for pure-Java tokenizers. */

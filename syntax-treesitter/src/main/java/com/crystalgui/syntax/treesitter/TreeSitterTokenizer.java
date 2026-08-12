@@ -17,6 +17,7 @@ import org.treesitter.TSQuery;
 import org.treesitter.TSQueryCapture;
 import org.treesitter.TSQueryCursor;
 import org.treesitter.TSQueryMatch;
+import org.treesitter.TSRange;
 import org.treesitter.TSTree;
 
 import java.nio.charset.StandardCharsets;
@@ -87,7 +88,7 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
      */
     private TSParser workerParser;
 
-    private Runnable invalidationListener;
+    private InvalidationListener invalidationListener;
 
     /**
      * Capture names by index, resolved once.
@@ -151,7 +152,7 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
     }
 
     @Override
-    public void setInvalidationListener(Runnable listener) {
+    public void setInvalidationListener(InvalidationListener listener) {
         this.invalidationListener = listener;
     }
 
@@ -228,26 +229,73 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
      * running one to stop.</p>
      */
     private void scheduleReparse(Rope document) {
-        String text = document.toString();
+        // The ROPE is handed over, not its text. Flattening a 200KB document is a 200KB copy, and doing it
+        // here would put one on the UI thread per keystroke -- the exact cost this method exists to move.
+        // Safe because a Rope is persistent: applying a change returns a new one rather than mutating this
+        // one, so the worker's snapshot cannot be edited underneath it. The tree, which is NOT persistent,
+        // is copied instead.
         TSTree snapshot = tree == null ? null : tree.copy();
         scheduler.job(JobKey.of(this, "reparse"), JobLane.LATENCY, context -> {
             if (workerParser == null) {
                 workerParser = new TSParser();
                 workerParser.setLanguage(language);
             }
+            String text = document.toString();
+            context.throwIfCancelled();
             TSTree parsed = workerParser.parseString(snapshot, text);
             // Built here rather than on delivery: it is an O(n) pass over the document and belongs on the
             // thread that already has the document in hand, not on the frame that receives the answer.
             return new Parsed(parsed, Utf8Offsets.of(text));
         }).onDone(result -> {
             if (result == null) return;
+            TSTree replaced = this.tree;
             this.tree = result.tree();
             this.offsets = result.offsets();
             this.stale = false;
             // Nothing about the DOCUMENT changed, so no existing signal would tell the view to re-query --
             // the highlighting would just stay one edit behind until something else happened to repaint.
-            if (invalidationListener != null) invalidationListener.run();
+            if (invalidationListener != null) {
+                announceChanged(replaced, result.tree(), result.offsets());
+            }
         }).submit();
+    }
+
+    /**
+     * Reports exactly which part of the document the new tree disagrees with the old one about.
+     *
+     * <p>Precision matters more than it looks. During a run of typing a reparse lands every few
+     * keystrokes, so a consumer told only "something changed" re-queries its whole viewport at nearly the
+     * rate a per-line cache exists to avoid — the cache would then buy almost nothing. tree-sitter
+     * already knows the answer, so the alternative is discarding information rather than saving work.</p>
+     *
+     * <p>Falls back to the whole document when there is no old tree to compare against, or when the
+     * comparison itself fails: over-reporting is merely slow, and under-reporting leaves stale colour on
+     * screen with nothing left to correct it.</p>
+     */
+    private void announceChanged(TSTree replaced, TSTree parsed, Utf8Offsets newOffsets) {
+        if (replaced == null) {
+            invalidationListener.tokensChanged(0, InvalidationListener.EVERYTHING);
+            return;
+        }
+        try {
+            TSRange[] ranges = TSTree.getChangedRanges(replaced, parsed);
+            if (ranges == null || ranges.length == 0) {
+                // Structurally identical -- the edit was inside a token, e.g. another character typed into
+                // an identifier. Nothing to re-query, so say nothing rather than invalidating a viewport.
+                return;
+            }
+            // The union, not each range: they are typically one small region, and a consumer that has to
+            // union them anyway is better served by one call than by n.
+            int lowByte = Integer.MAX_VALUE;
+            int highByte = 0;
+            for (TSRange range : ranges) {
+                lowByte = Math.min(lowByte, range.getStartByte());
+                highByte = Math.max(highByte, range.getEndByte());
+            }
+            invalidationListener.tokensChanged(newOffsets.toUtf16(lowByte), newOffsets.toUtf16(highByte));
+        } catch (RuntimeException comparisonFailed) {
+            invalidationListener.tokensChanged(0, InvalidationListener.EVERYTHING);
+        }
     }
 
     /** A finished parse and the offset index over the text it describes — swapped in together. */
