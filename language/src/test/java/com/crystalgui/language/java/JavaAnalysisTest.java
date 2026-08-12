@@ -138,6 +138,80 @@ public class JavaAnalysisTest {
         }
     }
 
+    /** Every capture emitted over the exact span of {@code needle}. */
+    private static List<String> capturesAt(List<SyntaxToken> tokens, String source, String needle) {
+        int at = source.indexOf(needle);
+        List<String> names = new ArrayList<>();
+        for (SyntaxToken token : tokens) {
+            if (token.start() == at && token.end() == at + needle.length()) names.add(token.name());
+        }
+        return names;
+    }
+
+    @Test
+    public void anUnresolvedNameIsMarkedAsSuch() {
+        // The exit criterion, and the inline half of what the diagnostic also says. Underlined rather
+        // than recoloured by the sheet, so the name keeps whatever colour said WHAT it is.
+        String source = ""
+                + "public class Script {\n"
+                + "    int run() { return whoKnows + 1; }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            assertTrue("nothing marked the unresolvable name",
+                    capturesAt(analysis.semanticTokens(), source, "whoKnows").contains("unresolved"));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    @Test
+    public void aResolvableNameIsNotMarkedUnresolved() {
+        // The direction that matters more: a false underline is a red mark on working code, while a
+        // missed one is invisible. Package and import segments have no binding and are legitimately
+        // unresolvable, so they must not be marked either.
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    List<String> names;\n"
+                + "    int size() { return names.size(); }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            for (SyntaxToken token : tokens) {
+                assertFalse("marked '" + source.substring(token.start(), token.end())
+                        + "' unresolved in a file that compiles", "unresolved".equals(token.name()));
+            }
+        } finally {
+            analysis.close();
+        }
+    }
+
+    @Test
+    public void aDeprecatedNameIsMarkedALONGSIDEItsKindRatherThanInsteadOfIt() {
+        // TWO TRUE THINGS ABOUT ONE RANGE. `old` is a method AND it is deprecated; the scheme draws
+        // the first as a colour and the second as a strike-through, so emitting only one of them
+        // throws away the piece of information the highlighter actually had.
+        String source = ""
+                + "public class Script {\n"
+                + "    @Deprecated int old() { return 1; }\n"
+                + "    int use() { return old(); }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            int callSite = source.indexOf("return old()") + 7;
+            List<String> captures = new ArrayList<>();
+            for (SyntaxToken token : analysis.semanticTokens()) {
+                if (token.start() == callSite) captures.add(token.name());
+            }
+            assertTrue("no deprecation marker: " + captures, captures.contains("deprecated"));
+            assertTrue("the kind was lost: " + captures, captures.contains("function.method"));
+        } finally {
+            analysis.close();
+        }
+    }
+
     // ── Diagnostics ─────────────────────────────────────────────────────────────────────────────
 
     @Test

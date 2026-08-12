@@ -98,6 +98,10 @@ theme {
     --syntax-label: #C586C0;
     --syntax-markup: #D4D4D4;
     --syntax-error: #F44747;
+    /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
+     * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
+    --syntax-unresolved: #F44747;
+    --syntax-deprecated: #808080;
     --syntax-operator: #D4D4D4;
     --syntax-punctuation: #808080;
     --syntax-punctuation-bracket: #808080;

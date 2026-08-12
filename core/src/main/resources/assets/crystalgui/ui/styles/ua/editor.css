@@ -391,6 +391,32 @@ texteditor text::highlight(error) {
     color: var(--syntax-error, #F44747);
 }
 
+/* ── The two an ENGINE reports, which no grammar can ──
+ *
+ * `error` above is a grammar's answer: malformed text, visible from shape alone. These two are not.
+ * Whether a name resolves and whether the thing it names is deprecated are questions about the world
+ * outside the file, so they appear only where a language engine is loaded — which is also why they
+ * degrade to nothing rather than to a wrong colour when one is not. */
+
+/* A NAME THAT RESOLVES TO NOTHING. Underlined rather than recoloured, deliberately: it is still a
+ * variable or a method and should keep the colour that says which, or the reader loses the one piece
+ * of information the highlighter had. The squiggle from the diagnostic says the same thing at the same
+ * place, and the two agreeing is the point — this is the inline half of a report the Problems panel
+ * also carries. */
+texteditor text::highlight(unresolved) {
+    color: var(--syntax-unresolved, #F44747);
+    text-decoration-line: underline;
+}
+
+/* STRUCK THROUGH, matching what DiagnosticTag.DEPRECATED already does to a diagnostic that carries it.
+ * The two paths have to agree about what deprecated looks like, or the same fact is drawn two ways
+ * depending on which layer noticed it. `text-decoration-line` has been allowed in a highlight since
+ * M2's carve-out, which is what makes this a rule rather than a feature request. */
+texteditor text::highlight(deprecated) {
+    color: var(--syntax-deprecated, #A0A0A0);
+    text-decoration-line: line-through;
+}
+
 /* ── Punctuation ──
  *
  * Dimmer than the code around it, deliberately: brackets and separators are structure the eye uses to

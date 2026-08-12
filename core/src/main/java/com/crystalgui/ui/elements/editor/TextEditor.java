@@ -1778,20 +1778,31 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // takes one list per row and the overlap rule has to be decided somewhere -- a second list would
         // push that decision into refreshHighlights, where two ranges under different names overlapping is
         // exactly the shape that crashed HighlightRegistry once already.
-        for (SyntaxToken token : semantic.tokensIn(spanStart, spanEnd)) {
-            overrideInRows(token, firstMissing, lastMissing);
+        // TWO PASSES, AND THE SPLIT IS THE RULE. The precedence is "the engine's answer beats the
+        // grammar's", which is a statement about SOURCES -- so every grammar token overlapping any
+        // semantic one is cleared first, and only then are the semantic tokens added. Doing it token by
+        // token would make each semantic token displace the previous one, and they are deliberately
+        // allowed to overlap each other: `count` being a field and `count` being deprecated are two
+        // true things about one range, drawn as a colour and a strike-through by two different rules.
+        List<SyntaxToken> semanticTokens = semantic.tokensIn(spanStart, spanEnd);
+        for (SyntaxToken token : semanticTokens) {
+            clearGrammarUnder(token, firstMissing, lastMissing);
+        }
+        for (SyntaxToken token : semanticTokens) {
+            distributeToRows(token, firstMissing, lastMissing);
         }
     }
 
     /**
-     * Files one semantic token under every row it covers, displacing whatever the grammar had said there.
+     * Drops the grammar's cached tokens wherever this semantic token covers them.
      *
-     * <p>{@link #distributeToRows}' twin, differing in one line: any cached token this one overlaps is
-     * removed first. Appending instead would leave both, and which colour won would then depend on the
-     * order the paint path happened to walk the list in — the same class of bug as the capture-precedence
-     * one, and just as invisible, since both names are legitimate and both resolve to a real colour.</p>
+     * <p>Called for every semantic token <em>before</em> any is added, which is what lets semantic
+     * tokens overlap each other. Leaving the grammar's instead would put two ranges under unrelated
+     * names over one span and make which colour paints depend on the order the paint path happened to
+     * walk the list in — the same class of bug as the capture-precedence one, and just as invisible,
+     * since both names are legitimate and both resolve to a real colour.</p>
      */
-    private void overrideInRows(SyntaxToken token, int firstRow, int lastRow) {
+    private void clearGrammarUnder(SyntaxToken token, int firstRow, int lastRow) {
         int startRow = buffer.document().offsetToPoint(clampToDocument(token.start())).row();
         int endRow = buffer.document().offsetToPoint(
                 clampToDocument(Math.max(token.start(), token.end() - 1))).row();
@@ -1800,13 +1811,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
             if (bucket == null) continue;
             int rowStart = buffer.document().lineStartOffset(row);
             int rowEnd = rowStart + buffer.line(row).length();
-            int start = Math.max(token.start(), rowStart) - rowStart;
-            int end = Math.min(token.end(), rowEnd) - rowStart;
-            if (end <= start) continue;
-            final int from = start;
-            final int to = end;
+            final int from = Math.max(token.start(), rowStart) - rowStart;
+            final int to = Math.min(token.end(), rowEnd) - rowStart;
+            if (to <= from) continue;
             bucket.removeIf(existing -> from < existing.end() && existing.start() < to);
-            bucket.add(new SyntaxToken(from, to, token.name()));
         }
     }
 
