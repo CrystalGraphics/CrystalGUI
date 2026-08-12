@@ -809,7 +809,7 @@ views, so the index — like everything else — holds readable names.
 > > the override as the single difference. **A negative control that cannot fail is the same trap as
 > > an assertion that cannot** — the M5 lesson, arriving in a new shape.
 >
-> ❌ **Still outstanding: the live name environment.** `ReadableView` writes remapped classes to a
+> ❌ **Still outstanding: the live name environment — now scheduled as M12.** `ReadableView` writes remapped classes to a
 > directory and hands the path to the compiler, because `ASTParser.setEnvironment` takes file paths.
 > That is correct anywhere bytes are obtainable and it is what the round-trip proves. It is **not**
 > what a live MC host needs: there the bytes come from the launch classloader through the transformer
@@ -880,7 +880,13 @@ from class files.
    same line the author sees. An engine whose traces point into an invisible wrapper is undebuggable.
 3. **Compiled scripts are cached** keyed `(source hash, mappings hash, band)` — a world with fifty
    scripts must not recompile fifty units every launch. Invalidation is structural: any key
-   component changes, the entry dies. (Delivered at M7.)
+   component changes, the entry dies. ✅ **Delivered at M7** (`ScriptCacheKey`, `ScriptCache`), in
+   memory and on disk. Two things the one-liner left out: **the classpath is deliberately not part of
+   the key** — hashing a modded launch's thousands of entries would cost more than the compile, and
+   bytecode embeds symbolic references rather than what it was compiled against, so a classpath change
+   that matters surfaces as a linkage error, loudly, which is the right place for it. And **only a
+   successful compile is cached**: caching a failure would serve it back after the author fixed the
+   file, which reads as the editor refusing to notice an edit.
 4. **A script naming MC classes is bound to that MC version's API** — only host-API-only scripts
    are portable across 1.7.10/1.20.x. Stated as the expectation; nothing here papers over an API
    that genuinely differs.
@@ -1030,8 +1036,22 @@ broken by design). Decided:
 - **Java**: the output remap pass (§15.5 B) is already rewriting every script class, so it also
   injects a **cooperative safepoint check at backward branches and method entries** — one static
   volatile read, JIT-friendly, letting the host kill a runaway script cleanly. This is only free
-  because the ASM pass exists anyway; it is the second consumer that justifies it. (Delivered at
-  M7.)
+  because the ASM pass exists anyway; it is the second consumer that justifies it.
+  ✅ **Delivered at M7** (`Safepoints`), with three corrections worth keeping:
+  - **The injected instruction is a CALL, not a read-and-branch.** A new branch target in a Java 7+
+    class file needs a new `StackMapTable` entry, which means `COMPUTE_FRAMES`, which means ASM
+    calling `getCommonSuperClass` — **loading classes at instrumentation time**. On an MC host that is
+    loading Minecraft classes while compiling, and it fails outright for a type that is not loadable
+    yet. A single `invokestatic` of a void no-arg method adds no branch, no local and no stack depth,
+    so every existing frame and max stays valid. The branch still happens inside `checkpoint()`, where
+    HotSpot inlines it back to exactly the volatile read the obvious version would have emitted.
+  - **The flag is the thread's own interrupt status**, not a private static. It is already volatile,
+    already an intrinsic — and decisively, it is the flag the JDK uses, so one `interrupt()` reaches a
+    *spinning* script through an injected check and a *blocked* one through `InterruptedException`. A
+    private flag would cover only the busy half.
+  - **The stop is an `Error`.** Scripts are full of `catch (Exception e)` around exactly the loop a
+    stop has to break out of. `catch (Throwable)` still defeats it, and nothing cooperative can beat
+    that — §19.1 is the answer rather than a cleverer exception type.
 - **Memory is not policed.** An in-process engine cannot meter allocation; the trust model (§19.1)
   is the answer, and saying so beats pretending.
 
@@ -1054,14 +1074,24 @@ user-visible value lands early.
 | **M4** ✅ | Module reshape (§5): `language/` rename + `.grammar`, `text.lang` SPIs in `core/` (12 types, interfaces and records only), `LanguageServices` per-document façade, editor consumes-if-present and **overlays semantic tokens over grammar tokens**, document-owned lifecycle (which also fixed `SyntaxTokenizer.close()` never being called), six registrations collapsed to a `Grammar` table | — | ✅ `core:headlessTest` green with no new deps — `LanguageSpiTest` runs the whole SPI with no engine and no grammar on the classpath; harness wires Java end-to-end unchanged; `SemanticOverlayTest` proves absent-services behaves exactly as before |
 | **M5** ✅ | Engine loading (§6): band detection (`EngineBand`), isolated child-first loader with a parent-delegated bridge (`EngineClassLoader`), jar-location seam (`EngineSource`), runtime JLS discovery (`JlsLevel`), pinned ECJ+Rhino per band **including all 13 transitive platform artifacts, constrained by signing era as well as by class-file major**, `checkEngineBands` (floor + signer) in `:language:check`, `smokeEngineBands` under real per-era launchers, `THIRD-PARTY.md` | M4 | ✅ band-selection unit tests incl. the `"1.8"` trap; ✅ isolation proven with two real Rhinos; ✅ **smoke compile+eval green on a real Java 8 JVM and on 17** — Rhino arithmetic, ES2015 and a working `ClassShutter` refusal; JDT resolving `java.util.List<java.lang.String>` against the running VM, and doing it **from broken source**; ✅ **and a script compiles to bytecode and RUNS on each band's own JVM**, through the bridge (`ScriptCompiler` → `EcjScriptCompiler` → `ScriptClassLoader`), including a call back into a host class; ✅ §23 rows 3, 4 and 8 closed |
 | **M6** ◐ | Java semantics (§15): ✅ ECJ diagnostics with real ranges, ✅ semantic tokens, ✅ `resolveAt`/`expectedTypeAt`/`membersOf`, ✅ `JavaLanguageServices` on the scheduler with diagnostics pushed into the document's `DiagnosticSet`, ✅ prelude mapper (`ScriptPrelude`), ✅ classpath probe (`HostClasspath`). ✅ reflection overlay (`ReflectionOverlay`), ✅ §15.5's **mapping boundary** (`MappingSet`, `ReadableView`, `InheritanceAwareRemapper` on plain ASM). ❌ remaining: **only** §15.5's **live name environment**, which needs a Minecraft platform to write or validate — see §15.5 | M0, M4, M5 | ✅ param/field/local coloured, unresolved flagged, deprecated struck; ✅ **the §13 checklist is twelve tests** (`BindingChecklistTest`), all passing, including on broken source; ✅ **the remap round-trip runs** — readable-named script → compiled → remapped → linked against `m_1234`, with an override staying an override and a negative control proving a naive remapper does not |
-| **M7** | **Java execution service — the product**: per-script child classloader over the band loader (§6.3), prelude/host-binding injection at runtime, compile-always/run-explicit lifecycle, the output remap pass wired for real (not just M6's fixture) including safepoint injection + host kill switch (§19.3), compiled-script cache `(source hash, mappings hash, band)` (§15.5 D.3), run/stop commands via `CommandRegistry`, disposal — a re-run replaces the loader and nothing pins the old one | M5, M6 | a script authored in the editor runs on explicit command, effect observable in the harness; re-run replaces the instance; kill interrupts a deliberate infinite loop; 100 compile/run/dispose cycles leak no classloaders (heap assertion); the §5.3 proof — compile-and-run with the grammar jars absent, headless |
+| **M7** ✅ | **Java execution service — the product** (`com.crystalgui.language.run`): per-script child classloader over the band loader, prelude/host-binding injection at runtime, compile-always/run-explicit lifecycle, the output remap pass wired for real, **safepoint injection + host kill switch** (§19.3), compiled-script cache `(source hash, mappings hash, band)` (§15.5 D.3) in memory and on disk, run/stop commands via `CommandRegistry`, disposal | M5, M6 | ✅ a script runs on explicit command and its effect is observable; ✅ re-run replaces the instance, and a *running* one is stopped first; ✅ **stop interrupts a deliberate infinite loop** — and a blocked one, from the same call; ✅ **100 compile/run/dispose cycles pin no classloaders**, measured by the scripts reporting their own loaders weakly; ✅ the §5.3 proof, as a bytecode scan with a negative control |
 | **M8** | Decorations + diagnostics UI (§17): tracked ranges with stickiness, squiggle view part, Problems wiring | M0; M6 for real input | stickiness golden tests (Monaco's cases); squiggles stay attached while typing above them; Problems row ↔ document range round-trip |
 | **M9** | Completion (§18): substrate generalisation, matcher+ranking ports, Java providers, type index + auto-import | M6, M8 | `list.forEach(x -> x.|)` completes String members; unimported `ArrayList` inserts import as one undo step; latency within budget on the indexed modpack fixture |
 | **M10** | JS + sandbox (§16, §19): Rhino execution service (reusing M7's lifecycle/commands), parse diagnostics, runtime-introspection completion, member-lookup remapping (§16.1), policy object at all four layers | M5, M7 (execution substrate), M6 (Java resolver for interop), M9 (UI) | `class` syntax gets an engine diagnostic; post-run completion on a live object; a readable-name member call links in a fake-obfuscated fixture; refused type absent from execution *and* completion, one test proving both |
 | **M11** | Resolver affordances + query-family tail: hover popup (`resolveAt` → the `Tooltip`/`Popover` substrate), go-to-definition (declaration site → open at range), `folds.scm` behind the existing `FoldingRangeProvider` SPI, `indents.scm` replacing the "line ends in `{`" rule (`insertNewlineWithIndent` already names its successor), **`locals.scm`** (§13 — scope colouring for the engineless languages), GLSL diagnostics adapter over the shader compiler's existing error output | M3, M6, M8 | hover shows type + doc for a Java symbol; go-to jumps within the script; Java/GLSL fixture folds match the tree, not the indent; a GLSL parameter and a member colour differently with no engine loaded; a GLSL error appears as a squiggle with no new machinery |
 
-Critical path: M0 → M1 → M3, and M0/M4 → M5 → M6 → M7 → M8/M9 → M10 → M11. M2 is the early
+| **M12** | **Platform integration** — the one thing every milestone above deliberately stopped short of. Bring `mc1710/` into the build (it has no `settings.gradle` today and is commented out of the root one), then wire what the plan has been building against a stand-in: §15.5 A's **live name environment** reading post-transform bytes from `LaunchClassLoader` through the transformer chain, §15.5 C's **mapping data** (1.7.10 SRG↔MCP CSVs, `params.csv` for parameter names) with sourcing and licences settled, and the platform's `LanguageServices`/`ScriptHost` wiring. Then the same for `mc1201/` | M7, M11 | a script written in readable names compiles, runs and links **inside a real 1.7.10 client**, against MC classes and a mixin-added member; completion never shows `func_147439_a`; the same script runs unchanged in dev and prod |
+
+Critical path: M0 → M1 → M3, and M0/M4 → M5 → M6 → M7 → M8/M9 → M10 → M11 → M12. M2 is the early
 visible win and touches none of it.
+
+> **M12 is deliberately last, and it is the only milestone that cannot be verified from this build.**
+> Everything before it is provable headlessly — which is why every seam it will plug into was built
+> against a stand-in and says so in its own javadoc: `HostClasspath` names itself the baseline the live
+> name environment replaces, `ReadableView` names the directory it writes as the thing an
+> `INameEnvironment` removes, and `MappingSet.IDENTITY` is the case that makes every non-MC host take
+> the same code path. Doing the platform work earlier would have meant writing code no test in this
+> repository could exercise.
 
 **Completeness contract**: every deliverable named in Parts II–IV either appears in a milestone
 row above or is listed in §22 as deferred/refused. A future edit that adds a promise adds a row
