@@ -334,6 +334,34 @@ compatibility statement. The table's shape survived; three of its numbers did no
   platform (bundled in a mod jar, a loader's `libraries/`, a Gradle configuration in a dev run, absent)
   and none of those changes which version is correct. `EngineSource.NONE` is a real deployment.
 
+> ✅ **The seam carries traffic — a script compiles and runs.** Built at the end of M5 rather than left
+> to M7, because a bridge nothing has crossed is a bridge nobody has checked. `ScriptCompiler` is the
+> bridge interface, `EcjScriptCompiler` the child-loaded adapter, `JavaEngine` the one place they meet,
+> and `ScriptClassLoader` a **host-owned, parent-first** loader for the produced bytes. Seven tests plus
+> the per-band smoke: a script returns a value, uses the JDK, **calls back into a host class**, brings
+> back its nested and anonymous classes, fails legibly when broken, and is *replaced* rather than
+> accumulated on re-run — while the host still cannot name a single ECJ type.
+>
+> **Three findings worth keeping:**
+> 1. **`javax.tools` is not available.** ECJ's `EclipseCompiler` — its `JavaCompiler` implementation,
+>    and the obvious way to compile in memory through a standard API — **is absent from band 8**, along
+>    with the `META-INF/services` registration. An adapter written against it compiles, passes on a
+>    modern JVM, and fails on the one host banding exists for. `BatchCompiler` is public and present in
+>    all three, so that is what the first working path uses.
+> 2. **Compiled bytes cross the bridge, not `Class` objects.** A script must load in a loader the *host*
+>    owns and can drop, or every version of every script is pinned for the engine's lifetime — and the
+>    engine is meant to be long-lived. This is what makes M7's "re-run replaces" achievable rather than
+>    retrofitted; the test asserts the two runs are genuinely different types.
+> 3. **`ScriptClassLoader` is parent-first — the opposite of `EngineClassLoader`, for the opposite
+>    reason.** The engine must beat the host's classpath; a script must never beat it, or a script class
+>    could shadow the API it was handed.
+>
+> **What this is not**: the compiler the editor will use. `BatchCompiler` writes class files to a temp
+> directory, which is fine for "run this" and far too slow per keystroke. M6's path is
+> `org.eclipse.jdt.internal.compiler.Compiler` with an `ICompilerRequestor` collecting bytes and a
+> custom `INameEnvironment` supplying types — which is also exactly where §15.5's obfuscated-name
+> mapping hooks in, and where §23 row 10 gets answered. All three are present in every band (measured).
+
 ### 6.4 The alternative, recorded and rejected
 
 jvmDowngrader *can* downgrade dependency jars — that is its purpose in `mc1710` — so "downgrade
@@ -957,7 +985,7 @@ user-visible value lands early.
 | **M2** ✅ | The scheme axis (§11): font-style carve-out in `HighlightStyle.ALLOWED` — no scoped variant and no editor migration needed, see §11.1 — full `--syntax-*` vocabulary, `islands-dark` + light authored from the exported scheme, default swap | — (parallel to M0/M1) | side-by-side with IntelliJ on the same Java fixture; italic comments and constants; governance tests green |
 | **M3** ✅ | Grammars (§12–13): **six** — `css`, `javascript`, `html`, `glsl`, `xml` beside `java` — vendored with all five platform/arch pairs, registered by extension, fixtured; `injections.scm` wired (html hosts css + js); §10.2's normalization landed as **seven load-time query rewrites**, not a rename map; `EveryShippedGrammarTest` covers parse + capture + registration per grammar. `locals.scm` deferred to M11 with a reason (§13) | M1 | ✅ one fixture per language in `workspace/src/`; html `<style>`/`<script>` bodies coloured as CSS/JS |
 | **M4** ✅ | Module reshape (§5): `language/` rename + `.grammar`, `text.lang` SPIs in `core/` (12 types, interfaces and records only), `LanguageServices` per-document façade, editor consumes-if-present and **overlays semantic tokens over grammar tokens**, document-owned lifecycle (which also fixed `SyntaxTokenizer.close()` never being called), six registrations collapsed to a `Grammar` table | — | ✅ `core:headlessTest` green with no new deps — `LanguageSpiTest` runs the whole SPI with no engine and no grammar on the classpath; harness wires Java end-to-end unchanged; `SemanticOverlayTest` proves absent-services behaves exactly as before |
-| **M5** ✅ | Engine loading (§6): band detection (`EngineBand`), isolated child-first loader with a parent-delegated bridge (`EngineClassLoader`), jar-location seam (`EngineSource`), runtime JLS discovery (`JlsLevel`), pinned ECJ+Rhino per band **including all 13 transitive platform artifacts, constrained by signing era as well as by class-file major**, `checkEngineBands` (floor + signer) in `:language:check`, `smokeEngineBands` under real per-era launchers, `THIRD-PARTY.md` | M4 | ✅ band-selection unit tests incl. the `"1.8"` trap; ✅ isolation proven with two real Rhinos; ✅ **smoke compile+eval green on a real Java 8 JVM and on 17** — Rhino arithmetic, ES2015 and a working `ClassShutter` refusal; JDT resolving `java.util.List<java.lang.String>` against the running VM, and doing it **from broken source**; ✅ §23 rows 3, 4 and 8 closed |
+| **M5** ✅ | Engine loading (§6): band detection (`EngineBand`), isolated child-first loader with a parent-delegated bridge (`EngineClassLoader`), jar-location seam (`EngineSource`), runtime JLS discovery (`JlsLevel`), pinned ECJ+Rhino per band **including all 13 transitive platform artifacts, constrained by signing era as well as by class-file major**, `checkEngineBands` (floor + signer) in `:language:check`, `smokeEngineBands` under real per-era launchers, `THIRD-PARTY.md` | M4 | ✅ band-selection unit tests incl. the `"1.8"` trap; ✅ isolation proven with two real Rhinos; ✅ **smoke compile+eval green on a real Java 8 JVM and on 17** — Rhino arithmetic, ES2015 and a working `ClassShutter` refusal; JDT resolving `java.util.List<java.lang.String>` against the running VM, and doing it **from broken source**; ✅ **and a script compiles to bytecode and RUNS on each band's own JVM**, through the bridge (`ScriptCompiler` → `EcjScriptCompiler` → `ScriptClassLoader`), including a call back into a host class; ✅ §23 rows 3, 4 and 8 closed |
 | **M6** | Java semantics (§15): ECJ diagnostics + semantic tokens + `resolveAt`/`expectedTypeAt`, prelude mapper, classpath probe, reflection overlay, **live name environment + mapping boundary (§15.5)** | M0, M4, M5 | fixture script: param/field/local coloured, unresolved flagged, deprecated struck; broken-code partial answers pass the §13-checklist tests; **remap round-trip: a script authored in readable names compiles, links and runs against a fixture class whose runtime members carry synthetic "obfuscated" names, through a fake mapping set** — all headless |
 | **M7** | **Java execution service — the product**: per-script child classloader over the band loader (§6.3), prelude/host-binding injection at runtime, compile-always/run-explicit lifecycle, the output remap pass wired for real (not just M6's fixture) including safepoint injection + host kill switch (§19.3), compiled-script cache `(source hash, mappings hash, band)` (§15.5 D.3), run/stop commands via `CommandRegistry`, disposal — a re-run replaces the loader and nothing pins the old one | M5, M6 | a script authored in the editor runs on explicit command, effect observable in the harness; re-run replaces the instance; kill interrupts a deliberate infinite loop; 100 compile/run/dispose cycles leak no classloaders (heap assertion); the §5.3 proof — compile-and-run with the grammar jars absent, headless |
 | **M8** | Decorations + diagnostics UI (§17): tracked ranges with stickiness, squiggle view part, Problems wiring | M0; M6 for real input | stickiness golden tests (Monaco's cases); squiggles stay attached while typing above them; Problems row ↔ document range round-trip |

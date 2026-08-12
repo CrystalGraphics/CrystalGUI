@@ -137,6 +137,17 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 
+    // THE ADAPTER COMPILES AGAINST THE OLDEST BAND, AND ONLY THE OLDEST (§6.3). `compileOnly`, so it
+    // never reaches a runtime classpath -- at run time the engine comes from EngineClassLoader and this
+    // artifact is not there at all. Pinning band 8's version here is what turns "one adapter across
+    // three bands" into a compile-time guarantee: an API added after 3.26.0 fails the build rather than
+    // failing on a Java 8 host months later.
+    //
+    // Note this is jdt.core ALONE, without band 8's platform closure. The adapter uses the compiler,
+    // not the workspace, and pulling the closure in would let it reach APIs that happen to resolve here
+    // and are absent from a real deployment's loader.
+    compileOnly("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8")
+
     // ── The engine bands (plan_syntax.md §6) ────────────────────────────────────────────────────
     //
     // DELIBERATELY NOT ON ANY COMPILE OR RUNTIME CLASSPATH. These configurations are resolvable and
