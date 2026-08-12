@@ -136,10 +136,16 @@ public class RunTestFixtureTest {
                 assertTrue("the fixture never reached '" + section + "'", output.contains(section));
             }
 
-            assertFalse("a section threw — see the transcript:\n" + output, output.contains("!! threw"));
+            // "!!" IS THE FIXTURE'S ONE MARK FOR A DEFECT, and this asserts on the mark rather than on
+            // any particular failure. The narrower version -- "no section threw" -- had a hole exactly
+            // the size of a section that catches its own exception: the reflection section logged
+            // "reflection failed" for a full run and the test passed, because nothing had propagated.
+            assertFalse("a section reported a failure -- see the transcript:\n" + output,
+                    output.contains("!!"));
 
             // A few values, so "it printed something" is not the whole assertion.
             assertTrue(output.contains("overflow wraps to"));
+            assertTrue("reflective invocation did not happen", output.contains("reflective call"));
             assertTrue("threads did not all finish", output.contains("4000"));
             assertTrue("BigDecimal section did not run", output.contains("0.3"));
         } finally {
