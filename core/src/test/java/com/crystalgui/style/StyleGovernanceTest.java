@@ -17,9 +17,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -288,6 +291,57 @@ public class StyleGovernanceTest {
     public void eachThemeAndSchemePairDefinesTheSameKeys() {
         assertSameKeys(THEMES + "crystal-dark.css", THEMES + "crystal-light.css");
         assertSameKeys(SCHEMES + "dark-plus.css", SCHEMES + "light-plus.css");
+        assertSameKeys(SCHEMES + "islands-dark.css", SCHEMES + "islands-light.css");
+    }
+
+    /**
+     * <b>Every shipped scheme defines every key, not merely every pair.</b>
+     *
+     * <p>Pairing alone is not enough once there is more than one pair: two schemes could each be
+     * internally consistent and disagree with each other, and switching between them would leave whichever
+     * token only one of them names resolving to its {@code var()} fallback — i.e. silently reverting to
+     * Dark+'s colour in the middle of an IntelliJ palette. The fallback is there so an editor with NO
+     * scheme still reads, not so a scheme can be half-written.</p>
+     */
+    @Test
+    public void everySchemeDefinesTheSameKeysAsEveryOther() {
+        List<String> schemes = shippedSchemes();
+        assertTrue("expected several schemes to compare, found " + schemes, schemes.size() > 1);
+
+        String reference = schemes.get(0);
+        for (String scheme : schemes.subList(1, schemes.size())) {
+            assertSameKeys(SCHEMES + reference, SCHEMES + scheme);
+        }
+    }
+
+    /**
+     * The schemes actually on disk — <b>discovered, never listed</b>, so adding one cannot skip these
+     * checks by being forgotten in a constant.
+     *
+     * <p>A hardcoded list is exactly what {@code StylePropertyRegistry} demonstrates going stale
+     * silently: the new entry is a one-line addition somewhere else and nothing links the two. Three of
+     * its properties were missing for a full release cycle that way.</p>
+     */
+    private static List<String> shippedSchemes() {
+        Path dir = schemesDir();
+        try (Stream<Path> files = Files.list(dir)) {
+            return files.map(path -> path.getFileName().toString())
+                    .filter(name -> name.endsWith(".css"))
+                    .sorted()
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new RuntimeException("cannot list " + dir, e);
+        }
+    }
+
+    private static Path schemesDir() {
+        String relative = "src/main/resources/assets/crystalgui/ui/schemes";
+        Path fromModule = Path.of(relative);
+        if (Files.isDirectory(fromModule)) return fromModule;
+        Path fromRoot = Path.of("core").resolve(relative);
+        assertTrue("cannot locate the schemes directory from " + Path.of("").toAbsolutePath(),
+                Files.isDirectory(fromRoot));
+        return fromRoot;
     }
 
     private static void assertSameKeys(String darkFile, String lightFile) {
@@ -316,7 +370,7 @@ public class StyleGovernanceTest {
     @Test
     public void theSchemeAndThemeAxesStayApart() {
         List<String> offences = new ArrayList<>();
-        for (String scheme : List.of("dark-plus.css", "light-plus.css")) {
+        for (String scheme : shippedSchemes()) {
             definitionsOf(load(SCHEMES + scheme)).forEach((name, value) -> {
                 if (SCHEME_TOKEN_PREFIXES.stream().noneMatch(name::startsWith)) {
                     offences.add(scheme + " defines a non-scheme token: " + name);
@@ -329,6 +383,94 @@ public class StyleGovernanceTest {
             }
         });
         assertTrue(String.join("\n", offences), offences.isEmpty());
+    }
+
+    // ── rule 7b: every capture a grammar can emit has a colour ──────────────────────────────────
+
+    /**
+     * <b>Every {@code --syntax-*} token the UA sheet reads is defined by every scheme.</b>
+     *
+     * <p>This is the highest-value check here because the failure it catches is <em>invisible</em>. A
+     * capture with no colour renders as body text, which looks exactly like a capture the grammar never
+     * produced — so "my Java has no operators highlighted" and "the grammar does not capture operators"
+     * are indistinguishable on screen, and only one of them is a bug.</p>
+     *
+     * <p>It caught six on the day it was written: {@code operator}, {@code attribute}, {@code variable},
+     * {@code constant}, {@code property} and {@code tag}. Six rules had been thought sufficient because
+     * {@code generalName()} folds a specialisation onto its stem — true, but only for names that HAVE a
+     * stem, and none of those six do.</p>
+     */
+    @Test
+    public void everySyntaxTokenTheSheetReadsIsDefinedByEveryScheme() {
+        Set<String> read = new TreeSet<>();
+        for (String part : userAgentParts()) {
+            Matcher matcher = Pattern.compile("var\\((--syntax-[a-z-]+)")
+                    .matcher(stripComments(load(STYLES + part)));
+            while (matcher.find()) read.add(matcher.group(1));
+        }
+        assertFalse("the sheet reads no --syntax-* tokens at all; the query is wrong", read.isEmpty());
+
+        List<String> offences = new ArrayList<>();
+        for (String scheme : shippedSchemes()) {
+            Set<String> defined = definitionsOf(load(SCHEMES + scheme)).keySet();
+            for (String token : read) {
+                if (!defined.contains(token)) {
+                    offences.add(scheme + " never defines " + token + ", which the UA sheet reads");
+                }
+            }
+        }
+        assertTrue(String.join("\n", offences), offences.isEmpty());
+    }
+
+    /**
+     * <b>Every capture name in a shipped {@code highlights.scm} is styled.</b>
+     *
+     * <p>The other half of the rule above, from the grammar's end rather than the sheet's: a new grammar
+     * introducing a capture nobody has coloured is the same invisible failure, arriving from the opposite
+     * direction. Satisfied either by a rule for the name itself or by one for its dotted general form,
+     * which is what {@code SyntaxToken.generalName()} falls back to.</p>
+     */
+    @Test
+    public void everyCaptureInAShippedGrammarHasAColour() {
+        Path queries = syntaxQueriesDir();
+        if (!Files.isDirectory(queries)) return;      // the grammar module is not in this build
+
+        Set<String> styled = new TreeSet<>();
+        for (String part : userAgentParts()) {
+            Matcher matcher = Pattern.compile("::highlight\\(([a-z.]+)\\)")
+                    .matcher(stripComments(load(STYLES + part)));
+            while (matcher.find()) styled.add(matcher.group(1));
+        }
+
+        List<String> offences = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(queries)) {
+            for (Path file : files.filter(p -> p.getFileName().toString().equals("highlights.scm")).toList()) {
+                String scm = Files.readString(file, StandardCharsets.UTF_8);
+                Matcher matcher = Pattern.compile("@([a-z][a-z.]*)").matcher(scm);
+                while (matcher.find()) {
+                    String capture = matcher.group(1);
+                    if (styled.contains(capture) || styled.contains(generalNameOf(capture))) continue;
+                    offences.add(file.getFileName() + " emits @" + capture
+                            + " (" + file.getParent().getFileName() + "), which nothing styles");
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        assertTrue(String.join("\n", new TreeSet<>(offences)), offences.isEmpty());
+    }
+
+    /** Mirrors {@code SyntaxToken.generalName()} — the dotted fallback a theme relies on. */
+    private static String generalNameOf(String capture) {
+        int dot = capture.lastIndexOf('.');
+        return dot <= 0 ? "" : capture.substring(0, dot);
+    }
+
+    private static Path syntaxQueriesDir() {
+        String relative = "src/main/resources/assets/crystalgui/syntax";
+        Path fromModule = Path.of("../syntax-treesitter").resolve(relative);
+        if (Files.isDirectory(fromModule)) return fromModule;
+        return Path.of("syntax-treesitter").resolve(relative);
     }
 
     // ── rule 8: the UA sheet's own three rules ──────────────────────────────────────────────────

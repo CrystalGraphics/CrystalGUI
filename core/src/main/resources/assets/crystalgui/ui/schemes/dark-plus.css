@@ -59,12 +59,48 @@ theme {
     --find-match-fg: #1B1B1B;
     --search-excluded-fg: #7A7A7A;
 
-    /* ── Syntax — the six general names every tokenizer falls back to ── */
+    /* ── Syntax — the full capture vocabulary ──
+     *
+     * Six general names used to be here, on the reasoning that generalName() folds every specialisation
+     * onto its stem. It does — but only for names that HAVE a stem. `operator`, `attribute`, `variable`,
+     * `constant`, `property` and `tag` have none, so the Java grammar's captures for them fell through to
+     * body text: not "unthemed", invisible, and indistinguishable from a capture the grammar never made.
+     * StyleGovernanceTest now fails the build if a shipped grammar emits a name no scheme colours. */
     --syntax-keyword: #569CD6;
+    --syntax-keyword-control: #C586C0;
+    --syntax-keyword-operator: #569CD6;
     --syntax-type: #4EC9A0;
+    --syntax-type-builtin: #569CD6;
     --syntax-function: #DCDCAA;
+    --syntax-function-builtin: #DCDCAA;
+    --syntax-function-method: #DCDCAA;
     --syntax-string: #CE9178;
+    --syntax-string-escape: #D7BA7D;
+    --syntax-string-special: #D7BA7D;
     --syntax-number: #B5CEA8;
+    --syntax-boolean: #569CD6;
+    --syntax-constant: #4FC1FF;
+    --syntax-constant-builtin: #569CD6;
     --syntax-comment: #6A9955;
+    --syntax-comment-doc: #6A9955;
+    --syntax-variable: #9CDCFE;
+    --syntax-variable-builtin: #569CD6;
+    --syntax-variable-parameter: #9CDCFE;
+    --syntax-variable-member: #9CDCFE;
+    --syntax-property: #9CDCFE;
+    --syntax-attribute: #9CDCFE;
+    --syntax-tag: #569CD6;
+    --syntax-operator: #D4D4D4;
+    --syntax-punctuation: #808080;
+    --syntax-punctuation-bracket: #808080;
+    --syntax-punctuation-delimiter: #808080;
+
+    /* NOT a colour, and the one scheme token that is not: comments are italic in every reference scheme,
+     * and a scheme that wants them upright says so here rather than by overriding the rule. Dark+ itself
+     * does not italicise, so this is the one place this scheme departs from VS Code — the alternative was
+     * shipping the mechanism with nothing exercising it. */
+    --syntax-comment-style: normal;
+
+    /* The bracket-MATCH highlight, which is not a capture — it is the pair under the caret. */
     --syntax-bracket: #4EC9A0;
 }

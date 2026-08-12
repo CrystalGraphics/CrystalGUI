@@ -209,33 +209,143 @@ texteditor text::highlight(bracket) {
  * cascade, and rendered in the default colour. That is not "unthemed": with no rule here, choosing a
  * language does nothing observable at all, and the bug reads as the tokenizer failing.
  *
- * The names are what SyntaxTokenizer emits. SyntaxToken.generalName() falls back from `function.builtin`
- * to `function`, so a sheet that names only the general forms still colours every specialisation —
- * which is why these six are enough for any tokenizer, including a future tree-sitter one.
+ * The names are what SyntaxTokenizer emits — tree-sitter capture names, the vocabulary shared by every
+ * published highlights.scm. SyntaxToken.generalName() falls back from `function.builtin` to `function`,
+ * so a specialisation with no rule of its own still colours as its general form.
  *
- * VS Code's Dark+ values, matching the diagnostic colours already in this sheet. */
+ * THAT FALLBACK IS WHY SIX RULES USED TO LOOK SUFFICIENT AND WERE NOT. It only fires for a name that HAS
+ * a general form: `@operator`, `@attribute`, `@variable`, `@constant`, `@property` and `@tag` have none,
+ * so the Java grammar's captures for them fell through to body text — indistinguishable from a capture
+ * the grammar never produced, which is precisely the invisible half of this trap. Every name in the
+ * vocabulary now has a rule, and StyleGovernanceTest fails the build if a shipped grammar introduces one
+ * that does not.
+ *
+ * Every colour is var(--syntax-*, <Dark+ fallback>) so an editor with no scheme loaded still reads. */
 texteditor text::highlight(keyword) {
     color: var(--syntax-keyword, #569CD6);
+}
+
+texteditor text::highlight(keyword.control) {
+    color: var(--syntax-keyword-control, #C586C0);
+}
+
+texteditor text::highlight(keyword.operator) {
+    color: var(--syntax-keyword-operator, #569CD6);
 }
 
 texteditor text::highlight(type) {
     color: var(--syntax-type, #4EC9A0);
 }
 
+texteditor text::highlight(type.builtin) {
+    color: var(--syntax-type-builtin, #569CD6);
+}
+
 texteditor text::highlight(function) {
     color: var(--syntax-function, #DCDCAA);
+}
+
+texteditor text::highlight(function.builtin) {
+    color: var(--syntax-function-builtin, #DCDCAA);
+}
+
+texteditor text::highlight(function.method) {
+    color: var(--syntax-function-method, #DCDCAA);
 }
 
 texteditor text::highlight(string) {
     color: var(--syntax-string, #CE9178);
 }
 
+texteditor text::highlight(string.escape) {
+    color: var(--syntax-string-escape, #D7BA7D);
+}
+
+texteditor text::highlight(string.special) {
+    color: var(--syntax-string-special, #D7BA7D);
+}
+
 texteditor text::highlight(number) {
     color: var(--syntax-number, #B5CEA8);
 }
 
+texteditor text::highlight(boolean) {
+    color: var(--syntax-boolean, #569CD6);
+}
+
+texteditor text::highlight(constant) {
+    color: var(--syntax-constant, #4FC1FF);
+}
+
+texteditor text::highlight(constant.builtin) {
+    color: var(--syntax-constant-builtin, #569CD6);
+}
+
+/* COMMENTS CARRY font-style, which every reference scheme sets and this engine refused until now.
+ * `::highlight()` accepting it is a deliberate divergence from CSS Pseudo-Elements 4 — argued at
+ * HighlightStyle.ALLOWED, and permissible here because a highlight already re-shapes, so the overlay
+ * premise the spec's restriction rests on does not hold. */
 texteditor text::highlight(comment) {
     color: var(--syntax-comment, #6A9955);
+    font-style: var(--syntax-comment-style, italic);
+}
+
+texteditor text::highlight(comment.doc) {
+    color: var(--syntax-comment-doc, #6A9955);
+    font-style: var(--syntax-comment-style, italic);
+}
+
+/* ── Identifiers ──
+ *
+ * A grammar cannot tell a field from a local by itself; `locals.scm` can, within a file, and semantic
+ * tokens can across one. These are the names both produce, so the colours are in place before either
+ * lands rather than arriving with them. */
+texteditor text::highlight(variable) {
+    color: var(--syntax-variable, #9CDCFE);
+}
+
+texteditor text::highlight(variable.builtin) {
+    color: var(--syntax-variable-builtin, #569CD6);
+}
+
+texteditor text::highlight(variable.parameter) {
+    color: var(--syntax-variable-parameter, #9CDCFE);
+}
+
+texteditor text::highlight(variable.member) {
+    color: var(--syntax-variable-member, #9CDCFE);
+}
+
+texteditor text::highlight(property) {
+    color: var(--syntax-property, #9CDCFE);
+}
+
+texteditor text::highlight(attribute) {
+    color: var(--syntax-attribute, #9CDCFE);
+}
+
+texteditor text::highlight(tag) {
+    color: var(--syntax-tag, #569CD6);
+}
+
+/* ── Punctuation ──
+ *
+ * Dimmer than the code around it, deliberately: brackets and separators are structure the eye uses to
+ * navigate and should not compete with the names. IntelliJ and Dark+ agree on this. */
+texteditor text::highlight(operator) {
+    color: var(--syntax-operator, #D4D4D4);
+}
+
+texteditor text::highlight(punctuation) {
+    color: var(--syntax-punctuation, #808080);
+}
+
+texteditor text::highlight(punctuation.bracket) {
+    color: var(--syntax-punctuation-bracket, #808080);
+}
+
+texteditor text::highlight(punctuation.delimiter) {
+    color: var(--syntax-punctuation-delimiter, #808080);
 }
 
 /* THE ACTIVE GUIDE — the block the caret is actually inside, which IntelliJ draws brighter than the rest.

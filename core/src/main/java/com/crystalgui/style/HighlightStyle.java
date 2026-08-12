@@ -2,6 +2,8 @@ package com.crystalgui.style;
 
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.text.FontStyle;
+import com.crystalgui.style.property.visual.text.FontWeight;
 import com.crystalgui.style.property.visual.text.TextDecorationLine;
 
 import java.util.Collections;
@@ -44,7 +46,25 @@ public final class HighlightStyle {
     public static final Set<StyleProperty<?>> ALLOWED = Set.of(
             StylePropertyRegistry.COLOR,
             StylePropertyRegistry.BACKGROUND_COLOR,
-            StylePropertyRegistry.TEXT_DECORATION_LINE);
+            StylePropertyRegistry.TEXT_DECORATION_LINE,
+            // font-weight and font-style are a DELIBERATE DIVERGENCE from CSS Pseudo-Elements 4, which
+            // allows a highlight only properties that cannot reflow the text it highlights.
+            //
+            // The spec's reason does not hold here, and that is the whole argument. On the web a highlight
+            // is a pure overlay painted over already-laid-out text, so permitting a wider face would mean a
+            // highlight could move the very glyphs it is highlighting. In this engine a highlight ALREADY
+            // re-shapes -- a span boundary is a shaping-run boundary, which UIText's own javadoc records --
+            // so the premise the restriction rests on is false for us. The incremental risk is that a
+            // WRAPPING label could re-wrap; the incremental gain is that a code editor can express its
+            // scheme at all, and every reference scheme in existence italicises comments.
+            //
+            // Refusing them instead would have meant an editor colour scheme that silently cannot say what
+            // IntelliJ's, VS Code's and Zed's all say. Allowing them and then dropping them where reflow is
+            // possible would be worse still -- that is the "resolves but paints nothing" class this file
+            // exists to prevent, and it is why there is no ALLOWED_IN_EDITOR variant: one rule, applied
+            // everywhere, is the only version nobody has to remember.
+            StylePropertyRegistry.FONT_WEIGHT,
+            StylePropertyRegistry.FONT_STYLE);
 
     /**
      * Allowed by CSS on a highlight pseudo-element, <b>not yet paintable here</b> — a different failure
@@ -106,6 +126,24 @@ public final class HighlightStyle {
 
     public Set<TextDecorationLine> decorations() {
         return get(StylePropertyRegistry.TEXT_DECORATION_LINE, Collections.emptySet());
+    }
+
+    /**
+     * Whether this range is bold, falling back to the originating element's weight.
+     *
+     * <p>The fallback is what keeps a bold label bold across the three characters a search happened to
+     * match: a highlight that says nothing about weight must not silently make its range lighter than
+     * the text around it.</p>
+     */
+    public boolean isBold(boolean inherited) {
+        FontWeight weight = get(StylePropertyRegistry.FONT_WEIGHT, null);
+        return weight == null ? inherited : weight.isBold();
+    }
+
+    /** Whether this range is italic, falling back to the originating element's style. See {@link #isBold}. */
+    public boolean isItalic(boolean inherited) {
+        FontStyle style = get(StylePropertyRegistry.FONT_STYLE, null);
+        return style == null ? inherited : style.isItalic();
     }
 
     @Override
