@@ -122,6 +122,8 @@ theme {
     --syntax-constructor: #BCBEC4;
     --syntax-embedded: #BCBEC4;
     --syntax-label: #CF8E6D;
+    --syntax-markup: #BCBEC4;
+    --syntax-error: #F75464;
 
     --syntax-operator: #BCBEC4;
     --syntax-punctuation: #BCBEC4;

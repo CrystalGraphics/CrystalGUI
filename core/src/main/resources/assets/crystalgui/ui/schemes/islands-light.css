@@ -94,6 +94,8 @@ theme {
     --syntax-constructor: #080808;
     --syntax-embedded: #080808;
     --syntax-label: #0033B3;
+    --syntax-markup: #080808;
+    --syntax-error: #E00000;
 
     --syntax-operator: #000000;
     --syntax-punctuation: #000000;

@@ -73,5 +73,10 @@ public final class TreeSitterLanguages {
         LanguageRegistry.registerExtensions(
                 new LanguageRegistry.Entry(Language.GLSL, () -> TreeSitterTokenizer.glsl(scheduler)),
                 "glsl", "vert", "frag", "geom", "tesc", "tese", "comp", "shader");
+        // The XML family, by extension rather than by content: an .svg and a .xsd are XML documents and
+        // parse as such, and nothing here needs to know what schema they follow.
+        LanguageRegistry.registerExtensions(
+                new LanguageRegistry.Entry(Language.PLAIN, () -> TreeSitterTokenizer.xml(scheduler)),
+                "xml", "xsd", "xsl", "xslt", "svg", "plist", "wsdl");
     }
 }
