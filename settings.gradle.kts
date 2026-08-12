@@ -8,7 +8,7 @@ include("gl-debug-harness")
 //
 // It stays a SEPARATE module regardless: core/ must remain loadable on a dedicated server with no GL and
 // no native libraries, so core/ owns the SyntaxTokenizer interface and nothing that needs a .dll/.so.
-include("syntax-treesitter")
+include("language")
 
 includeBuild("CrystalGraphics") {
     dependencySubstitution {

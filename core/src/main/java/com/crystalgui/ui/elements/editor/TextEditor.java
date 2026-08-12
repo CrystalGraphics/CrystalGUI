@@ -30,6 +30,8 @@ import com.crystalgui.text.Selection;
 import com.crystalgui.text.SelectionModel;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.syntax.SyntaxToken;
+import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.lang.SemanticTokenProvider;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.text.HighlightRegistry;
@@ -315,6 +317,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * which means "never asked". Conflating them re-queries blank lines forever.</p>
      */
     private final Map<Integer, List<SyntaxToken>> rowSyntax = new HashMap<>();
+
+    /**
+     * The engine behind this document, or null — and null is the ordinary case.
+     *
+     * <p>Held rather than owned: the lifecycle belongs to the <em>document</em>, so the same file in two
+     * split panes is two editors sharing one of these. That is why {@link #setLanguageServices} does not
+     * close what it replaces — see its note.</p>
+     */
+    @Nullable
+    private LanguageServices languageServices;
 
     /** Search hits, in document offsets. Published under {@code ::highlight(search)}. */
     private final List<TextRange> searchMatches = new ArrayList<>();
@@ -1487,6 +1499,68 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /**
+     * Attaches an engine, or detaches one with null.
+     *
+     * <h3>This editor does not own what it is given</h3>
+     *
+     * <p>The old services are <b>not closed</b> here, only unsubscribed. Services belong to the document
+     * ({@link LanguageServices}), and the same file open in two panes is two editors holding one set —
+     * so closing on replacement would release a compiler still in use by the other view. The owner is
+     * whoever created it, which today is {@code TextFileDocument}.</p>
+     *
+     * <p>The subscription is the same one {@link #setTokenizer} makes and for the same reason: a compile
+     * lands without the document changing, so nothing else would ever prompt a re-query and the semantic
+     * colours would sit one compile behind until an unrelated repaint.</p>
+     */
+    public TextEditor setLanguageServices(@Nullable LanguageServices services) {
+        if (this.languageServices == services) return this;
+        if (this.languageServices != null) {
+            this.languageServices.semanticTokens().setInvalidationListener(null);
+        }
+        this.languageServices = services;
+        if (services != null) {
+            services.semanticTokens().setInvalidationListener((fromOffset, toOffset) -> {
+                invalidateRowSyntax(fromOffset, toOffset);
+                highlightsDirty = true;
+            });
+        }
+        rowSyntax.clear();
+        highlightsDirty = true;
+        highlightedFrom = -1;
+        highlightedTo = -1;
+        return this;
+    }
+
+    /** The engine behind this document, or null. @see LanguageServices */
+    @Nullable
+    public LanguageServices languageServices() {
+        return languageServices;
+    }
+
+    /**
+     * Releases what this editor's own document work holds — the tokenizer's natives and the engine.
+     *
+     * <p><b>Not called from the widget's own teardown</b>, deliberately. A widget can be removed from the
+     * tree and re-added, and a dock rebuild does exactly that on every split and drag; closing the parse
+     * tree there would free natives for a document that is still open and rebuild them on the next frame.
+     * The document is what ends, so the document calls this — {@code TextFileDocument.dispose()}.</p>
+     *
+     * <p>Idempotent, because the paths that reach it overlap: a file deleted while its tab is open can
+     * plausibly arrive from both ends.</p>
+     */
+    public void disposeLanguage() {
+        tokenizer.setInvalidationListener(null);
+        tokenizer.close();
+        tokenizer = SyntaxTokenizer.NONE;
+        if (languageServices != null) {
+            languageServices.semanticTokens().setInvalidationListener(null);
+            languageServices.close();
+            languageServices = null;
+        }
+        rowSyntax.clear();
+    }
+
+    /**
      * Re-highlights the rows on screen.
      *
      * <p><b>Bounded to the realised rows.</b> The editor already knows which lines exist as elements, so
@@ -1642,7 +1716,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * covers.</p>
      */
     private void ensureRowSyntax(int firstViewLine, int lastViewLine) {
-        if (tokenizer == SyntaxTokenizer.NONE) return;
+        SemanticTokenProvider semantic = languageServices == null
+                ? SemanticTokenProvider.NONE : languageServices.semanticTokens();
+        if (tokenizer == SyntaxTokenizer.NONE && semantic == SemanticTokenProvider.NONE) return;
 
         int firstMissing = Integer.MAX_VALUE;
         int lastMissing = -1;
@@ -1673,6 +1749,46 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         for (SyntaxToken token : tokenizer.tokenize(buffer.document(), spanStart, spanEnd)) {
             distributeToRows(token, firstMissing, lastMissing);
+        }
+
+        // SEMANTIC TOKENS LAND SECOND AND WIN. Both sources speak the same capture vocabulary and describe
+        // the same spans; the difference is that the grammar guessed from shape and the engine knows. So a
+        // parameter the grammar called `variable` becomes `variable.parameter`, and that is the entire
+        // value of having an engine colour anything.
+        //
+        // Merged into the SAME per-row bucket rather than kept as a second layer, because the paint path
+        // takes one list per row and the overlap rule has to be decided somewhere -- a second list would
+        // push that decision into refreshHighlights, where two ranges under different names overlapping is
+        // exactly the shape that crashed HighlightRegistry once already.
+        for (SyntaxToken token : semantic.tokensIn(spanStart, spanEnd)) {
+            overrideInRows(token, firstMissing, lastMissing);
+        }
+    }
+
+    /**
+     * Files one semantic token under every row it covers, displacing whatever the grammar had said there.
+     *
+     * <p>{@link #distributeToRows}' twin, differing in one line: any cached token this one overlaps is
+     * removed first. Appending instead would leave both, and which colour won would then depend on the
+     * order the paint path happened to walk the list in — the same class of bug as the capture-precedence
+     * one, and just as invisible, since both names are legitimate and both resolve to a real colour.</p>
+     */
+    private void overrideInRows(SyntaxToken token, int firstRow, int lastRow) {
+        int startRow = buffer.document().offsetToPoint(clampToDocument(token.start())).row();
+        int endRow = buffer.document().offsetToPoint(
+                clampToDocument(Math.max(token.start(), token.end() - 1))).row();
+        for (int row = Math.max(startRow, firstRow); row <= Math.min(endRow, lastRow); row++) {
+            List<SyntaxToken> bucket = rowSyntax.get(row);
+            if (bucket == null) continue;
+            int rowStart = buffer.document().lineStartOffset(row);
+            int rowEnd = rowStart + buffer.line(row).length();
+            int start = Math.max(token.start(), rowStart) - rowStart;
+            int end = Math.min(token.end(), rowEnd) - rowStart;
+            if (end <= start) continue;
+            final int from = start;
+            final int to = end;
+            bucket.removeIf(existing -> from < existing.end() && existing.start() < to);
+            bucket.add(new SyntaxToken(from, to, token.name()));
         }
     }
 

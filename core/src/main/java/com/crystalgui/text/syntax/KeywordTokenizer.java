@@ -22,10 +22,24 @@ import java.util.Set;
  * are much stronger evidence than one implementation with expectations written to match it.</p>
  *
  * <h3>What it cannot do, stated plainly</h3>
- * <p>It has no idea what anything <em>is</em>. It cannot tell a type from a variable, a call from a
- * declaration, or a field from a local — all of which need a parse. It highlights the four things a
- * regular language can actually recognise: comments, strings, numbers and a fixed keyword set. Anything
- * beyond that is why tree-sitter is worth a native dependency.</p>
+ * <p>It has no idea what anything <em>is</em>. It highlights the four things a regular language can
+ * actually recognise: comments, strings, numbers and a fixed keyword set. Anything beyond that is why
+ * tree-sitter is worth a native dependency.</p>
+ *
+ * <p><b>There are three tiers, and the two things above this one fail differently</b>, which is worth
+ * separating because it decides where a missing colour has to be fixed:</p>
+ *
+ * <ul>
+ *   <li><b>This</b> — comments, strings, numbers, keywords. Every identifier is one colour.</li>
+ *   <li><b>A grammar</b> ({@code SyntaxTokenizer} from the language module) sees <em>shape</em>, so it
+ *       separates a declaration from a call and a constructor from a method. It still cannot separate a
+ *       field from a local, because nothing in the shape of {@code count} says which it is.</li>
+ *   <li><b>An engine</b> ({@link com.crystalgui.text.lang.SemanticTokenProvider}) has resolved the names,
+ *       so it can. That is the whole reason the semantic layer colours anything at all.</li>
+ * </ul>
+ *
+ * <p>Each tier is absent independently and each absence is silent. This one is what remains when both of
+ * the others are — which is the case on a dedicated server, and the reason this file is not deleted.</p>
  */
 public final class KeywordTokenizer implements SyntaxTokenizer {
 

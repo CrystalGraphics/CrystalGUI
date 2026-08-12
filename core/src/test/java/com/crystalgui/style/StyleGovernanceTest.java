@@ -1,6 +1,7 @@
 package com.crystalgui.style;
 
 import com.crystalgui.style.sheet.StyleSheetRegistry;
+import com.crystalgui.text.lang.SymbolKind;
 
 import org.junit.Test;
 
@@ -467,6 +468,38 @@ public class StyleGovernanceTest {
     }
 
     /**
+     * <b>Every {@link SymbolKind} an engine can report is a capture something colours.</b>
+     *
+     * <p>The third direction into the same rule, and the one that arrives without a grammar. A semantic
+     * token provider names its colours through {@link SymbolKind#captureName()} rather than spelling them,
+     * so that bridge is a capture producer exactly like a {@code highlights.scm} — and it is not covered by
+     * the test above, because there is no file to scan. A kind whose capture nothing styles renders the
+     * resolved symbol as body text: the engine ran, the answer was right, and the screen is unchanged.</p>
+     *
+     * <p>Runs with no engine and no grammar module present, because both sides of it are in {@code core/}.
+     * {@code LanguageSpiTest} asserts the other half — that no kind answers with an empty or malformed
+     * name — from {@code headlessTest}, where the schemes are unreachable.</p>
+     */
+    @Test
+    public void everySymbolKindNamesACaptureTheSheetColours() {
+        Set<String> styled = new TreeSet<>();
+        for (String part : userAgentParts()) {
+            Matcher matcher = Pattern.compile("::highlight\\(([a-z.]+)\\)")
+                    .matcher(stripComments(load(STYLES + part)));
+            while (matcher.find()) styled.add(matcher.group(1));
+        }
+        assertFalse("the sheet styles no highlights at all; the query is wrong", styled.isEmpty());
+
+        List<String> offences = new ArrayList<>();
+        for (SymbolKind kind : SymbolKind.values()) {
+            String capture = kind.captureName();
+            if (styled.contains(capture) || styled.contains(generalNameOf(capture))) continue;
+            offences.add("SymbolKind." + kind + " colours as @" + capture + ", which nothing styles");
+        }
+        assertTrue(String.join("\n", offences), offences.isEmpty());
+    }
+
+    /**
      * Capture synonyms folded before the query reaches a scheme.
      *
      * <p><b>Mirrors {@code Queries.normalizeCaptureDialect} in the syntax module</b>, which is not on this
@@ -489,9 +522,9 @@ public class StyleGovernanceTest {
 
     private static Path syntaxQueriesDir() {
         String relative = "src/main/resources/assets/crystalgui/syntax";
-        Path fromModule = Path.of("../syntax-treesitter").resolve(relative);
+        Path fromModule = Path.of("../language").resolve(relative);
         if (Files.isDirectory(fromModule)) return fromModule;
-        return Path.of("syntax-treesitter").resolve(relative);
+        return Path.of("language").resolve(relative);
     }
 
     // ── rule 8: the UA sheet's own three rules ──────────────────────────────────────────────────
