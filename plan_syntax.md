@@ -39,20 +39,20 @@ direction it wastes a milestone. Re-audited:
 | `Language` / `LanguageRegistry` | ✅ | comments, bracket pairs, extension→entry |
 | `KeywordTokenizer` | ✅ keep | the no-natives fallback; `core/` must load on a dedicated server |
 | `TreeSitterTokenizer` | ⚠️ **works, does not scale** | four concrete defects, §9.1 |
-| Grammars | ✅ **java, css, javascript, html** (M3) | `lib/tree-sitter/`, 5 platform/arch pairs each. **glsl outstanding** — the only one the fork has no subproject for |
+| Grammars | ✅ **six: java, css, javascript, html, glsl, xml** (M3) | `lib/tree-sitter/`, 5 platform/arch pairs each; injections wired; `locals.scm` deferred to M11 (§13) |
 | Schemes | ✅ **Islands Dark/Light** (M2), default | authored from the exported `ij-scheme/`; Dark+/Light+ still shipped and selectable |
 | Paint path | ✅ | captures → `::highlight(name)` → `CgStyleSpan`; per-view-line clipping in `refreshHighlights` |
 | **Background work model** | ✅ **M0** | `com.crystalgui.core.async` — lanes, keyed single-flight, debounce, cancellation, drain-on-tick |
-| **Tracked ranges (decorations)** | ❌ still does not exist | every range-owner is bespoke; nothing survives an edit except by re-derivation. **M7** |
+| **Tracked ranges (decorations)** | ❌ still does not exist | every range-owner is bespoke; nothing survives an edit except by re-derivation. **M8** |
 | **Per-row token cache** | ✅ **M1b** | keyed by model row; idle frames and scroll-back ask nothing |
 | **Semantic layer** (resolver, diagnostics, completion) | ❌ does not exist | no SPI, no engine, no UI |
 | Bold/italic in `::highlight()` | ❌ deliberately refused | `HighlightStyle.ALLOWED` = `{color, background-color, text-decoration-line}`; §11 carves the editor exception |
 
 The remaining ❌ rows are the foundation work still outstanding. Everything else is filling in.
 
-> **Progress, 2026-08-12.** M0–M2 landed and M3 is three languages of four. Keystroke cost on a
-> 5,000-line file went **16.9ms → 0.63ms**, inside the §7.3 budget. The editor is painted in Islands
-> Dark, and `java`/`css`/`javascript`/`html` have real grammars.
+> **Progress, 2026-08-12.** M0–M3 landed. Keystroke cost on a 5,000-line file went **16.9ms →
+> 0.63ms**, inside the §7.3 budget. The editor is painted in Islands Dark, and six languages have
+> real grammars with injections wired.
 >
 > Four bugs in the capture→colour seam were found and fixed along the way, and they are worth
 > remembering as a class rather than individually: **the harness never had tree-sitter on its
@@ -78,7 +78,7 @@ would have failed late instead of early.
 | 2 | "The ES5.1 trap mostly closes" with modern Rhino | `let`/`const`, arrows, template literals, destructuring: yes. **ES6 `class` syntax: still unimplemented** (mozilla/rhino#835, open). **ES modules: unsupported** | the grammar-ahead-of-engine gap is permanent for JS; §16 turns it into diagnostics instead of pretending it closes |
 | 3 | "ECJ runs on 8 and 25" | **ECJ ≥ 4.28 (June 2023) requires Java 17 to run.** The 4.17–4.27 line runs on 11. Only the ≤ 4.16 era (mid-2020, compiles up to Java 14) runs on 8 | same consequence: banding, §6 — and it is *fine*, because a Java 8 host cannot load newer bytecode anyway |
 | 4 | "ECJ is a single ~3MB jar" exposing `ITypeBinding` | the slim `org.eclipse.jdt:ecj` jar is the **batch compiler only — no DOM, no bindings API**. `ASTParser`/`ITypeBinding` live in `org.eclipse.jdt:org.eclipse.jdt.core` plus a handful of transitive `org.eclipse.platform` jars (~10–15MB total) | real dependency weight; isolated classloader per band, §6.3; never near `core/` |
-| 5 | "each grammar needs a subproject added to the fork" — priced as the bulk of steps 3–5 | upstream `tree-sitter-ng` **already ships `tree-sitter-css`, `tree-sitter-javascript`, `tree-sitter-html`** (31 grammars, Zig cross-compile, 6 platforms, plus a codegen task for new ones). Only **GLSL** is genuinely new | grammar cost collapses: three languages are a fork-sync and a build; one is a codegen'd subproject. §12 |
+| 5 | "each grammar needs a subproject added to the fork" — priced as the bulk of steps 3–5 | upstream `tree-sitter-ng` **already ships `tree-sitter-css`, `tree-sitter-javascript`, `tree-sitter-html`** (31 grammars, Zig cross-compile, 6 platforms, plus a codegen task for new ones). Only **GLSL** and (later) **XML** were genuinely new | grammar cost collapses: three languages are a fork-sync and a build; two are codegen'd subprojects. §12 |
 | 6 | (unexamined) tokenizer converts every offset UTF-16↔UTF-8 | the binding exposes `parseStringEncoding(tree, source, TSInputEncoding)`, so this looked like a free win — **and it does not work.** Measured 2026-08-12 against the Java grammar: both `UTF16LE` and `UTF16BE` report a byte length matching the *UTF-8* encoding and produce a tree containing `ERROR` nodes, i.e. the string reaches the native side as UTF-8 whatever it is told | the conversion layer **stays** and is made fast instead (ASCII fast path + per-line index). See §9.2 A |
 
 Method note for future revisions: every claim above was one search or one `javap` away. Verify
@@ -135,7 +135,7 @@ Three rules that make the layers real rather than aspirational:
 
 ## 5. Modules
 
-### 5.1 `syntax-treesitter/` → `language/`
+### 5.1 `syntax-treesitter/` → `language/` ✅ done (M4)
 
 Renamed (decided v1 §16.1): package `com.crystalgui.language`, the HQ for everything below L3 that
 is not `core/`'s interfaces. Sub-packages by concern so a later split is a move, not an untangling:
@@ -147,6 +147,23 @@ com.crystalgui.language
   .js           the Rhino adapter: execution service, parse diagnostics, runtime introspection
   .resolve      engine-neutral: type index, import table, fuzzy matcher, ranking, sandbox policy
 ```
+
+> `.grammar` exists; the other three are named in `language/build.gradle.kts`'s header and are empty
+> until their milestone. Creating them now would be three empty directories asserting work that has
+> not started.
+
+**One thing landed that the plan did not ask for, and it is the reason the rename was worth doing on
+its own schedule.** `TreeSitterLanguages` held six near-identical `registerExtensions` blocks and
+`TreeSitterTokenizer` six near-identical factories, with the per-language facts split across both —
+parser, query directory, `Language`, extensions, injections. Adding XML meant getting the same six
+facts right in two files, with nothing but care stopping a mismatch. They are now rows in a
+`Grammar` enum: **a seventh language is one row**, and the two consumers cannot disagree because
+there is nothing left to disagree with. Three tests pin the table itself (every row registers every
+extension it claims; no two rows claim one extension; an injecting row names grammars we ship).
+
+> The parser is held as a `Supplier`, which is load-bearing rather than tidy: an enum constant's
+> fields are built at class-init, so holding `TSLanguage` instances would load **every** native the
+> first time anything touched the table — including a lookup for a language the process never opens.
 
 ### 5.2 What `core/` gains *for the language stack* (SPIs only — the full list, so scope creep is visible)
 
@@ -160,17 +177,53 @@ com.crystalgui.language
 `com.crystalgui.text.syntax` already holds `SyntaxToken`/`SyntaxTokenizer`. A sibling package
 `com.crystalgui.text.lang` gains the L2 contracts:
 
-| Interface | One-line contract |
-|---|---|
-| `Diagnostic` | `(range, severity, message, source, code?)` — immutable value |
-| `SemanticTokenProvider` | async; produces `SyntaxToken`-shaped spans in the same capture vocabulary, keyed per line (§14.2) |
-| `Resolver` | `resolveAt(offset)`, `expectedTypeAt(offset)`, `membersOf(type, callingContext)` — all async, all versioned |
-| `CompletionProvider` | `(context) → CompletionList{items, isIncomplete}` + `resolveItem(item)` |
-| `CompletionItem` | the LSP field set (§18.2) including `additionalTextEdits` |
-| `LanguageServices` | per-**document** façade bundling the above; lifecycle follows the document, not the editor — two tabs share it, closing the document drops it |
+| Interface | One-line contract | State |
+|---|---|---|
+| `Diagnostic` | `(range, severity, message, source, code?)` — immutable value | ✅ **already existed** in `text.diagnostic`, LSP-shaped, with a per-owner `DiagnosticSet`. Not rewritten, not mirrored |
+| `SemanticTokenProvider` | produces `SyntaxToken`-shaped spans in the same capture vocabulary | ✅ M4 |
+| `Resolver` | `resolveAt(offset)`, `expectedTypeAt(offset)`, `membersOf(type, callingContext)` — all async, all versioned | ✅ M4 |
+| `CompletionProvider` | `(request) → CompletionList{items, incomplete}` + `resolveItem(item)` | ✅ M4 |
+| `CompletionItem` | the LSP field set (§18.2) including `additionalTextEdits` | ✅ M4 |
+| `LanguageServices` | per-**document** façade bundling the above; lifecycle follows the document, not the editor — two tabs share it, closing the document drops it | ✅ M4 |
 
 `TextEditor` consumes `LanguageServices` if present and behaves exactly as today if absent. That
 absence *is* the dedicated-server story and the feature flag; there is no other flag.
+
+**Three corrections from building it**, each of which removed something the plan had budgeted for:
+
+1. **`Diagnostic` was already there**, and so was the per-owner `DiagnosticSet` that independent
+   engines need. An engine publishes with `set.changeOne(services.id(), list)` and the Problems
+   panel, the inspection widget and the status bar all read it through paths that already work. So
+   `LanguageServices` has **no** `diagnostics()` accessor — mirroring the list would be two copies
+   with no rule about which is authoritative. Likewise `Change` is already LSP's `TextEdit`, and
+   `SymbolKind` serves as `CompletionItemKind`, so neither needed inventing. The rule that produced
+   all three: **an SPI that duplicates a type the codebase already has is worse than one that
+   reuses it**, because the two drift and no caller can tell which is authoritative.
+
+2. **There are two async shapes, not one, and "all async" hid the distinction.** Continuous
+   background analysis **pushes** with an invalidation range — `SemanticTokenProvider` mirrors
+   `SyntaxTokenizer` exactly, so the per-row cache from M1b works on it unchanged. A user-initiated
+   question **requests** with a callback *that may never fire* — a superseded hover must be able to
+   produce no answer at all, which a future cannot express without being completed with something.
+   LSP splits these the same way (`publishDiagnostics` is a notification, `hover` is a request), and
+   getting it wrong would have meant either putting a viewport query back on the frame or leaking a
+   promise per keystroke.
+
+3. **A type must not cross the seam as a string.** `membersOf(String typeName, …)` was the obvious
+   signature and it is lossy in the one direction that matters: an engine holding an
+   `ITypeBinding` would stringify to answer `resolveAt` and have to parse it back to answer
+   `membersOf`, so `List<String>` survives as text and its members come back as `E get(int)`. Hence
+   `TypeRef` — an interface exposing only `displayName()`/`qualifiedName()`, with the engine's own
+   binding intact behind it. `TypeRef.of(name)` is there for the engines that genuinely have nothing
+   more (JavaScript's runtime introspection, a test fake).
+
+**And one bug the reshape uncovered rather than introduced.** Nothing in the application had ever
+called `SyntaxTokenizer.close()`. The method has existed since the seam did and the tree-sitter
+backend's own test opens and closes a hundred documents to prove it releases natives — but
+`OpenDocuments.close` disposes a document only when it implements `Disposable`, and
+`TextFileDocument` did not. Every text document's parse tree, parser and query cursor survived until
+the process ended. "Lifecycle follows the document" is the fix for both that and `LanguageServices`,
+which is why they are one change.
 
 ### 5.3 Engines never touch `core/`
 
@@ -411,6 +464,25 @@ normalization map** at load, folding whatever dialect it speaks onto §10.1. The
 tested (§21), and it is the one place per grammar where "our Java looks subtly unlike Zed's Java"
 can be fixed without touching a vendored file.
 
+> **Landed at M3, and it is not a map.** `Queries` applies **seven load-time rewrites**, and only
+> one of them (`@delimiter` → `@punctuation.delimiter`) is the string→string substitution this
+> section imagined. The other six are *structural*, because the grammars disagree about more than
+> spelling:
+>
+> | Rewrite | Why a name map cannot do it |
+> |---|---|
+> | `splitMethodDeclarationsFromCalls` | Java's query gives declarations and invocations one capture; the split is by **node type**, not by name |
+> | `captureBinaryLiterals` | `binary_integer_literal` is a node the author's query simply never names — nothing to rename |
+> | `captureObjectLikeDefines` | Adds a SCREAMING_CASE `@constant` rule and `preproc_params`/`preproc_extension` captures to the C family |
+> | `promoteBuiltinTypes` | `primitive_type` → `@type.builtin` is a *predicate-free* promotion the authors leave flat |
+> | `liftUnambiguousPredicates` | The binding evaluates no predicates at all, so `#match?` patterns silently never fire — they are lifted into Java regex at load and evaluated by us |
+> | XML's `@property`-for-attribute-name | **Deliberately not folded** — this grammar already uses `@attribute` for something else, so the fold would collide rather than translate |
+>
+> The correction that matters for future grammars: **budget for a per-grammar rewrite pass, not a
+> per-grammar rename table.** The rewrites are still data-shaped, still tested one method each
+> (`LiftedPredicateTest`, `NumericLiteralsTest`), and still keep the vendored file untouched — but
+> a `Map<String,String>` would have delivered one of seven.
+
 ## 11. Schemes — Islands Dark, and the font-style carve-out
 
 ### 11.1 Step 0 — the carve-out ✅ done (M2), and cheaper than planned
@@ -453,24 +525,31 @@ subprojects with the same Zig cross-compile the vendored jars came from. Per lan
 | Language | Work | Cost class |
 |---|---|---|
 | `css`, `javascript`, `html` | ✅ **done (M3)** — two `include` lines in the fork's `settings.gradle`, a `jar` task, vendor the jar and the author's query | cheaper than priced: the natives were already built for all five platform/arch pairs, and `downloadSource` supplies `queries/` intact |
-| `glsl` | ❌ **outstanding** — the fork has no subproject, so it needs generating from `tree-sitter-grammars/tree-sitter-glsl` (the C parser; the lib.rs crate is Rust packaging of the same grammar — not usable, named so nobody reaches for it twice) and cross-compiling | the one real build task. **Zig is available**: CrystalGraphics' `freetype-msdfgen-harfbuzz-bindings/native-build.gradle.kts` has a `downloadZig` task and a working cross-compile recipe to copy |
+| `glsl` | ✅ **done (M3)** — the fork had no subproject, so it was generated from `tree-sitter-grammars/tree-sitter-glsl` (the C parser; the lib.rs crate is Rust packaging of the same grammar — not usable, named so nobody reaches for it twice) and cross-compiled | the one real build task, and it came in at the priced cost. `downloadZig` fetches its own toolchain; ~3 min for five targets |
+| `xml` | ✅ **done (M3, unplanned)** — same codegen recipe, plus the multi-grammar trap below | an hour, as the README predicted for the second generated grammar |
 
-First jar through the pipe (css — smallest, no injections) writes the recipe into
-`lib/tree-sitter/README.md` so the second costs an hour, not a day. The Zig cross-compile is
-confirmed reproducible locally (2026-08-11).
+**Six grammars ship**, each with all five platform/arch pairs. Three build traps are recorded in
+`lib/tree-sitter/README.md` because each cost real time and none is discoverable from the error:
 
-**Injections** (`html` blocker, decided v1): host tree → `injections.scm` → child parser per
-injected range (tree-sitter's included-ranges API) → merged token list. Entirely inside
-`language/.grammar`; `SyntaxTokenizer`'s flat document-offset token list is already the right
-return shape, so no `core/` change. `tree-sitter-html` ships its own `injections.scm` and it is
-already vendored, so the remaining work is entirely in the tokenizer.
+1. The generator emits `implements TSLanguage` where this fork's `TSLanguage` is a **class**, and a
+   publishing block wanting `ossrhUsername`. Both fail at compile time, so neither is subtle.
+2. **`buildNative` must run before `jar`**, and `jar` does not depend on it — building only the jar
+   produces one with no natives inside and *no error*.
+3. **A multi-grammar repo needs its sources pointed at.** `tree-sitter-xml` ships `xml/` and `dtd/`
+   with no top-level `src/`, so the default glob found no parser, linked a native containing
+   nothing, and failed as `undefined symbol: tree_sitter_xml`. `BuildNativeTask` exposes
+   `additionalCFiles`/`additionalIncludeDirs` for exactly this.
 
-> **Revised at M3: `html` ships now, before injections.** The original rule was that it should wait,
-> because `<style>` and `<script>` bodies colouring as markup text reads as broken rather than
-> incomplete. That argument still holds — but a tag-coloured document is an improvement on an
-> uncoloured one, and shipping it makes the gap *visible in a fixture* rather than theoretical in a
-> plan. `workspace/src/index.html` puts its style and script blocks last on purpose, so the gap is
-> the thing you scroll to. The note lives at the registration in `TreeSitterLanguages`.
+**Injections** ✅ **done (M3)**: host tree → `injections.scm` → child parser per injected range
+(tree-sitter's included-ranges API) → merged token list. Entirely inside `language/.grammar`;
+`SyntaxTokenizer`'s flat document-offset token list was already the right return shape, so no
+`core/` change was needed — the prediction held.
+
+**One thing the plan did not anticipate**: the injected sub-parse is *not* recursive by
+construction, and making it so would be a re-entrancy question, not a loop. `appendInjected` runs
+one level — HTML hosting CSS and JS — which is every case the six shipped grammars produce. A
+grammar that injects into an injection (markdown → html → js) would need the depth guard that does
+not exist yet, and the tokenizer says so at the method rather than leaving it to be discovered.
 
 ## 13. The other query families
 
@@ -478,9 +557,9 @@ A grammar directory is a folder of queries, loaded uniformly — plan the loader
 
 | Query | Feeds | When |
 |---|---|---|
-| `highlights.scm` | §9–10 | now |
-| `injections.scm` | §12 | with html |
-| `locals.scm` | within-file scope colouring — `variable.parameter` vs `variable.member` with **no engine at all**; most of what makes IntelliJ's colouring look richer | with the grammar batch; superseded per-language when semantic tokens (§14) land, kept for engineless languages |
+| `highlights.scm` | §9–10 | ✅ M3 |
+| `injections.scm` | §12 | ✅ M3 |
+| `locals.scm` | within-file scope colouring — `variable.parameter` vs `variable.member` with **no engine at all**; most of what makes IntelliJ's colouring look richer | **M11** — superseded per-language when semantic tokens (§14) land, so its lasting value is the engineless languages (glsl, css, xml), which is also why it moved *behind* M6 rather than ahead of it |
 | `folds.scm` | syntax-aware folding, upgrading `IndentRangeProvider` behind the existing `FoldingRangeProvider` SPI | M11 |
 | `indents.scm` | a real indent engine replacing the "line ends in `{`" rule (`TextEditor.insertNewlineWithIndent` names this plan as its successor) | M11 |
 
@@ -799,15 +878,15 @@ user-visible value lands early.
 | **M0** ✅ | Scheduler + version spine: service-layer scheduler (lanes, keyed single-flight, debounce, cancellation, drain-on-tick), `TextBuffer.version()`, `WORKBENCH_SERVICES.md` updated | — | deterministic tests: superseded, cancelled, stale-discarded, drained-on-tick — all under manual clock |
 | **M1** ✅ | Tokenizer rewrite (§9): UTF-16 parse, conversion layer deleted, off-thread double-buffered reparse, per-line interned token cache, native lifecycle per document | M0 | non-ASCII fixture correct; typing a 5k-line file: UI cost within §7.3 budgets, measured and recorded; 100-open/close leak test |
 | **M2** ✅ | The scheme axis (§11): font-style carve-out in `HighlightStyle.ALLOWED` — no scoped variant and no editor migration needed, see §11.1 — full `--syntax-*` vocabulary, `islands-dark` + light authored from the exported scheme, default swap | — (parallel to M0/M1) | side-by-side with IntelliJ on the same Java fixture; italic comments and constants; governance tests green |
-| **M3** ◐ | Grammars (§12–13). ✅ `css`, `javascript`, `html` vendored, registered and fixtured; `EveryShippedGrammarTest` covers parse + capture + registration. ❌ remaining: **`glsl`** (needs `downloadZig`, then codegen from `tree-sitter-grammars/tree-sitter-glsl`), **`injections.scm`** wired in the tokenizer, **normalization maps** (§10.2 — not yet needed, the three vendored queries happen to speak the standard dialect), **`locals.scm`** | M1 | one fixture per language in `workspace/src/`; html `<style>`/`<script>` bodies coloured as CSS/JS |
-| **M4** | Module reshape (§5): `language/` rename + sub-packages, `text.lang` SPIs in `core/`, `LanguageServices` per-document façade, editor consumes-if-present | — | `core:headlessTest` green with no new deps; harness wires Java end-to-end unchanged |
+| **M3** ✅ | Grammars (§12–13): **six** — `css`, `javascript`, `html`, `glsl`, `xml` beside `java` — vendored with all five platform/arch pairs, registered by extension, fixtured; `injections.scm` wired (html hosts css + js); §10.2's normalization landed as **seven load-time query rewrites**, not a rename map; `EveryShippedGrammarTest` covers parse + capture + registration per grammar. `locals.scm` deferred to M11 with a reason (§13) | M1 | ✅ one fixture per language in `workspace/src/`; html `<style>`/`<script>` bodies coloured as CSS/JS |
+| **M4** ✅ | Module reshape (§5): `language/` rename + `.grammar`, `text.lang` SPIs in `core/` (12 types, interfaces and records only), `LanguageServices` per-document façade, editor consumes-if-present and **overlays semantic tokens over grammar tokens**, document-owned lifecycle (which also fixed `SyntaxTokenizer.close()` never being called), six registrations collapsed to a `Grammar` table | — | ✅ `core:headlessTest` green with no new deps — `LanguageSpiTest` runs the whole SPI with no engine and no grammar on the classpath; harness wires Java end-to-end unchanged; `SemanticOverlayTest` proves absent-services behaves exactly as before |
 | **M5** | Engine loading (§6): band detection, isolated child-first loaders, pinned ECJ+Rhino per band, `THIRD-PARTY.md` | M4 | band-selection unit tests; smoke compile+eval on a Java 8 toolchain and on 17+ (Gradle toolchains — no MC needed); §23 verifications closed |
 | **M6** | Java semantics (§15): ECJ diagnostics + semantic tokens + `resolveAt`/`expectedTypeAt`, prelude mapper, classpath probe, reflection overlay, **live name environment + mapping boundary (§15.5)** | M0, M4, M5 | fixture script: param/field/local coloured, unresolved flagged, deprecated struck; broken-code partial answers pass the §13-checklist tests; **remap round-trip: a script authored in readable names compiles, links and runs against a fixture class whose runtime members carry synthetic "obfuscated" names, through a fake mapping set** — all headless |
 | **M7** | **Java execution service — the product**: per-script child classloader over the band loader (§6.3), prelude/host-binding injection at runtime, compile-always/run-explicit lifecycle, the output remap pass wired for real (not just M6's fixture) including safepoint injection + host kill switch (§19.3), compiled-script cache `(source hash, mappings hash, band)` (§15.5 D.3), run/stop commands via `CommandRegistry`, disposal — a re-run replaces the loader and nothing pins the old one | M5, M6 | a script authored in the editor runs on explicit command, effect observable in the harness; re-run replaces the instance; kill interrupts a deliberate infinite loop; 100 compile/run/dispose cycles leak no classloaders (heap assertion); the §5.3 proof — compile-and-run with the grammar jars absent, headless |
 | **M8** | Decorations + diagnostics UI (§17): tracked ranges with stickiness, squiggle view part, Problems wiring | M0; M6 for real input | stickiness golden tests (Monaco's cases); squiggles stay attached while typing above them; Problems row ↔ document range round-trip |
 | **M9** | Completion (§18): substrate generalisation, matcher+ranking ports, Java providers, type index + auto-import | M6, M8 | `list.forEach(x -> x.|)` completes String members; unimported `ArrayList` inserts import as one undo step; latency within budget on the indexed modpack fixture |
 | **M10** | JS + sandbox (§16, §19): Rhino execution service (reusing M7's lifecycle/commands), parse diagnostics, runtime-introspection completion, member-lookup remapping (§16.1), policy object at all four layers | M5, M7 (execution substrate), M6 (Java resolver for interop), M9 (UI) | `class` syntax gets an engine diagnostic; post-run completion on a live object; a readable-name member call links in a fake-obfuscated fixture; refused type absent from execution *and* completion, one test proving both |
-| **M11** | Resolver affordances + query-family tail: hover popup (`resolveAt` → the `Tooltip`/`Popover` substrate), go-to-definition (declaration site → open at range), `folds.scm` behind the existing `FoldingRangeProvider` SPI, `indents.scm` replacing the "line ends in `{`" rule (`insertNewlineWithIndent` already names its successor), GLSL diagnostics adapter over the shader compiler's existing error output | M3, M6, M8 | hover shows type + doc for a Java symbol; go-to jumps within the script; Java/GLSL fixture folds match the tree, not the indent; a GLSL error appears as a squiggle with no new machinery |
+| **M11** | Resolver affordances + query-family tail: hover popup (`resolveAt` → the `Tooltip`/`Popover` substrate), go-to-definition (declaration site → open at range), `folds.scm` behind the existing `FoldingRangeProvider` SPI, `indents.scm` replacing the "line ends in `{`" rule (`insertNewlineWithIndent` already names its successor), **`locals.scm`** (§13 — scope colouring for the engineless languages), GLSL diagnostics adapter over the shader compiler's existing error output | M3, M6, M8 | hover shows type + doc for a Java symbol; go-to jumps within the script; Java/GLSL fixture folds match the tree, not the indent; a GLSL parameter and a member colour differently with no engine loaded; a GLSL error appears as a squiggle with no new machinery |
 
 Critical path: M0 → M1 → M3, and M0/M4 → M5 → M6 → M7 → M8/M9 → M10 → M11. M2 is the early
 visible win and touches none of it.
@@ -822,24 +901,38 @@ to nothing.
 The styling work's law — a rule that can be broken silently will be — applied to a stack that is
 mostly invisible when wrong:
 
-1. **Every capture has a colour**: scan shipped `highlights.scm` names (post-normalization);
-   assert each has a `--syntax-*` token or a coloured general form, in every scheme. (v1 §6.1,
-   still the single highest-value test here.)
-2. **Vocabulary conformance**: normalized capture names ⊆ §10.1's set — a new grammar cannot
-   introduce a name no scheme has heard of.
-3. **Scheme pairing and scope**: extend the existing `StyleGovernanceTest` pair/scope checks to
-   new schemes; extend `nothingIsDrawnInTheColourOfWhatItSitsOn` to `--syntax-*` vs `--editor-bg`
-   (a dozen colours authored at once is exactly where that bug re-enters).
-4. **Scheduler determinism** under manual clock (§7.2) — supersede, cancel, stale-discard, drain.
-5. **Offset correctness on non-ASCII** — the test the UTF-8 layer never had; one fixture with
-   accents, emoji and CJK asserting token ranges.
-6. **Decoration stickiness goldens** — Monaco's boundary-insertion cases, all four modes.
+1. ✅ **Every capture has a colour** (`StyleGovernanceTest.everyCaptureInAShippedGrammarHasAColour`):
+   scans shipped `highlights.scm` names **post-normalization** — it runs the same `Queries` rewrites
+   the tokenizer does, or it would check names the editor never emits — and asserts each has a
+   `--syntax-*` token or a coloured general form, in every scheme. (v1 §6.1, and it earned its keep:
+   it is what caught the schemes missing `markup` and `error` when xml landed.)
+2. ✅ **Vocabulary conformance**: normalized capture names ⊆ §10.1's set — a new grammar cannot
+   introduce a name no scheme has heard of. Same test, other direction.
+3. ✅ **Scheme pairing and scope**: `eachThemeAndSchemePairDefinesTheSameKeys`,
+   `everySchemeDefinesTheSameKeysAsEveryOther`, `theSchemeAndThemeAxesStayApart`, and
+   `nothingIsDrawnInTheColourOfWhatItSitsOn` extended to `--syntax-*` vs `--editor-bg`.
+4. ✅ **Scheduler determinism** under manual clock (§7.2) — supersede, cancel, stale-discard, drain.
+5. ✅ **Offset correctness on non-ASCII** — the test the UTF-8 layer never had. Three of them, and
+   the shape matters: `everyCaptureLandsOnTheTextItNamesAcrossMultiByteCharacters` asserts captured
+   **text**, not that ranges are in bounds, because a range shifted by the encoding delta is still a
+   valid range. `SurrogateSafetyTest` covers the astral-plane half, which is where the real crash was.
+6. **Decoration stickiness goldens** — Monaco's boundary-insertion cases, all four modes. (M8)
 7. **The §13 checklist as tests** — one JUnit method per row (generic substitution, overload
    phases, bridge filtering, accessibility-from-context, pattern-variable regions, lambda target
-   typing), against ECJ bindings, headless.
-8. **Native leak test** — §9.2 D.
+   typing), against ECJ bindings, headless. (M6)
+8. ✅ **Native leak test** — §9.2 D: `openingAndClosingManyDocumentsDoesNotAccumulateNatives`,
+   plus `closingIsIdempotent`, since double-close is the failure mode a leak fix introduces.
 9. **Sandbox symmetry** — a refused type is absent from execution, completion, hover and index in
-   the same test.
+   the same test. (M10)
+10. ✅ **The semantic vocabulary is coloured too** (`StyleGovernanceTest.everySymbolKindNamesACaptureTheSheetColours`)
+    — added at M4, and it is the same rule as (1) arriving from a third direction. A
+    `SemanticTokenProvider` names its colours through `SymbolKind.captureName()` rather than
+    spelling them, so that bridge is a capture producer exactly like a `highlights.scm` — and it has
+    no file to scan, so rule (1) cannot see it. A kind whose capture nothing styles renders the
+    resolved symbol as body text: the engine ran, the answer was right, the screen is unchanged.
+11. ✅ **The grammar table is consistent** — every row registers every extension it claims and
+    resolves to its own `Language`; no two rows claim one extension (registration *replaces*, so a
+    collision is silent and the later row simply wins); an injecting row names grammars we ship.
 
 Everything in `language/` tests headlessly — no GL, no MC. That is a consequence of the layer
 rules, and it is also the enforcement of them.
@@ -852,13 +945,22 @@ rules, and it is also the enforcement of them.
 - **TextMate/Monarch grammars**; re-litigating tree-sitter (§3).
 - **User-supplied grammars at runtime** — grammars are vendored jars; a resource pack must not
   load native code.
+- **Nested injections** — the injected sub-parse runs **one level**, which covers every case the six
+  shipped grammars produce (HTML hosting CSS and JavaScript). Markdown hosting HTML hosting
+  JavaScript would need a depth guard that does not exist. Listed here rather than left to be
+  discovered; `TreeSitterTokenizer.withInjections` says so at the method.
 - **IME/composition input, bidi/RTL caret movement, screen-reader support** — declared unsupported
   rather than discovered; each reaches `CgSystemInput` or the coordinate model and is its own plan.
 - **Minimap, diff view, overview ruler** — consumers of §17.1, which reserves them a payload lane;
   not built here.
 - **TypeScript-style JS type inference** — §16.2 is the contract.
 - **`KeywordTokenizer` retirement** — it is the engineless fallback `core/`'s no-natives guarantee
-  rests on; its javadoc says so (M4 re-checks that it still does).
+  rests on; its javadoc says so, and **M4 re-checked it: still true, and sharpened.** The file used
+  to say a lexer "cannot tell a type from a variable, a call from a declaration, or a field from a
+  local — all of which need a parse", which conflates two tiers. A parse gives you call-vs-declaration;
+  a field-vs-local needs an *engine*, because nothing in the shape of `count` says which it is. The
+  javadoc now names all three tiers, since which one is missing decides where a missing colour has to
+  be fixed.
 - **Player-submitted scripts executing on a server** — permanently, per §19.1. Not a missing
   feature; a refused one.
 - **Remapping reflection helper** for scripts that reflect on MC members (§15.5 D.1) — v1 declares

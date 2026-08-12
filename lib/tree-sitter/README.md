@@ -37,7 +37,7 @@ alternative is a build that only works for whoever produced it.
 ## What is deliberately *not* here
 
 `highlights.scm`. The grammar jars carry the compiled parser and its natives and nothing else, so the
-query files are vendored separately, in `syntax-treesitter/src/main/resources/assets/crystalgui/syntax/`,
+query files are vendored separately, in `language/src/main/resources/assets/crystalgui/syntax/`,
 each with its grammar's own licence. They are the grammar authors' files rather than hand-written
 approximations: the capture names in them are what a theme styles, so an approximation would produce
 highlighting subtly unlike every other editor's.

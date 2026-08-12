@@ -29,6 +29,7 @@ looks like a needed helper is the symptom of one that does not — see
 | `Notifications` / `StatusBar` — events and ambient text, plus their views (`StatusBarView`, `NotificationsView`, `NotificationBalloons`) | **shipped** | [Notifications and status](#notifications-and-status) |
 | `DockBannerProvider` — a strip above a panel | **shipped** | [Contributions](#contributions) |
 | `JobScheduler` — work off the UI thread | **shipped** | [Background work](#background-work) |
+| `LanguageServices` — the engine behind a document | **seam shipped, no engine yet** | [Language services](#language-services) |
 
 ---
 
@@ -1278,6 +1279,36 @@ markers.detach(resource);   // closing a document
 | **`detach` on close is the half that leaks** | A closed file's problems are not the workspace's, and the listener keeps the document alive |
 | **`setAll` writes the DEFAULT owner's slice** | Not all of them. Kept because forcing every single-producer document to name an owner makes it invent one, scattering keys that never collide and never merge |
 | **Tags change how a diagnostic is DRAWN, not how bad it is** | UNNECESSARY fades, DEPRECATED strikes through, and both keep their severity |
+
+## Language services
+
+`com.crystalgui.text.lang` — `LanguageServices` and the three contracts it bundles
+(`SemanticTokenProvider`, `Resolver`, `CompletionProvider`), plus the value types they speak
+(`SymbolInfo`, `SymbolKind`, `SymbolModifier`, `TypeRef`, `DeclarationSite`, `CompletionItem`,
+`CompletionList`, `Versioned`). **Interfaces only** — every engine lives in `language/`.
+
+```java
+// The workbench builds one per DOCUMENT, from the same registry entry that answers "what language".
+LanguageRegistry.Entry entry = LanguageRegistry.forFileName(path.name());
+editor.setTokenizer(entry.newTokenizer());
+editor.setLanguageServices(entry.newServices(editor.buffer(), resource));   // null when no engine
+
+// An engine publishes diagnostics into the document's existing set, under its own id.
+document.diagnostics().changeOne(services.id(), compiled.problems());
+```
+
+| Rule | Why |
+|---|---|
+| **Absence is the feature flag, and there is no other one** | Three tiers degrade independently and each absence is silent: no engine → grammar colouring, no grammar → keyword lexer, neither → plain text. A `enableSemanticHighlighting` boolean would be a second source of truth about what is actually loaded, and the two disagree the moment a native fails to load |
+| **Per DOCUMENT, never per editor** | The same file in two split panes is one document. Two sets would double every compile, publish two competing diagnostic slices into one `DiagnosticSet`, and disagree about which version they had reached |
+| **`LanguageServices.close()` is the ONLY close on the seam** | `SemanticTokenProvider` has one too and nothing outside an implementation may call it — an editor closing a provider releases something it was only lent, while the document's other view carries on using it |
+| **The document owns them — `TextFileDocument.dispose()`** | Not the widget. The dock rebuilds every panel on every split and drag, so releasing on widget teardown frees a parse tree for a document that is still open and rebuilds it next frame. **This is also what finally calls `SyntaxTokenizer.close()`**: that method has existed since the seam did and nothing in the application ever reached it, so every text document's native parse tree survived until the process ended |
+| **`setLanguageServices` unsubscribes, it does not close** | Same reason — the editor holds, the document owns |
+| **Diagnostics are NOT on this interface** | They already have a home with a per-owner model built for exactly this. `services.id()` is the owner key; mirroring the list here would be two copies with no rule about which is authoritative |
+| **Every answer carries the document version it describes** | `Versioned<T>`. The consumer picks the staleness policy, because there are three correct ones and they are not interchangeable: **discard** for hover and go-to-definition, **keep adjusted** for diagnostics, **keep per line** for semantic tokens — dropping those on every keystroke flickers the file back to lexer colouring and restores it 300ms later |
+| **Two async shapes, and the split is not arbitrary** | Continuous background analysis **pushes** with an invalidation range (`SemanticTokenProvider`, mirroring `SyntaxTokenizer`); a user-initiated question **requests** with a callback that may never fire (`Resolver`, `CompletionProvider`). LSP splits them the same way — `publishDiagnostics` is a notification, `hover` is a request |
+| **Semantic tokens speak the grammars' capture vocabulary** | `SymbolKind.captureName()` is the bridge. A parallel vocabulary would need its own scheme tokens, its own governance test and a mapping table nobody keeps current. `StyleGovernanceTest.everySymbolKindNamesACaptureTheSheetColours` pins it |
+| **An engine's colouring REPLACES the grammar's where they overlap** | Merged into one per-row bucket in `TextEditor.ensureRowSyntax`, not layered. Two overlapping ranges under unrelated names leave the winner to paint order — and both names resolve to real colours, so the wrong one reads as a scheme bug |
 
 ## Contributing to a view's header
 

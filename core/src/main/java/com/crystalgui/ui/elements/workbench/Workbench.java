@@ -418,6 +418,11 @@ public class Workbench extends UIElement {
             // A FRESH tokenizer per document -- the interface exists for implementations holding a parse
             // tree per file, and sharing one would cross-contaminate them.
             created.setTokenizer(entry.newTokenizer());
+            // Fresh services per document too, and for the same reason one level up: they hold a compile
+            // result about THIS text. Null unless a language module registered an engine, which is the
+            // whole feature flag -- see LanguageServices. Released by TextFileDocument.dispose().
+            Resource resource = Resource.of(path);
+            created.setLanguageServices(entry.newServices(created.buffer(), resource));
             // No command installation here: TextEditor registers its own and binds its own chords, so a
             // document created before this workbench is attached is no longer a special case.
             // Here rather than only from WorkbenchSettings.apply: a document opened after the settings
@@ -425,7 +430,7 @@ public class Workbench extends UIElement {
             // apply to the files that happened to be open when a preference was last changed and to no
             // others -- which reads as the setting working intermittently.
             WorkbenchSettings.applyTo(this, created);
-            return new TextFileDocument(created, Resource.of(path));
+            return new TextFileDocument(created, resource);
         });
 
         dock = new DockArea(registry, defaultLayout());

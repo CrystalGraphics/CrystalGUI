@@ -117,13 +117,14 @@ Harness scenes live in `gl-debug-harness/src/main/java/.../harness/scene/ui/`; r
 
 # Module layout — what actually compiles
 
-`settings.gradle.kts` includes **only** `core` and `gl-debug-harness`. CrystalGraphics is an
+`settings.gradle.kts` includes `core`, `language` and `gl-debug-harness`. CrystalGraphics is an
 `includeBuild` composite with three `dependencySubstitution` entries, which is how the
 `compileOnly("com.crystalgraphics:core:1.0.0")` coordinates resolve to local source.
 
 | Module | In build? | State |
 |---|---|---|
 | `core/` | ✅ | The engine. Java 21 → Java 8 bytecode. Everything below lives here. |
+| `language/` | ✅ | The language stack — everything with a native or an engine behind it. Depends on `core/`; **`core/` must never depend on it**, which is what keeps tree-sitter's `.so`s and (later) ECJ's ~15MB off a dedicated server. Ships six tree-sitter grammars in `.grammar`; `.java`/`.js`/`.resolve` are reserved for the engines. *(Was `syntax-treesitter/` until M4.)* |
 | `gl-debug-harness/` | ✅ | Git submodule (branch `crystalgui`). 16 CrystalGUI scenes. The only way to run the UI. |
 | `CrystalGraphics/` | ✅ (composite) | The rendering backend. Consumed, never reimplemented. |
 | `mc1710/` | ❌ commented out | Bare `@Mod` stub. No CrystalGUI integration at all. Scaffolding. |
@@ -138,7 +139,8 @@ build. There are currently **no exemptions** — the guard is clean.
 | Source set | CrystalGraphics on classpath? | What belongs there |
 |---|---|---|
 | `core/src/test/` | ✅ `testImplementation` | Anything needing `CgIO`, fonts, `StyleSheet`, sprites, drawables |
-| `core/src/headlessTest/` | ❌ **core deliberately absent**, `platform` present | Everything a dedicated server must run: `serialization/`, `net/`, tree/state logic |
+| `core/src/headlessTest/` | ❌ **core deliberately absent**, `platform` present | Everything a dedicated server must run: `serialization/`, `net/`, tree/state logic, and **`text.lang` — the language SPIs, which run here precisely because no engine and no grammar is on this classpath** |
+| `language/src/test/` | ✅ (plus the tree-sitter natives) | Grammars, queries, the tokenizer. Skips cleanly when a native will not load on the running platform |
 | harness scenes | ✅ full GL | Anything visual |
 
 **The absence is the assertion.** On a dedicated Minecraft server there is no GL context and no fonts.
@@ -995,6 +997,10 @@ The things that are invisible from any single class and expensive to rediscover.
 | **A `MenuId.submenu` declaration is PERMANENT** — it lives on the interned id, not on any registry, so `CommandRegistry.resetForTesting()` cannot undo it | Correct (a submenu is a structural fact about a menu, like a class declaration) and a trap for tests: one test nesting a child left every later test seeing a stray section. Use a fresh `MenuId.of(name + counter)` per test rather than a shared constant |
 | **`font-size` does not inherit, whatever `setInheritable(true)` says** — `default.css` opens with `* { font-size: 10 }`, which is a candidate at STYLESHEET origin on *every* element, and inheritance only applies where there is no candidate at any origin | A rule on a wrapper computes correctly on the wrapper and the label inside it still renders at 10. `statusbarview .__status-item__` works only because the status item **is** its `UIText`; any widget that wraps its label — for padding, a hover fill, an icon slot — must put the declaration on the text element itself. Cost a probe on the menu bar, where `height: 22px` on the same selector applied and the `font-size` beside it silently did not |
 | **`font-weight`/`font-style` DO inherit — and are drawn by `UIText` alone** | The mirror of the row above, and both halves surprise. They inherit because nothing writes a universal rule for them, so a `font-weight` on a wrapper *does* reach the label inside it — do not "fix" the asymmetry with a `* { font-weight: normal }`, which would silently disable it (`FontFaceTest` pins this). And they reach the glyphs through a **`CgStyleSpan`**, because the two faces are *synthesised* — so `TextField` and `TextEditor`, which draw via `CgTextRenderer.Draw.text(String)` with a bare family rather than a styled paragraph, resolve them and paint nothing. Anything measuring styled text must measure on the same path it paints on: synthetic bold is wider, so `measureEllipsised` truncating against an unspanned probe cuts in the wrong place |
+| **`core/` must never depend on `language/`** — the language SPIs live in `core/src/main/java/com/crystalgui/text/lang/` and the engines implement them from the other side | `TextEditor` consumes `LanguageServices`, so the interface has to be where the editor is. Invert the dependency and tree-sitter's five platform natives — and later ECJ's ~15MB with its DOM stack — land on a dedicated server's classpath, which is the one thing `headlessTest` exists to prevent |
+| **A language capability is absent in three independent tiers, and each absence is silent** | No engine → grammar colouring; no grammar module → `KeywordTokenizer`; neither → plain text. All three are spelled as "is this reference null", which is why there is **no** `enableSemanticHighlighting` setting: a boolean can disagree with what actually loaded, and then two things claim to answer the same question |
+| **`LanguageServices` belongs to the DOCUMENT, not to the editor or the widget** | The same file in two split panes is one document: two service sets would double every compile, publish two competing slices into one `DiagnosticSet`, and disagree about which version they reached. So `setLanguageServices` unsubscribes but never closes, and `TextFileDocument.dispose()` is the owner. **That dispose is also what finally calls `SyntaxTokenizer.close()`** — the method existed since the seam did, `OpenDocuments.close` only disposes documents implementing `Disposable`, and a text document was not one, so every native parse tree in the application survived until the process ended |
+| **Semantic tokens REPLACE grammar tokens where they overlap; they do not layer** | Merged into one per-row bucket in `ensureRowSyntax`. Two overlapping ranges under unrelated names leave the winner to paint order, and **both names resolve to real colours** — so the wrong one reads as a scheme bug rather than an ordering one, which is exactly how the capture-precedence bug cost two rounds. Note the corollary when writing a test: a dotted capture is *also* published under its general form, so grammar-`variable` vs engine-`variable.parameter` cannot show the difference — assert on a pair where neither is the other's general form |
 | CSS text belongs in `test`, never `headlessTest` | `StyleSheet` class-init reads `default.css` via `CgIO` → unloadable headlessly |
 | JOML + Taffy must stay on the headless classpath | Field descriptors resolve at class load; `UIElement`/`ElementStyle` have fields of those types |
 | CrystalGraphics `platform` must stay on the headless classpath too — the excluded module is CG **core** | `UIInputHandler` *implements* `CgSystemInput`; a supertype resolves at class load, so stripping it fails every input test with `NoClassDefFoundError` |
@@ -1359,7 +1365,16 @@ com.crystalgui.text            Rope, TextBuffer, TextSummary, Change/ChangeSet, 
                                two come from contrib/linesOperations/ and browser/controller/. See
                                "Port the module boundaries too" for the full mapping and the two
                                unimplemented gaps (atomic tab moves, column selection)
-  .syntax                      Language, SyntaxToken, SyntaxTokenizer (SPI), KeywordTokenizer
+  .syntax                      Language, LanguageRegistry, SyntaxToken, SyntaxTokenizer (SPI),
+                               KeywordTokenizer — the ENGINELESS tier, and what a dedicated server has
+  .lang                        The semantic layer's contracts, INTERFACES ONLY: LanguageServices (the
+                               per-DOCUMENT facade), SemanticTokenProvider, Resolver, CompletionProvider
+                               + CompletionItem/CompletionList, SymbolInfo/SymbolKind/SymbolModifier,
+                               TypeRef, DeclarationSite, Versioned. Every engine lives in language/;
+                               this package is the whole footprint in core/, and its absence at runtime
+                               is the only feature flag. docs/CGUI_WORKBENCH_SERVICES.md
+  .diagnostic                  Diagnostic, DiagnosticSet, DiagnosticSeverity, DiagnosticTag, Markers,
+                               RelatedInformation — LSP-shaped, per-owner. NOT duplicated in .lang
   .wrap                        LineProjection, ProjectedLines, LineBreaksComputer (SPI),
                                MonospaceLineBreaks, ShapedLineBreaks, BreakOpportunities, WrapIndent —
                                soft wrap, and the model/view coordinate seam the whole editor rests on
