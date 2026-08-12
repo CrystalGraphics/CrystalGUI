@@ -92,7 +92,7 @@ public class RunTest {
             if (x < 0 || y < 0) throw new IllegalArgumentException("negative: " + x + "," + y);
         }
 
-        double distance() {
+        public double distance() {
             return Math.sqrt(x * x + y * y);
         }
     }
@@ -266,7 +266,7 @@ public class RunTest {
     // ── main ────────────────────────────────────────────────────────────────────────────────────
 
     public static void main(String[] args) {
-        System.out.println("RunTest starting — args: " + Arrays.toString(args));
+        System.out.println("RunTest starting - args: " + Arrays.toString(args));
         new RunTest();
 
         attempt("primitives, overflow and bit operations", RunTest::primitives);
@@ -289,7 +289,7 @@ public class RunTest {
         attempt("reflection", RunTest::reflection);
         attempt("time and math", RunTest::timeAndMath);
 
-        System.out.printf("%nRunTest finished — %d sections in %d ms%n",
+        System.out.printf("%nRunTest finished - %d sections in %d ms%n",
                 SECTION.get(), Duration.ofNanos(System.nanoTime() - STARTED).toMillis());
     }
 
@@ -779,7 +779,11 @@ public class RunTest {
             log("reflective construction", instance);
             log("reflective call", type.getMethod("distance").invoke(instance));
         } catch (ReflectiveOperationException failed) {
-            log("reflection failed", failed);
+            // "!!" is the fixture's one mark for a defect, shared with attempt() above -- so a section
+            // that CATCHES its own failure is still visible to RunTestFixtureTest. Without the shared
+            // prefix this line reported a broken reflective lookup under a heading that reads as the
+            // engine being broken, and the test saw a section that had not thrown and passed.
+            log("!! reflection failed", failed);
         }
 
         // NOTE FOR MINECRAFT HOSTS: the mapping boundary rewrites symbolic references, not strings, so
@@ -819,7 +823,7 @@ public class RunTest {
      */
     @SuppressWarnings("unused")
     private static void runawayForStopTesting() {
-        section("runaway — press Mod+F2 to stop");
+        section("runaway - press Mod+F2 to stop");
         long spins = 0;
         while (true) {
             spins++;
