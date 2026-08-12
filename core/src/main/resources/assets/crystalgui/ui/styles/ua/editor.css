@@ -735,17 +735,32 @@ completionpopup {
     z-index: 900;
 }
 
+/* 16px, tighter than the 18 it replaced. IntelliJ's rows have the text nearly filling the box; ours had
+ * visible air above and below, which is what made the list read as a menu rather than as code. Paired with
+ * CompletionPopup.ROW_HEIGHT -- a virtualised list needs the number in Java to turn an index into a scroll
+ * offset and cannot read the cascade, so the duplication is forced rather than sloppy. */
 .__completion-row__ {
-    height: 18px;
+    height: 16px;
     flex-direction: row;
     align-items: center;
-    gap-all: 4px;
     padding-left: 4px;
     padding-right: 6px;
 }
 
+/* NO `gap-all` on the row, and that is the point: a gap applies between EVERY pair of children, so it put
+ * a space between the name and its own parameter list -- `arraycopy (Object, int, ...)`, which reads as two
+ * things rather than one signature. The one place a gap is wanted is after the icon, so it is a margin
+ * there instead. Everything else is separated by the grow-only spacer. */
+.__completion-icon__ {
+    margin-right: 4px;
+}
+
+/* IntelliJ's selection indigo rather than the workbench's VS Code navy. A deliberate divergence from the
+ * rest of the shell: this popup is the one surface being held beside IntelliJ's own, and --list-selected-bg
+ * is the token every OTHER list here shares -- reusing it would drag every tree and panel along with any
+ * change made for this widget. */
 .__completion-row__.__selected__ {
-    background-color: var(--list-selected-bg, #04395E);
+    background-color: var(--completion-selected-bg, #2E436E);
 }
 
 /* 12px, NOT the artwork's native 16.
@@ -783,21 +798,40 @@ completionpopup {
 .__completion-mark-static__ { background: icon("crystalgui:nodes/java/staticMark"); }
 .__completion-mark-final__  { background: icon("crystalgui:nodes/java/finalMark"); }
 
+/* BOLD, and only on the name. font-weight inherits and is drawn by UIText alone through a CgStyleSpan, so
+ * putting it on the row instead would quietly embolden the parameter list and the type column too -- which
+ * is the whole distinction this split exists to draw. */
 .__completion-label__ {
     font-size: 10px;
+    font-weight: bold;
     color: var(--completion-label, #D4D4D4);
+}
+
+/* The parameter list, abutting the name and dimmed -- IntelliJ's "tail text". Regular weight, so the eye
+ * lands on the name; same size, so the row reads as one string rather than two controls. */
+.__completion-params__ {
+    font-size: 10px;
+    color: var(--completion-params, #808080);
+    flex-shrink: 1;
+    min-width: 0;
 }
 
 /* Dimmed and shrinkable: when the row is tight the detail is what gives, because the NAME is the part
  * that must stay whole -- a truncated identifier is unreadable and a truncated return type is merely
  * less informative. */
+/* The SAME size as the label, distinguished by colour alone -- which is what IntelliJ does. At 9px it read
+ * as a footnote rather than as the type it is.
+ *
+ * Shrinkable, and it is the one thing in the row that gives: the NAME must stay whole, because a truncated
+ * identifier is unreadable while a truncated return type is merely less informative. */
 .__completion-detail__ {
-    font-size: 9px;
+    font-size: 10px;
     color: var(--completion-detail, #808080);
     flex-shrink: 1;
     min-width: 0;
 }
 
+.__completion-deprecated__ .__completion-params__,
 .__completion-deprecated__ .__completion-label__ {
     text-decoration-line: line-through;
     color: var(--completion-deprecated, #808080);
@@ -839,3 +873,21 @@ completionpopup text::highlight(completion-match) {
  * keeps the labels aligned with every other row. */
 .completion-kind-keyword,
 .completion-kind-unknown        { background: none; }
+
+/* The bottom strip -- IntelliJ's "Press Enter to insert, Tab to replace".
+ *
+ * It is doing real work rather than decorating: the two keys behave DIFFERENTLY (Enter keeps the rest of the
+ * identifier, Tab consumes it) and nothing else in the widget says so. Its text is derived from
+ * CompletionPopup.ACCEPT_KEYS, the same list the key handler reads, so it cannot promise a binding that is
+ * not there.
+ *
+ * 16px, paired with CompletionPopup.HINT_HEIGHT -- the flip-above-or-below decision is computed from the
+ * popup's total height in Java and cannot read the cascade. */
+.__completion-hint__ {
+    height: 16px;
+    font-size: 9px;
+    color: var(--completion-hint, #6E7681);
+    padding-left: 6px;
+    padding-right: 6px;
+    text-align: left;
+}

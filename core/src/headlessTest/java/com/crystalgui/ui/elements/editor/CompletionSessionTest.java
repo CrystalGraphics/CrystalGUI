@@ -371,6 +371,33 @@ public class CompletionSessionTest {
                 buffer.toString().indexOf("ArrayList\n}") + "ArrayList".length(), after);
     }
 
+    /**
+     * Enter keeps the rest of the identifier; Tab consumes it.
+     *
+     * <p>The strip at the foot of the popup says exactly this, and its text is built from the same
+     * {@code ACCEPT_KEYS} table the key handler reads — so if the two accepts ever stopped differing, the
+     * strip would be a promise the widget does not keep and nothing else would notice.</p>
+     */
+    @Test
+    public void enterInsertsAndTabReplacesTheRestOfTheIdentifier() {
+        StubProvider provider = new StubProvider();
+        provider.items.add(item("getName", SymbolKind.METHOD));
+
+        TextBuffer inserting = new TextBuffer("obj.getNameOf");
+        CompletionSession insert = CompletionSession.open(inserting, provider, 11,
+                CompletionProvider.TriggerKind.EXPLICIT, null);
+        insert.caretMoved(11);
+        assertTrue(insert.accept(false));
+        assertEquals("insert keeps the tail", "obj.getNameOf", inserting.toString());
+
+        TextBuffer replacing = new TextBuffer("obj.getNameOf");
+        CompletionSession replace = CompletionSession.open(replacing, provider, 11,
+                CompletionProvider.TriggerKind.EXPLICIT, null);
+        replace.caretMoved(11);
+        assertTrue(replace.accept(true));
+        assertEquals("replace consumes it", "obj.getName", replacing.toString());
+    }
+
     @Test
     public void acceptingWithNothingSelectedClosesRatherThanEditing() {
         TextBuffer buffer = new TextBuffer("abc");
