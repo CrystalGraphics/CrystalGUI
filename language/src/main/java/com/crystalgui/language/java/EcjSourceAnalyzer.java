@@ -495,8 +495,15 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 // therefore only meaningful on a method.
                 if ((method.getModifiers() & 0x0040) != 0) continue;
                 if (!isVisible(method, owner, asking)) continue;
-                String signature = method.getName() + "/" + method.getParameterTypes().length;
-                if (!seen.add(signature)) continue;
+                // THE KEY IS THE FULL ERASED SIGNATURE, not the arity.
+                //
+                // `name + "/" + parameterCount` collapsed every one-argument overload into one row:
+                // System.out offered println() and println(boolean) and nothing else, where there are ten.
+                // The dedup exists to stop an override appearing twice -- once from the subclass and once
+                // from the supertype it overrides -- and that needs the parameter TYPES, which is what
+                // "same method" actually means. Erased, so an override with a substituted generic still
+                // matches the declaration it overrides.
+                if (!seen.add(erasedSignatureOf(method))) continue;
                 into.add(new SymbolInfo(method.getName(), SymbolKind.METHOD,
                         typeRef(method.getReturnType()), owner.getQualifiedName(), null,
                         modifiersOf(method), null, parameterTypesOf(method)));
@@ -530,6 +537,18 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             List<TypeRef> types = new ArrayList<>(declared.length);
             for (ITypeBinding parameter : declared) types.add(typeRef(parameter));
             return types;
+        }
+
+        /** {@code println(java.lang.String)} — what "the same method" means for deduplication. */
+        private static String erasedSignatureOf(IMethodBinding method) {
+            StringBuilder signature = new StringBuilder(method.getName()).append('(');
+            ITypeBinding[] parameters = method.getParameterTypes();
+            for (int i = 0; i < parameters.length; i++) {
+                if (i > 0) signature.append(',');
+                ITypeBinding erasure = parameters[i] == null ? null : parameters[i].getErasure();
+                signature.append(erasure == null ? "?" : erasure.getQualifiedName());
+            }
+            return signature.append(')').toString();
         }
 
         /** JLS 6.6, asked of the bindings rather than reimplemented. */

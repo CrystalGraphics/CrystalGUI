@@ -80,9 +80,23 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
     public enum InsertTextFormat {
         /** Inserted exactly as written. */
         PLAIN,
-        /** Carries tab stops and placeholders. */
+        /**
+         * Carries {@link #CARET} — and, one day, tab stops and placeholders.
+         *
+         * <p><b>Only {@code $0} is implemented</b>, deliberately. It is not linked editing and does not
+         * pretend to be: it marks where the caret lands, which is the whole of what accepting a method
+         * needs ({@code println(|)}) and none of what a template needs. {@code $1}/{@code $2} tab stops
+         * arrive with rename, because both want the same linked-edit machinery and building it twice is
+         * how the two come to behave differently — §18.4's reasoning, unchanged.</p>
+         *
+         * <p>An unimplemented placeholder is therefore inserted <em>literally</em>, which is wrong in a way
+         * somebody reports rather than wrong in a way that silently swallows text.</p>
+         */
         SNIPPET
     }
+
+    /** The caret marker inside a {@link InsertTextFormat#SNIPPET} — LSP's {@code $0}. */
+    public static final String CARET = "$0";
 
     public CompletionItem {
         if (label == null) label = "";
@@ -108,15 +122,25 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
      * typed, and two overloads stop being two identical rows the user cannot choose between.</p>
      */
     public static CompletionItem from(SymbolInfo symbol) {
-        return builder(symbol.name() + symbol.parameterList(), symbol.kind())
+        Builder builder = builder(symbol.name() + symbol.parameterList(), symbol.kind())
                 .detail(symbol.type() == null ? symbol.container() : symbol.type().displayName())
                 .documentation(symbol.documentation())
                 .filterText(symbol.name())
                 .sortText(symbol.name())
-                .insertText(symbol.name())
                 .modifiers(symbol.modifiers())
-                .deprecated(symbol.is(SymbolModifier.DEPRECATED))
-                .build();
+                .deprecated(symbol.is(SymbolModifier.DEPRECATED));
+        if (symbol.isInvocable()) {
+            // ACCEPTING A METHOD WRITES ITS BRACKETS, with the caret inside when there is an argument to
+            // type and after them when there is not. Leaving them out means every acceptance is followed
+            // by typing `()` by hand; putting the caret past them means pressing Left before you can
+            // start. Both references do exactly this.
+            builder.insertText(symbol.parameters().isEmpty()
+                    ? symbol.name() + "()" + CARET
+                    : symbol.name() + "(" + CARET + ")").snippet();
+        } else {
+            builder.insertText(symbol.name());
+        }
+        return builder.build();
     }
 
     public static Builder builder(String label, SymbolKind kind) {

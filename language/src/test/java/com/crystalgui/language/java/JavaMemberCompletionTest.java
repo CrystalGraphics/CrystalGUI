@@ -159,7 +159,11 @@ public class JavaMemberCompletionTest {
         CompletionItem exit = named(completeAfterTheDot(AFTER_THE_DOT), "exit(int)");
         assertNotNull("the label must carry the parameter list", exit);
         assertEquals("typing the bare name must still match it", "exit", exit.filterKey());
-        assertEquals("and accepting must insert the bare name", "exit", exit.textToInsert());
+        // The insertion now carries brackets and a caret marker -- see
+        // acceptingAMethodWritesItsBracketsAroundTheCaret. What this test is about is that the NAME is
+        // what leads it, so the four fields still describe one member rather than three.
+        assertTrue("the insertion must start with the bare name: " + exit.textToInsert(),
+                exit.textToInsert().startsWith("exit"));
     }
 
     /**
@@ -189,5 +193,99 @@ public class JavaMemberCompletionTest {
         CompletionItem out = named(completeAfterTheDot(AFTER_THE_DOT), "out");
         assertNotNull(out);
         assertEquals("a field labelled `out()` would be a lie about what it is", "out", out.label());
+    }
+
+    // ── Bug fixes ───────────────────────────────────────────────────────────────────────────────
+
+    /** Completion at an arbitrary caret, for the cases that are not "straight after System.". */
+    private List<CompletionItem> completeAt(String source, int caret, String prefix, boolean afterDot) {
+        TextBuffer buffer = new TextBuffer(source);
+        LanguageServices services = new JavaLanguageServices(
+                buffer, engine, null, "Demo", HostClasspath.detect());
+        try {
+            AtomicReference<CompletionList> answered = new AtomicReference<>(CompletionList.EMPTY);
+            CompletionProvider.Request request = afterDot
+                    ? CompletionProvider.Request.character(caret, prefix, ".")
+                    : CompletionProvider.Request.explicit(caret, prefix);
+            services.completion().complete(request,
+                    (Versioned<CompletionList> v) -> answered.set(v.orElse(CompletionList.EMPTY)));
+            return answered.get().items();
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * Every overload is its own row.
+     *
+     * <p>The dedup key was {@code name + "/" + parameterCount}, which collapsed all ten one-argument
+     * {@code println} overloads into one: the popup offered {@code println()} and {@code println(boolean)}
+     * and nothing else. The key had to be the erased <em>signature</em> — which is what "the same method"
+     * means, and what makes the dedup do the job it was added for: an override appearing once, not twice.</p>
+     */
+    @Test
+    public void everyOverloadIsItsOwnRow() {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run() {\n"
+                + "        System.out.\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("System.out.") + "System.out.".length();
+        List<String> printlns = new ArrayList<>();
+        for (String label : labelsOf(completeAt(source, caret, "", true))) {
+            if (label.startsWith("println")) printlns.add(label);
+        }
+
+        assertTrue("PrintStream declares ten printlns; got " + printlns, printlns.size() >= 9);
+        assertTrue(printlns.toString(), printlns.contains("println(int)"));
+        assertTrue(printlns.toString(), printlns.contains("println(char)"));
+        assertTrue(printlns.toString(), printlns.contains("println(String)"));
+        assertTrue(printlns.toString(), printlns.contains("println()"));
+    }
+
+    /**
+     * Accepting a method writes its brackets, with the caret where the argument goes.
+     *
+     * <p>{@code $0} is LSP's marker and the only part of the snippet format implemented — a caret position,
+     * not linked editing.</p>
+     */
+    @Test
+    public void acceptingAMethodWritesItsBracketsAroundTheCaret() {
+        List<CompletionItem> items = completeAfterTheDot(AFTER_THE_DOT);
+
+        CompletionItem exit = named(items, "exit(int)");
+        assertNotNull(exit);
+        assertEquals("exit(" + CompletionItem.CARET + ")", exit.textToInsert());
+
+        CompletionItem gc = named(items, "gc()");
+        assertNotNull(gc);
+        assertEquals("a no-argument method leaves the caret AFTER the brackets",
+                "gc()" + CompletionItem.CARET, gc.textToInsert());
+
+        CompletionItem out = named(items, "out");
+        assertNotNull(out);
+        assertEquals("a field is not something you call", "out", out.textToInsert());
+    }
+
+    /**
+     * The JDK's own types are offered, which they were not.
+     *
+     * <p>Typing {@code System} listed {@code SystemClock} and friends from the classpath and never
+     * {@code java.lang.System}: since Java 9 the platform lives in the jrt image rather than on the
+     * classpath the index scanned.</p>
+     */
+    @Test
+    public void theTypeIndexKnowsThePlatformTypes() {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run() {\n"
+                + "        System\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("        System") + "        System".length();
+        List<String> labels = labelsOf(completeAt(source, caret, "System", false));
+
+        assertTrue("java.lang.System is missing from the index: " + labels, labels.contains("System"));
     }
 }

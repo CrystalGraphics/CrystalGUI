@@ -1718,7 +1718,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         UIWindow window = getAttachedWindow();
         if (window != null) {
-            if (completionPopup == null) completionPopup = new CompletionPopup();
+            if (completionPopup == null) {
+                completionPopup = new CompletionPopup();
+                completionPopup.onRowClicked.connect(index -> {
+                    if (completion == null) return;
+                    completion.setSelectedIndex(index);
+                    acceptCompletion(false);
+                    // FOCUS BACK, on the mouse-DOWN this arrived from. emitMouseDown blurs before it
+                    // dispatches, so without this the editor is left unfocused after a click-accept and the
+                    // next keystroke goes nowhere -- the caret is still drawn, which makes it look like the
+                    // editor simply stopped responding.
+                    UIWindow attached = getAttachedWindow();
+                    if (attached != null) attached.getInputHandler().requestPointerFocus(this);
+                });
+            }
             updateCompletionAnchor();
             completionPopup.attach(window, opened);
         }
@@ -2408,8 +2421,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private void maybeTriggerCompletion(char typed) {
         if (completion != null && !completion.isClosed()) return;
         if (languageServices == null) return;
-        if (!language.isCompletionTrigger(typed)) return;
-        openCompletion(CompletionProvider.TriggerKind.CHARACTER, String.valueOf(typed));
+        if (language.isCompletionTrigger(typed)) {
+            openCompletion(CompletionProvider.TriggerKind.CHARACTER, String.valueOf(typed));
+            return;
+        }
+        // TYPING A NAME OPENS THE LIST TOO -- IntelliJ's autopopup, and without it the only way in was
+        // Ctrl+Space, which is a thing you have to remember rather than a thing that helps.
+        //
+        // It self-limits rather than needing a threshold: the session filters down as you type and closes
+        // itself the moment nothing matches, so declaring a brand-new name costs one popup that vanishes
+        // on the first character that makes the name unique. A minimum prefix length would be a number
+        // chosen to feel right, and would delay exactly the case it was meant to serve.
+        if (Character.isJavaIdentifierStart(typed)) {
+            openCompletion(CompletionProvider.TriggerKind.EXPLICIT, null);
+        }
     }
 
 

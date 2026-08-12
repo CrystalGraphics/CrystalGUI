@@ -80,6 +80,11 @@ public record SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type,
         return parameters;
     }
 
+    /** Whether this is something you call — so accepting it should write brackets. */
+    public boolean isInvocable() {
+        return kind == SymbolKind.METHOD || kind == SymbolKind.CONSTRUCTOR || kind == SymbolKind.FUNCTION;
+    }
+
     /** {@code (String, int)} — or {@code ()} for a method with none, and {@code ""} for a non-method. */
     public String parameterList() {
         if (kind != SymbolKind.METHOD && kind != SymbolKind.CONSTRUCTOR && kind != SymbolKind.FUNCTION) {
