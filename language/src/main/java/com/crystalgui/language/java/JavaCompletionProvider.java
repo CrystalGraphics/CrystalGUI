@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-
 /**
  * What could go here, answered from the last ECJ analysis.
  *
