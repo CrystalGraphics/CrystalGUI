@@ -757,6 +757,7 @@ completionpopup {
      * list scrolled, underneath it. Reserving the bar's width plus a little air is what the overlay model
      * needs from anything drawing to the right edge. */
     padding-right: 12px;
+    overflow: hidden;
 }
 
 /* NO `gap-all` on the row, and that is the point: a gap applies between EVERY pair of children, so it put
@@ -813,10 +814,19 @@ completionpopup {
 /* BOLD, and only on the name. font-weight inherits and is drawn by UIText alone through a CgStyleSpan, so
  * putting it on the row instead would quietly embolden the parameter list and the type column too -- which
  * is the whole distinction this split exists to draw. */
+/* NOWRAP AND ELLIPSIS ON EVERY TEXT IN THE ROW, individually.
+ *
+ * A row has a fixed height and its texts wrapped: a long signature became two lines drawn over the row
+ * below it, and widening the popup "fixed" it by removing the need to wrap. `white-space` INHERITS, so the
+ * nowrap could have gone on the row -- but `text-overflow` does NOT, and set on a wrapper it silently never
+ * arrives and the row renders as plain clip. They are written together on each element so the pair cannot
+ * drift apart, which is the trap AGENTS.md records against this exact property. */
 .__completion-label__ {
     font-size: 10px;
     font-weight: bold;
     color: var(--completion-label, #D4D4D4);
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /* The parameter list, abutting the name and dimmed -- IntelliJ's "tail text". Regular weight, so the eye
@@ -826,6 +836,8 @@ completionpopup {
     color: var(--completion-params, #808080);
     flex-shrink: 1;
     min-width: 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /* Dimmed and shrinkable: when the row is tight the detail is what gives, because the NAME is the part
@@ -841,6 +853,8 @@ completionpopup {
     color: var(--completion-detail, #808080);
     flex-shrink: 1;
     min-width: 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .__completion-deprecated__ .__completion-params__,
