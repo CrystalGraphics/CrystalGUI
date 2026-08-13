@@ -603,6 +603,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             int offset = Math.min(tracked.from(), buffer.length());
             revealRow(buffer.offsetToPoint(offset).row());
             setCaret(offset);
+            revealCaretCentred();
             return true;
         }
         int row = Math.max(0, Math.min(target.start().row(), buffer.lineCount() - 1));
@@ -610,6 +611,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int rowStart = buffer.document().lineStartOffset(row);
         int rowEnd = buffer.document().lineEndOffset(row);
         setCaret(Math.min(rowEnd, rowStart + Math.max(0, target.start().column())));
+        // AND SCROLLED TO. `revealRow` only UNFOLDS -- its whole job is making the row exist as a view line
+        // -- and `setCaret` deliberately never scrolls, so between them this moved the caret to a problem
+        // and left the viewport exactly where it was. Reported as "the up/down arrows do nothing", which is
+        // precisely what a jump you cannot see looks like. Centred, because this is navigation: see
+        // revealCaretCentred on why that is a different question from following a caret.
+        revealCaretCentred();
         return true;
     }
 

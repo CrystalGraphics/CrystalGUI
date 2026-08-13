@@ -272,4 +272,226 @@ public class JavaLanguageServicesTest {
             services.close();
         }
     }
+
+    // ── Warnings survive a syntax error ─────────────────────────────────────────────────────────
+
+    /** A file whose only fault is an unused import — one warning, no errors. */
+    private static final String WITH_WARNING = ""
+            + "import java.util.List;\n"
+            + "public class Script {\n"
+            + "    void run() {\n"
+            + "        int x = 1;\n"
+            + "        x = x + 1;\n"
+            + "    }\n"
+            + "}\n";
+
+    private static List<Diagnostic> lastOf(List<List<Diagnostic>> announced) {
+        return announced.isEmpty() ? List.of() : announced.get(announced.size() - 1);
+    }
+
+    private static long errorsIn(List<Diagnostic> found) {
+        return found.stream().filter(d -> d.severity() == com.crystalgui.text.diagnostic
+                .DiagnosticSeverity.ERROR).count();
+    }
+
+    private static long warningsIn(List<Diagnostic> found) {
+        return found.stream().filter(d -> d.severity() != com.crystalgui.text.diagnostic
+                .DiagnosticSeverity.ERROR).count();
+    }
+
+    /** Types {@code text} at the end of the buffer. */
+    private static void append(TextBuffer buffer, String text) {
+        int at = buffer.length();
+        buffer.edit(com.crystalgui.text.ChangeSet.of(buffer.length(),
+                new com.crystalgui.text.Change(at, at, text)));
+    }
+
+    /**
+     * <b>A syntax error no longer swallows the warnings.</b>
+     *
+     * <p>ECJ skips every optional problem for a unit that does not parse, so the panel appeared to show
+     * errors <em>or</em> warnings and never both — fix the one syntax error and four warnings "appeared"
+     * that had been there all along. They are held from the last analysis whose optional pass actually
+     * ran and re-announced beside the errors.</p>
+     */
+    @Test
+    public void warningsSurviveASyntaxError() {
+        TextBuffer buffer = new TextBuffer(WITH_WARNING);
+        List<List<Diagnostic>> announced = new ArrayList<>();
+        JavaLanguageServices services = servicesFor(buffer);
+        try {
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
+            assertEquals("the fixture is meant to warn about its unused import: " + lastOf(announced),
+                    1, warningsIn(lastOf(announced)));
+            assertEquals(0, errorsIn(lastOf(announced)));
+
+            // Break the parse, exactly as typing a trailing dot does.
+            int at = buffer.document().toString().indexOf("x = x + 1;") + "x = x + 1;".length();
+            buffer.edit(com.crystalgui.text.ChangeSet.of(buffer.length(),
+                    new com.crystalgui.text.Change(at, at, "\n        x.")));
+            settle();
+
+            List<Diagnostic> now = lastOf(announced);
+            assertTrue("the broken file should still report its syntax error: " + now,
+                    errorsIn(now) > 0);
+            assertEquals("the warning was dropped the moment the file stopped parsing: " + now,
+                    1, warningsIn(now));
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * <b>A retained warning says where its text is NOW.</b>
+     *
+     * <p>The reason they are held in a decoration lane rather than in a plain list: the file goes on being
+     * edited while it is broken, so a warning re-announced at the row it was first reported on would
+     * point at whatever has since moved there — and the Problems row navigates to it.</p>
+     */
+    @Test
+    public void aRetainedWarningFollowsTheEditsMadeWhileTheFileIsBroken() {
+        TextBuffer buffer = new TextBuffer(WITH_WARNING);
+        List<List<Diagnostic>> announced = new ArrayList<>();
+        JavaLanguageServices services = servicesFor(buffer);
+        try {
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
+            int reportedRow = lastOf(announced).stream()
+                    .filter(d -> d.severity() != com.crystalgui.text.diagnostic.DiagnosticSeverity.ERROR)
+                    .findFirst().orElseThrow().start().row();
+
+            // A blank line at the very top, then break the parse. The import moves down by one.
+            buffer.edit(com.crystalgui.text.ChangeSet.of(buffer.length(),
+                    new com.crystalgui.text.Change(0, 0, "\n")));
+            append(buffer, "class Broken {\n");
+            settle();
+
+            List<Diagnostic> now = lastOf(announced);
+            assertTrue("the file should be broken: " + now, errorsIn(now) > 0);
+            Diagnostic retained = now.stream()
+                    .filter(d -> d.severity() != com.crystalgui.text.diagnostic.DiagnosticSeverity.ERROR)
+                    .findFirst().orElseThrow();
+            assertEquals("the retained warning did not follow the line inserted above it",
+                    reportedRow + 1, retained.start().row());
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * <b>Deleting the warned-about text drops the warning, without waiting for the file to parse.</b>
+     *
+     * <p>This is what keeps retention honest rather than merely persistent. The range holding the warning
+     * collapses when its text goes, and a range that collapsed <em>because of an edit</em> is not the same
+     * thing as one that was born empty — which is the distinction {@code TrackedRange.collapsedByEdit}
+     * exists to make.</p>
+     */
+    @Test
+    public void fixingTheWarningWhileBrokenRemovesIt() {
+        TextBuffer buffer = new TextBuffer(WITH_WARNING);
+        List<List<Diagnostic>> announced = new ArrayList<>();
+        JavaLanguageServices services = servicesFor(buffer);
+        try {
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
+            assertEquals(1, warningsIn(lastOf(announced)));
+
+            // Break the parse first, so the retained set is what is being asked about.
+            append(buffer, "class Broken {\n");
+            settle();
+            assertEquals("precondition: the warning is being retained", 1, warningsIn(lastOf(announced)));
+
+            // Now delete the unused import while the file is still broken.
+            String text = buffer.document().toString();
+            int from = text.indexOf("import java.util.List;\n");
+            buffer.edit(com.crystalgui.text.ChangeSet.of(buffer.length(), new com.crystalgui.text.Change(
+                    from, from + "import java.util.List;\n".length(), "")));
+            settle();
+
+            List<Diagnostic> now = lastOf(announced);
+            assertTrue("the file should still be broken: " + now, errorsIn(now) > 0);
+            assertEquals("the warning outlived the import it was about: " + now, 0, warningsIn(now));
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * <b>Attaching a second listener does not disturb the retained warnings.</b>
+     *
+     * <p>{@code announcement} has a side effect — it replaces the retained lane — and its inputs are
+     * row/column positions that only mean anything against the document the analysis saw. Recomputing it
+     * when a listener attaches would map those positions against a buffer that has since been edited and
+     * overwrite correctly-tracked ranges with wrong offsets, so the list is computed once per analysis
+     * and replayed. Silent if broken: the second listener gets a plausible list that points at the wrong
+     * text, and the first listener never sees anything change.</p>
+     */
+    @Test
+    public void aLateListenerDoesNotCorruptTheRetainedPositions() {
+        TextBuffer buffer = new TextBuffer(WITH_WARNING);
+        List<List<Diagnostic>> first = new ArrayList<>();
+        JavaLanguageServices services = servicesFor(buffer);
+        try {
+            services.onDiagnostics(v -> first.add(v.orElse(List.of())));
+            int reportedRow = lastOf(first).stream()
+                    .filter(d -> d.severity() != com.crystalgui.text.diagnostic.DiagnosticSeverity.ERROR)
+                    .findFirst().orElseThrow().start().row();
+
+            // A line at the very top, and NO settle: the lane tracks the edit, so the warning has moved,
+            // while the held analysis still describes the document before it. This is the window in which
+            // recomputing would map the analysis's original row/column against the newer buffer.
+            buffer.edit(com.crystalgui.text.ChangeSet.of(buffer.length(),
+                    new com.crystalgui.text.Change(0, 0, "\n")));
+            services.onDiagnostics(v -> { });
+
+            // Now break the parse, so the retained warning is what gets re-announced.
+            append(buffer, "class Broken {\n");
+            settle();
+
+            Diagnostic retained = lastOf(first).stream()
+                    .filter(d -> d.severity() != com.crystalgui.text.diagnostic.DiagnosticSeverity.ERROR)
+                    .findFirst().orElseThrow();
+            assertEquals("attaching a listener re-derived the retained range from positions describing an"
+                            + " older document, so the warning points a line above its own text",
+                    reportedRow + 1, retained.start().row());
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * <b>A file that parses has the last word, even when it has errors and no warnings.</b>
+     *
+     * <p>The case that makes {@code optionalProblemsAnalysed} worth asking the compiler rather than
+     * inferring. "Errors and no warnings" is the shape of a suppressed analysis <em>and</em> the shape of
+     * a file that resolves badly but parses fine — and treating the second as the first resurrects
+     * warnings the user has already fixed, which is worse than the bug this feature fixes.</p>
+     */
+    @Test
+    public void aSemanticErrorDoesNotResurrectFixedWarnings() {
+        TextBuffer buffer = new TextBuffer(WITH_WARNING);
+        List<List<Diagnostic>> announced = new ArrayList<>();
+        JavaLanguageServices services = servicesFor(buffer);
+        try {
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
+            assertEquals("precondition: one warning to forget", 1, warningsIn(lastOf(announced)));
+
+            // Remove the unused import AND introduce a name that does not resolve. The file still parses,
+            // so ECJ's answer -- one error, no warnings -- is complete.
+            buffer.edit(com.crystalgui.text.ChangeSet.of(buffer.length(), new com.crystalgui.text.Change(
+                    0, buffer.length(),
+                    "public class Script {\n"
+                            + "    void run() {\n"
+                            + "        int x = nope();\n"
+                            + "        x = x + 1;\n"
+                            + "    }\n"
+                            + "}\n")));
+            settle();
+
+            List<Diagnostic> now = lastOf(announced);
+            assertTrue("the fixture is meant to have an unresolved name: " + now, errorsIn(now) > 0);
+            assertEquals("a parsing file's answer is complete — retention must not add to it: " + now,
+                    0, warningsIn(now));
+        } finally {
+            services.close();
+        }
+    }
 }

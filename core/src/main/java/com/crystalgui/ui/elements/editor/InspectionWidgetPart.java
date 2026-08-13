@@ -34,7 +34,12 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
 final class InspectionWidgetPart extends EditorViewPart {
 
     static final String PANEL_CLASS = "__inspection__";
-    static final String STATUS_CLASS = "__inspection-status__";
+    /** One severity's icon-and-number pair. Carries a {@code severity-*} class the cascade draws from. */
+    static final String COUNT_CLASS = "__inspection-count__";
+    static final String ICON_CLASS = "__inspection-icon__";
+    static final String NUMBER_CLASS = "__inspection-number__";
+    /** The green tick, shown only when the file has nothing at all. */
+    static final String CLEAN_MARK_CLASS = "__inspection-ok__";
     static final String PREVIOUS_CLASS = "__inspection-previous__";
     static final String NEXT_CLASS = "__inspection-next__";
 
@@ -53,8 +58,21 @@ final class InspectionWidgetPart extends EditorViewPart {
      */
     private static final float CLEARANCE = 14f;
 
+    /**
+     * Logical px between the widget and the editor's top edge — i.e. the separator above it.
+     *
+     * <p>Its own constant rather than {@link #CLEARANCE}, because the two answer different questions: the
+     * horizontal one is "clear the scrollbar", which is a widget's width, and this one is "sit just under
+     * the tab strip", which is a hairline. Sharing a number would have made either of them wrong the first
+     * time the other changed.</p>
+     */
+    private static final float TOP_GAP = 2f;
+
     private UIElement panel;
-    private UIText status;
+    private UIElement errorCount;
+    private UIElement warningCount;
+    private UIElement infoCount;
+    private UIElement clean;
     private Button previous;
     private Button next;
 
@@ -67,7 +85,16 @@ final class InspectionWidgetPart extends EditorViewPart {
         DiagnosticSet diagnostics = editor.diagnostics();
         panel();
 
-        status.setText(summaryOf(diagnostics));
+        int errors = diagnostics.count(DiagnosticSeverity.ERROR);
+        int warnings = diagnostics.count(DiagnosticSeverity.WARNING);
+        int information = diagnostics.count(DiagnosticSeverity.INFORMATION);
+        showCount(errorCount, errors);
+        showCount(warningCount, warnings);
+        showCount(infoCount, information);
+        // The green tick, and only when there is genuinely nothing. IntelliJ's widget says "this file is
+        // clean" with a mark rather than with the word, which is also the only state that needs saying --
+        // every other one is already spelled out by the counts beside it.
+        clean.setDisplayed(errors == 0 && warnings == 0 && information == 0);
         applyWorst(diagnostics.worst());
 
         // Disabled rather than hidden when there is nothing to visit: a control that vanishes changes the
@@ -80,33 +107,18 @@ final class InspectionWidgetPart extends EditorViewPart {
         // box with no definite size, which means the panel never needs to measure its own text -- and so
         // the readout cannot be clipped by a width computed against the wrong font.
         StyleGroup.defaultPipeline(panel.getStyle().getLayoutGroup(),
-                l -> l.positionType(TaffyPosition.ABSOLUTE).top(CLEARANCE).right(CLEARANCE));
+                l -> l.positionType(TaffyPosition.ABSOLUTE).top(TOP_GAP).right(CLEARANCE));
     }
 
     /**
-     * "No problems", or the non-zero counts.
+     * One severity's chip — its icon and its number — shown only when it has one.
      *
-     * <p>Words rather than symbols, and singular/plural handled, because this is the one line in the editor
-     * a person reads to decide whether they are done.</p>
+     * <p>A severity with nothing to report is not "0", it is absent: IntelliJ shows the marks that apply
+     * and no others, and a row of zeroes is noise in a widget whose whole job is to be glanceable.</p>
      */
-    private static String summaryOf(DiagnosticSet diagnostics) {
-        int errors = diagnostics.count(DiagnosticSeverity.ERROR);
-        int warnings = diagnostics.count(DiagnosticSeverity.WARNING);
-        int information = diagnostics.count(DiagnosticSeverity.INFORMATION);
-        if (errors == 0 && warnings == 0 && information == 0) return "No problems";
-
-        StringBuilder out = new StringBuilder();
-        append(out, errors, "error");
-        append(out, warnings, "warning");
-        append(out, information, "note");
-        return out.toString();
-    }
-
-    private static void append(StringBuilder out, int count, String noun) {
-        if (count == 0) return;
-        if (out.length() > 0) out.append("  ");
-        out.append(count).append(' ').append(noun);
-        if (count != 1) out.append('s');
+    private static void showCount(UIElement chip, int count) {
+        chip.setDisplayed(count > 0);
+        if (count > 0) ((UIText) chip.getChildren().get(1)).setText(Integer.toString(count));
     }
 
     /** Set AND cleared, all three — the panel is long-lived, so a file that was fixed would otherwise keep
@@ -129,10 +141,19 @@ final class InspectionWidgetPart extends EditorViewPart {
         // Chrome, not content: it must stay in the corner rather than sliding away as the text scrolls.
         panel.setScrollExempt(true);
 
-        status = new UIText("");
-        status.addClass(STATUS_CLASS);
-        status.setHitTest(false);
-        panel.addChild(status);
+        // BUILT ONCE, shown and hidden per render. Creating the chips as counts appear would put new
+        // elements into the tree from inside a render pass -- the trap the editor's gutter arrows and the
+        // palette's key chips each paid for -- and they would land after the frame's layout.
+        errorCount = countChip("severity-error");
+        warningCount = countChip("severity-warning");
+        infoCount = countChip("severity-info");
+        clean = new UIElement();
+        clean.addClass(CLEAN_MARK_CLASS);
+        clean.setHitTest(false);
+        panel.addChild(errorCount);
+        panel.addChild(warningCount);
+        panel.addChild(infoCount);
+        panel.addChild(clean);
 
         previous = arrow(PREVIOUS_CLASS, editor::goToPreviousProblem);
         next = arrow(NEXT_CLASS, editor::goToNextProblem);
@@ -141,6 +162,33 @@ final class InspectionWidgetPart extends EditorViewPart {
 
         editor.addInternalChild(panel);
         return panel;
+    }
+
+    /**
+     * A severity's icon and its number, as one unit.
+     *
+     * <p>A container rather than two siblings on the panel, because the icon and the count <b>are</b> one
+     * thing: {@code gap-all} applies between every pair of children, so laying them out flat would put the
+     * same space inside a chip as between two of them. The panel therefore uses margins on the chips and
+     * no gap of its own — which is also required because a chip hidden with {@code display: none}
+     * <em>still counts</em> for a {@code gap-all}, so a clean file would have carried three phantom gaps.</p>
+     */
+    private static UIElement countChip(String severityClass) {
+        UIElement chip = new UIElement();
+        chip.addClass(COUNT_CLASS);
+        chip.addClass(severityClass);
+        chip.setHitTest(false);
+
+        UIElement icon = new UIElement();
+        icon.addClass(ICON_CLASS);
+        icon.setHitTest(false);
+        chip.addChild(icon);
+
+        UIText number = new UIText("");
+        number.addClass(NUMBER_CLASS);
+        number.setHitTest(false);
+        chip.addChild(number);
+        return chip;
     }
 
     /**

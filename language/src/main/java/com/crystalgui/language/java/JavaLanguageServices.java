@@ -7,7 +7,12 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.TextBuffer;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.decoration.DecorationSet;
+import com.crystalgui.text.decoration.Stickiness;
+import com.crystalgui.text.decoration.TrackedRange;
 import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.lang.LanguageServices;
 import com.crystalgui.text.lang.Resolver;
@@ -140,7 +145,9 @@ public final class JavaLanguageServices implements LanguageServices {
         // FIRED IMMEDIATELY IF THERE IS ALREADY AN ANSWER. A view attached after the first analysis
         // landed would otherwise show nothing until the next edit -- and for a file nobody types in,
         // that is forever.
-        if (current != null) listener.accept(announcement(current));
+        // REPLAYED, never recomputed -- see install. Recomputing would re-derive offsets from positions
+        // that describe an older document.
+        if (lastAnnouncement != null) listener.accept(lastAnnouncement);
         return () -> diagnosticListeners.remove(listener);
     }
 
@@ -151,8 +158,82 @@ public final class JavaLanguageServices implements LanguageServices {
      * differ by exactly the typing that happened while the compile ran, which is the whole quantity the
      * stamp exists to measure — reading it here would make every list look fresh and the gate a no-op.</p>
      */
-    private static Versioned<List<Diagnostic>> announcement(SourceAnalyzer.Analysis analysis) {
-        return Versioned.of(analysis.version(), analysis.diagnostics());
+    private Versioned<List<Diagnostic>> announcement(SourceAnalyzer.Analysis analysis) {
+        List<Diagnostic> reported = analysis.diagnostics();
+        if (analysis.optionalProblemsAnalysed()) {
+            remember(reported);
+            return Versioned.of(analysis.version(), reported);
+        }
+        List<Diagnostic> merged = new ArrayList<>(reported);
+        merged.addAll(recalled());
+        return Versioned.of(analysis.version(), merged);
+    }
+
+    // ── Warnings survive a syntax error ─────────────────────────────────────────────────────────
+
+    /**
+     * Where the retained optional problems live, so they follow the edits made while the file is broken.
+     *
+     * <p>A lane in the <b>document's own</b> {@code DecorationSet}, which {@code TextBuffer.applied}
+     * adjusts before any listener runs — the same machinery the editor's squiggles use, and the reason
+     * this costs no tracking code of its own.</p>
+     */
+    private static final String RETAINED_LANE = "java-retained-warnings";
+
+    /**
+     * Remembers this analysis's optional problems, <b>replacing</b> whatever was held.
+     *
+     * <p>Replacing rather than merging, and to empty when there are none: an analysis whose optional pass
+     * ran is the complete answer, so a warning the user has just fixed has to leave. Merging would make
+     * the set grow monotonically and never forget anything.</p>
+     */
+    private void remember(List<Diagnostic> reported) {
+        List<DecorationSet.Entry> entries = new ArrayList<>();
+        for (Diagnostic problem : reported) {
+            if (problem.severity() == DiagnosticSeverity.ERROR) continue;
+            if (!problem.hasPosition()) continue;
+            int from = offsetOf(problem.start());
+            int to = Math.max(from, offsetOf(problem.end()));
+            entries.add(DecorationSet.Entry.of(from, to, problem));
+        }
+        // ALWAYS_GROWS, matching the editor's diagnostic lane: type at either edge of an underlined name
+        // and the new character belongs to the same problem rather than sitting outside it.
+        buffer.decorations().replaceLane(RETAINED_LANE,
+                Stickiness.ALWAYS_GROWS_WHEN_TYPING_AT_EDGES, entries);
+    }
+
+    /**
+     * The retained problems, re-stated <b>where their text is now</b>.
+     *
+     * <p>Rebuilt from the tracked offsets rather than re-announced with their original row and column,
+     * which is the entire point of holding them in a decoration lane: a warning about line 17 that has
+     * since become line 20 must say 20, or the Problems row navigates to innocent text and the squiggle
+     * paints over it.</p>
+     *
+     * <p><b>A range that collapsed is dropped, and that is what keeps this honest.</b> Delete the unused
+     * import while the file is broken and the range holding its warning shrinks to nothing, so the warning
+     * goes with it rather than persisting until the file next parses. It is the difference between
+     * retaining a problem and retaining a claim about text that is gone — and {@code collapsedByEdit} is
+     * the distinction, since a diagnostic can legitimately be born empty.</p>
+     */
+    private List<Diagnostic> recalled() {
+        List<Diagnostic> out = new ArrayList<>();
+        for (TrackedRange range : buffer.decorations().inLane(RETAINED_LANE)) {
+            if (range.isRemoved() || range.collapsedByEdit()) continue;
+            Diagnostic original = range.payload(Diagnostic.class);
+            if (original == null) continue;
+            out.add(new Diagnostic(pointOf(range.from()), pointOf(range.to()), original.severity(),
+                    original.message(), original.source(), original.code()));
+        }
+        return out;
+    }
+
+    private int offsetOf(TextPoint point) {
+        return buffer.pointToOffset(point);
+    }
+
+    private TextPoint pointOf(int offset) {
+        return buffer.offsetToPoint(Math.max(0, Math.min(offset, buffer.length())));
     }
 
     // ── Scheduling ──────────────────────────────────────────────────────────────────────────────
@@ -221,11 +302,19 @@ public final class JavaLanguageServices implements LanguageServices {
         if (previous != null) previous.close();
 
         tokens.adopt(analysis);
-        Versioned<List<Diagnostic>> announced = announcement(analysis);
+        // COMPUTED ONCE PER ANALYSIS, not once per listener. announcement() has a side effect now -- it
+        // replaces the retained-warning lane -- and its inputs are row/column positions that are only
+        // meaningful against the document the analysis saw. Recomputing it later, when a listener happens
+        // to attach, would map those positions against a buffer that has since been edited and overwrite
+        // correctly-tracked ranges with wrong offsets. @see #announcement
+        lastAnnouncement = announcement(analysis);
         for (Consumer<Versioned<List<Diagnostic>>> listener : new ArrayList<>(diagnosticListeners)) {
-            listener.accept(announced);
+            listener.accept(lastAnnouncement);
         }
     }
+
+    /** The last list handed out, replayed verbatim to a listener that attaches later. @see #install */
+    private Versioned<List<Diagnostic>> lastAnnouncement;
 
     @Override
     public void close() {

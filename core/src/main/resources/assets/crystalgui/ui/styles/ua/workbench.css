@@ -659,14 +659,75 @@ quickpick ::highlight(quickpick-match) {
     z-index: 2;
 }
 
-.__inspection-status__ {
-    font-size: 7px;
-    margin-right: 4px;
+/* ONE CHIP PER SEVERITY — an icon and its number, as IntelliJ's widget does it.
+ *
+ * It used to read "2 errors  3 warnings  1 note", which is the same information at four times the width
+ * and has to be parsed rather than glanced at. The icons are already the vocabulary the Problems panel
+ * and the error stripe use, so the widget stops being the one place a severity is spelled in words.
+ *
+ * MARGIN, NOT `gap-all`, on the panel: a chip is hidden with `display: none` when its count is zero, and
+ * a hidden child still counts for a gap — so a clean file would have carried three phantom gaps before
+ * the tick. The margin travels with the chip and disappears with it. */
+.__inspection-count__ {
+    flex-direction: row;
+    align-items: center;
+    margin-right: 5px;
 }
 
-.__inspection-clean__ .__inspection-status__ { color: var(--inspection-clean-fg, #6A9955); }
-.__inspection-errors__ .__inspection-status__ { color: var(--inspection-error-fg, #F14C4C); }
-.__inspection-warnings__ .__inspection-status__ { color: var(--inspection-warning-fg, #CCA700); }
+/* Inside a chip the two parts are one unit, so the space between them is smaller than between chips. */
+.__inspection-icon__ {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+    margin-right: 2px;
+}
+
+.__inspection-number__ {
+    font-size: 7px;
+}
+
+/* The same three glyphs and the same three colours as the Problems rows. A severity that looked
+ * different in two places would read as two different kinds of problem. */
+.__inspection-count__.severity-error .__inspection-icon__ {
+    overlay: icon("crystalgui:general/statusError");
+    color: var(--inspection-error-fg, #F14C4C);
+}
+
+.__inspection-count__.severity-warning .__inspection-icon__ {
+    overlay: icon("crystalgui:general/warningDialog");
+    color: var(--inspection-warning-fg, #CCA700);
+}
+
+.__inspection-count__.severity-info .__inspection-icon__ {
+    overlay: icon("crystalgui:general/informationDialog");
+    color: var(--inspection-info-fg, #3794FF);
+}
+
+.__inspection-count__.severity-error .__inspection-number__ {
+    color: var(--inspection-error-fg, #F14C4C);
+}
+
+.__inspection-count__.severity-warning .__inspection-number__ {
+    color: var(--inspection-warning-fg, #CCA700);
+}
+
+.__inspection-count__.severity-info .__inspection-number__ {
+    color: var(--inspection-info-fg, #3794FF);
+}
+
+/* A DRAWN SHAPE, not a glyph: the bundled font has no U+2713, and a missing glyph renders as a blank
+ * advance — so a tick spelled as text is an empty box that reads as a layout bug. The arrows below carry
+ * the same note for the same reason. */
+.__inspection-ok__ {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    margin-right: 5px;
+    overlay: shape("checkmark");
+    overlay-fit: contain;
+    color: var(--inspection-clean-fg, #6A9955);
+}
 
 /* Drawn shapes, never glyphs: MinecraftRegular.otf has no U+25B2/U+25BC and a missing glyph renders as
  * a blank advance, so a text arrow would be an empty button that reads as a layout bug. */
@@ -723,12 +784,12 @@ quickpick ::highlight(quickpick-match) {
  * `:disabled` above is for the meaningful case — there ARE problems and you are standing on the last of
  * them — where a greyed arrow says "this direction is exhausted" and the other one is still live. With
  * nothing detected there is no such thing as a direction: both are dead permanently, and two ghosts
- * beside the word "No problems" read as controls that failed to load rather than as controls with
- * nothing to do. IntelliJ's widget collapses to the check and the label for the same reason.
+ * beside a lone tick read as controls that failed to load rather than as controls with nothing to do.
+ * IntelliJ's widget collapses to the check for the same reason, which is exactly what this leaves.
  *
  * `display: none` and not opacity, because at zero opacity they would still take their slots and still
  * hit-test — a dead target you cannot see is worse than one you can. The widget shrink-wraps its row, so
- * dropping them is also what closes the gap after the label. */
+ * dropping them is also what closes the gap after the tick. */
 .__inspection-clean__ .__inspection-previous__,
 .__inspection-clean__ .__inspection-next__ {
     display: none;

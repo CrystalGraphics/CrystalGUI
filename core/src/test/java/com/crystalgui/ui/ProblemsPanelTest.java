@@ -1047,6 +1047,34 @@ public class ProblemsPanelTest extends UiTestBase {
         window.getInputHandler().endFrame();
     }
 
+    /**
+     * <b>Worst first, then document order.</b>
+     *
+     * <p>The panel is read top-down to decide what to fix, and an error is not one of six things to scan
+     * for — it is why the panel is open. Sorted positionally, two syntax errors on line 509 sat under four
+     * unused-import warnings purely because imports live at the top of the file, so the only rows that
+     * stopped it compiling were the last ones you reached.</p>
+     *
+     * <p>Only the view is reordered: {@code Diagnostic}'s natural order stays positional, because a
+     * squiggle lookup and "what is on this row" both want document order.</p>
+     */
+    @Test
+    public void problemsAreListedWorstFirst() {
+        give(shader,
+                at(3, DiagnosticSeverity.WARNING, "unused import"),
+                at(7, DiagnosticSeverity.INFORMATION, "a note"),
+                at(40, DiagnosticSeverity.ERROR, "second error"),
+                at(20, DiagnosticSeverity.ERROR, "first error"),
+                at(9, DiagnosticSeverity.WARNING, "unused local"));
+        panel.bindTo(markers);
+        settle();
+        expandEverything();
+
+        List<Diagnostic> shown = panel.visibleProblems();
+        assertEquals(List.of("first error", "second error", "unused import", "unused local", "a note"),
+                shown.stream().map(Diagnostic::message).toList());
+    }
+
     /** A press through the real route — accumulated and dispatched by the frame pair, as input is. */
     private void press(UIElement target) {
         window.getInputHandler().beginFrame();

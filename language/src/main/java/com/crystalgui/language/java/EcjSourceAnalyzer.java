@@ -11,6 +11,7 @@ import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.syntax.SyntaxToken;
 
+import org.eclipse.jdt.core.compiler.CategorizedProblem;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
@@ -153,6 +154,30 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         @Override
         public long version() {
             return version;
+        }
+
+        /**
+         * True unless the unit carries a <b>syntax</b> problem, which is what makes ECJ skip
+         * {@code analyseCode()} and with it every optional problem in the file.
+         *
+         * <p>Asked as ECJ's own category rather than as "are there errors": a semantic error leaves the
+         * optional passes running, so a resolve failure with no warnings is a complete answer and a parse
+         * failure with no warnings is an absent one. The two are indistinguishable from the list alone.</p>
+         *
+         * <p>{@code CategorizedProblem} rather than an ID range — the ranges are internal and the category
+         * is the published API. A problem that is not categorized at all is not a syntax error.</p>
+         */
+        @Override
+        public boolean optionalProblemsAnalysed() {
+            CompilationUnit resolved = unit;
+            if (resolved == null) return true;
+            for (IProblem problem : resolved.getProblems()) {
+                if (problem instanceof CategorizedProblem categorized
+                        && categorized.getCategoryID() == CategorizedProblem.CAT_SYNTAX) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         @Override
