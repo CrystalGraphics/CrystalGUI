@@ -171,6 +171,11 @@ final class UIResizer extends UIElement {
             if (handle.dx != 0) l.width(finalWidth);
             if (handle.dy != 0) l.height(finalHeight);
         });
+        // AND SAY SO. Everything else that writes geometry from code uses IMPORTANT, which outranks the
+        // INLINE above -- so a widget that sizes itself would overwrite this every frame and the handle
+        // would appear dead on that axis. The flag is what lets such a widget stand down instead, without
+        // this having to win an origin fight it should not win. @see UIElement#isUserSizedHeight
+        target.markUserSized(handle.dx != 0, handle.dy != 0);
 
         // The origin follows the size that was ACHIEVED, never the pointer. That is what pins the opposite
         // edge in place, and what makes the element stop moving the instant it stops resizing.

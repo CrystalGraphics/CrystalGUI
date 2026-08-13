@@ -78,7 +78,6 @@ public final class CompletionPopup extends Popover {
     public static final String HINT_CLASS = "__completion-hint__";
     public static final String HINT_TEXT_CLASS = "__completion-hint-text__";
     public static final String OPTIONS_CLASS = "__completion-options__";
-    public static final String GRIP_CLASS = "__completion-grip__";
 
     /**
      * A key that accepts, and the word the strip uses for it.
@@ -175,7 +174,6 @@ public final class CompletionPopup extends Popover {
     private final UIElement hint = new UIElement();
 
     /** The corner grab, at the strip's right-hand end. */
-    private final UIElement grip = new UIElement();
     private final UIText hintLabel = new UIText(hintText());
 
     /**
@@ -211,11 +209,9 @@ public final class CompletionPopup extends Popover {
      * from the pointer having <em>moved</em>, not from a press, which is the rule {@code NavigatorView}
      * shipped backwards once.</p>
      */
-    private float userWidth = -1f;
-    private float userHeight = -1f;
 
     private boolean isUserSized() {
-        return userWidth > 0f && userHeight > 0f;
+        return isUserSizedWidth() || isUserSizedHeight();
     }
 
     @Nullable
@@ -265,7 +261,6 @@ public final class CompletionPopup extends Popover {
 
         hint.addClass(HINT_CLASS);
         installStripDrag();
-        installGrip();
         hintLabel.addClass(HINT_TEXT_CLASS);
         hintLabel.setHitTest(false);
         hint.addChild(hintLabel);
@@ -282,11 +277,14 @@ public final class CompletionPopup extends Popover {
         options.onPressed.connect(this::openOptionsMenu);
         hint.addChild(options);
 
-        // LAST, so it is the bottom-RIGHT corner. Added before the options button it sat inside the strip
-        // with the kebab to its right, which is not a corner and does not read as a grab.
-        grip.addClass(GRIP_CLASS);
-        hint.addChild(grip);
         addInternalChild(hint);
+
+        // THE LIST FILLS WHATEVER HEIGHT THE POPUP HAS, always -- which is what lets `resize:` work here
+        // with no coupling at all. Sizing the LIST to its rows and leaving the popup automatic was the
+        // arrangement that made a drag add empty space instead of rows: the popup grew, the list did not,
+        // and nothing connected the two. With the popup owning the height, the rows follow it whether that
+        // height came from the content, from a clamp, or from a handle.
+        StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(), l -> l.height(0f).flexGrow(1f));
 
         widthProbe = renderer.createTemplate();
         widthProbe.setHitTest(false);
@@ -360,13 +358,10 @@ public final class CompletionPopup extends Popover {
      */
     private void resetUserGeometry() {
         userMoved = false;
-        if (!isUserSized()) return;
-        userWidth = -1f;
-        userHeight = -1f;
-        // The fill idiom has to be undone too, or the list keeps growing into a box that is once again
-        // sized to its content -- which resolves to zero and shows an empty popup.
-        StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(), l -> l.flexGrow(0f));
-        StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.heightAuto());
+        // Removes the INLINE width/height the resize wrote, not merely the flag -- otherwise the popup's
+        // own IMPORTANT sizing and the dragged one would both be live and the result would depend on
+        // which ran last. @see UIElement#clearUserSizing
+        clearUserSizing();
     }
 
     /** Told where the completed word is on screen, in the window's coordinates. */
@@ -440,40 +435,6 @@ public final class CompletionPopup extends Popover {
     }
 
     /**
-     * Dragging the grip resizes in <b>both</b> axes.
-     *
-     * <p>Sourced on the parent for the same reason the strip drag is: a drag sourced on something the drag
-     * itself resizes measures its deltas in a frame that is changing under it.</p>
-     */
-    private void installGrip() {
-        grip.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
-            UIWindow window = getAttachedWindow();
-            UIElement host = getParent();
-            if (window == null || host == null) return;
-
-            float startWidth = getRuntimeCache().getWidth();
-            float startHeight = getRuntimeCache().getHeight();
-            float[] press = pressInHostSpace(grip, host, event.getPosition().x(), event.getPosition().y());
-            float pressX = press[0];
-            float pressY = press[1];
-
-            window.getInputHandler().getDragController().startDrag(host, pressX, pressY,
-                    new UIDragController.DragListener() {
-                        @Override
-                        public void onDragUpdate(float mx, float my, float sx, float sy,
-                                                 float dx, float dy) {
-                            // Latched by MOVEMENT: a press that drags nowhere leaves the popup automatic.
-                            if (dx == 0f && dy == 0f) return;
-                            userWidth = Math.max(MIN_WIDTH, startWidth + dx);
-                            userHeight = Math.max(MIN_HEIGHT, startHeight + dy);
-                            applyUserSize();
-                        }
-                    });
-            event.stopPropagation();
-        }, false, false);
-    }
-
-    /**
      * A press inside {@code from}, expressed in {@code host}'s coordinates.
      *
      * <p>Through the <b>transform</b> chain rather than the layout chain, because this popup is promoted:
@@ -491,23 +452,6 @@ public final class CompletionPopup extends Popover {
                 .transformPosition(new Vector3f(localX, localY, 0f));
         Vector2f inHost = host.screenToLocal(world.x, world.y);
         return new float[] { inHost.x, inHost.y };
-    }
-
-    /**
-     * Writes a dragged size, and hands the leftover space to the list.
-     *
-     * <p>The second half is the one that was missing: growing the popup without growing the list left a
-     * taller box with the same nineteen rows in it and empty space underneath — the resize appeared to do
-     * nothing but add margin. The list takes {@code height: 0; flex-grow: 1}, which is the fill idiom, and
-     * it works here <em>because</em> the popup now has an explicit height: a popover sized by its own
-     * content has no free space to distribute, which is the trap {@code QuickPick.sizeListToContent}
-     * documents.</p>
-     */
-    private void applyUserSize() {
-        StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
-                l -> l.width(userWidth).height(userHeight));
-        StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(),
-                l -> l.height(0f).flexGrow(1f));
     }
 
     /**
@@ -565,9 +509,10 @@ public final class CompletionPopup extends Popover {
      * with nothing visible in it.</p>
      */
     private void sizeToContent(int rowCount) {
-        if (isUserSized()) return;
-        float height = Math.min(rowCount, MAX_VISIBLE_ROWS) * ROW_HEIGHT;
-        StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(), l -> l.height(height));
+        if (isUserSizedHeight()) return;
+        float height = Math.min(rowCount, MAX_VISIBLE_ROWS) * ROW_HEIGHT + HINT_HEIGHT;
+        // DEFAULT origin, not IMPORTANT -- see the note on the width write in reposition().
+        StyleGroup.defaultPipeline(getStyle().getLayoutGroup(), l -> l.height(height));
     }
 
     /**
@@ -615,6 +560,9 @@ public final class CompletionPopup extends Popover {
         // THE USER OWNS WHAT THEY HAVE DRAGGED. Either latch stops this method writing anything, because
         // both halves are written by the same IMPORTANT pipeline and this one runs every frame -- it would
         // win every argument it is allowed to have.
+        // ONCE THE USER HAS TOUCHED IT, THIS STOPS. Position is pinned by a resize as well as by a move,
+        // because a leading-edge drag moves the origin too -- re-anchoring afterwards would undo half of
+        // the gesture the pointer is still making.
         if (isUserSized() || userMoved) return;
         float wanted = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, measuredWidth));
         float width = Math.max(0f, Math.min(wanted, window.getScreenWidth() - 2f * MARGIN));
@@ -653,14 +601,18 @@ public final class CompletionPopup extends Popover {
 
         placedLeft = left;
         placedTop = top;
-        StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
-                l -> l.width(width).left(left).top(top));
-        // Only when it had to be cut. Otherwise the list keeps sizing itself to its rows, which is what
-        // makes a two-item popup two items tall rather than a mostly-empty box.
-        if (fitted < height) {
-            float listHeight = Math.max(ROW_HEIGHT, fitted - HINT_HEIGHT);
-            StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(), l -> l.height(listHeight));
-        }
+        // POSITION AT IMPORTANT, SIZE AT DEFAULT, and the split is the whole reason `resize:` works here.
+        //
+        // A user resize writes INLINE, per spec, so that an author's !important still wins. Anything the
+        // widget writes at IMPORTANT therefore outranks the handle -- and withdrawing it is not available
+        // either, because a widget's IMPORTANT and an author's !important share one origin bucket with
+        // nothing to tell them apart. So the measured size goes in BELOW the handle instead: author
+        // !important beats the drag, the drag beats this, and nothing had to be special-cased.
+        //
+        // The position stays at IMPORTANT because nothing else writes it and it is not a size the user can
+        // take -- `userMoved` is what stands this down for a move.
+        StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.left(left).top(top));
+        StyleGroup.defaultPipeline(getStyle().getLayoutGroup(), l -> l.width(width).height(fitted));
     }
 
     // ── Rows ────────────────────────────────────────────────────────────────────────────────────

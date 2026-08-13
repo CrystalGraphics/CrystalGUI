@@ -732,10 +732,21 @@ dockgroup texteditor {
  * Not `resize:` -- UIResizer writes at INLINE and reposition() writes width at IMPORTANT, so the grabber
  * could move the height and never the width. CompletionPopup owns the drag instead; see installGrip. */
 completionpopup {
-    /* CLIPPED, always. The list is sized independently of this box -- by row count normally, by the fill
-     * idiom once resized -- and any disagreement between the two painted rows straight over the editor
-     * below, outside the popup's own border. Overflow is the guarantee that cannot be got wrong twice. */
+    /* CLIPPED, always. The list fills this box, and any disagreement between the two painted rows straight
+     * over the editor below, outside the popup's own border. `overflow` is also what `resize` requires:
+     * CSS only makes an element resizable when its overflow is not `visible`, and the same is true here. */
     overflow: hidden;
+    /* EVERY EDGE AND CORNER, from the cascade rather than from a hand-built grabber.
+     *
+     * This is ambient on any element -- the same shape as `overflow` making one a scroll container -- so a
+     * popup opts in with one declaration. It was hand-rolled because `UIResizer` writes at INLINE while
+     * this widget writes its own geometry at IMPORTANT, which beat it: the height could be dragged (nothing
+     * else wrote it) and the width could not be dragged at all. The widget now stands down on whichever
+     * axis the user has taken, so the ambient handles work and the grabber is gone.
+     *
+     * The leading (top/left) handles exist because a promoted popover is out of flow, which is the only
+     * case where `left`/`top` are a position rather than a nudge that reflows its siblings. */
+    resize: both;
     background: var(--palette-bg, #252526);
     outline-width: 1px;
     outline-color: var(--palette-border, #454545);
@@ -931,15 +942,6 @@ completionpopup text::highlight(completion-match) {
     align-items: center;
     padding-left: 6px;
     padding-right: 4px;
-}
-
-/* The corner grab. Sized so it is hittable without crowding the options button beside it. */
-.__completion-grip__ {
-    width: 10px;
-    height: 10px;
-    margin-left: 2px;
-    cursor: nwse-resize;
-    background: var(--completion-grip, #55585C);
 }
 
 .__completion-hint-text__ {
