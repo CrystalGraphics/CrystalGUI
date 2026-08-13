@@ -1463,8 +1463,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public float lineHeight() {
         var general = getStyle().getGeneralGroup();
         float multiplier = general.lineHeight();
-        if (multiplier <= 0f) multiplier = 1.2f;
-        return Math.max(1f, general.fontSize() * multiplier);
+        // `!(x > 0)` RATHER THAN `x <= 0`, and that is the whole fix rather than a stylistic preference.
+        // NaN fails every comparison, so `multiplier <= 0f` is FALSE for NaN and the default never
+        // applied -- and `Math.max(1f, NaN)` is NaN too, so the floor below did not catch it either. Two
+        // guards that both read as protective, neither of which stops the one value that matters.
+        //
+        // A NaN line height then poisons everything downstream of it: getScrollHeight multiplies by it,
+        // getMaxScrollTop subtracts, setScrollImmediate clamps with Math.max/min and stores NaN, and every
+        // view part computes a row's top as `origin + line * lineHeight - scrollTop`. One NaN stacks every
+        // row in the document at the same y, with nothing having thrown.
+        if (!(multiplier > 0f)) multiplier = 1.2f;
+        float size = general.fontSize();
+        if (!(size > 0f)) return 1f;
+        float height = size * multiplier;
+        return height > 1f ? height : 1f;
     }
 
     /**
