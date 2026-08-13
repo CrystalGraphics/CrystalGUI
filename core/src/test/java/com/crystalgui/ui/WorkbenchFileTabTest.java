@@ -29,6 +29,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
@@ -381,6 +382,72 @@ public class WorkbenchFileTabTest extends UiTestBase {
                 2, editor.caretPoint().row());
         assertSame("the keyboard is still in the panel — the caret is placed but you cannot type at it",
                 editor, window.getInputHandler().getFocusedElement());
+    }
+
+    /**
+     * <b>A file with errors is marked on its tab and in the tree, from one provider.</b>
+     *
+     * <p>Both surfaces ask {@code FileDecorations} the same question, which is what stops a tab and a tree
+     * row disagreeing about one file — and means dirty state and VCS reach the tab for free rather than
+     * needing a second mechanism per surface.</p>
+     *
+     * <p><b>Errors only.</b> A decoration on a filename is read at a glance across a whole tree and its
+     * only useful question is "is this broken"; an amber name for warnings is most files most of the time,
+     * and the graded answer already exists in the inspection widget and the Problems panel.</p>
+     */
+    @Test
+    public void aFileWithErrorsIsDecoratedOnItsTabAndInTheTree() {
+        CgPath path = CgPath.parse("mymod.proj:src/Main.java");
+        openWithContent(path);
+        settle();
+
+        var decorations = workbench.fileTree().getDecorations();
+        assertNull("a clean file must not be decorated", styleClassOf(decorations, path));
+
+        com.crystalgui.fs.Resource resource = workbench.activeDocument().resource();
+        com.crystalgui.text.diagnostic.DiagnosticSet set =
+                workbench.markers().attach(resource, new com.crystalgui.text.diagnostic.DiagnosticSet());
+
+        // A WARNING FIRST, which must change nothing at all.
+        set.setAll(java.util.List.of(new com.crystalgui.text.diagnostic.Diagnostic(
+                new com.crystalgui.text.TextPoint(0, 0), new com.crystalgui.text.TextPoint(0, 1),
+                com.crystalgui.text.diagnostic.DiagnosticSeverity.WARNING, "meh", null, null)));
+        settle();
+        assertNull("warnings must not decorate — only errors do", styleClassOf(decorations, path));
+
+        set.setAll(java.util.List.of(new com.crystalgui.text.diagnostic.Diagnostic(
+                new com.crystalgui.text.TextPoint(0, 0), new com.crystalgui.text.TextPoint(0, 1),
+                com.crystalgui.text.diagnostic.DiagnosticSeverity.ERROR, "boom", null, null)));
+        settle();
+
+        assertEquals("the tree row is not marked", "decoration-error", styleClassOf(decorations, path));
+        assertEquals("the tab is not marked", "decoration-error", tabDecorationClass(path));
+
+        // AND IT COMES OFF. A tab outlives every state its file passes through, so a class that is added
+        // and never swapped leaves it red for the rest of the session once the file has been wrong once.
+        set.setAll(java.util.List.of());
+        settle();
+        assertNull("the tree kept the mark after the fix", styleClassOf(decorations, path));
+        assertNull("the tab kept the mark after the fix", tabDecorationClass(path));
+    }
+
+    /** Null is the ordinary answer for an undecorated file, so resolve() may hand back null itself. */
+    private static String styleClassOf(
+            com.crystalgui.ui.elements.workbench.decoration.FileDecorations decorations, CgPath path) {
+        var decoration = decorations.resolve(path, false);
+        return decoration == null ? null : decoration.styleClass();
+    }
+
+    /** The {@code decoration-*} class actually on the tab element, or null. */
+    private String tabDecorationClass(CgPath path) {
+        var tab = workbench.dock().groupFor(
+                        workbench.dock().layout().leaves().get(0))
+                .tabFor(workbench.refFor(path));
+        if (tab == null) return null;
+        for (String cls : tab.getClasses()) {
+            if (cls.startsWith("decoration-")) return cls;
+        }
+        return null;
     }
 
     /** A press through the real route — focus resolution is exactly what is under test. */

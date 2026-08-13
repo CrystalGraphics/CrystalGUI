@@ -356,7 +356,7 @@ entry is visible rather than merely absent: `background`, `background-color`, `b
 `mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`,
 `outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-fit`,
 `overlay-origin`, `overlay-position`, `resize`, `scroll-behavior`, `scroll-duration`,
-`selection-color`, `text-align`, `text-decoration-line`, `text-offset-x`, `text-offset-y`,
+`selection-color`, `text-align`, `text-decoration-color`, `text-decoration-line`, `text-offset-x`, `text-offset-y`,
 `text-overflow`, `text-shadow`, `transform`, `transform-origin-x`, `transform-origin-y`,
 `transition`, `white-space`, `z-index` — plus the whole layout set from `LayoutProperties`.
 

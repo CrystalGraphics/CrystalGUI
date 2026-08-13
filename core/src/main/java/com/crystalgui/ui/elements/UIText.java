@@ -474,7 +474,8 @@ public final class UIText extends UIElement {
         if (styles.isEmpty() && !baseSpanNeeded) return Collections.emptyList();
         if (styles.isEmpty()) {
             return limit <= 0 ? Collections.emptyList()
-                    : List.of(new CgStyleSpan(0, limit, bold, italic, base, 0, null, 0f));
+                    : List.of(new CgStyleSpan(0, limit, bold, italic, base, 0, null, 0f,
+                            ownDecorationColor()));
         }
 
         // Winner per character, then run-length encoded — the only way to get disjoint spans out of
@@ -502,7 +503,7 @@ public final class UIText extends UIElement {
             if (previous != null) {
                 // Anything between the last highlight and this one carries the element's own decoration.
                 if (baseSpanNeeded && runStart > uncoveredFrom) {
-                    out.add(new CgStyleSpan(uncoveredFrom, runStart, bold, italic, base, 0, null, 0f));
+                    out.add(new CgStyleSpan(uncoveredFrom, runStart, bold, italic, base, 0, null, 0f, 0));
                 }
                 out.add(toCgSpan(previous, runStart, i, shadow, bold, italic));
                 uncoveredFrom = i;
@@ -510,9 +511,22 @@ public final class UIText extends UIElement {
             runStart = here == null ? -1 : i;
         }
         if (baseSpanNeeded && uncoveredFrom < limit) {
-            out.add(new CgStyleSpan(uncoveredFrom, limit, bold, italic, base, 0, null, 0f));
+            out.add(new CgStyleSpan(uncoveredFrom, limit, bold, italic, base, 0, null, 0f,
+                    ownDecorationColor()));
         }
         return out;
+    }
+
+    /**
+     * This element's own {@code text-decoration-color}, or {@code 0} for "the text's own colour".
+     *
+     * <p>{@code 0} is the backend's sentinel as well as CSS's {@code currentColor} default, so the two
+     * agree without a translation — an underline is the glyphs' colour unless something says otherwise.</p>
+     */
+    private int ownDecorationColor() {
+        Integer color = getStyle().getGeneralGroup()
+                .getValueSave(com.crystalgui.style.property.StylePropertyRegistry.TEXT_DECORATION_COLOR);
+        return color == null ? 0 : color;
     }
 
     /** This element's own {@code text-decoration-line}, as the cascade resolved it. */
@@ -535,8 +549,10 @@ public final class UIText extends UIElement {
         // 4, argued at HighlightStyle.ALLOWED. What has not changed is the fallback: a highlight that is
         // silent about weight must not make its range lighter than the text around it, which is what keeps
         // a bold label bold across the three characters a search happened to match.
+        // 0 for the decoration colour: a `::highlight()` sets one colour, and CSS's own
+        // `text-decoration-color: currentColor` default says an underline follows it.
         return new CgStyleSpan(start, end, style.isBold(bold), style.isItalic(italic),
-                toCgDecorations(style.decorations()), color, null, 0f);
+                toCgDecorations(style.decorations()), color, null, 0f, 0);
     }
 
     private static Set<CgTextDecoration> toCgDecorations(Set<TextDecorationLine> source) {
@@ -968,7 +984,7 @@ public final class UIText extends UIElement {
         if (!bold && !italic) return CgTextLayout.of(probe, family).build();
         return CgTextLayout.of(
                 new CgStyledText(probe, List.of(
-                        new CgStyleSpan(0, probe.length(), bold, italic, null, 0, null, 0f))),
+                        new CgStyleSpan(0, probe.length(), bold, italic, null, 0, null, 0f, 0))),
                 resolveGroup()).build();
     }
 }

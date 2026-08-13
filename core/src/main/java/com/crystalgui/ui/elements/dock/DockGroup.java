@@ -252,6 +252,10 @@ public class DockGroup extends UIElement {
         for (DockPanelRef panel : wanted) {
             Tab tab = tabs.addTab(area.registry().titleOf(panel));
             applyIcon(tab, area.registry().iconOf(panel));
+            // AT BUILD TIME, which is the whole reason the decoration is pulled from a provider rather
+            // than pushed onto the tab: the strip is rebuilt on every rearrangement, and anything pushed
+            // would have to be pushed again by somebody who noticed.
+            applyDecoration(tab, panel);
             tab.content().addChild(contentFor(panel));
             tabByPanel.put(panel, tab);
             area.installTabDrag(this, panel, tab);
@@ -273,9 +277,24 @@ public class DockGroup extends UIElement {
      */
     void refreshPresentation(DockPanelRef panel) {
         Tab tab = tabByPanel.get(panel);
+        if (tab == null) return;
         // setText suppresses an equal write, so a caller that cannot cheaply tell whether anything moved
         // may call this freely.
-        if (tab != null) tab.setText(area.registry().titleOf(panel));
+        tab.setText(area.registry().titleOf(panel));
+        applyDecoration(tab, panel);
+    }
+
+    /**
+     * Puts the panel's {@code decoration-*} class on its tab, replacing whichever one it had.
+     *
+     * <p><b>Swapped, never added.</b> A tab outlives every state its file passes through — broken, fixed,
+     * broken again — so adding {@code decoration-error} without removing it leaves a tab permanently red
+     * once its file has been wrong once. The same rule the project tree's rows follow for the identical
+     * reason, and {@code swapPrefixedClass} is the one definition of it.</p>
+     */
+    private void applyDecoration(Tab tab, DockPanelRef panel) {
+        String decoration = area.registry().decorationOf(panel);
+        tab.swapPrefixedClass("decoration-", decoration == null ? "" : decoration);
     }
 
     /**
