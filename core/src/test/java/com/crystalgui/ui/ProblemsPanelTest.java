@@ -16,6 +16,7 @@ import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.ui.elements.chrome.ProblemNode;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
 
 import org.junit.Before;
@@ -767,6 +768,163 @@ public class ProblemsPanelTest extends UiTestBase {
         settle();
         assertEquals("and without the options it is a plain substring again",
                 List.of(shader), panel.visibleFiles());
+    }
+
+    /**
+     * <b>Folding a heading lands focus on the row, and never on nothing.</b>
+     *
+     * <p>{@code emitMouseDown} blurs the focus owner <em>before</em> it dispatches, and a chevron is
+     * {@code FocusPolicy.NONE} — it has to be, since focusing a fold arrow is meaningless. So the press
+     * used to blur whatever had focus and then focus nothing at all, leaving the whole window with
+     * {@code focusedElement == null}: no ring anywhere, and {@code consumeKeyboardEvent} dispatches
+     * nothing whatsoever in that state, so the keyboard went dead after a fold. It also let
+     * {@code ListView.restoreFocusIfRealised} read null as "nobody owns this" and pull focus onto a row a
+     * frame later, so the ring left the editor tab and reappeared somewhere the user never clicked —
+     * reported as the panel flickering.</p>
+     *
+     * <p>The fix is the DOM's own rule, in {@code emitMouseDown}: click-focus walks up to the nearest
+     * focusable ancestor, which is why clicking a {@code <button>}'s inner text focuses the button. Here
+     * that ancestor is the row, so focus moves <em>into</em> the panel — which is also what both
+     * references do when you click anything in a tree.</p>
+     *
+     * <p>Driven through {@code emitMouseDown}'s own route rather than {@code sendInputEvent}: focus
+     * resolution is the thing under test and dispatching straight at the element skips it entirely.</p>
+     */
+    @Test
+    public void foldingAHeadingLandsFocusOnTheRow() {
+        give(shader, error(3, "one"), error(9, "two"));
+        panel.bindTo(markers);
+        settle();
+
+        // Somewhere else in the window entirely -- standing in for the editor tab or the rail button the
+        // user was last in. Focusable on click, which is what every such control is.
+        UIElement elsewhere = new UIElement().layout(l -> l.width(10).height(10));
+        elsewhere.setFocusPolicy(FocusPolicy.CLICK);
+        panel.getParent().addChild(elsewhere);
+        settle();
+        window.getInputHandler().requestFocus(elsewhere);
+        settle();
+        assertSame(elsewhere, window.getInputHandler().getFocusedElement());
+
+        // Through the realised row rather than querySelector: rows are internal children, which public
+        // traversal skips by design.
+        UIElement headingRow = panel.tree().realisedRows().get(0);
+        assertNotNull("the heading row is not realised, so this asserts nothing", headingRow);
+        UIElement twisty = headingRow.querySelector("." + ProblemsPanel.TWISTY_CLASS);
+        assertNotNull("no chevron, so this asserts nothing", twisty);
+        press(twisty);
+
+        // EVERY FRAME, not just once it settles. The second half of this bug was a single frame with no
+        // focus owner at all: the fold recycles the row, recycling blurs it, and the restore used to be
+        // deferred to the next frame. One frame is enough to see — every :focus ring in the window goes
+        // out and comes back, which is what "the focus rings of everything flash" was. Asserting after a
+        // settle passes against the broken version, because by then the restore has run.
+        for (int frame = 0; frame < 8; frame++) {
+            window.updateWithoutPainting();
+            assertNotNull("frame " + frame + " had no focus owner at all — every ring in the window blinks,"
+                            + " and consumeKeyboardEvent dispatches nothing while focus is null",
+                    window.getInputHandler().getFocusedElement());
+        }
+
+        assertSame("focus should land on the row the chevron belongs to",
+                headingRow, window.getInputHandler().getFocusedElement());
+    }
+
+    /**
+     * <b>Collapsing moves focus to the heading, and unfolding does not resurrect the old row.</b>
+     *
+     * <p>Two faults, one stale number. {@code focusedIndex} is clamped only by {@code setFocusedIndex},
+     * which nothing calls when the model <em>shrinks</em> — so folding a heading with focus on its last
+     * child left the index at 2 with one row in the list. While out of range that is invisible: nothing
+     * is realised there, so focus simply went nowhere and the panel lost its ring. It stops being
+     * invisible when the list grows back — unfolding found index 2 realised again and put focus on
+     * whatever now occupies it, which is the last problem. Reported as "unfolding opens with the last
+     * item focused for a split second".</p>
+     *
+     * <p>So: the index is clamped where the model is whole ({@code ListView.updateWindow}), and the fold
+     * hands focus to the node it collapsed — the ARIA tree pattern, and the same rule the editor already
+     * applies to folding a block the caret is in. A focus owner that is not on screen cannot be painted,
+     * scrolled to or typed at.</p>
+     */
+    @Test
+    public void collapsingMovesFocusToTheHeadingAndUnfoldingKeepsItThere() {
+        give(shader, error(3, "one"), error(9, "two"));
+        panel.bindTo(markers);
+        settle();
+        assertEquals("the heading plus its two problems", 3, panel.tree().visibleRows().size());
+
+        UIElement lastRow = panel.tree().realisedRows().get(2);
+        assertNotNull(lastRow);
+        window.getInputHandler().requestFocus(lastRow);
+        settle();
+        assertEquals(2, panel.tree().getFocusedIndex());
+
+        ProblemNode heading = ProblemNode.file(shader);
+        panel.tree().requestToggle(heading);
+        for (int frame = 0; frame < 6; frame++) {
+            window.updateWithoutPainting();
+            assertNotNull("folding left frame " + frame + " with no focus owner — the arrows cannot walk"
+                    + " back out of what was just collapsed", window.getInputHandler().getFocusedElement());
+        }
+        assertEquals("focus should sit on the heading that was collapsed", 0, panel.tree().getFocusedIndex());
+
+        panel.tree().requestToggle(heading);
+        for (int frame = 0; frame < 6; frame++) window.updateWithoutPainting();
+        assertEquals("unfolding resurrected the stale index and grabbed the last problem",
+                0, panel.tree().getFocusedIndex());
+    }
+
+    /**
+     * <b>A recycled row must not come back wearing {@code :hover}.</b>
+     *
+     * <p>A pooled row is deliberately kept in the tree as a {@code display: none} child, so nothing
+     * detaches and nothing tells the input handler the element has stopped meaning what it meant.
+     * {@code recycle} gives up <em>focus</em> for exactly that reason — "the element must give focus up
+     * the moment it stops representing anything" — and hover was simply never included in that sentence.
+     * So the flag rode the element through the pool: fold the heading with the pointer on its chevron,
+     * unfold it, and the element that <em>was</em> the heading came back as the last problem, still
+     * hovered. An untouched row lit up.</p>
+     *
+     * <p>The next hover diff corrects it, which is why it showed as a two-or-three-frame flash on the
+     * wrong row rather than a stuck highlight — and why it read as a paint glitch rather than as state.
+     * The whole gesture goes through real presses, because the hover the pooling carries is the one the
+     * pointer left on the chevron.</p>
+     */
+    @Test
+    public void unfoldingDoesNotBringARowBackHovered() {
+        give(shader, error(3, "one"), error(9, "two"));
+        panel.bindTo(markers);
+        settle();
+
+        UIElement twisty = panel.tree().realisedRows().get(0).querySelector("." + ProblemsPanel.TWISTY_CLASS);
+        assertNotNull("no chevron, so this asserts nothing", twisty);
+        press(twisty);
+        settle();
+        assertEquals("the heading should be folded", 1, panel.tree().visibleRows().size());
+
+        press(panel.tree().realisedRows().get(0).querySelector("." + ProblemsPanel.TWISTY_CLASS));
+        for (int frame = 0; frame < 6; frame++) {
+            window.updateWithoutPainting();
+            for (var entry : panel.tree().realisedRows().entrySet()) {
+                // Row 0 is the one the pointer is genuinely on — its chevron is what was pressed.
+                if (entry.getKey() == 0) continue;
+                assertFalse("frame " + frame + ": row " + entry.getKey() + " came back from the pool"
+                                + " hovered, with the pointer on the heading's chevron",
+                        entry.getValue().isHovered());
+            }
+        }
+    }
+
+    /** A press through the real route — accumulated and dispatched by the frame pair, as input is. */
+    private void press(UIElement target) {
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        int cx = (int) (target.getRuntimeCache().getX() + target.getRuntimeCache().getWidth() / 2f);
+        int cy = (int) (target.getRuntimeCache().getY() + target.getRuntimeCache().getHeight() / 2f);
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(cx, cy, 0, 0, 0, true, 0f, 0L));
+        window.getInputHandler().endFrame();
     }
 
 }
