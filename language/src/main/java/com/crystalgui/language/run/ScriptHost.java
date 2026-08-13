@@ -199,7 +199,7 @@ public final class ScriptHost implements Closeable {
      * Runs on a fresh daemon thread and returns it, so a caller can {@link #stop} a runaway script.
      *
      * <p>Daemon, because a script that will not die must never be the reason the game cannot exit.
-     * That is the backstop under the safepoints rather than a substitute for them: it makes shutdown
+     * That is the backstop under the ssafepoints rather than a substitute for them: it makes shutdown
      * safe, and it does nothing at all for a session that is still running.</p>
      */
     public Thread runAsync(Compiled compiled, Map<String, Object> bindings,

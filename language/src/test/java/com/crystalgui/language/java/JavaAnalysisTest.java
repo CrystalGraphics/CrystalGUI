@@ -434,6 +434,73 @@ public class JavaAnalysisTest {
         }
     }
 
+    /**
+     * <b>A syntax error suppresses every optional problem in the file — this is ECJ, not us.</b>
+     *
+     * <p>Reported as a panel bug: the Problems view shows errors <em>or</em> warnings and never both, and
+     * fixing one syntax error reveals four warnings that were "hidden by it". They were not hidden. They
+     * were never reported: this fixture has an unused import <em>and</em> an unused local <em>and</em> a
+     * syntax error, and ECJ answers with the two syntax errors and nothing else.</p>
+     *
+     * <p>The mechanism is structural rather than configurable. A unit that fails to parse has
+     * {@code ignoreFurtherInvestigation} set, which skips {@code analyseCode()} — and unused locals come
+     * out of flow analysis while unused imports come out of the same post-resolve pass. There is no
+     * compiler option that turns this back on, because the analysis it would re-enable is being run over
+     * a tree the parser has already said it does not trust.</p>
+     *
+     * <p>Both {@code javac} and ECJ take that view; IntelliJ appears not to only because its inspections
+     * are a separate engine from its compiler, and it keeps the previous pass's results on screen while
+     * the file is broken. Matching it here is a <b>product</b> decision — retain the last clean warnings
+     * and track them through the edits, which {@code DecorationSet} could already do — and not a bug fix.
+     * Recorded as a test so the day ECJ changes its mind, or we add a second pass, is a failing
+     * assertion rather than a surprise.</p>
+     */
+    @Test
+    public void aSyntaxErrorSuppressesEveryOptionalProblemInTheFile() {
+        String source = ""
+                + "import java.util.List;\n"          // never used -> would be a warning
+                + "public class Script {\n"
+                + "    void run() {\n"
+                + "        int unusedLocal = 1;\n"     // never read -> would be a warning
+                + "        String s = null;\n"
+                + "        s.\n"                       // the syntax error
+                + "    }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<Diagnostic> found = analysis.diagnostics();
+            long errors = found.stream().filter(d -> d.severity() == DiagnosticSeverity.ERROR).count();
+            long lesser = found.stream().filter(d -> d.severity() != DiagnosticSeverity.ERROR).count();
+
+            assertTrue("the fixture is meant to be broken: " + found, errors > 0);
+            assertEquals("ECJ has started reporting optional problems for a unit that does not parse."
+                            + " That is a behaviour change worth knowing about, not a broken test: " + found,
+                    0, lesser);
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /** ...and the control: with the syntax error gone, the same file reports both of them. */
+    @Test
+    public void aFileThatParsesReportsItsOptionalProblems() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    void run() {\n"
+                + "        int unusedLocal = 1;\n"
+                + "    }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<Diagnostic> found = analysis.diagnostics();
+            long lesser = found.stream().filter(d -> d.severity() != DiagnosticSeverity.ERROR).count();
+            assertTrue("the warnings the broken fixture never got: " + found, lesser > 0);
+        } finally {
+            analysis.close();
+        }
+    }
+
     @Test
     public void theAnalysisCarriesTheVersionItDescribes() {
         SourceAnalyzer.Analysis analysis = analyze("public class Script { }\n");

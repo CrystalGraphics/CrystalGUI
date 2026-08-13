@@ -327,6 +327,7 @@ editor scheme's.
 | `--link` | `#4A88C7` | crystal-dark.css |
 | `--list-hover-bg` | `var(--hover-bg)` | base.css |
 | `--list-selected-bg` | `var(--selection-bg)` | base.css |
+| `--list-selected-inactive-bg` | `var(--selection-inactive-bg)` | base.css |
 | `--menu-accelerator` | `var(--fg-hint)` | base.css |
 | `--menu-arrow` | `var(--fg-secondary)` | base.css |
 | `--menu-bg` | `var(--surface-overlay)` | base.css |

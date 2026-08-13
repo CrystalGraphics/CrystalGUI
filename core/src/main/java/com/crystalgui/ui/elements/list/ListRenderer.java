@@ -55,4 +55,20 @@ public interface ListRenderer<T> {
      */
     default void unbind(UIElement template) {
     }
+
+    /**
+     * What Copy puts on the clipboard for {@code item}.
+     *
+     * <p><b>Asked of the renderer rather than read off the row element</b>, and the reason is the pool: a
+     * selection routinely includes rows that are not realised, so scraping text out of elements can only
+     * ever copy the part of the selection that happens to be on screen. The renderer is the one thing
+     * that knows how an item becomes text, which is its whole job.</p>
+     *
+     * <p>The default is {@code String.valueOf}, which is right for a list of strings or paths and merely
+     * unhelpful for a record — it is a sensible answer for every list rather than a good one for each,
+     * and a renderer whose items are structured should say what a row actually reads as.</p>
+     */
+    default String copyTextFor(T item) {
+        return String.valueOf(item);
+    }
 }

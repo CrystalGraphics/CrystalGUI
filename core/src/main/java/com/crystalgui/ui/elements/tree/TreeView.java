@@ -103,6 +103,13 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
             public void unbind(UIElement template) {
                 renderer.unbind(template);
             }
+
+            /** Unwraps the flattened row, so a tree renderer answers about its ITEM rather than about
+             * the depth/expanded envelope the list happens to hold it in. */
+            @Override
+            public String copyTextFor(TreeRow<T> row) {
+                return row == null ? "" : renderer.copyTextFor(row.item());
+            }
         });
         return this;
     }
@@ -294,14 +301,6 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
      * <em>different</em> row every time it is recycled, so a listener cannot capture an index and must ask
      * at click time. Delegates to the list's realised-row map rather than duplicating it.</p>
      */
-    public int indexOfRowElement(@Nullable UIElement rowElement) {
-        if (rowElement == null) return -1;
-        for (var entry : realisedRows().entrySet()) {
-            if (entry.getValue() == rowElement) return entry.getKey();
-        }
-        return -1;
-    }
-
     @Nullable
     public TreeRow<T> rowAt(int index) {
         return index >= 0 && index < getModel().size() ? getModel().get(index) : null;

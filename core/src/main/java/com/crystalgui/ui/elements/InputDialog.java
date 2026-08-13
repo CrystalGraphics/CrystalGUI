@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.chrome;
+package com.crystalgui.ui.elements;
 
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.style.StyleGroup;

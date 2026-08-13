@@ -29,6 +29,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
@@ -284,5 +285,113 @@ public class WorkbenchFileTabTest extends UiTestBase {
         } catch (IllegalStateException expected) {
             assertTrue(expected.getMessage(), expected.getMessage().contains("nosuchtype"));
         }
+    }
+
+    /**
+     * <b>{@code openFile}'s callback runs with the document present and the editor focusable.</b>
+     *
+     * <p>The navigation primitive under go-to-line, go-to-definition and clicking a problem. It exists
+     * because {@code openFile} has two paths and only one is synchronous: an open file activates its tab
+     * and returns, an unopened one goes through a {@code client.read} round trip. Anything that positioned
+     * a caret on the statement <em>after</em> the call therefore acted on the previous editor.</p>
+     */
+    @Test
+    public void openFileRunsItsCallbackWithTheEditorReadyToFocus() {
+        CgPath path = CgPath.parse("mymod.proj:src/Main.java");
+        TextEditor editor = openWithContent(path);
+
+        boolean[] ran = {false};
+        TextEditor[] seen = {null};
+        workbench.openFile(path, () -> {
+            ran[0] = true;
+            seen[0] = workbench.activeEditor();
+            if (seen[0] != null) window.getInputHandler().requestFocus(seen[0]);
+        });
+        settle();
+
+        assertTrue("the callback never ran, so nothing could be revealed", ran[0]);
+        assertSame("the callback saw a different editor than the one it opened", editor, seen[0]);
+        assertSame("focusing the editor from the callback did not stick — a problem clicked in the panel"
+                        + " would land the caret nowhere",
+                editor, window.getInputHandler().getFocusedElement());
+    }
+
+    /**
+     * <b>Double-clicking a problem puts the caret on its line and the keyboard in the editor.</b>
+     *
+     * <p>End to end, through the real press route, because every part of this was individually correct
+     * and the whole was not: the panel raises activation, the workbench opens the file, the callback
+     * positions the caret — and the question is only whether focus is still on the editor once the press
+     * has finished being dispatched.</p>
+     */
+    @Test
+    public void doubleClickingAProblemLandsTheCaretAndTheFocusInTheEditor() {
+        // ONE-TO-ONE, because the press below is built from the row's LAYOUT position while the input
+        // handler takes SCREEN coordinates — the two differ by exactly uiScale, and at any other value
+        // the press lands somewhere else in the panel.
+        window.setUiScale(1f);
+        settle();
+
+        CgPath path = CgPath.parse("mymod.proj:src/Main.java");
+        TextEditor editor = openWithContent(path);
+        // ENOUGH LINES TO LAND ON. setCaret clamps, so a diagnostic pointing past the end would put the
+        // caret at the last line and this would assert nothing about navigation at all.
+        editor.setText("one\ntwo\nthree\nfour\nfive");
+        settle();
+
+        // THE WORKBENCH'S OWN RESOURCE, not one built here: the panel filters by identity of the resource
+        // the document reports, and a hand-made one that merely looks the same matches nothing.
+        assertNotNull("no active document", workbench.activeDocument());
+        com.crystalgui.fs.Resource resource = workbench.activeDocument().resource();
+        // ATTACHED FIRST, THEN FILLED. The panel refreshes from `markers.onDidChange`, so a set populated
+        // before it is attached announces nothing and the tree stays empty.
+        com.crystalgui.text.diagnostic.DiagnosticSet set =
+                workbench.markers().attach(resource, new com.crystalgui.text.diagnostic.DiagnosticSet());
+        set.setAll(java.util.List.of(new com.crystalgui.text.diagnostic.Diagnostic(
+                new com.crystalgui.text.TextPoint(2, 0), new com.crystalgui.text.TextPoint(2, 4),
+                com.crystalgui.text.diagnostic.DiagnosticSeverity.ERROR, "boom", null, null)));
+        settle();
+
+        var tree = workbench.problems().tree();
+        Integer problemIndex = null;
+        for (int i = 0; i < tree.visibleRows().size(); i++) {
+            if (!tree.rowAt(i).item().isFile()) { problemIndex = i; break; }
+        }
+        assertNotNull("no problem row: rows=" + tree.visibleRows().size()
+                + " files=" + workbench.problems().visibleFiles()
+                + " source=" + workbench.problems().source()
+                + " resource=" + resource, problemIndex);
+        UIElement row = tree.realisedRows().get(problemIndex);
+        assertNotNull("the problem row is not realised", row);
+
+        java.util.List<Object> chosen = new java.util.ArrayList<>();
+        workbench.problems().onProblemChosen.connect(chosen::add);
+
+        press(row);
+        assertTrue("the press did not even land on the row — selection unchanged, so the coordinates or"
+                        + " the hit test are wrong, not the activation. focused="
+                        + window.getInputHandler().getFocusedElement(),
+                tree.isSelected(problemIndex));
+        press(row);
+        settle();
+
+        assertFalse("the double click never reached the panel at all", chosen.isEmpty());
+        assertEquals("the caret should be on the problem's line — chosen=" + chosen
+                        + " activeEditor=" + (workbench.activeEditor() == editor),
+                2, editor.caretPoint().row());
+        assertSame("the keyboard is still in the panel — the caret is placed but you cannot type at it",
+                editor, window.getInputHandler().getFocusedElement());
+    }
+
+    /** A press through the real route — focus resolution is exactly what is under test. */
+    private void press(UIElement target) {
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        int cx = (int) (target.getRuntimeCache().getX() + target.getRuntimeCache().getWidth() / 2f);
+        int cy = (int) (target.getRuntimeCache().getY() + target.getRuntimeCache().getHeight() / 2f);
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().consumeMouseEvent(
+                new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(cx, cy, 0, 0, 0, true, 0f, 0L));
+        window.getInputHandler().endFrame();
     }
 }

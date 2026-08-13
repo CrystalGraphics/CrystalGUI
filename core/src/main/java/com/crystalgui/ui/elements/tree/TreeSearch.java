@@ -1053,6 +1053,20 @@ public final class TreeSearch<T> {
             if (label != null) markRow(template, label, null, item, row.expandable());
         }
 
+        /**
+         * Forwarded, like every other method here — a decorator that answers for itself is a decorator
+         * that silently replaces the thing it wraps.
+         *
+         * <p>Missing, the panel's own {@code copyTextFor} existed, was correct, and was never called:
+         * Copy fell through to {@code TreeRenderer}'s {@code String.valueOf} default and put a record's
+         * generated {@code toString} on the clipboard. Nothing failed anywhere, because installing a
+         * search component is not something a Copy has any reason to be aware of.</p>
+         */
+        @Override
+        public String copyTextFor(T item) {
+            return inner.copyTextFor(item);
+        }
+
         @Override
         public void unbind(UIElement template) {
             inner.unbind(template);

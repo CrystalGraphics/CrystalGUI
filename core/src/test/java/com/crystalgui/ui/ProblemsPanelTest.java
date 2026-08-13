@@ -4,6 +4,7 @@ import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.ui.elements.tree.TreeSearch;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -913,6 +914,137 @@ public class ProblemsPanelTest extends UiTestBase {
                         entry.getValue().isHovered());
             }
         }
+    }
+
+    /**
+     * <b>A double click on a problem reports it; a single click only selects.</b>
+     *
+     * <p>Two failures with one symptom — "clicking does nothing, it does not even highlight". The panel
+     * wired navigation to {@code onRowActivated}, whose javadoc says <em>Enter on the focused row</em>
+     * and says the pointer half is the renderer's to raise; nobody raised it, so the panel was fully
+     * keyboard-navigable and inert to the mouse. And {@code ListView} put {@code __selected__} on the row
+     * while no stylesheet gave this panel a rule for it, so selection worked perfectly and painted
+     * nothing — which is what made a wired-up widget look completely dead and sent the search to the
+     * input layer twice.</p>
+     *
+     * <p>Through the real press route, because {@code sendInputEvent} skips focus resolution and
+     * selection here is driven entirely by focus — a test that dispatches straight at the row passes
+     * against a panel no click can ever select.</p>
+     */
+    @Test
+    public void doubleClickingAProblemReportsItAndSelectsIt() {
+        give(shader, error(4, "undefined variable"), error(9, "no output node"));
+        panel.bindTo(markers);
+        settle();
+
+        List<ProblemNode> chosen = new ArrayList<>();
+        panel.onProblemChosen.connect(chosen::add);
+
+        UIElement problemRow = panel.tree().realisedRows().get(1);
+        assertNotNull("row 1 should be the first problem under the heading", problemRow);
+        assertFalse("row 1 is a heading, so this asserts the wrong thing",
+                panel.tree().rowAt(1).item().isFile());
+
+        press(problemRow);
+        settle();
+        assertTrue("one press must only select — it is how you aim at a row, not how you leave it",
+                chosen.isEmpty());
+        assertTrue("the row was never marked selected, so nothing can highlight",
+                problemRow.hasClass(com.crystalgui.ui.elements.list.ListView.SELECTED_CLASS));
+
+        press(problemRow);
+        settle();
+        assertEquals("a double click should report exactly one problem", 1, chosen.size());
+    }
+
+    /**
+     * <b>Clicking a file heading does not navigate.</b> It is not a destination — {@code chooseRow} says
+     * so and folds it instead — and folding on a single click would be a second spelling of what the
+     * chevron already does, on a tree that also has to support selecting a row.
+     */
+    @Test
+    public void clickingAFileHeadingDoesNotReportAProblem() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
+        settle();
+
+        List<ProblemNode> chosen = new ArrayList<>();
+        panel.onProblemChosen.connect(chosen::add);
+
+        // TWICE, so this asserts the heading rule rather than merely re-asserting that one press does
+        // nothing — which is true of every row now and would make this pass for the wrong reason.
+        press(panel.tree().realisedRows().get(0));
+        press(panel.tree().realisedRows().get(0));
+        settle();
+
+        assertTrue("a heading is not a destination", chosen.isEmpty());
+    }
+
+    /**
+     * <b>Copy puts the message on the clipboard, not the record.</b>
+     *
+     * <p>{@code ListRenderer.copyTextFor} defaults to {@code String.valueOf}, which for a record is its
+     * generated {@code toString} — so copying a problem produced the whole object graph, {@code code=}
+     * and {@code tags=[]} included. The override has to travel through {@code TreeView}'s renderer
+     * adapter as well, which unwraps the flattened {@code TreeRow} the list actually holds; without that
+     * forward the override exists and is never called.</p>
+     */
+    @Test
+    public void copyingAProblemPutsItsMessageOnTheClipboard() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
+        settle();
+
+        int problemIndex = -1;
+        for (int i = 0; i < panel.tree().visibleRows().size(); i++) {
+            if (!panel.tree().rowAt(i).item().isFile()) { problemIndex = i; break; }
+        }
+        assertTrue("no problem row, so this asserts nothing", problemIndex >= 0);
+
+        panel.tree().select(problemIndex);
+        assertTrue("nothing to copy", panel.tree().canCopy());
+        panel.tree().copy();
+
+        assertEquals("undefined variable", CgPlatform.input().getClipboard());
+    }
+
+    /**
+     * <b>A right-click does not change the selection.</b>
+     *
+     * <p>It opens a menu <em>about</em> a row; it does not choose it. Two separate things had to be told
+     * so: {@code emitMouseDown} settled focus on any button (and a list drives selection from focus), and
+     * the row's own press listener selected on any button too. Either alone left the menu destroying the
+     * selection it was opened over — unrecoverable once a multi-selection exists.</p>
+     */
+    @Test
+    public void rightClickingARowLeavesTheSelectionAlone() {
+        give(shader, error(4, "undefined variable"), error(9, "no output node"));
+        panel.bindTo(markers);
+        settle();
+
+        press(panel.tree().realisedRows().get(1));
+        settle();
+        assertTrue("the left press should have selected row 1", panel.tree().isSelected(1));
+
+        rightPress(panel.tree().realisedRows().get(2));
+        settle();
+
+        assertTrue("a right-click moved the selection off the row the user had chosen",
+                panel.tree().isSelected(1));
+        assertFalse("a right-click selected the row it was merely asking about",
+                panel.tree().isSelected(2));
+    }
+
+    /** A secondary-button press, through the same accumulate-and-dispatch route as a real one. */
+    private void rightPress(UIElement target) {
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        int cx = (int) (target.getRuntimeCache().getX() + target.getRuntimeCache().getWidth() / 2f);
+        int cy = (int) (target.getRuntimeCache().getY() + target.getRuntimeCache().getHeight() / 2f);
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(cx, cy, 0, 0, 1, true, 0f, 0L));
+        window.getInputHandler().endFrame();
     }
 
     /** A press through the real route — accumulated and dispatched by the frame pair, as input is. */
