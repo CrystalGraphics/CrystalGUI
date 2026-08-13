@@ -94,7 +94,8 @@ public final class JavaLanguageServices implements LanguageServices {
         this.scheduler = scheduler;
         this.className = className;
         this.classpath = classpath == null ? Collections.emptyList() : new ArrayList<>(classpath);
-        this.completion = new JavaCompletionProvider(buffer, () -> current, typeIndexFor(this.classpath));
+        this.completion = new JavaCompletionProvider(buffer, () -> current,
+                typeIndexFor(this.classpath), this::analyseText);
         this.bufferSubscription = buffer.onChanged.connect(change -> schedule());
         // ONE ANALYSIS AT CONSTRUCTION, undebounced. A document that is opened and not typed in would
         // otherwise have no colours and no problems until the first keystroke -- which is exactly the
@@ -187,6 +188,17 @@ public final class JavaLanguageServices implements LanguageServices {
     }
 
     private static final Map<List<String>, TypeIndex> TYPE_INDICES = new HashMap<>();
+
+    /**
+     * Analyses arbitrary text on the calling thread, for the completion probe.
+     *
+     * <p>Version {@code -1}, because this describes text the document does not contain and must never be
+     * mistaken for an answer about it. The caller closes it.</p>
+     */
+    private SourceAnalyzer.Analysis analyseText(String text) {
+        if (closed) return null;
+        return engine.analyzer().analyze(className, text, classpath, engine.releaseLevel(), -1L);
+    }
 
     /** Analyses on the calling thread — construction, and any caller with no scheduler. */
     private void analyzeNow() {

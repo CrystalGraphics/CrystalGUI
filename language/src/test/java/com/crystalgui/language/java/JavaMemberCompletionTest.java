@@ -379,4 +379,30 @@ public class JavaMemberCompletionTest {
         assertTrue("substring is an instance method and must survive: " + labels,
                 labels.contains("substring(int)"));
     }
+
+    /**
+     * A bare trailing dot still offers members.
+     *
+     * <p>{@code ctx.} on its own is not a parseable expression: recovery has nothing to hang the member
+     * access on, so there is no node at that offset and no binding. It is <b>not</b> a timing problem — the
+     * same text parses the same way however long you wait — which is why typing one more character appeared
+     * to fix it and waiting never did.</p>
+     *
+     * <p>The answer is a probe parse with a synthetic name at the caret, which is what IntelliJ does. This
+     * test is the whole reason that path exists.</p>
+     */
+    @Test
+    public void aBareTrailingDotStillOffersMembers() {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run() {\n"
+                + "        System.\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("System.") + "System.".length();
+        List<String> labels = labelsOf(completeAt(source, caret, "", true));
+
+        assertTrue("a trailing dot offered nothing: " + labels, labels.contains("out"));
+        assertTrue(labels.toString(), labels.contains("currentTimeMillis()"));
+    }
 }

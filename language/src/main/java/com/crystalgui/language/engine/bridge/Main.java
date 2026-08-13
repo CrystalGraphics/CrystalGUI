@@ -1,5 +1,7 @@
 package com.crystalgui.language.engine.bridge;
 
+import com.crystalgui.render.CgUiPaintContext;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -267,7 +269,6 @@ public final class Main {
         Comparator<String> byLengthThenNatural = Comparator
                 .comparingInt(String::length)
                 .thenComparing(Comparator.naturalOrder());
-
         Transformer<String, String> trimAndUpper = ((Transformer<String, String>) String::trim)
                 .then(String::toUpperCase); 
         List<String> words = supplier.get();
