@@ -283,12 +283,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /**
      * The current-line band's other half, inside the gutter.
      *
-     * <p><b>Two elements rather than one wide one</b>, because the gutter and the code area are separately
-     * stacked: the gutter paints an opaque background above the text so a long line scrolled sideways
-     * passes behind the numbers, which means a single band drawn behind everything is simply covered in
-     * the gutter region, and one drawn in front of everything hides the numbers. A band inside the gutter
-     * sits in the gutter's own stacking context — beneath its numbers, above its background — which is
-     * the only place it can be both visible and behind the digits.</p>
+     * <p><b>Two elements rather than one wide one</b>, because the gutter and the code area are separate
+     * boxes: {@link #textViewport()} is positioned at exactly the gutter's right border and clips with
+     * {@code overflow: hidden}, so a band inside it <em>cannot reach</em> the gutter however it is
+     * stacked. Drawn in front of everything instead, it hides the numbers. A band inside the gutter sits
+     * in the gutter's own stacking context — beneath its numbers, above its background — which is the
+     * only place it can be both visible and behind the digits.</p>
      */
     private final UIElement currentLineGutter = new UIElement();
 
