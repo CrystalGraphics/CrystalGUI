@@ -1,5 +1,6 @@
 package com.crystalgui.render.texture.svg;
 
+import com.crystalgraphics.gl.buffer.CgStreamBuffer;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.util.profiling.CgProfiler;
