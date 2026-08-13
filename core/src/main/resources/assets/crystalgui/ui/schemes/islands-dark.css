@@ -74,6 +74,7 @@ theme {
      * someone who has not compared the two side by side. IntelliJ does not tint class names: the position
      * and capitalisation already say "type", and colouring them turns a screen of Java into stripes. */
     --syntax-type: #BCBEC4;
+    --syntax-type-parameter: #16BAAC;
     --syntax-type-builtin: #CF8E6D;
     --syntax-type-qualifier: #CF8E6D;
 
@@ -97,6 +98,8 @@ theme {
     --syntax-function-special: #56A8F5;
     --syntax-function-method: #56A8F5;
     --syntax-function-call: #BCBEC4;
+    --syntax-function-static: #57AAF7;
+    --syntax-function-static-style: italic;
 
     --syntax-string: #6AAB73;
     --syntax-string-escape: #CF8E6D;

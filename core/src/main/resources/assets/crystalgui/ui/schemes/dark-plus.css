@@ -70,6 +70,7 @@ theme {
     --syntax-keyword-control: #C586C0;
     --syntax-keyword-operator: #569CD6;
     --syntax-type: #4EC9A0;
+    --syntax-type-parameter: #4EC9A0;
     --syntax-type-builtin: #569CD6;
     --syntax-type-qualifier: #569CD6;
     --syntax-function: #DCDCAA;
@@ -77,6 +78,10 @@ theme {
     --syntax-function-special: #DCDCAA;
     --syntax-function-method: #DCDCAA;
     --syntax-function-call: #DCDCAA;
+    --syntax-function-static: #DCDCAA;
+    /* VS Code does not slant a static call; stated rather than inherited, per the rule that a
+     * scheme defines every key the sheet reads. */
+    --syntax-function-static-style: normal;
     --syntax-string: #CE9178;
     --syntax-string-escape: #D7BA7D;
     --syntax-string-special: #D7BA7D;

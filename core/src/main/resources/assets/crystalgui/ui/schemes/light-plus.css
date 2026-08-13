@@ -55,6 +55,7 @@ theme {
     --syntax-keyword-control: #AF00DB;
     --syntax-keyword-operator: #0000FF;
     --syntax-type: #267F99;
+    --syntax-type-parameter: #267F99;
     --syntax-type-builtin: #0000FF;
     --syntax-type-qualifier: #0000FF;
     --syntax-function: #795E26;
@@ -62,6 +63,10 @@ theme {
     --syntax-function-special: #795E26;
     --syntax-function-method: #795E26;
     --syntax-function-call: #795E26;
+    --syntax-function-static: #795E26;
+    /* VS Code does not slant a static call; stated rather than inherited, per the rule that a
+     * scheme defines every key the sheet reads. */
+    --syntax-function-static-style: normal;
     --syntax-string: #A31515;
     --syntax-string-escape: #EE0000;
     --syntax-string-special: #EE0000;

@@ -79,8 +79,14 @@ public enum SymbolKind {
             case ENUM:
             case RECORD:
             case ANNOTATION:
-            case TYPE_PARAMETER:
                 return "type";
+            // A TYPE PARAMETER IS NOT A TYPE, to a reader or to a scheme. `<E>` is a placeholder the
+            // declaration introduces, and both references give it a colour of its own —
+            // TYPE_PARAMETER_NAME_ATTRIBUTES, teal in Islands and in every JetBrains scheme since. Folded
+            // into `type` it took the default foreground, so the one thing on the line that is not a real
+            // type read exactly like the ones that are.
+            case TYPE_PARAMETER:
+                return "type.parameter";
             case METHOD:
             case CONSTRUCTOR:
                 return "function.method";

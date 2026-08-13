@@ -17,6 +17,7 @@ import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.Annotation;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.CatchClause;
@@ -237,7 +238,14 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 public boolean visit(SimpleName name) {
                     String capture = captureFor(name);
                     if (capture != null) {
-                        tokens.add(new SyntaxToken(name.getStartPosition(),
+                        // THE `@` IS PART OF THE ANNOTATION, and a SimpleName does not include it: the
+                        // name node starts one character in, so the marker drew in the default colour
+                        // beside a yellow name. IntelliJ's DEFAULT_METADATA covers the whole of
+                        // `@SuppressWarnings`, and it should -- the `@` is what makes the name metadata
+                        // rather than a type reference, so it is the last part that should be left out.
+                        int start = "attribute".equals(capture)
+                                ? annotationStartFor(name) : name.getStartPosition();
+                        tokens.add(new SyntaxToken(start,
                                 name.getStartPosition() + name.getLength(), capture));
                     }
                     return true;
@@ -319,16 +327,89 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 if (variable.isParameter()) return SymbolKind.PARAMETER.captureName();
                 return SymbolKind.LOCAL_VARIABLE.captureName();
             }
+            // AN ANNOTATION'S NAME IS METADATA, not a type reference -- DEFAULT_METADATA, yellow, and the
+            // third thing this method was flattening. `@SuppressWarnings` resolves to the annotation's
+            // TYPE binding, so it came back as `type` and took the default foreground, overwriting the
+            // grammar's own `@attribute` capture. It was yellow in the documentation popup the whole time,
+            // because JavaSignatures knows the name came from an annotation and says so.
+            //
+            // Positional rather than kind-based, and it has to be: `@interface Nullable { }` DECLARES a
+            // type and is drawn as one, while `@Nullable` USES it as metadata. Same binding, same
+            // SymbolKind, two colours -- so the parent chain is the only thing that can tell them apart.
+            if (isAnnotationName(name)) return "attribute";
             if (binding instanceof ITypeBinding) {
                 // A type NAME only. The grammar gets declarations right; what it cannot do is tell that
                 // a bare identifier in an expression is a type rather than a variable.
-                return SymbolKind.CLASS.captureName();
+                //
+                // A TYPE VARIABLE IS NOT A CLASS. `<E>` is a placeholder the declaration introduces, and
+                // both references give it its own colour; a grammar cannot tell it from a class name
+                // because the two are spelled identically.
+                return ((ITypeBinding) binding).isTypeVariable()
+                        ? SymbolKind.TYPE_PARAMETER.captureName() : SymbolKind.CLASS.captureName();
             }
             if (binding instanceof IMethodBinding) {
-                return ((IMethodBinding) binding).isConstructor()
-                        ? SymbolKind.CONSTRUCTOR.captureName() : SymbolKind.METHOD.captureName();
+                if (((IMethodBinding) binding).isConstructor()) {
+                    return SymbolKind.CONSTRUCTOR.captureName();
+                }
+                return methodCapture(name, (IMethodBinding) binding);
             }
             return null;
+        }
+
+        /**
+         * A method DECLARATION, a STATIC call and an instance call are three different colours.
+         *
+         * <h3>This layer was undoing the grammar's own split</h3>
+         *
+         * <p>{@code Queries.splitMethodDeclarationsFromCalls} exists precisely so a declaration and an
+         * invocation can be told apart, because the vendored query captured both as {@code @function.method}
+         * — and the scheme has carried {@code --syntax-function-call} at the plain identifier colour ever
+         * since, matching {@code DEFAULT_FUNCTION_CALL baseAttributes="DEFAULT_IDENTIFIER"}.</p>
+         *
+         * <p>None of it had any effect, because <b>semantic tokens replace grammar tokens</b> and this
+         * method returned {@code function.method} for every {@code IMethodBinding} it saw. So every call
+         * on screen was blue, the grammar's careful distinction was overwritten by a coarser answer from
+         * the layer that is supposed to know more, and the split looked broken in the query rather than in
+         * the engine.</p>
+         *
+         * <p>Static calls take a slant on top, which is {@code DEFAULT_STATIC_METHOD}'s only difference
+         * from the instance one — the same channel a static field already uses to say "this name does not
+         * belong to the object in front of you".</p>
+         */
+        /**
+         * Whether this name is the <b>name of an annotation being applied</b> — {@code @Nullable}, or the
+         * {@code Contract} of {@code @Contract(pure = true)}.
+         *
+         * <p>Walks out through the type nodes a qualified or parameterised name sits under, so
+         * {@code @org.jetbrains.annotations.Nullable} is recognised as readily as the simple form. It
+         * deliberately does <em>not</em> match a member-value pair's name: {@code pure} is a method on the
+         * annotation type, and IntelliJ gives it no colour of its own either.</p>
+         */
+        /**
+         * Where the enclosing annotation begins — its {@code @} — or the name's own start.
+         *
+         * <p>Only extends over a <b>simple</b> annotation name. For a qualified one the {@code @} is
+         * several nodes away and the span between them is the package, which is not metadata and is not
+         * IntelliJ's colour either; taking the whole range would paint
+         * {@code @org.jetbrains.annotations.Nullable} yellow end to end.</p>
+         */
+        private static int annotationStartFor(SimpleName name) {
+            ASTNode parent = name.getParent();
+            return parent instanceof Annotation ? parent.getStartPosition() : name.getStartPosition();
+        }
+
+        private static boolean isAnnotationName(SimpleName name) {
+            ASTNode node = name.getParent();
+            while (node instanceof QualifiedName || node instanceof SimpleType
+                    || node instanceof QualifiedType || node instanceof ParameterizedType) {
+                node = node.getParent();
+            }
+            return node instanceof Annotation;
+        }
+
+        private static String methodCapture(SimpleName name, IMethodBinding method) {
+            if (name.getParent() instanceof MethodDeclaration) return SymbolKind.METHOD.captureName();
+            return Modifier.isStatic(method.getModifiers()) ? "function.static" : "function.call";
         }
 
         @Override

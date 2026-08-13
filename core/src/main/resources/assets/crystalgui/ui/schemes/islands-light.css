@@ -61,6 +61,7 @@ theme {
 
     /* Default foreground, for the reason islands-dark.css sets out: IntelliJ does not tint class names. */
     --syntax-type: #000000;
+    --syntax-type-parameter: #007E8A;
     --syntax-type-builtin: #0033B3;
     --syntax-type-qualifier: #0033B3;
 
@@ -69,6 +70,8 @@ theme {
     --syntax-function-special: #00627A;
     --syntax-function-method: #00627A;
     --syntax-function-call: #080808;
+    --syntax-function-static: #00627A;
+    --syntax-function-static-style: italic;
 
     --syntax-string: #067D17;
     --syntax-string-escape: #0037A6;
