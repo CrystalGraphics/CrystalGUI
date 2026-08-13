@@ -55,6 +55,10 @@ import javax.annotation.Nullable;
  *                            registry and an unregistered id is simply not run
  * @param insertTextFormat    whether {@link #insertText} is literal or a snippet
  * @param deprecated          drawn struck through, like {@link SymbolModifier#DEPRECATED}
+ * @param inheritedFromObject whether this is one of the seven {@code java.lang.Object} members every type
+ *                            has. They are drawn quieter and sorted last within their kind — they are
+ *                            always present, so they are never what you opened the list for, and IntelliJ
+ *                            de-emphasises them for exactly that reason
  * @param modifiers           what the symbol is, beyond its kind — {@code static}, {@code abstract}.
  *                            Kind and modifier are <b>orthogonal</b> axes and an icon needs both: a static
  *                            method and an instance method are the same kind and draw differently, so
@@ -67,7 +71,7 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
                              @Nullable Change textEdit, List<Change> additionalTextEdits,
                              List<String> commitCharacters, @Nullable String command,
                              InsertTextFormat insertTextFormat, boolean deprecated,
-                             Set<SymbolModifier> modifiers) {
+                             Set<SymbolModifier> modifiers, boolean inheritedFromObject) {
 
     /**
      * How {@link CompletionItem#insertText} should be read.
@@ -109,6 +113,9 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
         modifiers = modifiers == null || modifiers.isEmpty() ? Set.of() : Set.copyOf(modifiers);
     }
 
+    /** The type whose members every other type inherits. */
+    public static final String OBJECT = "java.lang.Object";
+
     /** The simplest item: a word, and what it is. */
     public static CompletionItem of(String label, SymbolKind kind) {
         return builder(label, kind).build();
@@ -128,6 +135,7 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
                 .filterText(symbol.name())
                 .sortText(symbol.name())
                 .modifiers(symbol.modifiers())
+                .inheritedFromObject(OBJECT.equals(symbol.container()))
                 .deprecated(symbol.is(SymbolModifier.DEPRECATED));
         if (symbol.isInvocable()) {
             // ACCEPTING A METHOD WRITES ITS BRACKETS, with the caret inside when there is an argument to
@@ -177,7 +185,7 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
     public CompletionItem withDocumentation(@Nullable String docs) {
         return new CompletionItem(label, kind, detail, docs, sortText, filterText, insertText,
                 textEdit, additionalTextEdits, commitCharacters, command, insertTextFormat, deprecated,
-                modifiers);
+                modifiers, inheritedFromObject);
     }
 
     /**
@@ -202,6 +210,7 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
         private InsertTextFormat insertTextFormat = InsertTextFormat.PLAIN;
         private boolean deprecated;
         private Set<SymbolModifier> modifiers = Set.of();
+        private boolean inheritedFromObject;
 
         private Builder(String label, SymbolKind kind) {
             this.label = label;
@@ -268,10 +277,15 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
             return this;
         }
 
+        public Builder inheritedFromObject(boolean value) {
+            this.inheritedFromObject = value;
+            return this;
+        }
+
         public CompletionItem build() {
             return new CompletionItem(label, kind, detail, documentation, sortText, filterText,
                     insertText, textEdit, additionalTextEdits, commitCharacters, command,
-                    insertTextFormat, deprecated, modifiers);
+                    insertTextFormat, deprecated, modifiers, inheritedFromObject);
         }
     }
 }

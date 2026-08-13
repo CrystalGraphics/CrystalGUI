@@ -857,6 +857,15 @@ completionpopup {
     text-overflow: ellipsis;
 }
 
+/* Object's members, drawn quieter: NOT bold, and dimmed to the parameter colour.
+ *
+ * Every type has these seven, so they are never what the list was opened for. IntelliJ makes the same
+ * distinction, and it is the one case where removing emphasis carries more information than adding it. */
+.__completion-inherited__ .__completion-label__ {
+    font-weight: normal;
+    color: var(--completion-params, #808080);
+}
+
 .__completion-deprecated__ .__completion-params__,
 .__completion-deprecated__ .__completion-label__ {
     text-decoration-line: line-through;
