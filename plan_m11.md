@@ -43,6 +43,29 @@ baked and a scheme switch would not reach them.
 | 24.3 | `folds.scm` | not started — vendoring question below |
 | 24.4 | `indents.scm` | not started — vendoring question below |
 
+### Follow-up: half of `JavaSignatures` is waiting to be deleted
+
+`JavaSignatures` renders a declaration two ways, and they are not peers:
+
+| Path | When | Who chooses the layout |
+|---|---|---|
+| **Quoted** — `quotedDeclaration` | the symbol is declared in the file being analysed | the author |
+| **Assembled** — `render` | anything else, i.e. the classpath | us |
+
+The assembled path exists **only because a classpath symbol has no source to quote**. Everything
+layout-shaped in it — `MAX_SIGNATURE_LINE`, the break before a long `=`, one parameter per line, the
+hanging indent under `implements`, `spaces()` — is there to invent a wrapping that the quoted path gets
+for free. Roughly 250 lines whose entire justification is the absence of a file.
+
+**So it becomes deletable the moment quoting can reach classpath sources**, which is not far-fetched:
+JDT resolves against jars that frequently ship a `-sources.jar` beside them, and IntelliJ's own popup
+shows parameter names (`println(String x)`) precisely because it has those attached. If we ever attach
+them — for parameter names, which is already a known gap — quoting comes with it and this whole path,
+plus the two `broken` flags threaded through it, goes.
+
+Worth doing deliberately rather than discovering: until then the assembled path is load-bearing for every
+JDK symbol anybody hovers, and the break rules are the only thing keeping those readable.
+
 ### Correction: 24.6 is not the cheapest item, it is the most expensive
 
 The claim below — *"`CgShaderParseException` names the offending line"* — **is false.** It names the

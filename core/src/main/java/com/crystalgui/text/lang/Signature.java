@@ -59,11 +59,6 @@ public record Signature(String text, List<SyntaxToken> tokens) {
         tokens = tokens == null || tokens.isEmpty() ? List.of() : List.copyOf(tokens);
     }
 
-    /** Uncoloured — everything an engine can say when it has the words but not the structure. */
-    public static Signature plain(String text) {
-        return new Signature(text, List.of());
-    }
-
     public boolean isEmpty() {
         return text.isEmpty();
     }
