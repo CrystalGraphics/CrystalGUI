@@ -244,6 +244,7 @@ final class JavaCompletionProvider implements CompletionProvider {
             case RECORD:
             case ANNOTATION:
             case TYPE_PARAMETER:
+            case EXCEPTION:
                 return true;
             default:
                 return false;
@@ -306,7 +307,12 @@ final class JavaCompletionProvider implements CompletionProvider {
      */
     private CompletionItem unimportedTypeItem(TypeIndex.Entry type) {
         Change importEdit = importEditFor(type.qualifiedName());
-        return CompletionItem.builder(type.simpleName(), type.kind())
+        // WHAT IT IS, read from the class file rather than assumed. Every row used to draw as a class,
+        // because the path a type lives at says nothing about whether it is an interface, an enum, an
+        // annotation or a throwable -- that is in the access flags.
+        TypeIndex.Kind kind = types.kindOf(type);
+        return CompletionItem.builder(type.simpleName(), kind.kind())
+                .modifiers(kind.isAbstract() ? java.util.Set.of(SymbolModifier.ABSTRACT) : java.util.Set.of())
                 .detail(type.packageName())
                 .filterText(type.simpleName())
                 // Below everything in scope at equal match quality: it costs an import to accept, so a name

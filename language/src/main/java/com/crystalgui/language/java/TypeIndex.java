@@ -43,10 +43,20 @@ import java.util.zip.ZipFile;
  */
 final class TypeIndex {
 
-    /** One type: enough to draw a row and to write the import. */
-    record Entry(String simpleName, String packageName, SymbolKind kind) {
+    /**
+     * One type: enough to draw a row, write the import, and later find its bytes.
+     *
+     * <p>{@code container} is where the class file lives — {@code jar:}, {@code dir:} or {@code jrt:} and a
+     * root. The <b>same String instance</b> is shared by every entry from one archive, so this costs a
+     * pointer per entry rather than a copy, which matters at fifty thousand of them.</p>
+     */
+    record Entry(String simpleName, String packageName, String container) {
         String qualifiedName() {
             return packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+        }
+
+        String classFilePath() {
+            return qualifiedName().replace('.', '/') + ".class";
         }
     }
 
@@ -64,6 +74,9 @@ final class TypeIndex {
 
     private final List<String> classpath;
     private List<Entry> entries;
+
+    /** Qualified name to entry, so the hierarchy walk can find an ancestor outside its own container. */
+    private final java.util.Map<String, Entry> byName = new java.util.HashMap<>();
 
     TypeIndex(List<String> classpath) {
         this.classpath = classpath == null ? List.of() : List.copyOf(classpath);
@@ -153,6 +166,141 @@ final class TypeIndex {
         return at == needle.length();
     }
 
+
+    // ── What a type IS, read from its access flags ──────────────────────────────────────────────
+
+    /**
+     * The kind and abstractness of {@code entry}, read from its class file.
+     *
+     * <h3>Lazily, and only for what is being shown</h3>
+     *
+     * <p>The path spells the NAME and says nothing about what the type is — everything else is in the access
+     * flags, and reading those means opening the file. Doing it during the scan would mean opening fifty
+     * thousand of them, which is tens of seconds; doing it for the forty rows a query returns is a handful
+     * of milliseconds, and the answer is memoised because the same names come back on every keystroke.</p>
+     *
+     * <p>Through ASM, which is already here for the mapping layer, rather than by hand-parsing the constant
+     * pool to reach one {@code u2}. {@code SKIP_CODE} and friends are unnecessary — {@code getAccess} and
+     * {@code getSuperName} read the header without visiting anything.</p>
+     *
+     * <p><b>Failure is silent and answers CLASS.</b> An unreadable entry is a jar that changed under us or a
+     * malformed class, and the right response is the majority answer rather than no row at all: the name is
+     * still correct and still worth offering.</p>
+     */
+    Kind kindOf(Entry entry) {
+        return kinds.computeIfAbsent(entry.qualifiedName(), name -> readKind(entry));
+    }
+
+    /** What the icon layer needs: what it is, and whether it is abstract. */
+    record Kind(SymbolKind kind, boolean isAbstract) {
+    }
+
+    private static final Kind PLAIN_CLASS = new Kind(SymbolKind.CLASS, false);
+
+    private final java.util.concurrent.ConcurrentHashMap<String, Kind> kinds =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private Kind readKind(Entry entry) {
+        byte[] bytes = bytesOf(entry);
+        if (bytes == null) return PLAIN_CLASS;
+        try {
+            org.objectweb.asm.ClassReader reader = new org.objectweb.asm.ClassReader(bytes);
+            int access = reader.getAccess();
+            boolean isAbstract = (access & org.objectweb.asm.Opcodes.ACC_ABSTRACT) != 0;
+
+            // ORDER MATTERS: an annotation is also an interface, and an enum is also a class, so the most
+            // specific flag has to be tested first. Reversed, every annotation would draw as an interface.
+            if ((access & org.objectweb.asm.Opcodes.ACC_ANNOTATION) != 0) {
+                return new Kind(SymbolKind.ANNOTATION, false);
+            }
+            if ((access & org.objectweb.asm.Opcodes.ACC_INTERFACE) != 0) {
+                // An interface is abstract by definition; saying so would put the abstract mark on every
+                // one of them, which is noise rather than information.
+                return new Kind(SymbolKind.INTERFACE, false);
+            }
+            if ((access & org.objectweb.asm.Opcodes.ACC_ENUM) != 0) {
+                return new Kind(SymbolKind.ENUM, false);
+            }
+            String superName = reader.getSuperName();
+            if ("java/lang/Record".equals(superName)) return new Kind(SymbolKind.RECORD, false);
+            if (isThrowable(superName, entry.container(), 0)) {
+                return new Kind(SymbolKind.EXCEPTION, isAbstract);
+            }
+            return new Kind(SymbolKind.CLASS, isAbstract);
+        } catch (RuntimeException malformed) {
+            return PLAIN_CLASS;
+        }
+    }
+
+    /**
+     * Whether {@code internalName}'s hierarchy reaches {@code Throwable}.
+     *
+     * <p>Walked rather than tested against a list of names, because the interesting exceptions are the ones
+     * a project declares itself and those are three or four hops from anything nameable. Bounded, because a
+     * malformed or circular hierarchy must not hang a keystroke — and because past a handful of hops the
+     * answer is essentially always no.</p>
+     *
+     * <p>Each ancestor is looked for in the SAME container first and then across the index, since a
+     * project's exception hierarchy is normally in one place and the JDK's roots are not.</p>
+     */
+    private boolean isThrowable(String internalName, String container, int depth) {
+        if (internalName == null || depth > MAX_HIERARCHY_HOPS) return false;
+        if ("java/lang/Throwable".equals(internalName)) return true;
+        if ("java/lang/Object".equals(internalName)) return false;
+
+        String binary = internalName.replace('/', '.');
+        byte[] bytes = bytesFrom(container, internalName + ".class");
+        if (bytes == null) {
+            Entry located = byName.get(binary);
+            if (located == null) return false;
+            bytes = bytesOf(located);
+            container = located.container();
+        }
+        if (bytes == null) return false;
+        try {
+            return isThrowable(new org.objectweb.asm.ClassReader(bytes).getSuperName(), container, depth + 1);
+        } catch (RuntimeException malformed) {
+            return false;
+        }
+    }
+
+    /** Deep enough for a project's own exception hierarchy, shallow enough to never be felt. */
+    private static final int MAX_HIERARCHY_HOPS = 8;
+
+    private byte[] bytesOf(Entry entry) {
+        return bytesFrom(entry.container(), entry.classFilePath());
+    }
+
+    /** Reads one class file out of whichever kind of container it came from. */
+    private static byte[] bytesFrom(String container, String classFilePath) {
+        if (container == null) return null;
+        try {
+            if (container.startsWith("jar:")) {
+                File archive = new File(container.substring(4));
+                if (!archive.isFile()) return null;
+                try (ZipFile zip = new ZipFile(archive)) {
+                    ZipEntry found = zip.getEntry(classFilePath);
+                    if (found == null) return null;
+                    try (java.io.InputStream in = zip.getInputStream(found)) {
+                        return in.readAllBytes();
+                    }
+                }
+            }
+            if (container.startsWith("dir:")) {
+                Path file = Path.of(container.substring(4)).resolve(classFilePath);
+                return Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+            }
+            if (container.startsWith("jrt:")) {
+                FileSystem jrt = FileSystems.getFileSystem(URI.create("jrt:/"));
+                Path file = jrt.getPath(container.substring(4), classFilePath);
+                return Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+            }
+        } catch (IOException | RuntimeException unreadable) {
+            return null;
+        }
+        return null;
+    }
+
     private synchronized void ensureBuilt() {
         if (entries != null) return;
         List<Entry> built = new ArrayList<>();
@@ -177,6 +325,7 @@ final class TypeIndex {
                     + " types; unimported-type completion will not offer everything on the classpath");
         }
         built.sort(Comparator.comparing(Entry::simpleName));
+        for (Entry entry : built) byName.putIfAbsent(entry.qualifiedName(), entry);
         entries = Collections.unmodifiableList(built);
     }
 
@@ -211,7 +360,8 @@ final class TypeIndex {
                     if (into.size() >= MAX_TYPES) return;
                     // /modules/java.base/java/lang/System.class -> java/lang/System.class
                     if (path.getNameCount() < 3) return;
-                    add(path.subpath(2, path.getNameCount()).toString().replace('\\', '/'), into);
+                    add(path.subpath(2, path.getNameCount()).toString().replace('\\', '/'), into,
+                            "jrt:/modules/" + path.getName(1));
                 });
             }
             return;
@@ -233,25 +383,27 @@ final class TypeIndex {
     }
 
     private static void scanArchive(File file, List<Entry> into) throws IOException {
+        String container = "jar:" + file.getPath();
         try (ZipFile archive = new ZipFile(file)) {
             Enumeration<? extends ZipEntry> zipEntries = archive.entries();
             while (zipEntries.hasMoreElements() && into.size() < MAX_TYPES) {
-                add(zipEntries.nextElement().getName(), into);
+                add(zipEntries.nextElement().getName(), into, container);
             }
         }
     }
 
     private static void scanDirectory(Path root, List<Entry> into) throws IOException {
+        String container = "dir:" + root;
         try (Stream<Path> walk = Files.walk(root)) {
             walk.filter(Files::isRegularFile).forEach(path -> {
                 if (into.size() >= MAX_TYPES) return;
-                add(root.relativize(path).toString().replace(File.separatorChar, '/'), into);
+                add(root.relativize(path).toString().replace(File.separatorChar, '/'), into, container);
             });
         }
     }
 
     /** Turns {@code java/util/ArrayList.class} into an entry, or ignores it. */
-    private static void add(String path, List<Entry> into) {
+    private static void add(String path, List<Entry> into, String container) {
         if (!path.endsWith(".class")) return;
         // NESTED TYPES ARE SKIPPED. `Map$Entry` cannot be imported under that name and inserting it
         // produces a compile error naming a type the list just offered -- which reads as the completion
@@ -273,6 +425,6 @@ final class TypeIndex {
         // KIND IS UNKNOWABLE FROM THE PATH -- telling a class from an interface needs the file's access
         // flags. CLASS is the honest majority answer and the icon is the only thing that reads it; the
         // alternative is opening every entry on the classpath to colour a letter.
-        into.add(new Entry(simple, packageName, SymbolKind.CLASS));
+        into.add(new Entry(simple, packageName, container));
     }
 }
