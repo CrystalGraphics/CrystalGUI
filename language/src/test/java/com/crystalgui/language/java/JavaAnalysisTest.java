@@ -70,6 +70,14 @@ public class JavaAnalysisTest {
         return analyzer.analyze("Script", source, List.of(), 8, 42L);
     }
 
+    /** The capture over an exact span — for a name that appears more than once in the fixture. */
+    private static String captureAtIndex(List<SyntaxToken> tokens, int at, int length) {
+        for (SyntaxToken token : tokens) {
+            if (token.start() == at && token.end() == at + length) return token.name();
+        }
+        return null;
+    }
+
     /** The capture at the first occurrence of {@code needle}, or null. */
     private static String captureAt(List<SyntaxToken> tokens, String source, String needle) {
         int at = source.indexOf(needle);
@@ -81,6 +89,88 @@ public class JavaAnalysisTest {
     }
 
     // ── Semantic tokens: the four kinds of identifier a grammar sees as one ──────────────────────
+
+    /**
+     * A method <b>declaration</b>, a <b>static</b> call and an instance call are three colours.
+     *
+     * <p>This layer used to return {@code function.method} for every {@code IMethodBinding}, which made
+     * every call on screen blue — and quietly undid {@code Queries.splitMethodDeclarationsFromCalls},
+     * which exists so the grammar can tell the two apart. Semantic tokens <em>replace</em> grammar tokens,
+     * so the coarser answer from the layer that is supposed to know more won every time, and the split
+     * looked broken in the query rather than in the engine.</p>
+     *
+     * <p>{@code DEFAULT_FUNCTION_CALL} carries {@code baseAttributes="DEFAULT_IDENTIFIER"} in the exported
+     * scheme — a call is deliberately <b>not</b> tinted — and {@code DEFAULT_STATIC_METHOD} differs from
+     * the instance one by a slant alone.</p>
+     */
+    @Test
+    public void aDeclarationAStaticCallAndAnInstanceCallAreThreeDifferentColours() {
+        String source = ""
+                + "public class Script {\n"
+                + "    static int twice(int n) { return n * 2; }\n"
+                + "    int run(String text) {\n"
+                + "        return twice(text.length());\n"
+                + "    }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+
+            assertEquals("the declaration is the blue one", "function.method",
+                    captureAtIndex(tokens, source.indexOf("twice"), 5));
+            assertEquals("a static call takes the slant", "function.static",
+                    captureAtIndex(tokens, source.lastIndexOf("twice"), 5));
+            assertEquals("and an instance call is not tinted at all", "function.call",
+                    captureAt(tokens, source, "length"));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * An annotation's name is <b>metadata</b>, not a type reference.
+     *
+     * <p>{@code @SuppressWarnings} resolves to the annotation's type binding, so it came back as
+     * {@code type} and took the default foreground — overwriting the grammar's own {@code @attribute}
+     * capture. It was yellow in the documentation popup the entire time, because {@code JavaSignatures}
+     * knows the name came from an annotation and says so; only the editor was wrong.</p>
+     *
+     * <p>The declaration is still a type, which is why this cannot be decided from the binding alone.</p>
+     */
+    @Test
+    public void anAnnotationUseIsMetadataWhileItsDeclarationIsAType() {
+        String source = ""
+                + "public class Script {\n"
+                + "    @SuppressWarnings(\"unused\")\n"
+                + "    void hidden() { }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            // THE `@` INCLUDED. A SimpleName starts one character in, so marking the name alone left the
+            // marker in the default colour beside a yellow name -- and the `@` is precisely what makes
+            // the name metadata rather than a type reference.
+            assertEquals("attribute", captureAt(tokens, source, "@SuppressWarnings"));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /** A type parameter is not a type — {@code <E>} is a placeholder, and both references colour it. */
+    @Test
+    public void aTypeParameterIsNotAClass() {
+        String source = ""
+                + "public class Script<E> {\n"
+                + "    E first(java.util.List<E> items) { return items.get(0); }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            assertEquals("type.parameter", captureAtIndex(tokens, source.indexOf("<E>") + 1, 1));
+        } finally {
+            analysis.close();
+        }
+    }
 
     @Test
     public void aParameterALocalAndAFieldAreThreeDifferentColours() {
@@ -206,7 +296,10 @@ public class JavaAnalysisTest {
                 if (token.start() == callSite) captures.add(token.name());
             }
             assertTrue("no deprecation marker: " + captures, captures.contains("deprecated"));
-            assertTrue("the kind was lost: " + captures, captures.contains("function.method"));
+            // `function.call`, not `function.method`: this is the CALL site, and a call is deliberately
+            // not tinted -- DEFAULT_FUNCTION_CALL inherits DEFAULT_IDENTIFIER. What this test is about is
+            // that a kind is emitted AT ALL beside the marker, not which kind it happens to be.
+            assertTrue("the kind was lost: " + captures, captures.contains("function.call"));
         } finally {
             analysis.close();
         }

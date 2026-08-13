@@ -268,6 +268,15 @@ texteditor .__indent-guide__ {
     color: var(--syntax-type, #4EC9A0);
 }
 
+/* A TYPE PARAMETER IS NOT A TYPE. `<E>` is a placeholder the declaration introduces, and every JetBrains
+ * scheme gives it a colour of its own (TYPE_PARAMETER_NAME_ATTRIBUTES, teal). Folded into `type` it took
+ * the default foreground in Islands, so the one name on the line that is NOT a real type read exactly
+ * like the ones that are. Only an engine can emit it -- the two are spelled identically, so a grammar has
+ * nothing to go on. */
+.__syntax__::highlight(type.parameter) {
+    color: var(--syntax-type-parameter, #4EC9A0);
+}
+
 .__syntax__::highlight(type.builtin) {
     color: var(--syntax-type-builtin, #569CD6);
 }
@@ -298,6 +307,16 @@ texteditor .__indent-guide__ {
 
 .__syntax__::highlight(function.method) {
     color: var(--syntax-function-method, #DCDCAA);
+}
+
+/* A STATIC call, which differs from an instance one by a SLANT and nothing else -- that is the whole of
+ * DEFAULT_STATIC_METHOD against DEFAULT_INSTANCE_METHOD. The same channel a static field already uses to
+ * say "this name does not belong to the object in front of you", and the only one left once colour is
+ * carrying the declaration-versus-call distinction. A scheme with no opinion inherits the call colour
+ * upright, which is what the plus schemes do. */
+.__syntax__::highlight(function.static) {
+    color: var(--syntax-function-static, #DCDCAA);
+    font-style: var(--syntax-function-static-style, normal);
 }
 
 /* A method CALL, distinct from a declaration — see Queries.splitMethodDeclarationsFromCalls for why the
