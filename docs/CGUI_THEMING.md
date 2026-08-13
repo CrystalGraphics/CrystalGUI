@@ -322,6 +322,7 @@ editor scheme's.
 | `--inspection-bg` | `#2D2D2DE0` | crystal-dark.css |
 | `--inspection-clean-fg` | `var(--success)` | base.css |
 | `--inspection-error-fg` | `var(--error)` | base.css |
+| `--inspection-info-fg` | `var(--info)` | base.css |
 | `--inspection-warning-fg` | `var(--warning)` | base.css |
 | `--label-fg` | `var(--fg)` | base.css |
 | `--link` | `#4A88C7` | crystal-dark.css |

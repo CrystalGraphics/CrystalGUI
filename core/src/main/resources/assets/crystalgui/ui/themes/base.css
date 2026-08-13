@@ -201,6 +201,9 @@ theme {
     --inspection-clean-fg: var(--success);
     --inspection-error-fg: var(--error);
     --inspection-warning-fg: var(--warning);
+    /* The third severity, which only became visible when the widget started drawing icons rather than
+     * spelling "1 note" in the same colour as everything else. */
+    --inspection-info-fg: var(--info);
 
     --label-fg: var(--fg);
 

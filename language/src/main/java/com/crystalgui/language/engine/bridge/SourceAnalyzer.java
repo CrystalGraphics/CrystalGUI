@@ -60,6 +60,28 @@ public interface SourceAnalyzer {
         List<Diagnostic> diagnostics();
 
         /**
+         * Whether the compiler's <b>optional</b> problem analysis actually ran for this unit.
+         *
+         * <p>ECJ reports unused imports, unused locals and every other optional problem out of the
+         * post-resolve and flow-analysis passes — and skips both entirely for a unit that failed to parse,
+         * because they would be running over a tree the parser has already said it does not trust. So a
+         * file with one syntax error reports that error and <em>nothing else</em>, and the warnings
+         * reappear the moment it parses again. {@code javac} behaves the same way.</p>
+         *
+         * <p><b>Reported rather than inferred</b>, and the difference is a real bug. "The list has errors
+         * and no warnings" looks like the same statement and is not: a file that parses cleanly, has one
+         * type error and genuinely has no warnings produces exactly that shape, and anything treating it as
+         * suppression would resurrect warnings the user has already fixed. Only the compiler knows which
+         * of the two happened.</p>
+         *
+         * <p>Defaults to true — an engine that does not distinguish the two is saying "my answer is
+         * complete", which is the safe reading: it costs a feature, not correctness.</p>
+         */
+        default boolean optionalProblemsAnalysed() {
+            return true;
+        }
+
+        /**
          * Colouring the grammar could not produce, in the §10.1 capture vocabulary.
          *
          * <p>Only what needs an engine: a parameter told apart from a local from a field, a type
