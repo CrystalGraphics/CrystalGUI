@@ -876,6 +876,9 @@ completionpopup text::highlight(completion-match) {
 .completion-kind-interface      { background: icon("crystalgui:nodes/java/interface"); }
 .completion-kind-enum           { background: icon("crystalgui:nodes/java/enum"); }
 .completion-kind-annotation     { background: icon("crystalgui:nodes/java/annotation"); }
+/* A throwable is a CLASS with its own drawing -- see SymbolKind.EXCEPTION, which says why that is a display
+ * refinement rather than a language kind. */
+.completion-kind-exception      { background: icon("crystalgui:nodes/java/exception"); }
 .completion-kind-type_parameter { background: icon("crystalgui:nodes/java/class"); }
 
 .completion-kind-method.completion-mod-abstract { background: icon("crystalgui:nodes/java/methodAbstract"); }

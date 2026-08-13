@@ -405,4 +405,72 @@ public class JavaMemberCompletionTest {
         assertTrue("a trailing dot offered nothing: " + labels, labels.contains("out"));
         assertTrue(labels.toString(), labels.contains("currentTimeMillis()"));
     }
+
+    // ── What the icons are read from ────────────────────────────────────────────────────────────
+
+    /** Everything the index offers for {@code prefix}, as name -> kind. */
+    private java.util.Map<String, SymbolKind> kindsOffered(String prefix) {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run() {\n"
+                + "        " + prefix + "\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("        " + prefix) + ("        " + prefix).length();
+        java.util.Map<String, SymbolKind> kinds = new java.util.HashMap<>();
+        for (CompletionItem item : completeAt(source, caret, prefix, false)) {
+            kinds.put(item.label(), item.kind());
+        }
+        return kinds;
+    }
+
+    /**
+     * A type's kind comes from its ACCESS FLAGS, not from the path it lives at.
+     *
+     * <p>Every index row used to draw as a class, because a class file's path spells its name and nothing
+     * else. Interface, enum, annotation and record are all one {@code u2} in the header — and the order the
+     * flags are tested in matters, since an annotation is also an interface and an enum is also a class.</p>
+     */
+    @Test
+    public void aTypesKindIsReadFromItsClassFile() {
+        java.util.Map<String, SymbolKind> kinds = kindsOffered("Runnable");
+        assertEquals("Runnable is an interface", SymbolKind.INTERFACE, kinds.get("Runnable"));
+
+        assertEquals("RetentionPolicy is an enum", SymbolKind.ENUM,
+                kindsOffered("RetentionPolic").get("RetentionPolicy"));
+        assertEquals("Override is an annotation, and annotations are also interfaces",
+                SymbolKind.ANNOTATION, kindsOffered("Overrid").get("Override"));
+    }
+
+    /** A throwable gets its own drawing — the fact a reader most wants from a list of similar names. */
+    @Test
+    public void aThrowableIsReportedAsAnException() {
+        assertEquals(SymbolKind.EXCEPTION, kindsOffered("IllegalStateExceptio").get("IllegalStateException"));
+        assertEquals("several hops from Throwable and still one", SymbolKind.EXCEPTION,
+                kindsOffered("FileNotFoundExceptio").get("FileNotFoundException"));
+        assertEquals("an Error is a Throwable too", SymbolKind.EXCEPTION,
+                kindsOffered("StackOverflowErro").get("StackOverflowError"));
+    }
+
+    /** The control: an ordinary class is still a class, so the walk above cannot be answering yes always. */
+    @Test
+    public void anOrdinaryClassIsStillAClass() {
+        assertEquals(SymbolKind.CLASS, kindsOffered("StringBuilde").get("StringBuilder"));
+    }
+
+    /** Abstractness rides as a MODIFIER, so kind and modifier stay orthogonal and the icon can compose. */
+    @Test
+    public void anAbstractClassSaysSoWithoutBecomingItsOwnKind() {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run() {\n"
+                + "        AbstractLis\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("        AbstractLis") + "        AbstractLis".length();
+        CompletionItem found = named(completeAt(source, caret, "AbstractLis", false), "AbstractList");
+        assertNotNull("AbstractList should be offered", found);
+        assertEquals(SymbolKind.CLASS, found.kind());
+        assertTrue("and it is abstract", found.is(SymbolModifier.ABSTRACT));
+    }
 }

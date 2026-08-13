@@ -25,6 +25,15 @@ public enum SymbolKind {
     INTERFACE,
     ENUM,
     RECORD,
+    /**
+     * A class whose hierarchy reaches {@code Throwable}.
+     *
+     * <p>A <b>display refinement</b> of {@link #CLASS} rather than a language kind — the JLS has no such
+     * category, and {@link #captureName()} still colours it as a type. It is here because both reference
+     * IDEs draw it with its own icon and because "is this a thing I can throw" is the fact a reader most
+     * wants from a list of forty similar names.</p>
+     */
+    EXCEPTION,
     ANNOTATION,
     /** {@code T} in {@code <T>} — a type, but one with no declaration to jump to outside its own scope. */
     TYPE_PARAMETER,

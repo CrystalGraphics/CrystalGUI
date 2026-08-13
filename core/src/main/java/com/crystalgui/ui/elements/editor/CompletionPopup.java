@@ -811,6 +811,7 @@ public final class CompletionPopup extends Popover {
                 case RECORD:
                 case ANNOTATION:
                 case TYPE_PARAMETER:
+                case EXCEPTION:
                     return true;
                 default:
                     return false;
