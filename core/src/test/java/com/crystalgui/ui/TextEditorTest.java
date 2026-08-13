@@ -1031,8 +1031,22 @@ public class TextEditorTest extends UiTestBase {
         settle();
         float scale = window.getUiScale();
         var point = editor.buffer().offsetToPoint(offset);
-        float x = editor.getRuntimeCache().getX() + editor.gutterWidth() + 4f + point.column() * 4f;
         float y = editor.getRuntimeCache().getY() + point.row() * editor.lineHeight() + 2f;
+        // X FROM THE EDITOR'S OWN HIT TESTING, not from a per-character guess.
+        //
+        // This was `gutterWidth + 4 + column * 4f`, a 4px advance tuned to whatever face happened to be
+        // the default -- so changing the default font moved every click by a character or more and
+        // `doubleClickSelectsTheWordUnderIt` selected `alpha` while claiming to click in `beta`. Asking
+        // offsetAt where the offset actually is makes the coordinate true for any font, any size and any
+        // gutter width, and it is the same function the click itself will go through.
+        float x = editor.getRuntimeCache().getX() + editor.gutterWidth() + 2f;
+        float limit = x + editor.getRuntimeCache().getWidth();
+        for (float probe = x; probe < limit; probe += 0.5f) {
+            if (editor.offsetAt(probe * scale, y * scale) >= offset) {
+                x = probe;
+                break;
+            }
+        }
         for (int i = 0; i < clicks; i++) {
             input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                     Math.round(x * scale), Math.round(y * scale), 0, 0, 0, true, 0f, 10L + i));
@@ -4749,7 +4763,15 @@ public class TextEditorTest extends UiTestBase {
     @Test
     public void theIndicatorStopsBeingClickableWhenItFades() {
         build("x");
-        editor.setZoomIndicatorSeconds(0.01f);
+        // A LONG HOLD, EXPIRED DELIBERATELY BELOW -- not a 10ms one raced against the frames.
+        //
+        // advanceFrame() takes its delta from System.nanoTime(), so settle()'s frames consume WALL CLOCK:
+        // showEditor() runs six of them, and with a hold of 0.01s the indicator had to survive six real
+        // frames inside ten milliseconds. That passed on the machine it was written on and failed the
+        // moment anything made a frame slower, reporting "shown while holding" — which reads as the
+        // indicator being broken rather than as the test timing out. The explicit tickFrame below is what
+        // the second half actually needs, and it works for any hold.
+        editor.setZoomIndicatorSeconds(5f);
         showEditor();
         key(CgKeyCodes.KEY_EQUALS, CgModifiers.CTRL);
         showEditor();
@@ -4761,7 +4783,9 @@ public class TextEditorTest extends UiTestBase {
         assertNotNull(indicator);
         assertTrue("shown while holding", indicator.hasClass(TextEditor.SHOWN_CLASS));
 
-        editor.tickFrame(1f);
+        // Past the hold in one explicit step, so what expires it is this line rather than how long the
+        // frames above happened to take.
+        editor.tickFrame(10f);
         settle();
 
         assertFalse("the hold expired", indicator.hasClass(TextEditor.SHOWN_CLASS));

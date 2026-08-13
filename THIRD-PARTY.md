@@ -12,6 +12,7 @@ Per-directory detail lives beside the assets it covers; this is the index.
 | IntelliJ Platform icons | `core/src/main/resources/assets/crystalgui/ui/icons/filetypes/` | Apache 2.0 | © 2000–2021 JetBrains s.r.o. Verbatim. See [ATTRIBUTION.md](core/src/main/resources/assets/crystalgui/ui/icons/ATTRIBUTION.md) |
 | Feather icons | `core/src/main/resources/assets/crystalgui/ui/icons/` | MIT | © 2013–2023 Cole Bemis. Verbatim |
 | Minecraft fonts | `core/src/main/resources/assets/crystalgui/ui/fonts/` | Public domain | `Minecraft.otf`, `MinecraftRegular.otf` |
+| JetBrains Mono | `core/src/main/resources/assets/crystalgui/ui/fonts/` | **SIL OFL 1.1** | `JetBrainsMono-Regular.ttf`. The **code** face — the editor and anything carrying `.__syntax__`. See [Fonts](#fonts) |
 | Taffy | Gradle dependency `dev.vfyjxf:taffy` | — | Extracted sources checked in at `research_repos/taffy/` for reference only |
 | LDLib2 | `research_repos/LDLib2/` | — | In-repo checkout, read for pattern prior art. **Not** a dependency and nothing is copied from it |
 | Minecraft 1.20.1 sources | `research_repos/mc1201_sources/` | Proprietary | Decompiled reference. Not redistributed, not built |
@@ -54,6 +55,35 @@ isolation `EngineClassLoader` exists for, not a coincidence.
 > `mc1710/` and `mc1201/` are commented out of `settings.gradle.kts`. When one of them starts
 > bundling a band, the licence texts have to travel in the jar — a row in this table is the index, not
 > the discharge. Recorded here rather than left to be discovered at release.
+
+## Fonts
+
+The UI's default face is **JetBrains Mono**, © 2020 The JetBrains Mono Project Authors, under the
+**SIL Open Font License 1.1**. <https://github.com/JetBrains/JetBrainsMono>
+
+Three obligations, and the third is the one that catches people:
+
+1. The copyright notice and the licence travel with the distribution — so `OFL.txt` ships **beside the
+   font file**, in `ui/fonts/`, not only referenced from here.
+2. The font may not be sold on its own. It is not; it is one asset inside a UI engine.
+3. **A modified version may not use the reserved font name.** So a subsetted or re-hinted build must be
+   renamed. We ship it verbatim, which avoids the question entirely — and that is the reason to keep
+   shipping it verbatim rather than trimming it to the glyphs we use.
+
+> **Why monospace, and why only for code.** Anything that lays code out by *counting characters* — the
+> Quick Documentation popup's hanging indent under `implements`, indent guides, a column ruler — is exact
+> in a monospace face and only approximate in a proportional one, because a space is narrower than an
+> average glyph by a ratio that changes with the size. That is not tunable; it is a property of the face.
+>
+> It was briefly the default for the **whole UI**, and that was an overreach: the argument above is about
+> code and says nothing about a menu bar or a tab strip, which read worse in it. Both references split it
+> the same way — IntelliJ uses **Inter** for the entire IDE and JetBrains Mono only in the editor, and VS
+> Code pairs the system UI font with a mono editor face. So `ua/editor.css` names the code surfaces and
+> everything else inherits the proportional default.
+
+**IBM Plex Sans is the UI face**, and also the second entry in the code stack: `font-family` is a
+preference list, so it supplies any glyph JetBrains Mono lacks. It ships from CrystalGraphics under the
+SIL OFL 1.1 as well.
 
 ## Ports, as opposed to assets
 

@@ -542,8 +542,14 @@ public class PreferencesTest extends UiTestBase {
 
         nav.tree().setExpanded("Short", false);
         for (int i = 0; i < 6; i++) w.updateWithoutPainting();
-        assertEquals("the minimum stayed at the widest row ever seen",
-                collapsed, nav.sidebarMinimumWidth(), 0.5f);
+        // THE RATCHET RELEASED, which is the whole subject -- not that the width returns to the exact
+        // pixel it started at. It comes back slightly UNDER the baseline, because the minimum is derived
+        // from the widest REALISED row and which rows are realised differs either side of an expansion.
+        // Pinning the starting value made this a test about one font's metrics: it passed on the old
+        // proportional face and failed by two pixels on the new one, reporting a stuck sidebar that was
+        // not stuck at all.
+        assertTrue("the minimum stayed at the widest row ever seen: " + nav.sidebarMinimumWidth(),
+                nav.sidebarMinimumWidth() <= collapsed + 0.5f);
     }
 
 
@@ -626,8 +632,10 @@ public class PreferencesTest extends UiTestBase {
 
         search.setQuery("");
         for (int i = 0; i < 8; i++) w.updateWithoutPainting();
-        assertEquals("clearing the query left the sidebar stuck at the long row's width",
-                idle, nav.sidebarMinimumWidth(), 0.5f);
+        // Came back down, which is the subject. See the note in foldingABranchLetsTheSidebarShrinkAgain
+        // for why this is not an equality against the starting pixel.
+        assertTrue("clearing the query left the sidebar stuck at the long row's width: "
+                + nav.sidebarMinimumWidth(), nav.sidebarMinimumWidth() <= idle + 0.5f);
     }
 
 }
