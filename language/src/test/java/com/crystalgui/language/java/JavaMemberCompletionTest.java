@@ -561,4 +561,43 @@ public class JavaMemberCompletionTest {
 
         assertTrue("a field receiver offered nothing: " + labels, labels.contains("length()"));
     }
+
+    /**
+     * Object's members are marked, so they can be sorted last and drawn quieter.
+     *
+     * <p>Every type has these seven, so they are never what a list was opened for — and they crowd the top
+     * of an alphabetical tail, where {@code equals}, {@code getClass} and {@code hashCode} all sort early.
+     * The mark comes from the declaring type the engine reported, not from a list of the seven names: a
+     * class declaring its own {@code toString} overrides Object's and is emphatically not inherited.</p>
+     */
+    @Test
+    public void objectsOwnMembersAreMarkedAsInherited() {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run() {\n"
+                + "        String s = null;\n"
+                + "        s.\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("        s.") + "        s.".length();
+        List<CompletionItem> items = completeAt(source, caret, "", true);
+
+        CompletionItem getClass = named(items, "getClass()");
+        assertNotNull("getClass should be offered: " + labelsOf(items), getClass);
+        assertTrue("getClass is Object's", getClass.inheritedFromObject());
+
+        CompletionItem wait = named(items, "wait()");
+        assertNotNull(wait);
+        assertTrue("wait is Object's", wait.inheritedFromObject());
+
+        // THE CONTROL, and the reason this is keyed on the declaring type rather than on the seven names:
+        // String declares its own toString and equals, so neither is inherited however familiar it looks.
+        CompletionItem toString = named(items, "toString()");
+        assertNotNull(toString);
+        assertFalse("String declares its own toString", toString.inheritedFromObject());
+
+        CompletionItem substring = named(items, "substring(int)");
+        assertNotNull(substring);
+        assertFalse("an ordinary member is not inherited", substring.inheritedFromObject());
+    }
 }

@@ -74,6 +74,7 @@ public final class CompletionPopup extends Popover {
     public static final String PARAMS_CLASS = "__completion-params__";
     public static final String DETAIL_CLASS = "__completion-detail__";
     public static final String DEPRECATED_CLASS = "__completion-deprecated__";
+    public static final String INHERITED_CLASS = "__completion-inherited__";
     public static final String HINT_CLASS = "__completion-hint__";
     public static final String HINT_TEXT_CLASS = "__completion-hint-text__";
     public static final String OPTIONS_CLASS = "__completion-options__";
@@ -764,6 +765,11 @@ public final class CompletionPopup extends Popover {
 
             if (item.deprecated()) row.addClass(DEPRECATED_CLASS);
             else row.removeClass(DEPRECATED_CLASS);
+
+            // Added AND removed, because rows are pooled: a row that drew toString() and is reused for a
+            // real member would otherwise keep the quiet styling and read as inherited.
+            if (item.inheritedFromObject()) row.addClass(INHERITED_CLASS);
+            else row.removeClass(INHERITED_CLASS);
 
             applyMatch(row.label, value.match());
         }

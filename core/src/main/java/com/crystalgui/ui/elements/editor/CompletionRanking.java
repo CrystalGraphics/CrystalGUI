@@ -56,6 +56,11 @@ final class CompletionRanking {
                 .comparingInt(CompletionRanking::tierOf)
                 .thenComparingInt(row -> row.item().deprecated() ? 1 : 0)
                 .thenComparingInt(row -> proximityOf(row.item().kind()))
+                // OBJECT'S MEMBERS LAST, within their kind. Every type has them, so they are never what the
+                // list was opened for -- and they crowd the top of an alphabetical tail where `equals`,
+                // `getClass` and `hashCode` all sort early. After proximity rather than before, so a field
+                // still outranks a method: this orders WITHIN a category, not across them.
+                .thenComparingInt(row -> row.item().inheritedFromObject() ? 1 : 0)
                 // RECENCY, after proximity and before the positional bonuses -- §18.3's ordering. It only
                 // ever separates items that already matched and are already equally near, which is the
                 // whole reason it can be this crude without being disruptive.
