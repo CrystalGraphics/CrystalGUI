@@ -1,0 +1,372 @@
+package com.crystalgui.ui;
+
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.lang.DeclarationSite;
+import com.crystalgui.text.lang.Signature;
+import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.lang.SymbolKind;
+import com.crystalgui.text.lang.SymbolModifier;
+import com.crystalgui.text.lang.TypeRef;
+import com.crystalgui.text.syntax.SyntaxToken;
+import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.elements.editor.DocumentationPopup;
+import com.crystalgui.ui.text.TextRange;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.Assert.*;
+
+/**
+ * M11 §24.1 — the Quick Documentation popup.
+ *
+ * <h3>What these cover</h3>
+ *
+ * <p>The <b>definition line</b>, which is the only band whose content is computed rather than copied, and
+ * the <b>band clearing</b>, which is the failure {@code UIText}'s own note records: a highlight reassigned
+ * only on the paths that have something to say leaves the previous symbol's ranges live on the paths that
+ * do not — and those ranges are offsets into a string that has since been replaced, so the band lands on
+ * whatever moved into those characters. Nothing throws, the popup looks right, and one word is the wrong
+ * colour. Asserting the ranges is the only way to see it.</p>
+ *
+ * <p>Deliberately not covered: where the box lands or how big it is. That is placement and cascade, both
+ * pinned elsewhere, and asserting pixels here would break on any legitimate restyle.</p>
+ */
+public class DocumentationPopupTest extends UiTestBase {
+
+    private DocumentationPopup popup;
+    private UIWindow window;
+
+    @Before
+    public void openAPopup() {
+        popup = new DocumentationPopup();
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
+        window = new UIWindow(Ui.of(root));
+        // THE USER-AGENT SHEET IS NOT INSTALLED FOR YOU, and without it this class could not have caught
+        // the bug below: with no rules at all, an element matches nothing whether it is attached or not,
+        // so an assertion about styling passes against the broken version for the wrong reason.
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(600, 400);
+        for (int i = 0; i < 2; i++) window.updateWithoutPainting();
+    }
+
+    private static SymbolInfo field(String name, String type, SymbolModifier... modifiers) {
+        return new SymbolInfo(name, SymbolKind.FIELD, TypeRef.of(type), "com.example.Host", null,
+                Set.of(modifiers), null);
+    }
+
+    private void show(SymbolInfo symbol) {
+        popup.show(window, symbol, 10f, 10f, 14f);
+        for (int i = 0; i < 2; i++) window.updateWithoutPainting();
+    }
+
+    /** {@code static final Method entryPoint} — modifiers, then type, then name, in Java's own order. */
+    @Test
+    public void theDefinitionLineReadsModifiersThenTypeThenName() {
+        show(field("entryPoint", "Method", SymbolModifier.STATIC, SymbolModifier.FINAL));
+        assertEquals("static final Method entryPoint", popup.definitionText());
+    }
+
+    /**
+     * Each role's characters are banded, so the scheme's colours land on the right words.
+     *
+     * <p>Asserted as offsets into the rendered line rather than as colours, because the colour is the
+     * stylesheet's and the <em>range</em> is this widget's only contribution to it.</p>
+     */
+    @Test
+    public void eachRoleIsBandedOverItsOwnCharacters() {
+        show(field("entryPoint", "Method", SymbolModifier.STATIC));
+        String line = popup.definitionText();
+        assertEquals("static Method entryPoint", line);
+
+        assertEquals(List.of(TextRange.of(0, 6)), ranges(DocumentationPopup.HL_MODIFIER));
+        assertEquals("static", line.substring(0, 6));
+
+        assertEquals(List.of(TextRange.of(7, 13)), ranges(DocumentationPopup.HL_TYPE));
+        assertEquals("Method", line.substring(7, 13));
+
+        assertEquals(List.of(TextRange.of(14, 24)), ranges(DocumentationPopup.HL_NAME));
+        assertEquals("entryPoint", line.substring(14, 24));
+    }
+
+    /** A method carries its parameter list, and the list is deliberately outside the name band. */
+    @Test
+    public void aMethodShowsItsParameterListOutsideTheNameBand() {
+        SymbolInfo method = new SymbolInfo("arraycopy", SymbolKind.METHOD, TypeRef.of("void"),
+                "java.lang.System", null, Set.of(SymbolModifier.STATIC), null,
+                List.of(TypeRef.of("Object"), TypeRef.of("int")));
+        show(method);
+
+        assertEquals("static void arraycopy(Object, int)", popup.definitionText());
+        assertEquals("the band must stop at the name", List.of(TextRange.of(12, 21)),
+                ranges(DocumentationPopup.HL_NAME));
+    }
+
+    /**
+     * <b>The band-clearing trap.</b> A symbol with no modifiers, shown after one that had them, must leave
+     * no modifier band behind — the popup is reused and the ranges are offsets into a replaced string.
+     */
+    @Test
+    public void aSymbolWithNoModifiersClearsThePreviousSymbolsBands() {
+        show(field("entryPoint", "Method", SymbolModifier.STATIC, SymbolModifier.FINAL));
+        assertFalse("precondition: the first symbol banded its modifiers",
+                ranges(DocumentationPopup.HL_MODIFIER).isEmpty());
+
+        show(field("x", "int"));
+
+        assertEquals("int x", popup.definitionText());
+        assertTrue("a modifier band must not survive onto a symbol that has none",
+                ranges(DocumentationPopup.HL_MODIFIER).isEmpty());
+        assertEquals("and the surviving bands must describe the NEW string",
+                List.of(TextRange.of(0, 3)), ranges(DocumentationPopup.HL_TYPE));
+        assertEquals(List.of(TextRange.of(4, 5)), ranges(DocumentationPopup.HL_NAME));
+    }
+
+    /**
+     * A type is declared with a <b>keyword</b>, not with a type — {@code class Host}, never {@code Host}.
+     *
+     * <p>The keyword bands with the modifiers because that is what it is: {@code class} is part of the
+     * declaration, not a reference to a type.</p>
+     */
+    @Test
+    public void aTypeIsDeclaredWithItsKeywordRatherThanWithATypeName() {
+        show(new SymbolInfo("Host", SymbolKind.CLASS, null, "com.example", null, Set.of(), null));
+        assertEquals("class Host", popup.definitionText());
+        assertTrue("a declaration keyword is not a type reference",
+                ranges(DocumentationPopup.HL_TYPE).isEmpty());
+        assertEquals(List.of(TextRange.of(0, 5)), ranges(DocumentationPopup.HL_MODIFIER));
+        assertEquals(List.of(TextRange.of(6, 10)), ranges(DocumentationPopup.HL_NAME));
+    }
+
+    /**
+     * <b>{@code java.lang.System} rendered its own name twice.</b>
+     *
+     * <p>An engine reports a class whose {@code type()} is itself, so writing modifiers-then-type-then-name
+     * produced {@code final System System} — visibly wrong, and wrong in the single most likely thing
+     * anybody hovers first. IntelliJ writes {@code public final class System}; ours writes the same minus
+     * the visibility {@link SymbolModifier} does not carry.</p>
+     */
+    @Test
+    public void aClassWhoseTypeIsItselfDoesNotPrintItsNameTwice() {
+        show(new SymbolInfo("System", SymbolKind.CLASS, TypeRef.of("System"), "java.lang", null,
+                Set.of(SymbolModifier.FINAL), null));
+        assertEquals("final class System", popup.definitionText());
+    }
+
+    /**
+     * The body band is hidden rather than empty while no engine reports documentation — which is every
+     * symbol today. An empty band is a gap that reads as a rendering failure.
+     */
+    @Test
+    public void theBodyBandIsHiddenWithNoDocumentationAndShownWithSome() {
+        show(field("x", "int"));
+        assertFalse("no engine populates documentation yet, so the band must not be drawn",
+                popup.isBodyShown());
+
+        show(field("x", "int").withDocumentation("Holds the thing."));
+        assertTrue(popup.isBodyShown());
+    }
+
+    /**
+     * A declaration site changes nothing visible now that the bottom band is gone — but it is still
+     * carried, and {@code editor.goToDefinition} reads it.
+     */
+    @Test
+    public void aSymbolWithADeclarationSiteStillShowsNormally() {
+        SymbolInfo here = field("x", "int")
+                .withDeclaration(DeclarationSite.here(new TextPoint(2, 0), new TextPoint(2, 1)));
+        show(here);
+        assertEquals(here, popup.shownSymbol());
+
+        SymbolInfo elsewhere = field("y", "int").withDeclaration(new DeclarationSite(
+                Resource.of(CgPath.parse("mymod.proj:src/Other.java")),
+                new TextPoint(1, 0), new TextPoint(1, 1)));
+        show(elsewhere);
+        assertEquals(elsewhere, popup.shownSymbol());
+    }
+
+    /**
+     * The owner band draws the <b>owner's</b> icon, never the symbol's own.
+     *
+     * <p>A member is declared in a type and a type is declared in a package. Drawing the symbol's kind put
+     * a method glyph beside a class name, which reads as "the method {@code java.io.PrintStream}" — a
+     * confident statement of the wrong thing, and the sort that is only ever noticed in a screenshot.</p>
+     */
+    @Test
+    public void theOwnerIconIsTheOwnersKindAndNotTheSymbolsOwn() {
+        show(new SymbolInfo("println", SymbolKind.METHOD, TypeRef.of("void"), "java.io.PrintStream",
+                null, Set.of(), null));
+        assertTrue("a method is owned by a class", ownerIconHasKind("class"));
+
+        show(new SymbolInfo("System", SymbolKind.CLASS, null, "java.lang", null, Set.of(), null));
+        assertTrue("a top-level class is owned by a package", ownerIconHasKind("package"));
+    }
+
+    /**
+     * A nested type is owned by a class, and a qualified name is the only evidence there is.
+     *
+     * <p>Java capitalises types and not packages, so the last segment decides. It is a heuristic and is
+     * documented as one — the cost of it being wrong is one glyph, never a wrong name.</p>
+     */
+    @Test
+    public void aNestedTypeIsOwnedByAClassRatherThanAPackage() {
+        show(new SymbolInfo("Entry", SymbolKind.INTERFACE, null, "java.util.Map", null, Set.of(), null));
+        assertTrue(ownerIconHasKind("class"));
+    }
+
+    /** Swapped, never added — the popup is reused, so yesterday's glyph must not survive beside today's. */
+    @Test
+    public void theOwnerIconIsSwappedRatherThanAccumulated() {
+        show(new SymbolInfo("System", SymbolKind.CLASS, null, "java.lang", null, Set.of(), null));
+        show(new SymbolInfo("println", SymbolKind.METHOD, TypeRef.of("void"), "java.io.PrintStream",
+                null, Set.of(), null));
+        assertTrue(ownerIconHasKind("class"));
+        assertFalse("the package glyph must have gone with the symbol it belonged to",
+                ownerIconHasKind("package"));
+    }
+
+    private boolean ownerIconHasKind(String kind) {
+        UIElement icon = popup.querySelector("." + DocumentationPopup.OWNER_ICON_CLASS);
+        return icon != null && icon.hasClass("completion-kind-" + kind);
+    }
+
+    /**
+     * An engine-rendered {@link Signature} <b>replaces</b> the assembled line, tokens and all.
+     *
+     * <p>This is the whole point of the seam carrying structure: the widget has no branch for a
+     * modifier, an annotation or a parameter, and the declaration below contains all three.</p>
+     */
+    @Test
+    public void anEngineSignatureIsDrawnWithItsOwnTokens() {
+        String text = "public void println(String x)";
+        show(field("println", "void").withSignature(new Signature(text, List.of(
+                new SyntaxToken(0, 6, "keyword"),
+                new SyntaxToken(7, 11, "type"),
+                new SyntaxToken(12, 19, "function.method"),
+                new SyntaxToken(20, 26, "type"),
+                new SyntaxToken(27, 28, "variable.parameter")))));
+
+        assertEquals(text, popup.definitionText());
+        assertEquals(List.of(TextRange.of(0, 6)), rangesOf("keyword"));
+        assertEquals("two type tokens must both survive under one name",
+                List.of(TextRange.of(7, 11), TextRange.of(20, 26)), rangesOf("type"));
+        assertEquals(List.of(TextRange.of(27, 28)), rangesOf("variable.parameter"));
+        assertTrue("the assembled path's bands must not be left over",
+                rangesOf(DocumentationPopup.HL_MODIFIER).isEmpty());
+    }
+
+    /**
+     * A symbol with no signature falls back to the assembled line — and the engine path's tokens must
+     * not survive onto it.
+     *
+     * <p>The two paths use different name sets, so a leftover would be a band under a name the new
+     * string never described. That is the same failure the modifier band had, one level up.</p>
+     */
+    @Test
+    public void fallingBackToTheAssembledLineClearsTheEnginesTokens() {
+        show(field("println", "void").withSignature(Signature.plain("public void println()")
+                .text().isEmpty() ? null : new Signature("public void println()",
+                List.of(new SyntaxToken(0, 6, "keyword")))));
+        assertFalse(rangesOf("keyword").isEmpty());
+
+        show(field("x", "int"));
+
+        assertEquals("int x", popup.definitionText());
+        assertTrue("the engine path's band must not survive the fallback",
+                rangesOf("keyword").isEmpty());
+        assertEquals(List.of(TextRange.of(0, 3)), rangesOf(DocumentationPopup.HL_TYPE));
+    }
+
+    private List<TextRange> rangesOf(String name) {
+        return popup.definitionElement().highlights().get(name);
+    }
+
+    /**
+     * <b>The very first show must style its lines like every later one.</b>
+     *
+     * <p>{@code fill()} builds the signature's line elements, and {@code invalidateStyleMatch()} early
+     * returns on a <em>detached</em> element — so filling before attaching meant no selector ever matched
+     * them. The first popup of a session had lines with no font size and no {@code white-space}, so the
+     * box measured itself from unstyled text and the lines drew on top of each other; from the second
+     * hover onwards the popup is already attached and everything is fine, which is what made it look like
+     * a race rather than an ordering mistake.</p>
+     *
+     * <p>Asserted through the cascade rather than by pixels: a line that matched has a {@code font-size}
+     * from the sheet, and one that did not has the property's initial value.</p>
+     */
+    @Test
+    public void theFirstShowStylesItsLinesLikeEveryLater() {
+        DocumentationPopup fresh = new DocumentationPopup();
+        fresh.show(window, field("entryPoint", "Method", SymbolModifier.STATIC), 10f, 10f, 14f);
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+
+        UIText firstLine = fresh.definitionElement();
+        assertNotNull("the first show should have built a line", firstLine);
+        float onFirstShow = firstLine.getStyle().getGeneralGroup().fontSize();
+
+        // AGAINST A LATER SHOW rather than against a number. The subject is "the first one is styled like
+        // the rest", and pinning the literal size would make this fail every time somebody tunes the
+        // sheet — which is a change to taste, not to the invariant.
+        fresh.show(window, field("x", "int"), 10f, 10f, 14f);
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+        float onLaterShow = fresh.definitionElement().getStyle().getGeneralGroup().fontSize();
+
+        assertEquals("the first line should be styled exactly as a later one",
+                onLaterShow, onFirstShow, 0.01f);
+        assertNotEquals("nothing matched at all — the line kept font-size's initial value",
+                16f, onFirstShow, 0.01f);
+    }
+
+    /**
+     * <b>The first popup of a process measured its signature at zero and stayed there.</b>
+     *
+     * <p>A line built during a show is measured by {@code setText} <em>before</em> its cascade has run,
+     * so it sized itself against {@code font-size}'s initial value; the real size arrived from the sheet
+     * moments later and invalidated the measurement, but with no {@code MeasureFunc} that re-resolves to
+     * zero — and zero in, zero out is not a geometry change, so {@code onLayoutChanged} never fired and
+     * nothing asked again. A deadlock, not a lag: the width stayed zero for the popup's whole life, so
+     * the box sized itself to the owner row with the signature clipped.</p>
+     *
+     * <p>Exactly once per process, because the line elements are pooled — from the second show they have
+     * been through a layout pass. That is what made it read as a warm-up problem.</p>
+     */
+    @Test
+    public void theFirstShowMeasuresItsSignatureLikeEveryLater() {
+        DocumentationPopup fresh = new DocumentationPopup();
+        SymbolInfo symbol = new SymbolInfo("println", SymbolKind.METHOD, TypeRef.of("void"),
+                "java.io.PrintStream", null, Set.of(), null);
+
+        fresh.show(window, symbol, 20f, 20f, 14f);
+        for (int i = 0; i < 4; i++) window.updateWithoutPainting();
+        float onFirstShow = fresh.definitionElement().getRuntimeCache().getWidth();
+
+        fresh.hide();
+        for (int i = 0; i < 2; i++) window.updateWithoutPainting();
+        fresh.show(window, symbol, 20f, 20f, 14f);
+        for (int i = 0; i < 4; i++) window.updateWithoutPainting();
+        float onLaterShow = fresh.definitionElement().getRuntimeCache().getWidth();
+
+        assertTrue("the signature measured nothing on the first show", onFirstShow > 0f);
+        assertEquals("and it should measure the same as on any later one",
+                onLaterShow, onFirstShow, 0.5f);
+    }
+
+    /** Hiding forgets what was shown, so a stale symbol cannot be read back off a closed popup. */
+    @Test
+    public void hidingForgetsTheSymbol() {
+        show(field("x", "int"));
+        assertNotNull(popup.shownSymbol());
+        popup.hide();
+        assertNull(popup.shownSymbol());
+    }
+
+    private List<TextRange> ranges(String name) {
+        return popup.definitionElement().highlights().get(name);
+    }
+}

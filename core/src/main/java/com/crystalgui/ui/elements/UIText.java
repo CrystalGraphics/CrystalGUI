@@ -160,12 +160,43 @@ public final class UIText extends UIElement {
         });
     }
 
+    /**
+     * Throw away the measurement and take it again on the next pass.
+     *
+     * <h3>Why a caller ever needs this</h3>
+     *
+     * <p>{@link #recompute()} is the only thing that measures, and it runs from exactly two places: a
+     * text change, and {@code onLayoutChanged()} — which itself fires only on a genuine Taffy geometry
+     * change. That pair covers a label whose text or box moves, and it has a hole: an element built and
+     * populated <em>while nothing about its geometry is settled</em> can measure zero, push zero, and
+     * then never be asked again, because zero-in-zero-out is not a geometry change. It is a deadlock
+     * rather than a lag — the width stays wrong for the element's whole life.</p>
+     *
+     * <p>The font listeners above have needed the same three steps since a theme switch left boxes sized
+     * for the previous face; this is that operation named and made available, rather than a second copy
+     * of it somewhere else.</p>
+     */
+    public void invalidateMeasurement() {
+        invalidateForFontChange();
+    }
+
     private void invalidateForFontChange() {
         shapedParagraph = null;
         shadowParagraph = null;
         getStyle().removeCandidates(LayoutProperties.WIDTH, slot -> slot.origin() == StyleOrigin.IMPORTANT);
         getStyle().removeCandidates(LayoutProperties.HEIGHT, slot -> slot.origin() == StyleOrigin.IMPORTANT);
         markTreeDirty();
+        // AND MEASURE AGAIN NOW, for the same reason the text listener says it must: with no MeasureFunc,
+        // markTreeDirty() alone re-runs Taffy against whatever this element last pushed -- and having just
+        // withdrawn that, it pushes nothing, so the box resolves to zero. Zero in, zero out is not a
+        // geometry change, so onLayoutChanged() never fires and nothing ever asks for a measurement again.
+        //
+        // That is a DEADLOCK, not a lag, and it is reachable whenever the font resolves after the element
+        // was first measured -- which is every element built mid-frame, since its cascade has not run when
+        // setText measures it. The Quick Documentation popup hit it on the first hover of a process: its
+        // signature lines measured against font-size's initial value, the real size arrived from the sheet
+        // moments later, and the width stayed at zero for the popup's whole life.
+        recompute();
     }
 
     /** Text content — bindable via {@link #bindTextTo(Property)}, reusing the same data-binding

@@ -501,5 +501,6 @@ public final class Main {
         System.out.println("phi=" + GOLDEN_RATIO + " hex=" + HEX + " bin=" + BINARY + " oct=" + OCTAL);
         System.out.println("big=" + BIG + " sci=" + SCIENTIFIC + " tiny=" + NEGATIVE_EXPONENT);
         System.out.println("tab[" + TAB + "] nothing=" + NOTHING + " path=" + PATH);
+        
     }
 }

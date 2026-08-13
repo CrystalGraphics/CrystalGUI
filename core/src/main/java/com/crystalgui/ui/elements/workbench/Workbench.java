@@ -440,6 +440,14 @@ public class Workbench extends UIElement {
             // whole feature flag -- see LanguageServices. Released by TextFileDocument.dispose().
             Resource resource = Resource.of(path);
             created.setLanguageServices(entry.newServices(created.buffer(), resource));
+            // A CROSS-FILE jump, which the editor announces rather than performs -- see the signal's own
+            // note. Same-file jumps never arrive here because the editor already made them; this hears
+            // only what genuinely needs the workspace, and routes it through the primitive the Problems
+            // panel uses so the two cannot disagree about focus or framing.
+            created.onDefinitionChosen.connect(site -> {
+                if (site.resource() == null || !site.resource().isProject()) return;
+                openAndReveal(site.resource().asPath(), site.start());
+            });
             // No command installation here: TextEditor registers its own and binds its own chords, so a
             // document created before this workbench is attached is no longer a special case.
             // Here rather than only from WorkbenchSettings.apply: a document opened after the settings
@@ -551,24 +559,38 @@ public class Workbench extends UIElement {
 
         problems.onProblemChosen.connect(node -> {
             if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
-            TextPoint at = node.diagnostic().start();
-            // AS THE CONTINUATION OF THE OPEN, not as the statement after it. openFile is asynchronous
-            // for a file that is not already on screen -- it returns before client.read has come back --
-            // so positioning on the next line acted on the editor from BEFORE the click. That is correct
-            // for a problem in the file you are already looking at and wrong for every other, which is
-            // why it read as intermittent rather than as broken.
-            openFile(node.resource().asPath(), () -> {
-                TextEditor editor = activeEditor();
-                if (editor == null) return;
-                editor.setCaret(editor.buffer().pointToOffset(at));
-                // AND CENTRED. setCaret deliberately does not scroll, so without this the caret lands on a
-                // line the viewport is nowhere near and nothing appears to have happened -- and scrolling
-                // only as far as strictly necessary leaves the problem pinned to an edge with its context
-                // entirely on one side. Both references centre for navigation.
-                editor.revealCaretCentred();
-                UIWindow window = getAttachedWindow();
-                if (window != null) window.getInputHandler().requestFocus(editor);
-            });
+            openAndReveal(node.resource().asPath(), node.diagnostic().start());
+        });
+    }
+
+    /**
+     * Open {@code path} if it is not already open, then put the caret at {@code at} and frame it — the one
+     * navigation primitive, and every caller that names a target differently ends up here.
+     *
+     * <p>Three callers name the same act three ways: a problem row names a {@link Diagnostic}'s start, a
+     * cross-file go-to-definition names a {@code DeclarationSite}, and both mean <em>open if needed, then
+     * arrive</em>. Written once for the reason the clipboard commands are written once — three paths that
+     * each open files their own way disagree about focus, about scrolling, and about the asynchronous case
+     * below, and the disagreements are found one at a time by whoever hits them.</p>
+     *
+     * <h3>The reveal is the CONTINUATION of the open, never the statement after it</h3>
+     *
+     * <p>{@link #openFile} has two paths and only one of them is synchronous. An already-open file
+     * activates its tab and returns, so the next statement finds the right editor; a file that is not open
+     * falls through to {@code client.read(path, ...)} and returns before any document exists. Written as
+     * consecutive statements, the reveal therefore acted on the editor from <em>before</em> the click —
+     * correct for a target in the file you were already looking at, wrong for every other, which is
+     * precisely why it presented as intermittent rather than as broken.</p>
+     */
+    private void openAndReveal(CgPath path, TextPoint at) {
+        openFile(path, () -> {
+            TextEditor editor = activeEditor();
+            if (editor == null) return;
+            // Caret, scroll and focus together -- a caret set on a line the viewport is nowhere near is
+            // indistinguishable from nothing having happened, and an unfocused editor cannot be typed in.
+            editor.revealAt(at);
+            UIWindow window = getAttachedWindow();
+            if (window != null) window.getInputHandler().requestFocus(editor);
         });
     }
 

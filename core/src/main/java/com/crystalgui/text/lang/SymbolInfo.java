@@ -39,13 +39,27 @@ import javax.annotation.Nullable;
 public record SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type,
                          @Nullable String container, @Nullable String documentation,
                          Set<SymbolModifier> modifiers, @Nullable DeclarationSite declaration,
-                         List<TypeRef> parameters) {
+                         List<TypeRef> parameters, @Nullable Signature signature) {
 
     public SymbolInfo {
         if (name == null) name = "";
         if (kind == null) kind = SymbolKind.UNKNOWN;
         modifiers = modifiers == null || modifiers.isEmpty() ? Set.of() : Set.copyOf(modifiers);
         parameters = parameters == null || parameters.isEmpty() ? List.of() : List.copyOf(parameters);
+    }
+
+    /**
+     * The eight-component shape, for every construction site that predates {@link Signature}.
+     *
+     * <p>Kept as an overload for the reason the seven-component one is: a signature is something an
+     * <em>engine with a binding</em> can produce, and the dozen places that build a {@code SymbolInfo}
+     * from a name and a kind — tests, the keyword tier, a completion item — have nothing to offer and
+     * should not have to say so. {@link #signature()} answering null is that statement, made once.</p>
+     */
+    public SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type, @Nullable String container,
+                      @Nullable String documentation, Set<SymbolModifier> modifiers,
+                      @Nullable DeclarationSite declaration, List<TypeRef> parameters) {
+        this(name, kind, type, container, documentation, modifiers, declaration, parameters, null);
     }
 
     /**
@@ -101,7 +115,19 @@ public record SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type,
 
     public SymbolInfo withParameters(List<TypeRef> newParameters) {
         return new SymbolInfo(name, kind, type, container, documentation, modifiers, declaration,
-                newParameters);
+                newParameters, signature);
+    }
+
+    /**
+     * The declaration as the engine would write it, with the tokens that colour it. @see Signature
+     *
+     * <p>Null for everything that has no binding behind it, which is most producers — a consumer draws
+     * what it can assemble from the other fields instead. That fallback is not a degraded mode: it is
+     * what a grammar-only language will always show.</p>
+     */
+    public SymbolInfo withSignature(@Nullable Signature newSignature) {
+        return new SymbolInfo(name, kind, type, container, documentation, modifiers, declaration,
+                parameters, newSignature);
     }
 
     /** The common shape: a name and what it is. */
