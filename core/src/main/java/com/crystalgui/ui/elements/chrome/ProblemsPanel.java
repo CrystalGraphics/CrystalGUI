@@ -15,6 +15,7 @@ import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.input.UIInputHandler;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.elements.Menu;
@@ -674,6 +675,25 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
          */
         private final java.util.Map<UIElement, ProblemNode> rowItems = new java.util.IdentityHashMap<>();
 
+        /**
+         * What Copy puts on the clipboard — <b>the message, and nothing else</b>.
+         *
+         * <p>The inherited default is {@code String.valueOf}, which for a record is its generated
+         * {@code toString}, so copying a row produced the entire object graph: {@code ProblemNode[resource=…,
+         * diagnostic=Diagnostic[start=508:8, end=…, code=1610612976, tags=[], related=[]]]}. What a person
+         * copying an error wants is the sentence they are about to search for or paste into a report, which
+         * is what both references put on the clipboard too.</p>
+         *
+         * <p>A heading copies its filename, for the same reason: it is what the row says.</p>
+         */
+        @Override
+        public String copyTextFor(ProblemNode item) {
+            if (item == null) return "";
+            if (item.isFile()) return item.resource() == null ? "" : item.resource().name();
+            Diagnostic diagnostic = item.diagnostic();
+            return diagnostic == null ? "" : diagnostic.message();
+        }
+
         @Override
         public UIElement createTemplate() {
             UIElement row = new UIElement();
@@ -696,6 +716,30 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
                 // problem rows still under them, one of them drawn twice. Expanding looked fine, which is
                 // why it survived a screenshot. ProjectFileTree defers its chevron for the same reason.
                 requestFold(node);
+            }, false, false);
+
+            // DOUBLE CLICK NAVIGATES; a single click only selects. It has to be raised here because
+            // `onRowActivated` is Enter only -- its javadoc says so, and says a renderer raises the
+            // pointer half from its own template. Without this the panel was keyboard-navigable and
+            // completely inert to the mouse.
+            //
+            // Two clicks rather than one for the reason `FilesRenderer` already records: one press has to
+            // mean "this is the row I am talking about", because a press is how you aim the selection, a
+            // Shift-range, or anything a command resolves from it. Navigating on that same press means a
+            // problem cannot be selected without also being jumped to.
+            //
+            // ONLY FOR A PROBLEM ROW. A file heading is not a destination -- chooseRow says as much and
+            // folds it instead -- and the chevron already spells that.
+            //
+            // The keyboard guard is not optional: Space and Enter on a focused element synthesise the same
+            // MouseEvent.Down a real click would, so without it Enter would activate twice.
+            row.onMouseDown.attachListener((element, event) -> {
+                if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+                if (event.getDetail() < 2) return;
+                ProblemNode node = rowItems.get(row);
+                if (node == null || node.isFile() || tree == null) return;
+                int index = tree.indexOfRowElement(row);
+                if (index >= 0) tree.onRowActivated.emit(index);
             }, false, false);
 
             UIElement icon = new UIElement();

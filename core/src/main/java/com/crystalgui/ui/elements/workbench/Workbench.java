@@ -11,13 +11,14 @@ import com.crystalgui.fs.FilePatternMap;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.fs.WorkingCopies;
 import com.crystalgui.fs.WorkspaceFileService;
+import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.chrome.InputDialog;
+import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgui.ui.elements.chrome.NotificationBalloons;
 import com.crystalgui.ui.elements.chrome.NotificationsView;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
@@ -533,15 +534,25 @@ public class Workbench extends UIElement {
         toolWindowManager.showPanel(PROBLEMS_TYPE);
 
         problems.onProblemChosen.connect(node -> {
-            // OPEN FIRST, THEN REVEAL. The panel is workspace-wide now, so the problem you clicked is
-            // routinely in a file that is not on screen — which is the case the panel's javadoc always
-            // described and could not produce until the index existed.
-            if (node.resource() != null && node.resource().isProject()) openFile(node.resource().asPath());
-            TextEditor editor = activeEditor();
-            if (editor == null || node.diagnostic() == null) return;
-            editor.setCaret(editor.buffer().pointToOffset(node.diagnostic().start()));
-            UIWindow window = getAttachedWindow();
-            if (window != null) window.getInputHandler().requestFocus(editor);
+            if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
+            TextPoint at = node.diagnostic().start();
+            // AS THE CONTINUATION OF THE OPEN, not as the statement after it. openFile is asynchronous
+            // for a file that is not already on screen -- it returns before client.read has come back --
+            // so positioning on the next line acted on the editor from BEFORE the click. That is correct
+            // for a problem in the file you are already looking at and wrong for every other, which is
+            // why it read as intermittent rather than as broken.
+            openFile(node.resource().asPath(), () -> {
+                TextEditor editor = activeEditor();
+                if (editor == null) return;
+                editor.setCaret(editor.buffer().pointToOffset(at));
+                // AND CENTRED. setCaret deliberately does not scroll, so without this the caret lands on a
+                // line the viewport is nowhere near and nothing appears to have happened -- and scrolling
+                // only as far as strictly necessary leaves the problem pinned to an edge with its context
+                // entirely on one side. Both references centre for navigation.
+                editor.revealCaretCentred();
+                UIWindow window = getAttachedWindow();
+                if (window != null) window.getInputHandler().requestFocus(editor);
+            });
         });
     }
 
@@ -785,6 +796,22 @@ public class Workbench extends UIElement {
      * blank editor with no explanation.</p>
      */
     public void openFile(CgPath path) {
+        openFile(path, null);
+    }
+
+    /**
+     * Opens a file and runs {@code onOpened} <b>once the document actually exists</b>.
+     *
+     * <p><b>The callback is the whole point, because this method has two paths and only one of them is
+     * synchronous.</b> A file already on screen is activated and returns immediately; a file that is not
+     * open goes through {@code client.read}, which is a round trip, and returns long before anything has
+     * been adopted. Every caller that wanted to do something <em>to</em> the file it just opened wrote
+     * the second statement as though the first had finished:</p>
+     * 
+     * @param onOpened run after the document is present and its tab is active, on both paths; never run
+     *                 if the read fails, since there is nothing to act on
+     */
+    public void openFile(CgPath path, @Nullable Runnable onOpened) {
         // BEFORE the already-open early return below, so re-activating a tab still promotes the file.
         // "Recent" means recently used, not recently created -- and the branch that returns early is the
         // common one once a session has been running for a while.
@@ -797,12 +824,16 @@ public class Workbench extends UIElement {
             // click that asked for it -- a widget must never rebuild the elements it is being clicked on.
             dock.syncGroups();
             dock.setActiveGroup(dock.groupFor(leaf));
+            if (onOpened != null) onOpened.run();
             return;
         }
         client.read(path, read -> {
             adoptInto(path, read.content());
             open.requestRead(path);
             open(DockInput.of(ref));
+            // AFTER open(), not before: the tab has to be the active one for activeEditor() to answer
+            // with the document this callback is about.
+            if (onOpened != null) onOpened.run();
         }, failure -> Notifications.show(openFailed(path, failure)
                 // AN ACTION, because a read failure is the case actions exist for: it is usually transient
                 // (a server round trip), the recovery is exactly what was just attempted, and without one

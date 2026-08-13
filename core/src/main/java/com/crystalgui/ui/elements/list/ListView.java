@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.list;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.platform.CgPlatform;
@@ -10,7 +11,10 @@ import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIInputHandler;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.ui.ClipboardActions;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.ui.elements.ScrollerView;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import lombok.Getter;
@@ -70,7 +74,7 @@ import java.util.*;
  *       of ten thousand rows is worse than nothing. It is the model that is state.</li>
  * </ul>
  */
-public class ListView<T> extends ScrollerView {
+public class ListView<T> extends ScrollerView implements ClipboardActions {
 
     /** Realised rows carry this, so a theme can style them without knowing they are recycled. */
     public static final String ROW_CLASS = "__row__";
@@ -456,6 +460,7 @@ public class ListView<T> extends ScrollerView {
         // listening. @see #modelConnection
         subscribeToModel();
         invalidateWindow();
+        installDefaultContextMenu();
         window.registerTicker(this);
         ticking = true;
     }
@@ -580,11 +585,17 @@ public class ListView<T> extends ScrollerView {
             // arrow keys just made.
             tracked.onMouseDown.attachListener((el, event) -> {
                 if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+                // THE PRIMARY BUTTON CHOOSES; the secondary one only asks. A right-click opens a menu
+                // ABOUT a row and must leave the selection alone — otherwise the menu destroys the very
+                // selection it was opened over, which for a multi-selection cannot be undone. The menu
+                // still knows its subject: it reads the row under the pointer directly.
+                if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
                 int index2 = indexOf(tracked);
                 if (index2 >= 0) pressRow(index2);
             }, false, true);
             tracked.onMouseUp.attachListener((el, event) -> {
                 if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+                if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
                 int index2 = indexOf(tracked);
                 if (index2 >= 0) releaseRow(index2);
             }, false, true);
@@ -806,6 +817,182 @@ public class ListView<T> extends ScrollerView {
         // across a re-flatten finds nothing to stamp and realise() applies the class as it rebinds.
         realised.forEach((index, row) -> applySelectionClass(row, index));
         onSelectionChanged.emit(Collections.unmodifiableSet(new TreeSet<>(selected)));
+    }
+
+    /**
+     * Which row {@code element} is, or sits inside — {@code -1} for anything that is not a row.
+     *
+     * <p><b>Walks up</b>, because the thing under the pointer is almost never the row: it is the label,
+     * the icon or a badge the renderer put there. This lived on {@code TreeView} and matched the row
+     * element exactly, which worked only because its one caller had already resolved the row by hand.</p>
+     */
+    public int indexOfRowElement(@Nullable UIElement element) {
+        for (UIElement scope = element; scope != null; scope = scope.getParent()) {
+            for (var entry : realised.entrySet()) {
+                if (entry.getValue() == scope) return entry.getKey();
+            }
+        }
+        return -1;
+    }
+
+    // ── The default row context menu ────────────────────────────────────────
+
+    /**
+     * Gives <b>every</b> list a right-click menu, installed once by whoever owns menus.
+     *
+     * <p><b>A hook rather than a call in each widget</b>, because "all of them" is the requirement: a
+     * helper hosts opt into is a list of call sites that is wrong the moment somebody adds a list and
+     * forgets. And it cannot simply be done here — a menu is chrome, {@code ui.elements.list} cannot see
+     * that package, and inverting the dependency would make the two mutually dependent for one item. So
+     * chrome installs the behaviour and the list supplies the seam. {@code ElementRegistry.bootstrapBuiltins}
+     * is the same shape.</p>
+     *
+     * @see ContextMenu#installDefaultForLists
+     */
+    public static void setDefaultContextMenuInstaller(@Nullable java.util.function.Consumer<ListView<?>> installer) {
+        defaultContextMenuInstaller = installer;
+    }
+
+    @Nullable
+    private static java.util.function.Consumer<ListView<?>> defaultContextMenuInstaller;
+
+    private boolean defaultContextMenuInstalled;
+
+    /**
+     * -- GETTER --
+     *  Whether this list declines the default menu because it has one of its own.
+     *  <p>Read at <b>click</b> time, not at install time — see the installer. Two menus attached to one
+     *  element are two listeners and both would open.</p>
+     */
+    @Getter
+    private boolean defaultContextMenuSuppressed;
+
+    /** For a widget that attaches its own menu — {@code ProjectFileTree} does. */
+    public ListView<T> suppressDefaultContextMenu() {
+        this.defaultContextMenuSuppressed = true;
+        return this;
+    }
+
+    /**
+     * Installed on first attach rather than in the constructor.
+     *
+     * <p>Construction order would otherwise decide it: a list built before chrome registers its hook
+     * would silently never get a menu, and that is exactly the kind of miss that shows up as "this one
+     * panel is different" months later. Every list reaches a window before it can be right-clicked.</p>
+     */
+    private void installDefaultContextMenu() {
+        if (defaultContextMenuInstalled || defaultContextMenuInstaller == null) return;
+        defaultContextMenuInstalled = true;
+        defaultContextMenuInstaller.accept(this);
+    }
+
+    // ── Copy ────────────────────────────────────────────────────────────────
+
+    /**
+     * A host's own cut/copy/paste, replacing the row-text default. @see #setClipboardActions
+     */
+    @Nullable
+    private ClipboardActions clipboardDelegate;
+
+    /**
+     * Hands this list's clipboard behaviour to whoever owns it.
+     *
+     * <p><b>This exists because implementing {@link ClipboardActions} here SHADOWS the host's.</b>
+     * {@code UiDataKeys.CLIPBOARD} resolves by walking outward from the focused element and taking the
+     * first thing of that type, so a list that answers for itself is found before the panel around it —
+     * and {@code ProjectFileTree} <em>contains</em> its tree rather than extending it. Giving every list a
+     * default Copy would therefore have silently replaced the explorer's whole Cut/Copy/Paste with a
+     * row-text copier: the menu would still have opened, the items would still have been enabled, and
+     * they would have done the wrong thing.</p>
+     *
+     * <p>So a host that already implements the interface says so, once, and this list becomes a
+     * pass-through. Every other list keeps the default and gains Copy for free.</p>
+     */
+    public ListView<T> setClipboardActions(@Nullable ClipboardActions delegate) {
+        this.clipboardDelegate = delegate == this ? null : delegate;
+        return this;
+    }
+
+    /**
+     * Answers {@link UiDataKeys#CLIPBOARD} with this list.
+     *
+     * <p>Implementing the interface is <b>not</b> what makes a widget the clipboard target — the walk asks
+     * {@code getData} and takes the first non-null answer, never {@code instanceof}. So this override is
+     * the whole mechanism, and it is also the shadowing hazard: it answers before any ancestor gets to,
+     * which is why {@link #setClipboardActions} exists.</p>
+     */
+    @Override
+    public Object getData(DataKey<?> key) {
+        if (key == UiDataKeys.CLIPBOARD) return clipboardDelegate != null ? clipboardDelegate : this;
+        return super.getData(key);
+    }
+
+    @Override
+    public boolean canCut() {
+        return clipboardDelegate != null && clipboardDelegate.canCut();
+    }
+
+    @Override
+    public void cut() {
+        if (clipboardDelegate != null) clipboardDelegate.cut();
+    }
+
+    /**
+     * The row a context menu was opened over — <b>its subject, which is not the selection</b>.
+     *
+     * <p>A right-click names the row it is about, so the menu acts on that row and leaves the selection
+     * alone. Cleared once used, and by the next ordinary press, so a later Ctrl+C means the selection
+     * again.</p>
+     */
+    public ListView<T> setContextRow(int index) {
+        this.contextRow = index >= 0 && index < model.size() ? index : -1;
+        return this;
+    }
+
+    private int contextRow = -1;
+
+    /** What Copy would act on: the right-clicked row if there is one, otherwise the selection. */
+    private java.util.Collection<Integer> copyTargets() {
+        if (contextRow >= 0 && contextRow < model.size() && !selected.contains(contextRow)) {
+            return List.of(contextRow);
+        }
+        return selected;
+    }
+
+    /** Something to copy — a list cannot copy "where the cursor is", only a row that was named or chosen. */
+    @Override
+    public boolean canCopy() {
+        return clipboardDelegate != null ? clipboardDelegate.canCopy() : !copyTargets().isEmpty();
+    }
+
+    @Override
+    public void copy() {
+        if (clipboardDelegate != null) {
+            clipboardDelegate.copy();
+            return;
+        }
+        java.util.Collection<Integer> targets = copyTargets();
+        contextRow = -1;
+        if (renderer == null || targets.isEmpty()) return;
+        StringBuilder out = new StringBuilder();
+        // IN LIST ORDER, which is what `selected` being a NavigableSet already guarantees -- copying a
+        // multi-selection in click order would produce text nobody could match against the screen.
+        for (int index : targets) {
+            if (index < 0 || index >= model.size()) continue;
+            if (out.length() > 0) out.append('\n');
+            out.append(renderer.copyTextFor(model.get(index)));
+        }
+        CgPlatform.input().setClipboard(out.toString());
+    }
+
+    @Override
+    public boolean canPaste() {
+        return clipboardDelegate != null && clipboardDelegate.canPaste();
+    }
+
+    @Override
+    public void paste() {
+        if (clipboardDelegate != null) clipboardDelegate.paste();
     }
 
     private void applySelectionClass(UIElement row, int index) {

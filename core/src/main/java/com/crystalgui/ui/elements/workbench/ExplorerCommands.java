@@ -13,7 +13,7 @@ import com.crystalgui.fs.WorkspaceFileService;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
-import com.crystalgui.ui.elements.chrome.InputDialog;
+import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgui.ui.input.keymap.Keymap;
 
 import java.util.ArrayList;

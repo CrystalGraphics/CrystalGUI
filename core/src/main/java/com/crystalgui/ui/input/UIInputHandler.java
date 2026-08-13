@@ -4,6 +4,7 @@ import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgSystemInput.Keyboard;
 import com.crystalgraphics.platform.input.CgSystemInput.Mouse;
@@ -643,6 +644,16 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         while (focusTarget != null && !focusTarget.getFocusPolicy().focusesOnClick()) {
             focusTarget = focusTarget.getParent();
         }
+
+        // ONLY THE PRIMARY BUTTON MOVES FOCUS. A right-click opens a menu ABOUT something; it does not
+        // choose it, and here that distinction is load-bearing rather than pedantic — a ListView drives
+        // its selection entirely from focus, so a right-click that focused a row also selected it, and
+        // the menu destroyed the selection it was opened over. Unrecoverable for a multi-selection.
+        //
+        // The context menu still knows its subject: it reads the row under the pointer directly, which is
+        // the rule a context menu follows anyway (a menu bar resolves against focus, a context menu
+        // against what was clicked).
+        if (buttonId != CgMouseCodes.LEFT_BUTTON) focusTarget = focusedElement;
 
         if (focusTarget != focusedElement && !absorbedByModal) {
             if (focusedElement != null) {

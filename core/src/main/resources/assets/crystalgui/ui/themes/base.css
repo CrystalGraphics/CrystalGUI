@@ -206,6 +206,10 @@ theme {
 
     --list-hover-bg: var(--hover-bg);
     --list-selected-bg: var(--selection-bg);
+    /* THE SELECTION OF A LIST THAT DOES NOT HAVE FOCUS. The system token has existed all along with
+     * nothing deriving from it — the same distinction the tabs already draw with --tab-active-bg against
+     * --tab-focused-bg, which is how you can tell, with two panels open, where a keystroke will land. */
+    --list-selected-inactive-bg: var(--selection-inactive-bg);
 
     --menu-accelerator: var(--fg-hint);
     --menu-arrow: var(--fg-secondary);

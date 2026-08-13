@@ -6,8 +6,9 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.input.keymap.Keymap;
 
 import javax.annotation.Nullable;
@@ -116,7 +117,60 @@ public final class EditorCommands {
         CommandRegistry.global().contribute(EditorCommands.class, EditorCommands::declare);
     }
 
+    /** {@code Navigate ▸ Line/Column} — IntelliJ's own wording, binding and placeholder. */
+    public static final String GO_TO_LINE = PREFIX + "goToLine";
+
+    /**
+     * {@code 40}, {@code 40:8}, or {@code :8} for a column on the line the caret is already on.
+     *
+     * <p><b>Clamped, never refused.</b> A line past the end goes to the last line — every editor does
+     * this, and refusing means retyping a number whose only fault is being optimistic. Unparseable input
+     * is a no-op rather than an error dialog: the field is the error message, exactly as the rename
+     * prompt treats a blank name.</p>
+     *
+     * <p>Package-visible so it can be tested without a prompt: the parsing and the clamping are the part
+     * with rules, and a dialog is not needed to state them.</p>
+     */
+    static void goTo(TextEditor editor, String typed) {
+        String text = typed.trim();
+        if (text.isEmpty()) return;
+        int colon = text.indexOf(':');
+        String linePart = colon < 0 ? text : text.substring(0, colon);
+        String columnPart = colon < 0 ? "" : text.substring(colon + 1);
+        int row = editor.caretPoint().row();
+        try {
+            // ONE-BASED on the way in, because that is what the gutter shows and what the user typed.
+            if (!linePart.isEmpty()) row = Integer.parseInt(linePart.trim()) - 1;
+        } catch (NumberFormatException malformed) {
+            return;
+        }
+        int column = 0;
+        try {
+            if (!columnPart.isEmpty()) column = Integer.parseInt(columnPart.trim()) - 1;
+        } catch (NumberFormatException malformed) {
+            return;
+        }
+        row = Math.max(0, Math.min(row, editor.buffer().lineCount() - 1));
+        column = Math.max(0, Math.min(column, editor.buffer().line(row).length()));
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(row, column)));
+        // CENTRED, not merely visible. setCaret does not scroll at all, and scrolling the minimum would
+        // put the line you asked for hard against the top or bottom edge with all its context on one
+        // side -- which is the worst framing for a line you have just been sent to.
+        editor.revealCaretCentred();
+    }
+
     private static void declare(CommandRegistry registry) {
+        // ── Navigation ──────────────────────────────────────────────────────────────────────────
+        // AN EDITOR COMMAND, though it opens a prompt. It was briefly in ChromeCommands on the grounds
+        // that InputDialog lived in `chrome` -- which put an editor action in the shell's command set and
+        // made `chrome` depend on `editor` for the first time. InputDialog imports nothing from chrome,
+        // so it moved to `ui.elements` beside Popover and TextField, and this came home.
+        registry.register(Command.of(GO_TO_LINE, "Go To Line…")
+                .binding("Mod+G")
+                .menu(MenuId.MAIN_VIEW, "1_appearance", 20)
+                .run(on(editor -> InputDialog.ask(editor, "Go To Line", "[Line][:column]", "",
+                        typed -> goTo(editor, typed)))));
+
         // ── Multi-caret ─────────────────────────────────────────────────────────────────────────
         registry.register(Command.of(PREFIX + "addCaretAtNextOccurrence", "Add Caret At Next Occurrence")
                 .run(on(TextEditor::addCaretAtNextOccurrence)));

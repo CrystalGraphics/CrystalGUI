@@ -908,6 +908,53 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return buffer.offsetToPoint(getCaret());
     }
 
+    /**
+     * Scrolls until the caret is on screen.
+     *
+     * <p><b>Deliberately not part of {@link #setCaret}</b>, and this is the distinction every navigation
+     * caller has to know about: moving the caret and <em>revealing</em> it are separate acts. Typing
+     * reveals because the user is looking at the caret; a programmatic move often must not, or every
+     * background edit would yank the viewport around. So the editor's own key handlers call this and the
+     * setters do not.</p>
+     *
+     * <p>Public because navigation lives outside this widget — opening a file at a line, jumping to a
+     * definition, clicking a problem. Without it those all set a caret the viewport is nowhere near,
+     * which reads as nothing having happened at all.</p>
+     */
+    public TextEditor revealCaret() {
+        ensureCaretVisible();
+        return this;
+    }
+
+    /**
+     * Scrolls until the caret's line sits in the <b>middle</b> of the viewport — what a jump does.
+     *
+     * <p><b>A different question from {@link #revealCaret()}, not a nicer version of it.</b> Following a
+     * caret wants the <em>least</em> scrolling that works, because the reader's eye is already on it and
+     * moving the text under them is the cost; arriving somewhere new wants the most context, because they
+     * have no idea where they are yet. Minimal scrolling puts the destination hard against the top or
+     * bottom edge with the surrounding code entirely on one side, which is the worst possible framing for
+     * a line you were sent to look at.</p>
+     *
+     * <p>Both references split it the same way: Monaco has {@code revealLine} beside
+     * {@code revealLineInCenter}, IntelliJ has {@code ScrollType.MAKE_VISIBLE} beside
+     * {@code ScrollType.CENTER}. Typing must never centre — the viewport would lurch on the keystroke
+     * that crosses the halfway line and again on every one after it.</p>
+     *
+     * <p>Clamped at both ends by {@code setScrollImmediate}, so a target near the start or end of the
+     * file simply comes as close to the middle as the document allows rather than scrolling into blank
+     * space above line one.</p>
+     */
+    public TextEditor revealCaretCentred() {
+        float height = lineHeight();
+        float top = viewLineOf(getCaret(), LineProjection.Affinity.LEFT) * height;
+        // IMMEDIATE, for the reason ensureCaretVisible gives: an eased scroll would leave the destination
+        // off screen for the length of the animation, and a jump is precisely when you are looking for it.
+        setScrollImmediate(getScrollLeft(), top - (viewportHeight() - height) / 2f);
+        markTreeDirty();
+        return this;
+    }
+
     /** The shared tail of every selection change: end the undo run, re-place the carets, repaint. */
     private void afterSelectionChange() {
         buffer.breakUndoCoalescing();

@@ -447,6 +447,45 @@ problemspanel .__problem__:hover {
     background: var(--list-hover-bg, #2A2D2E);
 }
 
+/* THE SELECTED ROW, and its absence is why clicking a problem did nothing visible.
+ *
+ * `ListView` puts `__selected__` on the row and every tree styles it **scoped to its own tag** —
+ * `projectfiletree .__project-row__.__selected__`, `navigatorview treeview .__row__.__selected__`,
+ * `quickpick .__row__.__selected__`. This panel was simply never given one, so selection was working
+ * perfectly and painting nothing: a click focused the row, selected it, and left the panel looking
+ * completely inert. Indistinguishable from a dead widget, and it sent two rounds of debugging at the
+ * input layer before anyone asked whether the state was merely invisible.
+ *
+ * SELECTION WINS OVER HOVER where both apply, spelled as an explicit compound. The two are the same
+ * kind of signal — a filled row — so at equal specificity they take turns being wrong, and the pointer
+ * resting on the selected row must not repaint it as merely hovered. `projectfiletree` answers this by
+ * dropping hover altogether (IntelliJ's Project view has no hover state); `quickpick` answers it with
+ * the compound below. This panel already ships hover, so it takes quickpick's answer rather than
+ * losing an affordance to gain consistency with the other tree.
+ *
+ * THE BASE RULE IS THE UNFOCUSED ONE, and that ordering is the whole trick — see the focused pair
+ * below. A selection is a statement about where a keystroke will land, so a panel that does not own
+ * focus must not make it in the same voice as one that does. Exactly what the tabs already do with
+ * --tab-active-bg against --tab-focused-bg. */
+problemspanel .__problem__.__selected__,
+problemspanel .__problem__.__selected__:hover {
+    background: var(--list-selected-inactive-bg, #2E3033);
+}
+
+/* ...AND THE PANEL THAT OWNS FOCUS GETS THE REAL COLOUR.
+ *
+ * `:focus-within` is the signal — the focus owner having an ancestor — and it is registered in
+ * `PseudoClasses` precisely so any container can ask it; the tabs' own rule records the two wrong turns
+ * (`dockgroup.__active__`, then a hand-maintained `__focused__` class) taken before landing here.
+ *
+ * Scoped to `problemspanel` rather than to the `viewcontainer` around it, deliberately: the panel is the
+ * thing whose focus this is about, the rule then holds wherever it is hosted, and a test can build one
+ * without a dock. */
+problemspanel:focus-within .__problem__.__selected__,
+problemspanel:focus-within .__problem__.__selected__:hover {
+    background: var(--list-selected-bg, #04395E);
+}
+
 /* Same class convention, same three glyphs, as the notification cards — a severity is a severity, and a
  * second palette for it would drift the first time either was touched. */
 problemspanel .__problem__ .__severity__ {
