@@ -48,7 +48,7 @@ class NotificationCard extends UIElement {
         icon.addClass(NotificationsView.ICON_CLASS);
         // THE CLASS CARRIES THE SEVERITY, and the sheet turns it into a glyph and a colour. Writing either
         // from here would put the palette in Java, which is the split graph.css already makes for port
-        // types and filetypes.css for file icons.
+        // types, and the file icons carry their own palette.
         icon.addClass(NotificationsView.SEVERITY_PREFIX
                 + notification.getSeverity().name().toLowerCase(Locale.ROOT));
         icon.setHitTest(false);

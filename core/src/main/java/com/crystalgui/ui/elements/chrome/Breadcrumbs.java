@@ -30,7 +30,7 @@ public class Breadcrumbs extends UIElement {
     public static final String SEGMENT_CLASS = "__crumb__";
     /** The glyph before a segment's text. Hidden unless that crumb supplied one. */
     public static final String ICON_CLASS = "__crumb-icon__";
-    /** What {@link Crumb#iconClass()} is swapped under — the palette lives in {@code filetypes.css}. */
+    /** What {@link Crumb#iconClass()} is swapped under. The icons carry their own palette, so nothing tints it. */
     public static final String FILETYPE_PREFIX = "filetype-";
     public static final String SEPARATOR_CLASS = "__crumb-sep__";
 
