@@ -67,6 +67,9 @@ final class JavaCompletionProvider implements CompletionProvider {
     /** Set by {@link #openCodeItems} whenever the answer drew on the type index. */
     private boolean typesSampled;
 
+    /** Set by {@link #memberItems} when the receiver did not resolve — see the note there. */
+    private boolean unresolvedReceiver;
+
     JavaCompletionProvider(TextBuffer buffer, Supplier<SourceAnalyzer.Analysis> analysis, TypeIndex types) {
         this.buffer = buffer;
         this.analysis = analysis;
@@ -90,8 +93,9 @@ final class JavaCompletionProvider implements CompletionProvider {
         if (truncated) items = items.subList(0, MAX_ITEMS);
         // Either kind of truncation makes this a partial answer: too many items to send, or an index that
         // had more to give. Both mean "ask me again when you know more".
-        boolean partial = truncated || typesSampled;
+        boolean partial = truncated || typesSampled || unresolvedReceiver;
         typesSampled = false;
+        unresolvedReceiver = false;
         answer.accept(Versioned.of(current.version(),
                 partial ? CompletionList.partial(items) : CompletionList.complete(items)));
     }
@@ -129,11 +133,48 @@ final class JavaCompletionProvider implements CompletionProvider {
 
         SymbolInfo receiver = current.resolveAt(probe);
         TypeRef type = receiver == null ? null : receiver.type();
-        if (type == null) return List.of();
+        if (type == null) {
+            // COULD NOT RESOLVE, and that is usually a matter of timing rather than of the code. The popup
+            // opens on the keystroke; the analysis behind it is up to a debounce old and was taken from
+            // text without this dot in it. Reporting an empty COMPLETE list caches that failure for the
+            // life of the session, which is what left a popup with nothing in it until something was typed.
+            unresolvedReceiver = true;
+            return List.of();
+        }
+
+        // STATIC ACCESS OFFERS STATIC MEMBERS. `Foo.` is a type name, and an instance method reached
+        // through one does not compile -- so offering it is offering a mistake, which is worse than
+        // offering nothing because the list looks authoritative and the error arrives after acceptance.
+        // The same rule membersOf already applies to accessibility.
+        boolean staticAccess = receiver.kind() != null && isTypeKind(receiver.kind());
 
         List<CompletionItem> items = new ArrayList<>();
-        for (SymbolInfo member : current.membersOf(type, caret)) items.add(itemFor(member));
+        for (SymbolInfo member : current.membersOf(type, caret)) {
+            if (staticAccess && !member.is(SymbolModifier.STATIC)) continue;
+            items.add(itemFor(member));
+        }
         return items;
+    }
+
+    /**
+     * Whether {@code kind} names a TYPE, which is what makes a member access static.
+     *
+     * <p>Asked of the kind the engine reported rather than of the text: {@code Foo.} and {@code foo.} are
+     * told apart by what {@code Foo} resolved to, not by its first letter. A convention-based test would be
+     * wrong for every lower-case type and every upper-case constant.</p>
+     */
+    private static boolean isTypeKind(SymbolKind kind) {
+        switch (kind) {
+            case CLASS:
+            case INTERFACE:
+            case ENUM:
+            case RECORD:
+            case ANNOTATION:
+            case TYPE_PARAMETER:
+                return true;
+            default:
+                return false;
+        }
     }
 
     /** Locals, parameters, fields, then keywords, then types that would need an import. */

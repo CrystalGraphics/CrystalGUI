@@ -1653,6 +1653,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
             services.semanticTokens().setInvalidationListener((fromOffset, toOffset) -> {
                 invalidateRowSyntax(fromOffset, toOffset);
                 highlightsDirty = true;
+                // A NEW ANALYSIS LANDED. This is the only signal the editor gets that the engine knows more
+                // than it did, and a completion list opened against the previous one may have been unable
+                // to resolve its receiver at all. Asking again here is what stops an empty popup sitting on
+                // screen until the next keystroke.
+                if (completion != null && !completion.isClosed()) completion.retrigger();
             });
             // THE ENGINE ANNOUNCES, THIS DOCUMENT'S SET OWNS. Filed under the engine's own id so a
             // second producer -- the shader compiler on a .glsl, a future linter -- cannot erase it,
