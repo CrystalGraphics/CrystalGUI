@@ -857,13 +857,14 @@ completionpopup {
     text-overflow: ellipsis;
 }
 
-/* Object's members, drawn quieter: NOT bold, and dimmed to the parameter colour.
+/* Object's members, drawn quieter: NOT bold, and that is the whole of it.
  *
- * Every type has these seven, so they are never what the list was opened for. IntelliJ makes the same
- * distinction, and it is the one case where removing emphasis carries more information than adding it. */
+ * Dimming them as well was too much. Weight already separates them from the members that are actually
+ * this type's, and taking the colour too pushes them towards reading as DISABLED -- which is a different
+ * claim, and one the list makes elsewhere for deprecated rows. Losing the emphasis is the signal; losing
+ * the legibility is a cost with nothing bought by it. */
 .__completion-inherited__ .__completion-label__ {
     font-weight: normal;
-    color: var(--completion-params, #808080);
 }
 
 .__completion-deprecated__ .__completion-params__,
