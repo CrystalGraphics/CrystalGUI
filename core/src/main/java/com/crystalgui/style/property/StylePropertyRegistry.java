@@ -75,6 +75,27 @@ public class StylePropertyRegistry {
     // at the same default font CgUiPaintContext already loads, so an element with no font-family
     // anywhere in its ancestor chain still resolves to something that works.
     public static final StyleProperty<Float> FONT_SIZE = create("font-size", 16f).setInheritable(true);
+    /**
+     * The UI's default face — <b>proportional</b>, and monospace is applied to code surfaces instead.
+     *
+     * <h3>The whole UI in a mono face was wrong, and both references agree</h3>
+     *
+     * <p>It was briefly JetBrains Mono everywhere, on the reasoning that anything laying code out by
+     * <em>counting characters</em> — the Quick Documentation popup's hanging indent under
+     * {@code implements}, indent guides, a column ruler — is exact in a monospace face and only
+     * approximate in a proportional one. That reasoning is sound and its scope was not: it argues for
+     * mono on <b>code</b>, and says nothing about a menu bar or a tab strip, which read worse in it.</p>
+     *
+     * <p>IntelliJ uses Inter for the entire IDE and JetBrains Mono only in the editor; VS Code does the
+     * same with the system UI font. So the mono face is declared by {@code ua/editor.css} on the editor
+     * and on {@code .__syntax__} — the class that already means "this text is code" — and the default
+     * here stays the proportional one every other widget inherits.</p>
+     *
+     * <p>Still a <b>preference list</b>, which is what {@code font-family} means: the first entry that
+     * loads wins and the rest supply glyphs it lacks. {@code FontFamilyCache.build} had to be corrected
+     * for that to be true — it demanded the first entry specifically and threw when it was absent, which
+     * made naming a font you had not shipped yet a crash at first paint.</p>
+     */
     public static final StyleProperty<List<String>> FONT_FAMILY = create(
             "font-family", List.of("crystalgraphics:IBMPlexSans-Regular.ttf"), FontFamilyValue::new
     ).setInheritable(true);
