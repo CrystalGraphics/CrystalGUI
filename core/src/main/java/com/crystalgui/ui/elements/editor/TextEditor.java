@@ -2424,12 +2424,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * re-opening would discard the list mid-keystroke.</p>
      */
     private void maybeTriggerCompletion(char typed) {
-        if (completion != null && !completion.isClosed()) return;
         if (languageServices == null) return;
+
+        // A TRIGGER CHARACTER RESTARTS THE SESSION; it never defers to a live one.
+        //
+        // This deferred, on the reasoning that reopening would discard a list mid-keystroke. Backwards: a
+        // dot ENDS the word the open list was about. Typing `f`, `b` opens an autopopup session for a word,
+        // and the `.` then found that session live and returned -- so the member list never opened at all.
+        // What stayed on screen was the dying word session, whose prefix had just become `fb.` and matched
+        // nothing, which is why it looked like an empty member list and why Ctrl+Space -- which has no such
+        // guard -- worked on the very same text.
         if (language.isCompletionTrigger(typed)) {
+            closeCompletion();
             openCompletion(CompletionProvider.TriggerKind.CHARACTER, String.valueOf(typed));
             return;
         }
+
+        // The autopopup half still defers: every character of a word would otherwise restart the session and
+        // throw away the list it is narrowing.
+        if (completion != null && !completion.isClosed()) return;
         // TYPING A NAME OPENS THE LIST TOO -- IntelliJ's autopopup, and without it the only way in was
         // Ctrl+Space, which is a thing you have to remember rather than a thing that helps.
         //

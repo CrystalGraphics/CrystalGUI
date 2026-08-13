@@ -517,4 +517,48 @@ public class JavaMemberCompletionTest {
         // classpath the test is running against.
         assertEquals(SymbolKind.RECORD, kindsOffered("SymbolInf").get("SymbolInfo"));
     }
+
+    /**
+     * A LOCAL VARIABLE receiver with a bare trailing dot.
+     *
+     * <p>The probe parse landed for {@code System.} and not for {@code fb.}, and the difference is the
+     * receiver's <em>kind</em>. Inserting a bare name makes {@code fb.Probe} a <b>QualifiedName</b> — Java's
+     * syntax for a package or type path — which JDT binds as a path, so a local has nothing to resolve to.
+     * It worked for {@code System.} only because a type name is a legal qualifier, which is the coincidence
+     * that made half the fix look like all of it.</p>
+     *
+     * <p>Inserting a call instead forces a {@code MethodInvocation}, whose expression is unambiguously the
+     * receiver whatever it is.</p>
+     */
+    @Test
+    public void aLocalVariableReceiverOffersItsMembers() {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run() {\n"
+                + "        String fb = null;\n"
+                + "        fb.\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("        fb.") + "        fb.".length();
+        List<String> labels = labelsOf(completeAt(source, caret, "", true));
+
+        assertTrue("a local receiver offered nothing: " + labels, labels.contains("substring(int)"));
+        assertTrue(labels.toString(), labels.contains("length()"));
+    }
+
+    /** A FIELD receiver too — the other everyday shape, and it parses the same wrong way without the call. */
+    @Test
+    public void aFieldReceiverOffersItsMembers() {
+        String source = ""
+                + "class Demo {\n"
+                + "    private String name = null;\n"
+                + "    void run() {\n"
+                + "        name.\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("        name.") + "        name.".length();
+        List<String> labels = labelsOf(completeAt(source, caret, "", true));
+
+        assertTrue("a field receiver offered nothing: " + labels, labels.contains("length()"));
+    }
 }
