@@ -1404,11 +1404,27 @@ public class UIElement implements SettingsScope, DataProvider {
 
     /** How far this can scroll before hitting the end; 0 when the content fits. */
     public float getMaxScrollLeft() {
-        return Math.max(0f, getScrollWidth() - getClientWidth());
+        return atLeastZero(getScrollWidth() - getClientWidth());
     }
 
     public float getMaxScrollTop() {
-        return Math.max(0f, getScrollHeight() - getClientHeight());
+        return atLeastZero(getScrollHeight() - getClientHeight());
+    }
+
+    /**
+     * {@code Math.max(0, x)} that also answers zero for a non-finite {@code x}.
+     *
+     * <p><b>{@code Math.max} propagates NaN</b>, so the obvious spelling of "never negative" does not
+     * make the guarantee it appears to: a content or client size that is NaN — an unmeasured viewport, a
+     * font that has not resolved, a line height computed from either — comes straight back out of the
+     * clamp, is stored as the scroll offset, and then poisons every layout that subtracts it. Nothing
+     * throws; a whole document simply stacks its rows at one y.</p>
+     *
+     * <p>A scroll extent is never legitimately NaN, so answering zero is not a guess — it is the same
+     * answer as "there is nothing to scroll", which is what an element with no measurable content has.</p>
+     */
+    private static float atLeastZero(float value) {
+        return value > 0f ? value : 0f;
     }
 
     /** Where the scroll is heading. Equal to {@link #getScrollTop()} unless a smooth scroll is in
@@ -1448,8 +1464,11 @@ public class UIElement implements SettingsScope, DataProvider {
      */
     public UIElement setScrollImmediate(float left, float top) {
         if (!isScrollContainer()) return this;
-        this.targetScrollLeft = Math.max(0f, Math.min(getMaxScrollLeft(), left));
-        this.targetScrollTop = Math.max(0f, Math.min(getMaxScrollTop(), top));
+        // CLAMPED WITH THE NaN-SAFE FLOOR, and the ordering matters: Math.min(NaN, x) is NaN, so a caller
+        // handing in a non-finite offset -- or a max computed from an unmeasured box -- would otherwise be
+        // stored verbatim however careful the clamp looked. @see #atLeastZero
+        this.targetScrollLeft = atLeastZero(Math.min(getMaxScrollLeft(), left));
+        this.targetScrollTop = atLeastZero(Math.min(getMaxScrollTop(), top));
         return applyScrollOffset(targetScrollLeft, targetScrollTop);
     }
 
