@@ -475,15 +475,37 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
 
             ITypeBinding asking = enclosingTypeAt(resolved, contextOffset);
             java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+
+            // THE WHOLE SUPERCLASS CHAIN FIRST, THEN THE INTERFACES.
+            //
+            // The dedup keeps whichever declaration is reached first, so this order decides which of several
+            // declarations of one method the list describes -- and a class's own implementation is what a
+            // caller would actually be invoking. Interleaving them (each class, then its interfaces, then
+            // its superclass) let `List.isEmpty()` win over `AbstractCollection.isEmpty()`, so completing on
+            // an AbstractList reported isEmpty as ABSTRACT: true of the declaration found, false of the
+            // method that would run, and visible as a wrong icon on a method that plainly has a body.
+            //
+            // Interfaces are still walked, and still after: a method declared only on an interface has no
+            // class declaration to lose to.
+            List<ITypeBinding> interfaces = new ArrayList<>();
             for (ITypeBinding current = ((EcjTypeRef) type).binding();
                  current != null; current = current.getSuperclass()) {
                 collectMembers(current, asking, seen, members);
-                for (ITypeBinding face : current.getInterfaces()) {
-                    collectMembers(face, asking, seen, members);
-                }
+                java.util.Collections.addAll(interfaces, current.getInterfaces());
+            }
+            for (int i = 0; i < interfaces.size(); i++) {
+                ITypeBinding face = interfaces.get(i);
+                collectMembers(face, asking, seen, members);
+                // Breadth-first through the interface graph, appending as we go -- an interface may extend
+                // others, and a default method three levels up is still reachable.
+                java.util.Collections.addAll(interfaces, face.getInterfaces());
+                if (interfaces.size() > MAX_INTERFACE_WALK) break;
             }
             return members;
         }
+
+        /** A guard on the interface graph, not a budget: a cycle here would append for ever. */
+        private static final int MAX_INTERFACE_WALK = 512;
 
         private static void collectMembers(ITypeBinding owner, ITypeBinding asking,
                                            java.util.Set<String> seen, List<SymbolInfo> into) {

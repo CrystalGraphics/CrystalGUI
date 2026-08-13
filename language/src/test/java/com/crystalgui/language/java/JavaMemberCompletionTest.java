@@ -473,4 +473,48 @@ public class JavaMemberCompletionTest {
         assertEquals(SymbolKind.CLASS, found.kind());
         assertTrue("and it is abstract", found.is(SymbolModifier.ABSTRACT));
     }
+
+    /**
+     * An abstract METHOD carries the modifier its icon composes from.
+     *
+     * <p>The type half of this was tested when the flags landed; the method half was assumed, and the two
+     * travel by completely different routes — a type's abstractness is read from access flags in
+     * {@code TypeIndex}, while a method's comes from ECJ's own binding through {@code modifiersOf}.
+     * Assuming one from the other is how half a feature ships.</p>
+     */
+    @Test
+    public void anAbstractMethodCarriesTheAbstractModifier() {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run(java.util.AbstractList<String> list) {\n"
+                + "        list.\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("        list.") + "        list.".length();
+        List<CompletionItem> items = completeAt(source, caret, "", true);
+
+        CompletionItem get = named(items, "get(int)");
+        assertNotNull("AbstractList.get should be offered: " + labelsOf(items), get);
+        assertTrue("get(int) is abstract on AbstractList", get.is(SymbolModifier.ABSTRACT));
+
+        // The control, from the same list: a concrete method beside it must NOT be marked, or the
+        // assertion above passes against a provider that marks everything.
+        CompletionItem isEmpty = named(items, "isEmpty()");
+        assertNotNull(isEmpty);
+        assertFalse("isEmpty() is concrete on AbstractList", isEmpty.is(SymbolModifier.ABSTRACT));
+    }
+
+    /**
+     * A record is reported as a record.
+     *
+     * <p>Claimed when the access-flag reading landed and never asserted — and it is the one kind that is
+     * <b>not</b> a flag: there is no {@code ACC_RECORD}, so it is inferred from the superclass being
+     * {@code java.lang.Record}. A test of the flag-driven kinds says nothing about it.</p>
+     */
+    @Test
+    public void aRecordIsReportedAsARecord() {
+        // One of ours, because the JDK exports very few public records and this one is certainly on the
+        // classpath the test is running against.
+        assertEquals(SymbolKind.RECORD, kindsOffered("SymbolInf").get("SymbolInfo"));
+    }
 }
