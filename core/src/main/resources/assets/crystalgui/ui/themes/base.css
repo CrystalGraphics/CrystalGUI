@@ -383,6 +383,15 @@ theme {
     --completion-label: var(--fg);
     --completion-match: var(--link);
 
+    /* Quick Documentation. The BANDS are chrome and derive from the surface tokens; the DEFINITION line's
+     * colours deliberately do not appear here -- it reads --syntax-* straight from the active scheme, so
+     * the signature is coloured by whatever is colouring the code it describes. A second palette would be
+     * a second thing to keep in step, and would be visibly wrong the moment a scheme is switched. */
+    --doc-bg: var(--surface-panel);
+    --doc-border: var(--border-base);
+    --doc-owner-fg: var(--fg-hint);
+    --doc-body-fg: var(--fg);
+
     --squiggle-error: var(--error);
     --squiggle-info: var(--info);
     --squiggle-warning: var(--warning);

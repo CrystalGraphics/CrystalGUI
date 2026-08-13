@@ -46,6 +46,27 @@ texteditor {
  *
  * The caret and the bands are ordinary absolutely-positioned children in document coordinates, so they
  * scroll with the text for free -- see TextEditor#layOutCaretAndSelection. */
+/* ── The code face ───────────────────────────────────────────────────────────────────────────────
+ *
+ * MONOSPACE HERE AND NOWHERE ELSE. It was briefly the default for the whole UI, which was an overreach:
+ * the argument for mono is that anything laying code out by COUNTING CHARACTERS is exact in it and only
+ * approximate otherwise -- the Quick Documentation popup's hanging indent under `implements`, indent
+ * guides, a column ruler -- and that argument says nothing about a menu bar or a tab strip, which simply
+ * read worse in it.
+ *
+ * Both references split it the same way: IntelliJ uses Inter for the entire IDE and JetBrains Mono only
+ * in the editor, and VS Code uses the system UI font with a mono face in the editor. So this names the
+ * surfaces that draw CODE -- the editor, and anything carrying `.__syntax__`, which is the class that
+ * already means exactly that -- and every other widget inherits the proportional default.
+ *
+ * A list, in preference order: the first entry that loads wins and the rest supply glyphs it lacks, so
+ * the sans behind it covers anything JetBrains Mono has no glyph for. */
+texteditor,
+.__syntax__ {
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
+                 "crystalgraphics:IBMPlexSans-Regular.ttf";
+}
+
 texteditor {
     overflow: auto;
     line-height: 1.4;
@@ -197,7 +218,17 @@ texteditor .__indent-guide__ {
  * A COLOUR on the glyph, not a background behind it. IntelliJ tints the brace itself, and the reason is
  * legibility rather than taste: a background has to fight the current-line band, which is drawn under the
  * very line a bracket match is most often looked at, and a subtle fill loses that fight completely. */
-texteditor text::highlight(bracket) {
+/* ── The syntax vocabulary ───────────────────────────────────────────────────────────────────────
+ *
+ * `.__syntax__` rather than `texteditor text`, so this is a CAPABILITY a widget opts into rather than
+ * something the editor owns. The capture names below are §10.1's vocabulary -- the one the grammar, the
+ * semantic provider and every colour scheme already agree on -- and anything that wants code coloured
+ * like code should get the same forty rules rather than a second copy that drifts.
+ *
+ * The second consumer is the Quick Documentation popup's signature line, which draws a declaration the
+ * engine tokenized. Duplicating these selectors for it would have meant two lists to keep in step, and
+ * the first divergence shows up as one word in the wrong colour -- which reads as a scheme bug. */
+.__syntax__::highlight(bracket) {
     color: var(--syntax-bracket, #4EC9A0);
 }
 
@@ -221,23 +252,23 @@ texteditor text::highlight(bracket) {
  * that does not.
  *
  * Every colour is var(--syntax-*, <Dark+ fallback>) so an editor with no scheme loaded still reads. */
-texteditor text::highlight(keyword) {
+.__syntax__::highlight(keyword) {
     color: var(--syntax-keyword, #569CD6);
 }
 
-texteditor text::highlight(keyword.control) {
+.__syntax__::highlight(keyword.control) {
     color: var(--syntax-keyword-control, #C586C0);
 }
 
-texteditor text::highlight(keyword.operator) {
+.__syntax__::highlight(keyword.operator) {
     color: var(--syntax-keyword-operator, #569CD6);
 }
 
-texteditor text::highlight(type) {
+.__syntax__::highlight(type) {
     color: var(--syntax-type, #4EC9A0);
 }
 
-texteditor text::highlight(type.builtin) {
+.__syntax__::highlight(type.builtin) {
     color: var(--syntax-type-builtin, #569CD6);
 }
 
@@ -247,25 +278,25 @@ texteditor text::highlight(type.builtin) {
  * foreground, so every qualifier in a shader went colourless. Reserved words read as keywords in
  * IntelliJ's GLSL and in every other editor; the fallback is only ever a guess, and this is where it
  * guesses wrong. */
-texteditor text::highlight(type.qualifier) {
+.__syntax__::highlight(type.qualifier) {
     color: var(--syntax-type-qualifier, #569CD6);
 }
 
-texteditor text::highlight(function) {
+.__syntax__::highlight(function) {
     color: var(--syntax-function, #DCDCAA);
 }
 
-texteditor text::highlight(function.builtin) {
+.__syntax__::highlight(function.builtin) {
     color: var(--syntax-function-builtin, #DCDCAA);
 }
 
 /* A function-like macro — `#define SATURATE(x)`. A DEFINITION, so it takes the declaration colour
  * rather than the call one; the fallback would give it the call's, since its stem is `function`. */
-texteditor text::highlight(function.special) {
+.__syntax__::highlight(function.special) {
     color: var(--syntax-function-special, #DCDCAA);
 }
 
-texteditor text::highlight(function.method) {
+.__syntax__::highlight(function.method) {
     color: var(--syntax-function-method, #DCDCAA);
 }
 
@@ -273,27 +304,27 @@ texteditor text::highlight(function.method) {
  * vendored query is adjusted to tell them apart. Every reference scheme colours these differently, and
  * with one name a scheme has to pick a side: blue everywhere lights up every .get() on screen, plain
  * everywhere leaves the document with only keywords and strings tinted. */
-texteditor text::highlight(function.call) {
+.__syntax__::highlight(function.call) {
     color: var(--syntax-function-call, #DCDCAA);
 }
 
-texteditor text::highlight(string) {
+.__syntax__::highlight(string) {
     color: var(--syntax-string, #CE9178);
 }
 
-texteditor text::highlight(string.escape) {
+.__syntax__::highlight(string.escape) {
     color: var(--syntax-string-escape, #D7BA7D);
 }
 
-texteditor text::highlight(string.special) {
+.__syntax__::highlight(string.special) {
     color: var(--syntax-string-special, #D7BA7D);
 }
 
-texteditor text::highlight(number) {
+.__syntax__::highlight(number) {
     color: var(--syntax-number, #B5CEA8);
 }
 
-texteditor text::highlight(boolean) {
+.__syntax__::highlight(boolean) {
     color: var(--syntax-boolean, #569CD6);
 }
 
@@ -302,12 +333,12 @@ texteditor text::highlight(boolean) {
  * grammar cannot tell a static field from an instance one, so slant is the only channel left that says
  * "this name does not belong to the object in front of you". A scheme that wants them upright says so
  * with --syntax-constant-style rather than by overriding the rule. */
-texteditor text::highlight(constant) {
+.__syntax__::highlight(constant) {
     color: var(--syntax-constant, #4FC1FF);
     font-style: var(--syntax-constant-style, normal);
 }
 
-texteditor text::highlight(constant.builtin) {
+.__syntax__::highlight(constant.builtin) {
     color: var(--syntax-constant-builtin, #569CD6);
 }
 
@@ -315,12 +346,12 @@ texteditor text::highlight(constant.builtin) {
  * `::highlight()` accepting it is a deliberate divergence from CSS Pseudo-Elements 4 — argued at
  * HighlightStyle.ALLOWED, and permissible here because a highlight already re-shapes, so the overlay
  * premise the spec's restriction rests on does not hold. */
-texteditor text::highlight(comment) {
+.__syntax__::highlight(comment) {
     color: var(--syntax-comment, #6A9955);
     font-style: var(--syntax-comment-style, italic);
 }
 
-texteditor text::highlight(comment.doc) {
+.__syntax__::highlight(comment.doc) {
     color: var(--syntax-comment-doc, #6A9955);
     font-style: var(--syntax-comment-style, italic);
 }
@@ -330,31 +361,31 @@ texteditor text::highlight(comment.doc) {
  * A grammar cannot tell a field from a local by itself; `locals.scm` can, within a file, and semantic
  * tokens can across one. These are the names both produce, so the colours are in place before either
  * lands rather than arriving with them. */
-texteditor text::highlight(variable) {
+.__syntax__::highlight(variable) {
     color: var(--syntax-variable, #9CDCFE);
 }
 
-texteditor text::highlight(variable.builtin) {
+.__syntax__::highlight(variable.builtin) {
     color: var(--syntax-variable-builtin, #569CD6);
 }
 
-texteditor text::highlight(variable.parameter) {
+.__syntax__::highlight(variable.parameter) {
     color: var(--syntax-variable-parameter, #9CDCFE);
 }
 
-texteditor text::highlight(variable.member) {
+.__syntax__::highlight(variable.member) {
     color: var(--syntax-variable-member, #9CDCFE);
 }
 
-texteditor text::highlight(property) {
+.__syntax__::highlight(property) {
     color: var(--syntax-property, #9CDCFE);
 }
 
-texteditor text::highlight(attribute) {
+.__syntax__::highlight(attribute) {
     color: var(--syntax-attribute, #9CDCFE);
 }
 
-texteditor text::highlight(tag) {
+.__syntax__::highlight(tag) {
     color: var(--syntax-tag, #569CD6);
 }
 
@@ -362,32 +393,32 @@ texteditor text::highlight(tag) {
  * `constructor` is a class name in `new X()` or `class X`; `embedded` is the interpolated expression
  * inside a template literal or an HTML attribute value. Both are identifier-shaped, so they take the
  * type and default colours rather than inventing a hue nobody's reference scheme has. */
-texteditor text::highlight(constructor) {
+.__syntax__::highlight(constructor) {
     color: var(--syntax-constructor, #4EC9A0);
 }
 
-texteditor text::highlight(embedded) {
+.__syntax__::highlight(embedded) {
     color: var(--syntax-embedded, #D4D4D4);
 }
 
 /* From GLSL: a `case` label. A genuinely new concept rather than a dialect spelling of an existing one,
  * so it gets a token instead of being normalized onto a near-miss — see Queries.normalizeCaptureDialect
  * for where synonyms are folded and why this is not one. */
-texteditor text::highlight(label) {
+.__syntax__::highlight(label) {
     color: var(--syntax-label, #C586C0);
 }
 
 /* From XML. `markup` is document content as opposed to the tags around it — the text between elements,
  * and its heading/link/raw specialisations. It reads as body text on purpose: in a markup document the
  * content is the thing being read, and tinting it would invert the figure and ground. */
-texteditor text::highlight(markup) {
+.__syntax__::highlight(markup) {
     color: var(--syntax-markup, #D4D4D4);
 }
 
 /* MALFORMED MARKUP, which is the one capture in the vocabulary that reports a PROBLEM rather than
  * naming a construct. A mismatched closing tag is the classic case, and a grammar can see it without
  * any semantic layer — so this is the one place a red belongs in a scheme that otherwise has none. */
-texteditor text::highlight(error) {
+.__syntax__::highlight(error) {
     color: var(--syntax-error, #F44747);
 }
 
@@ -403,7 +434,7 @@ texteditor text::highlight(error) {
  * of information the highlighter had. The squiggle from the diagnostic says the same thing at the same
  * place, and the two agreeing is the point — this is the inline half of a report the Problems panel
  * also carries. */
-texteditor text::highlight(unresolved) {
+.__syntax__::highlight(unresolved) {
     color: var(--syntax-unresolved, #F44747);
     text-decoration-line: underline;
 }
@@ -412,7 +443,7 @@ texteditor text::highlight(unresolved) {
  * The two paths have to agree about what deprecated looks like, or the same fact is drawn two ways
  * depending on which layer noticed it. `text-decoration-line` has been allowed in a highlight since
  * M2's carve-out, which is what makes this a rule rather than a feature request. */
-texteditor text::highlight(deprecated) {
+.__syntax__::highlight(deprecated) {
     color: var(--syntax-deprecated, #A0A0A0);
     text-decoration-line: line-through;
 }
@@ -421,19 +452,19 @@ texteditor text::highlight(deprecated) {
  *
  * Dimmer than the code around it, deliberately: brackets and separators are structure the eye uses to
  * navigate and should not compete with the names. IntelliJ and Dark+ agree on this. */
-texteditor text::highlight(operator) {
+.__syntax__::highlight(operator) {
     color: var(--syntax-operator, #D4D4D4);
 }
 
-texteditor text::highlight(punctuation) {
+.__syntax__::highlight(punctuation) {
     color: var(--syntax-punctuation, #808080);
 }
 
-texteditor text::highlight(punctuation.bracket) {
+.__syntax__::highlight(punctuation.bracket) {
     color: var(--syntax-punctuation-bracket, #808080);
 }
 
-texteditor text::highlight(punctuation.delimiter) {
+.__syntax__::highlight(punctuation.delimiter) {
     color: var(--syntax-punctuation-delimiter, #808080);
 }
 
@@ -915,6 +946,11 @@ completionpopup text::highlight(completion-match) {
  * refinement rather than a language kind. */
 .completion-kind-exception      { background: icon("crystalgui:nodes/java/exception"); }
 .completion-kind-type_parameter { background: icon("crystalgui:nodes/java/class"); }
+/* Not reachable from a completion list -- nothing offers a package as an item -- but the Quick
+ * Documentation popup draws its OWNER band with this vocabulary, and a top-level class is owned by a
+ * package. Here rather than in a second prefix of its own, so one kind means one glyph everywhere. */
+.completion-kind-package        { background: icon("crystalgui:nodes/java/package"); }
+.completion-kind-module         { background: icon("crystalgui:nodes/java/package"); }
 
 .completion-kind-method.completion-mod-abstract { background: icon("crystalgui:nodes/java/methodAbstract"); }
 .completion-kind-class.completion-mod-abstract  { background: icon("crystalgui:nodes/java/classAbstract"); }
@@ -969,3 +1005,158 @@ completionpopup text::highlight(completion-match) {
     background-color: var(--completion-options-hover-bg, #3A3D41);
     color: var(--completion-label, #D4D4D4);
 }
+
+/* ── Quick Documentation ─────────────────────────────────────────────────────────────────────────
+ *
+ * IntelliJ's DocumentationMarkup, band for band: DEFINITION, then CONTENT, then BOTTOM. Its SECTIONS band
+ * -- the Params:/Returns:/Throws: table -- has no rule here because SymbolInfo.documentation() is one
+ * rendered string and there is nothing to split it on. The band arrives with the data, not before it.
+ *
+ * The tag needs no ElementRegistry entry: tagName() falls back to the lowercased class name, and only a
+ * widget that must survive UIDescriptionCodec needs registering. completionpopup above is the precedent. */
+documentationpopup {
+    /* Clipped for the reason the completion popup is: the bands fill this box and any disagreement paints
+     * straight over the editor, outside this border. It is also what `resize` requires. */
+    overflow: hidden;
+    resize: both;
+    background: var(--doc-bg, #191A1C);
+    outline-width: 1px;
+    outline-color: var(--doc-border, #393B40);
+    padding-all: 9px;
+    gap-all: 3px;
+    /* THE LINE BOX, which is most of the vertical looseness and is not a gap at all.
+     *
+     * `line-height` defaults to `normal` -- the font's OWN line box -- and JetBrains Mono's is generous,
+     * so every band was ~30% taller than its glyphs before a single margin was involved. Tightening the
+     * gaps alone would have chased the smaller half of the difference and left the box still tall.
+     * Inheritable, so this one declaration reaches the owner row, every signature line and the footer. */
+    line-height: 1.15;
+    /* SIZED TO CONTENT, AND DELIBERATELY NOT max-width CAPPED.
+     *
+     * A fixed width made every popup as wide as the widest might need — hovering `System` gave a two-word
+     * definition in a 420px box with 300px of nothing after it. A `max-width` fixed that and broke
+     * something worse: **it made the box unresizable past the cap**. A user drag writes `width` at INLINE,
+     * and max-width is applied after width whatever origin it came from, so the cap silently won and the
+     * popup simply refused to be dragged wider. Same shape as a base rule's min-height beating a height
+     * written at higher specificity.
+     *
+     * What actually needed bounding was the CONTENT, not the box: the engine breaks a long declaration
+     * across lines (see Signature), so the widest line is short by construction and the box is sensible
+     * without anything capping it. Height still caps, because a documentation body is unbounded in a way
+     * a declaration is not, and the body band is the part that scrolls. */
+    max-height: 320px;
+    /* Over the completion popup's 900 -- Ctrl+Q with a list open should read over it, not under it. */
+    z-index: 910;
+}
+
+/* The owner band: the DECLARING type, drawn with that type's own kind icon. Reuses the completion popup's
+ * icon vocabulary, which is keyed on SymbolKind and has nothing completion-specific in it but the prefix. */
+documentationpopup .__doc-owner__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 4px;
+    /* The band is 16px of icon beside ~11px of text, so without this the row is as tall as the icon and
+     * the text floats in it. Matching the icon to the text closes a gap that reads as a margin. */
+    height: 14px;
+}
+
+/* ONE rule. There were briefly two — mine at 14px above the existing 11px one — and the later won, so
+ * the first looked like it did nothing. Two rules for one element on the same properties is a coin toss
+ * decided by file order, which is the trap the sheet's own header warns about for `:disabled` after
+ * `:hover`. */
+documentationpopup .__doc-owner-icon__ {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+}
+
+documentationpopup .__doc-owner-text__ {
+    font-size: 8;
+    color: var(--doc-owner-fg, #7A7A7A);
+}
+
+/* The definition line -- ONE text run, and NOT a wrapping one.
+ *
+ * `white-space: normal` here is what made the box too narrow, and the mechanism is worth stating because
+ * it is invisible: a wrappable text element contributes only its LONGEST WORD to its container's
+ * min-content width, not its whole line. So a content-sized popup sized itself to the owner row instead
+ * -- hovering `java.lang.System` produced a box as wide as `java.lang` with the signature wrapped to
+ * `final class` / `System` underneath it. It looked like a width bug and was a wrapping one, and it only
+ * showed up when the owner was SHORTER than the signature, which is why other symbols looked fine.
+ *
+ * A signature is a line. Ellipsised rather than wrapped when it genuinely does not fit, which is also
+ * what the completion popup does with its detail column -- and this box can be dragged wider. */
+/* IT WRAPS. A long declaration is shown in full over several lines, not truncated.
+ *
+ * This was `nowrap` + `text-overflow: ellipsis`, and that was the wrong call twice over. Both references
+ * WRAP a signature -- IntelliJ breaks before the `=` of a long field and between the parameters of a long
+ * method -- because a declaration you cannot read the end of is the one thing a documentation popup must
+ * not produce. Ours cut `retryLoop(Supplier<Boolean> atten` mid-word, and because the popup clips with
+ * `overflow: hidden` there was not even an ellipsis to say so.
+ *
+ * The reason `nowrap` went in was a different bug entirely: a wrappable UIText contributes only its
+ * longest WORD to a content-sized parent's width, so the box sized itself to the owner row. That is fixed
+ * by forceSelfSizeWidth() in DocumentationPopup, which makes the element report its full measured width
+ * -- so wrapping is safe again, and `nowrap` was treating the symptom of something already cured.
+ *
+ * max-width bounds the measured width so it cannot exceed the popup: it is a SEPARATE PROPERTY from
+ * width and applies after it whatever origin the width came from -- the same reason a base rule's
+ * min-height beats a height written at higher specificity. Without it the IMPORTANT width from
+ * forceSelfSizeWidth stays wider than the popup and the text never gets a narrower box to wrap into. */
+/* The band is a COLUMN of lines; the engine decided where they break. */
+documentationpopup .__doc-definition-box__ {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* NOWRAP, and that is now correct rather than a workaround.
+ *
+ * It was `normal` briefly, on the theory that the layout should wrap a long signature -- and it cannot:
+ * a wrapping UIText measures the unwrapped string to report its own width, so wrapping and self-sizing
+ * are mutually exclusive, and self-sizing is what makes a short signature size the popup at all. The
+ * breaks come from the engine instead, at points it understands (after an annotation, between
+ * parameters, before a long initializer) rather than at whatever word reaches the edge. */
+documentationpopup .__doc-definition__ {
+    font-size: 8;
+    color: var(--syntax-variable, #DFE1E5);
+    white-space: nowrap;
+}
+
+/* Coloured from the ACTIVE SCHEME, not from a popup palette, so the signature matches the code it describes
+ * and a scheme switch recolours it with nothing else to update. */
+documentationpopup .__doc-definition__::highlight(doc-modifier) {
+    color: var(--syntax-keyword, #CF8E6D);
+}
+
+documentationpopup .__doc-definition__::highlight(doc-type) {
+    color: var(--syntax-type, #B5B6E3);
+}
+
+documentationpopup .__doc-definition__::highlight(doc-name) {
+    color: var(--syntax-variable, #DFE1E5);
+}
+
+/* The one band that can be arbitrarily long, so it is the one that scrolls -- and it bounds ITSELF rather
+ * than growing into the popup.
+ *
+ * `height: 0; flex-grow: 1` is the fill idiom and it is exactly wrong here now that the box is sized to
+ * its content: a popover's height comes from its own children, so there is no free space to distribute
+ * and a growing child with a zero basis resolves to zero -- a popup with an invisible body. QuickPick
+ * records the same trap. A max-height of its own gives it somewhere to scroll inside instead. */
+documentationpopup .__doc-body__ {
+    font-size: 9;
+    color: var(--doc-body-fg, #DFE1E5);
+    white-space: normal;
+    overflow: auto;
+    max-height: 220px;
+}
+
+/* THE BOTTOM BAND IS GONE for now, rules and all.
+ *
+ * It read `this file` for anything declared in the open document -- the common case -- which says less
+ * than the owner band directly above it. IntelliJ's names the MODULE instead, and we have no notion of
+ * one yet, so there was nothing better to put there.
+ *
+ * Deleted rather than hidden: a hidden child still counts for a `gap-all`, so `display: none` would have
+ * left exactly the space it used to take. The pencil's command, editor.goToDefinition, is untouched and
+ * still bound to Ctrl+B and Ctrl+Click. */

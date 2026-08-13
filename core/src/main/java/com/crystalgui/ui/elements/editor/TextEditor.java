@@ -38,7 +38,9 @@ import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionProvider;
+import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SemanticTokenProvider;
 import com.crystalgui.text.lang.Versioned;
 import com.crystalgui.text.syntax.Language;
@@ -147,6 +149,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     public static final String LINE_CLASS = "__line__";
+
+    /**
+     * Opt in to the {@code ::highlight()} vocabulary of §10.1 — the forty capture-name rules every
+     * colour scheme defines.
+     *
+     * <p>A <b>capability</b>, not a part of this widget: anything drawing code coloured like code adds
+     * this class and gets the same rules. Public because the documentation popup is the second consumer
+     * and will not be the last.</p>
+     */
+    public static final String SYNTAX_CLASS = "__syntax__";
     public static final String CARET_CLASS = "__caret__";
     public static final String SELECTION_CLASS = "__selection__";
     public static final String GUTTER_CLASS = "__gutter__";
@@ -768,6 +780,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     reentrantFind = false;
                 }
             }
+            // A HOVER BOX DESCRIBES AN OFFSET, and typing moves it. Dismissed rather than re-resolved,
+            // because what is on screen is now about a position that has shifted underneath it and the
+            // pointer has not asked about wherever the text ended up. A Ctrl+Q popup is left alone: it was
+            // asked for deliberately, and hideHoverDocumentation is what tells the two apart.
+            hideHoverDocumentation();
             onChanged.emit(buffer.toString());
         });
 
@@ -1073,6 +1090,19 @@ public class TextEditor extends ScrollerView implements UndoScope {
             int clicks = Math.min(3, Math.max(1, event.getDetail()));
             boolean extend = CgModifiers.hasShift(CgPlatform.input().getCurrentModifiers());
             boolean addCaret = CgModifiers.hasAlt(CgPlatform.input().getCurrentModifiers());
+            int mods = CgPlatform.input().getCurrentModifiers();
+
+            // CTRL+CLICK IS GO-TO-DEFINITION, which the Alt branch below has named as the reason it leaves
+            // Ctrl alone since multi-caret went in. It moves the caret FIRST and resolves from there: the
+            // resolver is asked about an offset, and asking about the word under the pointer while the
+            // caret is still wherever it was would resolve the wrong name -- and would do it silently,
+            // since both are real names and both produce a plausible jump.
+            if ((CgModifiers.hasCtrl(mods) || CgModifiers.hasSuper(mods)) && !extend && clicks == 1) {
+                setCaret(offset);
+                goToDefinition();
+                event.stopPropagation();
+                return;
+            }
 
             if (addCaret && clicks == 1) {
                 // Alt+Click adds a caret, as in VS Code. Ctrl is left alone because Ctrl+Click is
@@ -1106,9 +1136,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         events.getGroup(MouseEvent.Move.class).attachListener((el, event) -> {
             rememberPointer(event.getPosition().x(), event.getPosition().y());
+            hoverPointerMoved();
             if (!selecting) return;
             extendDragTo(offsetAt(event.getPosition().x(), event.getPosition().y()));
         }, false, false);
+
+        // THE POINTER LEFT THE TEXT, which is not the same as it having left the popup -- the box sits
+        // below the token, so reaching for it fires this immediately. The grace in the ticker is what
+        // makes that survivable; hiding here would make the popup unreachable.
+        onMouseLeave.attachListener((el, event) -> cancelHover(), false, false);
 
         events.getGroup(MouseEvent.Up.class).attachListener((el, event) -> {
             selecting = false;
@@ -1745,6 +1781,350 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return languageServices;
     }
 
+    // ── Go-to-definition ────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Where {@link #goToDefinition} sends a jump it cannot make itself — a declaration in <em>another</em>
+     * file.
+     *
+     * <p><b>The editor deliberately cannot open documents.</b> Same line {@code ProblemsPanel} draws and
+     * states for the same reason: opening a file is a workspace-level act, and a widget that did it itself
+     * would have to reach a client, a tab strip and a dock through the application to get there.</p>
+     *
+     * <p>A <b>same-file</b> jump is deliberately <em>not</em> announced, and that asymmetry is the design
+     * rather than an omission. Nothing is opened, no tab changes, and the entire act is moving this
+     * widget's own caret — so routing it out and back would hand the shell a movement it cannot perform
+     * better, and would make jumping to a local variable depend on a workbench that a harness scene and a
+     * bare editor test do not have. What goes out is what genuinely cannot be done from in here.</p>
+     *
+     * <p>Both halves still converge on {@link #revealAt}, so they cannot drift on what "arriving" means.</p>
+     */
+    public final Signal.Value<DeclarationSite> onDefinitionChosen = new Signal.Value<>();
+
+    /**
+     * Put the caret at {@code at} and frame it — the one movement every navigation ends with.
+     *
+     * <p>Shared rather than repeated because {@link #setCaret} deliberately does not scroll, so every
+     * caller has to remember a second call; the ones that forgot it are indistinguishable from nothing
+     * having happened. Centred rather than merely visible, because a line you were <em>sent</em> to with
+     * all of its context on one side is the worst possible framing for it — both references centre for
+     * navigation and only scroll minimally for typing.</p>
+     */
+    public void revealAt(TextPoint at) {
+        setCaret(buffer.pointToOffset(at));
+        revealCaretCentred();
+    }
+
+    /** Documentation — {@code Ctrl+Q} and hover, which write to the same popup. */
+    private static final int LANE_DOC = 0;
+    /** Go-to-definition, which writes to the caret. */
+    private static final int LANE_DEFINITION = 1;
+
+    private final int[] resolveSerials = new int[2];
+
+    /**
+     * Resolve the name at {@code offset} and hand the answer over, or report that nothing was asked.
+     *
+     * <h3>A serial per DESTINATION, not per feature and not one for everything</h3>
+     *
+     * <p>The serial exists to drop an answer for a request the user has replaced — so two requests
+     * supersede each other exactly when they would write to the same place. {@code Ctrl+Q} and hover share
+     * a lane because they fill one popup and the later one genuinely replaces the earlier;
+     * go-to-definition has its own because it moves the caret instead, and nothing about asking for
+     * documentation means you stopped wanting the jump.</p>
+     *
+     * <p>This was <b>one</b> shared serial until hover arrived, on the reasoning that the user's last
+     * action should win. Hover is what makes that wrong: it is ambient rather than an action, so a single
+     * lane let a stray mouse movement one pixel after {@code Ctrl+B} silently eat the jump — and only
+     * sometimes, depending on which resolve finished first.</p>
+     *
+     * <p>Both discards live here rather than at each call site because they are one line each and silent
+     * to omit: neither produces an error, both produce a confident answer about a position the user has
+     * left.</p>
+     *
+     * @return whether a request was issued — false means no engine, which is the ordinary case
+     */
+    private boolean resolveAt(int lane, int offset, java.util.function.Consumer<SymbolInfo> onResolved) {
+        if (languageServices == null) return false;
+        final int serial = ++resolveSerials[lane];
+        languageServices.resolver().resolveAt(offset, answer -> {
+            // AGAINST THE VERSION THE ANSWER ARRIVED AT, not the one it was asked at -- isFresh is an
+            // equality, so comparing with the ask-time stamp would accept every answer it ever got and
+            // the gate would read as present while doing nothing.
+            if (serial != resolveSerials[lane] || answer == null || !answer.isFresh(buffer.version())) {
+                return;
+            }
+            SymbolInfo symbol = answer.value();
+            if (symbol != null) onResolved.accept(symbol);
+        });
+        return true;
+    }
+
+    /**
+     * Resolve the name at the caret and go to where it is declared — {@code Ctrl+B}, and Ctrl+Click.
+     *
+     * <h3>Three ways this legitimately does nothing, and none of them is a failure</h3>
+     *
+     * <p>No engine ({@code languageServices == null}) is the three-tier absence rule and the ordinary case
+     * for a language that will never have one. A null {@link SymbolInfo#declaration()} is
+     * {@link DeclarationSite}'s own documented ordinary case — a member of a compiled class with no source
+     * attached, which is most of the JDK. And the callback may simply never fire, which
+     * {@link com.crystalgui.text.lang.Resolver} states as its contract for a superseded request. So this
+     * reports whether it <em>asked</em>, never whether it arrived: anything keyed on an answer coming back
+     * would hang open on the one path designed to produce silence.</p>
+     *
+     * <h3>Two independent discards, and dropping either produces a confidently wrong jump</h3>
+     *
+     * <p><b>Version</b> — an answer computed against text that has since been edited names a row that now
+     * holds something else, so it is discarded exactly as a stale diagnostic list is. <b>Request
+     * identity</b> — the caret moves, and an answer for the <em>previous</em> caret would jump somewhere
+     * the user stopped asking about. The serial is {@code CompletionSession}'s own guard, for the same
+     * reason and in the same shape.</p>
+     *
+     * @return whether a request was issued at all
+     */
+    @Nullable
+    private DocumentationPopup docPopup;
+
+    /** The live Quick Documentation popup, or null. Exposed so a test can read it without pixels. */
+    @Nullable
+    public DocumentationPopup documentationPopup() {
+        return docPopup;
+    }
+
+    /**
+     * Resolve at the caret and show the Quick Documentation popup — {@code Ctrl+Q}.
+     *
+     * <p>Opens on the answer rather than on the keystroke: an empty box that fills in 300ms later is worse
+     * than one that appears once there is something in it, and a resolve that produces nothing should
+     * produce nothing on screen too. The two discards in {@link #resolveAtCaret} mean the box that opens
+     * describes the caret it was asked about and no other.</p>
+     *
+     * @return whether a request was issued — false means no engine, the ordinary case for most languages
+     */
+    public boolean showQuickDocumentation() {
+        return showDocumentationAt(getCaret());
+    }
+
+    private boolean showDocumentationAt(int offset) {
+        return resolveAt(LANE_DOC, offset, symbol -> {
+            UIWindow window = getAttachedWindow();
+            if (window == null) return;
+            if (docPopup == null) {
+                docPopup = new DocumentationPopup();
+            }
+            float[] anchor = anchorInWindow(offset);
+            if (anchor == null) return;
+            docPopup.show(window, symbol, anchor[0], anchor[1], anchor[2]);
+        });
+    }
+
+    /** Closes the documentation popup if it is open. */
+    public void closeQuickDocumentation() {
+        hoverShownFor = -1;
+        if (docPopup != null && docPopup.isOpen()) docPopup.hide();
+    }
+
+    // ── Hover documentation ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * How long the pointer must rest on a token before its documentation appears.
+     *
+     * <p>Long enough that crossing a line of code does not strobe popups, short enough that resting on a
+     * name feels like asking. VS Code's {@code editor.hover.delay} defaults to 300ms and IntelliJ's is in
+     * the same range; this sits between them.</p>
+     */
+    private static final float HOVER_DELAY_SECONDS = 0.4f;
+
+    /**
+     * How long the popup survives the pointer leaving the word.
+     *
+     * <p><b>This grace is what makes the popup reachable at all</b>, and it is not a nicety. The box opens
+     * below the token, so moving the pointer towards it leaves the token immediately — and the editor's
+     * {@code Leave} and the popup's {@code Enter} are two separate dispatches whose order within a frame is
+     * not something to depend on. Hiding on {@code Leave} means the popup vanishes the instant you reach
+     * for it, every time; a grace makes the two orderings indistinguishable. VS Code's
+     * {@code editor.hover.sticky} is the same idea with a different name.</p>
+     */
+    private static final float HOVER_GRACE_SECONDS = 0.25f;
+
+    private boolean hoverDocumentation = true;
+    private int hoverWordStart = -1;
+    private int hoverShownFor = -1;
+    private float hoverRest;
+    private float hoverGrace;
+
+    /** {@code Show on Mouse Move} — IntelliJ's own name for this, and on by default as it is there. */
+    public TextEditor setHoverDocumentationEnabled(boolean enabled) {
+        this.hoverDocumentation = enabled;
+        if (!enabled) closeQuickDocumentation();
+        return this;
+    }
+
+    public boolean isHoverDocumentationEnabled() {
+        return hoverDocumentation;
+    }
+
+    /**
+     * The start of the word under a point, or -1 when the pointer is not over one.
+     *
+     * <p><b>The past-the-end check is the whole difficulty.</b> {@code offsetAtLocal} clamps to the
+     * nearest position by design — that is what makes clicking in the blank area right of a line put the
+     * caret at its end — so without a horizontal bound every pixel to the right of a short line reports
+     * that line's last token. The result is a documentation popup for {@code foo} while the pointer sits
+     * in empty space two hundred pixels away, which reads as the popup being stuck rather than as a
+     * hit-testing question.</p>
+     */
+    private int hoverWordStartAt(float localX, float localY) {
+        if (viewLineCount() <= 0 || buffer.length() == 0) return -1;
+        int offset = offsetAtLocal(localX, localY);
+        int viewLine = viewLineOf(offset, LineProjection.Affinity.RIGHT);
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        LineProjection projection = projectionAt(viewLine);
+        float endX = textOriginX() + xOfView(viewLine, projection.viewLineEnd(model.viewLineInRow()))
+                - finiteOrZero(getScrollLeft());
+        if (localX > endX) return -1;
+        int[] word = WordOperations.wordAt(buffer.document(), offset, wordClassifier);
+        if (word == null || word[1] <= word[0]) return -1;
+        return word[0];
+    }
+
+    /**
+     * Re-reads what the pointer is over. Called from the move listener rather than the ticker, because a
+     * timer should measure how long the pointer has been <em>still</em> and only a move can restart that.
+     */
+    private void hoverPointerMoved() {
+        if (hoverSuppressed()) {
+            cancelHover();
+            return;
+        }
+        hoverOverWord(hoverWordStartAt(pointerX, pointerY));
+    }
+
+    /** No hover while a drag is selecting, while completion owns the caret, or when it is switched off. */
+    private boolean hoverSuppressed() {
+        return !hoverDocumentation || selecting || completion != null;
+    }
+
+    private void hoverOverWord(int word) {
+        // THE SAME WORD IS NOT A NEW HOVER. Resetting on every move event would mean the delay never
+        // elapses while the pointer drifts a pixel at a time over a long identifier -- so the popup would
+        // appear only if you held perfectly still, which reads as it working intermittently.
+        if (word == hoverWordStart) return;
+        hoverWordStart = word;
+        hoverRest = 0f;
+        // NOTHING IS HIDDEN HERE, on any path. A move only ever RE-AIMS the timer.
+        //
+        // Hiding on "the pointer is over a different word now" is the obvious rule and it makes the popup
+        // unreachable, because the box opens BELOW the token: every route to it crosses the next line of
+        // code, and that line has words on it. So reaching for the popup read as "you asked about
+        // something else" and closed it about a third of the way down the top border -- which is exactly
+        // where the pointer stops being over the token's line and starts being over the line beneath.
+        //
+        // Hiding on "over no word" fails the same way through the gaps between tokens.
+        //
+        // So the box now survives the whole traversal and is replaced only when a NEW lookup actually
+        // fires -- see tickHoverDocumentation, which hides immediately before asking. The pointer
+        // crosses a line in a few frames and the delay is 400ms, so nothing fires in transit.
+    }
+
+    /**
+     * Test seam: report the pointer as resting on the word containing {@code offset}, or nowhere for -1.
+     *
+     * <p>Takes an <b>offset</b> rather than a word start, so the "is this still the same word" rule is the
+     * real one — handing it a word start directly would make two points inside one identifier look like
+     * two different hovers and the test would pass against a broken timer. The geometry that normally
+     * produces the offset is {@link #hoverWordStartAt}, which is covered from local coordinates.</p>
+     */
+    public void hoverPointerForTest(int offset) {
+        if (hoverSuppressed()) {
+            cancelHover();
+            return;
+        }
+        if (offset < 0) {
+            hoverOverWord(-1);
+            return;
+        }
+        int[] word = WordOperations.wordAt(buffer.document(), offset, wordClassifier);
+        hoverOverWord(word == null || word[1] <= word[0] ? -1 : word[0]);
+    }
+
+    /**
+     * The start of the word at a point in this element's own coordinates, or -1 for none — the real
+     * geometry the hover path runs, exposed because "is the pointer over a token" is the half of it that
+     * a timing test cannot reach and that silently answers yes for empty space.
+     */
+    public int hoverWordStartAtForTest(float localX, float localY) {
+        return hoverWordStartAt(localX, localY);
+    }
+
+    private void cancelHover() {
+        hoverWordStart = -1;
+        hoverRest = 0f;
+    }
+
+    /**
+     * Hides only what HOVER opened.
+     *
+     * <p>A popup opened with {@code Ctrl+Q} is a deliberate request and must not be dismissed by the
+     * pointer wandering off a word it was never anchored to — {@code hoverShownFor} is what tells the two
+     * apart. Escape and a press outside still close either, through the popover stacks.</p>
+     */
+    private void hideHoverDocumentation() {
+        if (hoverShownFor < 0) return;
+        hoverShownFor = -1;
+        hoverGrace = 0f;
+        if (docPopup != null && docPopup.isOpen()) docPopup.hide();
+    }
+
+    private void tickHoverDocumentation(float deltaSeconds) {
+        if (!hoverDocumentation) return;
+
+        // STICKY: the pointer being inside the popup is the one state where nothing should be counted.
+        if (hoverShownFor >= 0 && docPopup != null && docPopup.isPointerOver()) {
+            hoverGrace = 0f;
+            return;
+        }
+
+        if (hoverWordStart >= 0 && hoverShownFor != hoverWordStart) {
+            hoverRest += deltaSeconds;
+            if (hoverRest >= HOVER_DELAY_SECONDS) {
+                hoverRest = 0f;
+                int word = hoverWordStart;
+                // CLEARED WHEN THE NEW LOOKUP FIRES, not when the pointer moved. This is the one moment
+                // the old box is genuinely wrong -- it describes a word we have stopped asking about --
+                // and doing it here rather than on the move is what lets the pointer travel to the popup
+                // without destroying it on the way.
+                //
+                // Before the request, so a word that resolves to nothing leaves an empty popup rather
+                // than the previous symbol's, which would be a confident answer to a question nobody
+                // asked. @see Resolver, whose callback may never fire at all.
+                hideHoverDocumentation();
+                hoverShownFor = word;
+                hoverGrace = 0f;
+                showDocumentationAt(word);
+            }
+            return;
+        }
+
+        if (hoverShownFor >= 0 && hoverWordStart < 0) {
+            hoverGrace += deltaSeconds;
+            if (hoverGrace >= HOVER_GRACE_SECONDS) hideHoverDocumentation();
+        }
+    }
+
+    public boolean goToDefinition() {
+        return resolveAt(LANE_DEFINITION, getCaret(), symbol -> {
+            DeclarationSite site = symbol.declaration();
+            if (site == null) return;
+            if (site.isSameDocument()) {
+                revealAt(site.start());
+            } else {
+                onDefinitionChosen.emit(site);
+            }
+        });
+    }
+
     // ── Completion ──────────────────────────────────────────────────────────────────────────────
 
     @Nullable
@@ -1914,7 +2294,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private void updateCompletionAnchor() {
         if (completionPopup == null || completion == null) return;
-        int anchorOffset = Math.max(0, Math.min(completion.replacementStart(), buffer.length()));
+        float[] anchor = anchorInWindow(completion.replacementStart());
+        if (anchor == null) return;
+        completionPopup.setAnchor(anchor[0], anchor[1], anchor[2]);
+    }
+
+    /**
+     * Where {@code offset} sits in the window's coordinate space, as {@code {x, y, lineHeight}}.
+     *
+     * <p>Shared by both popups because it is the seam where two coordinate spaces meet, and a popup placed
+     * from the wrong one looks deliberately positioned while being wrong by exactly {@code uiScale}. Two
+     * copies of this would be two chances to reach for the transform chain, which is in surface pixels and
+     * is only populated once the element has painted.</p>
+     */
+    @Nullable
+    private float[] anchorInWindow(int at) {
+        int anchorOffset = Math.max(0, Math.min(at, buffer.length()));
         int viewLine = viewLineOf(anchorOffset, LineProjection.Affinity.RIGHT);
         ProjectedLines.ModelPosition model = modelAt(viewLine);
         int rowStart = buffer.document().lineStartOffset(model.row());
@@ -1930,8 +2325,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // not been scrolled, and the alternative is a popup nobody can find.
         float localX = textOriginX() + xOfView(viewLine, view.column()) - finiteOrZero(getScrollLeft());
         float localY = textOriginY() + viewLine * lineHeight() - finiteOrZero(getScrollTop());
-        if (!Float.isFinite(localX) || !Float.isFinite(localY)) return;
-        completionPopup.setAnchor(getWindowX() + localX, getWindowY() + localY, lineHeight());
+        if (!Float.isFinite(localX) || !Float.isFinite(localY)) return null;
+        return new float[] { getWindowX() + localX, getWindowY() + localY, lineHeight() };
     }
 
     /**
@@ -3888,6 +4283,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         viewCursorsPart.advanceBlink(deltaSeconds);
         zoomIndicatorPart.tick(deltaSeconds);
         autoScrollDuringDrag(deltaSeconds);
+        // A REST TIMER, so it belongs on the heartbeat rather than on the move event: what it measures is
+        // the pointer NOT moving, and the last move is the one event that will not be followed by another.
+        tickHoverDocumentation(deltaSeconds);
         return true;
     }
 
@@ -4034,7 +4432,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
             line.addClass(LINE_CLASS);
             line.setHitTest(false);
             line.markAsInternal();
-            line.addChild(new UIText(""));
+            // SYNTAX_CLASS is what carries the forty ::highlight() rules. They used to be selected as
+            // `texteditor text::highlight(...)`, which made the whole capture vocabulary the editor's
+            // private property -- so the documentation popup, which draws a declaration the engine
+            // tokenized in exactly the same vocabulary, would have needed a duplicate list. Two lists
+            // drift, and the first divergence reads as a scheme bug rather than a selector one.
+            line.addChild(new UIText("").addClass(SYNTAX_CLASS));
         }
         layOutLine(viewLine, line);
         if (line.getParent() == null) textViewport().addInternalChild(line);

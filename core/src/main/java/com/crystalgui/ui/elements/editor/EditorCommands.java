@@ -120,6 +120,12 @@ public final class EditorCommands {
     /** {@code Navigate ▸ Line/Column} — IntelliJ's own wording, binding and placeholder. */
     public static final String GO_TO_LINE = PREFIX + "goToLine";
 
+    /** {@code Navigate ▸ Declaration or Usages} — {@code Ctrl+B}, and Ctrl+Click in the editor. */
+    public static final String GO_TO_DEFINITION = PREFIX + "goToDefinition";
+
+    /** {@code View ▸ Quick Documentation} — IntelliJ's own name for it, and its binding. */
+    public static final String QUICK_DOCUMENTATION = PREFIX + "quickDocumentation";
+
     /**
      * {@code 40}, {@code 40:8}, or {@code :8} for a column on the line the caret is already on.
      *
@@ -170,6 +176,24 @@ public final class EditorCommands {
                 .menu(MenuId.MAIN_VIEW, "1_appearance", 20)
                 .run(on(editor -> InputDialog.ask(editor, "Go To Line", "[Line][:column]", "",
                         typed -> goTo(editor, typed)))));
+
+        // ENABLED WHENEVER AN EDITOR IS FOCUSED, deliberately not "when the caret resolves to something".
+        // Whether a name has a declaration is an ASYNCHRONOUS question, so an enablement predicate could
+        // only answer it from a cached previous resolve -- and a menu row that greys and ungreys as
+        // compiles land is worse than one that is always live and sometimes does nothing. Both references
+        // keep this entry enabled. @see TextEditor#goToDefinition
+        registry.register(Command.of(GO_TO_DEFINITION, "Go To Declaration")
+                .binding("Mod+B")
+                .menu(MenuId.MAIN_VIEW, "1_appearance", 10)
+                .run(on(TextEditor::goToDefinition)));
+
+        // NAMED FOR THE FEATURE, not for the trigger. Hovering is a setting on this popup rather than a
+        // separate affordance, and pressing the key again promotes the same content into a tool window --
+        // an id called `editor.hover` would make both of those look like new features when they land.
+        registry.register(Command.of(QUICK_DOCUMENTATION, "Quick Documentation")
+                .binding("Mod+Q")
+                .menu(MenuId.MAIN_VIEW, "1_appearance", 30)
+                .run(on(TextEditor::showQuickDocumentation)));
 
         // ── Multi-caret ─────────────────────────────────────────────────────────────────────────
         registry.register(Command.of(PREFIX + "addCaretAtNextOccurrence", "Add Caret At Next Occurrence")

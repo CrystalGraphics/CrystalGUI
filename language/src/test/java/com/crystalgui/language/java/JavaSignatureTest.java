@@ -1,0 +1,622 @@
+package com.crystalgui.language.java;
+
+import com.crystalgui.language.engine.EngineBand;
+import com.crystalgui.language.engine.EngineSource;
+import com.crystalgui.language.engine.JavaEngine;
+import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.text.lang.Signature;
+import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.lang.SymbolKind;
+import com.crystalgui.text.syntax.SyntaxToken;
+import org.junit.After;
+import org.junit.Assume;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.List;
+
+import static org.junit.Assert.*;
+
+/**
+ * M11 §24.1 — the declaration the engine renders for the Quick Documentation popup.
+ *
+ * <h3>Why this lives with the engine and not with the widget</h3>
+ *
+ * <p>Everything asserted here is something <b>only a binding knows</b>: that {@code public} is a
+ * modifier, that {@code @Nullable} is an annotation, that {@code x} is a parameter. The widget that
+ * draws it has no branches at all — it maps a capture name to a highlight range — so a regression in
+ * what a declaration <em>reads</em> as can only be caught on this side.</p>
+ *
+ * <p>The assertions are on the <b>text</b> and on the capture at a given word, never on offsets: the
+ * offsets are an artefact of how the builder concatenates, and pinning them would make every addition
+ * to a signature a test edit.</p>
+ */
+public class JavaSignatureTest {
+
+    private JavaEngine engine;
+    private SourceAnalyzer analyzer;
+
+    @Before
+    public void openEngine() throws Exception {
+        EngineBand band = EngineBand.detect();
+        String paths = System.getProperty("cgui.test.engineBand" + band.minimumFeatureVersion());
+        EngineSource source = EngineSource.ofPathList(paths);
+        Assume.assumeTrue("no jars supplied for band " + band + "; skipping",
+                !source.jarsFor(band).isEmpty());
+        engine = JavaEngine.open(band, source);
+        analyzer = engine.analyzer();
+    }
+
+    @After
+    public void closeEngine() throws IOException {
+        if (engine != null) engine.close();
+    }
+
+    /** The signature of the symbol at the first occurrence of {@code needle}. */
+    private Signature signatureAt(String source, String needle) {
+        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, List.of(), 8, 1L);
+        int at = source.indexOf(needle);
+        if (at < 0) throw new IllegalArgumentException("no '" + needle + "' in the fixture");
+        SymbolInfo symbol = analysis.resolveAt(at);
+        assertNotNull("nothing resolved at '" + needle + "'", symbol);
+        assertNotNull("the engine should always render a signature", symbol.signature());
+        return symbol.signature();
+    }
+
+    /** The capture name covering the first occurrence of {@code word} in the rendered text. */
+    private static String captureOf(Signature signature, String word) {
+        int at = signature.text().indexOf(word);
+        assertTrue("'" + word + "' is not in <" + signature.text() + ">", at >= 0);
+        for (SyntaxToken token : signature.tokens()) {
+            if (token.start() <= at && token.end() >= at + word.length()) return token.name();
+        }
+        return null;
+    }
+
+    /** Visibility, which {@code SymbolModifier} does not carry and only the flags know. */
+    @Test
+    public void aMethodRendersItsVisibilityReturnTypeAndParameterNames() {
+        String source = ""
+                + "public class Script {\n"
+                + "    public void println(String text, int count) { }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "println");
+
+        assertEquals("public void println(String text, int count)", signature.text());
+        assertEquals("keyword", captureOf(signature, "public"));
+        assertEquals("void is a primitive, and the editor draws primitives as builtins",
+                "type.builtin", captureOf(signature, "void"));
+        assertEquals("function.method", captureOf(signature, "println"));
+        assertEquals("variable.parameter", captureOf(signature, "text"));
+    }
+
+    /**
+     * Annotations, on the declaration and on a parameter — the thing that made the widget-assembled
+     * version unfixable, since a widget cannot know an annotation exists.
+     */
+    @Test
+    public void annotationsAppearOnTheDeclarationAndOnParameters() {
+        String source = ""
+                + "import java.lang.annotation.*;\n"
+                + "public class Script {\n"
+                + "    @Retention(RetentionPolicy.RUNTIME) @interface Nullable { }\n"
+                + "    @Deprecated\n"
+                + "    void take(@Nullable String x) { }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "take");
+
+        assertTrue("the declaration's annotation is missing from <" + signature.text() + ">",
+                signature.text().contains("@Deprecated"));
+        assertTrue("the parameter's annotation is missing from <" + signature.text() + ">",
+                signature.text().contains("@Nullable"));
+        assertEquals("attribute", captureOf(signature, "@Deprecated"));
+    }
+
+    /** A type is declared with a keyword and its supertypes, never with its own name twice. */
+    @Test
+    public void aTypeRendersItsKeywordAndSupertypes() {
+        String source = ""
+                + "import java.io.Serializable;\n"
+                + "public final class Script implements Serializable {\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "Script");
+
+        assertEquals("public final class Script implements Serializable", signature.text());
+        assertEquals("keyword", captureOf(signature, "class"));
+        assertEquals("type", captureOf(signature, "Serializable"));
+    }
+
+    /**
+     * {@code extends Object} is on every class and in no source file, so printing it back would show a
+     * declaration nobody wrote in a box that claims to show what they did.
+     */
+    @Test
+    public void anImplicitObjectSuperclassIsNotPrinted() {
+        Signature signature = signatureAt("public class Script { }\n", "Script");
+        assertEquals("public class Script", signature.text());
+    }
+
+    /**
+     * The initializer <b>as written</b>, read from the AST rather than from the folded constant.
+     *
+     * <p>Underscores and the {@code d} suffix survive, which they would not through
+     * {@code getConstantValue()} — that answers a {@code Double} and the spelling is gone.</p>
+     */
+    @Test
+    public void aFieldShowsItsInitializerExactlyAsWritten() {
+        String source = ""
+                + "public class Script {\n"
+                + "    static final double GOLDEN_RATIO = 1.618_033_988_749d;\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "GOLDEN_RATIO");
+
+        assertEquals("static final double GOLDEN_RATIO = 1.618_033_988_749d;", signature.text());
+        assertEquals("constant", captureOf(signature, "GOLDEN_RATIO"));
+    }
+
+    /**
+     * <b>{@code = null} was missing entirely.</b>
+     *
+     * <p>{@code getConstantValue()} answers only for primitives and {@code String}, so an
+     * {@code Object NOTHING = null} reported no initializer — and there is no way through that API to
+     * tell "not a constant" from "the constant is null". The field plainly has one either way, and the
+     * AST has it verbatim.</p>
+     */
+    @Test
+    public void aNullInitializerIsShown() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private static final Object NOTHING = null;\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "NOTHING");
+
+        assertEquals("private static final Object NOTHING = null;", signature.text());
+        assertEquals("constant.builtin", captureOf(signature, "null"));
+    }
+
+    /**
+     * A hex literal stays hex — folding it would report {@code -559038737} for {@code 0xDEAD_BEEF},
+     * which is the same number and not the same declaration.
+     */
+    @Test
+    public void aHexLiteralIsNotFoldedToDecimal() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private static final int HEX = 0xDEAD_BEEF;\n"
+                + "}\n";
+        assertEquals("private static final int HEX = 0xDEAD_BEEF;",
+                signatureAt(source, "HEX").text());
+    }
+
+    /**
+     * Escapes inside a literal get their own capture, because the editor gives them one.
+     *
+     * <p>A string drawn in one flat colour is a visibly poorer rendering of text the editor is colouring
+     * properly three lines above — {@code string.escape} is in the vocabulary and every scheme defines
+     * it.</p>
+     */
+    @Test
+    public void escapeSequencesInsideALiteralAreCapturedSeparately() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private static final String ESCAPES = \"tab:\\t and more\";\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "ESCAPES");
+
+        assertEquals("string.escape", captureOf(signature, "\\t"));
+        assertEquals("the surrounding text is still a string", "string",
+                captureOf(signature, "tab:"));
+    }
+
+    /** {@code throws} belongs to the declaration and is what tells you to handle something. */
+    @Test
+    public void checkedExceptionsAreRendered() {
+        String source = ""
+                + "import java.io.IOException;\n"
+                + "public class Script {\n"
+                + "    void read() throws IOException { }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "read");
+        assertEquals("void read() throws IOException", signature.text());
+        assertEquals("keyword", captureOf(signature, "throws"));
+    }
+
+    /**
+     * Simple type names, never qualified ones.
+     *
+     * <p>{@code java.util.Map<java.lang.String, java.util.List<java.lang.Integer>>} is correct and
+     * unreadable — a two-argument generic becomes most of a line of package names.</p>
+     */
+    @Test
+    public void typeNamesAreSimpleRatherThanQualified() {
+        String source = ""
+                + "import java.util.Map;\n"
+                + "public class Script {\n"
+                + "    Map<String, Integer> counts;\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "counts");
+        assertEquals("Map<String,Integer> counts;", signature.text().replace(", ", ","));
+        assertFalse("qualified names have leaked in", signature.text().contains("java.util"));
+    }
+
+    /**
+     * A folded {@code char} is rendered as the <b>literal</b>, escaped.
+     *
+     * <p>{@code TAB = '\t'} folds to the tab character itself. Put in the signature raw it drew as a
+     * missing glyph — the popup read {@code private static final char TAB = □} — and it is not a
+     * rendering problem to work around: what a declaration shows is the literal, quotes and all.</p>
+     */
+    @Test
+    public void aCharConstantIsRenderedAsAnEscapedLiteral() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private static final char TAB = '\\t';\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "TAB");
+        assertEquals("private static final char TAB = '\\t';", signature.text());
+    }
+
+    /** Primitives colour as builtins, the way the editor's own grammar draws them. */
+    @Test
+    public void primitiveTypesAreCapturedAsBuiltins() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private static final char TAB = '\\t';\n"
+                + "    Object thing;\n"
+                + "}\n";
+        assertEquals("type.builtin", captureOf(signatureAt(source, "TAB"), "char"));
+        assertEquals("type", captureOf(signatureAt(source, "thing"), "Object"));
+    }
+
+    /**
+     * <b>{@code @SuppressWarnings([Ljava.lang.Object;@c3d4bd7)}.</b>
+     *
+     * <p>An annotation member value is an {@code Object[]} whenever the member is an array — including
+     * the single-element array a lone {@code "unused"} becomes — and {@code String.valueOf} on it yields
+     * a JVM identity string. JDT also hands back an {@code ITypeBinding} for a {@code Class} literal, an
+     * {@code IVariableBinding} for an enum constant and an {@code IAnnotationBinding} for a nested one,
+     * so four distinct shapes were falling through a branch written for the fifth.</p>
+     */
+    @Test
+    public void anArrayValuedAnnotationRendersItsElementsRatherThanAnArrayIdentity() {
+        String source = ""
+                + "public class Script {\n"
+                + "    @SuppressWarnings(\"unused\")\n"
+                + "    void hidden() { }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "hidden");
+
+        assertTrue("<" + signature.text() + "> should carry the value",
+                signature.text().contains("@SuppressWarnings(\"unused\")"));
+        assertFalse("an array identity string has leaked in: " + signature.text(),
+                signature.text().contains("[L") || signature.text().contains("@c"));
+    }
+
+    /** A multi-element array keeps its braces, which is how it is written. */
+    @Test
+    public void aMultiElementAnnotationArrayKeepsItsBraces() {
+        String source = ""
+                + "public class Script {\n"
+                + "    @SuppressWarnings({\"unused\", \"rawtypes\"})\n"
+                + "    void hidden() { }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "hidden");
+        assertTrue("<" + signature.text() + ">",
+                signature.text().contains("{\"unused\", \"rawtypes\"}"));
+    }
+
+    /**
+     * A text block is a constant too, and its newlines would go straight into a line the popup draws
+     * with {@code white-space: nowrap}.
+     */
+    @Test
+    public void aLongStringConstantIsTruncatedAndItsControlCharactersEscaped() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private static final String Q = \"SELECT id\\n  FROM widgets\\n WHERE owner = ?\";\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "Q");
+
+        // THE DECLARATION'S OWN BREAK IS A REAL NEWLINE and is wanted -- this test predates breaking and
+        // asserted on the whole signature, which now legitimately contains one. What must not survive is
+        // a raw newline inside the LITERAL, which would put half the string on a line of its own.
+        String literal = signature.text().substring(signature.text().indexOf("= "));
+        assertFalse("a raw newline reached the literal: <" + literal + ">", literal.contains("\n"));
+        assertTrue("<" + literal + "> should escape them instead", literal.contains("\\n"));
+    }
+
+    /**
+     * A short declaration stays on <b>one</b> line — breaking unconditionally would put a two-word field
+     * on three, which is worse than the problem being solved.
+     */
+    @Test
+    public void aShortDeclarationIsNotBroken() {
+        // A DISTINCTIVE NAME, because the needle is a plain indexOf: `n` matched the one in `class`
+        // first, so the test resolved nothing and failed for a reason unrelated to what it asserts.
+        String source = "public class Script {\n    int tally;\n}\n";
+        assertFalse(signatureAt(source, "tally").text().contains("\n"));
+    }
+
+    /**
+     * A long one breaks at <b>semantic</b> points: the annotation on its own line, then one parameter
+     * per line, indented, with the closing bracket back at the margin.
+     *
+     * <p>This is the shape both references use, and it is the reason breaks are the engine's to place: it
+     * knows where a break is legal and meaningful, and the layout does not. Re-wrapping at the edge of the
+     * box splits whatever two words land there, which is how a parameter list ends up broken in the middle
+     * of a generic type.</p>
+     */
+    @Test
+    public void aLongDeclarationBreaksAtSemanticPoints() {
+        String source = ""
+                + "import java.util.function.Supplier;\n"
+                + "public class Script {\n"
+                + "    @SuppressWarnings(\"unused\")\n"
+                + "    public static int retryLoop(Supplier<Boolean> attempt, String description) {\n"
+                + "        return 0;\n"
+                + "    }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "retryLoop");
+        String[] lines = signature.text().split("\n");
+
+        assertTrue("expected several lines, got <" + signature.text() + ">", lines.length >= 4);
+        assertEquals("the annotation belongs on its own line", "@SuppressWarnings(\"unused\")", lines[0]);
+        assertTrue("the declaration follows it: " + lines[1],
+                lines[1].startsWith("public static int retryLoop("));
+        assertTrue("parameters are indented one per line: " + lines[2], lines[2].startsWith("    "));
+        assertTrue("a parameter per line, not all on one: " + lines[2], lines[2].endsWith(","));
+        assertEquals("and the bracket closes at the margin", ")", lines[lines.length - 1]);
+    }
+
+    /**
+     * A declaration in this unit is quoted <b>exactly as written</b> — layout, terminator and all.
+     *
+     * <p>This asserted the opposite: that a long field was broken before its {@code =} by us. That break
+     * was ours to impose only while the declaration was being assembled from parts, and imposing it on
+     * top of the author's own wrapping showed a shape the file does not contain. A one-line declaration
+     * stays one line.</p>
+     */
+    @Test
+    public void aDeclarationInThisUnitIsQuotedExactlyAsWritten() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private static final String PATH = "
+                + "\"C:\\\\Users\\\\somebody\\\\Documents\\\\file.txt\";\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "PATH");
+
+        assertEquals("one line in the file, one line here", 1, signature.text().split("\n").length);
+        assertTrue("the terminator belongs to the declaration: <" + signature.text() + ">",
+                signature.text().endsWith(";"));
+        assertTrue("<" + signature.text() + ">",
+                signature.text().startsWith("private static final String PATH = "));
+    }
+
+    /**
+     * And a MULTI-LINE one keeps its own wrapping and indentation rather than being reflowed.
+     *
+     * <p>The author's layout is information — an argument per line, an aligned array — and reproducing
+     * it costs nothing once the declaration is quoted rather than rebuilt.</p>
+     */
+    @Test
+    public void aMultiLineDeclarationKeepsTheAuthorsOwnLayout() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    private static final List<String> NAMES = List.of(\n"
+                + "            \"alpha\",\n"
+                + "            \"beta\");\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "NAMES");
+        String[] lines = signature.text().split("\n");
+
+        assertEquals("the file wraps it over three lines, so this should too", 3, lines.length);
+        assertTrue(signature.text().endsWith(";"));
+
+        // RELATIVE to the first line, not absolute. The slice starts AT the declaration, so its first
+        // line lost the four columns it sat at while the continuations kept theirs -- which doubled the
+        // apparent indent, and did so more the deeper the declaration sat in the file. Each continuation
+        // gives back exactly what the first line lost: 12 in the file, 8 here.
+        assertEquals("the argument should be indented 8 relative to the declaration, not 12",
+                8, leadingSpaces(lines[1]));
+        assertEquals(8, leadingSpaces(lines[2]));
+    }
+
+    private static int leadingSpaces(String line) {
+        int n = 0;
+        while (n < line.length() && line.charAt(n) == ' ') n++;
+        return n;
+    }
+
+    /**
+     * A <b>text block</b> is a string, and was rendering as plain text.
+     *
+     * <p>Its AST node cannot be named from here — {@code TextBlock} is Java 13 and this class is loaded
+     * by the band-8 child — so it was skipped, and a whole SQL statement drew uncoloured beside a
+     * properly coloured declaration.</p>
+     *
+     * <p>Self-skipping rather than band-gated: a band whose JDT cannot parse a text block reports a
+     * syntax problem, and asserting against that would fail for the language level rather than for the
+     * behaviour.</p>
+     */
+    @Test
+    public void aTextBlockIsCapturedAsAString() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private static final String QUERY = \"\"\"\n"
+                + "            SELECT id\n"
+                + "            \"\"\";\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, List.of(), 17, 1L);
+        SymbolInfo symbol = analysis.resolveAt(source.indexOf("QUERY"));
+        Assume.assumeTrue("this band cannot parse a text block; skipping",
+                symbol != null && symbol.signature() != null
+                        && symbol.signature().text().contains("SELECT"));
+
+        assertEquals("the block's contents should be a string, not plain text",
+                "string", captureOf(symbol.signature(), "SELECT id"));
+    }
+
+    /**
+     * A doc comment is <b>not</b> part of the declaration, whatever the AST node spans.
+     *
+     * <p>{@code FieldDeclaration} includes its own Javadoc, so quoting the node put a paragraph of prose
+     * into the SIGNATURE band — the one band that is meant to be a single declaration, sitting directly
+     * above the band whose whole purpose is documentation.</p>
+     */
+    @Test
+    public void aDocCommentIsNotQuotedIntoTheSignature() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /** Holds the thing. */\n"
+                + "    private static final int COUNT = 3;\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "COUNT");
+
+        assertEquals("private static final int COUNT = 3;", signature.text());
+    }
+
+    /**
+     * <b>{@code new Foo(...)} resolves the constructor, not the type.</b>
+     *
+     * <p>Syntactically the name <em>is</em> the type, so {@code resolveBinding()} answers the type and
+     * the popup described the class — its supertypes, its interfaces — instead of the overload being
+     * called, which is the one thing you cannot see from the call site. The constructor is reachable only
+     * by asking the enclosing {@code ClassInstanceCreation}.</p>
+     */
+    @Test
+    public void aConstructorCallResolvesTheConstructorRatherThanTheType() {
+        String source = ""
+                + "import java.util.ArrayList;\n"
+                + "public class Script {\n"
+                + "    Object make() { return new ArrayList<String>(8); }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, List.of(), 8, 1L);
+        SymbolInfo symbol = analysis.resolveAt(source.indexOf("ArrayList<String>(8)"));
+
+        assertNotNull(symbol);
+        assertEquals(SymbolKind.CONSTRUCTOR, symbol.kind());
+        assertTrue("the owner should carry its type parameters: " + symbol.container(),
+                symbol.container().endsWith("ArrayList<E>"));
+        assertTrue("<" + symbol.signature().text() + "> should be a constructor",
+                symbol.signature().text().contains("ArrayList("));
+    }
+
+    /**
+     * A generic type shows how it is <b>declared</b>, not how this call instantiated it.
+     *
+     * <p>Hovering an {@code ArrayList<String>} reported {@code extends AbstractList<String>} — true of
+     * that instantiation and not of the declaration, which is what documentation is about.</p>
+     */
+    @Test
+    public void aGenericTypeShowsItsDeclarationRatherThanItsInstantiation() {
+        String source = ""
+                + "import java.util.ArrayList;\n"
+                + "public class Script {\n"
+                + "    ArrayList<String> list = null;\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "ArrayList<String> list");
+
+        assertTrue("the parameter should be the declared one: " + signature.text(),
+                signature.text().contains("ArrayList<E>"));
+        assertFalse("the instantiation leaked in: " + signature.text(),
+                signature.text().contains("<String>"));
+    }
+
+    /**
+     * A long {@code implements} list is a <b>hanging indent</b>: the first interface stays on the
+     * keyword's line and the rest align under it.
+     *
+     * <p>Not the same rule as the parameter list, which is a block indent. Putting every interface on its
+     * own indented line leaves {@code implements} alone on a line, which reads as a heading over a list
+     * rather than as one clause. The pad is the keyword's own width, so alignment falls out of the text
+     * instead of being a magic number — 11 for {@code implements}, 8 for an interface's {@code extends}.</p>
+     */
+    @Test
+    public void aLongImplementsListHangsUnderItsFirstInterface() {
+        String source = ""
+                + "import java.io.Serializable;\n"
+                + "import java.util.RandomAccess;\n"
+                + "public class Script extends java.util.AbstractList<String>\n"
+                + "        implements java.util.List<String>, RandomAccess, Cloneable, Serializable {\n"
+                + "    public String get(int i) { return null; }\n"
+                + "    public int size() { return 0; }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "Script extends");
+        String[] lines = signature.text().split("\n");
+
+        int at = -1;
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].startsWith("implements ")) at = i;
+        }
+        assertTrue("no implements clause in <" + signature.text() + ">", at >= 0);
+        assertTrue("the first interface belongs on the keyword's line: " + lines[at],
+                lines[at].length() > "implements ".length());
+
+        String pad = "           ";                       // "implements " is eleven characters
+        assertTrue("the second should align under the first: <" + lines[at + 1] + ">",
+                lines[at + 1].startsWith(pad) && !lines[at + 1].startsWith(pad + " "));
+    }
+
+    /**
+     * A non-literal initializer is <b>walked, not flattened</b> — coloured, and spaced by us.
+     *
+     * <p>It used to go through {@code ASTNode.toString()}, which produced two faults at once: every part
+     * came out with no capture, so a call drew in one flat colour beside a properly coloured declaration
+     * line, and JDT's flattener writes argument lists with no space after the comma —
+     * {@code Circle(1.5d),new Rectangle(3.0d,4.0d)}.</p>
+     */
+    @Test
+    public void aCallInitializerIsColouredAndSpacedRatherThanFlattened() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    void run() {\n"
+                + "        List<String> names = List.of(\"one\", \"two\");\n"
+                + "    }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "names");
+
+        assertTrue("the flattener's comma spacing survived: <" + signature.text() + ">",
+                signature.text().contains("\"one\", \"two\""));
+        assertEquals("the invoked method should be captured", "function.call",
+                captureOf(signature, "of"));
+        assertEquals("and its string arguments too", "string", captureOf(signature, "\"one\""));
+    }
+
+    /** {@code new Foo(...)} in an initializer keeps its keyword and its type distinct. */
+    @Test
+    public void aConstructorCallInAnInitializerIsCaptured() {
+        String source = ""
+                + "public class Script {\n"
+                + "    Object thing = new StringBuilder(16);\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "thing");
+
+        assertTrue("<" + signature.text() + ">", signature.text().contains("new StringBuilder(16)"));
+        assertEquals("keyword", captureOf(signature, "new"));
+        assertEquals("type", captureOf(signature, "StringBuilder"));
+        assertEquals("number", captureOf(signature, "16"));
+    }
+
+    /**
+     * A method from the <b>classpath</b> renders types without names.
+     *
+     * <p>{@code IMethodBinding} carries parameter types and not names — a class read off the classpath
+     * genuinely has none unless it was built with {@code -parameters}. IntelliJ shows {@code x} for
+     * {@code println} because it has the JDK sources attached and falls back to exactly this when it does
+     * not. The difference is real information about where the source is, not an inconsistency.</p>
+     */
+    @Test
+    public void aClasspathMethodRendersTypesWithoutParameterNames() {
+        String source = ""
+                + "public class Script {\n"
+                + "    void run() { System.out.println(\"hi\"); }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "println");
+
+        assertTrue("<" + signature.text() + "> should name the parameter's type",
+                signature.text().contains("(String)"));
+    }
+}

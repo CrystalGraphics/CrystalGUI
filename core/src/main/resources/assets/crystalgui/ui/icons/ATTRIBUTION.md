@@ -78,7 +78,8 @@ one file tree is the cost.
 
 <https://github.com/feathericons/feather>
 
-`folder.svg`, `file-text.svg`, `image.svg`, `code.svg`, `package.svg`, `x.svg`, and the three severity
+`folder.svg`, `file-text.svg`, `image.svg`, `code.svg`, `package.svg`, `x.svg`, `more-vertical.svg`,
+and the three severity
 marks the notification cards draw — `info.svg`, `alert-triangle.svg`, `alert-circle.svg`. Stroked, 24×24,
 authored as `stroke="currentColor"` — which is what makes them theme from the cascade for free, and why
 they are kept around as chrome marks even though the file tree now uses the IntelliJ set.
