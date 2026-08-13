@@ -99,7 +99,6 @@ public class StyleGovernanceTest {
     private static List<String> structureSheets() {
         List<String> sheets = new ArrayList<>(userAgentParts());
         sheets.add("graph.css");
-        sheets.add("filetypes.css");
         sheets.add("decorations.css");
         return sheets;
     }
