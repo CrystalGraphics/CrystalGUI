@@ -17,6 +17,8 @@ import com.crystalgui.render.texture.CgUiRoundedRect;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -1042,6 +1044,75 @@ public class UIElement implements SettingsScope, DataProvider {
     /** The resize handles, present only while {@code resize} is not {@code none}. Which ones exist
      * depends on the axes the mode allows -- see {@link UIResizer.Handle}. */
     private final List<UIResizer> resizers = new ArrayList<>();
+
+    // ── Which axes the user has taken over ──────────────────────────────────
+
+    /**
+     * Whether a drag on a resize handle has claimed this element's <b>width</b>. @see #isUserSizedHeight
+     */
+    public boolean isUserSizedWidth() {
+        return userSizedWidth;
+    }
+
+    /**
+     * Whether a drag has claimed this element's <b>height</b>.
+     *
+     * <h3>Why an element records this at all</h3>
+     *
+     * <p>{@link UIResizer} writes at <b>INLINE</b> origin, deliberately and per spec — a user resize
+     * writes the style attribute "without {@code !important}", so an author's rule still wins. Every
+     * other piece of geometry this engine writes from code uses <b>IMPORTANT</b>, which beats it.</p>
+     *
+     * <p>So a widget that sizes itself — a popup measuring its content, a panel fitting its rows —
+     * silently defeats the resizer on whatever axis it writes, and does it <em>every frame</em>. The
+     * failure is worse than a dead handle: {@code CompletionPopup} could be dragged taller because
+     * nothing else wrote its height, and could not be dragged wider at all, which reads as a broken
+     * widget rather than an unsupported gesture. It hand-rolled the entire drag to escape the fight.</p>
+     *
+     * <p>The fix is not to raise the resizer's origin — that would put a drag above an author's
+     * {@code !important} and invert the ladder. It is for the widget to <b>stop writing an axis the
+     * user has taken over</b>, which is one condition rather than a re-implemented gesture, and which
+     * this is the flag for.</p>
+     */
+    public boolean isUserSizedHeight() {
+        return userSizedHeight;
+    }
+
+    private boolean userSizedWidth, userSizedHeight;
+
+    /**
+     * Called by {@link UIResizer} as a drag writes each axis.
+     *
+     * <p><b>Records only; it does not clear anything.</b> Withdrawing the IMPORTANT declarations on this
+     * axis would let the handle beat the widget — and would beat an <em>author's</em> {@code !important}
+     * in the same stroke, because the two live in one origin bucket and nothing distinguishes them.
+     * That is the inversion the ladder exists to prevent, and {@code ResizeTest} pins it.</p>
+     *
+     * <p>So a widget whose size the user may take writes that size at a <b>lower</b> origin rather than
+     * expecting the resizer to outrank it — see {@code CompletionPopup}, which writes its measured size
+     * through {@code defaultPipeline} for exactly this reason. Then the ladder does the work unaided:
+     * author {@code !important} beats the drag, the drag beats the widget's own measurement.</p>
+     */
+    void markUserSized(boolean width, boolean height) {
+        userSizedWidth |= width;
+        userSizedHeight |= height;
+    }
+
+    /**
+     * Hands both axes back to the layout — what a widget calls when its own sizing should apply again.
+     *
+     * <p><b>Removes the INLINE declarations too</b>, and it has to: clearing the flag alone would let the
+     * widget write its size again while the dragged one sat underneath at the same origin, so whichever
+     * ran last would win and the result would flicker between them. A popup that must open at its content
+     * size every time — which is what "the menu must not keep its old size" means — needs the declaration
+     * gone, not merely outranked.</p>
+     */
+    public void clearUserSizing() {
+        userSizedWidth = false;
+        userSizedHeight = false;
+        getStyle().removeCandidates(LayoutProperties.WIDTH, slot -> slot.origin() == StyleOrigin.INLINE);
+        getStyle().removeCandidates(LayoutProperties.HEIGHT, slot -> slot.origin() == StyleOrigin.INLINE);
+    }
     private Resize resizeMode = Resize.NONE;
 
     /**
