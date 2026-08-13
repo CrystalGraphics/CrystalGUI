@@ -160,6 +160,33 @@ public final class DockPanelRegistry<C> {
     }
 
     /**
+     * A style class for a panel's tab — how a workbench says "this file will not compile".
+     *
+     * <p>Pulled rather than pushed, for the reason {@link #setTitleProvider} gives at length: the strip is
+     * rebuilt on every dock rearrangement, so anything pushed onto a tab has to be pushed again by
+     * somebody who noticed the rebuild, and nobody notices. A provider makes a tab correct the moment it
+     * is built, whoever built it and whenever.</p>
+     *
+     * <p>A <b>class</b>, not a colour: the answer comes from {@code FileDecorations}, which merges
+     * independent contributors — problems, dirty state, VCS — and names the winner as a
+     * {@code decoration-*} class the stylesheet already draws. The dock stays ignorant of what any of them
+     * mean, exactly as it stays ignorant of what a {@code .java} is.</p>
+     */
+    @Nullable
+    private Function<DockPanelRef, String> decorationProvider;
+
+    public DockPanelRegistry<C> setDecorationProvider(@Nullable Function<DockPanelRef, String> provider) {
+        this.decorationProvider = provider;
+        return this;
+    }
+
+    /** The {@code decoration-*} class for a panel's tab, or null. @see #setDecorationProvider */
+    @Nullable
+    public String decorationOf(DockPanelRef ref) {
+        return decorationProvider == null ? null : decorationProvider.apply(ref);
+    }
+
+    /**
      * Supplies a tab icon for panels that do not name one themselves — how a workbench says "a panel on a
      * {@code .java} file gets the java glyph" without the dock learning what a file type is.
      */

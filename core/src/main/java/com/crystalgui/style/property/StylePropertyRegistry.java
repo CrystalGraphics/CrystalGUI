@@ -252,6 +252,24 @@ public class StylePropertyRegistry {
             create("text-decoration-line", (Class) Set.class, java.util.Collections.emptySet(),
                     TextDecorationLineValue::new).setInheritable(true);
 
+    /**
+     * CSS {@code text-decoration-color}, with CSS's own {@code currentColor} default.
+     *
+     * <p>{@code 0} means "the text's colour", which is what the backend already spelled: a
+     * {@code CgTextDecorationRect} has always carried its own ARGB and had no way to be told one, so an
+     * underline was the glyphs' colour by construction rather than by choice.</p>
+     *
+     * <p>The case that wanted it is a file the compiler has rejected. Recolouring the <b>name</b> is what
+     * both references use for version control, so a red filename in a project tree reads as "untracked",
+     * not "broken" — the mark has to be a rule under the name rather than the name itself.</p>
+     *
+     * <p>Inheritable, like {@code color} and like {@code text-decoration-line} beside it, so a rule on a
+     * row reaches the label inside it — which is the only reason this is usable from a decoration class
+     * that lands on the row rather than on its text.</p>
+     */
+    public static final StyleProperty<Integer> TEXT_DECORATION_COLOR =
+            create(new ColorProperty("text-decoration-color", 0)).setInheritable(true);
+
     // CSS `scroll-behavior`. Purely a paint/animation concern, so no Taffy listener.
     public static final StyleProperty<ScrollBehavior> SCROLL_BEHAVIOR =
             create("scroll-behavior", ScrollBehavior.class, ScrollBehavior.AUTO);

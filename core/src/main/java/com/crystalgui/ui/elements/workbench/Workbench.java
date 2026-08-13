@@ -42,6 +42,7 @@ import com.crystalgui.ui.elements.dock.DockPath;
 import com.crystalgui.ui.elements.dock.DockPanelRegistry;
 import com.crystalgui.ui.elements.editor.EditorCommands;
 import com.crystalgui.ui.elements.editor.TextEditor;
+import com.crystalgui.ui.elements.workbench.decoration.DiagnosticDecorations;
 import com.crystalgui.ui.elements.workbench.document.TextFileDocument;
 
 import java.util.ArrayList;
@@ -377,6 +378,20 @@ public class Workbench extends UIElement {
         // The explorer IS the workspace's undo scope. UndoScope.nearest walks outward from focus, so
         // Ctrl+Z in the tree reaches file operations and Ctrl+Z in an editor still reaches its own text.
         this.fileTree.setUndoStack(fileService.undoStack());
+        // PROBLEMS AS A DECORATION. Everything for this already existed -- the weights, the
+        // `.decoration-error` classes, the tree's own resolve-and-apply -- and nothing read Markers.
+        //
+        // Through `pendingRefresh` rather than a direct refresh, for the reason FileDecorations records:
+        // a provider can fire from inside a click handler on a row, and a widget must never rebuild the
+        // elements it is being clicked on.
+        this.fileTree.getDecorations().addProvider(new DiagnosticDecorations(markers));
+        // ONE SIGNAL, BOTH SURFACES. The tree redraws from the decorations' own announcement; the tabs
+        // have to be told, because a tab is not a decoration consumer -- it pulls a class when it is
+        // built and has no reason to look again on its own.
+        markers.onDidChange.connect(resource -> {
+            fileTree.getDecorations().invalidate();
+            syncTabDecorations();
+        });
         fileTree.onFileChosen.connect(this::openFile);
         fileTree.onFilesDropped.connect(this::dropFiles);
         // RENDERED FROM THE RESULT, never from the call site. One update path serves this client's own
@@ -398,6 +413,7 @@ public class Workbench extends UIElement {
         // someone who noticed.
         registry.setTitleProvider(this::tabTitleFor);
         registry.setIconProvider(Workbench::tabIconFor);
+        registry.setDecorationProvider(this::tabDecorationFor);
 
         // Anchors match where defaultLayout() puts them, so closing a panel and reopening it from the
         // activity bar lands it back where it was rather than somewhere merely legal.
@@ -1249,6 +1265,38 @@ public class Workbench extends UIElement {
         if (path.isEmpty()) return null;
         String title = panel.state(DockPanelRef.TITLE, CgPath.parse(path).name());
         return isDirty(CgPath.parse(path)) ? title + DIRTY_MARKER : title;
+    }
+
+    /**
+     * How a tab is coloured — the same answer the file's row in the tree gets, from the same providers.
+     *
+     * <p>Asked of {@link FileDecorations} rather than of {@code markers} directly, and that is the point
+     * of routing it this way: a tab and a tree row showing different things about one file is precisely
+     * the disagreement a shared model exists to prevent, and everything else that decorates a file —
+     * dirty state, VCS, whatever comes next — reaches the tab for free rather than needing a second
+     * mechanism per surface.</p>
+     *
+     * <p><b>Not bubbled and not directory-resolved</b>: a tab is always a file.</p>
+     */
+    @Nullable
+    private String tabDecorationFor(DockPanelRef panel) {
+        String path = panel.state(PATH_STATE, "");
+        if (path.isEmpty()) return null;
+        // NULL IS THE ORDINARY ANSWER -- an undecorated file is the state nearly every file is in, and
+        // resolve() says so with null rather than with an empty decoration.
+        var decoration = fileTree.getDecorations().resolve(CgPath.parse(path), false);
+        return decoration == null ? null : decoration.styleClass();
+    }
+
+    /**
+     * Re-reads every open tab's decoration.
+     *
+     * <p>Through the dock's own {@code refreshPanelPresentation} rather than by walking leaves to groups
+     * to tabs — the walk {@code DockArea} explicitly warns callers off, because it keeps compiling long
+     * after the dock changes how a tab is built.</p>
+     */
+    private void syncTabDecorations() {
+        for (DockPanelRef panel : dock.allPanels()) dock.refreshPanelPresentation(panel);
     }
 
     /**

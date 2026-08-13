@@ -1546,6 +1546,30 @@ projectfiletree .__project-row__.__selected__ {
     color: var(--tree-selected-fg, #FFFFFF);
 }
 
+/* ── A FILE THE COMPILER HAS REJECTED ─────────────────────────────────────────────────────────────
+ *
+ * A RULE UNDER THE NAME, never the name's colour. Both references recolour a filename for VERSION
+ * CONTROL — a red name in a project tree reads as "untracked", not "broken" — so tinting it here would
+ * be saying something the reader already has a meaning for. IntelliJ marks a broken file by underlining
+ * it and leaving the name alone, which is what this does.
+ *
+ * That needed `text-decoration-color` to exist: a decoration was drawn in the glyphs' colour by
+ * construction, so "red underline, unchanged text" was not expressible. The backend's rect had carried
+ * its own ARGB since it was written and nothing upstream could say what it was.
+ *
+ * ERRORS ONLY. A decoration on a filename is read at a glance down a whole tree and its only useful
+ * question is "is this broken"; marking warnings makes most files marked most of the time. The graded
+ * answer is in the inspection widget and the Problems panel, which have room to be precise.
+ *
+ * IN THE UA SHEET rather than in `decorations.css`, because that sheet is a VCS palette a host opts
+ * into and nothing loads it today — a rule filed there is a rule that never runs. This is structural
+ * chrome, like the severity icons the Problems panel already carries here. */
+projectfiletree .__project-row__.decoration-error text,
+tab.decoration-error {
+    text-decoration-line: underline;
+    text-decoration-color: var(--decoration-error, #F14C4C);
+}
+
 
 /* ── The editor ──
  * The whole application: a workbench, the panels it ships, and the commands it answers to. */
