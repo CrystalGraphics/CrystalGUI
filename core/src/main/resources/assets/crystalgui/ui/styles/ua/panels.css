@@ -471,10 +471,21 @@ problemspanel .__problem__ .__severity__.severity-error {
     color: var(--problems-error-fg, #DB5C5C);
 }
 
+/* THE TRAILING SLOT FOLLOWS THE TEXT, not the row's edge — `:17` on a problem, the count on a file
+ * heading. Growing the message pushes whatever comes after it to the far right of a wide panel, where it
+ * reads as a column of its own rather than as a fact about the line beside it; at any real panel width
+ * that is most of a screen away from the message it belongs to.
+ *
+ * This rule was already written once, scoped to `.__problem-file__` so only the heading's count came
+ * back — the problem rows underneath kept pushing their line number away, which is the half you actually
+ * read. It belongs on both, so it is stated once here and the heading-only copy is gone.
+ *
+ * `flex-shrink` stays 1: with nothing growing, a long message is sized to its own content and simply
+ * shrinks when the row runs out of room, ellipsising as before with the line number still on screen. */
 problemspanel .__problem__ .__message__ {
     font-size: 7px;
     color: var(--problems-message-fg, #DFE1E5);
-    flex-grow: 1;
+    flex-grow: 0;
     flex-shrink: 1;
     min-width: 0px;
     text-overflow: ellipsis;
@@ -521,12 +532,19 @@ problemspanel .__problem__.__problem-file__ .__message__ {
 }
 
 /* THE FOLDER, beside the filename — VS Code's second column, dim because it disambiguates rather than
- * identifies. The same slot carries `:591` on a problem row, which is why one rule serves both. */
+ * identifies. The same slot carries `:591` on a problem row, which is why one rule serves both.
+ *
+ * NO PADDING OF ITS OWN. The row already sets `gap-all: 6px`, which applies between EVERY pair of
+ * children — so a padding here is added to a gap that is already there, and the number drifted ten
+ * pixels off the message it belongs to. It is not a separate column: a message and its line number are
+ * one location, read as one thing, and IntelliJ sets them a single space apart. The 6px that remains is
+ * the row's gap, and cancelling that for this one pair would take a negative margin here rather than a
+ * change to the row — the gap is wanted between the icon and the message. */
 problemspanel .__problem__ .__line__ {
     font-size: 7px;
     color: var(--problems-tree-line-fg, #6B6E76);
     flex-shrink: 0;
-    padding-left: 4px;
+    padding-left: -3px;
 }
 
 /* HOW MANY PROBLEMS ARE IN THIS FILE. Trailing, so it sits at a fixed place down the column rather than
@@ -561,9 +579,3 @@ problemspanel .__problem__.__leaf__ .__twisty__ {
     overlay: none;
 }
 
-/* THE COUNT FOLLOWS THE FILENAME, not the row's trailing edge. Growing the label pushes it to the far
- * right of a wide panel, where it reads as a column of its own rather than as a fact about the file
- * beside it -- and at this panel's width that is most of a screen away from the name it belongs to. */
-problemspanel .__problem__.__problem-file__ .__message__ {
-    flex-grow: 0;
-}
