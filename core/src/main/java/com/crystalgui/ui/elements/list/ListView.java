@@ -478,6 +478,10 @@ public class ListView<T> extends ScrollerView {
         }
 
         int count = model.size();
+
+        // A FOCUSED INDEX PAST THE MODEL IS A LIE, and it must die here rather than sit and wait.
+        if (focusedIndex >= count) focusedIndex = -1;
+
         if (count == 0) {
             recycleAll();
             return;
@@ -508,7 +512,15 @@ public class ListView<T> extends ScrollerView {
         lastRealised = last;
         // Deferred by a frame, deliberately — see restoreFocusIfRealised.
         focusRestoreWanted = focusedIndex >= 0;
+        
+        if (focusBlurredByRecycle) {
+            focusBlurredByRecycle = false;
+            restoreFocusIfRealised();
+        }
     }
+
+    /** Set when {@link #recycle} pooled the element that held focus — see {@link #updateWindow()}. */
+    private boolean focusBlurredByRecycle;
 
     /**
      * How far down the scrollport the first row starts. Zero for a plain list.
@@ -927,7 +939,16 @@ public class ListView<T> extends ScrollerView {
         var window = getAttachedWindow();
         recycling = true;
         try {
+            // NOTED, because this blur leaves the WHOLE WINDOW with no focus owner until the restore runs
+            // -- see updateWindow, which closes that gap in the same frame rather than a frame later.
+            if (window != null && window.getInputHandler().getFocusedElement() == row) {
+                focusBlurredByRecycle = true;
+            }
             if (window != null) window.getInputHandler().blurIfFocused(row);
+            // AND HOVER, for the identical reason focus is given up above: the element stops representing
+            // anything, so it cannot still be the thing the pointer is over. Missing, the flag rides the
+            // element through the pool and an untouched row comes back wearing :hover.
+            if (window != null) window.getInputHandler().clearHoverIfHovered(row);
             renderer.unbind(row);
         } finally {
             recycling = false;

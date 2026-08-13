@@ -123,6 +123,31 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         blurIfFocused(element);
     }
 
+    /**
+     * The element is about to represent something else — so it cannot still be what the pointer is over.
+     *
+     * <p>The narrow half of {@link #forgetElement}, for an element that is <b>not</b> leaving the tree: a
+     * pooled list row is deliberately kept as a {@code display: none} child so its Taffy node and style
+     * candidates survive, and it comes back bound to a different item. {@code recycle} already gives up
+     * <em>focus</em> for exactly this reason — "the element must give focus up the moment it stops
+     * representing anything" — and hover is the same sentence with a different word in it.</p>
+     *
+     * <p>Without it the flag rides the element through the pool: fold a heading with the pointer on its
+     * chevron, unfold it, and the element that was the heading comes back as some row further down still
+     * wearing {@code :hover}, so an untouched row lights up. The next hover diff does correct it, which is
+     * why it presents as a two-or-three-frame flash rather than a stuck highlight — and why it reads as a
+     * paint glitch rather than as state.</p>
+     *
+     * <p>{@code lastFrameHover} is dropped as well as the flag, so the next diff treats the pointer as
+     * newly entering whatever is genuinely under it. Leaving it set would suppress the very Enter that
+     * repairs this when the recycled element happens to still be under the cursor.</p>
+     */
+    public void clearHoverIfHovered(UIElement element) {
+        if (element == null) return;
+        if (lastFrameHover == element) lastFrameHover = null;
+        element.setHovered(false);
+    }
+
     public void sendInputEvent(UIElement element, UIEvent event) {
         if (element == null) return;
         UIElement[] path = UITreeTraversal.pathToRoot(element); // root-first, path[path.length - 1] == element
@@ -602,15 +627,32 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         // dialog's text field the moment you click its dim backdrop, which no dialog anywhere does.
         boolean absorbedByModal = targetElement == null && window.getActiveModal() != null;
 
-        if (targetElement != focusedElement && !absorbedByModal) {
+        // THE NEAREST FOCUSABLE ANCESTOR, not the exact element hit — the DOM's rule, which is why
+        // clicking a <button>'s inner text focuses the button.
+        //
+        // Composites used to dodge this by making their parts `setHitTest(false)`, which works right up
+        // until a part is itself interactive: a tree's fold chevron has to keep the pointer, and it is
+        // never focusable. So a press on it blurred the focus owner here and then focused NOTHING, and
+        // the fold left the whole window with `focusedElement == null` — no ring anywhere, and
+        // `consumeKeyboardEvent` dispatches nothing at all in that state, so the keyboard went dead.
+        // Reported as the Problems panel flickering: the ring left the editor tab on the press, and
+        // `ListView.restoreFocusIfRealised` then read null as "nobody owns this" and pulled focus onto a
+        // row. Two chevrons had it, `GraphNode` works around it with its own `requestFocus`, and the
+        // walk is what covers every composite at once.
+        UIElement focusTarget = targetElement;
+        while (focusTarget != null && !focusTarget.getFocusPolicy().focusesOnClick()) {
+            focusTarget = focusTarget.getParent();
+        }
+
+        if (focusTarget != focusedElement && !absorbedByModal) {
             if (focusedElement != null) {
                 emitAndLoseFocus(focusedElement);
             }
-            if (targetElement != null && targetElement.getFocusPolicy().focusesOnClick()) {
+            if (focusTarget != null) {
                 // Deliberately no scroll: you clicked what you could already see, and scrolling
                 // here would pull the content out from under the cursor. Nor a focus ring, unless
                 // this is a text field — see emitAndSetFocus.
-                emitAndSetFocus(targetElement, FocusSource.POINTER);
+                emitAndSetFocus(focusTarget, FocusSource.POINTER);
             }
         }
 
