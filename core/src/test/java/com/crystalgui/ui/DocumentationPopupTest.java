@@ -270,8 +270,7 @@ public class DocumentationPopupTest extends UiTestBase {
      */
     @Test
     public void fallingBackToTheAssembledLineClearsTheEnginesTokens() {
-        show(field("println", "void").withSignature(Signature.plain("public void println()")
-                .text().isEmpty() ? null : new Signature("public void println()",
+        show(field("println", "void").withSignature(new Signature("public void println()",
                 List.of(new SyntaxToken(0, 6, "keyword")))));
         assertFalse(rangesOf("keyword").isEmpty());
 

@@ -1,6 +1,5 @@
 package com.crystalgui.ui.elements.editor;
 
-import com.crystalgui.core.signal.Signal;
 import com.crystalgui.text.lang.Signature;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
