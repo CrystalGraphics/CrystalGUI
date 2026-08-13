@@ -60,9 +60,25 @@ final class JavaCompletionProvider implements CompletionProvider {
     /** Past this the list is truncated and reported {@link CompletionList#incomplete} so the session re-asks. */
     private static final int MAX_ITEMS = 300;
 
+    /**
+     * A name inserted at the caret so the parser has something to hang the expression on.
+     *
+     * <p>Deliberately unlikely, and IntelliJ's own trick — its is {@code IntellijIdeaRulezzz}. The point is
+     * only that it cannot collide with a real identifier in the file: it is inserted, parsed against, and
+     * thrown away, and if it ever matched something real the resolution would be of the user's symbol
+     * rather than of the expression being completed.</p>
+     */
+    private static final String COMPLETION_PROBE = "CrystalGuiCompletionProbe";
+
     private final TextBuffer buffer;
     private final Supplier<SourceAnalyzer.Analysis> analysis;
     private final TypeIndex types;
+
+    /**
+     * Analyses arbitrary text — used only for the probe parse below, and only when the ordinary analysis
+     * could not resolve a receiver.
+     */
+    private final java.util.function.Function<String, SourceAnalyzer.Analysis> reanalyse;
 
     /** Set by {@link #openCodeItems} whenever the answer drew on the type index. */
     private boolean typesSampled;
@@ -70,10 +86,12 @@ final class JavaCompletionProvider implements CompletionProvider {
     /** Set by {@link #memberItems} when the receiver did not resolve — see the note there. */
     private boolean unresolvedReceiver;
 
-    JavaCompletionProvider(TextBuffer buffer, Supplier<SourceAnalyzer.Analysis> analysis, TypeIndex types) {
+    JavaCompletionProvider(TextBuffer buffer, Supplier<SourceAnalyzer.Analysis> analysis, TypeIndex types,
+                           java.util.function.Function<String, SourceAnalyzer.Analysis> reanalyse) {
         this.buffer = buffer;
         this.analysis = analysis;
         this.types = types;
+        this.reanalyse = reanalyse;
     }
 
     @Override
@@ -132,24 +150,79 @@ final class JavaCompletionProvider implements CompletionProvider {
         int probe = Math.max(0, nameEnd - 1);
 
         SymbolInfo receiver = current.resolveAt(probe);
-        TypeRef type = receiver == null ? null : receiver.type();
-        if (type == null) {
-            // COULD NOT RESOLVE, and that is usually a matter of timing rather than of the code. The popup
-            // opens on the keystroke; the analysis behind it is up to a debounce old and was taken from
-            // text without this dot in it. Reporting an empty COMPLETE list caches that failure for the
-            // life of the session, which is what left a popup with nothing in it until something was typed.
+        if (receiver == null || receiver.type() == null) {
+            // A TRAILING DOT WITH NOTHING AFTER IT IS NOT A PARSEABLE EXPRESSION.
+            //
+            // `ctx.` on its own gives recovery nothing to hang the member access on, so there is no node at
+            // that offset and no binding -- which is why typing one more character made the list appear and
+            // made this look like a timing problem. It is not: the same text parses the same way however
+            // long you wait.
+            //
+            // So parse a copy with a name inserted at the caret. That is IntelliJ's own answer (its probe is
+            // literally called IntellijIdeaRulezzz) and it is the only way to ask "what could go HERE" of a
+            // parser that answers questions about complete expressions.
+            //
+            // Only on failure, so the ordinary path -- where a prefix has already been typed -- pays nothing
+            // for it.
+            return probedMemberItems(caret);
+        }
+        return membersFrom(current, receiver, caret);
+    }
+
+    /**
+     * Re-parses with {@link #COMPLETION_PROBE} at the caret, and answers from that.
+     *
+     * <p>The probe offset is <em>before</em> the insertion point, so it needs no adjustment — the receiver
+     * is to the left of the dot and the insertion is to the right of it.</p>
+     *
+     * <p>The analysis is closed here rather than retained: it describes text the document does not contain,
+     * and keeping it would mean two analyses claiming to be about one file. Its cost is one parse, paid only
+     * when the ordinary one could not answer.</p>
+     */
+    private List<CompletionItem> probedMemberItems(int caret) {
+        if (reanalyse == null) {
             unresolvedReceiver = true;
             return List.of();
         }
+        String text = buffer.toString();
+        int at = Math.max(0, Math.min(caret, text.length()));
+        SourceAnalyzer.Analysis probed =
+                reanalyse.apply(text.substring(0, at) + COMPLETION_PROBE + text.substring(at));
+        if (probed == null) {
+            unresolvedReceiver = true;
+            return List.of();
+        }
+        try {
+            int dot = receiverEndingAt(at);
+            if (dot < 0) {
+                unresolvedReceiver = true;
+                return List.of();
+            }
+            int nameEnd = dot;
+            while (nameEnd > 0 && Character.isWhitespace(text.charAt(nameEnd - 1))) nameEnd--;
+            SymbolInfo receiver = probed.resolveAt(Math.max(0, nameEnd - 1));
+            if (receiver == null || receiver.type() == null) {
+                unresolvedReceiver = true;
+                return List.of();
+            }
+            return membersFrom(probed, receiver, at);
+        } finally {
+            probed.close();
+        }
+    }
 
-        // STATIC ACCESS OFFERS STATIC MEMBERS. `Foo.` is a type name, and an instance method reached
-        // through one does not compile -- so offering it is offering a mistake, which is worse than
-        // offering nothing because the list looks authoritative and the error arrives after acceptance.
-        // The same rule membersOf already applies to accessibility.
+    /**
+     * The members of {@code receiver}, filtered by how it is being reached.
+     *
+     * <p><b>Static access offers static members.</b> {@code Foo.} is a type name, and an instance method
+     * reached through one does not compile — so offering it is offering a mistake, which is worse than
+     * offering nothing because the list looks authoritative and the error arrives after acceptance. The
+     * same rule {@code membersOf} already applies to accessibility.</p>
+     */
+    private List<CompletionItem> membersFrom(SourceAnalyzer.Analysis from, SymbolInfo receiver, int caret) {
         boolean staticAccess = receiver.kind() != null && isTypeKind(receiver.kind());
-
         List<CompletionItem> items = new ArrayList<>();
-        for (SymbolInfo member : current.membersOf(type, caret)) {
+        for (SymbolInfo member : from.membersOf(receiver.type(), caret)) {
             if (staticAccess && !member.is(SymbolModifier.STATIC)) continue;
             items.add(itemFor(member));
         }
