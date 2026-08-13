@@ -9,6 +9,7 @@ import com.crystalgui.text.lang.CompletionList;
 import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.lang.LanguageServices;
 import com.crystalgui.text.lang.SymbolKind;
+import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.text.lang.Versioned;
 
 import org.junit.After;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -338,5 +340,43 @@ public class JavaMemberCompletionTest {
 
         assertTrue("AbstractMethodError is the JDK's own and should be reachable: " + labels,
                 labels.contains("AbstractMethodError"));
+    }
+
+    /**
+     * A type name offers only what you can reach through one.
+     *
+     * <p>An instance method reached through a type name does not compile, so offering it is offering a
+     * mistake — worse than offering nothing, because the list looks authoritative and the error arrives
+     * after acceptance. The same rule {@code membersOf} already applies to accessibility.</p>
+     */
+    @Test
+    public void staticAccessOffersOnlyStaticMembers() {
+        List<CompletionItem> items = completeAfterTheDot(AFTER_THE_DOT);
+        assertFalse("the list should not be empty", items.isEmpty());
+
+        for (CompletionItem item : items) {
+            assertTrue("instance member offered through a type name: " + item.label(),
+                    item.is(SymbolModifier.STATIC));
+        }
+        // ...and the statics really are there, so this cannot pass by offering nothing at all.
+        assertTrue(labelsOf(items).contains("currentTimeMillis()"));
+        assertTrue(labelsOf(items).contains("out"));
+    }
+
+    /** An INSTANCE receiver is unaffected — the negative control for the filter above. */
+    @Test
+    public void anInstanceReceiverKeepsItsInstanceMembers() {
+        String source = ""
+                + "class Demo {\n"
+                + "    void run() {\n"
+                + "        String s = \"x\";\n"
+                + "        s.\n"
+                + "    }\n"
+                + "}\n";
+        int caret = source.indexOf("s.\n") + 2;
+        List<String> labels = labelsOf(completeAt(source, caret, "", true));
+
+        assertTrue("substring is an instance method and must survive: " + labels,
+                labels.contains("substring(int)"));
     }
 }

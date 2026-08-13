@@ -285,6 +285,20 @@ public final class CompletionSession {
         if (!closed) refilter();
     }
 
+    /**
+     * Asks the provider again at the current caret, without the user having typed.
+     *
+     * <p>For the moment a fresh analysis lands. The popup opens on a keystroke and the engine is a debounce
+     * behind it, so completing straight after a {@code .} routinely asks a compiler that has not seen the
+     * dot yet — and the honest answer then is "I cannot resolve that receiver". Waiting for the next
+     * keystroke to re-ask means the popup sits there empty until you type something, which is precisely how
+     * it was reported.</p>
+     */
+    public void retrigger() {
+        if (closed) return;
+        request(lastKnownCaret, CompletionProvider.TriggerKind.RETRIGGER, null);
+    }
+
     public int selectedIndex() {
         return selected;
     }
