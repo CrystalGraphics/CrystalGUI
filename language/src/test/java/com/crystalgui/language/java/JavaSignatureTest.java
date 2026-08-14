@@ -14,7 +14,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.Assert.*;
 
@@ -170,7 +172,10 @@ public class JavaSignatureTest {
 
         assertEquals("public final class Script implements Serializable", signature.text());
         assertEquals("keyword", captureOf(signature, "class"));
-        assertEquals("type", captureOf(signature, "Serializable"));
+        // `type.interface`, NOT `type` -- Serializable is one, and only a binding can say so, since the
+        // three type declarations are spelled identically at every use site. A scheme with nothing to
+        // add still draws it as a type: a dotted capture publishes under its general form too.
+        assertEquals("type.interface", captureOf(signature, "Serializable"));
     }
 
     /**
@@ -668,9 +673,46 @@ public class JavaSignatureTest {
 
         assertTrue("the flattener's comma spacing survived: <" + signature.text() + ">",
                 signature.text().contains("\"one\", \"two\""));
-        assertEquals("the invoked method should be captured", "function.call",
+        // `function.static`, because `List.of` IS static and the analyzer knows it. Two visitors reach
+        // this name -- MethodInvocation claims it so a call is coloured with no analyzer attached, then
+        // SimpleName asks the one that knows more -- and the later, better-informed answer wins. Keeping
+        // both used to be the behaviour and it threw out of the popup: HighlightRegistry refuses two
+        // ranges of one name that overlap, so any signature containing a call failed to render at all.
+        assertEquals("the invoked method should be captured", "function.static",
                 captureOf(signature, "of"));
         assertEquals("and its string arguments too", "string", captureOf(signature, "\"one\""));
+    }
+
+    /**
+     * <b>No two captures share a range</b> — a rendering rule, not a tidiness one.
+     *
+     * <p>{@code HighlightRegistry.set} rejects two ranges of one name that overlap, and the popup groups
+     * a signature's tokens by name before handing them over. So a duplicate is not a redundant entry that
+     * gets ignored: it is an {@code IllegalArgumentException} thrown out of {@code renderDefinition}, and
+     * the symptom is the whole harness dying on a hover rather than a mis-coloured word.</p>
+     *
+     * <p>It happened because two visitors legitimately reach one node — the invocation claims its own
+     * name so a call is still coloured with no analyzer attached, and the name then asks the analyzer,
+     * which knows more. Both answers were kept. Asserted over the whole token list rather than at the one
+     * node that broke, because the next duplicate will come from a different pair of visitors.</p>
+     */
+    @Test
+    public void noTwoCapturesCoverTheSameRange() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    void run() {\n"
+                + "        List<String> names = List.of(\"one\", Integer.toString(2));\n"
+                + "    }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "names");
+
+        Set<String> seen = new HashSet<>();
+        for (SyntaxToken token : signature.tokens()) {
+            String range = token.start() + ".." + token.end();
+            assertTrue("two captures over " + range + " in <" + signature.text() + ">: "
+                    + token.name(), seen.add(range));
+        }
     }
 
     /** {@code new Foo(...)} in an initializer keeps its keyword and its type distinct. */

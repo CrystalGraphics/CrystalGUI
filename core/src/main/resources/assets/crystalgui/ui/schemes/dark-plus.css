@@ -71,6 +71,13 @@ theme {
     --syntax-keyword-operator: #569CD6;
     --syntax-type: #4EC9A0;
     --syntax-type-parameter: #4EC9A0;
+
+    /* AN INTERFACE AND AN ENUM, which only an engine can tell from a class -- the three are
+     * spelled identically at every use site. This scheme draws all three alike -- it overrides neither
+     * DEFAULT_INTERFACE_NAME nor ENUM_NAME, so agreeing with the class colour IS the port. */
+    --syntax-type-interface: #4EC9A0;
+    --syntax-type-enum: #4EC9A0;
+    --syntax-type-enum-style: normal;
     --syntax-type-builtin: #569CD6;
     --syntax-type-qualifier: #569CD6;
     --syntax-function: #DCDCAA;
@@ -98,6 +105,7 @@ theme {
     --syntax-variable-captured: #9CDCFE;
     --syntax-captured-underline: #569CD6;
     --syntax-reassigned-underline: #808080;
+    --syntax-parameter-reassigned-underline: #808080;
     --syntax-property: #9CDCFE;
     --syntax-attribute: #9CDCFE;
     --syntax-tag: #569CD6;
@@ -105,6 +113,9 @@ theme {
     --syntax-embedded: #D4D4D4;
     --syntax-label: #C586C0;
     --syntax-markup: #D4D4D4;
+
+    /* A PACKAGE PATH -- `java.util` in an import. Body text, which is what this scheme shows for a package path. */
+    --syntax-module: #D4D4D4;
     --syntax-error: #F44747;
     /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
      * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
@@ -121,6 +132,9 @@ theme {
      * shipping the mechanism with nothing exercising it. */
     --syntax-comment-style: normal;
     --syntax-constant-style: normal;
+    --syntax-keyword-weight: normal;
+    --syntax-constant-weight: normal;
+    --syntax-bracket-weight: normal;
 
     /* The bracket-MATCH highlight, which is not a capture — it is the pair under the caret. */
     --syntax-bracket: #4EC9A0;

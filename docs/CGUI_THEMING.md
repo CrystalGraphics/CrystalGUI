@@ -111,6 +111,7 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
+
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -496,6 +497,7 @@ editor scheme's.
 | `--syntax-attribute` | `#9CDCFE` | dark-plus.css |
 | `--syntax-boolean` | `#569CD6` | dark-plus.css |
 | `--syntax-bracket` | `#4EC9A0` | dark-plus.css |
+| `--syntax-bracket-weight` | `normal` | dark-plus.css |
 | `--syntax-captured-underline` | `#569CD6` | dark-plus.css |
 | `--syntax-comment` | `#6A9955` | dark-plus.css |
 | `--syntax-comment-doc` | `#6A9955` | dark-plus.css |
@@ -503,6 +505,7 @@ editor scheme's.
 | `--syntax-constant` | `#4FC1FF` | dark-plus.css |
 | `--syntax-constant-builtin` | `#569CD6` | dark-plus.css |
 | `--syntax-constant-style` | `normal` | dark-plus.css |
+| `--syntax-constant-weight` | `normal` | dark-plus.css |
 | `--syntax-constructor` | `#4EC9A0` | dark-plus.css |
 | `--syntax-deprecated` | `#808080` | dark-plus.css |
 | `--syntax-embedded` | `#D4D4D4` | dark-plus.css |
@@ -517,10 +520,13 @@ editor scheme's.
 | `--syntax-keyword` | `#569CD6` | dark-plus.css |
 | `--syntax-keyword-control` | `#C586C0` | dark-plus.css |
 | `--syntax-keyword-operator` | `#569CD6` | dark-plus.css |
+| `--syntax-keyword-weight` | `normal` | dark-plus.css |
 | `--syntax-label` | `#C586C0` | dark-plus.css |
 | `--syntax-markup` | `#D4D4D4` | dark-plus.css |
+| `--syntax-module` | `#D4D4D4` | dark-plus.css |
 | `--syntax-number` | `#B5CEA8` | dark-plus.css |
 | `--syntax-operator` | `#D4D4D4` | dark-plus.css |
+| `--syntax-parameter-reassigned-underline` | `#808080` | dark-plus.css |
 | `--syntax-property` | `#9CDCFE` | dark-plus.css |
 | `--syntax-punctuation` | `#808080` | dark-plus.css |
 | `--syntax-punctuation-bracket` | `#808080` | dark-plus.css |
@@ -532,6 +538,9 @@ editor scheme's.
 | `--syntax-tag` | `#569CD6` | dark-plus.css |
 | `--syntax-type` | `#4EC9A0` | dark-plus.css |
 | `--syntax-type-builtin` | `#569CD6` | dark-plus.css |
+| `--syntax-type-enum` | `#4EC9A0` | dark-plus.css |
+| `--syntax-type-enum-style` | `normal` | dark-plus.css |
+| `--syntax-type-interface` | `#4EC9A0` | dark-plus.css |
 | `--syntax-type-parameter` | `#4EC9A0` | dark-plus.css |
 | `--syntax-type-qualifier` | `#569CD6` | dark-plus.css |
 | `--syntax-unresolved` | `#F44747` | dark-plus.css |
@@ -568,4 +577,5 @@ editor scheme's.
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
+
 <!-- TOKENS:END -->

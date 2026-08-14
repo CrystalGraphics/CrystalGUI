@@ -29,6 +29,7 @@ import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ForStatement;
 import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
+import org.eclipse.jdt.core.dom.IPackageBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.LambdaExpression;
 import org.eclipse.jdt.core.dom.IVariableBinding;
@@ -364,8 +365,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 // A TYPE VARIABLE IS NOT A CLASS. `<E>` is a placeholder the declaration introduces, and
                 // both references give it its own colour; a grammar cannot tell it from a class name
                 // because the two are spelled identically.
-                return ((ITypeBinding) binding).isTypeVariable()
-                        ? SymbolKind.TYPE_PARAMETER.captureName() : SymbolKind.CLASS.captureName();
+                return JavaSignatures.typeCapture((ITypeBinding) binding);
             }
             if (binding instanceof IMethodBinding) {
                 if (((IMethodBinding) binding).isConstructor()) {
@@ -373,6 +373,12 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 }
                 return methodCapture(name, (IMethodBinding) binding);
             }
+            // A PACKAGE SEGMENT. `java` and `util` in an import are package bindings, and nothing was
+            // answering for them -- so every import read as body text with one coloured word at the end,
+            // while IntelliJ tints the whole path. The grammar cannot help: its rule for a scoped
+            // identifier is a CAPITALISATION heuristic, so `com.crystalgui` is invisible to it by
+            // construction and `Foo.bar` is a false positive.
+            if (binding instanceof IPackageBinding) return SymbolKind.PACKAGE.captureName();
             return null;
         }
 

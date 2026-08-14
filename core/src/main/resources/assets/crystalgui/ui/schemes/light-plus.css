@@ -56,6 +56,13 @@ theme {
     --syntax-keyword-operator: #0000FF;
     --syntax-type: #267F99;
     --syntax-type-parameter: #267F99;
+
+    /* AN INTERFACE AND AN ENUM, which only an engine can tell from a class -- the three are
+     * spelled identically at every use site. This scheme draws all three alike -- it overrides neither
+     * DEFAULT_INTERFACE_NAME nor ENUM_NAME, so agreeing with the class colour IS the port. */
+    --syntax-type-interface: #267F99;
+    --syntax-type-enum: #267F99;
+    --syntax-type-enum-style: normal;
     --syntax-type-builtin: #0000FF;
     --syntax-type-qualifier: #0000FF;
     --syntax-function: #795E26;
@@ -83,6 +90,7 @@ theme {
     --syntax-variable-captured: #001080;
     --syntax-captured-underline: #0070C1;
     --syntax-reassigned-underline: #909090;
+    --syntax-parameter-reassigned-underline: #909090;
     --syntax-property: #001080;
     --syntax-attribute: #E50000;
     --syntax-tag: #800000;
@@ -90,6 +98,9 @@ theme {
     --syntax-embedded: #000000;
     --syntax-label: #AF00DB;
     --syntax-markup: #000000;
+
+    /* A PACKAGE PATH -- `java.util` in an import. Body text, which is what this scheme shows for a package path. */
+    --syntax-module: #1F1F22;
     --syntax-error: #E51400;
     /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
      * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
@@ -101,5 +112,8 @@ theme {
     --syntax-punctuation-delimiter: #383838;
     --syntax-comment-style: normal;
     --syntax-constant-style: normal;
+    --syntax-keyword-weight: normal;
+    --syntax-constant-weight: normal;
+    --syntax-bracket-weight: normal;
     --syntax-bracket: #267F99;
 }

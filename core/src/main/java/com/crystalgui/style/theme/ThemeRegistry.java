@@ -64,6 +64,10 @@ public final class ThemeRegistry {
         registerScheme("crystalgui:islands-light");
         registerScheme("crystalgui:dark-plus");
         registerScheme("crystalgui:light-plus");
+        // Last because it is the outlier: Islands and Dark+ both keep a page calm and colour by
+        // category, Eclipse Dark colours nearly every identifier by KIND. Registered rather than
+        // omitted for the same reason Dark+ is — the choice is the user's.
+        registerScheme("crystalgui:eclipse-dark");
     }
 
     @Nullable
