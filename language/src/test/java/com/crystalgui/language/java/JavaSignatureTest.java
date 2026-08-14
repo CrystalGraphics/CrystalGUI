@@ -128,7 +128,12 @@ public class JavaSignatureTest {
         assertEquals("keyword", captureOf(signature, "public"));
         assertEquals("void is a primitive, and the editor draws primitives as builtins",
                 "type.builtin", captureOf(signature, "void"));
-        assertEquals("function.method", captureOf(signature, "println"));
+        // NOT `function.method`, which is the EDITOR's colour for a declaration and is emphasis rather
+        // than identity. In the editor blue distinguishes a declaration from the calls around it; in a
+        // popup there is one declaration and nothing to contrast with, so the emphasis says nothing and
+        // makes the subject the loudest thing in a box that is entirely about that subject. IntelliJ's
+        // own popup leaves it plain, and the parity rule is about what a name IS, not how loud it is.
+        assertEquals("function.call", captureOf(signature, "println"));
         assertEquals("variable.parameter", captureOf(signature, "text"));
     }
 
@@ -550,6 +555,48 @@ public class JavaSignatureTest {
      * <p>Hovering an {@code ArrayList<String>} reported {@code extends AbstractList<String>} — true of
      * that instantiation and not of the declaration, which is what documentation is about.</p>
      */
+    /**
+     * A type variable is teal <b>wherever it appears</b>, not only where it is declared.
+     *
+     * <p>Types used to be rendered as one opaque string carrying one capture, so the {@code E} in
+     * {@code List<E>} was flat while the {@code E} six characters earlier in the same header was teal.
+     * Fixed at the cause rather than per site: {@code appendTypeName} builds a type from its parts, so
+     * every position that renders one — supertypes, parameters, return types, throws, wildcards, arrays,
+     * nested generics, a {@code Class} literal in an annotation — gets it without being told.</p>
+     */
+    @Test
+    public void aTypeVariableIsColouredInsideEveryPositionThatRendersAType() {
+        String source = ""
+                + "import java.util.Collection;\n"
+                + "import java.util.List;\n"
+                + "public interface Script<E> extends List<E> {\n"
+                + "    void take(Collection<? extends E> from, E[] more);\n"
+                + "}\n";
+
+        Signature header = signatureAt(source, "Script<E> extends");
+        assertTrue("the supertype's argument is missing: <" + header.text() + ">",
+                header.text().contains("List<E>"));
+        int inSupertype = header.text().indexOf("List<E>") + 5;
+        assertEquals("the E inside the supertype should be a parameter too", "type.parameter",
+                captureAtOffset(header, inSupertype));
+
+        Signature method = signatureAt(source, "take");
+        assertTrue("a wildcard bound should survive: <" + method.text() + ">",
+                method.text().contains("? extends E"));
+        assertTrue("and an array of a variable: <" + method.text() + ">",
+                method.text().contains("E[]"));
+        assertEquals("the bound is a type parameter", "type.parameter",
+                captureAtOffset(method, method.text().indexOf("extends E") + 8));
+    }
+
+    /** The capture covering an exact offset in the rendered text. */
+    private static String captureAtOffset(Signature signature, int at) {
+        for (SyntaxToken token : signature.tokens()) {
+            if (token.start() <= at && token.end() > at) return token.name();
+        }
+        return null;
+    }
+
     @Test
     public void aGenericTypeShowsItsDeclarationRatherThanItsInstantiation() {
         String source = ""
