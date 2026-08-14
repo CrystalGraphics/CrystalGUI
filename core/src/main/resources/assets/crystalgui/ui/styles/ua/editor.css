@@ -322,8 +322,14 @@ texteditor .__indent-guide__ {
     font-style: var(--syntax-type-enum-style, normal);
 }
 
+/* A PRIMITIVE IS THE KEYWORD ATTRIBUTE, in both references — neither IntelliJ nor VS Code has a separate
+ * colour for `int`, `double` and `void`; they are lexer keywords and are drawn as such. That is already
+ * why every shipped scheme gives this the same colour as `keyword`, and it is why the WEIGHT is read from
+ * `--syntax-keyword-weight` rather than from a key of its own: under Eclipse Dark the whole line was bold
+ * except its return type, which reads as the one word having failed rather than as a deliberate palette. */
 .__syntax__::highlight(type.builtin) {
     color: var(--syntax-type-builtin, #569CD6);
+    font-weight: var(--syntax-keyword-weight, normal);
 }
 
 /* A STORAGE QUALIFIER IS A KEYWORD, not a type, and the dotted fallback gets this one wrong.

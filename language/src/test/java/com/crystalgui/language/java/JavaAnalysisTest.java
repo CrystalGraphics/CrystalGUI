@@ -371,6 +371,71 @@ public class JavaAnalysisTest {
     }
 
     @Test
+    public void anInstantiationIsCapturedAsTheCallItIs() {
+        // `new ArrayList<>()` is a CALL, and both references draw it as one. The grammar cannot: its
+        // `@constructor` capture covers a class name in `new X()` AND in `class X`, so the one
+        // distinction that matters here -- declaration versus use -- is the one it has folded away.
+        //
+        // The popup had already been corrected to ask the ClassInstanceCreation while the highlighter
+        // still asked the name, so the colour said "class" over a popup describing the constructor.
+        String source = ""
+                + "public class Script {\n"
+                + "    Object run() { return new java.util.ArrayList<>(); }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            assertEquals("function.call", captureAt(tokens, source, "ArrayList"));
+            // AND ONLY THE RIGHTMOST SEGMENT. The constructor is what the type's own name refers to; the
+            // qualifiers in front of it are still the package they were in an import line.
+            assertEquals("module", captureAt(tokens, source, "util"));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    @Test
+    public void aConstructorDeclarationIsStillADeclaration() {
+        // The other half of the split above, and the reason the constructor case can be deleted from
+        // captureFor rather than merely re-pointed: a constructor has a declaration form and a use form
+        // exactly as any other method does, so the test methodCapture already applies is the right one.
+        String source = ""
+                + "public class Script {\n"
+                + "    Script(int seed) { }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            int declaration = source.indexOf("Script(int");
+            assertEquals("function.method",
+                    captureAtIndex(analysis.semanticTokens(), declaration, "Script".length()));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    @Test
+    public void anArgumentOfAnInstantiationIsNotTheConstructor() {
+        // `new Message(text, Severity.INFO, 0L)` -- the argument sits inside the creation, and a walk
+        // that climbs any qualified name reaches it. Everything downstream was then individually right
+        // and collectively wrong: the constructor's kind and container, under the hovered word's name.
+        String source = ""
+                + "public class Script {\n"
+                + "    enum Severity { INFO }\n"
+                + "    static class Message { Message(String t, Severity s) { } }\n"
+                + "    Object run() { return new Message(\"x\", Severity.INFO); }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            int use = source.indexOf("Severity.INFO");
+            assertEquals("type.enum", captureAtIndex(tokens, use, "Severity".length()));
+            assertEquals("constant", captureAtIndex(tokens, use + 9, "INFO".length()));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    @Test
     public void anUnresolvedNameIsMarkedAsSuch() {
         // The exit criterion, and the inline half of what the diagnostic also says. Underlined rather
         // than recoloured by the sheet, so the name keeps whatever colour said WHAT it is.

@@ -13,6 +13,7 @@ since M3 with a stated reason.
 | 24.9 | Clicking a problem | **done** — reveal is the continuation of the open |
 | 24.2 | Go-to-definition | **done** — `Mod+B`, Ctrl+Click, 6 tests |
 | 24.1 | Quick Documentation | **done** — `Mod+Q` + hover, `DocumentationPopup`, engine-rendered `Signature`, 14 + 8 tests |
+| — | Source attachment | **done** — `SourceArchives` + `AttachedSources`: a classpath symbol is quoted from its `-sources.jar` or the JDK's `src.zip`, so `println` shows the JDK's own `String x`. Closes the parameter-name gap 24.1 recorded and did **not** delete the assembled path; see the follow-up below |
 
 ### The declaration seam — decided against both references, deliberately
 
@@ -43,28 +44,50 @@ baked and a scheme switch would not reach them.
 | 24.3 | `folds.scm` | not started — vendoring question below |
 | 24.4 | `indents.scm` | not started — vendoring question below |
 
-### Follow-up: half of `JavaSignatures` is waiting to be deleted
+### Follow-up: source attachment landed, and the assembled path did **not** get deleted
 
-`JavaSignatures` renders a declaration two ways, and they are not peers:
+`AttachedSources` reads a `-sources.jar` beside each classpath jar and the JDK's `src.zip`, parses the
+declaring unit once, and matches the declaration by **binding key** — a JDT key is derived from the
+signature, so the key the editor's unit reports for `List.add` is the same string a unit parsed out of
+`src.zip` reports for its declaration, provided both resolved against the same classpath. Quoting is
+hoisted out of `render`'s three branches into `of`, so it is tried once for everything and assembly is
+reached only when it fails.
 
-| Path | When | Who chooses the layout |
-|---|---|---|
-| **Quoted** — `quotedDeclaration` | the symbol is declared in the file being analysed | the author |
-| **Assembled** — `render` | anything else, i.e. the classpath | us |
+The result is what the note below predicted for the popup — `boolean add(E e)`,
+`public static String format(String format, Object... args)`,
+`@Native public static final int   MAX_VALUE = 0x7fffffff;`, `Map.merge` in the JDK's own wrapping —
+and **not** what it predicted for the code. The prediction was that the assembled path becomes
+deletable. It does not, for two reasons, one of which was never about the classpath at all:
 
-The assembled path exists **only because a classpath symbol has no source to quote**. Everything
-layout-shaped in it — `MAX_SIGNATURE_LINE`, the break before a long `=`, one parameter per line, the
-hanging indent under `implements`, `spaces()` — is there to invent a wrapping that the quoted path gets
-for free. Roughly 250 lines whose entire justification is the absence of a file.
+1. **Sources are not always attached, and the flagship host is the case that has none.** A mod jar
+   shipped without them, an obfuscated 1.7.10 jar, a plain directory of class files. That is §15.5's
+   whole world, so assembly is not a legacy path there — it is the normal one.
+2. **Parameters, catch variables and for-init locals never had a quotable declaration**, and that has
+   nothing to do with where the source is. They were assembled because `quotedNode` dispatched only
+   fragments and body declarations. Now quoted — which found a real defect rather than a plainer
+   rendering: assembly renders a variable from `variable.getType()`, and a varargs parameter's type
+   *is* `int[]`, so `int... counts` had been rendering as `int[] counts`. `final` was dropped for the
+   same reason.
 
-**So it becomes deletable the moment quoting can reach classpath sources**, which is not far-fetched:
-JDT resolves against jars that frequently ship a `-sources.jar` beside them, and IntelliJ's own popup
-shows parameter names (`println(String x)`) precisely because it has those attached. If we ever attach
-them — for parameter names, which is already a known gap — quoting comes with it and this whole path,
-plus the two `broken` flags threaded through it, goes.
+So what actually shrank is **what assembly is for**, not the code. `MAX_SIGNATURE_LINE`, `spaces()`,
+the hanging indent and the `broken` flag all stay, and they stay load-bearing — for source-less jars,
+where they are still the only thing keeping a 110-character `ArrayList` header readable.
 
-Worth doing deliberately rather than discovering: until then the assembled path is load-bearing for every
-JDK symbol anybody hovers, and the break rules are the only thing keeping those readable.
+Two tests were pinned to assembly *by choice of fixture* (`Map.merge`, `ArrayList`) on the stated
+grounds that a classpath symbol is the one thing that cannot be quoted. Both now quote, so they were
+asserting our layout rules against text we no longer write; they are replaced by one test that drives
+assembly honestly — a **directory** classpath entry, which source discovery does not look beside — and
+asserts the one difference visible from outside, the missing parameter name.
+
+> **The trap, and it is invisible:** a platform source must be parsed at **compliance 8**. A file out of
+> `src.zip` declares `package java.util`, which `java.base` already owns, so at 9+ it lands in the
+> unnamed module and the compiler refuses the clash — *"The package java.util conflicts with a package
+> accessible from another module"*. That one error is not local: it poisons resolution for the whole
+> unit, so every type reference in the file becomes unresolvable and `java.util.List` quotes correctly
+> while drawing `SequencedCollection` in the plain type colour, three lines under an editor drawing the
+> same word interface-coloured. 8 is the last level with no module system, so it is derived rather than
+> tuned, and it is strictly better rather than a trade: at 9+ *no* platform type resolves its
+> references. The rule keys on **which archive the bytes came from**, never on the package name.
 
 ### Correction: 24.6 is not the cheapest item, it is the most expensive
 
