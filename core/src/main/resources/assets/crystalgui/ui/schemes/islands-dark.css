@@ -118,6 +118,9 @@ theme {
     --syntax-variable-builtin: #CF8E6D;
     --syntax-variable-parameter: #BCBEC4;
     --syntax-variable-member: #C77DBB;
+    --syntax-variable-captured: #C77DBB;
+    --syntax-captured-underline: #9E6294;
+    --syntax-reassigned-underline: #84868C;
 
     --syntax-property: #C77DBB;
     --syntax-attribute: #B3AE60;

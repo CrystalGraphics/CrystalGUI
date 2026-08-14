@@ -496,6 +496,7 @@ editor scheme's.
 | `--syntax-attribute` | `#9CDCFE` | dark-plus.css |
 | `--syntax-boolean` | `#569CD6` | dark-plus.css |
 | `--syntax-bracket` | `#4EC9A0` | dark-plus.css |
+| `--syntax-captured-underline` | `#569CD6` | dark-plus.css |
 | `--syntax-comment` | `#6A9955` | dark-plus.css |
 | `--syntax-comment-doc` | `#6A9955` | dark-plus.css |
 | `--syntax-comment-style` | `normal` | dark-plus.css |
@@ -524,6 +525,7 @@ editor scheme's.
 | `--syntax-punctuation` | `#808080` | dark-plus.css |
 | `--syntax-punctuation-bracket` | `#808080` | dark-plus.css |
 | `--syntax-punctuation-delimiter` | `#808080` | dark-plus.css |
+| `--syntax-reassigned-underline` | `#808080` | dark-plus.css |
 | `--syntax-string` | `#CE9178` | dark-plus.css |
 | `--syntax-string-escape` | `#D7BA7D` | dark-plus.css |
 | `--syntax-string-special` | `#D7BA7D` | dark-plus.css |
@@ -535,6 +537,7 @@ editor scheme's.
 | `--syntax-unresolved` | `#F44747` | dark-plus.css |
 | `--syntax-variable` | `#9CDCFE` | dark-plus.css |
 | `--syntax-variable-builtin` | `#569CD6` | dark-plus.css |
+| `--syntax-variable-captured` | `#9CDCFE` | dark-plus.css |
 | `--syntax-variable-member` | `#9CDCFE` | dark-plus.css |
 | `--syntax-variable-parameter` | `#9CDCFE` | dark-plus.css |
 | `--tab-active-bg` | `var(--surface-raised)` | base.css |
