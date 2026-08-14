@@ -18,22 +18,27 @@ import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Annotation;
+import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.CatchClause;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.EnhancedForStatement;
+import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ForStatement;
 import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
+import org.eclipse.jdt.core.dom.LambdaExpression;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.NodeFinder;
 import org.eclipse.jdt.core.dom.ParameterizedType;
+import org.eclipse.jdt.core.dom.PostfixExpression;
+import org.eclipse.jdt.core.dom.PrefixExpression;
 import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.QualifiedType;
 import org.eclipse.jdt.core.dom.ReturnStatement;
@@ -48,6 +53,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -164,12 +170,15 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         private final String source;
         /** Declaration rendering, which shares nothing with this class but the AST. @see JavaSignatures */
         private final JavaSignatures signatures;
+        /** Locals and parameters written to after their declaration. @see #collectReassigned */
+        private Set<String> reassigned;
 
         EcjAnalysis(CompilationUnit unit, String source, long version) {
             this.unit = unit;
             this.source = source == null ? "" : source;
             this.version = version;
             this.signatures = new JavaSignatures(unit, this.source);
+            this.reassigned = unit == null ? Set.of() : collectReassigned(unit);
         }
 
         @Override
@@ -312,7 +321,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
          * <p>Null is the common and correct answer for most names. This exists to say the handful of
          * things a parse cannot: which <em>kind</em> of variable a bare identifier is.</p>
          */
-        private static String captureFor(SimpleName name) {
+        private String captureFor(SimpleName name) {
             IBinding binding = name.resolveBinding();
             if (binding == null) return null;
             if (binding instanceof IVariableBinding) {
@@ -324,8 +333,19 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                     return constant ? SymbolKind.CONSTANT.captureName()
                             : SymbolKind.FIELD.captureName();
                 }
-                if (variable.isParameter()) return SymbolKind.PARAMETER.captureName();
-                return SymbolKind.LOCAL_VARIABLE.captureName();
+                // THREE FACTS ABOUT ONE LOCAL, and IntelliJ draws each of them: what it is, whether
+                // it is ever assigned again, and whether it was reached from inside a lambda. The last
+                // two are the ones a grammar can never answer, and neither needs dataflow -- both fall
+                // out of where the name sits in the tree.
+                boolean captured = isCapturedHere(name, variable);
+                if (variable.isParameter()) {
+                    if (captured) return "variable.captured";
+                    return reassigned.contains(variable.getKey())
+                            ? "variable.parameter.reassigned" : SymbolKind.PARAMETER.captureName();
+                }
+                if (captured) return "variable.captured";
+                return reassigned.contains(variable.getKey())
+                        ? "variable.reassigned" : SymbolKind.LOCAL_VARIABLE.captureName();
             }
             // AN ANNOTATION'S NAME IS METADATA, not a type reference -- DEFAULT_METADATA, yellow, and the
             // third thing this method was flattening. `@SuppressWarnings` resolves to the annotation's
@@ -376,6 +396,92 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
          * from the instance one — the same channel a static field already uses to say "this name does not
          * belong to the object in front of you".</p>
          */
+        /**
+         * Every local or parameter that is <b>assigned after it is declared</b>.
+         *
+         * <h3>A syntactic scan, not dataflow</h3>
+         *
+         * <p>The question IntelliJ answers with {@code DEFAULT_REASSIGNED_LOCAL_VARIABLE} is not "what
+         * value does this hold" but "is this name ever written to again" — and that is decided by looking
+         * for it on the left of an assignment or under a {@code ++}/{@code --}. No flow analysis, no
+         * ordering, one pass over the unit.</p>
+         *
+         * <p>Keyed on {@link IBinding#getKey()} rather than on the binding itself, because JDT does not
+         * promise identity across the two visits and a {@code HashSet} of bindings would quietly miss
+         * matches.</p>
+         */
+        private Set<String> collectReassigned(CompilationUnit resolved) {
+            final Set<String> keys = new HashSet<>();
+            resolved.accept(new ASTVisitor() {
+                private void mark(Expression target) {
+                    if (!(target instanceof SimpleName)) return;
+                    IBinding binding = ((SimpleName) target).resolveBinding();
+                    if (!(binding instanceof IVariableBinding)) return;
+                    IVariableBinding variable = (IVariableBinding) binding;
+                    // A FIELD IS NOT A REASSIGNED LOCAL. Fields are expected to be written to; the
+                    // underline exists to flag a local whose value does not stay put.
+                    if (variable.isField()) return;
+                    keys.add(variable.getKey());
+                }
+
+                @Override
+                public boolean visit(Assignment node) {
+                    mark(node.getLeftHandSide());
+                    return true;
+                }
+
+                @Override
+                public boolean visit(PrefixExpression node) {
+                    if (node.getOperator() == PrefixExpression.Operator.INCREMENT
+                            || node.getOperator() == PrefixExpression.Operator.DECREMENT) {
+                        mark(node.getOperand());
+                    }
+                    return true;
+                }
+
+                @Override
+                public boolean visit(PostfixExpression node) {
+                    mark(node.getOperand());
+                    return true;
+                }
+            });
+            return keys;
+        }
+
+        /**
+         * Whether {@code use} reaches {@code variable} from <b>inside a lambda or anonymous class the
+         * declaration is outside of</b> — IntelliJ's
+         * {@code IMPLICIT_ANONYMOUS_CLASS_PARAMETER_ATTRIBUTES}.
+         *
+         * <p>Worth drawing because a captured local is not an ordinary one: it is effectively final by
+         * language rule, it outlives the frame that declared it, and it is the single most useful thing to
+         * know when reading a lambda body — which of these names came from outside.</p>
+         *
+         * <p>Decided by comparing the nearest enclosing lambda of the <em>use</em> against that of the
+         * <em>declaration</em>. If the use is inside one the declaration is not, it was captured. No
+         * dataflow, no escape analysis: the question is entirely about position.</p>
+         */
+        private boolean isCapturedHere(SimpleName use, IVariableBinding variable) {
+            CompilationUnit resolved = unit;
+            if (resolved == null) return false;
+            ASTNode useScope = enclosingCapture(use);
+            if (useScope == null) return false;
+            ASTNode declaration = resolved.findDeclaringNode(variable);
+            // A declaration outside this unit cannot be compared, and one that is not found is not
+            // evidence of capture -- saying nothing is the right answer for a name we cannot place.
+            if (declaration == null) return false;
+            return enclosingCapture(declaration) != useScope;
+        }
+
+        private static ASTNode enclosingCapture(ASTNode from) {
+            for (ASTNode node = from; node != null; node = node.getParent()) {
+                if (node instanceof LambdaExpression || node instanceof AnonymousClassDeclaration) {
+                    return node;
+                }
+            }
+            return null;
+        }
+
         /**
          * Whether this name is the <b>name of an annotation being applied</b> — {@code @Nullable}, or the
          * {@code Contract} of {@code @Contract(pure = true)}.

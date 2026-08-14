@@ -156,6 +156,69 @@ public class JavaAnalysisTest {
         }
     }
 
+    /**
+     * A local that is <b>written to again</b> is drawn differently from one that is not.
+     *
+     * <p>{@code DEFAULT_REASSIGNED_LOCAL_VARIABLE} keeps the kind's colour and adds an underline, because
+     * what changed is not <em>what the name is</em> but that its value does not stay put. Decided by a
+     * syntactic scan — the name on the left of an assignment, or under a {@code ++}/{@code --} — not by
+     * dataflow.</p>
+     */
+    @Test
+    public void aReassignedLocalIsMarkedAndASettledOneIsNot() {
+        String source = ""
+                + "public class Script {\n"
+                + "    int run() {\n"
+                + "        int settled = 1;\n"
+                + "        int counter = 0;\n"
+                + "        counter++;\n"
+                + "        return settled + counter;\n"
+                + "    }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            assertEquals("variable.reassigned", captureAt(tokens, source, "counter"));
+            assertEquals("a local assigned once is an ordinary one", "variable",
+                    captureAt(tokens, source, "settled"));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * A local reached from <b>inside a lambda</b> is captured, and IntelliJ draws it as such.
+     *
+     * <p>{@code IMPLICIT_ANONYMOUS_CLASS_PARAMETER_ATTRIBUTES} gives it the field colour and an underline,
+     * and that pairing is not arbitrary: a captured local is effectively final by language rule and
+     * outlives the frame that declared it, so it behaves far more like a field than like a local.</p>
+     *
+     * <p>Positional, like the annotation case — the same variable is ordinary outside the lambda and
+     * captured inside it, so no property of the binding can decide it.</p>
+     */
+    @Test
+    public void aLocalReachedFromInsideALambdaIsCaptured() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    void run(List<String> items) {\n"
+                + "        StringBuilder out = new StringBuilder();\n"
+                + "        out.append(\"outside\");\n"
+                + "        items.forEach(item -> out.append(item));\n"
+                + "    }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            assertEquals("outside the lambda it is an ordinary local", "variable",
+                    captureAtIndex(tokens, source.indexOf("out.append(\"outside\")"), 3));
+            assertEquals("inside it, it was captured", "variable.captured",
+                    captureAtIndex(tokens, source.indexOf("out.append(item)"), 3));
+        } finally {
+            analysis.close();
+        }
+    }
+
     /** A type parameter is not a type — {@code <E>} is a placeholder, and both references colour it. */
     @Test
     public void aTypeParameterIsNotAClass() {

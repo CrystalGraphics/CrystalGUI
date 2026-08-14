@@ -392,6 +392,37 @@ texteditor .__indent-guide__ {
     color: var(--syntax-variable-parameter, #9CDCFE);
 }
 
+/* A LOCAL THAT IS WRITTEN TO AGAIN, and a parameter likewise -- DEFAULT_REASSIGNED_LOCAL_VARIABLE and
+ * DEFAULT_REASSIGNED_PARAMETER, which differ from the ordinary kind by an UNDERLINE and nothing else.
+ *
+ * The colour deliberately stays the kind's: what changed is not what the name is, it is that its value
+ * does not stay put, so the channel carrying it has to be one the kind is not already using. Only an
+ * engine can emit these -- a grammar sees a name, and whether it is assigned again is a fact about the
+ * whole method rather than about the token. */
+.__syntax__::highlight(variable.reassigned) {
+    color: var(--syntax-variable, #9CDCFE);
+    text-decoration-line: underline;
+    text-decoration-color: var(--syntax-reassigned-underline, #84868C);
+}
+
+.__syntax__::highlight(variable.parameter.reassigned) {
+    color: var(--syntax-variable-parameter, #9CDCFE);
+    text-decoration-line: underline;
+    text-decoration-color: var(--syntax-reassigned-underline, #84868C);
+}
+
+/* CAPTURED BY A LAMBDA -- IntelliJ's IMPLICIT_ANONYMOUS_CLASS_PARAMETER_ATTRIBUTES, which gives it the
+ * FIELD colour and an underline of its own.
+ *
+ * That pairing is not arbitrary: a captured local behaves far more like a field than like a local. It is
+ * effectively final by language rule, it outlives the frame that declared it, and inside a lambda body
+ * the one thing worth knowing about a name is whether it came from outside. */
+.__syntax__::highlight(variable.captured) {
+    color: var(--syntax-variable-captured, #9CDCFE);
+    text-decoration-line: underline;
+    text-decoration-color: var(--syntax-captured-underline, #84868C);
+}
+
 .__syntax__::highlight(variable.member) {
     color: var(--syntax-variable-member, #9CDCFE);
 }

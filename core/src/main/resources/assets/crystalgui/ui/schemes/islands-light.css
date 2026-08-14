@@ -90,6 +90,9 @@ theme {
     --syntax-variable-builtin: #0033B3;
     --syntax-variable-parameter: #000000;
     --syntax-variable-member: #871094;
+    --syntax-variable-captured: #871094;
+    --syntax-captured-underline: #9E6294;
+    --syntax-reassigned-underline: #84868C;
 
     --syntax-property: #871094;
     --syntax-attribute: #9E880D;

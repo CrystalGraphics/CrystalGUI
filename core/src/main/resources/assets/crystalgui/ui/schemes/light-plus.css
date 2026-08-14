@@ -80,6 +80,9 @@ theme {
     --syntax-variable-builtin: #0000FF;
     --syntax-variable-parameter: #001080;
     --syntax-variable-member: #001080;
+    --syntax-variable-captured: #001080;
+    --syntax-captured-underline: #0070C1;
+    --syntax-reassigned-underline: #909090;
     --syntax-property: #001080;
     --syntax-attribute: #E50000;
     --syntax-tag: #800000;

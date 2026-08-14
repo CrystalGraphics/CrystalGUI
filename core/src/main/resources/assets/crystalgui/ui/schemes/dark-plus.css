@@ -95,6 +95,9 @@ theme {
     --syntax-variable-builtin: #569CD6;
     --syntax-variable-parameter: #9CDCFE;
     --syntax-variable-member: #9CDCFE;
+    --syntax-variable-captured: #9CDCFE;
+    --syntax-captured-underline: #569CD6;
+    --syntax-reassigned-underline: #808080;
     --syntax-property: #9CDCFE;
     --syntax-attribute: #9CDCFE;
     --syntax-tag: #569CD6;
