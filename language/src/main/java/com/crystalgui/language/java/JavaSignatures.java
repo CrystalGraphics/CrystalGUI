@@ -148,11 +148,12 @@ final class JavaSignatures {
                 appendTypeName(out, method.getReturnType());
                 out.raw(" ");
             }
-            // NOT `function.method`, which is the EDITOR's colour for a declaration. IntelliJ's own
-            // popup leaves the name at the identifier colour -- the box is already about this symbol, so
-            // tinting its name says nothing the surrounding text does not, and it made the one word you
-            // are reading about the loudest thing in the box.
-            out.append(name, kind == SymbolKind.CONSTRUCTOR ? "constructor" : "function.call");
+            // `function.method`, THE DECLARATION COLOUR, because that is what this is. It was briefly
+            // `function.call` on the argument that a popup has one subject and needs no emphasis to
+            // separate it from anything -- which is true about EMPHASIS and beside the point about
+            // IDENTITY. The parity rule is that a name is drawn as what it IS, and what this is is the
+            // declaration; marking it as a call states something false in the one box devoted to it.
+            out.append(name, kind == SymbolKind.CONSTRUCTOR ? "constructor" : "function.method");
             appendParameters(out, method, broken);
             appendThrows(out, method.getExceptionTypes());
             return out.build();
