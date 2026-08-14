@@ -65,6 +65,14 @@ texteditor,
 .__syntax__ {
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
                  "crystalgraphics:IBMPlexSans-Regular.ttf";
+
+    /* AND THE DOCUMENT'S INK, which only `texteditor` used to declare — so a code surface OUTSIDE the
+     * editor inherited whatever chrome it was promoted into. Most of a line of code is UNCAPTURED:
+     * parentheses, commas, semicolons, `=`, the angle brackets of a generic. Nothing colours them, by
+     * design, so they are the surface's own foreground — and in a documentation popup, which is in the
+     * TOP LAYER and therefore not inside the editor at all, that foreground came from the chrome. The
+     * declaration read in two palettes at once, with the punctuation the wrong one. */
+    color: var(--editor-fg, #FFFFFF);
 }
 
 texteditor {

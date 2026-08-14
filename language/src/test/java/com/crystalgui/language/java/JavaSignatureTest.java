@@ -684,6 +684,136 @@ public class JavaSignatureTest {
     }
 
     /**
+     * <b>Hovering an ARGUMENT of a {@code new} expression describes the argument, not the constructor.</b>
+     *
+     * <p>The walk that finds a constructor climbs through {@code QualifiedName} so
+     * {@code new java.util.ArrayList<>()} resolves — but a {@code QualifiedName} is also an ordinary
+     * field access, so {@code new Message(text, Severity.INFO, 0L)} climbed from the argument straight to
+     * the creation. The popup then rendered the constructor under the <em>hovered word's</em> name:
+     * {@code public Severity(String, Severity, long)} for a class called Message, with a container band
+     * correctly reading {@code Main.Message}. Every part was individually right, which is exactly why it
+     * read as a naming bug rather than a resolution one.</p>
+     *
+     * <p>The type name in the same expression still resolves to the constructor — the correction the walk
+     * exists for, and the half a narrower fix would have broken.</p>
+     */
+    @Test
+    public void anArgumentOfANewExpressionResolvesToItselfAndNotToTheConstructor() {
+        String source = ""
+                + "public class Script {\n"
+                + "    enum Severity { INFO }\n"
+                + "    static class Message {\n"
+                + "        Message(String text, Severity severity, long id) { }\n"
+                + "    }\n"
+                + "    void run() {\n"
+                + "        Message m = new Message(\"started\", Severity.INFO, 0L);\n"
+                + "    }\n"
+                + "}\n";
+
+        Signature argument = signatureAt(source, "Severity.INFO");
+        assertTrue("the argument was reported as the constructor: <" + argument.text() + ">",
+                argument.text().contains("enum Severity"));
+
+        Signature constructor = signatureAt(source, "Message(\"started\"");
+        assertTrue("the type name should still reach the constructor: <" + constructor.text() + ">",
+                constructor.text().startsWith("Message(String text"));
+    }
+
+    /**
+     * <b>A record's canonical constructor is declared by the RECORD.</b>
+     *
+     * <p>Nobody writes it, so {@code findDeclaringNode} answers the record rather than a
+     * {@code MethodDeclaration} and the parameter names came back null — making a record in the file
+     * being edited render exactly like a classpath type with no sources attached,
+     * {@code Message(String, Severity, long)}. The names are the components, reached through a
+     * structural property so the class {@code RecordDeclaration} is never named: it arrived with Java 14
+     * and this adapter compiles against the oldest band, where naming it would make the whole class
+     * unloadable.</p>
+     */
+    @Test
+    public void aRecordsCanonicalConstructorShowsItsComponentNames() {
+        String source = ""
+                + "public class Script {\n"
+                + "    record Message(String text, long id) { }\n"
+                + "    void run() {\n"
+                + "        Message m = new Message(\"started\", 0L);\n"
+                + "    }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, List.of(), 17, 1L);
+        SymbolInfo symbol = analysis.resolveAt(source.indexOf("Message(\"started\""));
+        Assume.assumeTrue("this band's JDT does not parse records; skipping",
+                symbol != null && symbol.kind() == SymbolKind.CONSTRUCTOR);
+
+        String text = symbol.signature().text();
+        assertTrue("a record's component names are missing: <" + text + ">",
+                text.contains("String text") && text.contains("long id"));
+    }
+
+    /**
+     * <b>A type parameter's DECLARATION carries its bounds; a USE of one does not.</b>
+     *
+     * <p>{@code appendTypeName} renders the use — a bare {@code T} — which is right everywhere a
+     * parameter is referred to and wrong in the single place it is introduced. Routing the declaration
+     * through it reduced {@code class Box<T extends Comparable<T>>} to {@code class Box<T>}: not a
+     * mis-colour but a missing constraint, in a box whose whole job is to say what the constraint is.</p>
+     *
+     * <p>The generic METHOD is the same omission one level down, and it was total — nothing rendered a
+     * method's own parameters at all, so {@code static <T> List<T> of(...)} showed a {@code T} in its
+     * return type with nothing anywhere saying where it came from.</p>
+     */
+    @Test
+    public void aTypeParameterDeclarationKeepsItsBoundsAndAGenericMethodItsOwn() {
+        String source = ""
+                + "public class Script {\n"
+                + "    static final class Box<T extends Comparable<T>> { }\n"
+                + "    static <E> E pick(E first, E second) { return first; }\n"
+                + "}\n";
+
+        Signature box = signatureAt(source, "Box<T extends");
+        assertTrue("the bound was dropped: <" + box.text() + ">",
+                box.text().contains("Box<T extends Comparable<T>>"));
+        assertEquals("extends is a keyword here as everywhere", "keyword",
+                captureAtOffset(box, box.text().indexOf("extends Comparable")));
+
+        Signature pick = signatureAt(source, "pick");
+        assertTrue("the method's own parameter is missing: <" + pick.text() + ">",
+                pick.text().contains("<E> E pick"));
+        assertEquals("and it is a parameter, not a type", "type.parameter",
+                captureAtOffset(pick, pick.text().indexOf("<E>") + 1));
+    }
+
+    /**
+     * <b>Every type position asks {@code typeCapture}, including the two that are not "a type in a
+     * declaration" — the SUBJECT and a parameterised type's HEAD.</b>
+     *
+     * <p>Those two were literal {@code "type"} strings and survived the pass that routed everything else
+     * through one function, because they read as obviously-a-type at the site. Hovering
+     * {@code java.util.List} therefore drew {@code public interface List<E> extends
+     * SequencedCollection<E>} entirely in the class colour, three lines under an editor drawing the same
+     * word interface-coloured — the popup contradicting the code it was launched from.</p>
+     *
+     * <p>Asserted on a CLASSPATH type on purpose. It exercises the assembled path, which is the one with
+     * no source to quote and therefore the one where every capture is this file's own decision.</p>
+     */
+    @Test
+    public void anInterfaceIsColouredAsOneAsTheSubjectAndAsASupertype() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    List<String> names;\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "List<String> names");
+
+        assertTrue("not the declaration: <" + signature.text() + ">",
+                signature.text().startsWith("public interface List"));
+        assertEquals("the subject", "type.interface", captureOf(signature, "List"));
+        assertEquals("the supertype's head", "type.interface",
+                captureOf(signature, "SequencedCollection"));
+        assertEquals("and the variable inside it", "type.parameter",
+                captureAtOffset(signature, signature.text().indexOf("SequencedCollection<E>") + 20));
+    }
+
+    /**
      * <b>No two captures share a range</b> — a rendering rule, not a tidiness one.
      *
      * <p>{@code HighlightRegistry.set} rejects two ranges of one name that overlap, and the popup groups

@@ -128,6 +128,41 @@ public class JavaAnalysisTest {
     }
 
     /**
+     * <b>A whole import path is one colour, and the last segment is the type it names.</b>
+     *
+     * <p>Three separate answers had to line up and one of them was missing. {@code util} resolves to a
+     * package binding; {@code List} resolves to a type; and {@code java} — the leftmost segment — is a
+     * bare qualifier that JDT gives <em>no</em> binding at all. A binding-only rule therefore coloured
+     * two of the three and left the first as body text, so every import in the file read in two
+     * colours. Positional, and only as a fallback, so the final segment keeps its real kind.</p>
+     *
+     * <p>{@code module} is tree-sitter's own name for this. The grammar cannot supply it: its rule for a
+     * scoped identifier is a CAPITALISATION heuristic, blind to {@code com.crystalgui} by construction
+     * and wrong on {@code Foo.bar}.</p>
+     */
+    @Test
+    public void everySegmentOfAnImportPathIsColouredAndTheLastIsItsType() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "package_placeholder\n".replace("package_placeholder\n", "")
+                + "public class Script {\n"
+                + "    List<String> names;\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            assertEquals("the leftmost segment has no binding and was left uncoloured", "module",
+                    captureAtIndex(tokens, source.indexOf("java"), 4));
+            assertEquals("and the one that does resolve must agree with it", "module",
+                    captureAtIndex(tokens, source.indexOf("util"), 4));
+            assertEquals("while the last segment is the type being imported", "type.interface",
+                    captureAtIndex(tokens, source.indexOf("List"), 4));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
      * An annotation's name is <b>metadata</b>, not a type reference.
      *
      * <p>{@code @SuppressWarnings} resolves to the annotation's type binding, so it came back as
