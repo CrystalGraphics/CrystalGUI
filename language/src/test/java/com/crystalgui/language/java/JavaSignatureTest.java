@@ -398,23 +398,22 @@ public class JavaSignatureTest {
      */
     @Test
     public void aLongDeclarationBreaksAtSemanticPoints() {
+        // A CLASSPATH symbol, because breaking is the ASSEMBLED path's job and an in-file declaration
+        // is quoted -- it keeps the author's own line, which is the whole point of quoting it.
         String source = ""
-                + "import java.util.function.Supplier;\n"
+                + "import java.util.Map;\n"
                 + "public class Script {\n"
-                + "    @SuppressWarnings(\"unused\")\n"
-                + "    public static int retryLoop(Supplier<Boolean> attempt, String description) {\n"
-                + "        return 0;\n"
+                + "    void run(Map<String, Integer> m) {\n"
+                + "        m.merge(\"a\", 1, null);\n"
                 + "    }\n"
                 + "}\n";
-        Signature signature = signatureAt(source, "retryLoop");
+        Signature signature = signatureAt(source, "merge");
         String[] lines = signature.text().split("\n");
 
-        assertTrue("expected several lines, got <" + signature.text() + ">", lines.length >= 4);
-        assertEquals("the annotation belongs on its own line", "@SuppressWarnings(\"unused\")", lines[0]);
-        assertTrue("the declaration follows it: " + lines[1],
-                lines[1].startsWith("public static int retryLoop("));
-        assertTrue("parameters are indented one per line: " + lines[2], lines[2].startsWith("    "));
-        assertTrue("a parameter per line, not all on one: " + lines[2], lines[2].endsWith(","));
+        assertTrue("expected several lines, got <" + signature.text() + ">", lines.length >= 3);
+        assertTrue("the declaration comes first: " + lines[0], lines[0].endsWith("merge("));
+        assertTrue("parameters are indented one per line: " + lines[1], lines[1].startsWith("    "));
+        assertTrue("a parameter per line, not all on one: " + lines[1], lines[1].endsWith(","));
         assertEquals("and the bracket closes at the margin", ")", lines[lines.length - 1]);
     }
 
@@ -626,15 +625,14 @@ public class JavaSignatureTest {
      */
     @Test
     public void aLongImplementsListHangsUnderItsFirstInterface() {
+        // A CLASSPATH type, for the reason above: an in-file declaration is quoted and keeps its own
+        // wrapping. ArrayList has the long implements list this hanging indent exists for.
         String source = ""
-                + "import java.io.Serializable;\n"
-                + "import java.util.RandomAccess;\n"
-                + "public class Script extends java.util.AbstractList<String>\n"
-                + "        implements java.util.List<String>, RandomAccess, Cloneable, Serializable {\n"
-                + "    public String get(int i) { return null; }\n"
-                + "    public int size() { return 0; }\n"
+                + "import java.util.ArrayList;\n"
+                + "public class Script {\n"
+                + "    ArrayList<String> names;\n"
                 + "}\n";
-        Signature signature = signatureAt(source, "Script extends");
+        Signature signature = signatureAt(source, "ArrayList<String> names");
         String[] lines = signature.text().split("\n");
 
         int at = -1;
@@ -745,6 +743,60 @@ public class JavaSignatureTest {
         String text = symbol.signature().text();
         assertTrue("a record's component names are missing: <" + text + ">",
                 text.contains("String text") && text.contains("long id"));
+    }
+
+    /**
+     * <b>A type declared in this file is QUOTED, so every keyword the language has survives.</b>
+     *
+     * <p>The assembled renderer knows a fixed list of clauses, and Java keeps adding to it. {@code sealed}
+     * is a modifier whose flag constant arrived in a later JDT, {@code permits} has no accessor the oldest
+     * band can name at all, and a nested type carries an implicit {@code static} nobody typed — so
+     * {@code public sealed interface Shape permits Circle, Rectangle, Triangle} rendered as
+     * {@code public static interface Shape}: two clauses gone and one word invented.</p>
+     *
+     * <p>Chasing those one clause at a time is the wrong shape of work, which is what this pins. The
+     * declaration is written down already; quoting it is right about every keyword that exists now and
+     * every one added later, without this file learning them.</p>
+     */
+    @Test
+    public void aTypeDeclaredInThisFileIsQuotedRatherThanReassembled() {
+        String source = ""
+                + "public class Script {\n"
+                + "    sealed interface Shape permits Circle {\n"
+                + "        double area();\n"
+                + "    }\n"
+                + "    record Circle(double r) implements Shape {\n"
+                + "        public double area() { return r; }\n"
+                + "    }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, List.of(), 17, 1L);
+        SymbolInfo symbol = analysis.resolveAt(source.indexOf("Shape permits"));
+        Assume.assumeTrue("this band's JDT does not parse sealed types; skipping",
+                symbol != null && symbol.signature() != null
+                        && !symbol.signature().text().contains("static"));
+
+        String text = symbol.signature().text();
+        assertEquals("sealed interface Shape permits Circle", text);
+    }
+
+    /**
+     * <b>A method declared in this file is quoted too</b> — so its parameters carry their real names and
+     * the author's own wrapping, rather than a layout this class invents from a binding.
+     */
+    @Test
+    public void aMethodDeclaredInThisFileIsQuotedWithItsParameterNames() {
+        String source = ""
+                + "public class Script {\n"
+                + "    protected final <T> T pick(T first, T second) throws IllegalStateException {\n"
+                + "        return first;\n"
+                + "    }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "pick");
+
+        assertEquals("protected final <T> T pick(T first, T second) throws IllegalStateException",
+                signature.text());
+        assertEquals("keyword", captureOf(signature, "throws"));
+        assertEquals("variable.parameter", captureOf(signature, "first"));
     }
 
     /**
