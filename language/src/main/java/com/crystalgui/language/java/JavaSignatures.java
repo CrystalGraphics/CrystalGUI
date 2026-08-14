@@ -113,13 +113,31 @@ final class JavaSignatures {
         Signature flat = render(binding, kind, name, false);
         // TRIED FLAT FIRST, and kept if it fits. Breaking unconditionally would put a two-word field
         // declaration on three lines, which is worse than the problem being solved.
-        return flat.text().length() <= MAX_SIGNATURE_LINE ? flat
+        //
+        // THE LONGEST LINE, not the total length: a flat render already contains a newline whenever the
+        // symbol carries an annotation, so measuring the whole string counts the metadata against the
+        // declaration and breaks parameter lists that would have fit comfortably.
+        return longestLine(flat.text()) <= MAX_SIGNATURE_LINE ? flat
                 : render(binding, kind, name, true);
+    }
+
+    private static int longestLine(String text) {
+        int longest = 0;
+        int from = 0;
+        while (from <= text.length()) {
+            int end = text.indexOf('\n', from);
+            if (end < 0) end = text.length();
+            longest = Math.max(longest, end - from);
+            from = end + 1;
+        }
+        return longest;
     }
 
     private Signature render(IBinding binding, SymbolKind kind, String name, boolean broken) {
         Signature.Builder out = new Signature.Builder();
-        appendAnnotations(out, binding.getAnnotations(), broken);
+        // ALWAYS its own line -- see appendAnnotations. Not `broken`: whether the declaration needs
+        // wrapping is a question about its length, and where its metadata goes is not.
+        appendAnnotations(out, binding.getAnnotations(), true);
         appendModifiers(out, binding.getModifiers(), kind);
 
         if (binding instanceof IVariableBinding) {
@@ -185,7 +203,7 @@ final class JavaSignatures {
      * yet — {@link Signature} is shaped so that arrives without changing the colouring.</p>
      */
     private static void appendAnnotations(Signature.Builder out,
-                                          IAnnotationBinding[] annotations, boolean broken) {
+                                          IAnnotationBinding[] annotations, boolean ownLine) {
         if (annotations == null) return;
         for (IAnnotationBinding annotation : annotations) {
             ITypeBinding type = annotation.getAnnotationType();
@@ -207,10 +225,19 @@ final class JavaSignatures {
                 }
                 out.append(")", "punctuation.bracket");
             }
-            // EACH ON ITS OWN LINE when broken -- which is what both references do, and what makes a
+            // EACH ON ITS OWN LINE, ALWAYS -- which is what both references do, and what makes a
             // method with a @Contract readable at all: the annotation is about the declaration rather
             // than part of it, so running them together buries the signature after its own metadata.
-            if (broken) out.newline(); else out.raw(" ");
+            //
+            // This used to be `if (broken)`, i.e. only once the declaration had already grown too long
+            // for one line -- so whether an annotation got its own line depended on how many characters
+            // happened to follow it. `@SuppressWarnings("unused")` on a long method was correct and
+            // `@FunctionalInterface` on a short interface was not, which reads as the rule working
+            // intermittently rather than as it being the wrong rule.
+            //
+            // The flag survives for PARAMETER annotations, which are the opposite case: `@Nullable
+            // String x` is one item in a list and a break there splits the list, not the metadata.
+            if (ownLine) out.newline(); else out.raw(" ");
         }
     }
 
