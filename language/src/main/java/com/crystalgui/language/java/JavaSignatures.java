@@ -33,6 +33,7 @@ import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Renders one symbol's declaration for the Quick Documentation popup — the text, and the capture names
@@ -71,10 +72,18 @@ final class JavaSignatures {
 
     private final CompilationUnit unit;
     private final String source;
+    /**
+     * What colour a name is — <b>the editor's own function, not a second copy of it</b>.
+     *
+     * <p>Handed in rather than reimplemented, because the two had already drifted twice. A name gets one
+     * answer, and a view that renders it differently is now visibly the one at fault. @see #capturesIn</p>
+     */
+    private final Function<SimpleName, String> nameCaptures;
 
-    JavaSignatures(CompilationUnit unit, String source) {
+    JavaSignatures(CompilationUnit unit, String source, Function<SimpleName, String> nameCaptures) {
         this.unit = unit;
         this.source = source == null ? "" : source;
+        this.nameCaptures = nameCaptures;
     }
 
     // ── The rendered declaration ────────────────────────────────────────────────────────────
@@ -640,7 +649,7 @@ final class JavaSignatures {
      * not visit simply stays the surrounding text's colour, which is the right default: an
      * unrecognised construct reads as plain code rather than as a guess.</p>
      */
-    private static List<Capture> capturesIn(ASTNode node, int from, String slice) {
+    private List<Capture> capturesIn(ASTNode node, int from, String slice) {
         List<Capture> captures = new ArrayList<>();
         node.accept(new ASTVisitor() {
             private void mark(ASTNode at, String name) {
@@ -742,14 +751,24 @@ final class JavaSignatures {
                 return true;
             }
 
+            /**
+             * <b>The editor's own answer, asked once and used by both.</b>
+             *
+             * <p>This branch used to decide for itself — a type was {@code type}, a variable went through
+             * a local copy of the kind table — and it drifted from the editor twice in a single session.
+             * Type parameters were teal in the editor and flat here; annotations were yellow here and
+             * plain in the editor. Each time the fix was the same edit in the other file, which is what a
+             * rule with two homes looks like.</p>
+             *
+             * <p>The stylesheet half was already shared: {@code .__syntax__::highlight(...)} styles the
+             * editor's lines and this popup's signature from one set of rules. This is the other half —
+             * the popup now asks the semantic layer what a name is rather than working it out again, so a
+             * name has one answer and the two views cannot disagree about it.</p>
+             */
             @Override
             public boolean visit(SimpleName it) {
-                IBinding binding = it.resolveBinding();
-                if (binding instanceof ITypeBinding) {
-                    mark(it, "type");
-                } else if (binding instanceof IVariableBinding) {
-                    mark(it, captureForVariable((IVariableBinding) binding));
-                }
+                String capture = nameCaptures == null ? null : nameCaptures.apply(it);
+                if (capture != null) mark(it, capture);
                 return false;
             }
         });

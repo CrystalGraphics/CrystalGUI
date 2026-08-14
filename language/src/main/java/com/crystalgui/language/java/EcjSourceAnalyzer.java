@@ -177,7 +177,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             this.unit = unit;
             this.source = source == null ? "" : source;
             this.version = version;
-            this.signatures = new JavaSignatures(unit, this.source);
+            this.signatures = new JavaSignatures(unit, this.source, this::captureFor);
             this.reassigned = unit == null ? Set.of() : collectReassigned(unit);
         }
 
