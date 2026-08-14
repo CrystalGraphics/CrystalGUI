@@ -62,6 +62,13 @@ theme {
     /* Default foreground, for the reason islands-dark.css sets out: IntelliJ does not tint class names. */
     --syntax-type: #000000;
     --syntax-type-parameter: #007E8A;
+
+    /* AN INTERFACE AND AN ENUM, which only an engine can tell from a class -- the three are
+     * spelled identically at every use site. This scheme draws all three alike -- it overrides neither
+     * DEFAULT_INTERFACE_NAME nor ENUM_NAME, so agreeing with the class colour IS the port. */
+    --syntax-type-interface: #000000;
+    --syntax-type-enum: #000000;
+    --syntax-type-enum-style: normal;
     --syntax-type-builtin: #0033B3;
     --syntax-type-qualifier: #0033B3;
 
@@ -97,6 +104,7 @@ theme {
     --syntax-variable-captured: #871094;
     --syntax-captured-underline: #9E6294;
     --syntax-reassigned-underline: #84868C;
+    --syntax-parameter-reassigned-underline: #84868C;
 
     --syntax-property: #871094;
     --syntax-attribute: #9E880D;
@@ -105,6 +113,9 @@ theme {
     --syntax-embedded: #080808;
     --syntax-label: #0033B3;
     --syntax-markup: #080808;
+
+    /* A PACKAGE PATH -- `java.util` in an import. Body text, which is what this scheme shows for a package path. */
+    --syntax-module: #080808;
     --syntax-error: #E00000;
     /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
      * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
@@ -118,6 +129,9 @@ theme {
 
     --syntax-comment-style: italic;
     --syntax-constant-style: italic;
+    --syntax-keyword-weight: normal;
+    --syntax-constant-weight: normal;
+    --syntax-bracket-weight: bold;
 
     --syntax-bracket: #067D17;
 }

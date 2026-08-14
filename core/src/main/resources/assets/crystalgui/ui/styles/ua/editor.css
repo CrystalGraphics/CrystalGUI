@@ -230,6 +230,7 @@ texteditor .__indent-guide__ {
  * the first divergence shows up as one word in the wrong colour -- which reads as a scheme bug. */
 .__syntax__::highlight(bracket) {
     color: var(--syntax-bracket, #4EC9A0);
+    font-weight: var(--syntax-bracket-weight, normal);
 }
 
 /* ── Syntax colours ──
@@ -252,8 +253,15 @@ texteditor .__indent-guide__ {
  * that does not.
  *
  * Every colour is var(--syntax-*, <Dark+ fallback>) so an editor with no scheme loaded still reads. */
+/* WEIGHT IS A CHANNEL, and until now no scheme used it. `font-weight` has been legal on a highlight
+ * since HighlightStyle carved it in beside `font-style` -- the divergence from CSS Pseudo-Elements 4
+ * that file argues at length -- and then nothing exercised it, which is the shape of a mechanism that
+ * quietly stops working. Eclipse Dark bolds its keyword and bold-italicises its constants, Islands bolds
+ * the matched brace, and every one of those was silently flattened. Only three captures are evidenced
+ * across the reference schemes, so there are three keys and not one per capture. */
 .__syntax__::highlight(keyword) {
     color: var(--syntax-keyword, #569CD6);
+    font-weight: var(--syntax-keyword-weight, normal);
 }
 
 .__syntax__::highlight(keyword.control) {
@@ -262,6 +270,17 @@ texteditor .__indent-guide__ {
 
 .__syntax__::highlight(keyword.operator) {
     color: var(--syntax-keyword-operator, #569CD6);
+}
+
+/* A PACKAGE PATH — `java.util` in an import, `com.crystalgui.language` in a package declaration.
+ * tree-sitter's own name for it (nvim-treesitter and Helix both capture a Java package path as
+ * @module), so the grammar and the engine keep speaking one vocabulary.
+ *
+ * Only an engine can produce these: the shipped grammar's rule for a scoped identifier is a
+ * CAPITALISATION heuristic, which is blind to `com.crystalgui` by construction and fires wrongly on
+ * `Foo.bar`. Body text by default, which is what IntelliJ's own Darcula-derived schemes show. */
+.__syntax__::highlight(module) {
+    color: var(--syntax-module, #D4D4D4);
 }
 
 .__syntax__::highlight(type) {
@@ -275,6 +294,24 @@ texteditor .__indent-guide__ {
  * nothing to go on. */
 .__syntax__::highlight(type.parameter) {
     color: var(--syntax-type-parameter, #4EC9A0);
+}
+
+/* AN INTERFACE AND AN ENUM ARE TYPES A SCHEME MAY WANT TO SAY MORE ABOUT — DEFAULT_INTERFACE_NAME and
+ * ENUM_NAME_ATTRIBUTES, which Eclipse Dark gives light cyan and italic pink and which Islands and Dark+
+ * leave alike. Only an engine can tell them apart: `class Foo`, `interface Foo` and `enum Foo` are
+ * spelled identically at every use site, so a parser sees three occurrences of one thing.
+ *
+ * BOTH DEFAULT TO THE TYPE COLOUR, which is what makes this free for a scheme with nothing to add: a
+ * dotted capture publishes under its general form too, so a scheme that never names these still draws
+ * every type alike. Placed AFTER `type` deliberately — the two rules tie on specificity (one
+ * pseudo-element each) and source order is what decides, the same rule `:disabled` and `:hover` pay. */
+.__syntax__::highlight(type.interface) {
+    color: var(--syntax-type-interface, #4EC9A0);
+}
+
+.__syntax__::highlight(type.enum) {
+    color: var(--syntax-type-enum, #4EC9A0);
+    font-style: var(--syntax-type-enum-style, normal);
 }
 
 .__syntax__::highlight(type.builtin) {
@@ -355,6 +392,7 @@ texteditor .__indent-guide__ {
 .__syntax__::highlight(constant) {
     color: var(--syntax-constant, #4FC1FF);
     font-style: var(--syntax-constant-style, normal);
+    font-weight: var(--syntax-constant-weight, normal);
 }
 
 .__syntax__::highlight(constant.builtin) {
@@ -405,10 +443,15 @@ texteditor .__indent-guide__ {
     text-decoration-color: var(--syntax-reassigned-underline, #84868C);
 }
 
+/* A SEPARATE TOKEN FROM THE LOCAL'S, because IntelliJ has two attributes here and a scheme uses the
+ * difference: Eclipse Dark underlines a reassigned PARAMETER and writes the reassigned LOCAL as
+ * baseAttributes="DEFAULT_LOCAL_VARIABLE", i.e. do not mark it at all. One shared token cannot say
+ * that, and the scheme that wanted it would have been silently overruled by the other three. A scheme
+ * with nothing to distinguish sets both to the same colour, which is what every other one does. */
 .__syntax__::highlight(variable.parameter.reassigned) {
     color: var(--syntax-variable-parameter, #9CDCFE);
     text-decoration-line: underline;
-    text-decoration-color: var(--syntax-reassigned-underline, #84868C);
+    text-decoration-color: var(--syntax-parameter-reassigned-underline, #84868C);
 }
 
 /* CAPTURED BY A LAMBDA -- IntelliJ's IMPLICIT_ANONYMOUS_CLASS_PARAMETER_ATTRIBUTES, which gives it the

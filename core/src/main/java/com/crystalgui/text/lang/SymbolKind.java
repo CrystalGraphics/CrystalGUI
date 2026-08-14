@@ -75,11 +75,19 @@ public enum SymbolKind {
     public String captureName() {
         switch (this) {
             case CLASS:
-            case INTERFACE:
-            case ENUM:
             case RECORD:
             case ANNOTATION:
                 return "type";
+            // AN INTERFACE AND AN ENUM ARE TYPES THAT A SCHEME MAY WANT TO SAY MORE ABOUT, and the dotted
+            // vocabulary is what lets them without a scheme having to care: `type.interface` publishes
+            // under its general form too, so a scheme that draws every type alike -- Islands, Dark+ -- keeps
+            // doing so with no entry of its own, while Eclipse Dark's light cyan interfaces and italic pink
+            // enums become expressible. Exactly the argument the TYPE_PARAMETER note below makes, applied
+            // one level further: folded into `type` the distinction is not muted, it is unsayable.
+            case INTERFACE:
+                return "type.interface";
+            case ENUM:
+                return "type.enum";
             // A TYPE PARAMETER IS NOT A TYPE, to a reader or to a scheme. `<E>` is a placeholder the
             // declaration introduces, and both references give it a colour of its own —
             // TYPE_PARAMETER_NAME_ATTRIBUTES, teal in Islands and in every JetBrains scheme since. Folded
@@ -103,9 +111,16 @@ public enum SymbolKind {
                 return "property";
             case KEYWORD:
                 return "keyword";
-            case LOCAL_VARIABLE:
+            // A PACKAGE IS NOT A VARIABLE, and the catch-all was making it one. `java` and `util` in an
+            // import resolve to package bindings, fell through to `variable`, and were saved from being
+            // drawn as locals only because nothing was answering for them at all -- so every import line
+            // read as body text with one blue word at the end. `module` is tree-sitter's own name for
+            // this (nvim-treesitter and Helix both capture a Java package path with it), which keeps the
+            // grammar and the engine speaking one vocabulary here as everywhere else.
             case PACKAGE:
             case MODULE:
+                return "module";
+            case LOCAL_VARIABLE:
             case LABEL:
             case UNKNOWN:
             default:

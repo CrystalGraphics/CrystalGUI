@@ -1,0 +1,205 @@
+/* @scheme Eclipse Dark
+ * @id     crystalgui:eclipse-dark
+ * @kind   dark
+ * @author crystalgui
+ *
+ * IntelliJ's "Eclipse Dark Theme" scheme — Eclipse's saturated palette, on IntelliJ's chrome.
+ *
+ * WHAT THIS IS AND WHY IT READS DIFFERENTLY. Islands and Dark+ both colour by CATEGORY and keep the
+ * page calm: a screen of Java is mostly body text with keywords and strings picked out. Eclipse goes
+ * the other way — a local is yellow, a field is cyan, a call is lime, a parameter is blue — so nearly
+ * every identifier carries a colour, and the colour is the fastest way to know what a name IS without
+ * reading the declaration. Neither is more correct; they answer different questions, which is exactly
+ * why the scheme axis exists (plan_styling.md §3.6).
+ *
+ * IT IS A CHILD OF DARCULA, and that is load-bearing here. The exported .icls overrides forty-odd
+ * attributes and inherits the rest, so every row below is one of two things and the comments say
+ * which: ECLIPSE DARK'S OWN, or DARCULA'S, showing through. Body text, comments, numbers, the caret,
+ * the gutter and the selection are all the latter — which is why this sits beside the same chrome
+ * `islands-dark.css` does rather than needing a theme of its own.
+ *
+ * WHAT COULD NOT BE PORTED, listed rather than silently dropped, because a scheme that quietly loses a
+ * distinction looks finished:
+ *
+ *   - RESOLUTION-ONLY KINDS THAT ARE STILL OUT OF REACH. `ABSTRACT_CLASS_NAME` (3eabe6),
+ *     `ABSTRACT_METHOD` (80f6a7) and `INHERITED_METHOD` (cdf668) need facts no capture publishes —
+ *     abstractness, and where a member was declared. They fold onto `type` and `function.*` here.
+ *     `SymbolModifier` already carries ABSTRACT, so the first two are reachable the day the analyzer
+ *     emits it. (`DEFAULT_INTERFACE_NAME` and `ENUM_NAME` were on this list and are not any more —
+ *     `SymbolKind` had INTERFACE and ENUM all along and was flattening both onto `type`.)
+ *   - `IDENTIFIER_UNDER_CARET` / `WRITE_IDENTIFIER_UNDER_CARET` (26535a band). Occurrence highlighting
+ *     is a feature, not a colour — there is nothing to tint until the editor marks the other uses of
+ *     the name under the caret.
+ *   - JAVADOC INTERNALS. `DEFAULT_DOC_COMMENT_TAG` (8e8070) and `..._TAG_VALUE` (9a8c7c) need `@param`
+ *     and its argument as separate captures; the doc comment is one range today.
+ *   - `ANNOTATION_ATTRIBUTE_NAME` (eb4b64), the `value` in `@Foo(value = 1)`. Our `attribute` is the
+ *     annotation's own name, which is a different thing wearing a similar word.
+ *
+ * Scope, machine-enforced (StyleGovernanceTest): --editor-*, --syntax-*, --find-match-*,
+ * --search-excluded-* and nothing else. */
+
+theme {
+    /* ── Surfaces — DARCULA'S, since Eclipse Dark overrides none of them ──
+     *
+     * TRANSPARENT rather than Darcula's #1E1F22, for the reason dark-plus.css records at length: an
+     * opaque document fill is a SQUARE painted over the rounded island beneath it, which is how the
+     * editor loses its corners. The two differ by five units of luminance, so the corners are worth
+     * more than the fidelity. A scheme whose paper genuinely differs sets a colour and accepts them. */
+    --editor-bg: #00000000;
+    --editor-fg: #BCBEC4;
+    --editor-caret: #CED0D6;
+    /* Darcula lifts the caret row eight units off its own background; applied to the panel this
+     * editor actually sits on rather than copied, or the band belongs to a page that is not here. */
+    --editor-current-line: #212327;
+    --editor-selection-bg: #214283;
+    --editor-gutter-bg: #191A1C;
+    --editor-gutter-edge: #303236;
+    --editor-line-number: #4B5059;
+    --editor-indent-guide: #303236;
+    --editor-indent-guide-active: #6F737A;
+    --editor-whitespace: #6F737A;
+    --editor-ruler: #303236;
+
+    /* ── Folding — Darcula neutrals ── */
+    --editor-fold: #5A5D63;
+    --editor-fold-active: #BCBEC4;
+    --editor-fold-placeholder-bg: #2B2D30;
+    --editor-fold-placeholder-fg: #8A8E96;
+    --editor-fold-placeholder-hover-bg: #393B40;
+    --editor-fold-placeholder-hover-fg: #DFE1E5;
+
+    /* ── The zoom indicator — Darcula neutrals ── */
+    --editor-zoom-bg: #2B2D30;
+    --editor-zoom-fg: #BCBEC4;
+    --editor-zoom-link: #548AF7;
+    --editor-zoom-link-pressed: #3B6FD4;
+
+    /* ── Find & replace — Darcula, untouched by Eclipse Dark ── */
+    --find-match-bg: #C87D2E;
+    --find-match-fg: #1E1F22;
+    --search-excluded-fg: #6F737A;
+
+    /* ── Syntax ──
+     *
+     * DEFAULT_KEYWORD cc6c1d. Bolder and browner than Darcula's own orange, and the one row that makes
+     * a screenshot recognisable as this scheme at a glance. BOLD, via --syntax-keyword-weight below. */
+    --syntax-keyword: #CC6C1D;
+    --syntax-keyword-control: #CC6C1D;
+    --syntax-keyword-operator: #CC6C1D;
+
+    /* TYPES ARE TINTED HERE, which is the opposite of Islands and deliberate on both sides. Islands
+     * leaves a class name at body text because position and capitalisation already say "type"; Eclipse
+     * says the shape is not the point, the KIND is, and colours it. DEFAULT_CLASS_NAME 1290c3. */
+    --syntax-type: #1290C3;
+    --syntax-type-parameter: #BFA4A4;
+
+    /* AN INTERFACE AND AN ENUM, which only an engine can tell from a class -- the three are
+     * spelled identically at every use site. DEFAULT_INTERFACE_NAME 80f2f6 and ENUM_NAME cc81ba italic,
+     * two of the rows that make this scheme legible at a glance. */
+    --syntax-type-interface: #80F2F6;
+    --syntax-type-enum: #CC81BA;
+    --syntax-type-enum-style: italic;
+    /* A primitive is a keyword, in the grammar and on screen. */
+    --syntax-type-builtin: #CC6C1D;
+    --syntax-type-qualifier: #CC6C1D;
+
+    /* A CALL IS LIME AND A DECLARATION IS GREEN — DEFAULT_FUNCTION_CALL a7ec21 against
+     * DEFAULT_FUNCTION_DECLARATION 1eb540, both stated outright, which is rarer than it sounds: Islands
+     * leaves the call at the identifier colour and only names the declaration.
+     *
+     * BARE `function` TAKES THE CALL COLOUR. It is what a producer emits when it cannot tell the two
+     * apart — every token the built-in lexer makes, which knows only "identifier followed by a paren" —
+     * and calls outnumber declarations several times over. */
+    --syntax-function: #A7EC21;
+    --syntax-function-builtin: #A7EC21;
+    --syntax-function-special: #1EB540;
+    --syntax-function-method: #1EB540;
+    --syntax-function-call: #A7EC21;
+    /* THE CALL COLOUR PLUS THE SLANT, not DEFAULT_STATIC_METHOD's 96ec3f. That attribute describes a
+     * static DECLARATION; a static CALL composes the call attribute with the static italic, which is
+     * why IntelliJ draws one slanted in the surrounding call colour rather than in its own. Established
+     * against a screenshot when reading the attribute name alone got it backwards — see islands-dark. */
+    --syntax-function-static: #A7EC21;
+    --syntax-function-static-style: italic;
+
+    --syntax-string: #17C6A3;
+    /* JAVA_VALID_STRING_ESCAPE db771d, not DEFAULT_VALID_STRING_ESCAPE cc6c1d. The scheme carries both
+     * and the Java-specific one wins in Java, which is the language this editor is for. */
+    --syntax-string-escape: #DB771D;
+    --syntax-string-special: #DB771D;
+
+    /* Darcula's, showing through — Eclipse Dark leaves numbers alone. */
+    --syntax-number: #2AACB8;
+    --syntax-boolean: #CC6C1D;
+    /* STATIC_FINAL_FIELD 8ddaf8 — a constant IS a static final field, so the row that names it wins
+     * over Darcula's generic constant purple. */
+    --syntax-constant: #8DDAF8;
+    --syntax-constant-builtin: #CC6C1D;
+
+    /* Darcula's line comment; the DOC comment is Eclipse Dark's own, and lighter than it. */
+    --syntax-comment: #7A7E85;
+    --syntax-comment-doc: #808080;
+
+    /* THE ROWS THAT MAKE THIS SCHEME. A local is yellow, a parameter blue, a field cyan — three colours
+     * where Islands has one, and all three need the semantic layer to tell them apart. A grammar sees
+     * an identifier, so on a file the engine has not analysed these collapse together and the scheme
+     * looks far calmer than it is. */
+    --syntax-variable: #F2F250;
+    --syntax-variable-builtin: #CC6C1D;
+    --syntax-variable-parameter: #79ABFF;
+    --syntax-variable-member: #66E1F8;
+    /* Captured-by-a-lambda has no attribute in the export, so this is derived rather than ported: our
+     * rule gives a captured local the FIELD colour (see editor.css for why that pairing is not
+     * arbitrary), and the underline is a dimmed version of it. */
+    --syntax-variable-captured: #66E1F8;
+    --syntax-captured-underline: #3C8FA3;
+
+    /* TRANSPARENT, AND THAT IS THE PORT. Eclipse Dark writes DEFAULT_REASSIGNED_LOCAL_VARIABLE as
+     * baseAttributes="DEFAULT_LOCAL_VARIABLE" — a deliberate "do not mark this", where every other
+     * shipped scheme underlines it. Silently underlining anyway would be exactly the kind of divergence
+     * that looks right and is not, so the reassigned-local underline is drawn in nothing. The PARAMETER
+     * underline below is the one Eclipse Dark does state, at its own colour. */
+    --syntax-reassigned-underline: #00000000;
+    --syntax-parameter-reassigned-underline: #707D95;
+
+    --syntax-property: #66E1F8;
+    /* ANNOTATION_NAME a0a0a0 — grey, where most schemes make an annotation loud. Italic and underlined
+     * in IntelliJ; the vocabulary carries neither for this capture. */
+    --syntax-attribute: #A0A0A0;
+    --syntax-tag: #CC6C1D;
+    /* A constructor names a class, so it takes the class colour rather than a function one. */
+    --syntax-constructor: #1290C3;
+    --syntax-embedded: #BCBEC4;
+    --syntax-label: #CC6C1D;
+    /* DEFAULT_DOC_MARKUP 1e789b — stated by this scheme, where the other two leave markup at body text. */
+    --syntax-markup: #1E789B;
+
+    /* A PACKAGE PATH -- `java.util` in an import. Tinted, like the class name it qualifies -- this scheme colours a
+     * package path rather than leaving it grey. */
+    --syntax-module: #1290C3;
+    --syntax-error: #F75464;
+    /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
+     * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
+    --syntax-unresolved: #F75464;
+    --syntax-deprecated: #6F737A;
+
+    /* DEFAULT_OPERATION_SIGN e6e6fa against f9faf4 for every bracket, brace, paren and dot — near-white
+     * punctuation, brighter than the body text it sits between, which is unusual and is the scheme's. */
+    --syntax-operator: #E6E6FA;
+    --syntax-punctuation: #F9FAF4;
+    --syntax-punctuation-bracket: #F9FAF4;
+    --syntax-punctuation-delimiter: #F9FAF4;
+
+    /* Neither comments nor constants are slanted in the export; stated rather than inherited, per the
+     * rule that a scheme defines every key the sheet reads. The constant is bold-ITALIC, which needs
+     * both channels — STATIC_FINAL_FIELD carries FONT_TYPE 3, and 3 is 1|2. */
+    --syntax-comment-style: normal;
+    --syntax-constant-style: italic;
+    --syntax-keyword-weight: bold;
+    --syntax-constant-weight: bold;
+    --syntax-bracket-weight: bold;
+
+    /* The bracket-MATCH pair under the caret — not a capture. Takes the string teal, as Islands takes
+     * its own string green: it has to differ from the near-white the brackets are already drawn in. */
+    --syntax-bracket: #17C6A3;
+}

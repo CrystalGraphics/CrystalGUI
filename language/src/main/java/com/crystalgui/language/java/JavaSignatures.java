@@ -658,12 +658,30 @@ final class JavaSignatures {
     private List<Capture> capturesIn(ASTNode node, int from, String slice) {
         List<Capture> captures = new ArrayList<>();
         node.accept(new ASTVisitor() {
+            /**
+             * <b>Last statement about a range wins, and an earlier one about the same range is
+             * dropped rather than kept beside it.</b>
+             *
+             * <p>Two visitors legitimately reach one node — {@code MethodInvocation} claims its own
+             * name so a call is coloured even with no analyzer attached, and {@code SimpleName} then
+             * asks the analyzer, which knows whether that call is static. Keeping both is not merely
+             * redundant, it is <em>fatal</em>: {@code HighlightRegistry.set} rejects two ranges of one
+             * name that overlap, so a signature containing any method call threw
+             * {@code IllegalArgumentException} out of the popup rather than rendering.</p>
+             *
+             * <p>Last-wins is the same rule the editor's own merge uses, and for the same reason: the
+             * later statement is the one made with more knowledge. The general answer is a floor, not a
+             * competitor.</p>
+             */
             private void mark(ASTNode at, String name) {
                 int start = at.getStartPosition() - from;
                 int end = start + at.getLength();
-                if (start >= 0 && end <= slice.length() && end > start) {
-                    captures.add(new Capture(start, end, name));
+                if (start < 0 || end > slice.length() || end <= start) return;
+                for (int i = captures.size() - 1; i >= 0; i--) {
+                    Capture existing = captures.get(i);
+                    if (existing.start == start && existing.end == end) captures.remove(i);
                 }
+                captures.add(new Capture(start, end, name));
             }
 
             /**
@@ -912,20 +930,41 @@ final class JavaSignatures {
     }
 
     /**
-     * {@code type.builtin} for a primitive, {@code type} for everything else.
+     * <b>What colour a type binding is — the one answer, for the editor and the popup both.</b>
      *
      * <p>Not cosmetic: the editor's grammar draws {@code int}, {@code char} and {@code void} as
      * builtins, so a flat {@code type} made the popup disagree with the code two lines behind it --
      * exactly the drift that sharing one capture vocabulary between them was meant to make
-     * impossible.</p>
+     * impossible. {@code EcjSourceAnalyzer} calls this rather than deciding again, for the same
+     * reason it hands its {@code captureFor} in rather than having this file reimplement it.</p>
      */
-    private static String typeCapture(ITypeBinding type) {
+    static String typeCapture(ITypeBinding type) {
         if (type == null) return "type";
         if (type.isPrimitive()) return "type.builtin";
-        // A TYPE VARIABLE WHEREVER IT APPEARS, not only at its declaration. `<E>` in the header and the
-        // `E` of a return type are the same thing, and colouring one and not the other is worse than
-        // colouring neither -- it reads as the highlighter losing track halfway along the line.
-        return type.isTypeVariable() ? "type.parameter" : "type";
+        return kindOf(type).captureName();
+    }
+
+    /**
+     * Which <em>kind</em> of type a binding is — the question a grammar cannot answer at all, since
+     * {@code class Foo}, {@code interface Foo} and {@code enum Foo} are spelled identically at every use.
+     *
+     * <p><b>Order is not alphabetical and cannot be.</b> JDT answers {@code isInterface()} true for an
+     * annotation type (an {@code @interface} <em>is</em> one) and {@code isClass()} false for an enum, so
+     * the specific tests come first or every annotation in the file turns interface-coloured. Annotation
+     * types stay {@link SymbolKind#CLASS}: {@code @Nullable} used as metadata is answered positionally by
+     * the analyzer, and what reaches here is the declaration, which is a type.</p>
+     *
+     * <p>A TYPE VARIABLE WHEREVER IT APPEARS, not only at its declaration. {@code <E>} in the header and
+     * the {@code E} of a return type are the same thing, and colouring one and not the other is worse
+     * than colouring neither -- it reads as the highlighter losing track halfway along the line.</p>
+     */
+    static SymbolKind kindOf(ITypeBinding type) {
+        if (type.isTypeVariable()) return SymbolKind.TYPE_PARAMETER;
+        if (type.isEnum()) return SymbolKind.ENUM;
+        if (type.isAnnotation()) return SymbolKind.CLASS;
+        if (type.isInterface()) return SymbolKind.INTERFACE;
+        if (type.isRecord()) return SymbolKind.RECORD;
+        return SymbolKind.CLASS;
     }
 
     private static String declarationKeyword(ITypeBinding type) {

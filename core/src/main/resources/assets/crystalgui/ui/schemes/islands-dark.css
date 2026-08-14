@@ -75,6 +75,13 @@ theme {
      * and capitalisation already say "type", and colouring them turns a screen of Java into stripes. */
     --syntax-type: #BCBEC4;
     --syntax-type-parameter: #16BAAC;
+
+    /* AN INTERFACE AND AN ENUM, which only an engine can tell from a class -- the three are
+     * spelled identically at every use site. This scheme draws all three alike -- it overrides neither
+     * DEFAULT_INTERFACE_NAME nor ENUM_NAME, so agreeing with the class colour IS the port. */
+    --syntax-type-interface: #BCBEC4;
+    --syntax-type-enum: #BCBEC4;
+    --syntax-type-enum-style: normal;
     --syntax-type-builtin: #CF8E6D;
     --syntax-type-qualifier: #CF8E6D;
 
@@ -125,6 +132,7 @@ theme {
     --syntax-variable-captured: #C77DBB;
     --syntax-captured-underline: #9E6294;
     --syntax-reassigned-underline: #84868C;
+    --syntax-parameter-reassigned-underline: #84868C;
 
     --syntax-property: #C77DBB;
     --syntax-attribute: #B3AE60;
@@ -133,6 +141,9 @@ theme {
     --syntax-embedded: #BCBEC4;
     --syntax-label: #CF8E6D;
     --syntax-markup: #BCBEC4;
+
+    /* A PACKAGE PATH -- `java.util` in an import. Body text, which is what this scheme shows for a package path. */
+    --syntax-module: #BCBEC4;
     --syntax-error: #F75464;
     /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
      * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
@@ -148,6 +159,9 @@ theme {
      * this, every reference scheme does this, and the engine refused to express it until now. */
     --syntax-comment-style: italic;
     --syntax-constant-style: italic;
+    --syntax-keyword-weight: normal;
+    --syntax-constant-weight: normal;
+    --syntax-bracket-weight: bold;
 
     /* The bracket-MATCH pair under the caret — not a capture. IntelliJ tints the brace itself rather than
      * painting a box behind it, because a fill loses to the current-line band it sits on. */
