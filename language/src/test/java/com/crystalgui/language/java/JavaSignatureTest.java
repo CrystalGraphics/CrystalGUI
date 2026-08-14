@@ -130,12 +130,10 @@ public class JavaSignatureTest {
         assertEquals("keyword", captureOf(signature, "public"));
         assertEquals("void is a primitive, and the editor draws primitives as builtins",
                 "type.builtin", captureOf(signature, "void"));
-        // NOT `function.method`, which is the EDITOR's colour for a declaration and is emphasis rather
-        // than identity. In the editor blue distinguishes a declaration from the calls around it; in a
-        // popup there is one declaration and nothing to contrast with, so the emphasis says nothing and
-        // makes the subject the loudest thing in a box that is entirely about that subject. IntelliJ's
-        // own popup leaves it plain, and the parity rule is about what a name IS, not how loud it is.
-        assertEquals("function.call", captureOf(signature, "println"));
+        // THE DECLARATION COLOUR, because this IS a declaration. It was briefly `function.call` on the
+        // argument that a popup has one subject and so needs no emphasis to separate it -- true about
+        // emphasis, and beside the point: the parity rule is that a name is drawn as what it IS.
+        assertEquals("function.method", captureOf(signature, "println"));
         assertEquals("variable.parameter", captureOf(signature, "text"));
     }
 
