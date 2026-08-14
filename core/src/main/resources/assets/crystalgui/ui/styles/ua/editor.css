@@ -1217,9 +1217,17 @@ documentationpopup .__doc-definition-box__ {
  * are mutually exclusive, and self-sizing is what makes a short signature size the popup at all. The
  * breaks come from the engine instead, at points it understands (after an annotation, between
  * parameters, before a long initializer) rather than at whatever word reaches the edge. */
+/* THE DOCUMENT'S INK, not the variable colour. This said `--syntax-variable` from when the popup had its
+ * own three-name vocabulary and the SUBJECT was most of what a line contained -- reasonable then, wrong the
+ * moment an engine started rendering real captures. What is left uncaptured in a signature is punctuation:
+ * parens, commas, semicolons, `=`, a generic's angle brackets. Under a scheme whose locals are yellow, every
+ * bracket in the box went yellow with them, and the declaration read in two palettes at once.
+ *
+ * It also beat the `.__syntax__` rule above on specificity (0,10,1 against 0,10,0), so setting the ink there
+ * -- the right place, since it covers every code surface -- changed nothing here until this line agreed. */
 documentationpopup .__doc-definition__ {
     font-size: 8;
-    color: var(--syntax-variable, #DFE1E5);
+    color: var(--editor-fg, #DFE1E5);
     white-space: nowrap;
 }
 

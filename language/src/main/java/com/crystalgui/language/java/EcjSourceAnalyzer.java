@@ -46,6 +46,7 @@ import org.eclipse.jdt.core.dom.ReturnStatement;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SimpleType;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
+import org.eclipse.jdt.core.dom.StructuralPropertyDescriptor;
 import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
@@ -295,6 +296,21 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             return tokens;
         }
 
+        /**
+         * Whether a name is the one being declared by a record component.
+         *
+         * <p>Asked of the tree rather than of the binding, because {@code IVariableBinding} gained
+         * {@code isRecordComponent()} in the JDT that shipped with Java 14 and this adapter is loaded by
+         * the OLDEST band's classloader. A structural-property id is a string and an older AST simply
+         * never reports it.</p>
+         */
+        private static boolean isRecordComponent(SimpleName name) {
+            ASTNode parent = name.getParent();
+            if (!(parent instanceof SingleVariableDeclaration)) return false;
+            StructuralPropertyDescriptor slot = parent.getLocationInParent();
+            return slot != null && "recordComponents".equals(slot.getId());
+        }
+
         /** Whether a name sits inside a {@code package} or {@code import} path. */
         private static boolean inPackagePath(SimpleName name) {
             ASTNode node = name.getParent();
@@ -345,6 +361,14 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             if (binding instanceof IVariableBinding) {
                 IVariableBinding variable = (IVariableBinding) binding;
                 if (variable.isEnumConstant()) return SymbolKind.ENUM_MEMBER.captureName();
+                // A RECORD COMPONENT IS A FIELD, and JDT calls it neither field nor parameter -- so it
+                // fell through both tests to the local-variable catch-all, and a record's header drew
+                // its components in the colour of a temporary inside a method body. They are exactly
+                // what a field is: state the object carries, named once, readable from anywhere the
+                // object is. Decided POSITIONALLY rather than through isRecordComponent(), which arrived
+                // with Java 14 -- calling it would throw NoSuchMethodError on the oldest band, which is
+                // the same trap naming RecordDeclaration sets and one an ordinary test cannot see.
+                if (isRecordComponent(name)) return SymbolKind.FIELD.captureName();
                 if (variable.isField()) {
                     int flags = variable.getModifiers();
                     boolean constant = Modifier.isStatic(flags) && Modifier.isFinal(flags);

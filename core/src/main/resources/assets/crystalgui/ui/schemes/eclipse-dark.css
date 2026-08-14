@@ -39,44 +39,55 @@
  * --search-excluded-* and nothing else. */
 
 theme {
-    /* ── Surfaces — DARCULA'S, since Eclipse Dark overrides none of them ──
+    /* ── Surfaces ──
      *
-     * TRANSPARENT rather than Darcula's #1E1F22, for the reason dark-plus.css records at length: an
-     * opaque document fill is a SQUARE painted over the rounded island beneath it, which is how the
-     * editor loses its corners. The two differ by five units of luminance, so the corners are worth
-     * more than the fidelity. A scheme whose paper genuinely differs sets a colour and accepts them. */
-    --editor-bg: #00000000;
+     * THE ONE SCHEME THAT PAINTS ITS OWN PAPER, and it costs the editor its rounded corners.
+     *
+     * The rule the other four follow is dark-plus.css's: stay transparent, because an opaque document
+     * fill is a SQUARE over the rounded island beneath it. That rule ends with "a scheme whose paper
+     * genuinely differs sets a colour and accepts square corners", and this is that scheme --
+     * #323232 against the frame's #191A1C is not a rounding error, it is a different surface, and
+     * leaving it transparent made an Eclipse-palette editor sit on an Islands page.
+     *
+     * NOT IN THE .icls, which is why it was guessed wrong first. An IntelliJ export carries only the
+     * attributes a scheme OVERRIDES: `TEXT` here has a FOREGROUND and no BACKGROUND, so the paper comes
+     * from the inherited Darcula parent -- and the parent is a name, not a payload. The file cannot tell
+     * you this value; the running IDE can. Measured, not derived.
+     *
+     * Everything below it is re-derived for the lighter ground rather than copied from the dark schemes:
+     * a caret row of #212327 on #323232 is a band DARKER than the page, which reads as a shadow. */
+    --editor-bg: #323232;
     --editor-fg: #BCBEC4;
     --editor-caret: #CED0D6;
-    /* Darcula lifts the caret row eight units off its own background; applied to the panel this
-     * editor actually sits on rather than copied, or the band belongs to a page that is not here. */
-    --editor-current-line: #212327;
+    /* Darcula lifts its caret row seven units off its own background; the same lift, from here. */
+    --editor-current-line: #393939;
     --editor-selection-bg: #214283;
-    --editor-gutter-bg: #191A1C;
-    --editor-gutter-edge: #303236;
-    --editor-line-number: #4B5059;
-    --editor-indent-guide: #303236;
-    --editor-indent-guide-active: #6F737A;
-    --editor-whitespace: #6F737A;
-    --editor-ruler: #303236;
+    /* The gutter is the page, as Darcula's is -- the numbers separate it, not a fill. */
+    --editor-gutter-bg: #323232;
+    --editor-gutter-edge: #414141;
+    --editor-line-number: #6B6B6B;
+    --editor-indent-guide: #414141;
+    --editor-indent-guide-active: #7A7A7A;
+    --editor-whitespace: #5C5C5C;
+    --editor-ruler: #414141;
 
     /* ── Folding — Darcula neutrals ── */
-    --editor-fold: #5A5D63;
+    --editor-fold: #6B6B6B;
     --editor-fold-active: #BCBEC4;
-    --editor-fold-placeholder-bg: #2B2D30;
+    --editor-fold-placeholder-bg: #3C3C3C;
     --editor-fold-placeholder-fg: #8A8E96;
-    --editor-fold-placeholder-hover-bg: #393B40;
+    --editor-fold-placeholder-hover-bg: #4A4A4A;
     --editor-fold-placeholder-hover-fg: #DFE1E5;
 
     /* ── The zoom indicator — Darcula neutrals ── */
-    --editor-zoom-bg: #2B2D30;
+    --editor-zoom-bg: #3C3C3C;
     --editor-zoom-fg: #BCBEC4;
     --editor-zoom-link: #548AF7;
     --editor-zoom-link-pressed: #3B6FD4;
 
     /* ── Find & replace — Darcula, untouched by Eclipse Dark ── */
     --find-match-bg: #C87D2E;
-    --find-match-fg: #1E1F22;
+    --find-match-fg: #232323;
     --search-excluded-fg: #6F737A;
 
     /* ── Syntax ──
