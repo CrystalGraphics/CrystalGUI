@@ -6,6 +6,7 @@ import com.crystalgui.text.lang.SymbolKind;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.BooleanLiteral;
+import org.eclipse.jdt.core.dom.ChildListPropertyDescriptor;
 import org.eclipse.jdt.core.dom.CharacterLiteral;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
@@ -138,6 +139,11 @@ final class JavaSignatures {
             // substituted, so the popup said `ArrayList(Collection<? extends String>)` -- true of
             // this call and not of the declaration anybody is asking about.
             IMethodBinding method = ((IMethodBinding) binding).getMethodDeclaration();
+            // A GENERIC METHOD DECLARES ITS OWN PARAMETERS, before the return type. Omitted entirely
+            // until now, so `static <T> List<T> of(T... elements)` rendered as `static List<T> of(...)`
+            // -- with a `T` in the return type and nothing anywhere saying where it came from, which is
+            // exactly the complaint the class branch already answers with appendTypeParameters.
+            appendMethodTypeParameters(out, method);
             if (!method.isConstructor()) {
                 appendTypeName(out, method.getReturnType());
                 out.raw(" ");
@@ -161,7 +167,7 @@ final class JavaSignatures {
             // show the declaration here.
             ITypeBinding type = ((ITypeBinding) binding).getTypeDeclaration();
             out.word(declarationKeyword(type), "keyword");
-            out.append(name, "type");
+            out.append(name, typeCapture(type));
             appendTypeParameters(out, type);
             appendSupertypes(out, type, broken);
             return out.build();
@@ -273,17 +279,57 @@ final class JavaSignatures {
         out.append(")", "punctuation.bracket");
     }
 
-    /** Null when this unit does not declare the method — see the note on appendParameters. */
+    /**
+     * Null when this unit does not declare the method — see the note on {@link #appendParameters}.
+     *
+     * <p><b>A record's canonical constructor is declared by the RECORD</b>, not by a
+     * {@code MethodDeclaration}: nobody wrote it, so {@code findDeclaringNode} answers the record itself
+     * and the names are its components. Without this a record in the file being edited rendered
+     * {@code Message(String, Severity, long)} — indistinguishable from a classpath type with no sources
+     * attached, and wrong in a way that reads as the engine not knowing about a file it is compiling.</p>
+     */
     private List<String> parameterNames(IMethodBinding method) {
         ASTNode declaration = unit.findDeclaringNode(method);
-        if (!(declaration instanceof MethodDeclaration)) return null;
+        if (declaration instanceof MethodDeclaration) {
+            return namesOf(((MethodDeclaration) declaration).parameters());
+        }
+        // NULL, NOT A RECORD NODE, for a canonical constructor — findDeclaringNode answers for a binding
+        // that has a declaration, and this one has none: it is implied by the header. So the question has
+        // to be asked of the TYPE, which does.
+        if (declaration == null && method.isConstructor()) {
+            ITypeBinding owner = method.getDeclaringClass();
+            declaration = owner == null ? null : unit.findDeclaringNode(owner);
+        }
+        if (declaration == null) return null;
+        return namesOf(structuralList(declaration, "recordComponents"));
+    }
+
+    private static List<String> namesOf(List<?> declarations) {
+        if (declarations == null) return null;
         List<String> names = new ArrayList<>();
-        for (Object parameter : ((MethodDeclaration) declaration).parameters()) {
-            if (parameter instanceof SingleVariableDeclaration) {
-                names.add(((SingleVariableDeclaration) parameter).getName().getIdentifier());
+        for (Object each : declarations) {
+            if (each instanceof SingleVariableDeclaration) {
+                names.add(((SingleVariableDeclaration) each).getName().getIdentifier());
             }
         }
         return names.isEmpty() ? null : names;
+    }
+
+    /**
+     * A named child list of any node, <b>without naming the node's class</b>.
+     *
+     * <p>{@code RecordDeclaration} arrived in JDT with Java 14 and this adapter is compiled against the
+     * OLDEST band, where the class does not exist — naming it in a cast or a signature makes the whole
+     * class unloadable there, which is the trap {@code TextBlock} already documents. A structural
+     * property lookup asks the AST by name instead, so an older band simply finds nothing.</p>
+     */
+    private static List<?> structuralList(ASTNode node, String property) {
+        for (Object each : node.structuralPropertiesForType()) {
+            if (!(each instanceof ChildListPropertyDescriptor)) continue;
+            ChildListPropertyDescriptor descriptor = (ChildListPropertyDescriptor) each;
+            if (property.equals(descriptor.getId())) return (List<?>) node.getStructuralProperty(descriptor);
+        }
+        return null;
     }
 
     private static void appendThrows(Signature.Builder out, ITypeBinding[] thrown) {
@@ -303,21 +349,65 @@ final class JavaSignatures {
      * appearing in a box that claims to show what they did.</p>
      */
     /**
-     * {@code <E>}, {@code <K, V>} — a generic type's own parameters, as declared.
+     * {@code <E>}, {@code <K, V>}, {@code <T extends Comparable<T>>} — a generic type's own parameters,
+     * <b>as declared, bounds included</b>.
      *
      * <p>Without these {@code ArrayList} renders as a raw type, which is the one thing it is not:
      * {@code class ArrayList} beside {@code extends AbstractList<E>} says the parameter came from
      * nowhere.</p>
+     *
+     * <h3>A DECLARATION of a type variable is not a USE of one</h3>
+     *
+     * <p>{@link #appendTypeName} renders the use — a bare {@code T}, which is right everywhere a
+     * parameter is referred to and wrong in the one place it is introduced. Routing this through it
+     * silently reduced {@code class Box<T extends Comparable<T>>} to {@code class Box<T>}: not a
+     * mis-colour but a missing constraint, in a box whose entire job is to say what the constraint is.
+     * The bound is often the most load-bearing half of the declaration.</p>
+     *
+     * <p>JDT returns an empty bound array when the only bound is {@code Object}, which is the same
+     * omission {@code appendSupertypes} makes and for the same reason — nobody wrote it.</p>
      */
     private static void appendTypeParameters(Signature.Builder out, ITypeBinding type) {
-        ITypeBinding[] parameters = type.getTypeParameters();
+        appendParameterList(out, type.getTypeParameters());
+    }
+
+    /** The shared {@code <A, B extends C>} rendering — a type declares these and so does a method. */
+    private static void appendParameterList(Signature.Builder out, ITypeBinding[] parameters) {
         if (parameters == null || parameters.length == 0) return;
         out.append("<", "punctuation.bracket");
         for (int i = 0; i < parameters.length; i++) {
             if (i > 0) out.append(",", "punctuation.delimiter").raw(" ");
-            appendTypeName(out, parameters[i]);
+            out.append(parameters[i].getName(), "type.parameter");
+            appendTypeBounds(out, parameters[i]);
         }
         out.append(">", "punctuation.bracket");
+    }
+
+    /** {@code <T>} on a generic method, which sits before the return type rather than after the name. */
+    private static void appendMethodTypeParameters(Signature.Builder out, IMethodBinding method) {
+        appendParameterList(out, method.getTypeParameters());
+        if (method.getTypeParameters() != null && method.getTypeParameters().length > 0) out.raw(" ");
+    }
+
+    /**
+     * {@code extends Comparable<T> & Serializable} on a type parameter's declaration.
+     *
+     * <p><b>{@code extends Object} is skipped</b>, the same omission {@link #appendSupertypes} makes and
+     * for the same reason — every unbounded parameter has it and no source file contains it. JDT does
+     * <em>not</em> report an empty array for the unbounded case, which was the assumption this shipped
+     * with: {@code ArrayList<E>} came out as {@code ArrayList<E extends Object>}.</p>
+     */
+    private static void appendTypeBounds(Signature.Builder out, ITypeBinding parameter) {
+        ITypeBinding[] bounds = parameter.getTypeBounds();
+        if (bounds == null || bounds.length == 0) return;
+        if (bounds.length == 1 && "java.lang.Object".equals(bounds[0].getQualifiedName())) return;
+        out.raw(" ").word("extends", "keyword");
+        for (int i = 0; i < bounds.length; i++) {
+            // `&`, not `,` -- a type parameter takes intersection bounds, and a comma here would read
+            // as a second parameter.
+            if (i > 0) out.raw(" ").append("&", "operator").raw(" ");
+            appendTypeName(out, bounds[i]);
+        }
     }
 
     /**
@@ -759,11 +849,11 @@ final class JavaSignatures {
 
             @Override
             public boolean visit(SimpleType it) {
-                // A TYPE VARIABLE IS NOT A TYPE, here as in the editor. The quoted path derives its
-                // captures from the AST, so `E` in `List<E>` would otherwise take the flat type colour
-                // while the same `E` two characters away in the header took the parameter one.
-                ITypeBinding bound = it.resolveBinding();
-                mark(it, bound != null && bound.isTypeVariable() ? "type.parameter" : "type");
+                // ASKED, NEVER DECIDED HERE. This used to carry its own `isTypeVariable` test -- one
+                // third of typeCapture, reimplemented -- so it kept every answer that function grew
+                // afterwards out of the quoted path: an interface named in an `implements` clause
+                // rendered flat while the same name in the editor behind the popup was cyan.
+                mark(it, typeCapture(it.resolveBinding()));
                 return false;
             }
 
@@ -1023,7 +1113,8 @@ final class JavaSignatures {
             return;
         }
         if (type.isParameterizedType()) {
-            out.append(type.getTypeDeclaration().getName(), "type");
+            ITypeBinding raw = type.getTypeDeclaration();
+            out.append(raw.getName(), typeCapture(raw));
             out.append("<", "punctuation.bracket");
             ITypeBinding[] arguments = type.getTypeArguments();
             for (int i = 0; i < arguments.length; i++) {

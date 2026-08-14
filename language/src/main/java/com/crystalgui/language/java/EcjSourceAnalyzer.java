@@ -46,6 +46,7 @@ import org.eclipse.jdt.core.dom.ReturnStatement;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SimpleType;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
+import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
@@ -294,6 +295,15 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             return tokens;
         }
 
+        /** Whether a name sits inside a {@code package} or {@code import} path. */
+        private static boolean inPackagePath(SimpleName name) {
+            ASTNode node = name.getParent();
+            while (node instanceof QualifiedName) node = node.getParent();
+            if (node == null) return false;
+            int type = node.getNodeType();
+            return type == ASTNode.PACKAGE_DECLARATION || type == ASTNode.IMPORT_DECLARATION;
+        }
+
         /**
          * Whether a name with no binding is actually a failure.
          *
@@ -324,7 +334,14 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
          */
         private String captureFor(SimpleName name) {
             IBinding binding = name.resolveBinding();
-            if (binding == null) return null;
+            // A PACKAGE PATH SEGMENT WITH NO BINDING OF ITS OWN. JDT gives the package binding to
+            // `java.util` and to the `util` inside it, but the leftmost `java` is a bare qualifier and
+            // resolves to nothing -- so a binding-only rule coloured `util` and left `java` as body
+            // text, drawing one import path in two colours. Positional, and only as a FALLBACK: the
+            // last segment of an import is a TYPE and has a binding, so it never reaches here.
+            if (binding == null) {
+                return inPackagePath(name) ? SymbolKind.PACKAGE.captureName() : null;
+            }
             if (binding instanceof IVariableBinding) {
                 IVariableBinding variable = (IVariableBinding) binding;
                 if (variable.isEnumConstant()) return SymbolKind.ENUM_MEMBER.captureName();
@@ -571,8 +588,21 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 node = node.getParent();
             }
             if (node instanceof ClassInstanceCreation) {
-                IMethodBinding constructor = ((ClassInstanceCreation) node).resolveConstructorBinding();
-                if (constructor != null) return constructor;
+                ClassInstanceCreation creation = (ClassInstanceCreation) node;
+                // ONLY IF THE NAME IS THE TYPE BEING CONSTRUCTED, which the walk above does not
+                // establish: a QualifiedName is climbed so `new java.util.ArrayList<>()` works, but a
+                // QualifiedName is also an ordinary field access, so `new Message(text, Severity.INFO,
+                // 0L)` climbed from the ARGUMENT `Severity` straight to the creation. The popup then
+                // reported the constructor -- correct container, correct kind -- under the hovered
+                // word's name, so it read `public Severity(String, Severity, long)` for a class called
+                // Message. Every part was individually right, which is why it looked like a naming bug.
+                Type constructed = creation.getType();
+                int at = name.getStartPosition();
+                if (constructed != null && at >= constructed.getStartPosition()
+                        && at < constructed.getStartPosition() + constructed.getLength()) {
+                    IMethodBinding constructor = creation.resolveConstructorBinding();
+                    if (constructor != null) return constructor;
+                }
             }
             return name.resolveBinding();
         }
