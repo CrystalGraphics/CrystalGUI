@@ -1104,7 +1104,12 @@ final class JavaSignatures {
             return;
         }
         if (type.isWildcardType()) {
-            out.append("?", "type");
+            // A WILDCARD IS PUNCTUATION. `?` names nothing, so the class capture it used to carry put two
+            // blue marks in `Function<? super T, ? extends R>` that referred to no class at all -- and it
+            // is not a keyword either, which was the second guess: the `super` and `extends` beside it
+            // are, and the `?` is the mark that introduces them. Punctuation is what both references
+            // draw it as, and it is the one capture whose whole meaning is "structure, not a name".
+            out.append("?", "punctuation");
             ITypeBinding bound = type.getBound();
             if (bound != null) {
                 out.raw(" ").word(type.isUpperbound() ? "extends" : "super", "keyword");

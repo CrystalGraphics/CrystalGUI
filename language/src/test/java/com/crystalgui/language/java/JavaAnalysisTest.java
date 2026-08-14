@@ -128,6 +128,40 @@ public class JavaAnalysisTest {
     }
 
     /**
+     * <b>A record component is a FIELD, and JDT calls it neither field nor parameter.</b>
+     *
+     * <p>So it fell through both tests to the local-variable catch-all, and a record's header drew its
+     * components in the colour of a temporary inside a method body — the one thing they are not. They
+     * are state the object carries, named once, readable from anywhere the object is.</p>
+     *
+     * <p>Decided from the tree rather than from {@code isRecordComponent()}, which arrived with Java 14:
+     * this adapter is loaded by the OLDEST band's classloader, where calling it throws
+     * {@code NoSuchMethodError} — a failure no test on a modern JVM can see.</p>
+     */
+    @Test
+    public void aRecordComponentIsColouredAsAFieldRatherThanALocal() {
+        String source = ""
+                + "public class Script {\n"
+                + "    record Message(String text, long id) {\n"
+                + "        String shout() { return text; }\n"
+                + "    }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, List.of(), 17, 1L);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            Assume.assumeTrue("this band's JDT does not parse records; skipping",
+                    captureAtIndex(tokens, source.indexOf("Message"), 7) != null);
+
+            assertEquals("the component's declaration", "variable.member",
+                    captureAtIndex(tokens, source.indexOf("text"), 4));
+            assertEquals("and reading it in the body, which already resolved to a field",
+                    "variable.member", captureAtIndex(tokens, source.lastIndexOf("text"), 4));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
      * <b>A whole import path is one colour, and the last segment is the type it names.</b>
      *
      * <p>Three separate answers had to line up and one of them was missing. {@code util} resolves to a
