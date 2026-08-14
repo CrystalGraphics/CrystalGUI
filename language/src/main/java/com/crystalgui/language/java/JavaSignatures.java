@@ -5,6 +5,7 @@ import com.crystalgui.text.lang.SymbolKind;
 
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.BooleanLiteral;
 import org.eclipse.jdt.core.dom.ChildListPropertyDescriptor;
 import org.eclipse.jdt.core.dom.CharacterLiteral;
@@ -156,6 +157,10 @@ final class JavaSignatures {
             // `new ArrayList<>(List.of("one"))` binds the constructor with its parameters already
             // substituted, so the popup said `ArrayList(Collection<? extends String>)` -- true of
             // this call and not of the declaration anybody is asking about.
+            // QUOTED WHOLE when this unit declares it -- see quotedHeader. Real parameter names,
+            // the author's own wrapping, and no implicit modifier they never typed.
+            Signature quoted = quotedHeader(binding);
+            if (quoted != null) return quoted;
             IMethodBinding method = ((IMethodBinding) binding).getMethodDeclaration();
             // A GENERIC METHOD DECLARES ITS OWN PARAMETERS, before the return type. Omitted entirely
             // until now, so `static <T> List<T> of(T... elements)` rendered as `static List<T> of(...)`
@@ -178,6 +183,10 @@ final class JavaSignatures {
         }
 
         if (binding instanceof ITypeBinding) {
+            // QUOTED WHOLE when this unit declares it -- which is the only way `sealed`, `permits` and
+            // `non-sealed` appear at all, and the only way an implicit `static` stays out.
+            Signature quoted = quotedHeader(binding);
+            if (quoted != null) return quoted;
             // THE DECLARATION, NOT THE INSTANTIATION. Hovering `new ArrayList<>(List.of("one"))`
             // binds the type as `ArrayList<String>`, whose superclass JDT reports as
             // `AbstractList<String>` -- so the popup claimed ArrayList is declared over String.
@@ -545,6 +554,60 @@ final class JavaSignatures {
         from = skipLeadingComments(from, end);
         if (from >= end) return null;
 
+        return quote(declaration, from, end, false);
+    }
+
+    /**
+     * The <b>header</b> of a type or method declared in this unit — everything up to its body brace.
+     *
+     * <h3>Why this exists at all, and what it retires</h3>
+     *
+     * <p>The assembled renderer knows a fixed list of things a declaration can contain: modifiers, a
+     * keyword, a name, type parameters, {@code extends}, {@code implements}, parameters, {@code throws}.
+     * Java keeps adding to that list. {@code sealed} is a modifier the flag constants only gained in a
+     * later JDT, {@code permits} has no accessor the oldest band can name at all, and {@code non-sealed}
+     * is a keyword no {@code Modifier} query returns — so
+     * {@code public sealed interface Shape permits Circle, Rectangle, Triangle} came out as
+     * {@code public static interface Shape}: two clauses silently gone, and a {@code static} the author
+     * never wrote, because a nested interface carries that flag implicitly.</p>
+     *
+     * <p><b>Every one of those is the same bug, and chasing them one clause at a time is the wrong
+     * shape of work.</b> A symbol declared in the file being edited has its declaration written down
+     * already: quoting it is one substring, and it is right about every keyword the language has now and
+     * every one it gains later, including the implicit modifiers a binding reports and nobody typed.</p>
+     *
+     * <h3>Where the header ends</h3>
+     *
+     * <p>At the first {@code &#123;} after the last modifier — the body brace. Scanning starts after the
+     * modifier list rather than at the declaration, because an annotation argument may contain a brace
+     * ({@code @Target(&#123;METHOD, FIELD&#125;)}) and it is the only thing in a header that can. An
+     * abstract method has no brace, so the node's own end is used and the trailing {@code ;} trimmed.</p>
+     */
+    private Signature quotedHeader(IBinding binding) {
+        ASTNode declaration = unit.findDeclaringNode(binding);
+        if (!(declaration instanceof BodyDeclaration)) return null;
+        int from = declaration.getStartPosition();
+        int end = from + declaration.getLength();
+        if (from < 0 || end > source.length() || end <= from) return null;
+        from = skipLeadingComments(from, end);
+        if (from >= end) return null;
+
+        int scanFrom = from;
+        for (Object modifier : ((BodyDeclaration) declaration).modifiers()) {
+            ASTNode node = (ASTNode) modifier;
+            scanFrom = Math.max(scanFrom, node.getStartPosition() + node.getLength());
+        }
+        int brace = source.indexOf('{', scanFrom);
+        if (brace >= 0 && brace < end) end = brace;
+        while (end > from && (Character.isWhitespace(source.charAt(end - 1))
+                || source.charAt(end - 1) == ';')) {
+            end--;
+        }
+        return end <= from ? null : quote(declaration, from, end, true);
+    }
+
+    /** The shared tail of both quoting paths: slice, dedent, and take the captures off the AST. */
+    private Signature quote(ASTNode declaration, int from, int end, boolean header) {
         String slice = source.substring(from, end);
         boolean tooLong = slice.length() > MAX_DECLARATION_CHARS;
         if (tooLong) slice = slice.substring(0, MAX_DECLARATION_CHARS);
@@ -554,10 +617,60 @@ final class JavaSignatures {
         Signature.Builder out = new Signature.Builder();
         out.raw(body.text);
         if (tooLong) out.raw("…");
-        for (Capture capture : capturesIn(declaration, from, slice)) {
+        // Walks the WHOLE declaration, body included, and `mark` drops anything past the slice --
+        // the same bounds check that makes the truncation above safe.
+        List<Capture> captures = capturesIn(declaration, from, slice);
+        if (header) markHeaderKeywords(slice, captures);
+        for (Capture capture : captures) {
             out.tokenAt(body.map(capture.start), body.map(capture.end), capture.name);
         }
         return out.build();
+    }
+
+    /**
+     * The declaration keywords that <b>have no AST node to hang a capture on</b>.
+     *
+     * <p>{@code public} and {@code final} are {@code Modifier} nodes and are already marked; {@code class},
+     * {@code extends}, {@code implements}, {@code permits} and {@code throws} are bare tokens the AST
+     * records only as structure. The assembled renderer wrote each one itself and coloured it in passing,
+     * so quoting silently dropped every one of them — a header in two colours where it used to be in
+     * three, which is the kind of loss that looks like a scheme change rather than a missing capture.</p>
+     *
+     * <p>A whole-word scan is safe HERE and would not be in general: the region is one declaration
+     * header, which cannot contain a comment (it ends at the body brace) and whose only string is inside
+     * an annotation argument — already captured, and skipped for that reason. {@code permits},
+     * {@code record} and {@code sealed} are CONTEXTUAL keywords, legal as identifiers elsewhere, which is
+     * the other half of why this is not applied to the variable path.</p>
+     */
+    private static void markHeaderKeywords(String slice, List<Capture> captures) {
+        for (String word : HEADER_KEYWORDS) {
+            int at = slice.indexOf(word);
+            while (at >= 0) {
+                int end = at + word.length();
+                boolean whole = (at == 0 || !isWordChar(slice.charAt(at - 1)))
+                        && (end == slice.length() || !isWordChar(slice.charAt(end)));
+                if (whole && !overlapsCapture(captures, at, end)) {
+                    captures.add(new Capture(at, end, "keyword"));
+                }
+                at = slice.indexOf(word, at + 1);
+            }
+        }
+    }
+
+    private static final String[] HEADER_KEYWORDS = {
+            "non-sealed", "implements", "interface", "extends", "permits", "throws",
+            "sealed", "record", "class", "enum",
+    };
+
+    private static boolean isWordChar(char c) {
+        return Character.isJavaIdentifierPart(c) || c == '-';
+    }
+
+    private static boolean overlapsCapture(List<Capture> captures, int start, int end) {
+        for (Capture capture : captures) {
+            if (capture.start < end && start < capture.end) return true;
+        }
+        return false;
     }
 
     /** The first position at or after {@code from} that is neither whitespace nor a comment. */
