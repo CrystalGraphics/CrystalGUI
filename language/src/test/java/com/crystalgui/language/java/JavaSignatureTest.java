@@ -748,6 +748,37 @@ public class JavaSignatureTest {
     }
 
     /**
+     * <b>An annotation gets its own line whatever the declaration's length</b>, and a parameter's does not.
+     *
+     * <p>The break used to be conditional on the signature having already grown too long for one line, so
+     * whether {@code @FunctionalInterface} sat above its interface depended on how many characters
+     * happened to follow it: correct on a long method, wrong on a short type, and reading as a rule that
+     * works intermittently rather than as the wrong rule. Length is a question about wrapping; where the
+     * metadata goes is not.</p>
+     *
+     * <p>A PARAMETER's annotation is the opposite case and stays inline — {@code @Nullable String x} is
+     * one item in a list, so a break there splits the list rather than separating metadata.</p>
+     */
+    @Test
+    public void anAnnotationTakesItsOwnLineEvenWhenTheDeclarationIsShort() {
+        String source = ""
+                + "@FunctionalInterface\n"
+                + "public interface Script {\n"
+                + "    void run(@Deprecated String x);\n"
+                + "}\n";
+
+        Signature type = signatureAt(source, "Script");
+        assertTrue("the annotation should be on its own line: <" + type.text() + ">",
+                type.text().startsWith("@FunctionalInterface\n"));
+        assertTrue("and the declaration should not have been broken up as well: <" + type.text() + ">",
+                type.text().endsWith("interface Script"));
+
+        Signature method = signatureAt(source, "run");
+        assertTrue("a parameter's annotation stays inline: <" + method.text() + ">",
+                method.text().contains("@Deprecated String x"));
+    }
+
+    /**
      * <b>A type parameter's DECLARATION carries its bounds; a USE of one does not.</b>
      *
      * <p>{@code appendTypeName} renders the use — a bare {@code T} — which is right everywhere a
