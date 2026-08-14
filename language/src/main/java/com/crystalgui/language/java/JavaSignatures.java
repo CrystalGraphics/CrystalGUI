@@ -126,8 +126,8 @@ final class JavaSignatures {
             // QUOTED WHOLE when we have the source for it -- see quotedDeclaration.
             Signature quoted = quotedDeclaration(variable);
             if (quoted != null) return quoted;
-            out.word(simpleTypeName(variable.getType()), typeCapture(variable.getType()));
-            out.append(name, captureForVariable(variable));
+            appendTypeName(out, variable.getType());
+            out.raw(" ").append(name, captureForVariable(variable));
             appendInitializer(out, variable, broken);
             return out.build();
         }
@@ -139,10 +139,14 @@ final class JavaSignatures {
             // this call and not of the declaration anybody is asking about.
             IMethodBinding method = ((IMethodBinding) binding).getMethodDeclaration();
             if (!method.isConstructor()) {
-                out.word(simpleTypeName(method.getReturnType()),
-                        typeCapture(method.getReturnType()));
+                appendTypeName(out, method.getReturnType());
+                out.raw(" ");
             }
-            out.append(name, kind == SymbolKind.CONSTRUCTOR ? "constructor" : "function.method");
+            // NOT `function.method`, which is the EDITOR's colour for a declaration. IntelliJ's own
+            // popup leaves the name at the identifier colour -- the box is already about this symbol, so
+            // tinting its name says nothing the surrounding text does not, and it made the one word you
+            // are reading about the loudest thing in the box.
+            out.append(name, kind == SymbolKind.CONSTRUCTOR ? "constructor" : "function.call");
             appendParameters(out, method, broken);
             appendThrows(out, method.getExceptionTypes());
             return out.build();
@@ -255,11 +259,12 @@ final class JavaSignatures {
             IAnnotationBinding[] onParameter = method.getParameterAnnotations(i);
             appendAnnotations(out, onParameter, false);
             boolean varargs = method.isVarargs() && i == types.length - 1;
-            String rendered = simpleTypeName(types[i]);
-            if (varargs && rendered.endsWith("[]")) {
-                rendered = rendered.substring(0, rendered.length() - 2) + "...";
+            if (varargs) {
+                appendTypeName(out, types[i].isArray() ? types[i].getElementType() : types[i]);
+                out.append("...", "punctuation.bracket");
+            } else {
+                appendTypeName(out, types[i]);
             }
-            out.append(rendered, typeCapture(types[i]));
             if (names != null && i < names.size()) {
                 out.raw(" ").append(names.get(i), "variable.parameter");
             }
@@ -286,7 +291,7 @@ final class JavaSignatures {
         out.raw(" ").word("throws", "keyword");
         for (int i = 0; i < thrown.length; i++) {
             if (i > 0) out.append(",", "punctuation.delimiter").raw(" ");
-            out.append(simpleTypeName(thrown[i]), "type");
+            appendTypeName(out, thrown[i]);
         }
     }
 
@@ -310,7 +315,7 @@ final class JavaSignatures {
         out.append("<", "punctuation.bracket");
         for (int i = 0; i < parameters.length; i++) {
             if (i > 0) out.append(",", "punctuation.delimiter").raw(" ");
-            out.append(simpleTypeName(parameters[i]), "type.parameter");
+            appendTypeName(out, parameters[i]);
         }
         out.append(">", "punctuation.bracket");
     }
@@ -332,7 +337,8 @@ final class JavaSignatures {
         if (superclass != null && !"java.lang.Object".equals(superclass.getQualifiedName())
                 && !type.isEnum() && !type.isInterface()) {
             if (broken) out.newline(); else out.raw(" ");
-            out.word("extends", "keyword").append(simpleTypeName(superclass), "type");
+            out.word("extends", "keyword");
+            appendTypeName(out, superclass);
         }
         ITypeBinding[] interfaces = type.getInterfaces();
         if (interfaces == null || interfaces.length == 0) return;
@@ -362,7 +368,7 @@ final class JavaSignatures {
                 out.append(",", "punctuation.delimiter");
                 if (perLine) out.newline().raw(pad); else out.raw(" ");
             }
-            out.append(simpleTypeName(interfaces[i]), "type");
+            appendTypeName(out, interfaces[i]);
         }
     }
 
@@ -835,7 +841,8 @@ final class JavaSignatures {
             return;
         }
         if (value instanceof ITypeBinding) {
-            out.append(simpleTypeName((ITypeBinding) value), "type").append(".class", "keyword");
+            appendTypeName(out, (ITypeBinding) value);
+                out.append(".class", "keyword");
             return;
         }
         if (value instanceof IVariableBinding) {
@@ -938,6 +945,56 @@ final class JavaSignatures {
                     ? "constant" : "variable.member";
         }
         return "variable";
+    }
+
+    /**
+     * A type name, <b>built from its parts</b> so the pieces inside it can be coloured separately.
+     *
+     * <h3>A generic is not one word</h3>
+     *
+     * <p>Rendering {@code SequencedCollection<E>} as a single string with a single {@code type} capture
+     * makes the {@code E} inside it flat, while the {@code E} in the very same declaration's header is
+     * teal — one name, two colours, six characters apart. The same goes for {@code Collection<? extends
+     * E>} in a constructor's parameter list.</p>
+     *
+     * <p>So this walks the binding rather than asking it for a name: a type variable is a type variable
+     * wherever it appears, a wildcard's bound is rendered on its own terms, and an array's element type
+     * keeps whatever it was. The brackets and commas get punctuation captures, which is what the editor
+     * gives them.</p>
+     */
+    private static void appendTypeName(Signature.Builder out, ITypeBinding type) {
+        if (type == null) return;
+
+        if (type.isTypeVariable()) {
+            out.append(type.getName(), "type.parameter");
+            return;
+        }
+        if (type.isArray()) {
+            appendTypeName(out, type.getElementType());
+            for (int i = 0; i < type.getDimensions(); i++) out.append("[]", "punctuation.bracket");
+            return;
+        }
+        if (type.isWildcardType()) {
+            out.append("?", "type");
+            ITypeBinding bound = type.getBound();
+            if (bound != null) {
+                out.raw(" ").word(type.isUpperbound() ? "extends" : "super", "keyword");
+                appendTypeName(out, bound);
+            }
+            return;
+        }
+        if (type.isParameterizedType()) {
+            out.append(type.getTypeDeclaration().getName(), "type");
+            out.append("<", "punctuation.bracket");
+            ITypeBinding[] arguments = type.getTypeArguments();
+            for (int i = 0; i < arguments.length; i++) {
+                if (i > 0) out.append(",", "punctuation.delimiter").raw(" ");
+                appendTypeName(out, arguments[i]);
+            }
+            out.append(">", "punctuation.bracket");
+            return;
+        }
+        out.append(simpleTypeName(type), typeCapture(type));
     }
 
     /**
