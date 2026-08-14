@@ -74,6 +74,47 @@ public class JavaSignatureTest {
         return null;
     }
 
+    /**
+     * <b>A name is coloured the same in the editor and in the popup.</b>
+     *
+     * <p>This is the invariant the two views kept breaking. They answered "what is this name" separately,
+     * so type parameters came out teal in the editor and flat in the popup, and annotations yellow in the
+     * popup and plain in the editor — each time fixed by making the same edit twice. The popup now asks
+     * the semantic layer rather than working it out again, and this fails if that is ever undone.</p>
+     *
+     * <p>Asserted over several kinds at once, because a shared function is only worth having if it covers
+     * the cases that actually differ: a constant, a type parameter, an annotation and a call.</p>
+     */
+    @Test
+    public void aNameIsColouredTheSameInTheEditorAndInThePopup() {
+        String source = ""
+                + "public class Script<E> {\n"
+                + "    private static final int COUNT = 3;\n"
+                + "    @SuppressWarnings(\"unused\")\n"
+                + "    E pick(E chosen) { return chosen; }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, List.of(), 8, 1L);
+        List<SyntaxToken> tokens = analysis.semanticTokens();
+
+        for (String name : new String[] { "COUNT", "chosen" }) {
+            SymbolInfo symbol = analysis.resolveAt(source.indexOf(name));
+            assertNotNull("nothing resolved at " + name, symbol);
+            assertNotNull("no signature for " + name, symbol.signature());
+
+            String inEditor = captureAtIndex(tokens, source.indexOf(name), name.length());
+            String inPopup = captureOf(symbol.signature(), name);
+            assertEquals(name + " is drawn differently in the two views", inEditor, inPopup);
+        }
+    }
+
+    /** The capture over an exact span — for a name that appears more than once in the fixture. */
+    private static String captureAtIndex(List<SyntaxToken> tokens, int at, int length) {
+        for (SyntaxToken token : tokens) {
+            if (token.start() == at && token.end() == at + length) return token.name();
+        }
+        return null;
+    }
+
     /** Visibility, which {@code SymbolModifier} does not carry and only the flags know. */
     @Test
     public void aMethodRendersItsVisibilityReturnTypeAndParameterNames() {
