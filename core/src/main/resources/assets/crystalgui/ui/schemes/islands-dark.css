@@ -98,7 +98,11 @@ theme {
     --syntax-function-special: #56A8F5;
     --syntax-function-method: #56A8F5;
     --syntax-function-call: #BCBEC4;
-    --syntax-function-static: #57AAF7;
+    /* THE CALL COLOUR PLUS A SLANT, not the declaration blue. DEFAULT_STATIC_METHOD describes a
+     * static DECLARATION; a static CALL composes the call attribute -- which is
+     * DEFAULT_IDENTIFIER -- with the static italic. That is why IntelliJ draws `classify(...)`
+     * white and slanted rather than blue, and reading the attribute name alone got it wrong. */
+    --syntax-function-static: #BCBEC4;
     --syntax-function-static-style: italic;
 
     --syntax-string: #6AAB73;

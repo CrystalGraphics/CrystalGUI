@@ -301,7 +301,7 @@ final class JavaSignatures {
         out.append("<", "punctuation.bracket");
         for (int i = 0; i < parameters.length; i++) {
             if (i > 0) out.append(",", "punctuation.delimiter").raw(" ");
-            out.append(simpleTypeName(parameters[i]), "type");
+            out.append(simpleTypeName(parameters[i]), "type.parameter");
         }
         out.append(">", "punctuation.bracket");
     }
@@ -726,7 +726,11 @@ final class JavaSignatures {
 
             @Override
             public boolean visit(SimpleType it) {
-                mark(it, "type");
+                // A TYPE VARIABLE IS NOT A TYPE, here as in the editor. The quoted path derives its
+                // captures from the AST, so `E` in `List<E>` would otherwise take the flat type colour
+                // while the same `E` two characters away in the header took the parameter one.
+                ITypeBinding bound = it.resolveBinding();
+                mark(it, bound != null && bound.isTypeVariable() ? "type.parameter" : "type");
                 return false;
             }
 
@@ -890,7 +894,12 @@ final class JavaSignatures {
      * impossible.</p>
      */
     private static String typeCapture(ITypeBinding type) {
-        return type != null && type.isPrimitive() ? "type.builtin" : "type";
+        if (type == null) return "type";
+        if (type.isPrimitive()) return "type.builtin";
+        // A TYPE VARIABLE WHEREVER IT APPEARS, not only at its declaration. `<E>` in the header and the
+        // `E` of a return type are the same thing, and colouring one and not the other is worse than
+        // colouring neither -- it reads as the highlighter losing track halfway along the line.
+        return type.isTypeVariable() ? "type.parameter" : "type";
     }
 
     private static String declarationKeyword(ITypeBinding type) {
