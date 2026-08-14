@@ -106,7 +106,7 @@ public final class EcjScriptCompiler implements ScriptCompiler {
      */
     private static String commandLine(Path file, Path output, List<String> classpath, int releaseLevel) {
         StringBuilder command = new StringBuilder();
-        String level = releaseLevel <= 8 ? "1." + releaseLevel : Integer.toString(releaseLevel);
+        String level = EcjOptions.levelName(releaseLevel);
         command.append("-source ").append(level).append(' ');
         // SOURCE AND TARGET BOTH, and the target is the one that matters: bytecode has to LOAD on the
         // host. A newer target on an older host produces class files the JVM refuses, and the error

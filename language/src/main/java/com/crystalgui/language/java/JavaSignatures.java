@@ -25,11 +25,13 @@ import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.NullLiteral;
 import org.eclipse.jdt.core.dom.NumberLiteral;
+import org.eclipse.jdt.core.dom.PrefixExpression;
 import org.eclipse.jdt.core.dom.PrimitiveType;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SimpleType;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.StringLiteral;
+import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
@@ -48,27 +50,29 @@ import java.util.function.Function;
  * does this name refer to. Rendering a declaration shares nothing with them but the AST — no state, no
  * helpers, no vocabulary — so it was a second class living in the first one's braces.</p>
  *
- * <h3>Two ways to produce a declaration, and the choice is about the SOURCE</h3>
+ * <h3>Quoted first, always — and from wherever the source actually is</h3>
  *
- * <p>A symbol declared in the file being analysed is <b>quoted</b>: {@link #quotedDeclaration} slices the
- * text the author wrote, so layout, indentation and terminator are theirs and only the captures are
- * derived. A symbol from the classpath has no source to quote, so it is <b>assembled</b> from the binding
- * — modifiers in a fixed order, the type, the name, the parameters — and the layout is this class's to
- * choose.</p>
+ * <p>A declaration is <b>quoted</b>: the text its author wrote, sliced whole, so layout, indentation,
+ * parameter names and terminator are theirs and only the captures are derived. That used to mean "a
+ * symbol in the file being edited", because nothing else had source to quote. {@link AttachedSources}
+ * removed the limit rather than the rule — a {@code -sources.jar} beside a jar and the JDK's
+ * {@code src.zip} are read exactly as the buffer is — so {@code java.util.List.add} now comes out of
+ * {@code src.zip} the same way a method three lines up comes out of the file.</p>
  *
- * <p><b>The assembled path is waiting to be deleted, and it is worth knowing which half is which.</b>
- * Everything layout-shaped in it — {@link #MAX_SIGNATURE_LINE}, the break before a long {@code =}, one
- * parameter per line, the hanging indent under {@code implements}, {@link #spaces} — exists to invent a
- * wrapping that the quoted path gets for free, and the {@code broken} flag threaded through half these
- * methods is what carries that choice around. None of it would survive being able to quote a classpath
- * symbol.</p>
+ * <p><b>Assembly is the fallback, and only the fallback.</b> It runs when there is genuinely no source:
+ * a mod jar shipped without one, an obfuscated Minecraft jar, a directory of class files. There it does
+ * the only thing left — rebuilds the declaration from the binding, in a layout of this class's choosing,
+ * without the parameter names a class file does not carry. That is a strictly worse answer, and the
+ * whole point of the ordering is that it is now reached only when there is no better one.</p>
  *
- * <p>That is not far-fetched: JDT resolves against jars that usually ship a {@code -sources.jar} beside
- * them, and IntelliJ shows {@code println(String x)} rather than {@code println(String)} precisely
- * because it has those attached. Attaching them here would fix the parameter-name gap and make this path
- * redundant in the same change. Until then it is load-bearing for every JDK symbol anybody hovers.</p>
+ * <p>Which is why the layout machinery stays rather than being deleted with the path it was written for:
+ * {@link #MAX_SIGNATURE_LINE}, the break before a long {@code =}, one parameter per line, the hanging
+ * indent under {@code implements}. It invents a wrapping the quoted path gets for free, and it is still
+ * the only thing keeping a source-less {@code ArrayList} from being 110 characters on one line. What it
+ * no longer does is decide how the JDK looks.</p>
  *
  * @see Signature for why the seam carries structure rather than a marked-up string
+ * @see AttachedSources for where a classpath symbol's source is found
  */
 final class JavaSignatures {
 
@@ -81,11 +85,24 @@ final class JavaSignatures {
      * answer, and a view that renders it differently is now visibly the one at fault. @see #capturesIn</p>
      */
     private final Function<SimpleName, String> nameCaptures;
+    /**
+     * Where to look when this unit does not declare the symbol — null in the attached units themselves.
+     *
+     * <p>Null there is what makes the recursion one level deep by construction rather than by a guard: a
+     * unit parsed out of {@code src.zip} has nowhere further to look, so it quotes or it does not.</p>
+     */
+    private final AttachedSources attached;
 
     JavaSignatures(CompilationUnit unit, String source, Function<SimpleName, String> nameCaptures) {
+        this(unit, source, nameCaptures, null);
+    }
+
+    JavaSignatures(CompilationUnit unit, String source, Function<SimpleName, String> nameCaptures,
+                   AttachedSources attached) {
         this.unit = unit;
         this.source = source == null ? "" : source;
         this.nameCaptures = nameCaptures;
+        this.attached = attached;
     }
 
     // ── The rendered declaration ────────────────────────────────────────────────────────────
@@ -111,6 +128,14 @@ final class JavaSignatures {
     private static final int MAX_SIGNATURE_LINE = 72;
 
     Signature of(IBinding binding, SymbolKind kind, String name) {
+        // QUOTED FIRST, AND NEVER RE-WRAPPED. The author chose that layout; MAX_SIGNATURE_LINE is a rule
+        // for text this class invents, not for text it copies, and applying it to a quote would only
+        // re-render the identical slice. Hoisted out of the three branches below when quoting learned to
+        // reach the classpath: with a quote available for nearly everything, "try flat, then broken" was
+        // running the whole assembly twice to arrive back at the same substring.
+        Signature quoted = quoted(binding);
+        if (quoted != null) return quoted;
+
         Signature flat = render(binding, kind, name, false);
         // TRIED FLAT FIRST, and kept if it fits. Breaking unconditionally would put a two-word field
         // declaration on three lines, which is worse than the problem being solved.
@@ -143,9 +168,6 @@ final class JavaSignatures {
 
         if (binding instanceof IVariableBinding) {
             IVariableBinding variable = (IVariableBinding) binding;
-            // QUOTED WHOLE when we have the source for it -- see quotedDeclaration.
-            Signature quoted = quotedDeclaration(variable);
-            if (quoted != null) return quoted;
             appendTypeName(out, variable.getType());
             out.raw(" ").append(name, captureForVariable(variable));
             appendInitializer(out, variable, broken);
@@ -157,10 +179,6 @@ final class JavaSignatures {
             // `new ArrayList<>(List.of("one"))` binds the constructor with its parameters already
             // substituted, so the popup said `ArrayList(Collection<? extends String>)` -- true of
             // this call and not of the declaration anybody is asking about.
-            // QUOTED WHOLE when this unit declares it -- see quotedHeader. Real parameter names,
-            // the author's own wrapping, and no implicit modifier they never typed.
-            Signature quoted = quotedHeader(binding);
-            if (quoted != null) return quoted;
             IMethodBinding method = ((IMethodBinding) binding).getMethodDeclaration();
             // A GENERIC METHOD DECLARES ITS OWN PARAMETERS, before the return type. Omitted entirely
             // until now, so `static <T> List<T> of(T... elements)` rendered as `static List<T> of(...)`
@@ -176,17 +194,21 @@ final class JavaSignatures {
             // separate it from anything -- which is true about EMPHASIS and beside the point about
             // IDENTITY. The parity rule is that a name is drawn as what it IS, and what this is is the
             // declaration; marking it as a call states something false in the one box devoted to it.
-            out.append(name, kind == SymbolKind.CONSTRUCTOR ? "constructor" : "function.method");
+            //
+            // AND A CONSTRUCTOR IS A METHOD DECLARATION, not a class. It took the `constructor` capture
+            // on the reasoning that a constructor names its class and should be coloured as one -- which
+            // reads well and is not what either reference does: `public ArrayList(Collection<? extends
+            // E>)` is a declaration of a member, and drawing its name in the class colour said the box
+            // was describing the type while the parameter list beside it said otherwise. The editor
+            // reaches the same answer through methodCapture, which splits declaration from use and needs
+            // no constructor case either.
+            out.append(name, "function.method");
             appendParameters(out, method, broken);
             appendThrows(out, method.getExceptionTypes());
             return out.build();
         }
 
         if (binding instanceof ITypeBinding) {
-            // QUOTED WHOLE when this unit declares it -- which is the only way `sealed`, `permits` and
-            // `non-sealed` appear at all, and the only way an implicit `static` stays out.
-            Signature quoted = quotedHeader(binding);
-            if (quoted != null) return quoted;
             // THE DECLARATION, NOT THE INSTANTIATION. Hovering `new ArrayList<>(List.of("one"))`
             // binds the type as `ArrayList<String>`, whose superclass JDT reports as
             // `AbstractList<String>` -- so the popup claimed ArrayList is declared over String.
@@ -379,13 +401,6 @@ final class JavaSignatures {
     }
 
     /**
-     * {@code extends Foo implements Bar} — the supertypes, minus the ones nobody writes.
-     *
-     * <p>{@code extends Object} is on every class and is in no source file; {@code extends Enum<E>}
-     * is compiler bookkeeping for an enum. Printing either back is a declaration the user never wrote
-     * appearing in a box that claims to show what they did.</p>
-     */
-    /**
      * {@code <E>}, {@code <K, V>}, {@code <T extends Comparable<T>>} — a generic type's own parameters,
      * <b>as declared, bounds included</b>.
      *
@@ -507,34 +522,146 @@ final class JavaSignatures {
     }
 
     /**
-     * The declaration <b>exactly as it appears in the file</b>, semicolon and all — or null when it
-     * is not in this unit.
+     * The declaration <b>as its author wrote it</b> — from this unit, or from an attached source
+     * archive — or null when there is no source for it anywhere.
+     *
+     * <h3>Two lookups, one rule</h3>
+     *
+     * <p>The file being edited is asked first, by binding, because that is both the commonest case and
+     * the only one where the binding object itself is the key. Everything else is asked of
+     * {@link AttachedSources} by the binding's <em>key string</em>, which is what lets two independent
+     * parses agree: a JDT key is derived from the signature, so the key this unit reports for
+     * {@code List.add} is character-for-character the key a unit parsed out of {@code src.zip} reports
+     * for its declaration — provided both resolved against the same classpath, which is why
+     * {@code AttachedSources} is handed one.</p>
+     *
+     * <p><b>The declaration binding, never the use.</b> {@code List<String>.add} and {@code List<E>.add}
+     * have different keys and only the second exists in a file, so a parameterized binding has to be
+     * reduced first — the same reduction the assembled path already made for a different reason (a
+     * popup describes how a thing is <em>declared</em>, not how this one call site parameterized it).</p>
+     *
+     * <p>Recursion stops by construction: an attached unit is built with no {@code AttachedSources} of
+     * its own, so it either quotes from its own text or answers null.</p>
+     */
+    private Signature quoted(IBinding binding) {
+        if (binding == null) return null;
+        Signature here = quotedNode(unit == null ? null : unit.findDeclaringNode(binding));
+        if (here != null) return here;
+        if (attached == null) return null;
+
+        String topLevel = topLevelSourceName(binding);
+        if (topLevel == null) return null;
+        AttachedSources.Attached source = attached.unitFor(topLevel);
+        if (source == null || source.unit == null) return null;
+
+        String key = declarationKeyOf(binding);
+        if (key == null) return null;
+        ASTNode declaration = source.unit.findDeclaringNode(key);
+        if (declaration == null) return null;
+        return new JavaSignatures(source.unit, source.text, nameCaptures).quotedNode(declaration);
+    }
+
+    /** Which of the two quoting shapes a declaring node is, or null if it is neither. */
+    private Signature quotedNode(ASTNode declaration) {
+        if (declaration instanceof VariableDeclarationFragment) return quotedFragment(declaration);
+        if (declaration instanceof BodyDeclaration) return quotedHeaderOf(declaration);
+        // A PARAMETER, A CATCH VARIABLE AND AN ENHANCED-FOR VARIABLE are all this one node, and all three
+        // were being assembled from the binding purely because nothing dispatched them. They have a
+        // declaration written down like anything else -- and it carries things the binding cannot report
+        // in the right shape: `final`, a varargs `...` rather than an array type, and an annotation on
+        // the same line, which is where the author put it and where assembly would not have.
+        if (declaration instanceof SingleVariableDeclaration) {
+            return quoteWhole(declaration);
+        }
+        return null;
+    }
+
+    /**
+     * The name of the file a symbol would be declared in — its outermost enclosing type.
+     *
+     * <p>A source archive is keyed by compilation unit, so a nested class, a method and a field all have
+     * to resolve to the same top-level name before anything can be looked up.</p>
+     *
+     * <p>Null for the things that are not declared in a file at all: a local, a parameter, a type
+     * variable, a primitive, an array. Each of those has either no declaring class or no name to look
+     * up, and asking anyway would put a lookup for {@code T.java} in front of every hover.</p>
+     */
+    private static String topLevelSourceName(IBinding binding) {
+        ITypeBinding type = declaringTypeOf(binding);
+        if (type == null) return null;
+        while (type.getDeclaringClass() != null) type = type.getDeclaringClass();
+        type = type.getTypeDeclaration();
+        if (type.isPrimitive() || type.isArray() || type.isTypeVariable() || type.isWildcardType()) {
+            return null;
+        }
+        String qualified = type.getBinaryName();
+        if (qualified == null || qualified.isEmpty()) qualified = type.getQualifiedName();
+        // A LOCAL OR ANONYMOUS CLASS has a binary name like `Outer$1`, which is not a file. The `$` is
+        // also how a nested type spells itself, but the walk above has already reached the outermost
+        // one -- so anything still carrying a `$` here is a class with no source name of its own.
+        if (qualified == null || qualified.isEmpty() || qualified.indexOf('$') >= 0) return null;
+        return qualified;
+    }
+
+    private static ITypeBinding declaringTypeOf(IBinding binding) {
+        if (binding instanceof ITypeBinding) return (ITypeBinding) binding;
+        if (binding instanceof IMethodBinding) return ((IMethodBinding) binding).getDeclaringClass();
+        if (binding instanceof IVariableBinding) return ((IVariableBinding) binding).getDeclaringClass();
+        return null;
+    }
+
+    /** The key of the DECLARATION a binding came from, which is the only key a source file contains. */
+    private static String declarationKeyOf(IBinding binding) {
+        if (binding instanceof ITypeBinding) {
+            return ((ITypeBinding) binding).getTypeDeclaration().getKey();
+        }
+        if (binding instanceof IMethodBinding) {
+            return ((IMethodBinding) binding).getMethodDeclaration().getKey();
+        }
+        if (binding instanceof IVariableBinding) {
+            IVariableBinding declaration = ((IVariableBinding) binding).getVariableDeclaration();
+            return declaration == null ? binding.getKey() : declaration.getKey();
+        }
+        return binding.getKey();
+    }
+
+    /**
+     * The declaration <b>exactly as it appears in the file</b>, semicolon and all.
      *
      * <h3>Quoted, not assembled</h3>
      *
      * <p>Everything else here builds a declaration out of parts and chooses its own layout: modifiers
-     * in a fixed order, a space before the {@code =}, a break when the line runs long. For a symbol on
-     * the classpath that is the only option. For one declared in the open file it is strictly worse,
-     * and it went wrong in two ways at once.</p>
+     * in a fixed order, a space before the {@code =}, a break when the line runs long. That is the only
+     * option for a symbol whose source is nowhere to be found — which since {@link AttachedSources} means
+     * a jar shipped without sources rather than "the classpath". Wherever there IS a file it is strictly
+     * worse, and it went wrong in two ways at once.</p>
      *
-     * <p>The <b>layout</b> stopped matching: the file has {@code List<Shape> shapes = List.of(} on one
-     * line, and the assembled form imposed a break before the {@code =} on top of the author's own
-     * wrapping — so the popup showed a shape the file does not contain, with the arguments carrying
-     * the file's indentation on top of ours. And the <b>semicolon</b> was missing, because an
-     * initializer <em>expression</em> ends before it; the statement is the thing that has one.</p>
+     * <p>The <b>layout</b> stopped matching: the assembled form imposed a break before the {@code =} on
+     * top of the author's own wrapping, so the popup showed a shape the file does not contain, with the
+     * arguments carrying the file's indentation on top of ours. And the <b>semicolon</b> was missing,
+     * because an initializer <em>expression</em> ends before it; the statement is the thing that has
+     * one.</p>
+     *
+     * <p>The motivating fixture for both — {@code List<Shape> shapes = List.of(...)} spread over four
+     * lines — is no longer quoted at all, and the reason is worth keeping: quoting fixed the
+     * <em>fidelity</em> of what was shown and never questioned <em>whether</em> to show it. Faithfully
+     * reproducing four lines of the file in a one-line band is a better rendering of the wrong
+     * decision. See {@code isValue} for where that decision now lives.</p>
      *
      * <p>Both are the same mistake — reconstructing what is already written down. The fragment's
      * parent spans modifiers, type, name, initializer and terminator, so quoting it is one substring,
      * and the captures come off the AST at positions into that very string.</p>
      */
-    private Signature quotedDeclaration(IVariableBinding variable) {
-        ASTNode fragment = unit.findDeclaringNode(variable);
-        if (!(fragment instanceof VariableDeclarationFragment)) return null;
+    private Signature quotedFragment(ASTNode fragment) {
         ASTNode declaration = fragment.getParent();
-        // A PARAMETER or a for-init has a parent that is not a declaration of its own, and quoting
-        // that would drag in the whole method header or loop. Those keep the assembled form.
+        // THE THREE PARENTS THAT ARE A DECLARATION IN THEIR OWN RIGHT. A field, a local statement, and
+        // the init clause of a `for` -- which reads as an exception and is not one: the clause node
+        // spans `int i = 0` and stops, so quoting it drags in no more of the loop than a local
+        // declaration drags in of its method. It was excluded on the assumption that its parent WAS the
+        // loop, so `i` in every counting loop in the file was assembled instead of quoted.
         if (!(declaration instanceof FieldDeclaration)
-                && !(declaration instanceof VariableDeclarationStatement)) {
+                && !(declaration instanceof VariableDeclarationStatement)
+                && !(declaration instanceof VariableDeclarationExpression)) {
             return null;
         }
         int from = declaration.getStartPosition();
@@ -554,7 +681,54 @@ final class JavaSignatures {
         from = skipLeadingComments(from, end);
         if (from >= end) return null;
 
+        // AND CUT BEFORE AN INITIALIZER THAT IS CODE RATHER THAN A VALUE -- the same cut quotedHeaderOf
+        // makes at a body brace, made at the other kind of body. `List<Shape> shapes = List.of(new
+        // Circle(1.5d), new Rectangle(3.0d, 4.0d), new Triangle(6.0d, 2.0d));` put four lines of the
+        // file into the one band meant to say what a name IS, directly over the file it was quoted
+        // from. Both references draw the line here: IntelliJ shows a local as its type and name, and
+        // shows a field's value when the value is the information.
+        Expression initializer = ((VariableDeclarationFragment) fragment).getInitializer();
+        if (initializer != null && !isValue(initializer)) {
+            SimpleName declared = ((VariableDeclarationFragment) fragment).getName();
+            int cut = declared.getStartPosition() + declared.getLength();
+            if (cut > from && cut < end) end = cut;
+        }
+
         return quote(declaration, from, end, false);
+    }
+
+    /**
+     * A node that <b>is</b> its own declaration — sliced whole, with any leading comment trimmed.
+     *
+     * <p>The simplest of the three quoting shapes, and the one with nothing to decide: a parameter has no
+     * body to cut before and no initializer to weigh, so its own extent is the answer.</p>
+     */
+    private Signature quoteWhole(ASTNode declaration) {
+        int from = declaration.getStartPosition();
+        int end = from + declaration.getLength();
+        if (from < 0 || end > source.length() || end <= from) return null;
+        from = skipLeadingComments(from, end);
+        return from >= end ? null : quote(declaration, from, end, false);
+    }
+
+    /**
+     * Whether an initializer is <b>a value</b> — worth putting in the signature — rather than code.
+     *
+     * <p>{@code MAX_RETRIES = 5} and {@code ESCAPES = "tab:\t"} say something the name alone does not,
+     * and both references show them. {@code = List.of(...)} and {@code = new Counter()} say only that
+     * there is an expression, which the file already says better, in the place you would read it.</p>
+     *
+     * <p>Literals rather than {@code getConstantValue()}, which answers null for a {@code null}
+     * initializer and for anything not {@code static final} — so it cannot tell "not a constant" from
+     * "the constant is null", and would drop the value from every ordinary field that has one.</p>
+     */
+    private static boolean isValue(Expression initializer) {
+        Expression node = initializer;
+        // `-1` is a NumberLiteral under a unary minus, and is as much a value as `1`.
+        if (node instanceof PrefixExpression) node = ((PrefixExpression) node).getOperand();
+        return node instanceof NumberLiteral || node instanceof StringLiteral
+                || node instanceof CharacterLiteral || node instanceof BooleanLiteral
+                || node instanceof NullLiteral;
     }
 
     /**
@@ -583,9 +757,7 @@ final class JavaSignatures {
      * ({@code @Target(&#123;METHOD, FIELD&#125;)}) and it is the only thing in a header that can. An
      * abstract method has no brace, so the node's own end is used and the trailing {@code ;} trimmed.</p>
      */
-    private Signature quotedHeader(IBinding binding) {
-        ASTNode declaration = unit.findDeclaringNode(binding);
-        if (!(declaration instanceof BodyDeclaration)) return null;
+    private Signature quotedHeaderOf(ASTNode declaration) {
         int from = declaration.getStartPosition();
         int end = from + declaration.getLength();
         if (from < 0 || end > source.length() || end <= from) return null;
@@ -658,8 +830,11 @@ final class JavaSignatures {
     }
 
     private static final String[] HEADER_KEYWORDS = {
+            // `super` and `extends` reach here only as WILDCARD BOUNDS -- the one place in a header
+            // either can appear, and the place `super` cannot possibly be the call the vendored grammar
+            // captures it as.
             "non-sealed", "implements", "interface", "extends", "permits", "throws",
-            "sealed", "record", "class", "enum",
+            "sealed", "record", "class", "enum", "super",
     };
 
     private static boolean isWordChar(char c) {
@@ -798,7 +973,11 @@ final class JavaSignatures {
         ASTNode declaring = unit.findDeclaringNode(variable);
         if (declaring instanceof VariableDeclarationFragment) {
             Expression initializer = ((VariableDeclarationFragment) declaring).getInitializer();
-            if (initializer != null) {
+            // THE SAME TEST quotedFragment makes -- see isValue. A rule that held on one path and not
+            // the other would be a popup that showed a name's code or not depending on which renderer
+            // happened to answer. The for-init this used to catch is quoted now, so what reaches here is
+            // a declaration whose source positions did not survive.
+            if (initializer != null && isValue(initializer)) {
                 // BEFORE THE `=`, indented -- IntelliJ's own break for a long field, and it keeps the
                 // declaration (which is what you asked about) on a line of its own.
                 if (broken) out.newline().indent(); else out.raw(" ");
@@ -826,11 +1005,16 @@ final class JavaSignatures {
      * only ever an approximation of what was actually typed, and getting them wrong in ways nobody
      * can correct from the popup. The author already wrote the spacing and an AST node knows exactly
      * which characters it came from, so slicing them back out is both less code and more faithful:
-     * a multi-line {@code List.of(...)} keeps its layout, an aligned array keeps its alignment, and
-     * anything this walk does not recognise still comes out verbatim rather than reformatted.</p>
+     * {@code 1.618_033_988_749d} keeps its underscores and its suffix, {@code 0xDEAD_BEEF} stays hex,
+     * and a string keeps the escapes the author wrote rather than being folded and re-escaped into a
+     * different spelling of the same bytes.</p>
      *
      * <p>Before that it was {@code ASTNode.toString()}, which is JDT's {@code NaiveASTFlattener} —
      * that is where {@code Circle(1.5d),new Rectangle} came from, and it had no captures at all.</p>
+     *
+     * <p><b>Only a value reaches here now</b> — see {@code isValue}. The slice-and-capture split is not
+     * thereby redundant: a string literal's escape sequences are captured separately, which is the one
+     * thing a flat append cannot do, and it is still the author's spelling that is shown.</p>
      *
      * <h3>Captures come from a separate pass, in source coordinates</h3>
      *

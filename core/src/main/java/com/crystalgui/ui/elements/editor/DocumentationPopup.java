@@ -154,6 +154,9 @@ public final class DocumentationPopup extends Popover {
         ownerRow.addClass(OWNER_CLASS);
         ownerIcon.addClass(OWNER_ICON_CLASS);
         ownerText.addClass(OWNER_TEXT_CLASS);
+        // A CODE SURFACE, so `.__syntax__::highlight(...)` reaches it -- the same rules that colour the
+        // editor's import lines, rather than a second pair of names only this band would use.
+        ownerText.addClass(TextEditor.SYNTAX_CLASS);
         ownerRow.addInternalChild(ownerIcon);
         ownerRow.addInternalChild(ownerText);
 
@@ -282,6 +285,7 @@ public final class DocumentationPopup extends Popover {
         String container = symbol.container();
         ownerRow.setDisplayed(container != null && !container.isEmpty());
         ownerText.setText(container == null ? "" : container);
+        markOwnerPath(container == null ? "" : container, symbol.containerKind());
 
         renderDefinition(symbol);
 
@@ -291,6 +295,82 @@ public final class DocumentationPopup extends Popover {
         bodyShown = docs != null && !docs.isBlank();
         body.setDisplayed(bodyShown);
         body.setText(docs == null ? "" : docs);
+    }
+
+    /**
+     * Colours the owner band's path the way the editor colours an import line.
+     *
+     * <h3>A capitalisation heuristic, and here it is sound</h3>
+     *
+     * <p>The shipped Java grammar guesses at a qualified name this way and it is a guess: it is blind to
+     * {@code com.crystalgui} and fires wrongly on {@code Foo.bar}, which is exactly why the engine answers
+     * for import paths instead. <b>This string is different in kind.</b> It is not source — it is
+     * {@code SymbolInfo.container()}, which the analyzer built from a binding as
+     * {@code package.Outer.Inner}, so the only thing a segment can be is a package fragment or a type
+     * name, and Java's naming convention decides which with no ambiguity left to lose.</p>
+     *
+     * <p>Handed the same {@code module}/{@code type} names the editor uses rather than a private pair, so
+     * one scheme colours both and a theme switch cannot leave the band behind. Dots stay uncaptured and
+     * keep the band's own muted colour, which is what separates a path from a declaration.</p>
+     */
+    private void markOwnerPath(String path, @Nullable SymbolKind ownerKind) {
+        // EVERY name cleared, on every path -- the rule the definition line already keeps, and the one
+        // place the owner band did not. The last segment's band is named after the owner's KIND, so it
+        // is `type.interface` for one symbol and `type.enum` or nothing at all for the next; assigning
+        // only the one this symbol needs left the previous symbol's band live over a string that has
+        // since been replaced. It is not a stale colour but a colour over the WRONG TEXT: hovering an
+        // enum constant after an interface showed `com.crystalgui.language.grammar.Main.Severity` with
+        // interface cyan across characters 10-14, which is `lgui`.
+        ownerText.highlights().clear();
+        List<TextRange> packages = new ArrayList<>();
+        List<TextRange> types = new ArrayList<>();
+        TextRange lastType = null;
+        int from = 0;
+        while (from <= path.length()) {
+            int dot = path.indexOf('.', from);
+            int end = dot < 0 ? path.length() : dot;
+            // A GENERIC ARGUMENT LIST IS NOT PART OF THE PATH. `Main.Box<T>` ends its last segment at the
+            // `<`, and marking through it would colour the parameters as though they were the owner.
+            int stop = end;
+            for (int i = from; i < end; i++) {
+                if (path.charAt(i) == '<') { stop = i; break; }
+            }
+            if (stop > from) {
+                (Character.isUpperCase(path.charAt(from)) ? types : packages)
+                        .add(TextRange.of(from, stop));
+                if (Character.isUpperCase(path.charAt(from))) lastType = TextRange.of(from, stop);
+            }
+            if (dot < 0) break;
+            from = dot + 1;
+        }
+        // THE OWNER'S OWN KIND, from the engine, for the LAST segment -- which is the owner itself.
+        // The capitalisation rule above can separate a package from a type and can never tell an
+        // interface from a class, so `java.util.List` drew its interface in the class colour directly
+        // under an editor drawing the same word in the interface one.
+        String ownerCapture = null;
+        if (lastType != null && ownerKind != null && ownerKind.isType()) {
+            ownerCapture = ownerKind.captureName();
+            if (!"type".equals(ownerCapture)) types.remove(lastType);
+        }
+        // THE OWNER'S TYPE PARAMETERS. `Main.Box<T>` ends its last SEGMENT at the `<` -- marking through
+        // it would colour the parameters as though they were part of the owner's name -- and then nothing
+        // marked them at all, so `<T>` sat at the band's muted colour beside a `T` the editor draws teal
+        // two lines above. A container is always the DECLARATION (`Box<T>`, `ArrayList<E>`), never an
+        // instantiation, so everything inside the brackets is a parameter by construction.
+        List<TextRange> parameters = new ArrayList<>();
+        int open = path.indexOf('<');
+        for (int i = open < 0 ? path.length() : open; i < path.length(); ) {
+            if (!Character.isJavaIdentifierStart(path.charAt(i))) { i++; continue; }
+            int word = i;
+            while (i < path.length() && Character.isJavaIdentifierPart(path.charAt(i))) i++;
+            parameters.add(TextRange.of(word, i));
+        }
+        ownerText.highlights().set("type.parameter", parameters);
+        ownerText.highlights().set("module", packages);
+        ownerText.highlights().set("type", types);
+        if (ownerCapture != null && !"type".equals(ownerCapture)) {
+            ownerText.highlights().set(ownerCapture, List.of(lastType));
+        }
     }
 
     /**
@@ -330,15 +410,6 @@ public final class DocumentationPopup extends Popover {
         renderAssembledDefinition(symbol);
     }
 
-    /**
-     * The engine's own declaration, coloured by the capture vocabulary the editor already uses.
-     *
-     * <p>This is the whole point of {@link Signature} carrying tokens rather than text: the work here is
-     * the same operation {@code TextEditor.ensureRowSyntax} performs for a line of code — group the ranges
-     * by capture name and register them — so the signature is coloured by the same rules, from the same
-     * scheme, as the code it describes. Nothing in this method knows what a modifier or an annotation is,
-     * which is why a language with neither needs no change to it.</p>
-     */
     /**
      * Lays the signature out over as many lines as the engine broke it into.
      *
@@ -382,6 +453,15 @@ public final class DocumentationPopup extends Popover {
         }
     }
 
+    /**
+     * The engine's own declaration, coloured by the capture vocabulary the editor already uses.
+     *
+     * <p>This is the whole point of {@link Signature} carrying tokens rather than text: the work here is
+     * the same operation {@code TextEditor.ensureRowSyntax} performs for a line of code — group the ranges
+     * by capture name and register them — so the signature is coloured by the same rules, from the same
+     * scheme, as the code it describes. Nothing in this method knows what a modifier or an annotation is,
+     * which is why a language with neither needs no change to it.</p>
+     */
     private void renderEngineSignature(Signature signature) {
         definitionText = signature.text();
         layOutSignatureLines(signature.text());
@@ -494,6 +574,12 @@ public final class DocumentationPopup extends Popover {
      */
     @Nullable
     private static SymbolKind ownerKindFor(SymbolInfo symbol) {
+        // THE ENGINE'S ANSWER FIRST. Everything below is a guess made from the container STRING, which
+        // can separate a package from a type and can never tell an interface from a class -- so every
+        // member of an interface showed a class mark. `containerKind` is null for a symbol whose owner is
+        // a package, and for any producer that has no binding to ask, which is what the guess is for.
+        SymbolKind owner = symbol.containerKind();
+        if (owner != null && owner.isType()) return owner;
         SymbolKind kind = symbol.kind();
         if (kind == null) return null;
         switch (kind) {

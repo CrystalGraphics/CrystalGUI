@@ -13,7 +13,6 @@ import com.crystalgui.text.syntax.SyntaxToken;
 
 import org.eclipse.jdt.core.compiler.CategorizedProblem;
 import org.eclipse.jdt.core.compiler.IProblem;
-import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
@@ -52,10 +51,8 @@ import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +90,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
     @Override
     public Analysis analyze(String className, String source, List<String> classpath,
                             int releaseLevel, long version) {
-        ASTParser parser = ASTParser.newParser(jlsLevel());
+        ASTParser parser = ASTParser.newParser(EcjOptions.jlsLevel());
         parser.setSource(source.toCharArray());
         // THE PATH THE SOURCE ITSELF IMPLIES, not the caller's guess. A file declaring a package
         // and named from its file stem makes ECJ report "the declared package does not match the
@@ -115,43 +112,17 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         parser.setEnvironment(entries, new String[0], new String[0], true);
 
         CompilationUnit unit = (CompilationUnit) parser.createAST(null);
-        return new EcjAnalysis(unit, source, version);
-    }
-
-    /**
-     * The newest level this band's JDT offers.
-     *
-     * <p>Read reflectively rather than named, for the reason {@code JlsLevel} sets out at length: an
-     * adapter compiled against the oldest band cannot name {@code JLS21}, and naming {@code JLS8}
-     * instead compiles everywhere and silently caps the newest band at Java 8 syntax — which is worse,
-     * because it works. Duplicated here rather than called because {@code JlsLevel} lives on the host
-     * side of the bridge and this class is loaded by the child.</p>
-     */
-    private static int jlsLevel() {
-        int highest = 0;
-        for (Field field : AST.class.getFields()) {
-            String name = field.getName();
-            if (!name.startsWith("JLS") || field.getType() != int.class) continue;
-            if (field.isAnnotationPresent(Deprecated.class)) continue;
-            if (!name.substring(3).chars().allMatch(Character::isDigit)) continue;
-            try {
-                highest = Math.max(highest, field.getInt(null));
-            } catch (IllegalAccessException unreachable) {
-                // A public static final int that cannot be read does not happen; skipping is right.
-            }
-        }
-        if (highest == 0) throw new IllegalStateException("no AST.JLS* constant in this band");
-        return highest;
+        // THE SAME CLASSPATH, handed on rather than re-derived: a signature quoted out of a source
+        // archive has to resolve against what this parse resolved against, or the binding keys the two
+        // are matched by would not be the same strings. @see AttachedSources
+        return new EcjAnalysis(unit, source, version, AttachedSources.forClasspath(classpath));
     }
 
     private static Map<String, String> compilerOptions(int releaseLevel) {
-        String level = releaseLevel <= 8 ? "1." + releaseLevel : Integer.toString(releaseLevel);
-        Map<String, String> options = new HashMap<>();
-        options.put("org.eclipse.jdt.core.compiler.source", level);
-        options.put("org.eclipse.jdt.core.compiler.compliance", level);
-        options.put("org.eclipse.jdt.core.compiler.codegen.targetPlatform", level);
+        Map<String, String> options = EcjOptions.forLevel(releaseLevel);
         // Deprecation reported rather than silent: a script calling a removed-next-version API is worth
-        // a squiggle, and SymbolModifier.DEPRECATED already has a drawing contract.
+        // a squiggle, and SymbolModifier.DEPRECATED already has a drawing contract. The one option that
+        // is this analysis's own -- an attached source is read for its shape, not diagnosed.
         options.put("org.eclipse.jdt.core.compiler.problem.deprecation", "warning");
         return options;
     }
@@ -176,11 +147,11 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         /** Locals and parameters written to after their declaration. @see #collectReassigned */
         private Set<String> reassigned;
 
-        EcjAnalysis(CompilationUnit unit, String source, long version) {
+        EcjAnalysis(CompilationUnit unit, String source, long version, AttachedSources attached) {
             this.unit = unit;
             this.source = source == null ? "" : source;
             this.version = version;
-            this.signatures = new JavaSignatures(unit, this.source, this::captureFor);
+            this.signatures = new JavaSignatures(unit, this.source, this::captureFor, attached);
             this.reassigned = unit == null ? Set.of() : collectReassigned(unit);
         }
 
@@ -349,7 +320,12 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
          * things a parse cannot: which <em>kind</em> of variable a bare identifier is.</p>
          */
         private String captureFor(SimpleName name) {
-            IBinding binding = name.resolveBinding();
+            // THE SAME QUESTION THE POPUP ASKS, through the same method. `new ArrayList<>(...)` resolves
+            // its name to the TYPE, so the colour said "class" while the popup -- which had already been
+            // corrected to ask the ClassInstanceCreation -- described the constructor being called. Both
+            // references colour a constructor call as a call, and the divergence is the shape this file
+            // has produced twice already: one rule with two homes drifts.
+            IBinding binding = bindingFor(name);
             // A PACKAGE PATH SEGMENT WITH NO BINDING OF ITS OWN. JDT gives the package binding to
             // `java.util` and to the `util` inside it, but the leftmost `java` is a bare qualifier and
             // resolves to nothing -- so a binding-only rule coloured `util` and left `java` as body
@@ -408,10 +384,11 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 // because the two are spelled identically.
                 return JavaSignatures.typeCapture((ITypeBinding) binding);
             }
+            // A CONSTRUCTOR IS NOT A SPECIAL CASE HERE -- methodCapture already draws the distinction that
+            // matters, which is DECLARATION versus USE, and a constructor has both forms exactly as any
+            // other method does. Naming CONSTRUCTOR outright gave both the declaration colour, so
+            // `new ArrayList<>()` was drawn like `public ArrayList(...)`; the call site is a call.
             if (binding instanceof IMethodBinding) {
-                if (((IMethodBinding) binding).isConstructor()) {
-                    return SymbolKind.CONSTRUCTOR.captureName();
-                }
                 return methodCapture(name, (IMethodBinding) binding);
             }
             // A PACKAGE SEGMENT. `java` and `util` in an import are package bindings, and nothing was
@@ -606,29 +583,43 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
          * <p>Go-to-definition gets the same correction for free, and wants it for the same reason.</p>
          */
         private static IBinding bindingFor(SimpleName name) {
-            ASTNode node = name.getParent();
-            while (node instanceof SimpleType || node instanceof ParameterizedType
-                    || node instanceof QualifiedType || node instanceof QualifiedName) {
-                node = node.getParent();
-            }
-            if (node instanceof ClassInstanceCreation) {
-                ClassInstanceCreation creation = (ClassInstanceCreation) node;
-                // ONLY IF THE NAME IS THE TYPE BEING CONSTRUCTED, which the walk above does not
-                // establish: a QualifiedName is climbed so `new java.util.ArrayList<>()` works, but a
-                // QualifiedName is also an ordinary field access, so `new Message(text, Severity.INFO,
-                // 0L)` climbed from the ARGUMENT `Severity` straight to the creation. The popup then
-                // reported the constructor -- correct container, correct kind -- under the hovered
-                // word's name, so it read `public Severity(String, Severity, long)` for a class called
-                // Message. Every part was individually right, which is why it looked like a naming bug.
-                Type constructed = creation.getType();
-                int at = name.getStartPosition();
-                if (constructed != null && at >= constructed.getStartPosition()
-                        && at < constructed.getStartPosition() + constructed.getLength()) {
-                    IMethodBinding constructor = creation.resolveConstructorBinding();
-                    if (constructor != null) return constructor;
+            IMethodBinding constructor = constructorInvokedBy(name);
+            return constructor != null ? constructor : name.resolveBinding();
+        }
+
+        /**
+         * The constructor {@code new Foo(...)} invokes, when {@code name} is the type being constructed —
+         * null for every other name, including the ones sitting inside the same expression.
+         *
+         * <p>Climbs the <b>type position only</b>, tracking which child it came from. That is what
+         * separates {@code new java.util.ArrayList<>()}, where every node up to the creation is the type,
+         * from {@code new Message(text, Severity.INFO, 0L)}, where {@code Severity.INFO} is an argument
+         * whose parent <em>is</em> the creation. An earlier version climbed any {@code QualifiedName} and
+         * then tested the name's offsets against the type's — which worked, and stated the rule in
+         * coordinates. The structural test says the same thing in the shape of the tree, and covers the
+         * qualifier of a qualified name ({@code util} in the path above) for the same reason rather than a
+         * second one.</p>
+         */
+        private static IMethodBinding constructorInvokedBy(SimpleName name) {
+            ASTNode child = name;
+            for (ASTNode node = name.getParent(); node != null; node = node.getParent()) {
+                if (node instanceof ClassInstanceCreation) {
+                    ClassInstanceCreation creation = (ClassInstanceCreation) node;
+                    Type constructed = creation.getType();
+                    return constructed == child ? creation.resolveConstructorBinding() : null;
                 }
+                if (node instanceof QualifiedName) {
+                    if (((QualifiedName) node).getName() != child) return null;
+                } else if (node instanceof QualifiedType) {
+                    if (((QualifiedType) node).getName() != child) return null;
+                } else if (node instanceof ParameterizedType) {
+                    if (((ParameterizedType) node).getType() != child) return null;
+                } else if (!(node instanceof SimpleType)) {
+                    return null;
+                }
+                child = node;
             }
-            return name.resolveBinding();
+            return null;
         }
 
         /**
@@ -665,6 +656,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 return new SymbolInfo(name.getIdentifier(), kind, typeRef(variable.getType()),
                         containerName(declaring), null, modifiers,
                         declarationOf(unit, binding))
+                        .withContainerKind(declaring == null ? null : JavaSignatures.kindOf(declaring))
                         .withSignature(signatures.of(binding, kind, name.getIdentifier()));
             }
             if (binding instanceof IMethodBinding) {
@@ -675,6 +667,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 return new SymbolInfo(name.getIdentifier(), kind, typeRef(method.getReturnType()),
                         containerName(declaring), null, modifiers,
                         declarationOf(unit, binding), parameterTypesOf(method))
+                        .withContainerKind(declaring == null ? null : JavaSignatures.kindOf(declaring))
                         .withSignature(signatures.of(binding, kind, name.getIdentifier()));
             }
             if (binding instanceof ITypeBinding) {

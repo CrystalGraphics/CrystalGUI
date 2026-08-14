@@ -39,13 +39,29 @@ import javax.annotation.Nullable;
 public record SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type,
                          @Nullable String container, @Nullable String documentation,
                          Set<SymbolModifier> modifiers, @Nullable DeclarationSite declaration,
-                         List<TypeRef> parameters, @Nullable Signature signature) {
+                         List<TypeRef> parameters, @Nullable Signature signature,
+                         @Nullable SymbolKind containerKind) {
 
     public SymbolInfo {
         if (name == null) name = "";
         if (kind == null) kind = SymbolKind.UNKNOWN;
         modifiers = modifiers == null || modifiers.isEmpty() ? Set.of() : Set.copyOf(modifiers);
         parameters = parameters == null || parameters.isEmpty() ? List.of() : List.copyOf(parameters);
+    }
+
+    /**
+     * The nine-component shape, for every construction site that predates {@link #containerKind}.
+     *
+     * <p>Same reasoning as the two below: what KIND the container is can only be answered by something
+     * holding the owner's binding, and the dozen sites that build a symbol from a name and a kind have
+     * nothing to offer. {@link #containerKind()} answering null is that statement, made once.</p>
+     */
+    public SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type, @Nullable String container,
+                      @Nullable String documentation, Set<SymbolModifier> modifiers,
+                      @Nullable DeclarationSite declaration, List<TypeRef> parameters,
+                      @Nullable Signature signature) {
+        this(name, kind, type, container, documentation, modifiers, declaration, parameters,
+                signature, null);
     }
 
     /**
@@ -115,7 +131,7 @@ public record SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type,
 
     public SymbolInfo withParameters(List<TypeRef> newParameters) {
         return new SymbolInfo(name, kind, type, container, documentation, modifiers, declaration,
-                newParameters, signature);
+                newParameters, signature, containerKind);
     }
 
     /**
@@ -127,7 +143,21 @@ public record SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type,
      */
     public SymbolInfo withSignature(@Nullable Signature newSignature) {
         return new SymbolInfo(name, kind, type, container, documentation, modifiers, declaration,
-                parameters, newSignature);
+                parameters, newSignature, containerKind);
+    }
+
+    /**
+     * What the container IS — an interface, an enum, a class.
+     *
+     * <p>Not derivable from {@link #container()}, which is a display string: {@code java.util.List} says
+     * nothing about {@code List} being an interface, and a capitalisation guess is exactly the heuristic
+     * the engine exists to replace. The popup reads it twice — for the icon beside the owner, which drew
+     * a class mark over every interface, and for the colour of the last path segment, which is the one
+     * place the editor and the popup could still disagree about a name.</p>
+     */
+    public SymbolInfo withContainerKind(@Nullable SymbolKind newContainerKind) {
+        return new SymbolInfo(name, kind, type, container, documentation, modifiers, declaration,
+                parameters, signature, newContainerKind);
     }
 
     /** The common shape: a name and what it is. */

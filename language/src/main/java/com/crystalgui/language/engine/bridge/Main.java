@@ -153,6 +153,12 @@ public final class Main {
         default String describe() {
             return getClass().getSimpleName() + " of area " + area();
         }
+
+        record Circle(double radius) {
+            public double area() {
+                return Math.PI * radius * radius;
+            }
+        }
     }
 
     public record Circle(double radius) implements Shape {

@@ -129,6 +129,64 @@ public class DocumentationPopupTest extends UiTestBase {
     }
 
     /**
+     * <b>The owner band is coloured like an import line</b> — packages, the owner's own kind, and its
+     * type parameters, in the same three capture names the editor uses.
+     *
+     * <p>It was one flat grey run, three lines above an editor colouring the identical text. The three
+     * rules interact and each was wrong on its own: a capitalisation split can separate a package from a
+     * type and can <em>never</em> tell an interface from a class, which is why the last segment takes the
+     * engine's {@code containerKind}; and the last segment ends at the {@code <}, which left the
+     * parameters marked by nothing at all.</p>
+     */
+    @Test
+    public void theOwnerBandIsColouredLikeAnImportLine() {
+        show(new SymbolInfo("sort", SymbolKind.METHOD, TypeRef.of("void"), "java.util.List<E>", null,
+                Set.of(), null).withContainerKind(SymbolKind.INTERFACE));
+
+        // "java.util.List<E>" -- java, util, List, E
+        assertEquals(List.of(TextRange.of(0, 4), TextRange.of(5, 9)), ownerRanges("module"));
+        assertEquals("the owner's own kind, not a capitalisation guess",
+                List.of(TextRange.of(10, 14)), ownerRanges("type.interface"));
+        assertTrue("an interface must not also be marked as a plain type",
+                ownerRanges("type").isEmpty());
+        assertEquals(List.of(TextRange.of(15, 16)), ownerRanges("type.parameter"));
+    }
+
+    /**
+     * <b>The band a symbol does not need is cleared, not merely left unassigned.</b>
+     *
+     * <p>The last segment's band is named after the owner's <em>kind</em>, so it is
+     * {@code type.interface} for one symbol and {@code type.enum} or plain {@code type} for the next.
+     * Assigning only the one this symbol needs leaves the previous symbol's ranges live over a string
+     * that has since been replaced — which is not a stale colour but a colour over the wrong text
+     * entirely, exactly as {@code UIText}'s own note records. Hovering an enum constant after an
+     * interface drew interface cyan across characters 10–14 of
+     * {@code com.crystalgui.language.grammar.Main.Severity}, which is {@code lgui}.</p>
+     */
+    @Test
+    public void anOwnerBandDropsThePreviousSymbolsKind() {
+        show(new SymbolInfo("sort", SymbolKind.METHOD, TypeRef.of("void"), "java.util.List<E>", null,
+                Set.of(), null).withContainerKind(SymbolKind.INTERFACE));
+        assertFalse("fixture is pointless if nothing was marked",
+                ownerRanges("type.interface").isEmpty());
+
+        show(new SymbolInfo("FATAL", SymbolKind.ENUM_MEMBER, null,
+                "com.crystalgui.language.grammar.Main.Severity", null, Set.of(), null)
+                .withContainerKind(SymbolKind.ENUM));
+
+        assertTrue("the previous owner's kind is still banded over unrelated characters",
+                ownerRanges("type.interface").isEmpty());
+        assertEquals(List.of(TextRange.of(37, 45)), ownerRanges("type.enum"));
+    }
+
+    /** The ranges registered under {@code name} on the owner band. */
+    private List<TextRange> ownerRanges(String name) {
+        UIText owner = (UIText) popup.querySelector("." + DocumentationPopup.OWNER_TEXT_CLASS);
+        assertNotNull("no owner band", owner);
+        return owner.highlights().get(name);
+    }
+
+    /**
      * A type is declared with a <b>keyword</b>, not with a type — {@code class Host}, never {@code Host}.
      *
      * <p>The keyword bands with the modifiers because that is what it is: {@code class} is part of the

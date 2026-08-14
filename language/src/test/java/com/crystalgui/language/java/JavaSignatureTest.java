@@ -57,7 +57,12 @@ public class JavaSignatureTest {
 
     /** The signature of the symbol at the first occurrence of {@code needle}. */
     private Signature signatureAt(String source, String needle) {
-        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, List.of(), 8, 1L);
+        return signatureAt(source, needle, List.of());
+    }
+
+    /** The same, resolved against a given classpath — for the symbols the running VM does not supply. */
+    private Signature signatureAt(String source, String needle, List<String> classpath) {
+        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, classpath, 8, 1L);
         int at = source.indexOf(needle);
         if (at < 0) throw new IllegalArgumentException("no '" + needle + "' in the fixture");
         SymbolInfo symbol = analysis.resolveAt(at);
@@ -107,6 +112,29 @@ public class JavaSignatureTest {
             String inPopup = captureOf(symbol.signature(), name);
             assertEquals(name + " is drawn differently in the two views", inEditor, inPopup);
         }
+    }
+
+    /**
+     * <b>A constructor's popup is a method declaration, and is coloured as one.</b>
+     *
+     * <p>It took the {@code constructor} capture — the class colour in this scheme — on the reasoning
+     * that a constructor names its class. True of the spelling and false of what the box is showing: the
+     * line is {@code public ArrayList(Collection&lt;? extends E&gt;)}, a declaration of a member, and its
+     * name drawn in the class colour said the popup was describing the type while the parameter list
+     * beside it said otherwise.</p>
+     *
+     * <p>Asserted against a <b>classpath</b> constructor, because that is the assembled path — the one an
+     * in-file declaration bypasses entirely by being quoted from source.</p>
+     */
+    @Test
+    public void aConstructorsPopupIsAMethodDeclaration() {
+        String source = ""
+                + "public class Script {\n"
+                + "    Object run() { return new java.util.ArrayList<String>(); }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "ArrayList");
+        assertEquals("function.method", captureOf(signature, "ArrayList"));
+        assertEquals("keyword", captureOf(signature, "public"));
     }
 
     /** The capture over an exact span — for a name that appears more than once in the fixture. */
@@ -202,6 +230,33 @@ public class JavaSignatureTest {
 
         assertEquals("static final double GOLDEN_RATIO = 1.618_033_988_749d;", signature.text());
         assertEquals("constant", captureOf(signature, "GOLDEN_RATIO"));
+    }
+
+    /**
+     * <b>An initializer that is code is cut; one that is a value is kept.</b>
+     *
+     * <p>Quoting fixed how faithfully an initializer was reproduced and never asked whether to
+     * reproduce it. So hovering {@code shapes} put four lines of the file — the whole {@code List.of}
+     * call, its three instantiations and their arguments — into the one band meant to say what a name
+     * <em>is</em>, floating directly over the file it had been quoted from.</p>
+     *
+     * <p>Both halves in one test, because the rule is a boundary and a test of either side alone
+     * passes against "always" or "never".</p>
+     */
+    @Test
+    public void aDeclarationShowsAValueAndNotAnExpression() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    static final int RETRIES = 5;\n"
+                + "    void run() {\n"
+                + "        List<String> names = List.of(\n"
+                + "                \"one\",\n"
+                + "                \"two\");\n"
+                + "    }\n"
+                + "}\n";
+        assertEquals("static final int RETRIES = 5;", signatureAt(source, "RETRIES").text());
+        assertEquals("List<String> names", signatureAt(source, "names").text());
     }
 
     /**
@@ -388,33 +443,91 @@ public class JavaSignatureTest {
     }
 
     /**
-     * A long one breaks at <b>semantic</b> points: the annotation on its own line, then one parameter
-     * per line, indented, with the closing bracket back at the margin.
+     * <b>A parameter, a catch variable and a for-init are quoted too</b> — they always had a declaration
+     * written down, and nothing was dispatching them to it.
      *
-     * <p>This is the shape both references use, and it is the reason breaks are the engine's to place: it
-     * knows where a break is legal and meaningful, and the layout does not. Re-wrapping at the edge of the
-     * box splits whatever two words land there, which is how a parameter list ends up broken in the middle
-     * of a generic type.</p>
+     * <h3>One of these was not merely plainer, it was wrong</h3>
+     *
+     * <p>Assembly renders a variable as {@code appendTypeName(variable.getType())}, and a varargs
+     * parameter's type <em>is</em> {@code int[]} — the {@code ...} spelling exists only inside
+     * {@code appendParameters}, which is not the path a hover on the parameter itself takes. So
+     * {@code int... counts} came out as {@code int[] counts}: true of the erasure and not of the
+     * declaration, in the one box devoted to saying what the declaration is.</p>
+     *
+     * <p>{@code final} was silently dropped for the same reason and the annotation would have been put
+     * on a line of its own, because assembly treats every annotation as metadata above a declaration —
+     * right for a method, wrong for one item in a parameter list.</p>
      */
     @Test
-    public void aLongDeclarationBreaksAtSemanticPoints() {
-        // A CLASSPATH symbol, because breaking is the ASSEMBLED path's job and an in-file declaration
-        // is quoted -- it keeps the author's own line, which is the whole point of quoting it.
+    public void aParameterCatchVariableAndForInitAreQuotedAsWritten() {
         String source = ""
-                + "import java.util.Map;\n"
                 + "public class Script {\n"
-                + "    void run(Map<String, Integer> m) {\n"
-                + "        m.merge(\"a\", 1, null);\n"
+                + "    void run(final String label, int... counts) {\n"
+                + "        for (int index = 0; index < 3; index++) { }\n"
+                + "        try { run(label, counts); } catch (RuntimeException failure) { }\n"
                 + "    }\n"
                 + "}\n";
-        Signature signature = signatureAt(source, "merge");
-        String[] lines = signature.text().split("\n");
 
-        assertTrue("expected several lines, got <" + signature.text() + ">", lines.length >= 3);
-        assertTrue("the declaration comes first: " + lines[0], lines[0].endsWith("merge("));
-        assertTrue("parameters are indented one per line: " + lines[1], lines[1].startsWith("    "));
-        assertTrue("a parameter per line, not all on one: " + lines[1], lines[1].endsWith(","));
-        assertEquals("and the bracket closes at the margin", ")", lines[lines.length - 1]);
+        assertEquals("final String label", signatureAt(source, "label,").text());
+        assertEquals("a varargs parameter is not an array parameter",
+                "int... counts", signatureAt(source, "counts)").text());
+        assertEquals("int index = 0", signatureAt(source, "index = 0").text());
+        assertEquals("RuntimeException failure", signatureAt(source, "failure)").text());
+    }
+
+    /**
+     * <b>A symbol with no source anywhere still gets a signature — assembled from the binding.</b>
+     *
+     * <h3>Why this is the only assembled-path test left</h3>
+     *
+     * <p>Two tests used to pin the assembled <em>layout</em> — a parameter per line, a hanging indent
+     * under {@code implements} — against {@code Map.merge} and {@code ArrayList}, on the stated grounds
+     * that a classpath symbol is the one thing that cannot be quoted. That stopped being true when
+     * {@link AttachedSources} landed: both now come out of {@code src.zip} with the JDK authors' own
+     * wrapping, so those tests were asserting our layout rules against text we no longer write.</p>
+     *
+     * <p>What survives the change is the <em>fallback</em>, and it is genuinely load-bearing — a mod jar
+     * shipped without sources, an obfuscated Minecraft jar, a directory of class files. So the fixture is
+     * a <b>directory classpath entry</b>: source discovery looks beside jars and this is not one, which
+     * is the same shape production hits and needs no fixture jar built.</p>
+     *
+     * <p>The observable is the <b>missing parameter name</b>. That is not a detail chosen for
+     * convenience — it is the one difference visible from outside between the two paths, because a class
+     * file does not carry names and a source file does. Asserting it here and its opposite in
+     * {@link #aClasspathMethodIsQuotedFromItsAttachedSource} pins the boundary from both sides; either
+     * alone passes against "always assembled" or "always quoted".</p>
+     */
+    @Test
+    public void aSymbolWithNoAttachedSourceIsAssembledInstead() {
+        String classes = ownCodeSource();
+        Assume.assumeNotNull(classes);
+        String source = ""
+                + "import com.crystalgui.language.java.HostClasspath;\n"
+                + "public class Script {\n"
+                + "    void run(ClassLoader loader) {\n"
+                + "        HostClasspath.detect(loader);\n"
+                + "    }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "detect(loader)", List.of(classes));
+
+        assertTrue("nothing resolved: <" + signature.text() + ">",
+                signature.text().contains("detect("));
+        assertTrue("the parameter's type belongs there: <" + signature.text() + ">",
+                signature.text().contains("ClassLoader"));
+        assertTrue("a class file carries no parameter names, so there is none to show: <"
+                        + signature.text() + ">",
+                signature.text().contains("detect(ClassLoader)"));
+    }
+
+    /** Where this test's own classes live — a directory, and one with no sources beside it. */
+    private static String ownCodeSource() {
+        try {
+            java.net.URL location = HostClasspath.class.getProtectionDomain()
+                    .getCodeSource().getLocation();
+            return new java.io.File(location.toURI()).getAbsolutePath();
+        } catch (Exception | NoClassDefFoundError unavailable) {
+            return null;
+        }
     }
 
     /**
@@ -444,29 +557,34 @@ public class JavaSignatureTest {
     /**
      * And a MULTI-LINE one keeps its own wrapping and indentation rather than being reflowed.
      *
-     * <p>The author's layout is information — an argument per line, an aligned array — and reproducing
-     * it costs nothing once the declaration is quoted rather than rebuilt.</p>
+     * <p>The author's layout is information — a parameter per line — and reproducing it costs nothing
+     * once the declaration is quoted rather than rebuilt.</p>
+     *
+     * <p>A <b>method header</b>, because that is where a quoted declaration can still span lines: a
+     * variable's initializer is cut unless it is a value, so the multi-line field this used to assert on
+     * no longer renders past its own name. The property is unchanged; only the shape that reaches it
+     * is.</p>
      */
     @Test
     public void aMultiLineDeclarationKeepsTheAuthorsOwnLayout() {
         String source = ""
-                + "import java.util.List;\n"
                 + "public class Script {\n"
-                + "    private static final List<String> NAMES = List.of(\n"
-                + "            \"alpha\",\n"
-                + "            \"beta\");\n"
+                + "    private static String join(\n"
+                + "            String first,\n"
+                + "            String second) { return first + second; }\n"
                 + "}\n";
-        Signature signature = signatureAt(source, "NAMES");
+        Signature signature = signatureAt(source, "join");
         String[] lines = signature.text().split("\n");
 
         assertEquals("the file wraps it over three lines, so this should too", 3, lines.length);
-        assertTrue(signature.text().endsWith(";"));
+        assertTrue("a header ends at its body: <" + signature.text() + ">",
+                signature.text().endsWith(")"));
 
         // RELATIVE to the first line, not absolute. The slice starts AT the declaration, so its first
         // line lost the four columns it sat at while the continuations kept theirs -- which doubled the
         // apparent indent, and did so more the deeper the declaration sat in the file. Each continuation
         // gives back exactly what the first line lost: 12 in the file, 8 here.
-        assertEquals("the argument should be indented 8 relative to the declaration, not 12",
+        assertEquals("the parameter should be indented 8 relative to the declaration, not 12",
                 8, leadingSpaces(lines[1]));
         assertEquals(8, leadingSpaces(lines[2]));
     }
@@ -615,68 +733,37 @@ public class JavaSignatureTest {
     }
 
     /**
-     * A long {@code implements} list is a <b>hanging indent</b>: the first interface stays on the
-     * keyword's line and the rest align under it.
+     * <b>A classpath type is quoted from its attached source, supertypes and all.</b>
      *
-     * <p>Not the same rule as the parameter list, which is a block indent. Putting every interface on its
-     * own indented line leaves {@code implements} alone on a line, which reads as a heading over a list
-     * rather than as one clause. The pad is the keyword's own width, so alignment falls out of the text
-     * instead of being a magic number — 11 for {@code implements}, 8 for an interface's {@code extends}.</p>
+     * <p>This asserted the opposite shape — a hanging indent under {@code implements}, aligned to the
+     * keyword's own width — because {@code ArrayList} was the canonical thing that could not be quoted
+     * and therefore had to be laid out by us. It can be quoted now, so what it shows is the JDK's own
+     * wrapping, and asserting our indent against their text would be pinning a rule to a string nobody
+     * here produces.</p>
+     *
+     * <p>The hanging indent still exists for the source-less case and is deliberately not re-tested
+     * there: it is layout, and {@link #aSymbolWithNoAttachedSourceIsAssembledInstead} pins the part of
+     * that path that carries meaning.</p>
      */
     @Test
-    public void aLongImplementsListHangsUnderItsFirstInterface() {
-        // A CLASSPATH type, for the reason above: an in-file declaration is quoted and keeps its own
-        // wrapping. ArrayList has the long implements list this hanging indent exists for.
+    public void aClasspathTypeIsQuotedWithItsOwnSupertypes() {
         String source = ""
                 + "import java.util.ArrayList;\n"
                 + "public class Script {\n"
                 + "    ArrayList<String> names;\n"
                 + "}\n";
         Signature signature = signatureAt(source, "ArrayList<String> names");
-        String[] lines = signature.text().split("\n");
 
-        int at = -1;
-        for (int i = 0; i < lines.length; i++) {
-            if (lines[i].startsWith("implements ")) at = i;
-        }
-        assertTrue("no implements clause in <" + signature.text() + ">", at >= 0);
-        assertTrue("the first interface belongs on the keyword's line: " + lines[at],
-                lines[at].length() > "implements ".length());
-
-        String pad = "           ";                       // "implements " is eleven characters
-        assertTrue("the second should align under the first: <" + lines[at + 1] + ">",
-                lines[at + 1].startsWith(pad) && !lines[at + 1].startsWith(pad + " "));
-    }
-
-    /**
-     * A non-literal initializer is <b>walked, not flattened</b> — coloured, and spaced by us.
-     *
-     * <p>It used to go through {@code ASTNode.toString()}, which produced two faults at once: every part
-     * came out with no capture, so a call drew in one flat colour beside a properly coloured declaration
-     * line, and JDT's flattener writes argument lists with no space after the comma —
-     * {@code Circle(1.5d),new Rectangle(3.0d,4.0d)}.</p>
-     */
-    @Test
-    public void aCallInitializerIsColouredAndSpacedRatherThanFlattened() {
-        String source = ""
-                + "import java.util.List;\n"
-                + "public class Script {\n"
-                + "    void run() {\n"
-                + "        List<String> names = List.of(\"one\", \"two\");\n"
-                + "    }\n"
-                + "}\n";
-        Signature signature = signatureAt(source, "names");
-
-        assertTrue("the flattener's comma spacing survived: <" + signature.text() + ">",
-                signature.text().contains("\"one\", \"two\""));
-        // `function.static`, because `List.of` IS static and the analyzer knows it. Two visitors reach
-        // this name -- MethodInvocation claims it so a call is coloured with no analyzer attached, then
-        // SimpleName asks the one that knows more -- and the later, better-informed answer wins. Keeping
-        // both used to be the behaviour and it threw out of the popup: HighlightRegistry refuses two
-        // ranges of one name that overlap, so any signature containing a call failed to render at all.
-        assertEquals("the invoked method should be captured", "function.static",
-                captureOf(signature, "of"));
-        assertEquals("and its string arguments too", "string", captureOf(signature, "\"one\""));
+        assertTrue("the declaration, not the instantiation: <" + signature.text() + ">",
+                signature.text().startsWith("public class ArrayList<E>"));
+        assertTrue("its own supertypes: <" + signature.text() + ">",
+                signature.text().contains("extends AbstractList<E>")
+                        && signature.text().contains("implements List<E>"));
+        // AN INTERFACE IN AN implements CLAUSE, which is the capture that goes flat the moment the
+        // attached unit stops resolving its own references -- the symptom of parsing a platform source
+        // at a compliance where its package collides with java.base. @see AttachedSources
+        assertEquals("a supertype is coloured by what it IS", "type.interface",
+                captureOf(signature, "RandomAccess"));
     }
 
     /**
@@ -906,17 +993,21 @@ public class JavaSignatureTest {
      * name so a call is still coloured with no analyzer attached, and the name then asks the analyzer,
      * which knows more. Both answers were kept. Asserted over the whole token list rather than at the one
      * node that broke, because the next duplicate will come from a different pair of visitors.</p>
+     *
+     * <p>Which is why the fixture is a <b>method header</b> and not the initializer that first broke it:
+     * an initializer is no longer rendered unless it is a value, so that fixture would now assert this
+     * over four tokens and pass whatever the rule was. A header still has the pair — {@code SimpleType}
+     * marks a parameter's type and {@code SimpleName} then marks the same characters.</p>
      */
     @Test
     public void noTwoCapturesCoverTheSameRange() {
         String source = ""
                 + "import java.util.List;\n"
                 + "public class Script {\n"
-                + "    void run() {\n"
-                + "        List<String> names = List.of(\"one\", Integer.toString(2));\n"
-                + "    }\n"
+                + "    @Deprecated\n"
+                + "    static <T> List<T> pick(List<T> from, Integer index) { return from; }\n"
                 + "}\n";
-        Signature signature = signatureAt(source, "names");
+        Signature signature = signatureAt(source, "pick");
 
         Set<String> seen = new HashSet<>();
         for (SyntaxToken token : signature.tokens()) {
@@ -926,38 +1017,32 @@ public class JavaSignatureTest {
         }
     }
 
-    /** {@code new Foo(...)} in an initializer keeps its keyword and its type distinct. */
-    @Test
-    public void aConstructorCallInAnInitializerIsCaptured() {
-        String source = ""
-                + "public class Script {\n"
-                + "    Object thing = new StringBuilder(16);\n"
-                + "}\n";
-        Signature signature = signatureAt(source, "thing");
-
-        assertTrue("<" + signature.text() + ">", signature.text().contains("new StringBuilder(16)"));
-        assertEquals("keyword", captureOf(signature, "new"));
-        assertEquals("type", captureOf(signature, "StringBuilder"));
-        assertEquals("number", captureOf(signature, "16"));
-    }
-
     /**
-     * A method from the <b>classpath</b> renders types without names.
+     * <b>A method from the classpath names its parameters</b> — because its source is attached.
      *
-     * <p>{@code IMethodBinding} carries parameter types and not names — a class read off the classpath
-     * genuinely has none unless it was built with {@code -parameters}. IntelliJ shows {@code x} for
-     * {@code println} because it has the JDK sources attached and falls back to exactly this when it does
-     * not. The difference is real information about where the source is, not an inconsistency.</p>
+     * <h3>This test used to assert the opposite, and the opposite used to be true</h3>
+     *
+     * <p>{@code IMethodBinding} carries parameter types and not names: a class file has none unless it
+     * was built with {@code -parameters}, so {@code println} rendered as {@code println(String)}. The
+     * note here said IntelliJ shows {@code println(String x)} "because it has the JDK sources attached"
+     * and called the difference real information about where the source is. It was — and it was a gap
+     * rather than a design, which is what {@link AttachedSources} closes: {@code src.zip} is beside every
+     * JDK on disk and nothing was reading it.</p>
+     *
+     * <p>So the assertion inverts, and {@code x} is not our word for the parameter. It is the JDK
+     * authors'.</p>
      */
     @Test
-    public void aClasspathMethodRendersTypesWithoutParameterNames() {
+    public void aClasspathMethodIsQuotedFromItsAttachedSource() {
         String source = ""
                 + "public class Script {\n"
                 + "    void run() { System.out.println(\"hi\"); }\n"
                 + "}\n";
         Signature signature = signatureAt(source, "println");
 
-        assertTrue("<" + signature.text() + "> should name the parameter's type",
-                signature.text().contains("(String)"));
+        assertTrue("<" + signature.text() + "> should carry the JDK's own parameter name",
+                signature.text().contains("println(String x)"));
+        assertEquals("and it is a parameter, as in any other declaration", "variable.parameter",
+                captureAtOffset(signature, signature.text().indexOf("(String x") + 8));
     }
 }

@@ -36,6 +36,7 @@ final class Queries {
         query = captureBinaryLiterals(query);
         query = captureObjectLikeDefines(query);
         query = promoteBuiltinTypes(query);
+        query = captureSelfReferencesAsKeywords(query);
         query = normalizeCaptureDialect(query);
         return liftUnambiguousPredicates(query);
     }
@@ -179,6 +180,29 @@ final class Queries {
         return query
                 .replaceAll("(\\(primitive_type\\)\\s*)@type\\b", "$1@type.builtin")
                 .replaceAll("(\\(sized_type_specifier\\)\\s*)@type\\b", "$1@type.builtin");
+    }
+
+    /**
+     * <b>{@code this} and {@code super} are keywords, and the vendored query calls them values.</b>
+     *
+     * <p>nvim-treesitter writes {@code (super) @function.builtin} and {@code (this) @variable.builtin},
+     * which is defensible where they behave like values — {@code super(...)} really is a call. It is wrong
+     * everywhere else, and the place it shows is the one where {@code super} cannot possibly be a call:
+     * a wildcard bound. {@code List<? super T>} drew {@code super} in the call colour, which under a
+     * scheme whose calls are lime is unmissable and reads as the highlighter mis-parsing the generic.</p>
+     *
+     * <p>Both are reserved words. The JLS has no context in which either is anything else, and both
+     * references draw them as keywords — which is why <em>every</em> shipped scheme already maps
+     * {@code variable.builtin} and {@code function.builtin} onto its keyword colour for exactly these
+     * two. Those names still earn their keep elsewhere ({@code console} in JavaScript,
+     * {@code gl_Position} in GLSL); Java simply has no use for them, and saying so once here beats
+     * five schemes each restating a colour they already agree on — and getting the WEIGHT wrong, which
+     * a colour alias cannot carry.</p>
+     */
+    private static String captureSelfReferencesAsKeywords(String query) {
+        return query
+                .replaceAll("(\\(super\\)\\s*)@function\\.builtin\\b", "$1@keyword")
+                .replaceAll("(\\(this\\)\\s*)@variable\\.builtin\\b", "$1@keyword");
     }
 
     /** A query ready to compile, plus the text conditions that have to be applied in Java. */

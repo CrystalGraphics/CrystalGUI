@@ -46,7 +46,7 @@ theme {
      * The rule the other four follow is dark-plus.css's: stay transparent, because an opaque document
      * fill is a SQUARE over the rounded island beneath it. That rule ends with "a scheme whose paper
      * genuinely differs sets a colour and accepts square corners", and this is that scheme --
-     * #323232 against the frame's #191A1C is not a rounding error, it is a different surface, and
+     * #2b2b2b against the frame's #191A1C is not a rounding error, it is a different surface, and
      * leaving it transparent made an Eclipse-palette editor sit on an Islands page.
      *
      * NOT IN THE .icls, which is why it was guessed wrong first. An IntelliJ export carries only the
@@ -55,15 +55,15 @@ theme {
      * you this value; the running IDE can. Measured, not derived.
      *
      * Everything below it is re-derived for the lighter ground rather than copied from the dark schemes:
-     * a caret row of #212327 on #323232 is a band DARKER than the page, which reads as a shadow. */
-    --editor-bg: #323232;
+     * a caret row of #212327 on #2b2b2b is a band DARKER than the page, which reads as a shadow. */
+    --editor-bg: #2b2b2b;
     --editor-fg: #BCBEC4;
     --editor-caret: #CED0D6;
     /* Darcula lifts its caret row seven units off its own background; the same lift, from here. */
     --editor-current-line: #393939;
     --editor-selection-bg: #214283;
     /* The gutter is the page, as Darcula's is -- the numbers separate it, not a fill. */
-    --editor-gutter-bg: #323232;
+    --editor-gutter-bg: #2b2b2b;
     --editor-gutter-edge: #414141;
     --editor-line-number: #6B6B6B;
     --editor-indent-guide: #414141;
@@ -178,7 +178,12 @@ theme {
      * in IntelliJ; the vocabulary carries neither for this capture. */
     --syntax-attribute: #A0A0A0;
     --syntax-tag: #CC6C1D;
-    /* A constructor names a class, so it takes the class colour rather than a function one. */
+    /* JAVASCRIPT ONLY, and the class colour is right there for a reason that does not generalise: the
+     * capture comes from a `#match? "^[A-Z]"` over a bare identifier, so what it really names is "a
+     * capitalised name", which is a class far more often than not. Java does not reach it -- the engine
+     * knows whether `ArrayList` is being declared or called and says so, and both references draw
+     * `new ArrayList<>()` as the call it is. This key said otherwise for a while, on the reasoning that a
+     * constructor names a class; that is true of the SPELLING and not of what is happening. */
     --syntax-constructor: #1290C3;
     --syntax-embedded: #BCBEC4;
     --syntax-label: #CC6C1D;
