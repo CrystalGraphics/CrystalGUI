@@ -5,6 +5,9 @@ import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
+import com.crystalgui.core.command.ClipboardCommands;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.render.texture.CgUiDrawable;
@@ -100,6 +103,61 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
      * somewhere. Carries the node rather than the diagnostic, so a listener knows which file to open.</p>
      */
     public final Signal.Value<ProblemNode> onProblemChosen = new Signal.Value<>();
+
+    /**
+     * How a command finds this panel — the data seam, rather than a static or a constructor argument.
+     *
+     * <p>The three rows of this panel's context menu are {@code Command}s, because {@code MenuBuilder} is
+     * the only thing that turns commands into rows and a second builder would drift within a release. A
+     * command resolves its subject by walking outward from the element the menu was opened on, so the
+     * panel has to be answerable along that walk. That is what a {@link DataKey} is for.</p>
+     */
+    public static final DataKey<ProblemsPanel> PROBLEMS_PANEL =
+            DataKey.create("problemsPanel", ProblemsPanel.class);
+
+    /**
+     * The row the menu was opened on — <b>not</b> the selection.
+     *
+     * <p>A context menu resolves against what was CLICKED while a menu bar resolves against what has
+     * FOCUS; opposite rules and both right, because a right-click names its subject. Held here rather
+     * than read back from the list because the list's own context row is private to its Copy support and
+     * is cleared as soon as that runs.</p>
+     */
+    @Nullable
+    private ProblemNode contextNode;
+
+    /** What the context menu's rows act on, or null when the menu was opened over nothing. */
+    @Nullable
+    public ProblemNode contextProblem() {
+        return contextNode;
+    }
+
+    @Override
+    public Object getData(DataKey<?> key) {
+        if (key == PROBLEMS_PANEL) return this;
+        // SUPER LAST, so the generic ELEMENT answer stays reachable -- the rule every override follows.
+        return super.getData(key);
+    }
+
+    /** Opens the quick fixes for the right-clicked problem, in the editor showing it. */
+    public boolean showQuickFixesForContext() {
+        ProblemNode node = contextNode;
+        if (node == null || node.isFile() || node.diagnostic() == null) return false;
+        // ONE SIGNAL, not both. The quick-fixes handler navigates as part of what it does -- the actions
+        // are resolved from an offset, so it has to open and position before it can ask -- and emitting
+        // onProblemChosen as well would run that same open twice.
+        onQuickFixesRequested.emit(node);
+        return true;
+    }
+
+    /**
+     * Asked for rather than performed, because this panel has no editor.
+     *
+     * <p>The same arrangement {@link #onProblemChosen} already documents: navigating to a problem is a
+     * workspace-level act, and a panel that reached for an editor would be reaching past the host that
+     * owns one. Alt+Enter in the editor is the same list; this is only the route to it.</p>
+     */
+    public final Signal.Value<ProblemNode> onQuickFixesRequested = new Signal.Value<>();
 
     private final UIElement content = new UIElement();
     private final UIText empty = new UIText("No problems have been detected in the workspace");
@@ -522,6 +580,28 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
         // the empty state are both position: absolute in there, stacked so neither one's arrival resizes
         // the panel, so an in-flow bar beside them shares their y and the first row is drawn over it.
         search = TreeSearch.installOn(tree, this, 0, searchModel(), node -> onProblemChosen.emit(node));
+
+        // ITS OWN MENU, so the shared list one does not also open -- attach keeps one live menu per site,
+        // but two attachments on one element are two listeners and both would fire.
+        tree.suppressDefaultContextMenu();
+        ContextMenu.attach(tree, CommandRegistry.global(), element -> {
+            int index = tree.indexOfRowElement(element);
+            if (index < 0) return null;
+            TreeRow<ProblemNode> row = tree.rowAt(index);
+            contextNode = row == null ? null : row.item();
+            // NAMED WITHOUT BEING SELECTED, which is ContextMenu's own rule: selecting instead would
+            // destroy the selection the menu was opened over.
+            tree.setContextRow(index);
+            if (contextNode == null || contextNode.isFile()) {
+                // A HEADING IS NOT A PROBLEM. It has no diagnostic to fix, quote or jump to, so it gets
+                // the plain Copy rather than three rows that would all be dead.
+                return ContextMenu.builder().item(ClipboardCommands.COPY);
+            }
+            return ContextMenu.builder()
+                    .item(ProblemsCommands.SHOW_QUICK_FIXES)
+                    .item(ClipboardCommands.COPY, "Copy Problem Description")
+                    .item(ProblemsCommands.JUMP_TO_SOURCE);
+        });
         search.input().setPlaceholder("Search problems");
         binding.add(markers.onDidChange.connect(resource -> refresh()));
         refresh();

@@ -591,6 +591,26 @@ public class Workbench extends UIElement {
                 if (window != null) window.getInputHandler().requestFocus(editor);
             });
         });
+
+        // SHOW QUICK-FIXES IS NAVIGATE PLUS ONE STEP, and it is spelled out here for the same reason the
+        // handler above is: which editor and what to do with it is the caller's business. The panel has
+        // no editor and must not reach for one -- it asks, and this answers.
+        //
+        // The list is opened INSIDE the continuation, after the caret has been placed: the actions are
+        // resolved from an offset, so asking before the file is open and positioned would ask about
+        // wherever the previous editor's caret happened to be.
+        problems.onQuickFixesRequested.connect(node -> {
+            if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
+            TextPoint at = node.diagnostic().start();
+            openFile(node.resource().asPath(), () -> {
+                TextEditor editor = activeEditor();
+                if (editor == null) return;
+                editor.revealAt(at);
+                UIWindow window = getAttachedWindow();
+                if (window != null) window.getInputHandler().requestFocus(editor);
+                editor.showCodeActionsAt(editor.getCaret());
+            });
+        });
     }
 
     /**
