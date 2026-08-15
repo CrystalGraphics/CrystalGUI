@@ -1076,17 +1076,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
      * has the binding — so {@code List<String>} survives the round trip as a <em>type</em> rather than
      * as text, and its members come back as {@code String get(int)} rather than {@code E get(int)}.</p>
      */
-    static final class EcjTypeRef implements TypeRef {
-
-        private final ITypeBinding binding;
-
-        EcjTypeRef(ITypeBinding binding) {
-            this.binding = binding;
-        }
-
-        ITypeBinding binding() {
-            return binding;
-        }
+    record EcjTypeRef(ITypeBinding binding) implements TypeRef {
 
         @Override
         public String displayName() {
