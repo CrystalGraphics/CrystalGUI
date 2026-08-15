@@ -106,6 +106,9 @@ theme {
      * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
     --syntax-unresolved: #E51400;
     --syntax-deprecated: #808080;
+    /* Dead code — nothing reads it. LIGHTER than the body text here, where dark schemes go darker: on
+     * white, receding means moving toward the background in the other direction. @see dark-plus.css */
+    --syntax-unnecessary: #A6A6A6;
     --syntax-operator: #000000;
     --syntax-punctuation: #383838;
     --syntax-punctuation-bracket: #383838;

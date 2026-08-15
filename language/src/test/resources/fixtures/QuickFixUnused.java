@@ -31,9 +31,26 @@ public class QuickFixUnused {
         return null;
     }
 
+    // FIX: "Remove method 'neverCalled'"
+    private void neverCalled() { }
+
+    // FIX: "Remove constructor 'QuickFixUnused'"
+    private QuickFixUnused(int unusedParameter) { }
+
+    /** Keeps the class constructible, so the private one above is unused for a real reason. */
+    QuickFixUnused() { }
+
+    // FIX: "Remove interface 'Helper'"
+    private interface Helper { }
+
     void unusedLocal() {
         // FIX: "Remove variable 'greeting'"
         String greeting = "never read";
+    }
+
+    void redundantSemicolon() {
+        // FIX: "Remove redundant semicolon"
+        ;
     }
 
     /**

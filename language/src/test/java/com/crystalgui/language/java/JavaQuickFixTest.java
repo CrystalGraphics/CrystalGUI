@@ -161,6 +161,84 @@ public class JavaQuickFixTest extends FixFixture {
                 IProblem.LocalVariableIsNeverUsed);
     }
 
+    // ── Whole members ───────────────────────────────────────────────────────────────────────────
+
+    @Test
+    public void anUnusedPrivateMethodIsRemoved() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private void helper() { }\n"
+                + "    void go() { }\n"
+                + "}\n";
+        assertReported(source, IProblem.UnusedPrivateMethod);
+        assertFix(source, "private void helper", UnusedCorrections.REMOVE_METHOD, ""
+                + "public class Script {\n"
+                + "    void go() { }\n"
+                + "}\n");
+        assertResolves(source, "private void helper", UnusedCorrections.REMOVE_METHOD,
+                IProblem.UnusedPrivateMethod);
+    }
+
+    @Test
+    public void anUnusedPrivateConstructorIsRemovedAndCalledAConstructor() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private Script(int unusedParameter) { }\n"
+                + "    Script() { }\n"
+                + "}\n";
+        assertReported(source, IProblem.UnusedPrivateConstructor);
+        assertEquals("a constructor is not a method",
+                "Remove constructor 'Script'",
+                offered(source, "private Script(", UnusedCorrections.REMOVE_CONSTRUCTOR).title());
+        assertResolves(source, "private Script(", UnusedCorrections.REMOVE_CONSTRUCTOR,
+                IProblem.UnusedPrivateConstructor);
+    }
+
+    /**
+     * <b>The noun is read from the declaration, not carried as a parameter.</b>
+     *
+     * <p>Three registrations share one correction, so a fixed word would have made a private interface
+     * offer to remove a "class". The kind is sitting on the node.</p>
+     */
+    @Test
+    public void anUnusedPrivateInterfaceIsCalledAnInterface() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private interface Helper { }\n"
+                + "    void go() { }\n"
+                + "}\n";
+        assertReported(source, IProblem.UnusedPrivateType);
+        assertEquals("Remove interface 'Helper'",
+                offered(source, "private interface Helper", UnusedCorrections.REMOVE_TYPE).title());
+        assertFix(source, "private interface Helper", UnusedCorrections.REMOVE_TYPE, ""
+                + "public class Script {\n"
+                + "    void go() { }\n"
+                + "}\n");
+    }
+
+    // ── Nothing at all ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Only reported because the policy switches it on</b> — ECJ leaves {@code emptyStatement} at
+     * {@code ignore}, so without that entry this correction would be dead code that looks alive.
+     */
+    @Test
+    public void aSuperfluousSemicolonIsRemovedWithItsLine() {
+        String source = ""
+                + "public class Script {\n"
+                + "    void go() {\n"
+                + "        ;\n"
+                + "    }\n"
+                + "}\n";
+        assertReported(source, IProblem.SuperfluousSemicolon);
+        assertFix(source, ";", UnusedCorrections.REMOVE_SEMICOLON, ""
+                + "public class Script {\n"
+                + "    void go() {\n"
+                + "    }\n"
+                + "}\n");
+        assertResolves(source, ";", UnusedCorrections.REMOVE_SEMICOLON, IProblem.SuperfluousSemicolon);
+    }
+
     // ── Unresolved types ────────────────────────────────────────────────────────────────────────
 
     /**

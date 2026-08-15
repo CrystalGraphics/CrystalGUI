@@ -241,6 +241,27 @@ texteditor .__indent-guide__ {
     font-weight: var(--syntax-bracket-weight, normal);
 }
 
+/* ── Dead weight, faded rather than underlined ───────────────────────────────────────────────────
+ *
+ * DiagnosticTag.UNNECESSARY, published from the diagnostic lane. A tag is not a severity: "this import is
+ * never used" is not a lesser warning, it is a different kind of statement, and underlining it says
+ * something is wrong about code whose only fault is that nobody reads it. Every reference implementation
+ * fades instead, which is exactly what lets them report six kinds of unused thing without a file looking
+ * broken.
+ *
+ * PUBLISHED AFTER the syntax tokens, so this wins the character rather than tinting it — see
+ * TextEditor.addTagRanges. That makes unused code go flat, which is IntelliJ's rendering; VS Code lowers
+ * the opacity and keeps the hue, which a highlight cannot express and which would need colour blending in
+ * the paint path to imitate.
+ *
+ * Its sibling tag has NO rule here on purpose: `::highlight(deprecated)` is already written further down
+ * and is fed by the SEMANTIC TOKEN path, which marks the reference itself rather than a diagnostic's
+ * range and works whether or not the deprecation warning is switched on. The tag is still produced —
+ * the Problems panel draws its own row from it — it simply does not need a second inline rule. */
+.__syntax__::highlight(unnecessary) {
+    color: var(--syntax-unnecessary, #6A6A6A);
+}
+
 /* ── Syntax colours ──
  *
  * THE SAME TRAP THE BRACKET RULE ABOVE RECORDS, and it caught us a second time. A tokenizer publishes

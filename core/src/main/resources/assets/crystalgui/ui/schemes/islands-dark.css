@@ -149,6 +149,8 @@ theme {
      * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
     --syntax-unresolved: #F75464;
     --syntax-deprecated: #6F737A;
+    /* Dead code — nothing reads it. Quieter than deprecated: that still runs, this is not read at all. */
+    --syntax-unnecessary: #5E6269;
 
     --syntax-operator: #BCBEC4;
     --syntax-punctuation: #BCBEC4;

@@ -24,6 +24,7 @@ import com.crystalgui.text.decoration.Stickiness;
 import com.crystalgui.text.decoration.TrackedRange;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
@@ -551,6 +552,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // squiggle drift off the token it is about as the token is extended.
         buffer.decorations().replaceLane(DIAGNOSTIC_LANE,
                 Stickiness.ALWAYS_GROWS_WHEN_TYPING_AT_EDGES, entries);
+        // AND THE HIGHLIGHTS, because a diagnostic now changes the TEXT and not only the marks under it.
+        // The two consumers of this lane cache differently: SquigglesPart re-reads it every frame, while
+        // refreshHighlights answers from a cache keyed on the visible range and would happily keep
+        // publishing the previous analysis's fades until something else happened to scroll or type.
+        // @see #addTagRanges
+        highlightsDirty = true;
     }
 
     /**
@@ -2535,6 +2542,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 }
             }
 
+            // AFTER THE SYNTAX TOKENS, and that order is the whole of the effect. A character belongs to
+            // one highlight and the last name written wins it, so publishing here REPLACES the token's
+            // colour rather than tinting it -- which is IntelliJ's look for dead code (flat grey) rather
+            // than VS Code's (opacity, which keeps the hue). The alternative would be blending colours in
+            // the paint path, and the sheet can express one of these and not the other.
+            addTagRanges(byName, lineStart, lineEnd);
+
             // CLAMPED to what is actually painted. A collapsed header stops drawing its trailing bracket,
             // so a token covering it would publish a range past the end of the string. Correct to do
             // unconditionally -- a range beyond the text is never meaningful, folding or not.
@@ -2612,6 +2626,49 @@ public class TextEditor extends ScrollerView implements UndoScope {
             if (range.start() < existing.end() && existing.start() < range.end()) return;
         }
         ranges.add(range);
+    }
+
+    /** The highlight name {@link DiagnosticTag#UNNECESSARY} is styled through. */
+    static final String UNNECESSARY_HIGHLIGHT = "unnecessary";
+
+    /**
+     * Publishes the ranges that change how text is <b>drawn</b> rather than marked — unused code faded,
+     * deprecated code struck through.
+     *
+     * <h3>Why this is not the squiggle</h3>
+     *
+     * <p>{@link DiagnosticTag}'s own note makes the case: "unused import" is not a lesser warning, it is a
+     * different kind of statement, and underlining it says "something is wrong here" about code whose only
+     * problem is that nobody reads it. Every reference implementation fades instead — which is what lets
+     * them report six kinds of unused thing without the file looking broken.</p>
+     *
+     * <p>It reuses the highlight mechanism the syntax colours already arrive through, so the whole feature
+     * is two names and two rules in the sheet. The colour stays in CSS, which is what lets a scheme decide
+     * how faded "faded" is; nothing here knows what either tag looks like.</p>
+     *
+     * <p><b>Offsets come from the tracked lane, never from the diagnostic.</b> The same rule
+     * {@code SquigglesPart} is built on and for the same reason: a row/column converted against the live
+     * buffer is right only at the instant the analysis landed, so 300ms of typing later the fade would sit
+     * over whatever moved into those offsets. A range whose text was deleted draws nothing at all.</p>
+     *
+     * <p><b>{@link DiagnosticTag#DEPRECATED} is deliberately not published here.</b> The
+     * {@code deprecated} highlight already exists and is fed by the <em>semantic token</em> path, which
+     * is the better producer of it in two ways: it marks the reference itself rather than whatever range
+     * a diagnostic happened to cover, and it works whether or not the deprecation warning is switched on.
+     * Publishing it a second time would put two producers on one name for no gain. The tag is still
+     * carried on the diagnostic — the Problems panel styles its own row from it.</p>
+     */
+    private void addTagRanges(Map<String, List<TextRange>> byName, int lineStart, int lineEnd) {
+        for (TrackedRange tracked : buffer.decorations().inLane(DIAGNOSTIC_LANE)) {
+            Diagnostic diagnostic = tracked.payload(Diagnostic.class);
+            if (diagnostic == null || tracked.collapsedByEdit()) continue;
+            if (!diagnostic.hasTag(DiagnosticTag.UNNECESSARY)) continue;
+
+            int start = Math.max(tracked.from(), lineStart);
+            int end = Math.min(tracked.to(), lineEnd);
+            if (end <= start) continue;
+            addRange(byName, UNNECESSARY_HIGHLIGHT, TextRange.of(start - lineStart, end - lineStart));
+        }
     }
 
     /**

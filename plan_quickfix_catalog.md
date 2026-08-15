@@ -909,11 +909,189 @@ separate plan with cross-document undo as its first line.
    fails naming the file, the line and what it got instead — so a fixture cannot quietly go stale. It
    selects files on the annotation rather than the extension, which is what keeps the 500-line
    colouring documents in the same directory out of a quick-fix analysis they make no claim about.
-4. **§14-F severity table, then the T1 batch.**
-5. Annotation insertion, `@Override`/`@Deprecated`, and the `SUPPRESS` product call.
+4. ~~**§14-F severity table, then the T1 batch.**~~ **Done**, and the ordering was backwards: eight of the
+   relevant problems are reported with no configuration at all, so the batch never needed the table —
+   the table needed the batch, and was written for the two entries that genuinely wanted switching on.
+   Four corrections shipped (private method, constructor, nested type, redundant semicolon), each with a
+   fixture site. `EcjProblemPolicy` holds the severities and the tags together because they are one
+   decision made twice.
+5. ~~Annotation insertion, `@Override`/`@Deprecated`, and the `SUPPRESS` product call.~~ **Replaced by
+   the `UNNECESSARY` work**, which is what the enable-set decision made of it: with
+   `MissingOverrideAnnotation` deliberately off — an override is a relationship, not a defect (§18.6) —
+   the annotation helper had no consumer left. What shipped instead is the half of `DiagnosticTag` that
+   was built and never connected: the analyzer produces tags, and the editor publishes an
+   `unnecessary` highlight so dead code fades rather than gaining a sixth kind of squiggle. `SUPPRESS`
+   stays parked.
+
+   **Writing that test found a defect immediately**, which is the argument for having written it:
+   `installDiagnostics` replaced the tracked lane without marking highlights dirty. `SquigglesPart`
+   re-reads the lane every frame and never noticed, while the highlight cache is keyed on the visible
+   range — so the fade would have appeared only when something else happened to scroll or type.
 6. `ImportPlan`, "did you mean", the list-element fixes, organise imports.
 7. **`commandId + arguments`** with the first command-shaped action (R4).
 8. T3 pair (try/catch, `throws`), then the corpus test (§15 L2), then T4's create-method.
+
+---
+
+## 18. Steps 4 and 5 — planned before written, because most of it is not an engineering decision
+
+Steps 0–3 had right answers and a way to measure them. The next two do not, and that is the whole reason
+this section exists: **every diagnostic switched on is a squiggle in somebody's file that was not there
+before**, and nothing in the code can say whether "you allocated an object and discarded it" earns one.
+What follows separates the parts that were measured from the parts that are a call.
+
+### 18.1 What was measured
+
+Every relevant problem, run through a real parse at the current option set. **Eight are already reported
+with no configuration at all:**
+
+| Reported today | Needs switching on |
+|---|---|
+| `UnusedImport`, `LocalVariableIsNeverUsed`, `UnusedPrivateField` | `MissingOverrideAnnotation` |
+| **`UnusedPrivateMethod`**, **`UnusedPrivateConstructor`**, **`UnusedPrivateType`** | `SuperfluousSemicolon` |
+| `DeadCode`, `AssignmentHasNoEffect` | `UnusedObjectAllocation` |
+
+`unusedPrivateMember` is one JDT option covering field, method, constructor and nested type — and the
+shipped field correction proves it is on. So **three of the T1 batch need no severity work whatever**,
+and §14-F's ordering ("write the severity table, then the batch") is backwards: the table is not what
+unblocks the batch, and building it first would have been building it for one entry.
+
+### 18.2 The finding that matters more than the table: `UNNECESSARY` is half-built
+
+`DiagnosticTag.UNNECESSARY` exists and its own javadoc argues the case — *"unused code is faded out …
+folding them into the severity ladder would force a choice between showing a squiggle you cannot act on
+and losing the rendering entirely."* `ProblemsPanel` consumes it and `panels.css` styles it.
+
+**Nothing produces it.** `EcjSourceAnalyzer.diagnostics()` builds every `Diagnostic` through the six-arg
+constructor, so the tag set is always empty. And the **editor ignores tags completely** — there is no
+`DiagnosticTag` reference anywhere under `ui/elements/editor/`.
+
+So today every unused import, local, field, method, constructor and nested type is an ordinary warning
+squiggle, where IntelliJ greys the text and VS Code fades it. That is not a cosmetic gap: it is the
+difference between "this file has nine problems" and "this file has nine bits of dead weight", and it is
+why the reference implementations can afford to report all of them.
+
+This lands on step 4 directly. The batch adds fixes to problems that are **already squiggling**, so it
+adds no noise by itself — but it triples the number of squiggles anyone will actually notice, and the
+natural response to a noisy editor is to turn the diagnostics off rather than to draw them properly.
+
+### 18.3 Step 4 — what is actually buildable
+
+**The batch, all on already-reported problems, no configuration:**
+
+| Correction | `IProblem` | Node | Notes |
+|---|---|---|---|
+| Remove method 'x' | `UnusedPrivateMethod` | `MethodDeclaration` | |
+| Remove constructor 'X' | `UnusedPrivateConstructor` | `MethodDeclaration` (`isConstructor`) | |
+| Remove class 'X' | `UnusedPrivateType` | `TypeDeclaration` | Nested only; a top-level type is never reported |
+
+One shared correction parameterised three ways, exactly as the local/field pair already is — they differ
+only in the problem, the node type and the noun in the title. **Names come from the declaration's own
+name node**, never from `getArguments()`, which is the lesson `UnusedPrivateField` cost.
+
+**Two that look like they belong and do not:**
+
+- **`DeadCode`.** ECJ points at the unreachable statement, but the unreachable statement is a
+  *consequence* — `if (false) { … }` wants the condition simplified, not the block deleted, and deleting
+  it leaves `if (false);`. IntelliJ treats this as a family of conditional simplifications rather than a
+  removal. Not a deletion, so not this batch.
+- **`AssignmentHasNoEffect`.** Fires for `n = n`, where deleting the statement is right, and the
+  catalogue already records the case that makes it dangerous — an RHS with a call in it, where deleting
+  drops the side effect. Narrow enough to need its own thinking, not a line in a batch.
+
+Both stay in the catalogue; neither ships here. Deferring them is the point of having written §12's
+exclusions down.
+
+**`EcjProblemSeverities` is created only if something needs enabling**, and the only thing that does is
+step 5's `MissingOverrideAnnotation` — which makes it step 5's cost, not step 4's.
+
+### 18.4 Step 5 — the annotation helper, and what it unlocks
+
+`@Override` needs `MissingOverrideAnnotation` switched on (measured: off). The insertion itself is a
+`ListRewrite` on `MODIFIERS2_PROPERTY` — **and that must be spiked before it is trusted**, the same way
+list removal was: the questions are whether the annotation lands on its own line, whether it takes the
+declaration's indentation, and whether it sorts before the other modifiers rather than after `public`.
+
+The helper is the point rather than the fix. Three things are the same insertion:
+
+| | Annotation | Needs |
+|---|---|---|
+| Add missing `@Override` | `@Override` | `MissingOverrideAnnotation` on |
+| Add missing `@Deprecated` | `@Deprecated` | three more options on |
+| **Suppress** | `@SuppressWarnings("…")` | a problem → token map |
+
+So the moment the helper exists, **`SUPPRESS` stops being an engineering question**. What remains is one
+real problem: the `@SuppressWarnings` token for a given problem is computed by JDT through
+`CompilerOptions.warningTokenFromIrritant` and `ProblemReporter.getIrritant`, **both internal API** — the
+one kind that may differ between bands. A hand-written map covering only the problems we enable is
+smaller, honest, and cannot break on a band upgrade.
+
+### 18.5 How the fading is actually drawn — no new rendering machinery
+
+Worth establishing before committing to it, because "fade the text" sounds like a change to how the
+editor paints and is not one.
+
+The editor already publishes **named highlight ranges** per view line — the CSS Custom Highlight API,
+`::highlight(name)` — and that is how syntax tokens, semantic tokens, search matches, the bracket pair
+and `search-excluded` all reach the screen. `search-excluded` is the exact precedent: it is struck
+through by a `text-decoration-line` rule in the sheet, with no Java knowing what a strikethrough is.
+
+`HighlightStyle.ALLOWED` carries `COLOR` and `TEXT_DECORATION_LINE`, so both tags are expressible:
+
+```css
+texteditor::highlight(unnecessary) { color: var(--editor-unnecessary-fg, …); }
+texteditor::highlight(deprecated)  { text-decoration-line: line-through; }
+```
+
+So the whole of the rendering half is: publish two more named ranges from the diagnostic lane — whose
+offsets are already tracked live through every edit — and write two CSS rules. **The colour stays in the
+sheet**, which is what lets a scheme decide how faded "faded" is.
+
+One consequence to accept deliberately: a character belongs to one highlight, and the last name written
+wins it, so an unnecessary range publishes **after** the syntax tokens and therefore replaces their
+colour rather than dimming it. That is IntelliJ's look (unused code goes flat grey) rather than VS
+Code's (opacity, which keeps the hue). It is the one the mechanism gives for free, and the alternative
+would mean per-character colour blending in the paint path for a difference nobody has asked for.
+
+### 18.6 The decisions, as taken
+
+| Question | Answer | Consequence |
+|---|---|---|
+| Enable `SuperfluousSemicolon` | **yes** | one more correction, and it tags as unnecessary |
+| Enable `UnusedObjectAllocation` | **yes** | diagnostic only — see below |
+| Enable `MissingOverrideAnnotation` | **no**, and for a better reason than taste | see below; step 5 becomes the tagging work instead |
+| `UNNECESSARY` tagging + editor fading | **yes** | §18.5 |
+| `SUPPRESS` | **stays parked** | unchanged |
+
+**An override is not a problem, so it must not arrive as one.** The reason `MissingOverrideAnnotation`
+stays off is not that the warning is annoying — it is that IntelliJ does not report overriding as a
+diagnostic *at all*. It draws a **gutter marker** on the declaration ("Overrides method in `UIElement`
+(com.crystalgui.ui)", Ctrl+U to navigate), which is information about a relationship rather than a
+complaint about the code. Routing it through the diagnostic pipeline would put a squiggle, a Problems-panel
+row and an error-stripe mark on every correctly-written override in the file.
+
+That makes it a **separate feature, catalogued here so it is not lost**: a gutter decoration in the same
+column the quick-fix bulb uses, fed by asking the resolver what the declaration at a row overrides, with
+navigate-to-super on click. It needs no ECJ option, no correction and no severity — and it belongs with
+the editor's other gutter parts (`FoldingDecorationsPart`, `GutterEdgePart`), not in this layer at all.
+Its inverse, "is overridden by", is the same marker pointing the other way and wants a type hierarchy.
+
+**`UnusedObjectAllocation` gets no correction, and that is the answer rather than an omission.** ECJ
+reports `new FileWriter(f);` because the result was discarded, and the fix a user wants is almost never
+"delete the line" — it is "assign it to something", which is the bug the diagnostic just found. Offering
+deletion, and offering it as the *preferred* action, would turn a warning that catches a real mistake
+into a one-keystroke way to discard the evidence. The diagnostic is the whole value here.
+
+### 18.7 The three decisions that were not mine
+
+1. **Which of the three optional diagnostics to switch on.** `MissingOverrideAnnotation` is required for
+   step 5 to have anything to fix. `SuperfluousSemicolon` and `UnusedObjectAllocation` are opinions —
+   the first is tidiness, the second catches real bugs (`new FileWriter(f);` discarded).
+2. **Whether `UNNECESSARY` tagging and editor fading are in scope**, or a separate piece of work. It is
+   the difference between the unused family reading as errors and reading as dead weight, and it touches
+   the analyzer and the editor's rendering rather than the correction layer.
+3. **Whether `SUPPRESS` ships now.** Parked in the catalogue as a product call; the helper in step 5 is
+   what it was waiting on.
 
 Steps 0–2 are the infrastructure this review says to build *first*, and together they are two days.
 After them the plan is what it was meant to be: a hundred entries, each a `Correction` in a family file,
