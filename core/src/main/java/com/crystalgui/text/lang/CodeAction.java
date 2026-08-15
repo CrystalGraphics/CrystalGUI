@@ -3,6 +3,7 @@ package com.crystalgui.text.lang;
 import com.crystalgui.text.ChangeSet;
 
 import java.util.Comparator;
+import java.util.Map;
 
 import javax.annotation.Nullable;
 
@@ -53,17 +54,31 @@ import javax.annotation.Nullable;
  * is that it is the obvious thing to "fix" by making ids unique per row. Doing that would make the id a
  * row identifier, which is what the title already is.</p>
  *
+ * <h3>A command carries its arguments</h3>
+ *
+ * <p>LSP's {@code Command} has an {@code arguments} array and this has a map, for the same reason: an
+ * action that runs a command has to be able to say <em>what about</em>. Without it the command re-derives
+ * its subject at run time — and the first consumer here was exactly that bug: "Copy problem message"
+ * read the problems at the <b>caret</b> when it ran, while the popup it sits in can be opened from a stripe
+ * mark or a hover nowhere near the caret. Now the action carries the message it was offered about.</p>
+ *
+ * <p>Strings only, because this crosses the {@code core/} ↔ {@code language/} boundary as data and a typed
+ * payload would need a type both sides agree on for every new command. A command that needs more than a
+ * few strings is a command that wants an edit instead.</p>
+ *
  * @param id        stable, never displayed — {@code "java.unused.removeImport"}
  * @param title     what the row says, already in the user's words — "Remove unused import"
  * @param kind      where it sorts, and what it is
  * @param edit      the change to apply, in offsets against {@link #version}, or null
  * @param commandId a {@code CommandRegistry} id to invoke, or null
+ * @param arguments what the command is about, by name — empty for an edit-only action
  * @param preferred whether this is <em>the</em> fix — LSP's {@code isPreferred}. The popup shows one
  *                  preferred action inline with its accelerator and hides the rest behind "More actions…"
  * @param version   the document version {@link #edit} was computed against
  */
 public record CodeAction(String id, String title, CodeActionKind kind, @Nullable ChangeSet edit,
-                         @Nullable String commandId, boolean preferred, long version) {
+                         @Nullable String commandId, Map<String, String> arguments,
+                         boolean preferred, long version) {
 
     /**
      * Tier, then preferred, then insertion order — which the sort being <b>stable</b> preserves.
@@ -80,6 +95,13 @@ public record CodeAction(String id, String title, CodeActionKind kind, @Nullable
         if (id == null || id.isEmpty()) throw new IllegalArgumentException("an action needs an id");
         if (title == null || title.isEmpty()) throw new IllegalArgumentException("an action needs a title");
         if (kind == null) kind = CodeActionKind.QUICK_FIX;
+        arguments = arguments == null ? Map.of() : Map.copyOf(arguments);
+    }
+
+    /** An edit-only action — the shape every correction produces, with nothing for a command to read. */
+    public CodeAction(String id, String title, CodeActionKind kind, @Nullable ChangeSet edit,
+                      @Nullable String commandId, boolean preferred, long version) {
+        this(id, title, kind, edit, commandId, Map.of(), preferred, version);
     }
 
     /** The common shape: a fix that edits the document. */
@@ -95,6 +117,12 @@ public record CodeAction(String id, String title, CodeActionKind kind, @Nullable
     /** An action with no edit — it runs a registered command instead. */
     public static CodeAction command(String id, String title, CodeActionKind kind, String commandId) {
         return new CodeAction(id, title, kind, null, commandId, false, 0L);
+    }
+
+    /** As {@link #command}, carrying what the command is about. */
+    public static CodeAction command(String id, String title, CodeActionKind kind, String commandId,
+                                     Map<String, String> arguments) {
+        return new CodeAction(id, title, kind, null, commandId, arguments, false, 0L);
     }
 
     /**
