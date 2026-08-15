@@ -1620,8 +1620,27 @@ public class UIElement implements SettingsScope, DataProvider {
      */
     public void scrollIntoView() {
         var self = getRuntimeCache();
-        for (UIElement ancestor = getParent(); ancestor != null; ancestor = ancestor.getParent()) {
+        UIElement child = this;
+        for (UIElement ancestor = getParent(); ancestor != null;
+                child = ancestor, ancestor = ancestor.getParent()) {
             if (!ancestor.isScrollContainer()) continue;
+            // A SCROLL-EXEMPT SUBTREE IS NOT CONTENT TO SCROLL TO, which is the second half of what
+            // setScrollExempt already promises and the one place that had not implemented it --
+            // getScrollWidth and getScrollHeight both do. An exempt child does not move with this
+            // ancestor's content (see the transform chain, which skips the offset for exactly this
+            // flag), so it is already where it will be drawn and "revealing" it is meaningless.
+            //
+            // Scrolling to it is worse than meaningless: it reveals the element's LAYOUT position, and
+            // an overlay pinned with `top: 0` lives at the top of the DOCUMENT. The editor's find bar is
+            // one, so focusing its input -- which Popover.hide does on every hover-doc dismissal, through
+            // requestFocus's "already focused, but may have been scrolled away since" branch -- scrolled
+            // a file from line 429 to line 1. Not to zero, but to 6: the field's own inset inside the
+            // bar, which is what made it look like a scroll bug rather than a reveal.
+            //
+            // Tested on the CHILD this ancestor was reached through, because that is what the transform
+            // chain tests -- the flag exempts an element from its PARENT's scroll, so an outer scroller
+            // still moves the whole subtree and must still be able to reveal it.
+            if (child.scrollExempt) continue;
 
             var box = ancestor.getRuntimeCache();
             float border = ancestor.getTaffyLayout().border().left;
