@@ -115,6 +115,18 @@ Neither licence grants trademark rights — Apache 2.0 § 6 says so outright. Th
 JetBrains' own drawings of documents, not marks. The **IntelliJ IDEA logo is** a mark, which is why it lives
 in `core/src/test/resources/` and not here: it is the SVG renderer's torture test, not a shipped asset.
 
+## `general/action/` — IntelliJ Platform (Apache 2.0)
+
+`intentionBulb`, `addDirectory`, `addFile`, `copy`, `cut`, `delete`, `edit`, `paste`, `reformatCode`,
+`refresh`, `run`, `save` — action icons from the IntelliJ Platform, © 2000-2023 JetBrains s.r.o. and
+contributors, used under the Apache License 2.0.
+
+**Unmodified**, and shipped with their `*_dark.svg` variants, which is the difference from `general/search/`
+above. Those were converted to `currentColor` because they are chrome marks that have to follow a theme and
+a toggle state; these carry meaning in their colour — the bulb's amber glass says "there is something to do
+here" and is the thing that makes it recognisable at 16px — so recolouring them from CSS would throw away
+what they are. `icon()` resolves the light/dark pair through `CgUiSvg.ofIcon`.
+
 ## `general/search/` — IntelliJ Platform (Apache 2.0)
 
 `search`, `matchCase`, `exactWords`, `regex`, `newLine`, `filter`, `up`, `down` — the Find toolbar icons
