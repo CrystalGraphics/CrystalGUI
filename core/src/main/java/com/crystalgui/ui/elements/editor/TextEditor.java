@@ -2062,18 +2062,48 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return showDocumentationAt(getCaret());
     }
 
+    /**
+     * The popup for what is at {@code offset} — the symbol if one resolves, the problems if any, or both.
+     *
+     * <h3>The problems do not wait for the resolve, and must not</h3>
+     *
+     * <p>This used to open only from inside the resolve callback, which fires <b>only when a symbol came
+     * back</b>. So the one case where a problem popup is worth most — a name that resolves to nothing —
+     * was the one case that showed nothing at all: hovering an unresolved {@code lenght()} gave a red
+     * squiggle, a lightbulb in the gutter, a working Alt+Enter, and no hover popup, because the resolve
+     * that never succeeded was gating the band that had nothing to do with it.</p>
+     *
+     * <p>They are independent sources and are now treated as such. Diagnostics are tracked ranges in the
+     * buffer, known synchronously; a symbol comes from an engine and arrives whenever it arrives. So the
+     * problem-only box opens immediately if there is a problem, and the resolve upgrades it in place when
+     * it lands — which is also the right order for the slow case, since the message is the part you were
+     * hovering for.</p>
+     *
+     * @return whether anything was shown or asked for
+     */
     boolean showDocumentationAt(int offset) {
-        return resolveAt(LANE_DOC, offset, symbol -> {
-            UIWindow window = getAttachedWindow();
-            if (window == null) return;
-            if (docPopup == null) {
-                docPopup = new DocumentationPopup();
-            }
-            float[] anchor = anchorInWindow(offset);
-            if (anchor == null) return;
-            docPopup.show(window, symbol, anchor[0], anchor[1], anchor[2]);
+        UIWindow window = getAttachedWindow();
+        if (window == null) return false;
+        float[] anchor = anchorInWindow(offset);
+        if (anchor == null) return false;
+
+        List<Diagnostic> problems = diagnosticsAt(offset);
+        if (!problems.isEmpty()) {
+            if (docPopup == null) docPopup = new DocumentationPopup();
+            docPopup.showProblemsAt(window, problems, anchor[0], anchor[1], anchor[2]);
+            fillProblemSection(offset);
+        }
+
+        boolean asked = resolveAt(LANE_DOC, offset, symbol -> {
+            UIWindow live = getAttachedWindow();
+            if (live == null) return;
+            if (docPopup == null) docPopup = new DocumentationPopup();
+            float[] at = anchorInWindow(offset);
+            if (at == null) return;
+            docPopup.show(live, symbol, at[0], at[1], at[2]);
             fillProblemSection(offset);
         });
+        return asked || !problems.isEmpty();
     }
 
     /**

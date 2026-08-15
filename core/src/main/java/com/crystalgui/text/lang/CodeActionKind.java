@@ -46,7 +46,11 @@ public enum CodeActionKind {
     /**
      * Lower sorts first. {@link #QUICK_FIX} leaves a gap above it, which
      * {@link CodeAction#preferred()} occupies — the preferred fix is not a kind of its own, it is the
-     * one of its kind that the popup shows without being asked.
+     * one of its kind that sorts ahead of the others.
+     *
+     * <p>The gap is also why <b>only {@code QUICK_FIX} may be shown inline</b> by the popup: everything
+     * in a higher tier is something to choose rather than to default to — a whole-file tidy, a
+     * refactoring, a suppression — and each of those already argues that for itself.</p>
      */
     public int tier() {
         return tier;

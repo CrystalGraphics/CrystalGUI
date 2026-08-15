@@ -1,11 +1,13 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.Signature;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.syntax.SyntaxToken;
+import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Popover;
@@ -155,6 +157,16 @@ public final class DocumentationPopup extends Popover {
 
     /** What the inline action would apply, and what the overflow menu would list. */
     private final java.util.List<CodeAction> actions = new java.util.ArrayList<>();
+
+    /**
+     * What is in the inline slot — the observable for the rule {@code primaryOf} applies.
+     *
+     * <p>Kept because nothing could see that rule from outside: {@link #offeredActions} reports what was
+     * <em>available</em>, and the band shipped choosing nothing from a list of perfectly good fixes with
+     * every test still green.</p>
+     */
+    @Nullable
+    private CodeAction primaryShown;
 
     /** Tracked rather than read back: display is a style write, not a queryable flag. */
     private boolean problemShown;
@@ -307,6 +319,7 @@ public final class DocumentationPopup extends Popover {
         problemMessage.setText(message.toString());
 
         CodeAction primary = primaryOf(actions);
+        primaryShown = primary;
         boolean hasPrimary = primary != null;
         primaryAction.setDisplayed(hasPrimary);
         primaryShortcut.setDisplayed(hasPrimary);
@@ -325,11 +338,32 @@ public final class DocumentationPopup extends Popover {
         problemActions.setDisplayed(anyAction);
     }
 
-    /** The one shown without being asked — first preferred quick fix, or nothing. */
+    /**
+     * The one shown without being asked — the <b>highest-ranked fix</b>, preferred or not.
+     *
+     * <h3>Why this is not "the preferred one"</h3>
+     *
+     * <p>It was, and that turned out to be a rule about the wrong thing. {@code preferred} means "this is
+     * unambiguously THE answer", so a correction that is one of several plausible ones deliberately does
+     * not set it — an import per candidate, a rename per near miss, add-throws beside surround-with-try.
+     * Requiring it here meant every one of those problems showed a message and a bare "More actions…",
+     * with the single obvious fix one keystroke further away than the day before. It affected most of
+     * them, because most real fixes come in families.</p>
+     *
+     * <p>So {@code preferred} does the job it can do — it <em>ranks</em>, through
+     * {@code CodeAction.ORDER} — and the popup shows whatever ranks first. The list arrives sorted, so
+     * "first" is "best", and a preferred fix is still the one that gets the slot when there is one.
+     * IntelliJ's hover popup behaves this way: the top fix inline, the rest behind the menu.</p>
+     *
+     * <p><b>Only a {@link CodeActionKind#QUICK_FIX} may take the slot.</b> That is what keeps a whole-file
+     * tidy out of it — "Organize imports", "Remove unused imports" and "Copy problem message" are all
+     * things to choose rather than to default to, which each of them already argues for itself, and one
+     * keystroke from a hover is exactly defaulting to it.</p>
+     */
     @Nullable
     private static CodeAction primaryOf(List<CodeAction> actions) {
         for (CodeAction action : actions) {
-            if (action.preferred()) return action;
+            if (action.kind() == com.crystalgui.text.lang.CodeActionKind.QUICK_FIX) return action;
         }
         return null;
     }
@@ -337,6 +371,12 @@ public final class DocumentationPopup extends Popover {
     /** What the problem section is currently offering — the observable a test asserts on. */
     public List<CodeAction> offeredActions() {
         return List.copyOf(actions);
+    }
+
+    /** The action in the inline slot, or null when nothing is offered there. @see #primaryOf */
+    @Nullable
+    public CodeAction primaryAction() {
+        return primaryShown;
     }
 
     /** What the problem band says, or empty. */
@@ -411,6 +451,34 @@ public final class DocumentationPopup extends Popover {
         setOffset(STRIPE_GAP);
         addClass(PROBLEM_ONLY_CLASS);
         showFor(anchor, null);
+        ownerRow.setDisplayed(false);
+        definition.setDisplayed(false);
+        bodyShown = false;
+        body.setDisplayed(false);
+        setProblem(problems, List.of());
+    }
+
+    /**
+     * The problem bands alone, opened <b>below a point in the text</b> rather than beside a stripe mark.
+     *
+     * <p>What a hover over a squiggle shows when there is no symbol to describe — which is not a corner
+     * case but the most valuable one: a name that resolves to nothing is exactly the name with a problem
+     * on it and a "did you mean" waiting behind it. {@link #showProblems} cannot serve this because it
+     * anchors leftward off an element, and the stripe's reason for that (pin the right edge to a mark in
+     * the scrollbar groove) is the opposite of what an in-text hover wants.</p>
+     */
+    public void showProblemsAt(UIWindow window, List<Diagnostic> problems,
+                               float x, float y, float lineHeight) {
+        this.shown = null;
+        // RESTORED, for the reason show() records: showProblems changes both and this is one reused
+        // instance, so an in-text hover after a stripe hover would open sideways off its own anchor.
+        setPreferredSide(AnchoredPlacement.Side.BOTTOM);
+        setOffset(0f);
+        addClass(PROBLEM_ONLY_CLASS);
+        clearUserSizing();
+        if (getParent() == null) window.addOverlay(this, null);
+        // Below the token's LINE rather than its top, or the box covers the word it is describing.
+        showAt(x, y + lineHeight, null);
         ownerRow.setDisplayed(false);
         definition.setDisplayed(false);
         bodyShown = false;

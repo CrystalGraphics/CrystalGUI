@@ -5,6 +5,7 @@ import com.crystalgui.text.Rope;
 import com.crystalgui.text.decoration.TrackedRange;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -67,6 +68,13 @@ final class SquigglesPart extends EditorViewPart {
                     : editor.buffer().decorations().inLane(TextEditor.DIAGNOSTIC_LANE)) {
                 Diagnostic diagnostic = tracked.payload(Diagnostic.class);
                 if (diagnostic == null || diagnostic.severity() == DiagnosticSeverity.HINT) continue;
+                // DEAD WEIGHT IS FADED, NOT UNDERLINED -- and never both. The fade IS this diagnostic's
+                // rendering: it says "nothing reads this" in place of a mark, which is the whole reason
+                // DiagnosticTag exists apart from severity. Drawing a band under it as well put a yellow
+                // line under every unused import beneath text that was already grey -- two marks for one
+                // fact, and the second one saying "something is wrong here" about code whose only fault is
+                // that it is unread. IntelliJ greys an unused import and underlines nothing.
+                if (diagnostic.hasTag(DiagnosticTag.UNNECESSARY)) continue;
                 // See the class note: born-empty is a real mark, collapsed-by-edit is a mark whose text is
                 // gone. Widening the second one paints over whatever took its place.
                 if (tracked.collapsedByEdit()) continue;

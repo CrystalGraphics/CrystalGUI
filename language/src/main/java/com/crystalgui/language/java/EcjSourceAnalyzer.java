@@ -248,10 +248,14 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                  * A name that resolves to nothing, and a name whose target is deprecated.
                  *
                  * <p>Emitted as a SECOND token over the same range rather than instead of the first,
-                 * because they answer a different question. {@code count} being a field and
-                 * {@code count} being unresolved are both worth saying, and a scheme draws the first
-                 * as a colour and the second as an underline — so replacing one with the other would
-                 * throw away the piece of information the highlighter actually had.</p>
+                 * because they answer a different question — {@code count} being a field and
+                 * {@code count} being unresolved are both worth saying, and a scheme styles them
+                 * separately.</p>
+                 *
+                 * <p>The scheme draws this one as a <em>colour</em> and not as an underline. It used to be
+                 * an underline, from before diagnostics were drawn inline; with a squiggle under the same
+                 * characters that was two lines for one fact, and it read as a double underline because it
+                 * was one. @see the {@code ::highlight(unresolved)} rule in {@code ua/editor.css}</p>
                  *
                  * <p>The editor's merge takes the last overlapping token, so these are added after the
                  * kind token above and win. That is the correct order: the more specific statement is
@@ -262,7 +266,13 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                     IBinding binding = name.resolveBinding();
                     int start = name.getStartPosition();
                     int end = start + name.getLength();
-                    if (binding == null) {
+                    // A RECOVERED BINDING IS AN UNRESOLVED NAME WEARING A BINDING. `setBindingsRecovery`
+                    // is on -- it is what lets the rest of a broken file still resolve -- and for an
+                    // unresolved TYPE it synthesises one rather than answering null. So only types slipped
+                    // through this check: `cont` and `lenght` came back null and went red, while `List`
+                    // came back as a TypeBinding and was coloured a perfectly confident class colour, with
+                    // the error squiggle under it the only sign anything was wrong.
+                    if (binding == null || binding.isRecovered()) {
                         // ONLY WHERE A NAME WAS EXPECTED TO RESOLVE. A label, a package fragment and
                         // the name in a declaration position legitimately have no binding, and
                         // underlining those would mark correct code as broken on every file.
