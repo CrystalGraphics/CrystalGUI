@@ -241,6 +241,14 @@ public final class RunConsoleView {
         pending = false;
         boolean wasAtTail = isAtTail();
         boolean changed = showing.drain();
+        if (changed) {
+            // THE DOCUMENT WAS WRITTEN BEHIND THE EDITOR'S BACK, and a filter change rewrites all of it.
+            // The editor's own early-out compares the visible OFFSET RANGE, which a wholesale rebuild can
+            // leave identical over completely different text -- so every realised row keeps the previous
+            // transcript's ranges, and nothing dirties them again. Ten link ranges published, one still
+            // painted a character short over the wrong word, and it never corrected itself.
+            editor.invalidateHighlights();
+        }
         if (changed && wasAtTail) scrollToTail();
         return changed;
     }

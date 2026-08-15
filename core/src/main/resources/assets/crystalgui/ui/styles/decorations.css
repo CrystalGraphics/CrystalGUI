@@ -50,7 +50,7 @@
 /* ONE TOKEN FOR THE RUNNING COLOUR, read by the tree row here and by the activity bar's dot in
  * `ua/workbench.css`. They were two different greens for one concept, chosen weeks apart, which is the
  * arrangement where a theme changes one of them and nobody notices the other. */
-.decoration-running    { color: var(--run-live-fg); }
+.decoration-running    { color: var(--run-live-fg, #5FAD65); }
 
 /* The badge inherits the row's decoration colour through `color`, so it needs no rule per state --
  * only the shared shrink. Stated here rather than in default.css because a theme that wants no badges

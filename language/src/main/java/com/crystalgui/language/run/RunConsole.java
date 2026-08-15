@@ -117,12 +117,103 @@ public final class RunConsole {
     private final ConcurrentLinkedQueue<Line> pending = new ConcurrentLinkedQueue<>();
     private volatile boolean clearRequested;
 
-    /** Mirrors the attached buffer's rows exactly, one entry per row. Touched only by {@link #drain}. */
-    private final List<Line> lines = new ArrayList<>();
+    /**
+     * <b>The whole transcript</b>, in arrival order — the truth the document is derived from, and what
+     * the ring bounds. Touched only by {@link #drain}.
+     *
+     * <p>Separate from {@link #shown} because a filter makes the document a <em>subset</em>. Bounding the
+     * document instead would leave this list unbounded whenever a filter is on, which is the one shape
+     * where "the console is capped" quietly stops being true.</p>
+     */
+    private final List<Line> all = new ArrayList<>();
+
+    /** Mirrors the attached buffer's rows exactly, one entry per row. A subsequence of {@link #all}. */
+    private final List<Line> shown = new ArrayList<>();
+
+    /** Running total of {@code text + '\n'} over {@link #all}, so the ring needs no re-measure. */
+    private int allChars;
+
+    /** Distinct script names in arrival order — what the filter picker offers. @see #scripts() */
+    private final java.util.LinkedHashSet<String> scriptsSeen = new java.util.LinkedHashSet<>();
+
+    /** The script whose output is shown, or null for everything. Applied in {@link #drain}. */
+    @Nullable private String filter;
+
+    @Nullable private volatile String requestedFilter;
+    private volatile boolean filterRequested;
 
     @Nullable private TextBuffer buffer;
     private int budgetChars = DEFAULT_BUDGET_KB * 1024;
     private long dropped;
+
+    // ── Input: a console reads as well as writes ─────────────────────────────────────────────────
+
+    /**
+     * Where a submitted line is handed to the script blocked on {@code System.in}.
+     *
+     * <p>Capacity one, and {@code offer}/{@code take} rather than a {@code SynchronousQueue}: a
+     * synchronous hand-off only succeeds while a taker is <em>already parked</em>, so a line submitted in
+     * the instant between {@code awaitingInput} going true and the reader actually blocking would be
+     * dropped — a race that costs the user their keystroke and looks like the field being ignored.</p>
+     */
+    private final java.util.concurrent.ArrayBlockingQueue<String> input =
+            new java.util.concurrent.ArrayBlockingQueue<>(1);
+
+    private volatile boolean awaitingInput;
+    @Nullable private volatile String awaitingScript;
+
+    /**
+     * Blocks until a line is submitted. <b>Script thread only</b>, called by {@link ScriptInput}.
+     *
+     * @return the line, or null when the script was stopped while waiting
+     */
+    @Nullable
+    String awaitInput(@Nullable String script) {
+        awaitingScript = script;
+        awaitingInput = true;
+        onDidChange.emit();
+        try {
+            return input.take();
+        } catch (InterruptedException stopped) {
+            // THE INTERRUPT IS THE KILL SWITCH, so it is restored rather than swallowed -- the script's
+            // next injected safepoint is what actually ends it, and clearing the flag here would make a
+            // script blocked on input the one place a stop does nothing.
+            Thread.currentThread().interrupt();
+            // AND ONLY HERE IS THE QUEUE DRAINED. A line offered to a request that was abandoned is not
+            // for the next one. Draining on ENTRY instead looked equivalent and was not: between one read
+            // returning and the next beginning, `awaitingInput` is still true and the field is still on
+            // screen, so a line typed in that window is legitimately for the read about to start -- and
+            // the entry drain threw it away. Two reads in a row hung on the second, every time.
+            input.clear();
+            return null;
+        } finally {
+            awaitingInput = false;
+            awaitingScript = null;
+            onDidChange.emit();
+        }
+    }
+
+    /** Whether something is blocked reading {@code System.in} — what makes the input row appear. */
+    public boolean isAwaitingInput() {
+        return awaitingInput;
+    }
+
+    /**
+     * Hands a line to whatever is waiting, and echoes it into the transcript. <b>UI thread.</b>
+     *
+     * <p>The echo is not decoration: a terminal shows what you typed, and without it the transcript reads
+     * as the script having answered its own question. Attributed to the WAITING script rather than to
+     * whoever is on screen, so a filter keeps the exchange together.</p>
+     *
+     * @return whether anything was waiting for it
+     */
+    public boolean submitInput(String line) {
+        if (!awaitingInput) return false;
+        String text = line == null ? "" : line;
+        String script = awaitingScript;
+        append(RunMessage.of(script == null ? "input" : script, RunLevel.OUT, text));
+        return input.offer(text);
+    }
 
     // ── The producing side: any thread ───────────────────────────────────────────────────────────
 
@@ -170,7 +261,10 @@ public final class RunConsole {
      */
     public RunConsole attach(@Nullable TextBuffer buffer) {
         this.buffer = buffer;
-        lines.clear();
+        all.clear();
+        shown.clear();
+        scriptsSeen.clear();
+        allChars = 0;
         dropped = 0;
         if (buffer != null) buffer.load("");
         return this;
@@ -188,12 +282,25 @@ public final class RunConsole {
         boolean changed = false;
         if (clearRequested) {
             clearRequested = false;
-            if (!lines.isEmpty() || target.length() > 0) {
+            if (!all.isEmpty() || target.length() > 0) {
                 target.load("");
-                lines.clear();
+                all.clear();
+                shown.clear();
+                scriptsSeen.clear();
+                allChars = 0;
                 dropped = 0;
                 changed = true;
             }
+        }
+
+        // A FILTER CHANGE IS A REBUILD, and it happens HERE rather than in the setter for the reason the
+        // clear does: the document may only be touched on the thread that draws it, and a caller wiring a
+        // rail row or a menu item should not have to know that.
+        if (filterRequested) {
+            filterRequested = false;
+            filter = requestedFilter;
+            rebuild(target);
+            changed = true;
         }
 
         // ONE INSERT FOR THE WHOLE BURST, not one per line. Twenty lines a second is twenty edits a
@@ -201,11 +308,17 @@ public final class RunConsole {
         // from a loop can be thousands.
         StringBuilder incoming = null;
         for (Line line = pending.poll(); line != null; line = pending.poll()) {
+            all.add(line);
+            allChars += line.text().length() + 1;
+            if (line.script() != null && !line.script().isEmpty()) scriptsSeen.add(line.script());
+            if (!passes(line)) continue;
             if (incoming == null) incoming = new StringBuilder();
             incoming.append(line.text()).append('\n');
-            lines.add(line);
+            shown.add(line);
         }
-        if (incoming != null) {
+        // A BURST FILTERED DOWN TO NOTHING IS NOT A CHANGE. Every line may belong to another script, and
+        // inserting an empty string would still mark the document dirty and re-measure every realised row.
+        if (incoming != null && incoming.length() > 0) {
             target.insert(target.length(), incoming.toString());
             changed = true;
         }
@@ -221,27 +334,108 @@ public final class RunConsole {
      * tenth at a time amortises it to nothing and costs only that the bound is approached in steps.</p>
      */
     private boolean trimToBudget(TextBuffer target) {
-        if (target.length() <= budgetChars || lines.size() < 2) return false;
+        // MEASURED ON THE TRANSCRIPT, not on the document. Under a filter the document is a subset, so a
+        // document-sized bound would let the retained transcript grow without limit -- the memory the
+        // bound exists to cap, uncapped in exactly the state somebody turned a filter on to survive.
+        if (allChars <= budgetChars || all.size() < 2) return false;
 
-        int drop = Math.max(1, lines.size() / 10);
+        int drop = Math.min(Math.max(1, all.size() / 10), all.size() - 1);
         int chars = 0;
-        for (int i = 0; i < drop && i < lines.size() - 1; i++) chars += lines.get(i).text().length() + 1;
+        int shownDrop = 0;
+        int shownChars = 0;
+        for (int i = 0; i < drop; i++) {
+            Line line = all.get(i);
+            chars += line.text().length() + 1;
+            // IDENTITY, and it is sound: `shown` holds the same Line instances in the same order, so the
+            // evicted prefix of `all` maps onto a prefix of `shown` by walking the two together.
+            if (shownDrop < shown.size() && shown.get(shownDrop) == line) {
+                shownChars += line.text().length() + 1;
+                shownDrop++;
+            }
+        }
         if (chars <= 0) return false;
 
-        target.delete(0, Math.min(chars, target.length()));
-        lines.subList(0, Math.min(drop, lines.size() - 1)).clear();
+        all.subList(0, drop).clear();
+        allChars -= chars;
+        if (shownDrop > 0) {
+            shown.subList(0, shownDrop).clear();
+            target.delete(0, Math.min(shownChars, target.length()));
+        }
+        // COUNTED OVER THE TRANSCRIPT, because that is what was lost. Reporting only the rows that
+        // happened to be on screen would say "nothing was dropped" while a filtered-out script's output
+        // was being discarded, which is the case a reader most needs told.
         dropped += drop;
         return true;
+    }
+
+    private boolean passes(Line line) {
+        return filter == null || filter.equals(line.script());
+    }
+
+    /** Re-derives the document from {@link #all}. One load, not one insert per surviving row. */
+    private void rebuild(TextBuffer target) {
+        shown.clear();
+        StringBuilder text = new StringBuilder();
+        for (Line line : all) {
+            if (!passes(line)) continue;
+            shown.add(line);
+            text.append(line.text()).append('\n');
+        }
+        // SELECTION IS LOST HERE, unavoidably: it names offsets that no longer exist. IntelliJ loses it
+        // switching console tabs too. Worth stating rather than discovering.
+        target.load(text.toString());
+    }
+
+    /**
+     * Shows only {@code script}'s output, or everything when null. <b>Any thread.</b>
+     *
+     * <p>Queued like {@link #clear}, applied in {@link #drain} — see there for why.</p>
+     */
+    public RunConsole setFilter(@Nullable String script) {
+        if (java.util.Objects.equals(filterRequested ? requestedFilter : filter, script)) return this;
+        requestedFilter = script;
+        filterRequested = true;
+        onDidChange.emit();
+        return this;
+    }
+
+    /** The script currently shown, or null for everything. The APPLIED one, not a pending request. */
+    @Nullable
+    public String filter() {
+        return filter;
+    }
+
+    /**
+     * Every script that has written to this transcript, in first-seen order.
+     *
+     * <p><b>Kept, not derived</b>, and the first attempt had it the other way round on the reasoning that
+     * "which scripts can I filter to" is asked when a menu opens. It is not: the picker compares this list
+     * every time the console changes, so deriving it walked the whole transcript — up to the ring's whole
+     * megabyte — on every frame output was flowing.</p>
+     *
+     * <p><b>And the ring deliberately does not unwind it.</b> A script whose every line has been evicted
+     * still ran, and is still something a reader may want to filter to; dropping it from the picker the
+     * moment its output aged out would make the control's contents depend on how chatty its neighbours
+     * have been. Only {@link #clear()} empties it, which is the one action that means "forget this run".</p>
+     */
+    public List<String> scripts() {
+        return List.copyOf(scriptsSeen);
+    }
+
+    /** How many lines the transcript holds, filtered or not — what the ring bounds. */
+    public int transcriptSize() {
+        return all.size();
     }
 
     /** The line at a row, or null past the end. Read by the tokenizer and by a click. */
     @Nullable
     public Line lineAt(int row) {
-        return row < 0 || row >= lines.size() ? null : lines.get(row);
+        return row < 0 || row >= shown.size() ? null : shown.get(row);
     }
 
+    /** Rows in the document — i.e. after filtering. @see #transcriptSize */
     public int lineCount() {
-        return lines.size();
+        return shown.size();
     }
 
     /**

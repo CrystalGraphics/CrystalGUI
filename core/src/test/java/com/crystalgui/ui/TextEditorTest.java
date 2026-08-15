@@ -4846,4 +4846,126 @@ public class TextEditorTest extends UiTestBase {
             // the engine's own guard
         }
     }
+
+    /**
+     * <b>Replacing the document while scrolled away must not leave the old highlights behind.</b>
+     *
+     * <p>{@code refreshHighlights} early-outs when the visible OFFSET RANGE is unchanged, which is not the
+     * same question as "are the ranges still valid": a wholesale replace under a scrolled viewport can
+     * produce an identical range over completely different text. Nothing then dirties the highlights
+     * again, so every realised row keeps the previous document's ranges permanently.</p>
+     *
+     * <p>Found through the Run console's per-script filter — ten link ranges published and one still
+     * painted, a character short, over the wrong word — but it is reachable here by reloading a file from
+     * disk while scrolled away from the top.</p>
+     */
+    @Test
+    public void replacingTheDocumentWhileScrolledRefreshesHighlights() {
+        StringBuilder first = new StringBuilder();
+        for (int i = 0; i < 200; i++) first.append("int alpha").append(i).append(" = 1;").append(NL);
+        build(first.toString());
+        editor.setTokenizer(com.crystalgui.text.syntax.KeywordTokenizer.java());
+        settle();
+        editor.updateWindow();
+        settle();
+
+        // AWAY FROM THE TOP, which is what makes the offset range survive the replace.
+        editor.setScrollTop(600f);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        StringBuilder second = new StringBuilder();
+        // TAB-INDENTED AND OF VARYING LENGTH, which is what makes the source->display mapping load-bearing:
+        // a table measured from the wrong row clamps every range at a different point, which is precisely
+        // how this presented -- `RunTest` where `RunTest.java:61` belonged.
+        for (int i = 0; i < 200; i++) {
+            second.append('	').append("double beta").append(i)
+                    .append(" = 2;").append("//").append("x".repeat(i % 17)).append(NL);
+        }
+        editor.buffer().load(second.toString());
+        settle();
+        editor.updateWindow();
+        settle();
+
+        int checked = 0;
+        for (UIElement child : allDescendants()) {
+            if (!child.hasClass(TextEditor.LINE_CLASS)) continue;
+            UIText text = (UIText) child.getChildren().get(0);
+            String shown = text.getText();
+            if (shown.isEmpty()) continue;
+            for (com.crystalgui.ui.text.TextRange range : text.highlights().get("type")) {
+                assertTrue("a range runs past the row it is on", range.end() <= shown.length());
+                assertEquals("the highlight must name the new document's type, not the old one's",
+                        "double", shown.substring(range.start(), range.end()));
+                checked++;
+            }
+        }
+        assertTrue("no highlights were checked, so this proves nothing", checked > 0);
+    }
+
+    /**
+     * <b>A wholesale replace must reproject EVERY row, not the few a line-count delta implies.</b>
+     *
+     * <p>{@code reprojectAfterEdit} took the incremental path for any single {@code Change}, and derived
+     * the rows it touched from the line-count delta — which assumes the edit is local. {@code
+     * TextBuffer.load} is one Change spanning the whole document, so replacing 478 rows with 427 was read
+     * as "52 rows at row 0 became 1 row" and everything below kept its OLD projection.</p>
+     *
+     * <p>Silent, because the rows still PAINT correctly — the text comes from elsewhere. What breaks is
+     * anything clipped to a view line's end: {@code refreshHighlights} clamps every range to it, so the
+     * Run console's stack-frame links came out truncated by however far each stale end fell short.</p>
+     *
+     * <p><b>This test does NOT reproduce that staleness</b>, and says so rather than implying coverage it
+     * does not have: {@code settle()} drives enough passes to reproject anyway, so it passes with the old
+     * arithmetic restored. The bug was diagnosed from an instrumented run instead — the same row
+     * reporting {@code lineEnd=9040} unfiltered and {@code 9031} filtered. What this pins is the weaker
+     * and still worthwhile property: after a wholesale replace, every published range describes the text
+     * it is actually on.</p>
+     */
+    @Test
+    public void replacingTheWholeDocumentReprojectsEveryRow() {
+        StringBuilder first = new StringBuilder();
+        for (int i = 0; i < 120; i++) first.append("return ").append(i).append(NL);
+        build(first.toString());
+        editor.setTokenizer(com.crystalgui.text.syntax.KeywordTokenizer.java());
+        settle();
+        editor.updateWindow();
+        settle();
+
+        // LONGER rows, and fewer of them -- the shape a filter produces. A stale projection then reports
+        // an end from the shorter document, which is the truncation.
+        StringBuilder second = new StringBuilder();
+        for (int i = 0; i < 80; i++) {
+            second.append("return a much longer replacement row number ").append(i).append(NL);
+        }
+        editor.buffer().load(second.toString());
+        settle();
+        editor.updateWindow();
+        settle();
+
+        // PAST THE REPROJECTED PREFIX. The stale arithmetic reprojects a run of rows starting at the
+        // edit, so rows near the top are correct however wrong the rest are -- which is exactly why this
+        // was invisible until somebody scrolled back to a stack trace two hundred rows down.
+        editor.setScrollTop(900f);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        // OBSERVED THROUGH THE HIGHLIGHTS, which is where a stale projection actually shows: every range
+        // is clipped to its view line's end, so one that is short truncates the range by however far.
+        int checked = 0;
+        for (UIElement child : allDescendants()) {
+            if (!child.hasClass(TextEditor.LINE_CLASS)) continue;
+            UIText text = (UIText) child.getChildren().get(0);
+            String shown = text.getText();
+            if (shown.isEmpty()) continue;
+            for (com.crystalgui.ui.text.TextRange range : text.highlights().get("keyword")) {
+                assertEquals("a range was clipped to a stale view-line end",
+                        "return", shown.substring(range.start(), range.end()));
+                checked++;
+            }
+        }
+        assertTrue("no ranges were checked, so this proves nothing", checked > 0);
+    }
 }

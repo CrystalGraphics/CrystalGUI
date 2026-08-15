@@ -2565,14 +2565,28 @@ public class TextEditor extends ScrollerView implements UndoScope {
             //
             // Done ONCE, at the end, rather than per producer: they all share the fault, and a remap
             // inside each one is four places for the next producer to forget.
-            CursorColumns.Line expanded = rowMetrics(modelRow).line();
+            // EXPANDED FROM THE LIVE ROW, never from `rowMetrics`. That is a computeIfAbsent cache, so a
+            // stale entry is returned silently -- and `displayIndexOf` CLAMPS its argument to the table's
+            // own length, so a table measured from a shorter row truncates every range on the real one at
+            // a different point. The Run console's per-script filter showed exactly that: `RunTest` where
+            // `RunTest.java:61` belonged, `Threa` for `Thread.java:1583`, and the last frame untouched
+            // because its stale counterpart happened to be long enough.
+            //
+            // A paint pass must not depend on a cache it cannot check. Skipped entirely for a row with no
+            // tab, which is nearly all of them: display equals source there, so the mapping is the
+            // identity and there is nothing to expand.
+            String source = buffer.line(modelRow);
+            CursorColumns.Line expanded =
+                    source.indexOf('\t') < 0 ? null : CursorColumns.expand(source, tabSize);
             int viewSourceStart = lineStart - rowStart;
-            int displayFrom = expanded.displayIndexOf(viewSourceStart);
+            int displayFrom = expanded == null ? viewSourceStart : expanded.displayIndexOf(viewSourceStart);
             for (List<TextRange> ranges : byName.values()) {
                 for (int i = ranges.size() - 1; i >= 0; i--) {
                     TextRange range = ranges.get(i);
-                    int start = expanded.displayIndexOf(viewSourceStart + range.start()) - displayFrom;
-                    int end = expanded.displayIndexOf(viewSourceStart + range.end()) - displayFrom;
+                    int start = expanded == null ? range.start()
+                            : expanded.displayIndexOf(viewSourceStart + range.start()) - displayFrom;
+                    int end = expanded == null ? range.end()
+                            : expanded.displayIndexOf(viewSourceStart + range.end()) - displayFrom;
                     start = Math.min(Math.max(0, start), painted);
                     end = Math.min(Math.max(0, end), painted);
                     // DROPPED, not clamped to empty. TextRange refuses a zero-width range outright, so
@@ -4297,10 +4311,38 @@ public class TextEditor extends ScrollerView implements UndoScope {
             projections.rebuild(buffer.document());
             return;
         }
-        int at = Math.max(0, Math.min(change.mapPos(changes.get(0).from(), -1), buffer.length()));
+        Change edit = changes.get(0);
+        int at = Math.max(0, Math.min(change.mapPos(edit.from(), -1), buffer.length()));
         int row = buffer.document().offsetToPoint(at).row();
-        int removed = delta >= 0 ? 1 : 1 - delta;
-        int added = delta >= 0 ? 1 + delta : 1;
+
+        // THE ROWS COME FROM THE EDIT, not from the line-count delta.
+        //
+        // Deriving them from the delta alone assumes the change is LOCAL -- true of every keystroke, and
+        // false of a single change that replaces the whole document. `TextBuffer.load` is exactly that:
+        // one Change spanning everything. Filtering the Run console from 478 rows to 427 gave delta -51,
+        // which the old arithmetic read as "52 rows at row 0 became 1 row" -- so every row from 52 down
+        // kept its OLD projection, and `viewLineEndOffset` answered for text that was no longer there.
+        //
+        // That is silent: the rows paint correctly, because the text comes from elsewhere. What breaks is
+        // anything CLIPPED to a view line's end -- refreshHighlights clamps every range to it, so the Run
+        // console's stack-frame links came out truncated by however far each stale end happened to fall
+        // short. `RunTest` for `RunTest.java:61`, `Threa` for `Thread.java:1583`, and one frame perfect
+        // because its stale end overshot instead.
+        //
+        // Counted from the inserted text, which is exact in every case: one row for a plain keystroke,
+        // two for a newline, and the whole new document for a replace. The removed count then follows,
+        // since delta is by definition added minus removed.
+        int added = 1;
+        String insert = edit.insert();
+        for (int i = 0; i < insert.length(); i++) {
+            if (insert.charAt(i) == '\n') added++;
+        }
+        int removed = added - delta;
+        if (removed < 1) {
+            // Not a shape rowsChanged can express. Rebuilding is always correct, only slower.
+            projections.rebuild(buffer.document());
+            return;
+        }
         projections.rowsChanged(buffer.document(), row, removed, added);
     }
 
@@ -4454,7 +4496,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // The FULL layout, not just the text. An edit or a reflow can turn a continuation line into a
             // first line or the reverse, which moves its carried indent and its width -- and after a
             // resize it moves every one of them.
+            String before = textOf(entry.getValue()).getText();
             layOutLine(viewLine, entry.getValue());
+            // A ROW WHOSE TEXT CHANGED HAS STALE HIGHLIGHTS, and nothing else says so.
+            //
+            // refreshHighlights below early-outs on `!highlightsDirty && from == highlightedFrom && to ==
+            // highlightedTo` -- i.e. on the visible OFFSET RANGE being unchanged. That is not a proxy for
+            // "the ranges are still valid": replace the document wholesale while the viewport is scrolled
+            // and the range can be identical over completely different text, so every realised row keeps
+            // the previous document's ranges and NEVER self-corrects, because nothing dirties them again.
+            //
+            // Reached from the Run console, where filtering re-derives the transcript under a reader who
+            // has scrolled back to look at a stack trace: ten link ranges published, one still painted --
+            // a character short, over the wrong word. It is reachable in an ordinary editor too, by
+            // reloading a file from disk while scrolled away from the top.
+            //
+            // Compared rather than assumed, so the method keeps its contract that a frame which changed
+            // nothing writes nothing: setText no-ops on an unchanged string, and so does this.
+            if (!before.equals(textOf(entry.getValue()).getText())) highlightsDirty = true;
         }
         // NO markTreeDirty() HERE, and its absence is the point.
         //
@@ -4467,6 +4526,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // Whatever genuinely moved has already dirtied the tree by writing a different value, which is the
         // mechanism the rest of the widget layer relies on. Adding a blanket dirty on top is not
         // belt-and-braces; it is the belt sewn to the floor.
+    }
+
+    /**
+     * Forces the next pass to rebuild every visible highlight range.
+     *
+     * <p>For a caller that <b>replaced the document wholesale</b> — the Run console re-derives its whole
+     * transcript when a per-script filter changes — where the buffer's own change signal is not enough on
+     * its own. {@link #refreshHighlights} early-outs when the visible OFFSET RANGE is unchanged, and a
+     * replace under a scrolled viewport can produce an identical range over completely different text.</p>
+     *
+     * <p>Clearing the remembered range as well as setting the flag is the point: the flag alone is
+     * consumed by whichever pass runs first, and the range comparison then holds the stale answer.</p>
+     */
+    public void invalidateHighlights() {
+        highlightsDirty = true;
+        highlightedFrom = -1;
+        highlightedTo = -1;
     }
 
     protected void invalidateWindow() {

@@ -9,16 +9,15 @@ carrying the output of running scripts, plus the indicator that says which files
 |---|---|---|
 | 9.5.1 | Capturing output — the thread-local marker | **done** — `ScriptOutput` + `ScriptHost` bracket, 11 tests |
 | 9.5.2 | The console as a text area | **rewritten from a ListView** — see below; the list was the wrong shape |
-| 9.5.3 | States | **done** — `RunState`/`RunSessions`, reported from `Running.invoke`, 12 tests. **The rail itself is not built** |
-| 9.5.4 | The ring | **done** — collapsing removed with the list; see below |
+| 9.5.3 | States, and the per-script filter | **done** — `RunState`/`RunSessions` (12 tests) and `RunConsole.setFilter` + the head picker (12 tests). **The rail itself is not built** |
+| 9.5.4 | The ring, and `System.in` | **done** — collapsing removed with the list; `ScriptInput` mirrors `ScriptOutput`, 7 tests |
 | 9.5.5 | The running indicator | **done** — `RunDecorations`, 6 tests, and it is now *invalidated* so the row actually repaints. Editor-tab half **cut**, see 9.5.7 |
 | 9.5.6 | Stack-frame links | **done** — `ConsoleFilter` + `JavaStackFrameFilter`, 10 tests |
 | 9.5.7 | The running badge | **done** — `RunIndicators`, 6 tests. Editor tabs cut, see below |
 
-Written before any of it existed; the states above are current. What remains is **the rail with its
-filter (9.5.3)**, planned in detail below, and the editable input line for `System.in`, which is deferred
-because `ScriptHost` does not route stdin at all and so is a language-side change before it is a widget
-one.
+Written before any of it existed; the states above are current. What remains is **the rail** (9.5.3) —
+the states, the filter it drives and the input row are all built; what is missing is the column of live
+scripts itself.
 
 ### All of it lives in `language/`, not in `core/`
 
@@ -461,6 +460,90 @@ as a general capability rather than a Run-panel special case.
 
 ---
 
+## 9.5.8 The filter, and what the text area cost
+
+Built ahead of the rail, because a filter is a model question and the rail is the picker for it. The
+picker meanwhile is a `Dropdown` in the panel head, at the **leading** edge — the trailing one belongs to
+Stop and Clear, and a filter is about what you are looking at rather than about what is happening.
+
+**Hidden below two scripts.** A filter offering one choice is a control that cannot do anything, and it
+is *removed* rather than hidden: a hidden child still counts for the head's `gap-all`, so a `display:
+none` picker leaves a permanent notch beside a console with nothing to filter.
+
+### The transcript and the document are now two lists
+
+This is the price §9.5.2 quietly incurred. When the console was a list, filtering was a row-source swap.
+As a document it is a **re-derivation**, and three things follow that would each have been found the hard
+way:
+
+- **`all` is the transcript; `shown` mirrors the document.** A filter makes the document a subset, so
+  they cannot be one list.
+- **The ring bounds `all`, not the document.** Bounding the document would leave the retained transcript
+  unbounded whenever a filter was on — the memory the bound exists to cap, uncapped in exactly the state
+  somebody turned a filter on to survive.
+- **Eviction walks both together.** `shown` is a subsequence of `all`, so the evicted prefix maps onto a
+  prefix of `shown` by identity. If those two ever disagree, `lineAt(row)` describes a different row than
+  the one painted — and the tokenizer's colours and the stack-frame links both read it.
+
+**`scripts()` is kept, not derived**, which reverses the first attempt. Deriving it walked the whole
+transcript, and the picker compares it on every frame output is flowing. The ring deliberately does not
+unwind it either: a script whose every line has aged out still ran, and dropping it from the picker would
+make the control's contents depend on how chatty its neighbours have been. Only `clear()` empties it.
+
+**Selection is lost on a filter change**, unavoidably — it names offsets that no longer exist. IntelliJ
+loses it switching console tabs too.
+
+---
+
+## 9.5.9 `System.in` — the mirror of the output capture
+
+`ScriptInput` is `ScriptOutput` in the other direction and had to be: same missing process boundary, same
+thread-local marker, same passthrough. **The passthrough half is the one that matters** — `System.in`
+belongs to the game and every other mod as well, and routing it wholesale would park them on a text field
+in a panel that may not even be open.
+
+Two things in the stream are not obvious and both fail as a **hang** rather than as an error:
+
+- **`read(byte[], int, int)` must be overridden to return a short read.** The inherited version keeps
+  calling `read()` until the array is full, and a decoder's buffer is kilobytes — so a `Scanner` reads the
+  line, then waits for thousands more bytes that are never coming. Line typed, Enter pressed, nothing
+  happens.
+- **The queue is drained on the INTERRUPT path only.** Draining on entry looked equivalent and was not:
+  between one read returning and the next beginning, `awaitingInput` is still true and the field is still
+  on screen, so a line typed in that window belongs to the read about to start — and the entry drain threw
+  it away. Two reads in a row hung on the second, every time.
+
+A stop reaches a script blocked on input, because the interrupt is the kill switch: it is restored rather
+than swallowed, the read reports end of input, and the injected safepoint does the rest. Without that,
+waiting for input would be the one state a script could not be stopped from — and the state it is most
+likely to be stuck in.
+
+### A row of its own, not the transcript's last line
+
+The sketch was "a text area that is read-only except for the last line", which is what a terminal looks
+like. **What it would take is a genuine editable-REGION feature in `TextEditor`**, and that is not three
+guard sites: it is a caret that cannot be moved above the boundary, a selection that cannot span it, a
+backspace that stops at it, and a paste and an undo that respect it. `setReadOnly` is one flag and none of
+that exists.
+
+So the input is a `TextField` — which already has every one of those behaviours for the one line it owns —
+attached only while a read is actually blocked, and **detached rather than hidden**, or a console with
+nothing to answer would carry an invisible tab stop under it. Focus follows it in, because the field
+appearing *is* the prompt: a script that stops dead with a field somewhere below that has to be found and
+clicked has not asked a question so much as hidden one.
+
+The cost is that the prompt and the answer sit on different rows. The alternative was an editor that is
+*mostly* read-only, which is the state where somebody discovers they have silently edited the transcript.
+If the editable region is built later, this row is where it plugs in.
+
+**What was typed is echoed**, attributed to the *waiting* script rather than to whatever is on screen, so
+a filter keeps the question and the answer together.
+
+`Ask.java` in the harness workspace exercises it — its own file rather than another `RunTest` section,
+because a blocking read would make every future run of that file stop and wait for a keystroke.
+
+---
+
 ## What it reuses
 
 `ListView` — virtualised, and a firehose demands it. `TreeSearch` for the filter, in the permanent
@@ -481,6 +564,9 @@ panel shape of `ProblemsPanel`.
 - A running script's file is marked in the tree, its folder taking the colour and not the badge; and
   **the Run stripe button carries a dot whenever anything is live**. The editor-tab mark is cut, with
   its reasons in 9.5.7 — three statements of one fact, in the place with the least room.
+- A script reading `System.in` gets the line typed into the panel, and a script stopped while waiting
+  actually stops; the game's own `System.in` is untouched.
+- Output can be narrowed to one script and back, and the ring still bounds the transcript while it is.
 - A runtime exception appears in the console and produces **no** Problems row.
 - The buffer is bounded: a script printing without pause does not grow it without limit, and when the
   oldest output is evicted the panel says so rather than quietly beginning in the middle.
