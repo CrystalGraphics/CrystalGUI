@@ -658,7 +658,15 @@ quickpick ::highlight(quickpick-match) {
 }
 
 /* The inspection widget — the problem readout in the editor's top-right corner.
- * Position is written from Java (right/top insets, content-sized); everything else is here. */
+ * Position is written from Java (right/top insets, content-sized); everything else is here.
+ *
+ * NO SURFACE OF ITS OWN. It sits over the editor's own background with nothing between, which is what
+ * IntelliJ's does: the readout is a handful of coloured glyphs and a number, and a panel behind them
+ * draws a box around something that is already legible — a chip floating over the text, competing with
+ * the first line of code for the eye. The counts carry their own colour and that is the whole widget.
+ *
+ * The padding stays: it is the clearance between the arrows and the scrollbar beside them, not the
+ * inset of a box that no longer exists. */
 .__inspection__ {
     flex-direction: row;
     align-items: center;
@@ -666,8 +674,6 @@ quickpick ::highlight(quickpick-match) {
     padding-right: 4px;
     padding-top: 2px;
     padding-bottom: 2px;
-    background: var(--inspection-bg, #2D2D2DE0);
-    border-radius: 3px;
     z-index: 2;
 }
 
