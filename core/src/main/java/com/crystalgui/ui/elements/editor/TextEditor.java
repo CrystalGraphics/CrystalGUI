@@ -1952,7 +1952,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public boolean applyCodeAction(@Nullable CodeAction action) {
         if (action == null || isReadOnly()) return false;
         if (!action.isApplicableTo(buffer.version())) return false;
-        if (action.commandId() != null && !DiagnosticActions.run(this, action.commandId())) return false;
+        if (action.commandId() != null && !DiagnosticActions.run(this, action)) return false;
         ChangeSet edit = action.edit();
         if (edit == null) return action.commandId() != null;
         buffer.breakUndoCoalescing();

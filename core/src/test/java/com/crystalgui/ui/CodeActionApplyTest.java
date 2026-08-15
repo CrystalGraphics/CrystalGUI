@@ -1,8 +1,10 @@
 package com.crystalgui.ui;
 
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.text.ChangeSet;
+import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.lang.CodeAction;
@@ -11,6 +13,8 @@ import com.crystalgui.ui.elements.editor.TextEditor;
 
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -90,6 +94,38 @@ public class CodeActionApplyTest extends UiTestBase {
                 CodeActionKind.SOURCE, "problem.copyMessage");
         assertTrue(copy.isApplicableTo(editor.buffer().version()));
         assertTrue(copy.isApplicableTo(editor.buffer().version() + 99));
+    }
+
+    /**
+     * <b>"Copy problem message" copies the problem it was offered ABOUT, not the one under the caret.</b>
+     *
+     * <p>The popup this row sits in can be opened from an error-stripe mark or a hover nowhere near the
+     * caret. The command used to re-read the caret's problems when it ran, so it copied whatever the caret
+     * happened to be on — the action now carries the message as an argument, decided when it was offered.
+     * Two problems on two rows, caret on the first, actions requested for the second: the clipboard must
+     * hold the second's message.</p>
+     */
+    @Test
+    public void copyMessageCopiesTheProblemTheActionWasOfferedAbout() {
+        editor.diagnostics().setAll(List.of(
+                Diagnostic.error(new TextPoint(0, 0),
+                        new TextPoint(0, 5), "alpha is wrong"),
+                Diagnostic.warning(new TextPoint(2, 0),
+                        new TextPoint(2, 7), "charlie is doubtful")));
+        settle();
+        editor.setSelection(0, 0);                              // caret on the FIRST problem
+
+        int charlie = editor.getText().indexOf("charlie");
+        @SuppressWarnings("unchecked")
+        List<CodeAction>[] offered = new List[1];
+        editor.requestCodeActions(charlie, actions -> offered[0] = actions);
+        assertTrue("the engine-free actions arrive synchronously", offered[0] != null);
+        CodeAction copy = offered[0].stream()
+                .filter(a -> "problem.copyMessage".equals(a.commandId())).findFirst().orElse(null);
+        assertTrue("copy is offered for the hovered problem", copy != null);
+
+        assertTrue(editor.applyCodeAction(copy));
+        assertEquals("charlie is doubtful", CgPlatform.input().getClipboard());
     }
 
     /**
