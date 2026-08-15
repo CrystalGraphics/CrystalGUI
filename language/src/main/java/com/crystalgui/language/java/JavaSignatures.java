@@ -25,7 +25,6 @@ import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.NullLiteral;
 import org.eclipse.jdt.core.dom.NumberLiteral;
-import org.eclipse.jdt.core.dom.PrefixExpression;
 import org.eclipse.jdt.core.dom.PrimitiveType;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SimpleType;
@@ -636,17 +635,11 @@ final class JavaSignatures {
      * a jar shipped without sources rather than "the classpath". Wherever there IS a file it is strictly
      * worse, and it went wrong in two ways at once.</p>
      *
-     * <p>The <b>layout</b> stopped matching: the assembled form imposed a break before the {@code =} on
-     * top of the author's own wrapping, so the popup showed a shape the file does not contain, with the
-     * arguments carrying the file's indentation on top of ours. And the <b>semicolon</b> was missing,
-     * because an initializer <em>expression</em> ends before it; the statement is the thing that has
-     * one.</p>
-     *
-     * <p>The motivating fixture for both — {@code List<Shape> shapes = List.of(...)} spread over four
-     * lines — is no longer quoted at all, and the reason is worth keeping: quoting fixed the
-     * <em>fidelity</em> of what was shown and never questioned <em>whether</em> to show it. Faithfully
-     * reproducing four lines of the file in a one-line band is a better rendering of the wrong
-     * decision. See {@code isValue} for where that decision now lives.</p>
+     * <p>The <b>layout</b> stopped matching: the file has {@code List<Shape> shapes = List.of(} on one
+     * line, and the assembled form imposed a break before the {@code =} on top of the author's own
+     * wrapping — so the popup showed a shape the file does not contain, with the arguments carrying the
+     * file's indentation on top of ours. And the <b>semicolon</b> was missing, because an initializer
+     * <em>expression</em> ends before it; the statement is the thing that has one.</p>
      *
      * <p>Both are the same mistake — reconstructing what is already written down. The fragment's
      * parent spans modifiers, type, name, initializer and terminator, so quoting it is one substring,
@@ -681,19 +674,12 @@ final class JavaSignatures {
         from = skipLeadingComments(from, end);
         if (from >= end) return null;
 
-        // AND CUT BEFORE AN INITIALIZER THAT IS CODE RATHER THAN A VALUE -- the same cut quotedHeaderOf
-        // makes at a body brace, made at the other kind of body. `List<Shape> shapes = List.of(new
-        // Circle(1.5d), new Rectangle(3.0d, 4.0d), new Triangle(6.0d, 2.0d));` put four lines of the
-        // file into the one band meant to say what a name IS, directly over the file it was quoted
-        // from. Both references draw the line here: IntelliJ shows a local as its type and name, and
-        // shows a field's value when the value is the information.
-        Expression initializer = ((VariableDeclarationFragment) fragment).getInitializer();
-        if (initializer != null && !isValue(initializer)) {
-            SimpleName declared = ((VariableDeclarationFragment) fragment).getName();
-            int cut = declared.getStartPosition() + declared.getLength();
-            if (cut > from && cut < end) end = cut;
-        }
-
+        // THE WHOLE DECLARATION, INITIALIZER AND ALL. It was briefly cut before any initializer that was
+        // not a literal, on the stated grounds that IntelliJ shows a local as its type and name -- which
+        // was asserted rather than measured, and is not what IntelliJ does: it quotes the declaration in
+        // full, all four lines of a wrapped `List.of(...)` included. Recorded because the reasoning was
+        // otherwise sound and will be re-proposed: a long declaration is a LAYOUT problem for the popup
+        // to solve, not a licence to show something other than what was written.
         return quote(declaration, from, end, false);
     }
 
@@ -709,26 +695,6 @@ final class JavaSignatures {
         if (from < 0 || end > source.length() || end <= from) return null;
         from = skipLeadingComments(from, end);
         return from >= end ? null : quote(declaration, from, end, false);
-    }
-
-    /**
-     * Whether an initializer is <b>a value</b> — worth putting in the signature — rather than code.
-     *
-     * <p>{@code MAX_RETRIES = 5} and {@code ESCAPES = "tab:\t"} say something the name alone does not,
-     * and both references show them. {@code = List.of(...)} and {@code = new Counter()} say only that
-     * there is an expression, which the file already says better, in the place you would read it.</p>
-     *
-     * <p>Literals rather than {@code getConstantValue()}, which answers null for a {@code null}
-     * initializer and for anything not {@code static final} — so it cannot tell "not a constant" from
-     * "the constant is null", and would drop the value from every ordinary field that has one.</p>
-     */
-    private static boolean isValue(Expression initializer) {
-        Expression node = initializer;
-        // `-1` is a NumberLiteral under a unary minus, and is as much a value as `1`.
-        if (node instanceof PrefixExpression) node = ((PrefixExpression) node).getOperand();
-        return node instanceof NumberLiteral || node instanceof StringLiteral
-                || node instanceof CharacterLiteral || node instanceof BooleanLiteral
-                || node instanceof NullLiteral;
     }
 
     /**
@@ -973,11 +939,7 @@ final class JavaSignatures {
         ASTNode declaring = unit.findDeclaringNode(variable);
         if (declaring instanceof VariableDeclarationFragment) {
             Expression initializer = ((VariableDeclarationFragment) declaring).getInitializer();
-            // THE SAME TEST quotedFragment makes -- see isValue. A rule that held on one path and not
-            // the other would be a popup that showed a name's code or not depending on which renderer
-            // happened to answer. The for-init this used to catch is quoted now, so what reaches here is
-            // a declaration whose source positions did not survive.
-            if (initializer != null && isValue(initializer)) {
+            if (initializer != null) {
                 // BEFORE THE `=`, indented -- IntelliJ's own break for a long field, and it keeps the
                 // declaration (which is what you asked about) on a line of its own.
                 if (broken) out.newline().indent(); else out.raw(" ");
@@ -1005,16 +967,11 @@ final class JavaSignatures {
      * only ever an approximation of what was actually typed, and getting them wrong in ways nobody
      * can correct from the popup. The author already wrote the spacing and an AST node knows exactly
      * which characters it came from, so slicing them back out is both less code and more faithful:
-     * {@code 1.618_033_988_749d} keeps its underscores and its suffix, {@code 0xDEAD_BEEF} stays hex,
-     * and a string keeps the escapes the author wrote rather than being folded and re-escaped into a
-     * different spelling of the same bytes.</p>
+     * a multi-line {@code List.of(...)} keeps its layout, an aligned array keeps its alignment, and
+     * anything this walk does not recognise still comes out verbatim rather than reformatted.</p>
      *
      * <p>Before that it was {@code ASTNode.toString()}, which is JDT's {@code NaiveASTFlattener} —
      * that is where {@code Circle(1.5d),new Rectangle} came from, and it had no captures at all.</p>
-     *
-     * <p><b>Only a value reaches here now</b> — see {@code isValue}. The slice-and-capture split is not
-     * thereby redundant: a string literal's escape sequences are captured separately, which is the one
-     * thing a flat append cannot do, and it is still the author's spelling that is shown.</p>
      *
      * <h3>Captures come from a separate pass, in source coordinates</h3>
      *
@@ -1178,7 +1135,23 @@ final class JavaSignatures {
                 // third of typeCapture, reimplemented -- so it kept every answer that function grew
                 // afterwards out of the quoted path: an interface named in an `implements` clause
                 // rendered flat while the same name in the editor behind the popup was cyan.
-                mark(it, typeCapture(it.resolveBinding()));
+                //
+                // AND THE NAME IS ASKED FIRST, because a type node and its name can legitimately mean
+                // different things: `new Circle(1.5d)` resolves its NAME to the constructor and its TYPE
+                // to the class. Claiming the span here and returning false is what stopped
+                // visit(SimpleName) -- whose whole javadoc is that the two views cannot disagree -- from
+                // ever being reached for it, so the popup drew a constructor call in the class colour
+                // directly under an editor drawing those same characters as a call.
+                //
+                // Only for a SIMPLE name. A qualified one (`java.util.List`) has package segments that
+                // are their own captures over sub-spans, and marking those under a whole-span `type`
+                // would leave two overlapping bands where there is one name -- a separate question from
+                // this one, and not this method's to answer.
+                String capture = null;
+                if (nameCaptures != null && it.getName() instanceof SimpleName) {
+                    capture = nameCaptures.apply((SimpleName) it.getName());
+                }
+                mark(it, capture != null ? capture : typeCapture(it.resolveBinding()));
                 return false;
             }
 
