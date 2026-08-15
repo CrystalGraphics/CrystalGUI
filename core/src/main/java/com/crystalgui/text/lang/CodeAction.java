@@ -72,8 +72,12 @@ import javax.annotation.Nullable;
  * @param edit      the change to apply, in offsets against {@link #version}, or null
  * @param commandId a {@code CommandRegistry} id to invoke, or null
  * @param arguments what the command is about, by name — empty for an edit-only action
- * @param preferred whether this is <em>the</em> fix — LSP's {@code isPreferred}. The popup shows one
- *                  preferred action inline with its accelerator and hides the rest behind "More actions…"
+ * @param preferred whether this is <em>the</em> fix — LSP's {@code isPreferred}. It <b>ranks</b>, through
+ *                  {@link #ORDER}: a preferred fix sorts first among its tier and so takes the popup's
+ *                  inline slot. It does not gate that slot — the popup shows whichever fix ranks first,
+ *                  because most real fixes come in families where none is unambiguously the answer
+ *                  (an import per candidate, a rename per near miss) and those problems must still offer
+ *                  one thing to press. @see DocumentationPopup's primary row
  * @param version   the document version {@link #edit} was computed against
  */
 public record CodeAction(String id, String title, CodeActionKind kind, @Nullable ChangeSet edit,

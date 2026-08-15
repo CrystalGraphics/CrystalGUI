@@ -548,13 +548,15 @@ problemspanel .__problem__ .__line__ {
 }
 
 /* A TAGGED PROBLEM IS DRAWN DIFFERENTLY, not ranked differently — LSP's DiagnosticTag, VS Code's
- * MarkerTag. Unused code fades and deprecated code is struck through, and both keep whatever severity
- * their producer gave them; folding these into the severity ladder would force a choice between showing a
- * squiggle you cannot act on and losing the rendering entirely. */
-.__problem__.tag-unnecessary .__message__ {
-    color: var(--problems-unnecessary-fg, #6B6E76);
-}
-
+ * MarkerTag. Deprecated code is struck through and keeps whatever severity its producer gave it; folding
+ * that into the severity ladder would force a choice between showing a squiggle you cannot act on and
+ * losing the rendering entirely.
+ *
+ * UNNECESSARY IS NOT DIMMED HERE, and that is the difference between the two surfaces. In the text the
+ * fade IS the report — it says "nothing reads this" in place of a mark. A row in this panel is not the
+ * code; it is a LIST OF THINGS TO DO, every entry equally worth reading, and dimming three of five rows
+ * says they matter less rather than that the code they point at is dead. IntelliJ's panel lists an unused
+ * import at full strength for the same reason. The tag is still carried — the editor draws it. */
 .__problem__.tag-deprecated .__message__ {
     text-decoration-line: line-through;
 }

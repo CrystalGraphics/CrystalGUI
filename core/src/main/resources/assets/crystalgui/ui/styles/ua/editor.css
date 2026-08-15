@@ -557,14 +557,19 @@ texteditor .__indent-guide__ {
  * outside the file, so they appear only where a language engine is loaded — which is also why they
  * degrade to nothing rather than to a wrong colour when one is not. */
 
-/* A NAME THAT RESOLVES TO NOTHING. Underlined rather than recoloured, deliberately: it is still a
- * variable or a method and should keep the colour that says which, or the reader loses the one piece
- * of information the highlighter had. The squiggle from the diagnostic says the same thing at the same
- * place, and the two agreeing is the point — this is the inline half of a report the Problems panel
- * also carries. */
+/* A NAME THAT RESOLVES TO NOTHING — RECOLOURED, and no longer also underlined.
+ *
+ * This rule and the comment above it had drifted apart: the note said "underlined rather than recoloured,
+ * so it keeps the colour that says which kind it is", and the rule underneath it did both. With the
+ * diagnostic squiggle under the same characters that made three marks for one fact, and the two lines
+ * read as a double underline — which is what it looks like, because it is one.
+ *
+ * The squiggle IS the underline: it is drawn at the line's bottom, coloured by severity, and it is what
+ * every editor uses to say "there is an error here". So this contributes the one thing the squiggle
+ * cannot — that the error is about THIS name rather than the statement around it. Red text plus a wavy
+ * underline is also exactly IntelliJ's rendering of an unresolved reference. */
 .__syntax__::highlight(unresolved) {
     color: var(--syntax-unresolved, #F44747);
-    text-decoration-line: underline;
 }
 
 /* STRUCK THROUGH, matching what DiagnosticTag.DEPRECATED already does to a diagnostic that carries it.

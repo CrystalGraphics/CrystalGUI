@@ -39,7 +39,7 @@ final class QuickFixBulbPart extends EditorViewPart {
     @Override
     void render(int firstViewLine, int lastViewLine) {
         if (!editor.isGutterVisible() || editor.diagnosticsAt(editor.getCaret()).isEmpty()) {
-            if (bulb != null) DecorationPool.hide(bulb);
+            hide();
             return;
         }
         int viewLine = editor.viewLineOf(editor.getCaret(),
@@ -47,9 +47,10 @@ final class QuickFixBulbPart extends EditorViewPart {
         if (viewLine < firstViewLine || viewLine > lastViewLine) {
             // The caret is scrolled off. Hidden rather than clamped to an edge: a bulb pinned to the top
             // of the gutter would claim there is something to fix on a row that is merely visible.
-            if (bulb != null) DecorationPool.hide(bulb);
+            hide();
             return;
         }
+        bulbElement().setDisplayed(true);
 
         float height = editor.lineHeight();
         // IN THE FOLD COLUMN, which is the gutter's own decoration lane -- the same box the fold arrows
@@ -59,6 +60,26 @@ final class QuickFixBulbPart extends EditorViewPart {
         StyleGroup.defaultPipeline(bulbElement().getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(0f).top(top).width(width).height(height));
+    }
+
+    /**
+     * <b>{@code display}, not a collapsed box</b> — and it has to be, which is a trap for the next
+     * pooled decoration that gets a size from the sheet.
+     *
+     * <p>{@code DecorationPool.hide} writes {@code width: 0; height: 0} at <b>DEFAULT</b> origin, which
+     * is how every other part here retires an element. It cannot work for this one: the bulb's size comes
+     * from a {@code .__quick-fix-bulb__} rule at <b>STYLESHEET</b> origin, and the cascade ranks that
+     * above DEFAULT — so the write was a no-op and the bulb stayed 12×12 for ever. Since the render path
+     * returns early once hidden, its {@code top} also stopped being updated, and it sat frozen on the last
+     * row it had been valid for: a bulb that follows you around the file, claiming a fix on whatever line
+     * it happens to be next to.</p>
+     *
+     * <p>{@code setDisplayed} writes at IMPORTANT, which outranks the sheet, so this is the one hide that
+     * survives having a styled size. The squiggle bands are unaffected because nothing in CSS gives them
+     * one — their geometry is entirely Java's, which is why the pool's idiom works there.</p>
+     */
+    private void hide() {
+        if (bulb != null) bulb.setDisplayed(false);
     }
 
     private UIElement bulbElement() {

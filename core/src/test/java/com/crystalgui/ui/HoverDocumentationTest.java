@@ -45,12 +45,16 @@ public class HoverDocumentationTest extends UiTestBase {
         private int asks;
         private int lastOffset = -1;
 
+        /** Set to model an unresolved name — the shape a "did you mean" fix is offered for. */
+        private boolean answerNothing;
+
         @Override
         public void resolveAt(int offset, Consumer<Versioned<SymbolInfo>> answer) {
             asks++;
             lastOffset = offset;
-            answer.accept(Versioned.of(version, new SymbolInfo("beta", SymbolKind.FIELD,
-                    TypeRef.of("int"), "com.example.Host", null, Set.of(), null)));
+            answer.accept(answerNothing ? Versioned.of(version, null)
+                    : Versioned.of(version, new SymbolInfo("beta", SymbolKind.FIELD,
+                            TypeRef.of("int"), "com.example.Host", null, Set.of(), null)));
         }
 
         @Override
@@ -114,6 +118,36 @@ public class HoverDocumentationTest extends UiTestBase {
         hoverOver(6, PAST_THE_DELAY);
         assertTrue("resting on a word should open the box", popupOpen());
         assertEquals("beta", editor.documentationPopup().shownSymbol().name());
+    }
+
+    /**
+     * <b>A name that resolves to nothing still shows its problem.</b>
+     *
+     * <p>The case this was broken for, and the one it matters most in: the popup used to be opened from
+     * inside the resolve callback, which fires only when a symbol comes back — so hovering an unresolved
+     * {@code lenght()} gave a red squiggle, a lightbulb, a working Alt+Enter and no popup at all, because
+     * a resolve that never succeeded was gating a band that has nothing to do with it. Diagnostics are
+     * tracked ranges and are known without asking anyone.</p>
+     */
+    @Test
+    public void aNameThatResolvesToNothingStillShowsItsProblem() {
+        resolver.answerNothing = true;
+        editor.diagnostics().setAll(List.of(com.crystalgui.text.diagnostic.Diagnostic.error(
+                new com.crystalgui.text.TextPoint(0, 6), new com.crystalgui.text.TextPoint(0, 10),
+                "cannot resolve method 'beta'")));
+        settle();
+
+        hoverOver(6, PAST_THE_DELAY);
+        assertTrue("an unresolved name with a problem must still open the box", popupOpen());
+        assertNull("there is no symbol to describe", editor.documentationPopup().shownSymbol());
+    }
+
+    /** With nothing resolved and nothing wrong, there is nothing to say — and no empty box. */
+    @Test
+    public void aNameThatResolvesToNothingAndHasNoProblemShowsNothing() {
+        resolver.answerNothing = true;
+        hoverOver(6, PAST_THE_DELAY);
+        assertFalse("an empty popup is worse than none", popupOpen());
     }
 
     /** Nothing happens before the delay has elapsed — otherwise crossing a line strobes popups. */

@@ -458,8 +458,8 @@ public class JavaAnalysisTest {
 
     @Test
     public void anUnresolvedNameIsMarkedAsSuch() {
-        // The exit criterion, and the inline half of what the diagnostic also says. Underlined rather
-        // than recoloured by the sheet, so the name keeps whatever colour said WHAT it is.
+        // The exit criterion, and the inline half of what the diagnostic also says. Recoloured by the
+        // sheet; the squiggle under it is the underline, and drawing both was one mark too many.
         String source = ""
                 + "public class Script {\n"
                 + "    int run() { return whoKnows + 1; }\n"
@@ -468,6 +468,30 @@ public class JavaAnalysisTest {
         try {
             assertTrue("nothing marked the unresolvable name",
                     capturesAt(analysis.semanticTokens(), source, "whoKnows").contains("unresolved"));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * <b>An unresolved TYPE too — which is the case that slipped through.</b>
+     *
+     * <p>Bindings recovery is on, and it is what lets the rest of a broken file still resolve. For an
+     * unresolved type it synthesises a {@code recovered} binding rather than answering null, so the null
+     * check that caught {@code whoKnows} and {@code lenght} never fired for {@code List}: the name came
+     * back as a confident class colour with only the error squiggle to say otherwise. The test above
+     * could not see it, because an unresolved <em>variable</em> genuinely is null.</p>
+     */
+    @Test
+    public void anUnresolvedTypeIsMarkedEvenThoughRecoveryGivesItABinding() {
+        String source = ""
+                + "public class Script {\n"
+                + "    List<String> names;\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            assertTrue("a recovered binding is an unresolved name wearing a binding",
+                    capturesAt(analysis.semanticTokens(), source, "List").contains("unresolved"));
         } finally {
             analysis.close();
         }
