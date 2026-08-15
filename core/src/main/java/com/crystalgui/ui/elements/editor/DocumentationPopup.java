@@ -222,7 +222,8 @@ public final class DocumentationPopup extends Popover {
         body.addClass(BODY_CLASS);
 
         problemMessage.addClass(PROBLEM_MESSAGE_CLASS);
-        problemMessage.forceSelfSizeWidth();
+        // NOT forceSelfSizeWidth. It reports the unwrapped run, which is exactly what stops a wrapping
+        // text from wrapping -- see the sheet's rule, which bounds this label instead.
         problemActions.addClass(PROBLEM_ACTIONS_CLASS);
         primaryAction.addClass(PROBLEM_ACTION_CLASS);
         primaryShortcut.addClass(PROBLEM_SHORTCUT_CLASS);

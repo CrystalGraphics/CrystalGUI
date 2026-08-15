@@ -1187,7 +1187,7 @@ documentationpopup .__doc-problem__ {
      * background on it ended where the text did, and the header read as a grey label floating on the
      * popup's paper with the fix row full width beneath it. The band is the element that spans, so the
      * band is what paints, and its padding is the MESSAGE's padding for the same reason. */
-    padding-top: 7px;
+    padding-top: 5px;
     padding-left: 9px;
     padding-right: 9px;
     background-color: var(--doc-problem-bg, #26282B);
@@ -1196,8 +1196,30 @@ documentationpopup .__doc-problem__ {
     border-bottom-color: var(--doc-border, #393B40);
 }
 
+/* THE SAME SIZE AS EVERY OTHER BAND, declared rather than inherited. font-size does not inherit here --
+ * core.css opens with a universal 10 that is a candidate on every element -- so a band that says nothing
+ * draws at 10 while the owner line and the definition beside it draw at 8. Three declarations rather than
+ * one on the band, because that is the rule the owner and definition rules already follow for the same
+ * reason: the wrapper is not the text. */
+/* WRAPS, AND THE BOUND IS ON THE LABEL rather than on the popup -- the same arrangement `tooltip
+ * .__label__` already documents, and for the same reason: a UIText wraps against a width it can see on
+ * ITSELF, and an ancestor's max-width is not one. Bounded here the text wraps and the box then
+ * shrink-wraps the wrapped result; bounded on the box the glyphs run straight past it.
+ *
+ * This band used to call forceSelfSizeWidth, which reports the UNWRAPPED run -- so `white-space: normal`
+ * could never take effect and one long compiler message stretched the popup to most of the window. The
+ * two are mutually exclusive, which the definition band's own comment already sets out; the difference is
+ * that a declaration is short by construction and a diagnostic is a sentence.
+ *
+ * flex-shrink: 0 for the reason the tooltip's label carries it: the band paints the ground the text sits
+ * on, so a label that gave way would leave the ground wider than the glyphs. */
 documentationpopup .__doc-problem-message__ {
+    font-size: 8;
+    padding-bottom: -3px;
     color: var(--editor-fg, #BCBEC4);
+    white-space: normal;
+    max-width: 360px;
+    flex-shrink: 0;
 }
 
 /* A ROW, and it wraps nothing: the two labels and their two accelerators are one line in IntelliJ, and a
@@ -1214,8 +1236,8 @@ documentationpopup .__doc-problem-actions__ {
     margin-top: 7px;
     margin-left: -9px;
     margin-right: -9px;
-    padding-top: 6px;
-    padding-bottom: 6px;
+    padding-top: 2px;
+    padding-bottom: 2px;
     padding-left: 9px;
     padding-right: 9px;
 }
@@ -1223,6 +1245,7 @@ documentationpopup .__doc-problem-actions__ {
 /* THE LINK COLOUR, because these behave like links -- one click, no state, and the accelerator beside
  * them is the keyboard equivalent rather than a second control. */
 documentationpopup .__doc-problem-action__ {
+    font-size: 8;
     color: var(--link, #548AF7);
     flex-shrink: 0;
     cursor: pointer;
@@ -1243,6 +1266,7 @@ documentationpopup .__doc-problem-action__:hover {
 /* The accelerator is a caption, not a control: dimmer, never the link colour, and it must not look
  * pressable or it becomes the thing people click instead of the action it names. */
 documentationpopup .__doc-problem-shortcut__ {
+    font-size: 8;
     color: var(--editor-line-number, #6B6B6B);
     flex-shrink: 0;
 }
@@ -1250,6 +1274,27 @@ documentationpopup .__doc-problem-shortcut__ {
 /* The overflow menu. The preferred fix keeps the lightbulb, which is the one row IntelliJ marks. */
 menu.__code-actions__ .__preferred-action__ {
     color: var(--link, #548AF7);
+}
+
+/* THE GUTTER BULB -- there is something to offer on the caret's row.
+ *
+ * In the fold column, which is the gutter's decoration lane, so it lines up with the fold arrows and
+ * needs no geometry of its own. It shares that column with them by construction: a row cannot both start
+ * a foldable region and be the caret's row often enough to be worth a lane of its own, and when it is,
+ * the arrow is the one you came for.
+ *
+ * The bulb is JetBrains' own drawing and brings its own colour, so there is no token here to argue
+ * about -- which also settles the question of whether it should read as a warning: upstream already
+ * decided, and matching it is what makes it recognisable. */
+texteditor .__quick-fix-bulb__ {
+    width:  12px;
+    height: 12px;
+    overlay: icon("crystalgui:general/action/intentionBulb");
+    /* NO `color`. This icon carries its own palette -- amber glass, grey base, hard-coded -- exactly like
+     * the filetype icons, so a tint here would be a declaration that does nothing. Its light/dark pair is
+     * resolved by icon() itself through CgUiSvg.ofIcon. */
+    cursor: pointer;
+    z-index: 5;
 }
 
 /* SHOWING A PROBLEM AND NOTHING ELSE -- the error stripe's popup.
