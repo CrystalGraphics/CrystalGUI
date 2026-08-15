@@ -33,6 +33,27 @@ import javax.annotation.Nullable;
  * being present is legal too, and means a row that is shown and does nothing — which is what a disabled
  * entry is, and is better than hiding it (the menu rules already argue this at length).</p>
  *
+ * <h3>{@code id} is the identity; {@code title} is prose</h3>
+ *
+ * <p>They are separate because everything that needs to <em>name</em> an action needs something the title
+ * cannot be. A title carries the offending symbol ("Remove variable 's'"), so it is not even constant
+ * between two invocations of the same correction; it is worded for a reader, so it gets reworded; and if
+ * this UI is ever translated it stops being English while every test, log line and keybinding that named
+ * it keeps expecting it to be. IntelliJ separates {@code getName} from {@code getFamilyName} for this,
+ * and LSP carries an opaque {@code data} field for the same reason.</p>
+ *
+ * <p>So an id is a stable dotted string — {@code "java.unused.removeImport"} — chosen by whoever wrote the
+ * correction and never shown to anyone. It is what a test asserts on, and what a future "apply this fix
+ * without asking" binding would name.</p>
+ *
+ * <p><b>It names the correction, not the row.</b> One correction may answer with several actions — an
+ * unresolved {@code List} offers an import per candidate — and those share an id, because they are one
+ * piece of logic offering alternatives rather than several corrections. What separates them is the title,
+ * which is the single place a title carries meaning the id does not, and the reason this is written down
+ * is that it is the obvious thing to "fix" by making ids unique per row. Doing that would make the id a
+ * row identifier, which is what the title already is.</p>
+ *
+ * @param id        stable, never displayed — {@code "java.unused.removeImport"}
  * @param title     what the row says, already in the user's words — "Remove unused import"
  * @param kind      where it sorts, and what it is
  * @param edit      the change to apply, in offsets against {@link #version}, or null
@@ -41,7 +62,7 @@ import javax.annotation.Nullable;
  *                  preferred action inline with its accelerator and hides the rest behind "More actions…"
  * @param version   the document version {@link #edit} was computed against
  */
-public record CodeAction(String title, CodeActionKind kind, @Nullable ChangeSet edit,
+public record CodeAction(String id, String title, CodeActionKind kind, @Nullable ChangeSet edit,
                          @Nullable String commandId, boolean preferred, long version) {
 
     /**
@@ -56,23 +77,24 @@ public record CodeAction(String title, CodeActionKind kind, @Nullable ChangeSet 
                     .thenComparing(a -> a.preferred() ? 0 : 1);
 
     public CodeAction {
+        if (id == null || id.isEmpty()) throw new IllegalArgumentException("an action needs an id");
         if (title == null || title.isEmpty()) throw new IllegalArgumentException("an action needs a title");
         if (kind == null) kind = CodeActionKind.QUICK_FIX;
     }
 
     /** The common shape: a fix that edits the document. */
-    public static CodeAction fix(String title, ChangeSet edit, long version) {
-        return new CodeAction(title, CodeActionKind.QUICK_FIX, edit, null, false, version);
+    public static CodeAction fix(String id, String title, ChangeSet edit, long version) {
+        return new CodeAction(id, title, CodeActionKind.QUICK_FIX, edit, null, false, version);
     }
 
     /** As {@link #fix}, and marked as the one to show without being asked. */
-    public static CodeAction preferredFix(String title, ChangeSet edit, long version) {
-        return new CodeAction(title, CodeActionKind.QUICK_FIX, edit, null, true, version);
+    public static CodeAction preferredFix(String id, String title, ChangeSet edit, long version) {
+        return new CodeAction(id, title, CodeActionKind.QUICK_FIX, edit, null, true, version);
     }
 
     /** An action with no edit — it runs a registered command instead. */
-    public static CodeAction command(String title, CodeActionKind kind, String commandId) {
-        return new CodeAction(title, kind, null, commandId, false, 0L);
+    public static CodeAction command(String id, String title, CodeActionKind kind, String commandId) {
+        return new CodeAction(id, title, kind, null, commandId, false, 0L);
     }
 
     /**

@@ -58,6 +58,11 @@ val jdtBand8 = "3.26.0"        // Eclipse 4.21, 2021-09. 3.27.0 is the first tha
 val jdtBand11 = "3.33.0"       // Eclipse 4.28, 2023-06. 3.34.0 is the first that needs Java 17
 val jdtBand17 = "3.46.0"       // newest at 2026-08-12
 val rhinoBand8 = "1.7.15.1"    // last release whose class files are Java 8
+// `org.eclipse.text` — where IDocument and TextEdit live, and therefore what ASTRewrite's only usable
+// exit is spelled in. Named here rather than only inside platformBand8 because the ADAPTER compiles
+// against it too (see the compileOnly pair below), and two spellings of one version is the hazard the
+// note above this block already describes.
+val eclipseTextBand8 = "3.11.0"
 val asmVersion = "9.10"     // real classes are major 49; only module-info is 53
 val rhinoModern = "1.9.1"      // needs Java 11 -- so bands 11 and 17 SHARE it; see EngineBand
 
@@ -87,7 +92,7 @@ val platformBand8 = listOf(
     // `checkEngineBands` now derives this from the certificates rather than trusting this comment.
     "org.eclipse.platform:org.eclipse.core.runtime:3.20.100",
     "org.eclipse.platform:org.eclipse.core.filesystem:1.9.300",
-    "org.eclipse.platform:org.eclipse.text:3.11.0",
+    "org.eclipse.platform:org.eclipse.text:$eclipseTextBand8",
     "org.eclipse.platform:org.eclipse.core.jobs:3.11.0",
     "org.eclipse.platform:org.eclipse.core.contenttype:3.7.1000",
     "org.eclipse.platform:org.eclipse.core.expressions:3.7.100",
@@ -167,6 +172,30 @@ dependencies {
     // not the workspace, and pulling the closure in would let it reach APIs that happen to resolve here
     // and are absent from a real deployment's loader.
     compileOnly("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8")
+
+    // AND org.eclipse.text, for the SAME BAND and for one reason: `ASTRewrite` lives in jdt.core but
+    // both its exits are spelled in types that do not -- `rewriteAST` takes an `org.eclipse.jface.text
+    // .IDocument` and returns an `org.eclipse.text.edits.TextEdit`, and neither is nameable without
+    // this artifact. Every quick fix is built on that rewrite, so without this line the whole
+    // correction layer would have to hand-roll text ranges instead. @see Rewrites
+    //
+    // THIS IS NOT THE CLOSURE THE COMMENT ABOVE REFUSES. That refusal is about reaching APIs which
+    // might be absent from a deployment's loader; this jar is pinned into `platformBand8`,
+    // `platformBand11` and band 17's resolved closure alike, so it is present at runtime on every band
+    // -- compiling against it asserts something that is true in production rather than only here.
+    // Pinned to band 8's version for the usual reason: an API added later must fail the build now.
+    compileOnly("org.eclipse.platform:org.eclipse.text:$eclipseTextBand8")
+
+    // AND ON THE TEST COMPILE PATH, so a fix's test can write `IProblem.UnusedImport` instead of the
+    // literal 268435844. That is not merely nicer to read: a correction is keyed on a problem id, and a
+    // test naming the id in digits is a test nobody can check against the table it is testing.
+    //
+    // COMPILE ONLY, AND IT STAYS THAT WAY. These are `static final int`, so javac inlines them and the
+    // compiled test carries the number with no reference to the class -- which is what keeps the tests
+    // honest, because the ONLY route to an engine remains EngineSource + EngineClassLoader. The trap it
+    // opens is narrow and loud: naming a non-constant JDT API here compiles and then dies at runtime with
+    // NoClassDefFoundError, since jdt.core is on no test RUNTIME classpath. Constants only.
+    testCompileOnly("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8")
 
     // ── ASM, for the mapping boundary (§15.5) ───────────────────────────────────────────────────
     //

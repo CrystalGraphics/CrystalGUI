@@ -4,6 +4,11 @@ A hover over a warning shows what is wrong and what to do about it, and Alt+Ente
 at the caret. IntelliJ's shape: the message, one primary fix with its accelerator, `More actions…`, and
 the declaration underneath.
 
+> **This file decides the mechanism. `plan_quickfix_catalog.md` decides the content** — every
+> correction worth having, keyed to the `IProblem` constant that triggers it, ranked by what it costs
+> here, with the work queue at the end. Read that one when adding a fix; read this one when changing
+> how fixes are carried, ranked or applied.
+
 ---
 
 ## 0. The question this answers first: how does an error map to an action?

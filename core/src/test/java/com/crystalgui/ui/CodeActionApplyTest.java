@@ -47,7 +47,7 @@ public class CodeActionApplyTest extends UiTestBase {
 
     /** Deletes "alpha\n", stamped with the version it was built against. */
     private CodeAction removeFirstLine(long version) {
-        return CodeAction.preferredFix("Remove line",
+        return CodeAction.preferredFix("test.removeLine", "Remove line",
                 ChangeSet.replace(editor.getText().length(), 0, 6, ""), version);
     }
 
@@ -86,8 +86,8 @@ public class CodeActionApplyTest extends UiTestBase {
      */
     @Test
     public void aCommandActionIsAlwaysApplicable() {
-        CodeAction copy = CodeAction.command("Copy problem message", CodeActionKind.SOURCE,
-                "problem.copyMessage");
+        CodeAction copy = CodeAction.command("problem.copyMessage", "Copy problem message",
+                CodeActionKind.SOURCE, "problem.copyMessage");
         assertTrue(copy.isApplicableTo(editor.buffer().version()));
         assertTrue(copy.isApplicableTo(editor.buffer().version() + 99));
     }
@@ -106,7 +106,7 @@ public class CodeActionApplyTest extends UiTestBase {
         String afterTyping = editor.getText();
 
         assertTrue(editor.applyCodeAction(
-                CodeAction.preferredFix("Remove line",
+                CodeAction.preferredFix("test.removeLine", "Remove line",
                         ChangeSet.replace(editor.getText().length(), 0, 7, ""),
                         editor.buffer().version())));
         settle();

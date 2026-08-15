@@ -8,11 +8,14 @@ import com.crystalgui.text.lang.CodeActionKind;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.BodyDeclaration;
+import org.eclipse.jdt.core.dom.ChildListPropertyDescriptor;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.NodeFinder;
+import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
+import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,6 +38,25 @@ import java.util.List;
  * though that also means a missing constant could not be detected — which is why the table sticks to
  * corrections that have existed since JDT 3.x.</p>
  *
+ * <h3>The code body is JDT's; the import region is ours</h3>
+ *
+ * <p>Corrections against declarations, statements and lists describe themselves to {@link Rewrites} and
+ * let JDT compute the text — that is the substrate, and it is what lets an unused name be dropped from
+ * {@code int a = 1, b = 2;} without this file knowing where the comma is.</p>
+ *
+ * <p><b>Imports are the exception, in both directions, and the reason is JDT's own design.</b> JDT does
+ * not expect the general rewriter to be used on the import region at all; it ships {@code ImportRewrite}
+ * for it, and that class refuses to work without a Java model this engine deliberately has not got. Using
+ * the general rewriter there is measurably wrong twice over: it cannot place an import into a file with no
+ * package declaration, and emptying the import list of such a file leaves the last line terminator behind
+ * — so removing the only import of a script leaves a blank first line. Both are recorded on
+ * {@link Rewrites}.</p>
+ *
+ * <p>So {@link #deletion} and {@link #importInsertOffset} stay, and the line between them and the
+ * rewriter is <b>the import region versus everything else</b> — one boundary, decided once from two
+ * measurements, rather than a judgement each new correction has to make. Anything tempted to unify them
+ * should reproduce those two results first.</p>
+ *
  * <h3>An unknown id returns nothing, and that is the answer rather than a gap</h3>
  *
  * <p>ECJ reports on the order of a thousand distinct problems. Covering them is not a goal: the popup still
@@ -42,6 +64,14 @@ import java.util.List;
  * hole to be filled is precisely how a table of (problems × fixes) gets built by accident.</p>
  */
 final class JavaQuickFixes {
+
+    // The stable names for these corrections. Never displayed; see CodeAction#id for why a title cannot
+    // do this job. Dotted and prefixed by the language, so a second engine's fixes cannot collide.
+    static final String REMOVE_UNUSED_IMPORT = "java.unused.removeImport";
+    static final String REMOVE_UNUSED_IMPORTS = "java.unused.removeImports";
+    static final String REMOVE_UNUSED_LOCAL = "java.unused.removeLocal";
+    static final String REMOVE_UNUSED_FIELD = "java.unused.removeField";
+    static final String ADD_IMPORT = "java.imports.add";
 
     private JavaQuickFixes() {
     }
@@ -65,11 +95,15 @@ final class JavaQuickFixes {
             if (id == IProblem.UnusedImport) {
                 addUnusedImport(actions, unit, source, documentLength, version, problem);
             } else if (id == IProblem.LocalVariableIsNeverUsed) {
-                addUnusedDeclaration(actions, unit, source, documentLength, version, problem,
-                        VariableDeclarationStatement.class, "Remove variable ");
+                addUnusedDeclaration(actions, unit, source, version, problem,
+                        VariableDeclarationStatement.class,
+                        VariableDeclarationStatement.FRAGMENTS_PROPERTY,
+                        REMOVE_UNUSED_LOCAL, "Remove variable ");
             } else if (id == IProblem.UnusedPrivateField) {
-                addUnusedDeclaration(actions, unit, source, documentLength, version, problem,
-                        FieldDeclaration.class, "Remove field ");
+                addUnusedDeclaration(actions, unit, source, version, problem,
+                        FieldDeclaration.class,
+                        FieldDeclaration.FRAGMENTS_PROPERTY,
+                        REMOVE_UNUSED_FIELD, "Remove field ");
             } else if (id == IProblem.UndefinedType || id == IProblem.ImportNotFound) {
                 addImports(actions, unit, source, documentLength, version, problem, importCandidates);
             }
@@ -86,12 +120,17 @@ final class JavaQuickFixes {
      * <p>Both, because they are different intentions rather than one with a count: you either meant this
      * line or you meant to tidy the file, and IntelliJ offers exactly this pair. The batch is not
      * preferred — a fix that edits lines you were not looking at should be chosen, not defaulted to.</p>
+     *
+     * <p>Whole lines, computed here rather than by the rewriter, for the reason the class note gives:
+     * JDT removes a list's elements and the separators <em>between</em> them, so emptying the imports of a
+     * file that has no package declaration leaves the final terminator — and a script's only import is
+     * exactly that case.</p>
      */
     private static void addUnusedImport(List<CodeAction> actions, CompilationUnit unit, String source,
                                         int documentLength, long version, IProblem problem) {
         ImportDeclaration declaration = enclosing(unit, problem, ImportDeclaration.class);
         if (declaration == null) return;
-        actions.add(CodeAction.preferredFix("Remove unused import",
+        actions.add(CodeAction.preferredFix(REMOVE_UNUSED_IMPORT, "Remove unused import",
                 ChangeSet.of(documentLength, deletion(source, declaration)), version));
 
         List<ImportDeclaration> unused = allUnusedImports(unit);
@@ -101,8 +140,8 @@ final class JavaQuickFixes {
         // SORTED, because ChangeSet.of REQUIRES it rather than normalising -- two overlapping changes have
         // no defined combined meaning, so it refuses them instead of letting iteration order decide.
         changes.sort(Comparator.comparingInt(Change::from));
-        actions.add(new CodeAction("Remove unused imports", CodeActionKind.SOURCE,
-                ChangeSet.of(documentLength, changes), null, false, version));
+        actions.add(new CodeAction(REMOVE_UNUSED_IMPORTS, "Remove unused imports",
+                CodeActionKind.SOURCE, ChangeSet.of(documentLength, changes), null, false, version));
     }
 
     private static List<ImportDeclaration> allUnusedImports(CompilationUnit unit) {
@@ -128,6 +167,10 @@ final class JavaQuickFixes {
      * <p>The <b>name</b> comes from the problem's own arguments and the <b>place</b> from the syntax tree.
      * Neither can come from the other: the compiler knows what did not resolve, and only the tree knows
      * where an import may legally be written.</p>
+     *
+     * <p><b>The one correction not built on {@link Rewrites}</b>, and not from inertia — a list rewrite on
+     * the imports produces uncompilable text for a file with no package declaration, which is the shape a
+     * script most often has. Recorded in full on {@code Rewrites}.</p>
      */
     private static void addImports(List<CodeAction> actions, CompilationUnit unit, String source,
                                    int documentLength, long version, IProblem problem,
@@ -146,7 +189,7 @@ final class JavaQuickFixes {
         for (String qualified : candidates) {
             if (alreadyImported(unit, qualified)) continue;
             String text = "import " + qualified + ";\n";
-            actions.add(new CodeAction("Import '" + qualified + "'", CodeActionKind.QUICK_FIX,
+            actions.add(new CodeAction(ADD_IMPORT, "Import '" + qualified + "'", CodeActionKind.QUICK_FIX,
                     ChangeSet.of(documentLength, Change.insert(at, text)), null, false, version));
         }
     }
@@ -191,32 +234,42 @@ final class JavaQuickFixes {
     /**
      * "Remove variable 's'" / "Remove field 'x'".
      *
-     * <p>Refused when the declaration declares <b>more than one name</b>: {@code int a, b;} with only
-     * {@code b} unused would lose {@code a} as well, and a quick fix that silently deletes working code is
-     * worse than no quick fix. Eclipse and IntelliJ both narrow to the fragment instead; doing that
-     * properly means rewriting the declaration rather than deleting a range, which is a different job from
-     * this one and is not worth guessing at.</p>
+     * <p><b>A declaration that declares several names loses only the one that is unused.</b>
+     * {@code int a = 1, b = 2;} becomes {@code int a = 1;} — the comma goes with it, and nothing here
+     * says so. This used to be refused outright, on the correct reasoning that deleting the statement's
+     * range would take {@code a} with it and a fix that silently removes working code is worse than no
+     * fix; what changed is not the reasoning but what the substrate can express. A list rewrite removes
+     * one element of a list, which is exactly the operation the refusal was standing in for.</p>
+     *
+     * <p><b>The name comes from the declaration, never from the problem's arguments.</b> Those are the
+     * pieces ECJ assembled its message from and their order is per-problem: {@code UnusedPrivateField}
+     * leads with the declaring <em>type</em>, so reading argument zero titled this "Remove field 'Script'"
+     * for a field named {@code count} — right shape, wrong word, and nothing but a reader would notice.
+     * The fragment has to be found anyway for the list case, and its own name node cannot be anything
+     * other than the name being removed.</p>
      */
-    private static <T extends ASTNode> void addUnusedDeclaration(
-            List<CodeAction> actions, CompilationUnit unit, String source, int documentLength, long version,
-            IProblem problem, Class<T> declarationType, String titlePrefix) {
-        T declaration = enclosing(unit, problem, declarationType);
+    private static void addUnusedDeclaration(
+            List<CodeAction> actions, CompilationUnit unit, String source, long version,
+            IProblem problem, Class<? extends ASTNode> declarationType,
+            ChildListPropertyDescriptor fragmentsProperty, String id, String titlePrefix) {
+        ASTNode declaration = enclosing(unit, problem, declarationType);
         if (declaration == null) return;
-        if (fragmentCount(declaration) != 1) return;
-        String name = nameOf(problem);
-        if (name == null) return;
-        actions.add(CodeAction.preferredFix(titlePrefix + "'" + name + "'",
-                ChangeSet.of(documentLength, deletion(source, declaration)), version));
-    }
+        VariableDeclarationFragment fragment =
+                enclosing(unit, problem, VariableDeclarationFragment.class);
+        if (fragment == null) return;
+        String name = fragment.getName().getIdentifier();
 
-    private static int fragmentCount(ASTNode declaration) {
-        if (declaration instanceof VariableDeclarationStatement) {
-            return ((VariableDeclarationStatement) declaration).fragments().size();
+        ASTRewrite rewrite = Rewrites.on(unit);
+        List<?> declared = (List<?>) declaration.getStructuralProperty(fragmentsProperty);
+        if (declared != null && declared.size() > 1) {
+            rewrite.getListRewrite(declaration, fragmentsProperty).remove(fragment, null);
+        } else {
+            rewrite.remove(declaration, null);
         }
-        if (declaration instanceof FieldDeclaration) {
-            return ((FieldDeclaration) declaration).fragments().size();
-        }
-        return 1;
+
+        ChangeSet edit = Rewrites.toChangeSet(rewrite, unit, source);
+        if (edit == null) return;
+        actions.add(CodeAction.preferredFix(id, titlePrefix + "'" + name + "'", edit, version));
     }
 
     /**
@@ -239,8 +292,10 @@ final class JavaQuickFixes {
      *
      * <p>Deleting only the node leaves the indentation that preceded it and the newline that followed, so
      * removing an import empties the line rather than removing it and the file slowly fills with blanks.
-     * Widening only when nothing else shares the line is what keeps {@code int a; int b;} from losing
-     * {@code b} along with {@code a}.</p>
+     * Widening only when nothing else shares the line is what keeps two declarations on one line from
+     * losing the survivor.</p>
+     *
+     * <p>Used by the import corrections alone — see the class note for why they and not the rest.</p>
      */
     private static Change deletion(String source, ASTNode node) {
         int start = node.getStartPosition();
