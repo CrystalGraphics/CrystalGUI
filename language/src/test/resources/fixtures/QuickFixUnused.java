@@ -17,6 +17,7 @@
 
 // FIX: "Remove unused import"
 // FIX: "Remove unused imports"
+// FIX: "Organize imports"
 import java.util.List;
 import java.util.Set;
 import java.util.Map;

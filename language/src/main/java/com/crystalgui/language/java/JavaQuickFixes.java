@@ -60,11 +60,14 @@ final class JavaQuickFixes {
     /** {@code IProblem} id → the corrections that answer for it. Built once. */
     private static final Map<Integer, List<Correction>> BY_PROBLEM = index(ALL);
 
+    /** The corrections that answer for no problem — asked once per request about the range. */
+    private static final List<Correction> INTENTIONS = intentions(ALL);
+
     private JavaQuickFixes() {
     }
 
     /**
-     * Everything offered for the problems overlapping {@code [from, to)}.
+     * Everything offered for the problems overlapping {@code [from, to)}, and for the range itself.
      *
      * <p>In the unit's own coordinates. The caller stamps the answer with the analysis version and the
      * apply path refuses it if the buffer has moved, so these offsets are either exactly right or unused.</p>
@@ -72,26 +75,34 @@ final class JavaQuickFixes {
     static List<CodeAction> in(CompilationUnit unit, String source, long version, int from, int to,
                               CodeActionContext host) {
         if (unit == null || source == null) return List.of();
-        FixContext context = new FixContext(unit, source, version, host);
+        FixContext context = new FixContext(unit, source, version, host, from, to);
         List<CodeAction> actions = new ArrayList<>();
 
         for (IProblem problem : unit.getProblems()) {
             if (!overlaps(problem, from, to)) continue;
             for (Correction correction : BY_PROBLEM.getOrDefault(problem.getID(), List.of())) {
-                try {
-                    correction.contribute(context, problem, actions);
-                } catch (RuntimeException broken) {
-                    // ONE CORRECTION MUST NOT COST THE OTHERS. A request computes every action for a
-                    // range at once and is answered on the UI thread, so a throw here would turn one
-                    // buggy correction into no popup at all -- and into an exception on an input path.
-                    // A correction that throws is a bug rather than a condition: the expected failure
-                    // modes (no node, nothing to offer, a rewrite that cannot be expressed) all return
-                    // quietly on their own.
-                }
+                contribute(correction, context, problem, actions);
             }
         }
+        // AFTER the problems, so on a tie an intention sorts behind a fix for what is actually wrong
+        // here -- the sort is stable and its last key is insertion order.
+        for (Correction intention : INTENTIONS) contribute(intention, context, null, actions);
+
         actions.sort(CodeAction.ORDER);
         return actions;
+    }
+
+    private static void contribute(Correction correction, FixContext context, IProblem problem,
+                                   List<CodeAction> actions) {
+        try {
+            correction.contribute(context, problem, actions);
+        } catch (RuntimeException broken) {
+            // ONE CORRECTION MUST NOT COST THE OTHERS. A request computes every action for a range at
+            // once and is answered on the UI thread, so a throw here would turn one buggy correction into
+            // no popup at all -- and into an exception on an input path. A correction that throws is a
+            // bug rather than a condition: the expected failure modes (no node, nothing to offer, a
+            // rewrite that cannot be expressed) all return quietly on their own.
+        }
     }
 
     private static Map<Integer, List<Correction>> index(List<Correction> corrections) {
@@ -102,6 +113,14 @@ final class JavaQuickFixes {
             }
         }
         return byProblem;
+    }
+
+    private static List<Correction> intentions(List<Correction> corrections) {
+        List<Correction> found = new ArrayList<>();
+        for (Correction correction : corrections) {
+            if (correction.problems().length == 0) found.add(correction);
+        }
+        return found;
     }
 
     @SafeVarargs
