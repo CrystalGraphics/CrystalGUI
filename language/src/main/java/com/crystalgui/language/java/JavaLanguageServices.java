@@ -102,7 +102,7 @@ public final class JavaLanguageServices implements LanguageServices {
         this.classpath = classpath == null ? Collections.emptyList() : new ArrayList<>(classpath);
         this.completion = new JavaCompletionProvider(buffer, () -> current,
                 typeIndexFor(this.classpath), this::analyseText);
-        this.actions = new JavaCodeActions(() -> current);
+        this.actions = new JavaCodeActions(() -> current, typeIndexFor(this.classpath));
         this.bufferSubscription = buffer.onChanged.connect(change -> schedule());
         // ONE ANALYSIS AT CONSTRUCTION, undebounced. A document that is opened and not typed in would
         // otherwise have no colours and no problems until the first keystroke -- which is exactly the

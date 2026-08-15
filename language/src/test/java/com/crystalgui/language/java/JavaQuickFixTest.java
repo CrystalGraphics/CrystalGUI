@@ -30,6 +30,10 @@ import static org.junit.Assert.assertTrue;
  */
 public class JavaQuickFixTest {
 
+    /** A stand-in classpath index — the real one is built from jars and is not this test's subject. */
+    private static final java.util.function.Function<String, List<String>> CANDIDATES = name ->
+            "List".equals(name) ? List.of("java.util.List", "java.awt.List") : List.of();
+
     private JavaEngine engine;
     private SourceAnalyzer analyzer;
 
@@ -56,7 +60,7 @@ public class JavaQuickFixTest {
         int at = source.indexOf(needle);
         if (at < 0) throw new IllegalArgumentException("no '" + needle + "' in the fixture");
         try {
-            return analysis.codeActionsIn(at, at + needle.length());
+            return analysis.codeActionsIn(at, at + needle.length(), CANDIDATES);
         } finally {
             analysis.close();
         }
@@ -170,5 +174,50 @@ public class JavaQuickFixTest {
     public void anUnknownProblemOffersNothing() {
         String source = "public class Script { void go() { undefined(); } }\n";
         assertTrue(actionsIn(source, "undefined").isEmpty());
+    }
+
+    /**
+     * <b>An unresolved type offers one action per candidate, and none of them is preferred.</b>
+     *
+     * <p>The first problem whose answer is several actions rather than one, which is the case the merge
+     * and the "More actions…" list were built for and had never been exercised. None is preferred on
+     * purpose: with {@code List} on the classpath twice, defaulting to whichever the index returned
+     * first is a coin toss that edits the file. IntelliJ makes you pick too.</p>
+     */
+    @Test
+    public void anUnresolvedTypeOffersOneImportPerCandidate() {
+        String source = ""
+                + "package demo;\n"
+                + "public class Script {\n"
+                + "    List<String> names;\n"
+                + "}\n";
+        List<CodeAction> actions = actionsIn(source, "List<String>");
+
+        CodeAction utilImport = titled(actions, "Import 'java.util.List'");
+        CodeAction awtImport = titled(actions, "Import 'java.awt.List'");
+        assertNotNull("no import offered: " + actions, utilImport);
+        assertNotNull("only one candidate was offered: " + actions, awtImport);
+        assertTrue("with two candidates neither may be the default", !utilImport.preferred());
+
+        // AFTER THE PACKAGE, never before it -- the one placement that turns a fix into a new error.
+        assertEquals(""
+                + "package demo;\n"
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    List<String> names;\n"
+                + "}\n", applied(source, utilImport));
+    }
+
+    /** A candidate already imported is not offered again. */
+    @Test
+    public void anImportAlreadyPresentIsNotOffered() {
+        String source = ""
+                + "package demo;\n"
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    List<String> names;\n"
+                + "}\n";
+        assertNull("it is already imported",
+                titled(actionsIn(source, "List<String>"), "Import 'java.util.List'"));
     }
 }

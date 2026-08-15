@@ -5,6 +5,7 @@ import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionProvider;
 import com.crystalgui.text.lang.Versioned;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -32,8 +33,36 @@ final class JavaCodeActions implements CodeActionProvider {
 
     private final Supplier<SourceAnalyzer.Analysis> analysis;
 
-    JavaCodeActions(Supplier<SourceAnalyzer.Analysis> analysis) {
+    /**
+     * The classpath index, for the one fix that needs to know what is out there.
+     *
+     * <p>Held on this side of the bridge rather than passed across it. The syntax tree knows which name
+     * failed to resolve and where an import may legally go; only an index of the classpath can say what
+     * that name could be, and it is shared between every document on the same classpath — so it belongs
+     * with the services rather than with a parse that is thrown away on the next keystroke.</p>
+     */
+    private final TypeIndex types;
+
+    JavaCodeActions(Supplier<SourceAnalyzer.Analysis> analysis, TypeIndex types) {
         this.analysis = analysis;
+        this.types = types;
+    }
+
+    /**
+     * Every qualified name that could satisfy {@code simpleName} — an EXACT match, not a prefix one.
+     *
+     * <p>{@code TypeIndex.matching} is completion's query and is deliberately generous: it takes a prefix
+     * and then falls back to a scattered match, which is right when someone is typing and wrong here.
+     * Importing {@code Listener} because the unresolved name was {@code List} would be a fix that
+     * compiles and is not what anyone asked for.</p>
+     */
+    private List<String> importCandidates(String simpleName) {
+        if (types == null || simpleName == null || simpleName.isEmpty()) return List.of();
+        List<String> found = new ArrayList<>();
+        for (TypeIndex.Entry entry : types.matching(simpleName).entries()) {
+            if (entry.simpleName().equals(simpleName)) found.add(entry.qualifiedName());
+        }
+        return found;
     }
 
     @Override
@@ -44,6 +73,6 @@ final class JavaCodeActions implements CodeActionProvider {
             return;
         }
         answer.accept(Versioned.of(current.version(),
-                current.codeActionsIn(request.from(), request.to())));
+                current.codeActionsIn(request.from(), request.to(), this::importCandidates)));
     }
 }

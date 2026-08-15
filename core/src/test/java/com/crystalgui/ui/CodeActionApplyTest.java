@@ -3,6 +3,8 @@ package com.crystalgui.ui;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.text.ChangeSet;
+import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionKind;
 import com.crystalgui.ui.elements.editor.TextEditor;
@@ -112,5 +114,32 @@ public class CodeActionApplyTest extends UiTestBase {
         editor.undoStack().undo();
         settle();
         assertEquals("undo took back more than the fix", afterTyping, editor.getText());
+    }
+
+    /**
+     * <b>Navigating to a problem centres it.</b>
+     *
+     * <p>Reported as "clicking a stripe mark takes me to a slightly off offset": the line landed at the
+     * very top of the viewport rather than in the middle, which is half a screen out and is what a
+     * minimal reveal looks like when a centred one was asked for.</p>
+     */
+    @Test
+    public void goingToAProblemCentresIt() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 400; i++) document.append("line ").append(i).append("\n");
+        editor.setText(document.toString());
+        for (int i = 0; i < 6; i++) settle();
+
+        Diagnostic problem = Diagnostic.onRow(200, DiagnosticSeverity.WARNING, "somewhere in the middle");
+        assertTrue(editor.goToDiagnostic(problem));
+        for (int i = 0; i < 4; i++) settle();
+
+        float lineHeight = editor.lineHeight();
+        float boxHeight = editor.getRuntimeCache().getHeight();
+        float lineTopOnScreen = 200 * lineHeight - editor.getScrollTop();
+        float middle = boxHeight / 2f;
+        assertTrue("row 200 sits at " + lineTopOnScreen + " in a box of " + boxHeight
+                        + " (scrollTop=" + editor.getScrollTop() + ", lineHeight=" + lineHeight + ")",
+                Math.abs(lineTopOnScreen - middle) <= lineHeight * 1.5f);
     }
 }

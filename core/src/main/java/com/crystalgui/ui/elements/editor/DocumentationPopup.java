@@ -88,6 +88,20 @@ public final class DocumentationPopup extends Popover {
     public static final String PROBLEM_ACTION_CLASS = "__doc-problem-action__";
     public static final String PROBLEM_SHORTCUT_CLASS = "__doc-problem-shortcut__";
 
+    /** Clear of the groove, so the box does not sit against the scrollbar it is describing. */
+    private static final float STRIPE_GAP = 1f;
+
+    /**
+     * On the popup while it is showing a problem and nothing else.
+     *
+     * <p>A modifier on the root rather than a second widget: it is the same box with three of its four
+     * bands hidden, and the only thing that has to change is that it must not reserve room below the last
+     * one. Hiding the bands is not enough — the popup's own bottom padding and the band's separator both
+     * survive, and together they draw an empty strip under the actions that reads as a section that
+     * failed to load.</p>
+     */
+    public static final String PROBLEM_ONLY_CLASS = "__problem-only__";
+
     /**
      * The icon vocabulary is {@code CompletionPopup}'s, on purpose.
      *
@@ -369,8 +383,50 @@ public final class DocumentationPopup extends Popover {
      * pixels with the root transform already baked in and would place the box neatly at {@code uiScale}
      * times where it belongs.</p>
      */
+    /**
+     * The problem bands alone — no owner, no declaration, no doc.
+     *
+     * <p>What the error stripe's marks show. A mark names a <em>problem</em> and not a symbol: it sits in
+     * the scrollbar's groove next to nothing at all, and there is frequently no name under it to resolve.
+     * IntelliJ's stripe tooltip is the same shape — the message and its actions, and nothing else.</p>
+     *
+     * <p>Hides the three symbol bands rather than leaving them from a previous show, for the reason every
+     * band here already records: they are pooled across symbols, and one left filled would describe
+     * whatever was hovered before this.</p>
+     */
+    public void showProblems(UIWindow window, List<com.crystalgui.text.diagnostic.Diagnostic> problems,
+                             UIElement anchor) {
+        this.shown = null;
+        clearUserSizing();
+        if (getParent() == null) window.addOverlay(this, null);
+        // ANCHORED TO THE MARK AND OPENED LEFTWARD, rather than dropped at the pointer. Two faults come
+        // from placing it at a point: the box lands under the cursor and covers the scrollbar you were
+        // reaching for, and its RIGHT edge moves with its own width -- so a one-word message and a full
+        // sentence start in different places. Anchoring pins the right edge to the mark and lets the box
+        // grow left from there, which is what IntelliJ does and what the activity bar's tooltips already
+        // do here. AnchoredPlacement flips to the other side when there is no room, so a narrow window
+        // degrades rather than clipping.
+        setPreferredSide(com.crystalgui.ui.AnchoredPlacement.Side.LEFT);
+        setOffset(STRIPE_GAP);
+        addClass(PROBLEM_ONLY_CLASS);
+        showFor(anchor, null);
+        ownerRow.setDisplayed(false);
+        definition.setDisplayed(false);
+        bodyShown = false;
+        body.setDisplayed(false);
+        setProblem(problems, List.of());
+    }
+
     public void show(UIWindow window, SymbolInfo symbol, float x, float y, float lineHeight) {
         this.shown = symbol;
+        // RESTORED, because showProblems changes both and this popup is one reused instance -- a hover in
+        // the text after one on the stripe would otherwise open sideways off its own anchor.
+        setPreferredSide(com.crystalgui.ui.AnchoredPlacement.Side.BOTTOM);
+        setOffset(0f);
+        removeClass(PROBLEM_ONLY_CLASS);
+        // SHOWN AGAIN, because showProblems hides them and this popup is one reused instance. Without it a
+        // stripe hover followed by an ordinary one draws a problem band over an empty box.
+        definition.setDisplayed(true);
         // FORGET A DRAGGED SIZE. `resize: both` writes width and height at INLINE, which outranks both the
         // stylesheet's 420px and this widget's own content sizing -- so without this a box stretched to
         // read one long javadoc stays that size for every symbol afterwards, including a one-line field

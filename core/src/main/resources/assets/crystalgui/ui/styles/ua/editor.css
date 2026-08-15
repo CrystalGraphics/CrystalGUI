@@ -1163,19 +1163,33 @@ documentationpopup {
  * border, and it carries the same uniform-width, three-transparent-edges spelling every hairline in this
  * codebase needs -- the rounded-background path takes its stroke width from border().left ALONE, so a
  * bottom-only width resolves, lays out and paints nothing. */
+/* TWO GROUNDS, NOT ONE, which is what IntelliJ draws: the message sits on chrome and the actions sit on
+ * the popup's own paper. Colouring the whole band one way makes the fix row look like part of the header
+ * rather than like something you can press.
+ *
+ * So the band itself paints NOTHING and carries no padding -- it is a column and a hairline. Each row
+ * paints and pads itself, because a shared padding here would leave a strip of the wrong ground above and
+ * below whichever row it belonged to. */
 documentationpopup .__doc-problem__ {
     flex-direction: column;
-    gap-all: 4px;
-    /* FULL BLEED, which is why the padding is written out rather than inherited: the popup's own padding
-     * would leave the band's ground short of the box's edges and it would read as a floating panel inside
-     * a panel instead of as the header of one. Negative margins pull it back out to the border. */
-    padding-top: 6px;
-    padding-bottom: 6px;
-    padding-left: 9px;
-    padding-right: 9px;
+    /* NO GAP. The two grounds meet; a gap between them shows the popup's paper as a seam through the
+     * header, which reads as a rendering fault rather than as spacing. */
+    gap-all: 0px;
+    /* FULL BLEED: the popup's own padding would leave both grounds short of the box's edges and the band
+     * would read as a panel floating inside a panel rather than as the header of one. */
     margin-top: -9px;
     margin-left: -9px;
     margin-right: -9px;
+    /* THE MESSAGE'S GROUND IS PAINTED HERE, not on the message.
+     *
+     * The message is a UIText with forceSelfSizeWidth -- it reports its own measured width so the popup
+     * has something to size itself from -- and a self-sized element does not stretch to its parent. So a
+     * background on it ended where the text did, and the header read as a grey label floating on the
+     * popup's paper with the fix row full width beneath it. The band is the element that spans, so the
+     * band is what paints, and its padding is the MESSAGE's padding for the same reason. */
+    padding-top: 7px;
+    padding-left: 9px;
+    padding-right: 9px;
     background-color: var(--doc-problem-bg, #26282B);
     border-width: 1px;
     border-color: #00000000;
@@ -1184,7 +1198,6 @@ documentationpopup .__doc-problem__ {
 
 documentationpopup .__doc-problem-message__ {
     color: var(--editor-fg, #BCBEC4);
-    white-space: normal;
 }
 
 /* A ROW, and it wraps nothing: the two labels and their two accelerators are one line in IntelliJ, and a
@@ -1193,6 +1206,18 @@ documentationpopup .__doc-problem-actions__ {
     flex-direction: row;
     align-items: center;
     gap-all: 6px;
+    /* THE POPUP'S OWN PAPER, so the fix row reads as continuous with the content below rather than as the
+     * bottom of the header. --doc-bg rather than a literal: it is the same token the box itself paints. */
+    background-color: var(--doc-bg, #191A1C);
+    /* OUT THROUGH THE BAND'S PADDING, which is the message's. Without the negative pair this row's ground
+     * would stop 9px short on each side and sit as an inset strip inside the header. */
+    margin-top: 7px;
+    margin-left: -9px;
+    margin-right: -9px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-left: 9px;
+    padding-right: 9px;
 }
 
 /* THE LINK COLOUR, because these behave like links -- one click, no state, and the accelerator beside
@@ -1225,6 +1250,21 @@ documentationpopup .__doc-problem-shortcut__ {
 /* The overflow menu. The preferred fix keeps the lightbulb, which is the one row IntelliJ marks. */
 menu.__code-actions__ .__preferred-action__ {
     color: var(--link, #548AF7);
+}
+
+/* SHOWING A PROBLEM AND NOTHING ELSE -- the error stripe's popup.
+ *
+ * The three symbol bands are hidden by the widget, which is not sufficient on its own: the popup's own
+ * bottom padding and the band's separator both remain, and together they draw an empty strip under the
+ * actions row that reads as a section which failed to load. There is nothing below the actions, so the
+ * band runs to the bottom edge and the separator has nothing left to separate. */
+documentationpopup.__problem-only__ {
+    padding-bottom: 0px;
+}
+
+documentationpopup.__problem-only__ .__doc-problem__ {
+    margin-bottom: 0px;
+    border-bottom-color: #00000000;
 }
 
 /* The owner band: the DECLARING type, drawn with that type's own kind icon. Reuses the completion popup's
