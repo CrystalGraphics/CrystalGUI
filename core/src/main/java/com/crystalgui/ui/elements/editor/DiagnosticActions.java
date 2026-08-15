@@ -40,7 +40,11 @@ final class DiagnosticActions {
     static List<CodeAction> forProblems(List<Diagnostic> problems) {
         List<CodeAction> actions = new ArrayList<>();
         if (problems == null || problems.isEmpty()) return actions;
-        actions.add(CodeAction.command("Copy problem message", CodeActionKind.SOURCE, COPY_MESSAGE));
+        // The action's id and the command's id are the same string here, and that is a coincidence of
+        // this one action rather than a rule: an action names a row, a command names what running it
+        // does, and the shape-derived contributors happen to be one row per command.
+        actions.add(CodeAction.command(COPY_MESSAGE, "Copy problem message",
+                CodeActionKind.SOURCE, COPY_MESSAGE));
         return actions;
     }
 

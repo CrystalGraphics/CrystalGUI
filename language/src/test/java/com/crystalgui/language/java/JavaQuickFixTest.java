@@ -1,89 +1,34 @@
 package com.crystalgui.language.java;
 
-import com.crystalgui.language.engine.EngineBand;
-import com.crystalgui.language.engine.EngineSource;
-import com.crystalgui.language.engine.JavaEngine;
-import com.crystalgui.language.engine.bridge.SourceAnalyzer;
-import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionKind;
 
-import org.junit.After;
-import org.junit.Assume;
-import org.junit.Before;
+import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
 
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The error → fix table, asserted on the <b>text it produces</b> rather than on the action's title.
+ * The error → fix table, asserted on the <b>text it produces</b> and on what the compiler says afterwards.
  *
- * <p>A title is prose; the edit is the thing that touches the file. These apply the {@link ChangeSet} to
- * the fixture and compare the result, because that is the only assertion that catches the failure mode
- * that matters — a fix whose range is one character out leaves {@code import ;} behind and still passes
- * anything checking that an action was offered.</p>
+ * <p>Three questions per correction, in the order {@link FixFixture} puts them: is the diagnostic reported
+ * at all, does the edit produce exactly the intended text, and is the problem gone once it is applied
+ * without anything new breaking. The first is invisible from a fix's own code and the third is the only
+ * reader of the output with no stake in it.</p>
+ *
+ * <p>{@code IProblem} constants are named here rather than written as numbers. They are inlined by the
+ * compiler, so this file carries the literal and never reaches for JDT at runtime — see the
+ * {@code testCompileOnly} note in the build script.</p>
  */
-public class JavaQuickFixTest {
+public class JavaQuickFixTest extends FixFixture {
 
-    /** A stand-in classpath index — the real one is built from jars and is not this test's subject. */
-    private static final java.util.function.Function<String, List<String>> CANDIDATES = name ->
-            "List".equals(name) ? List.of("java.util.List", "java.awt.List") : List.of();
-
-    private JavaEngine engine;
-    private SourceAnalyzer analyzer;
-
-    // THROUGH JavaEngine, never by constructing EcjSourceAnalyzer here: JDT lives behind the band loader,
-    // so a direct `new` compiles and then dies on NoClassDefFoundError for a class the file imports.
-    @Before
-    public void openEngine() throws Exception {
-        EngineBand band = EngineBand.detect();
-        EngineSource source = EngineSource.ofPathList(
-                System.getProperty("cgui.test.engineBand" + band.minimumFeatureVersion()));
-        Assume.assumeTrue("no jars supplied for band " + band + "; skipping",
-                !source.jarsFor(band).isEmpty());
-        engine = JavaEngine.open(band, source);
-        analyzer = engine.analyzer();
-    }
-
-    @After
-    public void closeEngine() throws java.io.IOException {
-        if (engine != null) engine.close();
-    }
-
-    private List<CodeAction> actionsIn(String source, String needle) {
-        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, List.of(), 8, 7L);
-        int at = source.indexOf(needle);
-        if (at < 0) throw new IllegalArgumentException("no '" + needle + "' in the fixture");
-        try {
-            return analysis.codeActionsIn(at, at + needle.length(), CANDIDATES);
-        } finally {
-            analysis.close();
-        }
-    }
-
-    private static CodeAction titled(List<CodeAction> actions, String title) {
-        for (CodeAction action : actions) {
-            if (action.title().equals(title)) return action;
-        }
-        return null;
-    }
-
-    /** What {@code edit} does to {@code source} — the only assertion worth making about a fix. */
-    private static String applied(String source, CodeAction action) {
-        assertNotNull("no edit on <" + action.title() + ">", action.edit());
-        StringBuilder out = new StringBuilder(source);
-        List<com.crystalgui.text.Change> changes = action.edit().changes();
-        for (int i = changes.size() - 1; i >= 0; i--) {          // back to front, so offsets stay valid
-            com.crystalgui.text.Change change = changes.get(i);
-            out.replace(change.from(), change.to(), change.insert());
-        }
-        return out.toString();
-    }
+    // ── Unused imports ──────────────────────────────────────────────────────────────────────────
 
     @Test
     public void anUnusedImportIsRemovedWholeLine() {
@@ -93,19 +38,39 @@ public class JavaQuickFixTest {
                 + "public class Script {\n"
                 + "    Map<String, String> go() { return null; }\n"
                 + "}\n";
-        List<CodeAction> actions = actionsIn(source, "java.util.List");
-        CodeAction fix = titled(actions, "Remove unused import");
-        assertNotNull("no fix offered: " + actions, fix);
+        assertReported(source, IProblem.UnusedImport);
+
+        CodeAction fix = offered(source, "java.util.List", JavaQuickFixes.REMOVE_UNUSED_IMPORT);
+        assertNotNull("no fix offered", fix);
         assertTrue("the one fix for a problem should be the preferred one", fix.preferred());
         assertEquals(CodeActionKind.QUICK_FIX, fix.kind());
 
         // THE WHOLE LINE, terminator included. Deleting only the node leaves an empty line behind, and a
         // file tidied that way slowly fills with them.
-        assertEquals(""
+        assertFix(source, "java.util.List", JavaQuickFixes.REMOVE_UNUSED_IMPORT, ""
                 + "import java.util.Map;\n"
                 + "public class Script {\n"
                 + "    Map<String, String> go() { return null; }\n"
-                + "}\n", applied(source, fix));
+                + "}\n");
+        assertResolves(source, "java.util.List", JavaQuickFixes.REMOVE_UNUSED_IMPORT,
+                IProblem.UnusedImport);
+    }
+
+    /**
+     * <b>The only import of a package-less file leaves no blank line behind.</b>
+     *
+     * <p>The shape a script actually has, and the one JDT's rewriter gets wrong: it removes a list's
+     * elements together with the separators <em>between</em> them, so emptying a list that nothing
+     * precedes strands the final terminator. That is why the import region is not described to
+     * {@code Rewrites} — see its class note — and this is the case that says so.</p>
+     */
+    @Test
+    public void theOnlyImportOfAPackagelessFileLeavesNoBlankLine() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script { }\n";
+        assertFix(source, "java.util.List", JavaQuickFixes.REMOVE_UNUSED_IMPORT,
+                "public class Script { }\n");
     }
 
     /**
@@ -121,15 +86,14 @@ public class JavaQuickFixTest {
                 + "import java.util.Map;\n"
                 + "import java.util.Set;\n"
                 + "public class Script { }\n";
-        List<CodeAction> actions = actionsIn(source, "java.util.List");
-        CodeAction batch = titled(actions, "Remove unused imports");
-        assertNotNull("no batch offered: " + actions, batch);
-        assertTrue("the batch must not be the default", !batch.preferred());
-        assertEquals("import java.util.Map;\nimport java.util.Set;\npublic class Script { }\n".length()
-                        - "import java.util.Map;\nimport java.util.Set;\n".length(),
-                applied(source, batch).length());
+        CodeAction batch = offered(source, "java.util.List", JavaQuickFixes.REMOVE_UNUSED_IMPORTS);
+        assertNotNull("no batch offered", batch);
+        assertFalse("the batch must not be the default", batch.preferred());
+        assertEquals(CodeActionKind.SOURCE, batch.kind());
         assertEquals("public class Script { }\n", applied(source, batch));
     }
+
+    // ── Unused locals and fields ────────────────────────────────────────────────────────────────
 
     @Test
     public void anUnusedLocalIsRemovedAndNamedInTheTitle() {
@@ -139,25 +103,46 @@ public class JavaQuickFixTest {
                 + "        String s = \"fah\";\n"
                 + "    }\n"
                 + "}\n";
-        List<CodeAction> actions = actionsIn(source, "String s");
-        CodeAction fix = titled(actions, "Remove variable 's'");
-        assertNotNull("no fix offered: " + actions, fix);
-        assertEquals(""
+        assertReported(source, IProblem.LocalVariableIsNeverUsed);
+        assertEquals("Remove variable 's'",
+                offered(source, "String s", JavaQuickFixes.REMOVE_UNUSED_LOCAL).title());
+        assertFix(source, "String s", JavaQuickFixes.REMOVE_UNUSED_LOCAL, ""
                 + "public class Script {\n"
                 + "    void go() {\n"
                 + "    }\n"
-                + "}\n", applied(source, fix));
+                + "}\n");
+        assertResolves(source, "String s", JavaQuickFixes.REMOVE_UNUSED_LOCAL,
+                IProblem.LocalVariableIsNeverUsed);
+    }
+
+    @Test
+    public void anUnusedPrivateFieldIsRemoved() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private int count;\n"
+                + "    void go() { }\n"
+                + "}\n";
+        assertReported(source, IProblem.UnusedPrivateField);
+        assertEquals("Remove field 'count'",
+                offered(source, "private int count", JavaQuickFixes.REMOVE_UNUSED_FIELD).title());
+        assertFix(source, "private int count", JavaQuickFixes.REMOVE_UNUSED_FIELD, ""
+                + "public class Script {\n"
+                + "    void go() { }\n"
+                + "}\n");
+        assertResolves(source, "private int count", JavaQuickFixes.REMOVE_UNUSED_FIELD,
+                IProblem.UnusedPrivateField);
     }
 
     /**
-     * <b>A declaration with more than one name is refused.</b>
+     * <b>A declaration with more than one name loses only the unused one.</b>
      *
-     * <p>{@code int a, b;} with only {@code b} unused would lose {@code a} as well. A quick fix that
-     * silently deletes working code is worse than no quick fix, so this offers nothing rather than
-     * guessing at a rewrite.</p>
+     * <p>This was refused for as long as a fix was a computed range: deleting the statement would take
+     * {@code a} with it, and a fix that silently removes working code is worse than no fix. The reasoning
+     * never changed — what changed is that removing one element of a list is now something the edit can
+     * <em>say</em>, so the comma goes with {@code b} and nothing in the correction knows where it was.</p>
      */
     @Test
-    public void aMultiNameDeclarationOffersNoRemoval() {
+    public void aMultiNameDeclarationLosesOnlyTheUnusedName() {
         String source = ""
                 + "public class Script {\n"
                 + "    int go() {\n"
@@ -165,24 +150,29 @@ public class JavaQuickFixTest {
                 + "        return a;\n"
                 + "    }\n"
                 + "}\n";
-        assertNull("deleting the statement would take 'a' with it",
-                titled(actionsIn(source, "b = 2"), "Remove variable 'b'"));
+        assertFix(source, "b = 2", JavaQuickFixes.REMOVE_UNUSED_LOCAL, ""
+                + "public class Script {\n"
+                + "    int go() {\n"
+                + "        int a = 1;\n"
+                + "        return a;\n"
+                + "    }\n"
+                + "}\n");
+        assertResolves(source, "b = 2", JavaQuickFixes.REMOVE_UNUSED_LOCAL,
+                IProblem.LocalVariableIsNeverUsed);
     }
 
-    /** An id nothing knows about offers nothing — the designed answer, not a gap. */
-    @Test
-    public void anUnknownProblemOffersNothing() {
-        String source = "public class Script { void go() { undefined(); } }\n";
-        assertTrue(actionsIn(source, "undefined").isEmpty());
-    }
+    // ── Unresolved types ────────────────────────────────────────────────────────────────────────
 
     /**
      * <b>An unresolved type offers one action per candidate, and none of them is preferred.</b>
      *
      * <p>The first problem whose answer is several actions rather than one, which is the case the merge
-     * and the "More actions…" list were built for and had never been exercised. None is preferred on
-     * purpose: with {@code List} on the classpath twice, defaulting to whichever the index returned
-     * first is a coin toss that edits the file. IntelliJ makes you pick too.</p>
+     * and the "More actions…" list were built for. None is preferred on purpose: with {@code List} on the
+     * classpath twice, defaulting to whichever the index returned first is a coin toss that edits the
+     * file. IntelliJ makes you pick too.</p>
+     *
+     * <p>Keyed on the title rather than the id, and this is the one correction where that is right — the
+     * candidates are one correction offering alternatives, so they share an id. @see CodeAction#id()</p>
      */
     @Test
     public void anUnresolvedTypeOffersOneImportPerCandidate() {
@@ -191,13 +181,15 @@ public class JavaQuickFixTest {
                 + "public class Script {\n"
                 + "    List<String> names;\n"
                 + "}\n";
-        List<CodeAction> actions = actionsIn(source, "List<String>");
+        assertReported(source, IProblem.UndefinedType);
 
-        CodeAction utilImport = titled(actions, "Import 'java.util.List'");
-        CodeAction awtImport = titled(actions, "Import 'java.awt.List'");
-        assertNotNull("no import offered: " + actions, utilImport);
-        assertNotNull("only one candidate was offered: " + actions, awtImport);
-        assertTrue("with two candidates neither may be the default", !utilImport.preferred());
+        CodeAction utilImport = offeredTitled(source, "List<String>", "Import 'java.util.List'");
+        CodeAction awtImport = offeredTitled(source, "List<String>", "Import 'java.awt.List'");
+        assertNotNull("no import offered", utilImport);
+        assertNotNull("only one candidate was offered", awtImport);
+        assertFalse("with two candidates neither may be the default", utilImport.preferred());
+        assertEquals("both candidates are the same correction",
+                utilImport.id(), awtImport.id());
 
         // AFTER THE PACKAGE, never before it -- the one placement that turns a fix into a new error.
         assertEquals(""
@@ -206,6 +198,7 @@ public class JavaQuickFixTest {
                 + "public class Script {\n"
                 + "    List<String> names;\n"
                 + "}\n", applied(source, utilImport));
+        assertResolves(source, "List<String>", JavaQuickFixes.ADD_IMPORT, IProblem.UndefinedType);
     }
 
     /** A candidate already imported is not offered again. */
@@ -218,6 +211,16 @@ public class JavaQuickFixTest {
                 + "    List<String> names;\n"
                 + "}\n";
         assertNull("it is already imported",
-                titled(actionsIn(source, "List<String>"), "Import 'java.util.List'"));
+                offeredTitled(source, "List<String>", "Import 'java.util.List'"));
+    }
+
+    // ── The designed empty answer ───────────────────────────────────────────────────────────────
+
+    /** An id nothing knows about offers nothing — the designed answer, not a gap. */
+    @Test
+    public void anUnknownProblemOffersNothing() {
+        String source = "public class Script { void go() { undefined(); } }\n";
+        List<CodeAction> actions = actionsIn(source, "undefined");
+        assertTrue("an unhandled problem must contribute nothing: " + actions, actions.isEmpty());
     }
 }
