@@ -73,6 +73,20 @@ final class EcjProblemPolicy {
         // delete the line would be offering to discard the evidence.
         options.put("org.eclipse.jdt.core.compiler.problem.unusedObjectAllocation", "warning");
 
+        // THREE MORE KINDS OF DEAD WEIGHT, each with a list-element correction behind it. All three are
+        // reported by IntelliJ's default inspection profile, which is the bar this table uses for
+        // "opinion nobody will resent". ECJ's own sub-options stay at their defaults, and two of them
+        // matter: an exception named in the Javadoc is not "unused", and Exception/Throwable are exempt
+        // -- a `throws Exception` on a script's main method is a convention, not a mistake.
+        options.put("org.eclipse.jdt.core.compiler.problem.unusedDeclaredThrownException", "warning");
+        options.put("org.eclipse.jdt.core.compiler.problem.redundantSuperinterface", "warning");
+        options.put("org.eclipse.jdt.core.compiler.problem.unusedTypeParameter", "warning");
+
+        // NOT unusedExceptionParameter. It fires on every `catch (Exception e)` that ignores `e`, which
+        // in a script is most of them, and IntelliJ's own unused-declaration inspection excludes catch
+        // parameters by default for the same reason. The rename-to-`ignored` correction the catalogue
+        // lists therefore has no diagnostic to hang off, and is not written.
+
         return options;
     }
 
@@ -105,6 +119,9 @@ final class EcjProblemPolicy {
                 IProblem.UnusedPrivateType,
                 IProblem.UnusedLabel,
                 IProblem.UnusedTypeParameter,
+                IProblem.UnusedMethodDeclaredThrownException,
+                IProblem.UnusedConstructorDeclaredThrownException,
+                IProblem.RedundantSuperinterface,
                 // Unreachable rather than unused, and the same statement about the text: nothing runs
                 // this. VS Code fades unreachable code for exactly this reason.
                 IProblem.DeadCode,

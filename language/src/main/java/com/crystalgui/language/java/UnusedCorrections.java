@@ -16,7 +16,10 @@ import org.eclipse.jdt.core.dom.EnumDeclaration;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
+import org.eclipse.jdt.core.dom.StructuralPropertyDescriptor;
+import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
+import org.eclipse.jdt.core.dom.TypeParameter;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
@@ -43,6 +46,9 @@ final class UnusedCorrections {
     static final String REMOVE_CONSTRUCTOR = "java.unused.removeConstructor";
     static final String REMOVE_TYPE = "java.unused.removeType";
     static final String REMOVE_SEMICOLON = "java.unused.removeSemicolon";
+    static final String REMOVE_THROWS = "java.unused.removeThrows";
+    static final String REMOVE_SUPERINTERFACE = "java.unused.removeSuperinterface";
+    static final String REMOVE_TYPE_PARAMETER = "java.unused.removeTypeParameter";
 
     private UnusedCorrections() {
     }
@@ -60,7 +66,17 @@ final class UnusedCorrections {
                 new RemoveUnusedMember(REMOVE_METHOD, IProblem.UnusedPrivateMethod),
                 new RemoveUnusedMember(REMOVE_CONSTRUCTOR, IProblem.UnusedPrivateConstructor),
                 new RemoveUnusedMember(REMOVE_TYPE, IProblem.UnusedPrivateType),
-                new RemoveSuperfluousSemicolon());
+                new RemoveSuperfluousSemicolon(),
+                new RemoveListElement(REMOVE_THROWS,
+                        new int[] {IProblem.UnusedMethodDeclaredThrownException,
+                                   IProblem.UnusedConstructorDeclaredThrownException},
+                        Type.class, "Remove '%s' from throws"),
+                new RemoveListElement(REMOVE_SUPERINTERFACE,
+                        new int[] {IProblem.RedundantSuperinterface},
+                        Type.class, "Remove redundant interface '%s'"),
+                new RemoveListElement(REMOVE_TYPE_PARAMETER,
+                        new int[] {IProblem.UnusedTypeParameter},
+                        TypeParameter.class, "Remove type parameter '%s'"));
     }
 
     // ── Imports ─────────────────────────────────────────────────────────────────────────────────
@@ -268,6 +284,65 @@ final class UnusedCorrections {
                 return ((AbstractTypeDeclaration) declaration).getName().getIdentifier();
             }
             return null;
+        }
+    }
+
+    // ── One element of a list ───────────────────────────────────────────────────────────────────
+
+    /**
+     * "Remove 'IOException' from throws" / "Remove redundant interface 'Runnable'" /
+     * "Remove type parameter 'U'" — the same operation three times, and the reason it is one class.
+     *
+     * <p>Each of these is an element of a comma-separated list on a declaration — {@code throws A, B},
+     * {@code implements A, B}, {@code <T, U>} — and removing one means absorbing a comma, or removing the
+     * keyword when the last one goes. That is what {@code ListRewrite} exists for and what a hand-computed
+     * range cannot express, which is why the catalogue listed these behind a "separator helper": the
+     * helper turned out to be the substrate, and the correction reduces to <em>find the element, ask which
+     * list it is in, remove it from that list</em>. The list is read off the node's own
+     * {@code getLocationInParent()}, so this does not even need to know whether it is looking at a method's
+     * throws clause or an enum's implements clause.</p>
+     */
+    private static final class RemoveListElement implements Correction {
+
+        private final String id;
+        private final int[] problems;
+        private final Class<? extends ASTNode> elementType;
+        private final String titleFormat;
+
+        RemoveListElement(String id, int[] problems, Class<? extends ASTNode> elementType,
+                          String titleFormat) {
+            this.id = id;
+            this.problems = problems;
+            this.elementType = elementType;
+            this.titleFormat = titleFormat;
+        }
+
+        @Override public String id() {
+            return id;
+        }
+
+        @Override public int[] problems() {
+            return problems;
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            ASTNode element = context.enclosing(problem, elementType);
+            if (element == null) return;
+            StructuralPropertyDescriptor location = element.getLocationInParent();
+            // Only an element OF A LIST can be removed this way. A `Type` node is also what a field's
+            // declared type is, and that one is a single child -- offering to "remove" it would delete
+            // the type from a declaration that needs one.
+            if (!(location instanceof ChildListPropertyDescriptor)) return;
+
+            ASTRewrite rewrite = context.rewrite();
+            rewrite.getListRewrite(element.getParent(), (ChildListPropertyDescriptor) location)
+                    .remove(element, null);
+            ChangeSet edit = context.changesFrom(rewrite);
+            if (edit == null) return;
+
+            String shown = context.source().substring(element.getStartPosition(),
+                    element.getStartPosition() + element.getLength()).trim();
+            out.add(context.preferredFix(id, String.format(titleFormat, shown), edit));
         }
     }
 

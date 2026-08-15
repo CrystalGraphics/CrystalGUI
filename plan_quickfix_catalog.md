@@ -1082,7 +1082,28 @@ reports `new FileWriter(f);` because the result was discarded, and the fix a use
 deletion, and offering it as the *preferred* action, would turn a warning that catches a real mistake
 into a one-keystroke way to discard the evidence. The diagnostic is the whole value here.
 
-### 18.7 The three decisions that were not mine
+### 18.7 The three decisions that were not mine (answered above)
+
+---
+
+## 19. Steps 6, 7 and 8 — the calls, taken before the code
+
+Measured first, as before. Four more problems need switching on and one shape question was settled by
+the probe: `UnhandledException`'s argument is the **qualified** exception name, so the import plan works
+from a string, and the unresolved-variable case reports as `UnresolvedVariable`, not `UndefinedName`.
+
+| Call | Answer | Why |
+|---|---|---|
+| Enable `unusedDeclaredThrownException`, `redundantSuperinterface`, `unusedTypeParameter` | **yes**, tagged unnecessary | all three are dead weight by the §18 line, and IntelliJ reports all three by default |
+| Enable `unusedExceptionParameter` | **no** | it fires on every `catch (Exception e)` that ignores `e`, which in a script is most of them; IntelliJ's own unused-declaration inspection excludes catch parameters by default. So the rename-to-`ignored` fix has no diagnostic and is not written |
+| "Did you mean" ranking | edit distance ≤ 2 (≤ 1 for names of three characters or fewer), case-insensitive, at most five, exact-case match first | `Lst` must offer `List` and must not offer forty scattered matches; the completion matcher's subsequence tier is the wrong tool and its own javadoc says which consumers must refuse it |
+| Where "did you mean" candidates come from | types: the host's `TypeIndex`, walked by distance (a new method beside `matching`); methods and fields: the receiver's binding, on the engine side; unresolved names: locals, parameters and fields in scope, from the tree | the split is the same one Import X drew — the tree knows what is in scope, only the host knows the classpath |
+| Organise imports | an **intention**, offered whenever the request overlaps the import region, kind `SOURCE`; IntelliJ's default layout (other, blank, `javax`, `java`, blank, static); refused if a comment sits inside the region | it is the first caret-based contributor, so the registry gains the smallest possible extension: a correction whose `problems()` is empty is asked once per request about the range. Refusing over a comment is what stops a tidy from deleting somebody's note |
+| `commandId + arguments` | `Map<String,String>` on the record, and **`copyMessage` is its first consumer** — a real defect: `DiagnosticActions.run` reads the problems at the *caret*, and the popup can be opened from a stripe mark or a hover nowhere near it | R4 said "when the first command-shaped action needs it"; one already did |
+| Try/catch template | `throw new RuntimeException(e);` | IntelliJ's default since 2020, and it does not swallow. A declaration whose value is used afterwards is split — `Type x;` then `try { x = …; }` — which is what IntelliJ does and what keeps definite assignment satisfied |
+| Add `throws` | on the enclosing method or constructor; **refused inside a lambda body and inside an initialiser** | a `throws` added to the method around a lambda is added to the wrong callable and compiles anyway, which is worse than nothing |
+| Create method from usage | in the receiver's type **only if that type is declared in this file**; `private` when it is the enclosing type, package-private otherwise; parameter types from the argument bindings, names from the arguments when they are simple names; return type from the use site (`void` for a statement, the declared type for an initialiser, else `Object`) | anything else is a second file, which is §14-G's deliberate no |
+| Corpus test | every `.java` under `core/` and `language/`, empty classpath, every action applied and re-parsed; gated on `-Pcorpus` | it is minutes, and it is the layer that finds what nobody wrote a fixture for |
 
 1. **Which of the three optional diagnostics to switch on.** `MissingOverrideAnnotation` is required for
    step 5 to have anything to fix. `SuperfluousSemicolon` and `UnusedObjectAllocation` are opinions —
