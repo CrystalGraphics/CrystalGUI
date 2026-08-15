@@ -9,6 +9,7 @@ import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Popover;
+import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.TextRange;
@@ -81,6 +82,11 @@ public final class DocumentationPopup extends Popover {
     public static final String DEFINITION_CLASS = "__doc-definition__";
     public static final String DEFINITION_BOX_CLASS = "__doc-definition-box__";
     public static final String BODY_CLASS = "__doc-body__";
+    public static final String PROBLEM_CLASS = "__doc-problem__";
+    public static final String PROBLEM_MESSAGE_CLASS = "__doc-problem-message__";
+    public static final String PROBLEM_ACTIONS_CLASS = "__doc-problem-actions__";
+    public static final String PROBLEM_ACTION_CLASS = "__doc-problem-action__";
+    public static final String PROBLEM_SHORTCUT_CLASS = "__doc-problem-shortcut__";
 
     /**
      * The icon vocabulary is {@code CompletionPopup}'s, on purpose.
@@ -117,6 +123,27 @@ public final class DocumentationPopup extends Popover {
     private final List<UIText> definitionLines = new ArrayList<>();
     private String definitionText = "";
     private final UIText body = new UIText("");
+
+    /**
+     * The problem section — message, then the one action worth showing without being asked.
+     *
+     * <p>One action inline and everything else behind "More actions…", which is IntelliJ's arrangement and
+     * is what keeps a hover the size of a hover. A popup that listed every contributor's answers would be
+     * taller than the code it is explaining before it said anything about the code.</p>
+     */
+    private final UIElement problemRow = new UIElement();
+    private final UIText problemMessage = new UIText("");
+    private final UIElement problemActions = new UIElement();
+    private final UIText primaryAction = new UIText("");
+    private final UIText primaryShortcut = new UIText("");
+    private final UIText moreActions = new UIText("");
+    private final UIText moreShortcut = new UIText("");
+
+    /** What the inline action would apply, and what the overflow menu would list. */
+    private final java.util.List<CodeAction> actions = new java.util.ArrayList<>();
+
+    /** Tracked rather than read back: display is a style write, not a queryable flag. */
+    private boolean problemShown;
 
     @Nullable
     private SymbolInfo shown;
@@ -180,6 +207,42 @@ public final class DocumentationPopup extends Popover {
         ownerText.forceSelfSizeWidth();
         body.addClass(BODY_CLASS);
 
+        problemMessage.addClass(PROBLEM_MESSAGE_CLASS);
+        problemMessage.forceSelfSizeWidth();
+        problemActions.addClass(PROBLEM_ACTIONS_CLASS);
+        primaryAction.addClass(PROBLEM_ACTION_CLASS);
+        primaryShortcut.addClass(PROBLEM_SHORTCUT_CLASS);
+        moreActions.addClass(PROBLEM_ACTION_CLASS);
+        moreActions.setText("More actions…");
+        moreShortcut.addClass(PROBLEM_SHORTCUT_CLASS);
+        moreShortcut.setText("Alt+Enter");
+        problemActions.addInternalChild(primaryAction);
+        problemActions.addInternalChild(primaryShortcut);
+        problemActions.addInternalChild(moreActions);
+        problemActions.addInternalChild(moreShortcut);
+        problemRow.addClass(PROBLEM_CLASS);
+        problemRow.addInternalChild(problemMessage);
+        problemRow.addInternalChild(problemActions);
+        // HIDDEN, not absent. The section is built once and shown per symbol, because an element created
+        // during fill() lands after that frame's layout pass -- the trap the command palette's key chips
+        // and the editor's gutter arrows each paid for.
+        problemRow.setDisplayed(false);
+        // ON THE MOUSE-DOWN rather than a press pair, because this popup is light-dismissable: a press
+        // outside an AUTO popover closes it, and the row would be gone before any mouse-up arrived.
+        primaryAction.onMouseDown.attachListener((element, event) -> {
+            CodeAction primary = primaryOf(actions);
+            if (primary != null) onActionChosen.emit(primary);
+            event.stopPropagation();
+        }, false, true);
+        moreActions.onMouseDown.attachListener((element, event) -> {
+            onMoreActions.emit();
+            event.stopPropagation();
+        }, false, true);
+
+        // ABOVE the owner, which is IntelliJ's order and is not arbitrary: the problem is why you looked,
+        // the declaration is what you were looking at. A popup that shows one instead of the other
+        // regresses hover for every symbol that happens to carry a warning.
+        addInternalChild(problemRow);
         addInternalChild(ownerRow);
         addInternalChild(definition);
         addInternalChild(body);
@@ -189,6 +252,81 @@ public final class DocumentationPopup extends Popover {
         // button. Listening on the children as well would be the bug that guard exists to prevent.
         onMouseEnter.attachListener((el, event) -> pointerOver = true, false, false);
         onMouseLeave.attachListener((el, event) -> pointerOver = false, false, false);
+    }
+
+    /** Chosen inline, or picked out of the overflow menu. */
+    public final com.crystalgui.core.signal.Signal.Value<CodeAction> onActionChosen =
+            new com.crystalgui.core.signal.Signal.Value<>();
+
+    /** "More actions…" — the host opens the full list, because only it knows where to put it. */
+    public final com.crystalgui.core.signal.Signal.Action onMoreActions =
+            new com.crystalgui.core.signal.Signal.Action();
+
+    /**
+     * Fills the problem section, or hides it.
+     *
+     * <p>Called <b>after</b> {@code show}, because actions arrive from an engine asynchronously and the
+     * popup must not wait for them — a hover that appeared only once the compiler answered would feel
+     * broken on the one file slow enough to notice. The section grows in when the answer lands.</p>
+     *
+     * <p>Hidden rather than emptied when there is nothing wrong, and hidden as a <em>row</em> rather than
+     * by clearing its text: a band with no content still occupies its share of the parent's {@code gap-all}
+     * and would leave a gap above the owner for every symbol in the file.</p>
+     */
+    public void setProblem(List<com.crystalgui.text.diagnostic.Diagnostic> problems,
+                           List<CodeAction> available) {
+        actions.clear();
+        if (available != null) actions.addAll(available);
+
+        boolean any = problems != null && !problems.isEmpty();
+        problemShown = any;
+        problemRow.setDisplayed(any);
+        if (!any) return;
+
+        StringBuilder message = new StringBuilder();
+        for (com.crystalgui.text.diagnostic.Diagnostic problem : problems) {
+            if (message.length() > 0) message.append(" · ");
+            message.append(problem.message());
+        }
+        problemMessage.invalidateMeasurement();
+        problemMessage.setText(message.toString());
+
+        CodeAction primary = primaryOf(actions);
+        boolean hasPrimary = primary != null;
+        primaryAction.setDisplayed(hasPrimary);
+        primaryShortcut.setDisplayed(hasPrimary);
+        if (hasPrimary) {
+            primaryAction.invalidateMeasurement();
+            primaryAction.setText(primary.title());
+            primaryShortcut.setText("Alt+Shift+Enter");
+        }
+        // MORE ACTIONS IS SHOWN WHENEVER THERE IS ANYTHING AT ALL, including when the only thing is the
+        // primary: IntelliJ shows it beside a single fix too, because the menu is also how you reach the
+        // things that are never inline. It hides only when the list is genuinely empty, which is a problem
+        // nobody can do anything about rather than one whose menu happens to be short.
+        boolean anyAction = !actions.isEmpty();
+        moreActions.setDisplayed(anyAction);
+        moreShortcut.setDisplayed(anyAction);
+        problemActions.setDisplayed(anyAction);
+    }
+
+    /** The one shown without being asked — first preferred quick fix, or nothing. */
+    @Nullable
+    private static CodeAction primaryOf(List<CodeAction> actions) {
+        for (CodeAction action : actions) {
+            if (action.preferred()) return action;
+        }
+        return null;
+    }
+
+    /** What the problem section is currently offering — the observable a test asserts on. */
+    public List<CodeAction> offeredActions() {
+        return List.copyOf(actions);
+    }
+
+    /** What the problem band says, or empty. */
+    public String problemText() {
+        return problemShown ? problemMessage.getText() : "";
     }
 
     /** What is currently on screen, or null. The only observable of what a resolve produced. */

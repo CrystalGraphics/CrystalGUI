@@ -93,6 +93,11 @@ public interface LanguageServices extends AutoCloseable {
         return CompletionProvider.NONE;
     }
 
+    /** What can be done about the problems in a range. @see CodeActionProvider */
+    default CodeActionProvider codeActions() {
+        return CodeActionProvider.NONE;
+    }
+
     /**
      * Told when the engine has a new set of problems for this document.
      *

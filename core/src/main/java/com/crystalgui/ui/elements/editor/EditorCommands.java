@@ -126,6 +126,9 @@ public final class EditorCommands {
     /** {@code View ▸ Quick Documentation} — IntelliJ's own name for it, and its binding. */
     public static final String QUICK_DOCUMENTATION = PREFIX + "quickDocumentation";
 
+    /** Alt+Enter. Named for what IntelliJ calls it, since that is what people search for. */
+    public static final String SHOW_CODE_ACTIONS = PREFIX + "showCodeActions";
+
     /**
      * {@code 40}, {@code 40:8}, or {@code :8} for a column on the line the caret is already on.
      *
@@ -194,6 +197,14 @@ public final class EditorCommands {
                 .binding("Mod+Q")
                 .menu(MenuId.MAIN_VIEW, "1_appearance", 30)
                 .run(on(TextEditor::showQuickDocumentation)));
+
+        // ALT+ENTER, which is IntelliJ's and is deliberately not Mod+. VS Code puts code actions on
+        // Ctrl+. and IntelliJ on Alt+Enter; the editor's own key handler returns false for any Alt chord
+        // precisely so bindings like this one can exist, while Ctrl+Enter it has to keep.
+        registry.register(Command.of(SHOW_CODE_ACTIONS, "Show Context Actions")
+                .binding("Alt+Enter")
+                .menu(MenuId.MAIN_VIEW, "1_appearance", 40)
+                .run(on(editor -> editor.showCodeActionsAt(editor.getCaret()))));
 
         // ── Multi-caret ─────────────────────────────────────────────────────────────────────────
         registry.register(Command.of(PREFIX + "addCaretAtNextOccurrence", "Add Caret At Next Occurrence")

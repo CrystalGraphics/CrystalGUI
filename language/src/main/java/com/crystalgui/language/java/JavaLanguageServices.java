@@ -13,6 +13,7 @@ import com.crystalgui.text.decoration.Stickiness;
 import com.crystalgui.text.decoration.TrackedRange;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.lang.CodeActionProvider;
 import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.lang.LanguageServices;
 import com.crystalgui.text.lang.Resolver;
@@ -101,6 +102,7 @@ public final class JavaLanguageServices implements LanguageServices {
         this.classpath = classpath == null ? Collections.emptyList() : new ArrayList<>(classpath);
         this.completion = new JavaCompletionProvider(buffer, () -> current,
                 typeIndexFor(this.classpath), this::analyseText);
+        this.actions = new JavaCodeActions(() -> current);
         this.bufferSubscription = buffer.onChanged.connect(change -> schedule());
         // ONE ANALYSIS AT CONSTRUCTION, undebounced. A document that is opened and not typed in would
         // otherwise have no colours and no problems until the first keystroke -- which is exactly the
@@ -137,6 +139,14 @@ public final class JavaLanguageServices implements LanguageServices {
      * describes a document from thirty seconds ago.</p>
      */
     private final JavaCompletionProvider completion;
+
+    /** Same supplier arrangement, same reason. @see JavaCodeActions */
+    private final JavaCodeActions actions;
+
+    @Override
+    public CodeActionProvider codeActions() {
+        return actions;
+    }
 
     @Override
     public Connection onDiagnostics(Consumer<Versioned<List<Diagnostic>>> listener) {

@@ -389,6 +389,11 @@ theme {
      * a second thing to keep in step, and would be visibly wrong the moment a scheme is switched. */
     --doc-bg: var(--surface-panel);
     --doc-border: var(--border-base);
+    /* The problem band reads as CHROME on top of the document the rest of the popup is showing, so it
+     * takes the surface every other bar takes -- the activity bar, the menu bar and the status bar are
+     * all --surface-base. Derived rather than repeated: a theme that moves its chrome moves this with it,
+     * which is the whole reason the component layer exists. */
+    --doc-problem-bg: var(--surface-base);
     --doc-owner-fg: var(--fg-hint);
     --doc-body-fg: var(--fg);
 
