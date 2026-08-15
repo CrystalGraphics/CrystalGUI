@@ -31,7 +31,11 @@ public class EditorFindReplaceTest extends UiTestBase {
 
     @Before
     public void setUp() {
-        editor = new TextEditor("one two one\nthree one\n");
+        build("one two one\nthree one\n");
+    }
+
+    private void build(String text) {
+        editor = new TextEditor(text);
         editor.layout(l -> l.width(400).height(200));
         UIElement root = new UIElement().layout(l -> l.width(400).height(200));
         root.addChild(editor);
@@ -59,6 +63,61 @@ public class EditorFindReplaceTest extends UiTestBase {
     public void typingSearchesTheDocument() {
         type("one");
         assertEquals(3, editor.matchCount());
+    }
+
+    /**
+     * <b>Selecting a word and pressing Ctrl+F searches for that word.</b>
+     *
+     * <p>Which is why the selection is made first rather than after, and both references do it. Without
+     * it the gesture is a lie: you highlight the thing you want, and the box opens empty.</p>
+     */
+    @Test
+    public void openingSeedsTheQueryFromTheSelection() {
+        editor.setSelection(4, 7);                 // "two"
+        bar.open();
+        settle();
+
+        assertEquals("two", bar.findField().getText());
+        assertEquals("and the seeded query is actually run", 1, editor.matchCount());
+    }
+
+    /**
+     * And it lands on the occurrence it was seeded FROM, not on the first one on screen.
+     *
+     * <p>The anchor for a typed query is the top of the viewport — that is what stops typing scrolling the
+     * document away. A <em>seeded</em> query already knows something better: the occurrence you
+     * highlighted is the one you asked about. Anchored on the viewport instead, an earlier occurrence
+     * higher up the screen wins and the highlight jumps off the word you picked.</p>
+     */
+    @Test
+    public void aSeededQueryStaysOnTheOccurrenceItWasSeededFrom() {
+        editor.setSelection(8, 11);                // the SECOND "one", with one above it
+        bar.open();
+        settle();
+
+        assertEquals("one", bar.findField().getText());
+        assertEquals(3, editor.matchCount());
+        assertEquals("it jumped to the first match instead of keeping the one selected",
+                8, editor.getSelectionStart());
+    }
+
+    /**
+     * A multi-line selection is a <b>scope</b>, not a query — so it seeds nothing.
+     *
+     * <p>Both references read one as "search inside this" rather than as a literal to look for. Nothing
+     * here implements that scope yet, and pasting the block in as a query would match nothing while
+     * burying whatever was in the box.</p>
+     */
+    @Test
+    public void aMultiLineSelectionDoesNotSeedTheQuery() {
+        type("three");
+        assertEquals(1, editor.matchCount());
+
+        editor.setSelection(8, 13);                // "one\nt" -- across the newline
+        bar.open();
+        settle();
+
+        assertEquals("the block replaced the query", "three", bar.findField().getText());
     }
 
     /** The toggles reach the scan, which is the whole point of passing a query rather than a string. */
@@ -119,6 +178,144 @@ public class EditorFindReplaceTest extends UiTestBase {
         window.getInputHandler().sendInputEvent(bar.findField().field(), event);
         settle();
         return event.isPropagationStopped();
+    }
+
+    /**
+     * <b>Nothing the bar does to itself may move the document.</b>
+     *
+     * <p>Opening it, typing in it and escaping out of it are all things you do <em>while looking at</em>
+     * a place in the file, and every one of them has been reported as jumping to line 1. Asserted across
+     * the whole gesture rather than at one step, because the report was never about a single action —
+     * it was that the view does not stay where it was put.</p>
+     */
+    @Test
+    public void theBarNeverMovesTheDocumentUnderYou() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 400; i++) document.append("line ").append(i).append(" sample\n");
+        build(document.toString());
+        // AT A REAL UI SCALE. Every other fixture here runs at 1, where a value measured in surface
+        // pixels and written back as a logical one is indistinguishable from a correct one.
+        window.setUiScale(2f);
+        for (int i = 0; i < 4; i++) settle();
+
+        editor.setScrollImmediate(0f, 2000f);
+        for (int i = 0; i < 4; i++) settle();
+        float parked = editor.getScrollTop();
+        assertTrue("fixture must be scrolled away from the top, was " + parked, parked > 100f);
+
+        // ONE LINE of tolerance, not zero. firstVisibleOffset anchors on the top row, which is normally
+        // scrolled partway off -- so revealing a match on it nudges by that fraction, once. A jump to the
+        // top of the document is three hundred lines, and this still catches it.
+        float slack = editor.lineHeight() + 1f;
+
+        bar.open();
+        settle();
+        assertEquals("opening moved it", parked, editor.getScrollTop(), slack);
+
+        type("sample");
+        assertEquals("typing moved it", parked, editor.getScrollTop(), slack);
+
+        assertTrue("the first escape should be consumed clearing the query", escape());
+        assertTrue("the second should be consumed closing the bar", escape());
+        for (int i = 0; i < 6; i++) settle();
+
+        assertEquals("escaping moved it", parked, editor.getScrollTop(), slack);
+    }
+
+    /**
+     * <b>Stepping to a match must leave it on screen.</b>
+     *
+     * <p>Asked through {@link TextEditor#offsetAt} rather than against the scroll numbers, because that
+     * is the same conversion a click uses — so "on screen" here means the row can actually be pointed at,
+     * not that some internal arithmetic agrees with itself.</p>
+     */
+    @Test
+    public void steppingToAMatchLeavesItOnScreen() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 400; i++) {
+            document.append("line ").append(i);
+            if (i == 40 || i == 200 || i == 380) document.append(" classify");
+            document.append('\n');
+        }
+        build(document.toString());
+
+        bar.open();
+        settle();
+        type("classify");
+        for (int i = 0; i < 6; i++) settle();
+        assertEquals(3, editor.matchCount());
+
+        for (int n = 0; n < 3; n++) {
+            editor.findNext();
+            for (int i = 0; i < 4; i++) settle();
+            int row = rowOf(editor.getCaret());
+            assertTrue("match " + (n + 1) + " landed on row " + row + ", which is off screen -- rows "
+                    + rowOf(editor.offsetAt(20f, 1f)) + ".."
+                    + rowOf(editor.offsetAt(20f, editor.getRuntimeCache().getHeight() - 1f))
+                    + " are (scrollTop=" + editor.getScrollTop()
+                    + ", padTop=" + editor.getTaffyLayout().padding().top + ")",
+                    rowIsOnScreen(row));
+        }
+    }
+
+    /**
+     * <b>An off-screen match is centred; an on-screen one does not move the view at all.</b>
+     *
+     * <p>IntelliJ's {@code ScrollType.CENTER}, and the argument {@code revealCaretCentred} already makes:
+     * stepping to a match is arriving somewhere new, so it wants the most context. Minimal scrolling
+     * frames the destination hard against an edge with every surrounding line on one side, which is the
+     * worst framing for the one line you were sent to look at.</p>
+     *
+     * <p>The second half is what stops it being annoying: a match already on screen must not move the
+     * view, or every press of Enter lurches the file for no reason.</p>
+     */
+    @Test
+    public void steppingCentresAMatchItHadToScrollTo() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 400; i++) {
+            document.append("line ").append(i);
+            if (i == 200 || i == 201) document.append(" classify");
+            document.append('\n');
+        }
+        build(document.toString());
+
+        // DRIVEN THROUGH THE EDITOR, not the bar: typing a query deliberately does NOT centre, so going
+        // through the box would exercise the other half of the split and hide this one.
+        editor.find("classify", false);
+        settle();
+        assertEquals(2, editor.matchCount());
+
+        editor.findNext();
+        for (int i = 0; i < 4; i++) settle();
+        assertEquals(200, rowOf(editor.getCaret()));
+
+        // CENTRED: the match should sit near the middle of the box, not against either edge.
+        float boxHeight = editor.getRuntimeCache().getHeight();
+        int centreRow = rowOf(editor.offsetAt(20f, boxHeight / 2f));
+        assertEquals("the match should have been centred, not brought flush to an edge",
+                200, centreRow, 1);
+
+        // AND THE SECOND MATCH IS ALREADY ON SCREEN, one line below -- so nothing may move.
+        float parked = editor.getScrollTop();
+        editor.findNext();
+        for (int i = 0; i < 4; i++) settle();
+        assertEquals("a match already on screen must not scroll the view",
+                parked, editor.getScrollTop(), 0.5f);
+        assertEquals(201, rowOf(editor.getCaret()));
+    }
+
+    private int rowOf(int offset) {
+        return editor.getText().substring(0, offset).split("\n", -1).length - 1;
+    }
+
+    /** Whether any point in the editor's box resolves to {@code row} — i.e. it can be clicked. */
+    private boolean rowIsOnScreen(int row) {
+        var cache = editor.getRuntimeCache();
+        float step = Math.max(1f, editor.lineHeight() / 3f);
+        for (float y = cache.getY(); y < cache.getY() + cache.getHeight(); y += step) {
+            if (rowOf(editor.offsetAt(cache.getX() + 20f, y)) == row) return true;
+        }
+        return false;
     }
 
     /**
