@@ -235,7 +235,21 @@ public abstract class FixFixture {
     }
 
     private static SourceAnalyzer.Analysis analyse(String className, String source) {
-        return analyzer.analyze(className, source, List.of(), RELEASE_LEVEL, VERSION);
+        return analyse(className, source, RELEASE_LEVEL);
+    }
+
+    /**
+     * An analysis at an explicit language level — for the corpus, which is this repository's own sources
+     * and needs the newest level the engine offers rather than the floor the fixtures are pinned to.
+     * The caller closes it.
+     */
+    protected static SourceAnalyzer.Analysis analyse(String className, String source, int level) {
+        return analyzer.analyze(className, source, List.of(), level, VERSION);
+    }
+
+    /** The newest language level this band's engine parses. */
+    protected static int newestLevel() {
+        return engine.releaseLevel();
     }
 
     private static int occurrences(List<Diagnostic> found, int problemId) {

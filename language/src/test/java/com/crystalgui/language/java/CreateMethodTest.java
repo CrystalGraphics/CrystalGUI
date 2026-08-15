@@ -134,6 +134,39 @@ public class CreateMethodTest extends FixFixture {
         assertResolves(source, "take(", CreateCorrections.CREATE_METHOD, IProblem.UndefinedMethod);
     }
 
+    /**
+     * <b>Into an interface, an abstract method.</b> A private method with a body is Java 9 and the floor
+     * is 8; abstract is also what IntelliJ generates there. Found by the corpus pass — see §20.
+     */
+    @Test
+    public void aCallFromInsideAnInterfaceCreatesAnAbstractMethod() {
+        String source = ""
+                + "public interface Script {\n"
+                + "    default int go() { return compute(2); }\n"
+                + "}\n";
+        assertFix(source, "compute(", CreateCorrections.CREATE_METHOD, ""
+                + "public interface Script {\n"
+                + "    default int go() { return compute(2); }\n"
+                + "\n"
+                + "    int compute(int i);\n"
+                + "}\n");
+        assertResolves(source, "compute(", CreateCorrections.CREATE_METHOD, IProblem.UndefinedMethod);
+    }
+
+    /**
+     * <b>Refused when an argument is a lambda.</b> A lambda takes its type from the parameter it is passed
+     * to, and that parameter is what does not exist yet; an {@code Object} parameter would leave the call
+     * as broken as before while looking fixed. Found by the corpus pass on {@code Dropdown}.
+     */
+    @Test
+    public void aCallWithALambdaArgumentIsRefused() {
+        String source = ""
+                + "public class Script {\n"
+                + "    void go() { onDone(() -> { }); }\n"
+                + "}\n";
+        assertNull(offered(source, "onDone(", CreateCorrections.CREATE_METHOD));
+    }
+
     /** <b>Refused for a type from a jar</b> — that would be a second file, which the carrier cannot express. */
     @Test
     public void aCallOnALibraryTypeIsRefused() {

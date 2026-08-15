@@ -94,6 +94,16 @@ final class JavaQuickFixes {
         return actions;
     }
 
+    /**
+     * When set, a correction that throws takes the request down with it instead of being swallowed.
+     *
+     * <p>A system property rather than a field, because it has to be visible on <b>both sides of the
+     * classloader boundary</b>: this class runs in the engine's loader and a test runs in the host's, so a
+     * static set from a test would land on a different copy of this class. Never set in production; set by
+     * the corpus test, whose whole purpose is to find the exception this would otherwise hide.</p>
+     */
+    static final String STRICT_PROPERTY = "cgui.quickfix.strict";
+
     private static void contribute(Correction correction, FixContext context, IProblem problem,
                                    List<CodeAction> actions) {
         try {
@@ -104,6 +114,9 @@ final class JavaQuickFixes {
             // no popup at all -- and into an exception on an input path. A correction that throws is a
             // bug rather than a condition: the expected failure modes (no node, nothing to offer, a
             // rewrite that cannot be expressed) all return quietly on their own.
+            if (Boolean.getBoolean(STRICT_PROPERTY)) {
+                throw new IllegalStateException(correction.id() + " threw", broken);
+            }
         }
     }
 

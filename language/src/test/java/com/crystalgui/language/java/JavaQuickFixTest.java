@@ -396,11 +396,18 @@ public class JavaQuickFixTest extends FixFixture {
 
     // ── The designed empty answer ───────────────────────────────────────────────────────────────
 
-    /** An id nothing knows about offers nothing — the designed answer, not a gap. */
+    /**
+     * An id nothing knows about offers nothing — the designed answer, not a gap.
+     *
+     * <p>{@code MissingSerialVersion}, because it is reported by default and no correction answers for
+     * it. This fixture used to be an undefined method call, until "create method" learned to answer that
+     * — which is the right way for this test to go stale.</p>
+     */
     @Test
     public void anUnknownProblemOffersNothing() {
-        String source = "public class Script { void go() { undefined(); } }\n";
-        List<CodeAction> actions = actionsIn(source, "undefined");
+        String source = "public class Script implements java.io.Serializable { }\n";
+        assertReported(source, IProblem.MissingSerialVersion);
+        List<CodeAction> actions = actionsIn(source, "Script");
         assertTrue("an unhandled problem must contribute nothing: " + actions, actions.isEmpty());
     }
 }

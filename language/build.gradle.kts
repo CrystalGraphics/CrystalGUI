@@ -565,6 +565,16 @@ tasks.register("checkEngineBands") {
 
 tasks.test {
     useJUnit()
+
+    // THE CORPUS PASS RUNS EVERY TIME. It was planned as opt-in on the assumption that running every quick
+    // fix over every .java file in the repository, applying each and re-parsing, would be minutes; it was
+    // measured at twelve seconds for 652 files and 942 applied actions, which is not enough to gate the
+    // one test that finds what nobody wrote a fixture for. `-PnoCorpus` skips it for a quick local loop.
+    // See CorpusTest.
+    systemProperty("cgui.test.corpus", if (project.hasProperty("noCorpus")) "false" else "true")
+    // The repository root, so the corpus can find the other modules' sources from inside this one.
+    systemProperty("cgui.test.repoRoot", rootProject.projectDir.absolutePath)
+
     // THE BAND JARS REACH THE TESTS AS PATHS, NOT AS A DEPENDENCY. Putting them on testRuntimeClasspath
     // would let a test resolve an engine class through the ordinary loader, which is exactly what the
     // isolation exists to prevent -- and the test would then pass against a setup that cannot occur in
