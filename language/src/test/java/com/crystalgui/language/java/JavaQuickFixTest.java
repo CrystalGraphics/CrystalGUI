@@ -216,6 +216,108 @@ public class JavaQuickFixTest extends FixFixture {
                 + "}\n");
     }
 
+    // ── One element of a list ───────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>The comma goes with the element, and the keyword goes with the last one.</b>
+     *
+     * <p>Two assertions in one fixture because they are the two things a hand-computed range gets wrong:
+     * removing the middle of {@code throws A, B, C} must absorb one comma, and removing the only element
+     * must take {@code throws} with it rather than leaving {@code void go() throws { }}.</p>
+     */
+    @Test
+    public void anUnusedThrowsClauseElementIsRemovedWithItsComma() {
+        String source = ""
+                + "import java.io.IOException;\n"
+                + "public class Script {\n"
+                + "    void go() throws IOException, InterruptedException {\n"
+                + "        Thread.sleep(1);\n"
+                + "    }\n"
+                + "}\n";
+        assertReported(source, IProblem.UnusedMethodDeclaredThrownException);
+        assertEquals("Remove 'IOException' from throws",
+                offered(source, "IOException, ", UnusedCorrections.REMOVE_THROWS).title());
+        assertFix(source, "IOException, ", UnusedCorrections.REMOVE_THROWS, ""
+                + "import java.io.IOException;\n"
+                + "public class Script {\n"
+                + "    void go() throws InterruptedException {\n"
+                + "        Thread.sleep(1);\n"
+                + "    }\n"
+                + "}\n");
+        assertResolves(source, "IOException, ", UnusedCorrections.REMOVE_THROWS,
+                IProblem.UnusedMethodDeclaredThrownException);
+    }
+
+    @Test
+    public void theOnlyThrowsElementTakesTheKeywordWithIt() {
+        String source = ""
+                + "import java.io.IOException;\n"
+                + "public class Script {\n"
+                + "    void go() throws IOException { }\n"
+                + "}\n";
+        assertFix(source, "IOException {", UnusedCorrections.REMOVE_THROWS, ""
+                + "import java.io.IOException;\n"
+                + "public class Script {\n"
+                + "    void go() { }\n"
+                + "}\n");
+    }
+
+    @Test
+    public void aRedundantSuperinterfaceIsRemoved() {
+        String source = ""
+                + "public class Script implements Runnable {\n"
+                + "    public void run() { }\n"
+                + "}\n"
+                + "class Sub extends Script implements Runnable, Cloneable { }\n";
+        assertReported(source, IProblem.RedundantSuperinterface);
+        assertFix(source, "Runnable, Cloneable", UnusedCorrections.REMOVE_SUPERINTERFACE, ""
+                + "public class Script implements Runnable {\n"
+                + "    public void run() { }\n"
+                + "}\n"
+                + "class Sub extends Script implements Cloneable { }\n");
+        assertResolves(source, "Runnable, Cloneable", UnusedCorrections.REMOVE_SUPERINTERFACE,
+                IProblem.RedundantSuperinterface);
+    }
+
+    @Test
+    public void anUnusedTypeParameterIsRemovedAndTheAngleBracketsGoWithTheLastOne() {
+        String source = ""
+                + "public class Script {\n"
+                + "    <T, U> void gen(T t) { }\n"
+                + "}\n";
+        assertReported(source, IProblem.UnusedTypeParameter);
+        assertFix(source, "U>", UnusedCorrections.REMOVE_TYPE_PARAMETER, ""
+                + "public class Script {\n"
+                + "    <T> void gen(T t) { }\n"
+                + "}\n");
+        String only = ""
+                + "public class Script {\n"
+                + "    <U> void gen() { }\n"
+                + "}\n";
+        assertFix(only, "U>", UnusedCorrections.REMOVE_TYPE_PARAMETER, ""
+                + "public class Script {\n"
+                + "    void gen() { }\n"
+                + "}\n");
+    }
+
+    /**
+     * <b>A field's type is a {@code Type} node too, and it is not in a list.</b>
+     *
+     * <p>The list-element correction reads which list a node is in off the node itself, and the guard is
+     * that a single-child {@code Type} is never one. This pins the guard from the outside: no correction
+     * in the table answers for a field's declared type at all, so nothing is offered rather than a
+     * "remove" that would strip the type off a declaration that needs one.</p>
+     */
+    @Test
+    public void aTypeThatIsNotAListElementIsNeverOfferedForRemoval() {
+        String source = "public class Script { private Strin field; }\n";
+        List<CodeAction> actions = actionsIn(source, "Strin");
+        for (CodeAction action : actions) {
+            assertFalse("no removal for a lone Type: " + action.title(),
+                    action.id().startsWith("java.unused.remove"));
+        }
+    }
+
     // ── Nothing at all ──────────────────────────────────────────────────────────────────────────
 
     /**

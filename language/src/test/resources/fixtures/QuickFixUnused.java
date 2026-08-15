@@ -53,6 +53,12 @@ public class QuickFixUnused {
         ;
     }
 
+    // FIX: "Remove 'java.io.IOException' from throws"
+    void neverThrowsIt() throws java.io.IOException { }
+
+    // FIX: "Remove type parameter 'U'"
+    <T, U> void unusedTypeParameter(T t) { }
+
     /**
      * The case that was refused until quick fixes moved onto JDT's rewriter: deleting the statement
      * would take `a` with it, so the correction offered nothing at all. Now only `b` goes, comma included.
@@ -62,4 +68,12 @@ public class QuickFixUnused {
         int a = 1, b = 2;
         return a;
     }
+}
+
+/** `Runnable` again, when the superclass already implements it. */
+// FIX: "Remove redundant interface 'Runnable'"
+class QuickFixRedundantInterface extends QuickFixUnusedBase implements Runnable { }
+
+class QuickFixUnusedBase implements Runnable {
+    public void run() { }
 }
