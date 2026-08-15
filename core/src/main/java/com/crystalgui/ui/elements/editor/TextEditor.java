@@ -2144,6 +2144,46 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String CODE_ACTIONS_CLASS = "__code-actions__";
     public static final String PREFERRED_ACTION_CLASS = "__preferred-action__";
 
+    /**
+     * The problem popup for one diagnostic, anchored at a point in the window — what a stripe mark shows.
+     *
+     * <p>Anchored where the pointer is rather than at the problem's text, because the text is by
+     * definition somewhere else: the whole value of the stripe is that it marks problems off screen.</p>
+     */
+    void showProblemPopupAt(Diagnostic problem, UIElement anchor) {
+        UIWindow window = getAttachedWindow();
+        if (window == null || problem == null || anchor == null) return;
+        if (docPopup == null) docPopup = new DocumentationPopup();
+        List<Diagnostic> problems = List.of(problem);
+        docPopup.showProblems(window, problems, anchor);
+
+        popupActions.disconnectAll();
+        TrackedRange tracked = trackedRangeFor(problem);
+        int offset = tracked != null && !tracked.isRemoved()
+                ? Math.min(tracked.from(), buffer.length())
+                : offsetOfPoint(problem.start());
+        popupActions.add(docPopup.onActionChosen.connect(action -> {
+            if (applyCodeAction(action)) closeQuickDocumentation();
+        }));
+        popupActions.add(docPopup.onMoreActions.connect(() -> {
+            closeQuickDocumentation();
+            showCodeActionsAt(offset);
+        }));
+        requestCodeActions(offset, available -> {
+            if (docPopup == null || !docPopup.isOpen()) return;
+            docPopup.setProblem(problems, available);
+            // RE-PLACED, because the actions row changes the box's width and the anchor is its RIGHT
+            // edge. Without this the message alone is positioned and the fix row then grows off to the
+            // left of where it was measured.
+            docPopup.reposition();
+        });
+    }
+
+    /** Moves the caret to {@code problem} and centres it — what clicking a stripe mark does. */
+    public boolean goToDiagnostic(@Nullable Diagnostic problem) {
+        return goToProblem(problem);
+    }
+
     /** Closes the documentation popup if it is open. */
     public void closeQuickDocumentation() {
         hover.forget();

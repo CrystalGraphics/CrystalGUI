@@ -111,8 +111,15 @@ public interface SourceAnalyzer {
          * <p>Defaulted to nothing so an adapter that offers no fixes says so by saying nothing, which is
          * the same three-tier absence the rest of this bridge uses. A band whose JDT is too old for a
          * particular correction simply does not return it.</p>
+         *
+         * <p>{@code importCandidates} maps a simple name onto the qualified names that could satisfy it.
+         * It is handed IN rather than looked up here because the split is real: the syntax tree knows
+         * <em>which</em> name is unresolved and <em>where</em> an import belongs, and only the host has an
+         * index of the classpath to say what that name could be. Passing a function rather than the index
+         * also keeps the index type off this bridge, which the band loader would otherwise have to share.</p>
          */
-        default List<CodeAction> codeActionsIn(int from, int to) {
+        default List<CodeAction> codeActionsIn(
+                int from, int to, java.util.function.Function<String, List<String>> importCandidates) {
             return List.of();
         }
 
