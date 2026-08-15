@@ -1,9 +1,9 @@
 package com.crystalgui.language.run;
 
 import com.crystalgui.fs.Resource;
+import com.crystalgui.text.TextBuffer;
 import org.junit.Test;
 
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -11,181 +11,167 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 
 /**
- * M9.5 §9.5.4 — the console's two rules, both of which fail silently when wrong.
+ * M9.5 §9.5.2 — the transcript as a document.
  *
- * <p>Headless on purpose: nothing here needs a window, a font or a GL context, and the rules being
- * pinned are about a data structure rather than about how it draws. A panel test could not tell a
- * collapse that never fired from one that fired and produced the same picture.</p>
+ * <p>Headless, and it can be: the console writes into a {@link TextBuffer}, which needs no window, no
+ * font and no GL. That is the same property that made the list version's model testable and it survives
+ * the change of shape — what is being pinned here is the thread rule, the bound, and the level map,
+ * none of which are about drawing.</p>
  */
 public class RunConsoleTest {
 
-    private static RunMessage out(String script, String origin, String text) {
-        return new RunMessage(script, origin, null, 0, RunLevel.OUT, text);
+    private static RunMessage out(String script, String text) {
+        return new RunMessage(script, null, null, 0, RunLevel.OUT, text);
+    }
+
+    private static RunConsole attached(TextBuffer buffer) {
+        return new RunConsole().attach(buffer);
     }
 
     /**
-     * <b>The same message repeating folds into one row with a count.</b>
+     * <b>Appending writes nothing; draining does.</b>
      *
-     * <p>Unity's rule and the reason Collapse exists: a null reference thrown on every frame update is
-     * one fact, however many times it is reported.</p>
+     * <p>Not an optimisation here but a correctness rule: output arrives on a script's own thread or the
+     * game's, and a {@code TextBuffer} may only be mutated on the thread that draws it. A console that
+     * wrote on append would be mutating a document from a script thread, which is the kind of fault that
+     * shows up as a corrupted rope rather than as an exception.</p>
      */
     @Test
-    public void aRepeatedMessageFoldsIntoOneCountedRow() {
-        RunConsole console = new RunConsole();
-        for (int tick = 1; tick <= 300; tick++) {
-            console.append(out("foo.js", "foo.js:12", "cannot read property of null"));
-        }
+    public void appendingIsQueuedAndDrainingWrites() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer);
 
-        List<RunConsole.Entry> entries = console.entries();
-        assertEquals(1, entries.size());
-        assertEquals(300, entries.get(0).count());
+        for (int i = 0; i < 100; i++) console.append(out("Main.java", "line " + i));
+        assertEquals("nothing should have been written yet", 0, buffer.length());
+
+        assertTrue(console.drain());
+        assertTrue(buffer.toString().startsWith("line 0\n"));
+        assertEquals(100, console.lineCount());
+    }
+
+    /** Draining with nothing pending is not a change, so a view can skip the work one would cause. */
+    @Test
+    public void anEmptyDrainReportsNoChange() {
+        RunConsole console = attached(new TextBuffer());
+        assertFalse(console.drain());
+        console.append(out("Main.java", "something"));
+        assertTrue(console.drain());
+        assertFalse(console.drain());
     }
 
     /**
-     * <b>Differing text NEVER folds, even from one call site — and this is the bug that shipped.</b>
+     * <b>Every distinct line is its own line.</b>
      *
-     * <p>The key was the origin alone, on the argument that a counter printing {@code tick 1},
-     * {@code tick 2} would otherwise never fold. The premise was right and the conclusion was not: those
-     * are not one message repeating, they are three messages, and a row showing only the newest does not
-     * compress the transcript, it deletes two thirds of it.</p>
-     *
-     * <p>It surfaced on the first real script. {@code RunTest.java} prints everything through a helper,
-     * so every line in the file shared that helper's origin, and thirteen distinct results collapsed into
-     * one row reading {@code ×13} — twelve of them simply gone. <b>A console that loses output is worse
-     * than a console that scrolls</b>, which is what the ring is for.</p>
+     * <p>The list version folded consecutive output by call site, which deleted text: a script printing
+     * through a helper gave every line the same origin, so thirteen distinct results became one row
+     * reading {@code ×13}. Folding is gone with the list — IntelliJ does not collapse, and a text area
+     * has nowhere to put a badge — and this pins that it stays gone.</p>
      */
     @Test
-    public void differentMessagesFromOneHelperNeverFold() {
-        RunConsole console = new RunConsole();
-        // ONE ORIGIN, as a shared print helper produces -- the exact shape that lost output.
+    public void distinctLinesFromOneHelperAreAllKept() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer);
         for (int i = 1; i <= 13; i++) {
-            console.append(out("RunTest.java", "RunTest.java:50", "result " + i));
+            console.append(new RunMessage("RunTest.java", "RunTest.java:50", null, 0,
+                    RunLevel.OUT, "result " + i));
         }
+        console.drain();
 
-        List<RunConsole.Entry> entries = console.entries();
-        assertEquals("thirteen distinct lines are thirteen rows", 13, entries.size());
-        assertEquals("result 1", entries.get(0).text());
-        assertEquals("result 13", entries.get(12).text());
+        assertEquals(13, console.lineCount());
+        assertTrue(buffer.toString().contains("result 1\n"));
+        assertTrue(buffer.toString().contains("result 13\n"));
     }
 
-    /**
-     * Different call sites are different rows, however alike the text.
-     *
-     * <p>One more separation than Unity offers, and worth keeping: the same string printed from two
-     * places is two facts, and merging them would hide that one of the two ever ran.</p>
-     */
+    /** Even an identical line repeated is repeated — a console shows what happened, in order. */
     @Test
-    public void twoCallSitesDoNotFold() {
-        RunConsole console = new RunConsole();
-        console.append(out("foo.js", "foo.js:12", "same"));
-        console.append(out("foo.js", "foo.js:40", "same"));
-        assertEquals(2, console.entries().size());
+    public void anIdenticalLineIsNotFolded() {
+        RunConsole console = attached(new TextBuffer());
+        for (int i = 0; i < 5; i++) console.append(out("Main.java", "same"));
+        console.drain();
+        assertEquals(5, console.lineCount());
     }
 
-    /**
-     * <b>An unattributed line never folds.</b>
-     *
-     * <p>Two lines with no origin share "nowhere", not a call site. Folding on that would merge messages
-     * that have nothing to do with each other — and would do it most eagerly exactly where the producer
-     * knew least, which is the worst possible place to be confident.</p>
-     */
+    /** A level is remembered per line — the map the tokenizer colours from. */
     @Test
-    public void messagesWithNoOriginNeverFold() {
-        RunConsole console = new RunConsole();
-        console.append(out("foo.js", null, "repeated"));
-        console.append(out("foo.js", null, "repeated"));
-        assertEquals(2, console.entries().size());
-    }
+    public void everyLineRemembersItsLevel() {
+        RunConsole console = attached(new TextBuffer());
+        console.append(new RunMessage("Main.java", null, null, 0, RunLevel.OUT, "fine"));
+        console.append(new RunMessage("Main.java", null, null, 0, RunLevel.ERROR, "broke"));
+        console.startRun("Main.java");
+        console.drain();
 
-    /**
-     * <b>Only CONSECUTIVE messages fold</b>, or the transcript silently reorders.
-     *
-     * <p>Two scripts interleaving is the ordinary case, not a corner: a tick handler and a one-shot run
-     * at the same time. If a line could reach back past another script's output to join its own, the
-     * console would be showing an order that never happened.</p>
-     */
-    @Test
-    public void foldingDoesNotReachBackPastAnotherScript() {
-        RunConsole console = new RunConsole();
-        // IDENTICAL TEXT AND ORIGIN on the outer pair, so they WOULD fold if folding could reach back.
-        console.append(out("a.js", "a.js:1", "same line"));
-        console.append(out("b.js", "b.js:1", "interleaved"));
-        console.append(out("a.js", "a.js:1", "same line"));
-
-        List<RunConsole.Entry> entries = console.entries();
-        assertEquals(3, entries.size());
-        assertEquals(1, entries.get(2).count());
-    }
-
-    /** Unity's Collapse is a toggle, and off means off. */
-    @Test
-    public void collapsingCanBeTurnedOff() {
-        RunConsole console = new RunConsole().setCollapsing(false);
-        for (int i = 0; i < 5; i++) console.append(out("foo.js", "foo.js:12", "line"));
-        assertEquals(5, console.entries().size());
+        assertEquals(RunLevel.OUT, console.lineAt(0).level());
+        assertEquals(RunLevel.ERROR, console.lineAt(1).level());
+        assertTrue("a run boundary is not output", console.lineAt(2).isDivider());
+        assertNull("past the end is null, not an exception", console.lineAt(99));
     }
 
     /**
      * <b>"Survives the script stopping" is a promise about lifetime, not about volume.</b>
      *
-     * <p>Without the ring a script printing without pause grows this until the game dies. With it, the
-     * oldest rows go — and the count of what went is kept, because a transcript that quietly begins in
-     * the middle reads as the console having missed something rather than as the bound being reached.</p>
+     * <p>Without the ring a script printing without pause grows the document until the game dies. With
+     * it the oldest lines go — and the count of what went is kept, because a transcript that quietly
+     * begins in the middle reads as the console having missed something.</p>
      */
     @Test
     public void theRingDropsTheOldestAndSaysHowMany() {
-        RunConsole console = new RunConsole().setBudgetKb(1);
-        for (int i = 0; i < 400; i++) {
-            console.append(out("foo.js", "foo.js:" + i, "a line of some length " + i));
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer).setBudgetKb(1);
+        for (int i = 0; i < 500; i++) {
+            console.append(out("Main.java", "a line of some length " + i));
+            console.drain();
         }
 
         assertTrue("the ring should have evicted something", console.dropped() > 0);
-        assertTrue("and it should still be bounded", console.size() < 400);
-        List<RunConsole.Entry> entries = console.entries();
-        assertEquals("the newest line is the one kept",
-                "a line of some length 399", entries.get(entries.size() - 1).text());
+        assertTrue("and the document should be bounded", buffer.length() <= 2 * 1024);
+        assertTrue("the newest line survives", buffer.toString().endsWith("a line of some length 499\n"));
     }
 
-    /**
-     * A budget smaller than one message must not empty the console on every append.
-     *
-     * <p>It would report a drop each time and show nothing, which reads as the console being broken
-     * rather than as the setting being absurd.</p>
-     */
+    /** The level map stays aligned to the document after a trim, or every colour lands on the wrong line. */
     @Test
-    public void anAbsurdBudgetStillKeepsTheNewestRow() {
-        RunConsole console = new RunConsole().setBudgetKb(1);
-        StringBuilder huge = new StringBuilder();
-        for (int i = 0; i < 5000; i++) huge.append('x');
-        console.append(out("foo.js", "foo.js:1", huge.toString()));
-        console.append(out("foo.js", "foo.js:2", huge.toString()));
+    public void theLevelMapStaysAlignedAfterTrimming() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer).setBudgetKb(1);
+        for (int i = 0; i < 500; i++) {
+            console.append(new RunMessage("Main.java", null, null, 0,
+                    i % 2 == 0 ? RunLevel.OUT : RunLevel.ERROR, "line " + i));
+            console.drain();
+        }
 
-        assertEquals(1, console.size());
-        assertEquals("foo.js:2", console.entries().get(0).origin());
+        assertEquals("one entry per row, exactly", buffer.lineCount() - 1, console.lineCount());
+        for (int row = 0; row < console.lineCount(); row++) {
+            String text = buffer.line(row);
+            RunConsole.Line line = console.lineAt(row);
+            assertNotNull("no level for row " + row, line);
+            assertEquals("row " + row + " is out of step with the document", text, line.text());
+        }
     }
 
-    /** Clearing is a fresh start, so the eviction notice goes with it. */
+    /** Clearing is queued, so it cannot land between two lines of a burst that preceded it. */
     @Test
-    public void clearingAlsoClearsTheDropCount() {
-        RunConsole console = new RunConsole().setBudgetKb(1);
-        for (int i = 0; i < 400; i++) console.append(out("foo.js", "foo.js:" + i, "text " + i));
+    public void clearingEmptiesEverything() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer).setBudgetKb(1);
+        for (int i = 0; i < 300; i++) console.append(out("Main.java", "a line of some length " + i));
+        console.drain();
         assertTrue(console.dropped() > 0);
 
         console.clear();
-        assertEquals(0, console.size());
-        assertEquals(0, console.dropped());
+        console.drain();
+        assertEquals(0, buffer.length());
+        assertEquals(0, console.lineCount());
+        assertEquals("the eviction notice goes with a fresh start", 0, console.dropped());
     }
 
     /**
-     * <b>Written from a script's thread, read from the UI's.</b>
+     * <b>Written from many threads, drained from one.</b>
      *
-     * <p>Unlike {@code Markers}, which lives on one thread, output arrives on whatever thread the script
-     * runs on — its own for a one-shot, the game's for a tick handler. A snapshot rather than a live view
-     * is what stops a panel iterating rows while one appears underneath it.</p>
+     * <p>The shape production is actually in: a one-shot on its own thread and a handler on the game's,
+     * both printing, while the frame loop drains.</p>
      */
     @Test
     public void appendingFromManyThreadsLosesNothing() throws Exception {
-        RunConsole console = new RunConsole();
+        RunConsole console = attached(new TextBuffer());
         int threads = 4;
         int each = 250;
         CountDownLatch start = new CountDownLatch(1);
@@ -196,11 +182,7 @@ public class RunConsoleTest {
             new Thread(() -> {
                 try {
                     start.await();
-                    for (int i = 0; i < each; i++) {
-                        // A DISTINCT ORIGIN PER LINE, so nothing folds and the count is exact -- this
-                        // test is about not losing writes, not about collapsing.
-                        console.append(out("s" + id, "s" + id + ":" + i, "line"));
-                    }
+                    for (int i = 0; i < each; i++) console.append(out("s" + id, "line " + i));
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                 } finally {
@@ -211,41 +193,44 @@ public class RunConsoleTest {
 
         start.countDown();
         assertTrue("threads did not finish", done.await(20, TimeUnit.SECONDS));
-        assertEquals(threads * each, console.size());
+        console.drain();
+        assertEquals(threads * each, console.lineCount());
     }
 
-    /** A reader iterating the snapshot cannot be surprised by a row arriving. */
-    @Test
-    public void entriesIsASnapshotAndNotAView() {
-        RunConsole console = new RunConsole();
-        console.append(out("foo.js", "foo.js:1", "first"));
-        List<RunConsole.Entry> snapshot = console.entries();
-        console.append(out("foo.js", "foo.js:2", "second"));
-        assertEquals(1, snapshot.size());
-        assertEquals(2, console.entries().size());
-    }
-
-    /** Every append is announced, because a panel has to know to redraw. */
+    /** Every enqueue is announced, because the view has to know to drain. */
     @Test
     public void everyChangeIsSignalled() {
-        RunConsole console = new RunConsole();
+        RunConsole console = attached(new TextBuffer());
         AtomicInteger changes = new AtomicInteger();
-        console.onDidChange.connect(c -> changes.incrementAndGet());
+        console.onDidChange.connect(changes::incrementAndGet);
 
-        console.append(out("foo.js", "foo.js:1", "one"));
-        console.append(out("foo.js", "foo.js:1", "two"));   // folds, and is still a change
+        console.append(out("Main.java", "one"));
+        console.startRun("Main.java");
         console.clear();
 
         assertEquals(3, changes.get());
     }
 
-    /** A navigable line knows where to send a double-click; an unattributed one says so. */
+    /** A console with nothing attached swallows output rather than throwing — the headless-host case. */
+    @Test
+    public void anUnattachedConsoleIsInert() {
+        RunConsole console = new RunConsole();
+        console.append(out("Main.java", "nowhere to go"));
+        assertFalse(console.drain());
+        assertEquals(0, console.lineCount());
+    }
+
+    /** A navigable line keeps what a click needs; an unattributed one says it has none. */
     @Test
     public void navigabilityIsCarriedPerLine() {
+        RunConsole console = attached(new TextBuffer());
         Resource file = Resource.of(Resource.SCHEME_PROJECT, "src/Main.java");
-        RunMessage located = RunMessage.at("Main.java", file, 42, RunLevel.ERROR, "boom");
-        assertTrue(located.isNavigable());
-        assertEquals("Main.java:42", located.origin());
-        assertFalse(RunMessage.of("Main.java", RunLevel.OUT, "plain").isNavigable());
+        console.append(RunMessage.at("Main.java", file, 42, RunLevel.ERROR, "boom"));
+        console.append(RunMessage.of("Main.java", RunLevel.OUT, "plain"));
+        console.drain();
+
+        assertTrue(console.lineAt(0).isNavigable());
+        assertEquals(42, console.lineAt(0).line());
+        assertFalse(console.lineAt(1).isNavigable());
     }
 }

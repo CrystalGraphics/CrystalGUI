@@ -7,14 +7,14 @@ carrying the output of running scripts, plus the indicator that says which files
 
 | § | Item | State |
 |---|---|---|
-| 9.5.1 | Capturing output — the thread-local marker | not started |
-| 9.5.2 | One console, filtered | `RunPanel` written and compiling; **its UI test is deferred — see below** |
-| 9.5.3 | The live-script rail and its states | not started |
-| 9.5.4 | Collapse by call site | not started |
-| 9.5.5 | The running indicator | not started — free in the tree, new on tabs |
+| 9.5.1 | Capturing output — the thread-local marker | **done** — `ScriptOutput` + `ScriptHost` bracket, 11 tests |
+| 9.5.2 | The console as a text area | **rewritten from a ListView** — see below; the list was the wrong shape |
+| 9.5.3 | States | **done** — `RunState`/`RunSessions`, reported from `Running.invoke`, 12 tests. **The rail itself is not built** |
+| 9.5.4 | The ring | **done** — collapsing removed with the list; see below |
+| 9.5.5 | The running indicator | **done in the tree** — `RunDecorations`, 6 tests. **Editor tabs still read no decorations** |
 
-Nothing exists today. `ScriptHost` has no output mechanism of any kind and `ScriptControl` is only the
-safepoint checkpoint, so this is a clean slate rather than a retrofit.
+Written before any of it existed; the states above are current. What remains is the rail, the per-script
+filter, the editable input line, clickable stack frames, and the editor-tab half of the indicator.
 
 ### All of it lives in `language/`, not in `core/`
 
@@ -116,19 +116,61 @@ The marker carries the script's identity, which is also what gives every message
 
 ---
 
-## 9.5.2 One console, filtered — not a tab per run
+## 9.5.2 The console is a read-only text area, not a list
 
-Scripts are concurrently live, and the question actually being asked is *"what just went wrong"*, which
-needs one place to look rather than a tab hunt. Every message carries its script, and the panel
-**filters** by script — which is the per-script view on demand, without paying for it always.
+**This was built as a `ListView` first, and that was the wrong shape.** The disproof is selection: an IDE
+console lets you drag from the middle of one line to the middle of another, ten rows down, and copy
+exactly that. A row-based list cannot express it — its selection unit is the row — and no amount of
+styling gets there. IntelliJ's console is an editor component, and so is VS Code's output panel.
 
-This is Unity's and the browser's choice; IntelliJ's tab-per-run only works because a run is a process
-and a process is the thing you were watching.
+Everything the list version bought is available and better in a text area, and several things it could
+never buy come free: character-level multi-line selection, copy of exactly what was dragged, soft wrap,
+find-in-console later.
 
-**Navigation:** a stack-trace frame resolves through `Workbench.openAndReveal`, which M11 §24.7 already
-built for exactly this shape of caller. Double-click on a frame opens the file at the line.
+### Repurpose `TextEditor`; do not build a text area
 
----
+Not a close call. `TextEditor` already has `setReadOnly`, `setGutterVisible`, `selections()`,
+`getSelectedText()`, `offsetAt(x, y)`, mouse drag-selection ported from VS Code, the clipboard actions,
+virtualised line rendering, scrolling, and a `SyntaxTokenizer` seam. Building a console text area means
+reimplementing all of that — which is the exact thing this repository's own rule refuses, except here the
+thing to port from is in the next package.
+
+The console is therefore a **configured** `TextEditor`: read-only, no gutter, no language services, no
+completion.
+
+### What `RunConsole` becomes
+
+It stops being a list of entries and becomes three things, all headless and all testable:
+
+1. **A thread-safe queue of pending appends.** This is not an optimisation, it is required: output
+   arrives on a script's own thread or the game's, and a `TextBuffer` may only be mutated on the UI
+   thread. The queue is drained once per frame, which is the deferred-refresh shape the list version
+   already needed for a different reason.
+2. **The ring**, now trimming whole lines off the front of the document rather than dropping rows.
+3. **A per-line level map**, which is what colours the transcript.
+
+### Colouring goes through the tokenizer seam, not a second path
+
+`SyntaxTokenizer.tokenize(document, from, to)` answers tokens in document offsets over the range the
+editor actually realised. A console tokenizer reads the level map and emits a token per line — so stderr,
+warnings and run boundaries are coloured by the **same** pipeline, the same `.__syntax__::highlight()`
+rules and the same editor colour scheme as code. Inventing a per-row colour path instead would give the
+console its own palette, drifting from the squiggles describing the same run.
+
+### Collapse is removed
+
+**Third time this rule has moved, and this is where it stops.** It began as fold-by-origin, which deleted
+output; became fold-by-text-and-origin, which was correct; and now goes entirely, because IntelliJ does
+not collapse and a text area has nowhere to put a `×N` badge without becoming a list again. The flood a
+bound is genuinely needed for is answered by the ring, which is where a bound belongs.
+
+### Deliberately phase two
+
+- **The input line.** The last line accepting `System.in` is real and wanted, and nothing routes stdin to
+  a script today — `ScriptHost` does not wire it at all. So the console ships read-only, and the editable
+  tail lands with the plumbing that would give it something to talk to.
+- **Clickable links.** A stack frame's `file:line` should be a link, as in both references. The offsets
+  are known when a line is appended; what is missing is the affordance and the hit test.
 
 ## 9.5.3 The live-script rail, and the state model
 
@@ -153,45 +195,45 @@ for work with a beginning and an end.
 
 ---
 
-## 9.5.4 Collapse by call site, not by message text
+## 9.5.4 The bound is the ring, and collapsing is gone
 
-Unity's Collapse *"displays only the first instance of recurring error messages"* and its manual
-recommends it for *"run-time errors, such as null references, that are sometimes generated on each frame
-update"* — the same pressure a tick handler puts on this panel, which is the strongest evidence the
-model is the right one.
+**This rule moved three times, and the moves are worth keeping** because each was disproved by something
+concrete rather than reconsidered.
 
-> **Its manual does not say what it matches on**, and this section originally asserted it was message
-> text. That was not checked and is not documented. The argument does not need it: whatever Unity keys
-> on, **collapsing by text alone does not solve our case**, because a handler printing `tick 1`,
-> `tick 2`, `tick 3` produces a different string every time and would not fold at all.
+1. **Fold by call site.** Argued from the per-tick counter: `tick 1`, `tick 2`, `tick 3` produce a
+   different string every time, so a text key never matches and the flood arrives in full. Unity's own
+   manual recommends Collapse for errors "generated on each frame update", which is the same pressure.
+2. **Disproved by the first real script.** `RunTest.java` prints through a helper, so every line in the
+   file shared that helper's origin — and thirteen distinct results collapsed into one row reading
+   `×13`, twelve of them gone. The premise was right and the conclusion did not follow: three different
+   messages are three messages, and a row showing only the newest does not compress a transcript, it
+   deletes two thirds of it. **A console that loses output is worse than a console that scrolls.**
+3. **Fold by text and origin**, which is Unity's rule with one extra separation, and which was correct.
+4. **Gone entirely**, with the list. IntelliJ does not collapse; a text area has nowhere to put a `×N`
+   badge without becoming a list again; and the flood a bound is genuinely needed for is answered by the
+   ring, which is where a bound belongs.
 
-Collapse by **origin**: `foo.js:12 ×340`. The origin is already known at log time from §9.5.1's marker,
-so it costs nothing, and text-identical collapse falls out of it as the special case where one call site
-also says one thing.
+### The ring, sized in KB
 
-**A per-tick budget, with an honest tail.** Beyond some count in one tick, drop and say so —
-`… 340 more from foo.js this tick`. Never silently. That is this repository's own rule: *if a workflow
-bounds coverage, log what was dropped; silent truncation reads as "covered everything" when it didn't.*
-
-**Clear on run**, matching Unity's Clear on Play, as a toggle rather than a default.
-
-### The buffer is bounded, and "survives" does not mean "unbounded"
-
-The decision above is that output survives a script stopping. **That is not the same as keeping it all**,
-and a per-tick script would otherwise grow the buffer until the game dies.
+Output deliberately survives its script stopping — the most useful transcript is usually the one from
+the run that just died. That is a promise about **lifetime**, not about **volume**: a script printing
+without pause would otherwise grow the document until the game dies.
 
 IntelliJ answers this with a **console cycle buffer** — `Settings | Editor | General | Console`,
 *"Override console cycle buffer size"*, specified **in KB rather than in lines**, global across every
-console, with its own documentation warning that *"large buffer size can affect performance in the case
-of chatty processes."* A chatty process is precisely what a tick handler is, so the reference's own
-caveat is our normal case rather than an edge one.
+console, with its own documentation warning that a large buffer "can affect performance in the case of
+chatty processes". A chatty process is precisely what a tick handler is, so the reference's own caveat
+is our normal case rather than an edge one.
 
-So: a ring, sized in KB, exposed as a setting. **KB and not lines**, because one stack trace is worth
-thirty prints and a line count would let a single exception evict a run's whole transcript. Dropping the
-oldest is reported the same way a per-tick overflow is — the panel says the transcript was truncated
-rather than quietly beginning in the middle.
+KB and not lines, because one stack trace is worth thirty prints and a line budget would let a single
+exception evict a whole run's transcript.
 
----
+**Trimmed in batches, and that is not premature.** Dropping exactly one line per append makes every
+append past the bound an O(n) shift of the line list, twenty times a second forever. Taking a tenth at a
+time amortises it away and costs only that the bound is approached in steps.
+
+**Eviction is counted and reported**, never silent. A transcript that quietly begins in the middle reads
+as the console having missed something rather than as the ring having done its job.
 
 ## 9.5.5 The running indicator — a decoration, not new machinery
 

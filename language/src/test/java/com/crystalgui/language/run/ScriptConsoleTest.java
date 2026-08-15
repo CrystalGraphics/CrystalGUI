@@ -1,6 +1,7 @@
 package com.crystalgui.language.run;
 
 import com.crystalgui.fs.Resource;
+import com.crystalgui.text.TextBuffer;
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
@@ -61,7 +62,7 @@ public class ScriptConsoleTest {
      */
     @Test
     public void aScriptsPrintlnReachesTheConsole() throws Throwable {
-        RunConsole console = new RunConsole();
+        RunConsole console = new RunConsole().attach(new TextBuffer());
         ByteArrayOutputStream passthrough = new ByteArrayOutputStream();
         System.setOut(new PrintStream(
                 ScriptOutput.routed(passthrough, RunLevel.OUT, console), true, StandardCharsets.UTF_8));
@@ -73,10 +74,9 @@ public class ScriptConsoleTest {
         compiled.withSource(Resource.of(Resource.SCHEME_PROJECT, "src/Script.java"));
         host.run(compiled, Map.of());
 
-        List<RunConsole.Entry> entries = console.entries();
-        assertEquals("exactly the script's line, and nothing else", 1, entries.size());
-        assertEquals("from the script", entries.get(0).text());
-        assertEquals("Script.java", entries.get(0).script());
+        assertEquals("exactly the script's line, and nothing else", 1, drained(console));
+        assertEquals("from the script", lineText(console, 0));
+        assertEquals("Script.java", lineScript(console, 0));
         assertEquals("nothing leaked to the real stream", 0, passthrough.size());
     }
 
@@ -89,7 +89,7 @@ public class ScriptConsoleTest {
      */
     @Test
     public void outputBeforeAndAfterTheRunIsNotCaptured() throws Throwable {
-        RunConsole console = new RunConsole();
+        RunConsole console = new RunConsole().attach(new TextBuffer());
         ByteArrayOutputStream passthrough = new ByteArrayOutputStream();
         System.setOut(new PrintStream(
                 ScriptOutput.routed(passthrough, RunLevel.OUT, console), true, StandardCharsets.UTF_8));
@@ -102,8 +102,8 @@ public class ScriptConsoleTest {
         host.run(compiled, Map.of());
         System.out.println("after");
 
-        assertEquals(1, console.size());
-        assertEquals("during", console.entries().get(0).text());
+        assertEquals(1, drained(console));
+        assertEquals("during", lineText(console, 0));
         String outside = passthrough.toString(StandardCharsets.UTF_8);
         assertTrue(outside.contains("before"));
         assertTrue(outside.contains("after"));
@@ -119,7 +119,7 @@ public class ScriptConsoleTest {
      */
     @Test
     public void aScriptWithNoRefIsNotCaptured() throws Throwable {
-        RunConsole console = new RunConsole();
+        RunConsole console = new RunConsole().attach(new TextBuffer());
         ByteArrayOutputStream passthrough = new ByteArrayOutputStream();
         System.setOut(new PrintStream(
                 ScriptOutput.routed(passthrough, RunLevel.OUT, console), true, StandardCharsets.UTF_8));
@@ -129,7 +129,34 @@ public class ScriptConsoleTest {
         assertTrue(compiled.successful());
         host.run(compiled, Map.of());
 
-        assertEquals(0, console.size());
+        assertEquals(0, drained(console));
         assertTrue(passthrough.toString(StandardCharsets.UTF_8).contains("unattributed"));
+    }
+
+    // ── Reading the transcript ──────────────────────────────────────────────────────────────────
+    //
+    // DRAIN FIRST, EVERY TIME. Appending only enqueues -- a TextBuffer may not be written from the
+    // thread a script prints on -- so a test that asserted without draining would be asserting about a
+    // document nothing had written to yet, and would pass for the wrong reason when the expectation was
+    // zero.
+
+    private static int drained(RunConsole console) {
+        console.drain();
+        return console.lineCount();
+    }
+
+    private static String lineText(RunConsole console, int row) {
+        console.drain();
+        return console.lineAt(row).text();
+    }
+
+    private static String lineScript(RunConsole console, int row) {
+        console.drain();
+        return console.lineAt(row).script();
+    }
+
+    private static RunLevel lineLevel(RunConsole console, int row) {
+        console.drain();
+        return console.lineAt(row).level();
     }
 }

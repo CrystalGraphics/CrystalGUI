@@ -84,9 +84,20 @@ final class SelectionsPart extends EditorViewPart {
             float right = pad + editor.xOfView(viewLine, toView.column()) - editor.getScrollLeft()
                     + (continuesPastRow ? height * 0.4f : 0f);
 
-            final float bandInk = editor.textHeight();
-            final float top = editor.textOriginY() + viewLine * height + (height - bandInk) / 2f
-                    - editor.getScrollTop();
+            // THE LINE BOX, NOT THE INK -- and the two are not the same the moment `line-height` is not 1.
+            //
+            // This inked the band at textHeight() and centred it in the row, which leaves (height -
+            // textHeight) of unpainted row on every boundary: at the shipped `line-height: 1.4` a
+            // multi-line selection came out as a stack of separate stripes with the background showing
+            // between them. IntelliJ and VS Code both paint the full line box, so a selection spanning
+            // rows is one solid shape.
+            //
+            // It also had to change for a reason independent of taste: CurrentLinePart paints the full
+            // height with no centring, so selecting the line the caret is on left the current-line band
+            // visible as a rim above and below the selection -- two decorations describing the same row
+            // and disagreeing about where it starts.
+            final float bandInk = height;
+            final float top = editor.textOriginY() + viewLine * height - editor.getScrollTop();
             final float bandLeft = left;
             final float width = Math.max(1f, right - left);
             StyleGroup.defaultPipeline(bandAt(index++).getStyle().getLayoutGroup(),

@@ -1,6 +1,7 @@
 package com.crystalgui.language.run;
 
 import com.crystalgui.fs.Resource;
+import com.crystalgui.text.TextBuffer;
 import org.junit.After;
 import org.junit.Test;
 
@@ -42,20 +43,20 @@ public class ScriptOutputTest {
      */
     @Test
     public void outputFromOutsideAScriptPassesStraightThrough() {
-        RunConsole console = new RunConsole();
+        RunConsole console = new RunConsole().attach(new TextBuffer());
         ByteArrayOutputStream passthrough = new ByteArrayOutputStream();
         PrintStream stream = routedTo(console, passthrough);
 
         stream.println("the game says something");
 
-        assertEquals("the console must not have taken it", 0, console.size());
+        assertEquals("the console must not have taken it", 0, drained(console));
         assertTrue(passthrough.toString(StandardCharsets.UTF_8).contains("the game says something"));
     }
 
     /** And inside a script, the same call reaches the console instead. */
     @Test
     public void outputFromInsideAScriptIsCaptured() {
-        RunConsole console = new RunConsole();
+        RunConsole console = new RunConsole().attach(new TextBuffer());
         ByteArrayOutputStream passthrough = new ByteArrayOutputStream();
         PrintStream stream = routedTo(console, passthrough);
 
@@ -66,9 +67,9 @@ public class ScriptOutputTest {
             ScriptOutput.exit(previous);
         }
 
-        assertEquals(1, console.size());
-        assertEquals("hello from the script", console.entries().get(0).text());
-        assertEquals("Main.java", console.entries().get(0).script());
+        assertEquals(1, drained(console));
+        assertEquals("hello from the script", lineText(console, 0));
+        assertEquals("Main.java", lineScript(console, 0));
         assertEquals("nothing should have leaked to the real stream", 0, passthrough.size());
     }
 
@@ -81,21 +82,21 @@ public class ScriptOutputTest {
      */
     @Test
     public void aLineBuiltFromSeveralPrintsIsOneRow() {
-        RunConsole console = new RunConsole();
+        RunConsole console = new RunConsole().attach(new TextBuffer());
         PrintStream stream = routedTo(console, new ByteArrayOutputStream());
 
         ScriptRef previous = ScriptOutput.enter(SCRIPT);
         try {
             stream.print("a");
             stream.print("b");
-            assertEquals("nothing complete yet", 0, console.size());
+            assertEquals("nothing complete yet", 0, drained(console));
             stream.println("c");
         } finally {
             ScriptOutput.exit(previous);
         }
 
-        assertEquals(1, console.size());
-        assertEquals("abc", console.entries().get(0).text());
+        assertEquals(1, drained(console));
+        assertEquals("abc", lineText(console, 0));
     }
 
     /**
@@ -104,13 +105,13 @@ public class ScriptOutputTest {
      * <p>It is invisible, and it would make two otherwise identical rows differ for a reason nobody
      * looking at the console could see.</p>
      *
-     * <p><b>Collapsing off, because both lines leave the same call site</b> and would otherwise fold
-     * into one row — which is the collapse rule working, and would hide the line splitting this is
-     * about. Two rules, two tests.</p>
+     * <p>Two lines from one call site, which the list version had to turn collapsing off to assert —
+     * folding is gone with the list, so the rule is now simply that a newline ends a line and a return
+     * is not part of it.</p>
      */
     @Test
     public void windowsLineEndingsDoNotLeaveAStrayCarriageReturn() {
-        RunConsole console = new RunConsole().setCollapsing(false);
+        RunConsole console = new RunConsole().attach(new TextBuffer());
         PrintStream stream = routedTo(console, new ByteArrayOutputStream());
 
         ScriptRef previous = ScriptOutput.enter(SCRIPT);
@@ -120,10 +121,9 @@ public class ScriptOutputTest {
             ScriptOutput.exit(previous);
         }
 
-        List<RunConsole.Entry> entries = console.entries();
-        assertEquals(2, entries.size());
-        assertEquals("one", entries.get(0).text());
-        assertEquals("two", entries.get(1).text());
+        assertEquals(2, drained(console));
+        assertEquals("one", lineText(console, 0));
+        assertEquals("two", lineText(console, 1));
     }
 
     /**
@@ -153,7 +153,7 @@ public class ScriptOutputTest {
      */
     @Test
     public void theOriginIsTheScriptsOwnFrameAndNotTheHelpers() {
-        RunConsole console = new RunConsole();
+        RunConsole console = new RunConsole().attach(new TextBuffer());
         PrintStream stream = routedTo(console, new ByteArrayOutputStream());
 
         ScriptRef previous = ScriptOutput.enter(SCRIPT);
@@ -163,11 +163,11 @@ public class ScriptOutputTest {
             ScriptOutput.exit(previous);
         }
 
-        RunConsole.Entry entry = console.entries().get(0);
-        assertNotNull("the script's frame should have been found", entry.origin());
-        assertTrue("the origin names the script's file: " + entry.origin(),
-                entry.origin().startsWith("Main.java:"));
-        assertTrue("and it is navigable", entry.isNavigable());
+        console.drain();
+        RunConsole.Line line = console.lineAt(0);
+        assertNotNull("nothing was appended at all", line);
+        assertTrue("the script's frame should have been found, and be navigable", line.isNavigable());
+        assertEquals("the line names the script's own file", "Main.java", line.file().name());
     }
 
     /** Not a lambda and not inlined — a real frame between the script and the write. */
@@ -196,11 +196,11 @@ public class ScriptOutputTest {
     /** The explicit binding a language's own `print` uses, which knows its level without inferring it. */
     @Test
     public void theExplicitBindingNeedsAScriptToBeRunning() {
-        RunConsole console = new RunConsole();
+        RunConsole console = new RunConsole().attach(new TextBuffer());
         ScriptOutput.install(console);           // idempotent; sets the console the binding writes to
 
         ScriptOutput.write(RunLevel.WARN, "ignored, nothing is running");
-        assertEquals(0, console.size());
+        assertEquals(0, drained(console));
 
         ScriptRef previous = ScriptOutput.enter(SCRIPT);
         try {
@@ -208,7 +208,34 @@ public class ScriptOutputTest {
         } finally {
             ScriptOutput.exit(previous);
         }
-        assertEquals(1, console.size());
-        assertEquals(RunLevel.WARN, console.entries().get(0).level());
+        assertEquals(1, drained(console));
+        assertEquals(RunLevel.WARN, lineLevel(console, 0));
+    }
+
+    // ── Reading the transcript ──────────────────────────────────────────────────────────────────
+    //
+    // DRAIN FIRST, EVERY TIME. Appending only enqueues -- a TextBuffer may not be written from the
+    // thread a script prints on -- so a test that asserted without draining would be asserting about a
+    // document nothing had written to yet, and would pass for the wrong reason when the expectation was
+    // zero.
+
+    private static int drained(RunConsole console) {
+        console.drain();
+        return console.lineCount();
+    }
+
+    private static String lineText(RunConsole console, int row) {
+        console.drain();
+        return console.lineAt(row).text();
+    }
+
+    private static String lineScript(RunConsole console, int row) {
+        console.drain();
+        return console.lineAt(row).script();
+    }
+
+    private static RunLevel lineLevel(RunConsole console, int row) {
+        console.drain();
+        return console.lineAt(row).level();
     }
 }
