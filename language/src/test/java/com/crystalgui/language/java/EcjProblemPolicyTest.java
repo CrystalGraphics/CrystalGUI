@@ -80,6 +80,62 @@ public class EcjProblemPolicyTest extends FixFixture {
                 first(source, IProblem.MissingSerialVersion));
     }
 
+    /**
+     * <b>A suppression must not report on the compiler's own configuration.</b>
+     *
+     * <p>{@code @SuppressWarnings("unused")} used to draw an info squiggle reading "At least one of the
+     * problems in category 'unused' is not analysed due to a compiler option being ignored" — true, and
+     * about this engine's option table rather than about the code it was written on.</p>
+     */
+    @Test
+    public void aSuppressWarningsAnnotationIsNotReportedOn() {
+        String source = ""
+                + "public class Script {\n"
+                + "    @SuppressWarnings(\"unused\")\n"
+                + "    int go() { int attempts = 0; return attempts; }\n"
+                + "}\n";
+        assertNull("the author cannot act on our compiler options",
+                first(source, IProblem.ProblemNotAnalysed));
+        assertTrue("and nothing else should land on the annotation either",
+                diagnosticsOf(source).isEmpty());
+    }
+
+    /**
+     * <b>An unused method is marked on its NAME, not on its signature.</b>
+     *
+     * <p>Every other {@code unused} problem is already reported on the name alone; these two carry the
+     * parameter list with them. Invisible while the mark was an underline and glaring once it became a
+     * fade — the whole signature went grey, so {@code int unusedParameter} read as unused in its own
+     * right when it is simply part of the thing that is unused.</p>
+     */
+    @Test
+    public void anUnusedMemberIsMarkedOnItsNameAlone() {
+        String source = ""
+                + "public class Script {\n"
+                + "    private void helper(int a, String b) { }\n"
+                + "    private Script(int unusedParameter) { }\n"
+                + "    Script() { }\n"
+                + "}\n";
+        assertEquals("the method's mark covers 'helper' and nothing more",
+                "helper", marked(source, IProblem.UnusedPrivateMethod));
+        assertEquals("the constructor's mark covers 'Script' and not its parameters",
+                "Script", marked(source, IProblem.UnusedPrivateConstructor));
+    }
+
+    /** The text a problem's reported range actually covers. */
+    private static String marked(String source, int problemId) {
+        Diagnostic problem = first(source, problemId);
+        assertNotNull("problem " + problemId + " is not reported", problem);
+        String[] lines = source.split("\n", -1);
+        StringBuilder text = new StringBuilder();
+        for (int row = problem.start().row(); row <= problem.end().row() && row < lines.length; row++) {
+            int from = row == problem.start().row() ? problem.start().column() : 0;
+            int to = row == problem.end().row() ? problem.end().column() : lines[row].length();
+            text.append(lines[row], Math.min(from, lines[row].length()), Math.min(to, lines[row].length()));
+        }
+        return text.toString();
+    }
+
     // ── Drawn as dead weight ────────────────────────────────────────────────────────────────────
 
     @Test

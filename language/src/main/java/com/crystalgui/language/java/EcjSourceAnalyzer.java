@@ -200,8 +200,9 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 // getSourceEnd is INCLUSIVE in JDT and exclusive in every range this codebase has, so
                 // the +1 is a real conversion rather than an off-by-one waiting to happen: without it a
                 // one-character problem produces a zero-width squiggle, which paints as nothing at all.
-                TextPoint start = pointOf(resolved, problem.getSourceStart());
-                TextPoint end = pointOf(resolved, problem.getSourceEnd() + 1);
+                int[] span = markedSpan(resolved, problem);
+                TextPoint start = pointOf(resolved, span[0]);
+                TextPoint end = pointOf(resolved, span[1]);
                 // TAGGED HERE, from the same table that decided the problem was worth reporting. A tag
                 // is how the text is DRAWN rather than how bad it is -- unused code faded, deprecated
                 // code struck through -- and without it every "nothing reads this" arrives as one more
@@ -211,6 +212,37 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         EcjProblemPolicy.tagsFor(problem.getID()), java.util.List.of()));
             }
             return found;
+        }
+
+        /**
+         * The span this problem should <b>mark</b>, which is ECJ's own except for two.
+         *
+         * <p>Every other {@code unused} problem is already reported on the name alone — the field, the
+         * nested type, the local, the import, the type parameter. {@code UnusedPrivateMethod} and
+         * {@code UnusedPrivateConstructor} report the name <em>and the parameter list</em>, which was
+         * invisible while the mark was an underline and is not once it is a fade: a whole signature went
+         * grey, so {@code int unusedParameter} read as unused code in its own right when it is simply
+         * part of the thing that is unused.</p>
+         *
+         * <p>Narrowed here rather than in the editor because this is the only side that knows what the id
+         * means — the widget is language-agnostic by design. And narrowed on the DIAGNOSTIC rather than on
+         * the fade alone, so the Problems row navigates to the name too, which is where every IDE puts
+         * this inspection's range. The corrections are unaffected: they read {@code unit.getProblems()}
+         * and so still see ECJ's own span.</p>
+         */
+        private static int[] markedSpan(CompilationUnit unit, IProblem problem) {
+            int[] reported = {problem.getSourceStart(), problem.getSourceEnd() + 1};
+            if (problem.getID() != IProblem.UnusedPrivateMethod
+                    && problem.getID() != IProblem.UnusedPrivateConstructor) {
+                return reported;
+            }
+            if (reported[0] < 0 || reported[1] <= reported[0]) return reported;
+            ASTNode node = NodeFinder.perform(unit, reported[0], reported[1] - reported[0]);
+            while (node != null && !(node instanceof MethodDeclaration)) node = node.getParent();
+            if (node == null) return reported;
+            SimpleName name = ((MethodDeclaration) node).getName();
+            if (name.getStartPosition() < 0 || name.getLength() <= 0) return reported;
+            return new int[] {name.getStartPosition(), name.getStartPosition() + name.getLength()};
         }
 
         private static TextPoint pointOf(CompilationUnit unit, int position) {
