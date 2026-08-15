@@ -266,14 +266,21 @@ public class SearchReplaceBar extends UIElement {
 
     // ── Driving the editor ──────────────────────────────────────────────────────────────────────
 
+    /**
+     * FROM WHAT IS ON SCREEN, not from the caret. {@code findNext()} is a STEPPING command — "somewhere I
+     * am not" — and a freshly typed query has nowhere to step from, so running it here anchored the search
+     * on the caret. Scrolling is view state and never moves the caret, so after reading your way down a
+     * file the caret is still wherever you last clicked, and typing a query scrolled the document back to
+     * it.
+     */
     private void runSearch() {
+        runSearch(editor.firstVisibleOffset());
+    }
+
+    /** As above, from an explicit anchor — a seeded query starts at the selection it was seeded from. */
+    private void runSearch(int from) {
         editor.find(SearchQuery.of(findBox.getText(), options));
-        // FROM WHAT IS ON SCREEN, not from the caret. findNext() is a STEPPING command -- "somewhere I am
-        // not" -- and a freshly typed query has nowhere to step from, so running it here anchored the
-        // search on the caret. Scrolling is view state and never moves the caret, so after reading your
-        // way down a file the caret is still wherever you last clicked, and typing a query scrolled the
-        // document back to it.
-        editor.findFrom(editor.firstVisibleOffset());
+        editor.findFrom(from);
         refresh();
     }
 
@@ -320,7 +327,12 @@ public class SearchReplaceBar extends UIElement {
         // FIND MEANS FIND. Reopening with the replace row still expanded gives back the state you left,
         // which is not what the key asked for.
         setReplaceShown(false);
+        // READ BEFORE FOCUS MOVES, applied after. Whether focusing the box disturbs either selection is
+        // not something this needs an answer to -- taking the reading first makes the order irrelevant.
+        String seed = seedFromSelection();
+        int seedAt = seed == null ? -1 : editor.getSelectionStart();
         focus(findBox.field());
+        applySeed(seed, seedAt);
     }
 
     /** Shows the bar with the replace row expanded — Ctrl+R. */
@@ -328,7 +340,55 @@ public class SearchReplaceBar extends UIElement {
         open = true;
         setDisplayed(true);
         setReplaceShown(true);
+        String seed = seedFromSelection();
+        int seedAt = seed == null ? -1 : editor.getSelectionStart();
         focus(findBox.field());
+        applySeed(seed, seedAt);
+    }
+
+    /**
+     * The editor's selection, when it is usable as a query — otherwise null.
+     *
+     * <p>Selecting a word and pressing Ctrl+F is how you search for that word in both references, which is
+     * the whole reason the selection is made first rather than after.</p>
+     *
+     * <p><b>A multi-line selection is a scope, not a query.</b> Both references read one as "search inside
+     * this" rather than as a literal to look for, and nothing here implements that scope yet — so the
+     * honest answer is to leave the box alone. Seeding it anyway would paste a block of text that matches
+     * nothing and would bury whatever query was there, which is worse than not seeding at all.</p>
+     */
+    private String seedFromSelection() {
+        if (!editor.hasSelection()) return null;
+        String selected = editor.getSelectedText();
+        if (selected.isEmpty() || selected.indexOf('\n') >= 0 || selected.indexOf('\r') >= 0) {
+            return null;
+        }
+        return selected;
+    }
+
+    /** Writes the seed, runs the search once, and leaves the box selected so typing replaces it. */
+    private void applySeed(String seed, int seedAt) {
+        if (seed != null) {
+            // SUPPRESSED, then run explicitly. The field's listener fires only on a CHANGED value, so
+            // re-opening on the same word the bar was last closed with would put the word in the box with
+            // no matches behind it -- close() clears the editor's query, and nothing would have re-run it.
+            writingBack = true;
+            try {
+                findBox.setText(seed);
+            } finally {
+                writingBack = false;
+            }
+            // ANCHORED ON THE SELECTION, not on the viewport: the occurrence you highlighted IS the one
+            // you asked about, and it is already the current selection -- so selectMatch re-selects the
+            // same range and ensureCaretVisible has nothing to scroll. Anchored on the viewport instead,
+            // a second occurrence higher up the screen would win and the highlight would jump off the
+            // word you picked, which is the same complaint the viewport anchor was introduced to fix.
+            runSearch(seedAt);
+        }
+        // SELECTED EITHER WAY, so the next keystroke replaces what is there. A seed is a guess at what you
+        // meant and typing over it must not require clearing it first; with no seed this is what makes a
+        // second Ctrl+F offer the previous query for replacement rather than for editing.
+        findBox.field().selectAll();
     }
 
     public void close() {

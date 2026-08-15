@@ -972,11 +972,32 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public TextEditor revealCaretCentred() {
         float height = lineHeight();
         float top = viewLineOf(getCaret(), LineProjection.Affinity.LEFT) * height;
+        // CENTRED IN THE BAND THE TEXT OCCUPIES, not in the scrollport -- the top padding is where the
+        // find bar sits, so centring through it puts the destination above the middle by half the bar.
+        // Same correction ensureCaretVisible carries, and it reduces to the old expression whenever the
+        // padding is zero.
+        float origin = textOriginY();
         // IMMEDIATE, for the reason ensureCaretVisible gives: an eased scroll would leave the destination
         // off screen for the length of the animation, and a jump is precisely when you are looking for it.
-        setScrollImmediate(getScrollLeft(), top - (viewportHeight() - height) / 2f);
+        setScrollImmediate(getScrollLeft(), top - (viewportHeight() - origin - height) / 2f);
         markTreeDirty();
         return this;
+    }
+
+    /**
+     * Whether the caret's line is inside the band the text is meant to occupy.
+     *
+     * <p>The membership half of {@link #ensureCaretVisible()}, shared so the two cannot drift — that
+     * method still decides <em>which</em> edge to scroll to, which is a different and simpler question.
+     * The asymmetry is explained there: the far edge accounts for the top padding because the line has to
+     * fit above the bottom of the box, and the near edge does not because scrolling a line to {@code top}
+     * already places it at the first row of text rather than under the chrome above it.</p>
+     */
+    private boolean caretIsInView() {
+        float height = lineHeight();
+        float top = viewLineOf(getCaret(), LineProjection.Affinity.LEFT) * height;
+        return top >= getScrollTop()
+                && top + height + textOriginY() <= getScrollTop() + viewportHeight();
     }
 
     /** The shared tail of every selection change: end the undo run, re-place the carets, repaint. */
@@ -3200,10 +3221,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public boolean findFrom(int offset) {
         if (searchMatches.isEmpty()) return false;
         if (!results.moveToFirstAtOrAfter(offset)) return false;
-        return selectMatch(results.current());
+        // NOT CENTRED. This runs on every keystroke in the find box, and centring there would scroll the
+        // document on each one -- exactly what anchoring on the viewport exists to prevent.
+        return selectMatch(results.current(), false);
     }
 
+    /** Stepping — Enter, F3, the bar's arrows. Centres a match it had to scroll to. */
     private boolean selectMatch(int index) {
+        return selectMatch(index, true);
+    }
+
+    /**
+     * @param centre whether an off-screen match is <b>centred</b> (stepping, which is arriving somewhere
+     *               new) or merely brought into view (a query being typed, which must not move the
+     *               document under the reader — see {@code SearchReplaceBar.runSearch})
+     */
+    private boolean selectMatch(int index, boolean centre) {
         if (index < 0 || index >= searchMatches.size()) return false;
         currentMatch = index;
         while (results.current() != index && results.next()) {
@@ -3211,7 +3244,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         TextRange match = searchMatches.get(index);
         setSelection(match.start(), match.end());
-        ensureCaretVisible();
+        // CENTRED, AND ONLY WHEN IT HAS TO MOVE AT ALL -- IntelliJ's ScrollType.CENTER, and the argument
+        // revealCaretCentred already makes: stepping to a match is arriving somewhere new, so it wants
+        // the most context, and minimal scrolling frames the destination hard against an edge with all
+        // the surrounding code on one side. A match already on screen must not move the view, or every
+        // press of Enter would lurch the file for no reason.
+        if (centre) {
+            if (!caretIsInView()) revealCaretCentred();
+        } else {
+            ensureCaretVisible();
+        }
         return true;
     }
 
@@ -4095,9 +4137,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // eased scroll means it is off screen for the length of the animation and every keystroke chases
         // a viewport that is still catching up with the last one.
         float viewport = viewportHeight();
-        if (top < getScrollTop()) setScrollImmediate(getScrollLeft(), top);
-        else if (top + height > getScrollTop() + viewport) {
-            setScrollImmediate(getScrollLeft(), top + height - viewport);
+        // IN THE COORDINATES A LINE IS ACTUALLY DRAWN IN, which offsetAtLocal is the definition of: a line
+        // at content offset `top` appears at `top + textOriginY() - scrollTop`. This compared `top`
+        // against `scrollTop` directly, i.e. it assumed the text starts at the top of the scrollport --
+        // true only while the top padding is zero.
+        //
+        // The find bar makes it 26px (it insets the editor by its own height), so every comparison here
+        // was out by nearly two lines: stepping to a match computed `2814 > 2814`, concluded the caret
+        // was already visible, and left it one row below the last one on screen. That is the whole of
+        // "sometimes puts them one line before/after the visible lines".
+        //
+        // ASYMMETRIC, and deliberately. The far edge adds the origin because the line has to fit above
+        // the bottom of the box. The near edge does not, because scrolling a line to `top` puts it at the
+        // FIRST ROW OF TEXT rather than at the top of the scrollport -- the padding strip above it is
+        // where the bar sits, and a line revealed into it is covered rather than shown. Both edges then
+        // mean the same thing: inside the band the text is meant to occupy.
+        float origin = textOriginY();
+        if (!caretIsInView()) {
+            if (top < getScrollTop()) setScrollImmediate(getScrollLeft(), top);
+            else setScrollImmediate(getScrollLeft(), top + height + origin - viewport);
         }
         // NOT invalidateWindow(). Scrolling changes which rows are on screen, and updateWindow already
         // recomputes that range every frame -- realising what has come into view and recycling what has
