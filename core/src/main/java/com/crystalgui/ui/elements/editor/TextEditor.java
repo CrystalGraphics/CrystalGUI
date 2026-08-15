@@ -3173,6 +3173,36 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return selectMatch(previous);
     }
 
+    /**
+     * The offset of the <b>first line on screen</b> — where a fresh query starts looking.
+     *
+     * <p>Scrolling is view state and deliberately never moves the caret, so the two drift apart the moment
+     * you read rather than edit. That is what made {@link #findNext()} the wrong operation to run on a
+     * newly typed query: it anchors on the caret, which after a wheel-scroll is still wherever you last
+     * clicked — usually the top of the file — so typing a query scrolled the document back there. Nothing
+     * about it was intermittent except whether you had clicked first.</p>
+     */
+    public int firstVisibleOffset() {
+        // Through rowAtTopOfViewport, which is the same question zoom already asks. Written out again here
+        // it would be a second definition of "which row is at the top", and the two would answer
+        // differently the first time either learned something about wrapping or folding.
+        return buffer.document().lineStartOffset(rowAtTopOfViewport());
+    }
+
+    /**
+     * Selects the first match at or after {@code offset}, wrapping — what a <b>fresh</b> query does.
+     *
+     * <p>Distinct from {@link #findNext()} in both halves, and the difference is the whole point: this
+     * takes an anchor rather than reading the caret, and it accepts a match starting exactly <em>at</em>
+     * that anchor rather than strictly after it. Stepping wants "somewhere I am not"; typing wants "the
+     * nearest one from here", and a match on the first visible line is the nearest one.</p>
+     */
+    public boolean findFrom(int offset) {
+        if (searchMatches.isEmpty()) return false;
+        if (!results.moveToFirstAtOrAfter(offset)) return false;
+        return selectMatch(results.current());
+    }
+
     private boolean selectMatch(int index) {
         if (index < 0 || index >= searchMatches.size()) return false;
         currentMatch = index;
