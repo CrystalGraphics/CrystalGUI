@@ -233,30 +233,31 @@ public class JavaSignatureTest {
     }
 
     /**
-     * <b>An initializer that is code is cut; one that is a value is kept.</b>
+     * A local's declaration is quoted <b>whole</b>, initializer and all — and keeps the editor's colours.
      *
-     * <p>Quoting fixed how faithfully an initializer was reproduced and never asked whether to
-     * reproduce it. So hovering {@code shapes} put four lines of the file — the whole {@code List.of}
-     * call, its three instantiations and their arguments — into the one band meant to say what a name
-     * <em>is</em>, floating directly over the file it had been quoted from.</p>
-     *
-     * <p>Both halves in one test, because the rule is a boundary and a test of either side alone
-     * passes against "always" or "never".</p>
+     * <p>It was briefly cut after the name for any initializer that was not a literal, on the stated
+     * grounds that IntelliJ shows a local as its type and name. It does not: it quotes the declaration
+     * in full. Kept as a test rather than simply reverted, because the colour half is worth pinning
+     * either way — the popup and the editor must not disagree about a name they both draw.</p>
      */
     @Test
-    public void aDeclarationShowsAValueAndNotAnExpression() {
+    public void aLocalIsQuotedWholeAndKeepsTheEditorsColours() {
         String source = ""
                 + "import java.util.List;\n"
                 + "public class Script {\n"
-                + "    static final int RETRIES = 5;\n"
                 + "    void run() {\n"
                 + "        List<String> names = List.of(\n"
                 + "                \"one\",\n"
                 + "                \"two\");\n"
                 + "    }\n"
                 + "}\n";
-        assertEquals("static final int RETRIES = 5;", signatureAt(source, "RETRIES").text());
-        assertEquals("List<String> names", signatureAt(source, "names").text());
+        Signature signature = signatureAt(source, "names");
+
+        assertTrue("the initializer belongs to the declaration: <" + signature.text() + ">",
+                signature.text().contains("List.of("));
+        assertEquals("type.interface", captureOf(signature, "List"));
+        assertEquals("type", captureOf(signature, "String"));
+        assertEquals("variable", captureOf(signature, "names"));
     }
 
     /**
@@ -557,34 +558,29 @@ public class JavaSignatureTest {
     /**
      * And a MULTI-LINE one keeps its own wrapping and indentation rather than being reflowed.
      *
-     * <p>The author's layout is information — a parameter per line — and reproducing it costs nothing
-     * once the declaration is quoted rather than rebuilt.</p>
-     *
-     * <p>A <b>method header</b>, because that is where a quoted declaration can still span lines: a
-     * variable's initializer is cut unless it is a value, so the multi-line field this used to assert on
-     * no longer renders past its own name. The property is unchanged; only the shape that reaches it
-     * is.</p>
+     * <p>The author's layout is information — an argument per line, an aligned array — and reproducing
+     * it costs nothing once the declaration is quoted rather than rebuilt.</p>
      */
     @Test
     public void aMultiLineDeclarationKeepsTheAuthorsOwnLayout() {
         String source = ""
+                + "import java.util.List;\n"
                 + "public class Script {\n"
-                + "    private static String join(\n"
-                + "            String first,\n"
-                + "            String second) { return first + second; }\n"
+                + "    private static final List<String> NAMES = List.of(\n"
+                + "            \"alpha\",\n"
+                + "            \"beta\");\n"
                 + "}\n";
-        Signature signature = signatureAt(source, "join");
+        Signature signature = signatureAt(source, "NAMES");
         String[] lines = signature.text().split("\n");
 
         assertEquals("the file wraps it over three lines, so this should too", 3, lines.length);
-        assertTrue("a header ends at its body: <" + signature.text() + ">",
-                signature.text().endsWith(")"));
+        assertTrue(signature.text().endsWith(";"));
 
         // RELATIVE to the first line, not absolute. The slice starts AT the declaration, so its first
         // line lost the four columns it sat at while the continuations kept theirs -- which doubled the
         // apparent indent, and did so more the deeper the declaration sat in the file. Each continuation
         // gives back exactly what the first line lost: 12 in the file, 8 here.
-        assertEquals("the parameter should be indented 8 relative to the declaration, not 12",
+        assertEquals("the argument should be indented 8 relative to the declaration, not 12",
                 8, leadingSpaces(lines[1]));
         assertEquals(8, leadingSpaces(lines[2]));
     }
@@ -993,21 +989,17 @@ public class JavaSignatureTest {
      * name so a call is still coloured with no analyzer attached, and the name then asks the analyzer,
      * which knows more. Both answers were kept. Asserted over the whole token list rather than at the one
      * node that broke, because the next duplicate will come from a different pair of visitors.</p>
-     *
-     * <p>Which is why the fixture is a <b>method header</b> and not the initializer that first broke it:
-     * an initializer is no longer rendered unless it is a value, so that fixture would now assert this
-     * over four tokens and pass whatever the rule was. A header still has the pair — {@code SimpleType}
-     * marks a parameter's type and {@code SimpleName} then marks the same characters.</p>
      */
     @Test
     public void noTwoCapturesCoverTheSameRange() {
         String source = ""
                 + "import java.util.List;\n"
                 + "public class Script {\n"
-                + "    @Deprecated\n"
-                + "    static <T> List<T> pick(List<T> from, Integer index) { return from; }\n"
+                + "    void run() {\n"
+                + "        List<String> names = List.of(\"one\", Integer.toString(2));\n"
+                + "    }\n"
                 + "}\n";
-        Signature signature = signatureAt(source, "pick");
+        Signature signature = signatureAt(source, "names");
 
         Set<String> seen = new HashSet<>();
         for (SyntaxToken token : signature.tokens()) {
@@ -1015,6 +1007,55 @@ public class JavaSignatureTest {
             assertTrue("two captures over " + range + " in <" + signature.text() + ">: "
                     + token.name(), seen.add(range));
         }
+    }
+
+    /**
+     * A non-literal initializer is <b>walked, not flattened</b> — coloured, and spaced by us.
+     *
+     * <p>It used to go through {@code ASTNode.toString()}, which produced two faults at once: every part
+     * came out with no capture, so a call drew in one flat colour beside a properly coloured declaration
+     * line, and JDT's flattener writes argument lists with no space after the comma —
+     * {@code Circle(1.5d),new Rectangle(3.0d,4.0d)}.</p>
+     */
+    @Test
+    public void aCallInitializerIsColouredAndSpacedRatherThanFlattened() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    void run() {\n"
+                + "        List<String> names = List.of(\"one\", \"two\");\n"
+                + "    }\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "names");
+
+        assertTrue("the flattener's comma spacing survived: <" + signature.text() + ">",
+                signature.text().contains("\"one\", \"two\""));
+        // `function.static`, because `List.of` IS static and the analyzer knows it. Two visitors reach
+        // this name -- MethodInvocation claims it so a call is coloured with no analyzer attached, then
+        // SimpleName asks the one that knows more -- and the later, better-informed answer wins. Keeping
+        // both used to be the behaviour and it threw out of the popup: HighlightRegistry refuses two
+        // ranges of one name that overlap, so any signature containing a call failed to render at all.
+        assertEquals("the invoked method should be captured", "function.static",
+                captureOf(signature, "of"));
+        assertEquals("and its string arguments too", "string", captureOf(signature, "\"one\""));
+    }
+
+    /** {@code new Foo(...)} in an initializer keeps its keyword and its type distinct. */
+    @Test
+    public void aConstructorCallInAnInitializerIsCaptured() {
+        String source = ""
+                + "public class Script {\n"
+                + "    Object thing = new StringBuilder(16);\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "thing");
+
+        assertTrue("<" + signature.text() + ">", signature.text().contains("new StringBuilder(16)"));
+        assertEquals("keyword", captureOf(signature, "new"));
+        assertEquals("number", captureOf(signature, "16"));
+        // `function.call` and not `type`, which is what this asserted before the highlighter started
+        // asking bindingFor: the name of a constructed type resolves to the CONSTRUCTOR, and both
+        // references draw that as a call. The popup shows the initializer, so it inherits the change.
+        assertEquals("function.call", captureOf(signature, "StringBuilder"));
     }
 
     /**

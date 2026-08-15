@@ -395,6 +395,27 @@ public class JavaAnalysisTest {
     }
 
     @Test
+    public void instantiatingARecordIsACallToo() {
+        // A record's canonical constructor is IMPLICIT -- nobody wrote it -- which is the shape that
+        // already caught findDeclaringNode out once. `new ArrayList<>()` passing proves nothing about
+        // it: that constructor is declared in a file, and this one exists only as a binding.
+        String source = ""
+                + "public class Script {\n"
+                + "    record Circle(double radius) { }\n"
+                + "    Object run() { return new Circle(1.5d); }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyzer.analyze("Script", source, List.of(), 17, 42L);
+        try {
+            int use = source.indexOf("new Circle") + 4;
+            String capture = captureAtIndex(analysis.semanticTokens(), use, "Circle".length());
+            Assume.assumeTrue("this band's JDT does not parse records; skipping", capture != null);
+            assertEquals("function.call", capture);
+        } finally {
+            analysis.close();
+        }
+    }
+
+    @Test
     public void aConstructorDeclarationIsStillADeclaration() {
         // The other half of the split above, and the reason the constructor case can be deleted from
         // captureFor rather than merely re-pointed: a constructor has a declaration form and a use form
