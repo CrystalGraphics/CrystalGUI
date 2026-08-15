@@ -474,11 +474,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private final SquigglesPart squigglesPart = new SquigglesPart(this);
     private final ErrorStripePart errorStripePart = new ErrorStripePart(this);
     private final InspectionWidgetPart inspectionWidgetPart = new InspectionWidgetPart(this);
+    private final QuickFixBulbPart quickFixBulbPart = new QuickFixBulbPart(this);
     /** Every part, in paint order, so the frame drives one list rather than a dozen named calls. */
     private final java.util.List<EditorViewPart> viewParts = java.util.List.of(
             gutterEdgePart, indentGuidesPart, whitespacePart, rulersPart, foldingDecorationsPart,
             zoomIndicatorPart, lineNumbersPart, currentLinePart, selectionsPart, squigglesPart, errorStripePart, inspectionWidgetPart,
-            viewCursorsPart);
+            quickFixBulbPart, viewCursorsPart);
 
     /**
      * The problems reported about this document.
@@ -2495,6 +2496,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // it, which reads as the highlighter losing sync rather than as a coordinate bug.
             int lineStart = viewLineStartOffset(viewLine);
             int lineEnd = viewLineEndOffset(viewLine);
+            int modelRow = modelAt(viewLine).row();
+            int rowStart = buffer.document().lineStartOffset(modelRow);
 
             Map<String, List<TextRange>> byName = new LinkedHashMap<>();
             addDocumentRanges(byName, "search", searchMatches, lineStart, lineEnd);
@@ -2510,10 +2513,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // range published here must be relative to the VIEW line -- which for a wrapped row is some
             // way into it. Doing only the first would push every colour on a continuation line left by
             // the width of everything above it.
-            int modelRow = modelAt(viewLine).row();
             List<SyntaxToken> rowTokens = rowSyntax.get(modelRow);
             if (rowTokens != null && !rowTokens.isEmpty()) {
-                int rowStart = buffer.document().lineStartOffset(modelRow);
                 for (SyntaxToken token : rowTokens) {
                     int start = Math.max(rowStart + token.start(), lineStart);
                     int end = Math.min(rowStart + token.end(), lineEnd);
@@ -2538,11 +2539,28 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // so a token covering it would publish a range past the end of the string. Correct to do
             // unconditionally -- a range beyond the text is never meaningful, folding or not.
             int painted = textOf(entry.getValue()).getText().length();
+            // SOURCE OFFSETS BECOME DISPLAY OFFSETS HERE, and every producer above needs it: search
+            // matches, the bracket pair, `::highlight()` ranges and the syntax tokens are all expressed
+            // in document offsets, while the string they are about to be applied to is
+            // viewLineDisplayText -- which has TABS EXPANDED.
+            //
+            // One tab therefore pushed everything after it left by (tabSize - 1) columns. Invisible in a
+            // space-indented codebase, which is why it survived: it took console output, where
+            // printStackTrace indents every frame with a real tab, for it to show -- as links underlining
+            // three characters to the left of the text they point at.
+            //
+            // Done ONCE, at the end, rather than per producer: they all share the fault, and a remap
+            // inside each one is four places for the next producer to forget.
+            CursorColumns.Line expanded = rowMetrics(modelRow).line();
+            int viewSourceStart = lineStart - rowStart;
+            int displayFrom = expanded.displayIndexOf(viewSourceStart);
             for (List<TextRange> ranges : byName.values()) {
                 for (int i = ranges.size() - 1; i >= 0; i--) {
                     TextRange range = ranges.get(i);
-                    int start = Math.min(range.start(), painted);
-                    int end = Math.min(range.end(), painted);
+                    int start = expanded.displayIndexOf(viewSourceStart + range.start()) - displayFrom;
+                    int end = expanded.displayIndexOf(viewSourceStart + range.end()) - displayFrom;
+                    start = Math.min(Math.max(0, start), painted);
+                    end = Math.min(Math.max(0, end), painted);
                     // DROPPED, not clamped to empty. TextRange refuses a zero-width range outright, so
                     // building one to filter it afterwards throws instead of filtering -- and the range
                     // that collapses is the bracket-match on the very brace the chip took over, i.e. the

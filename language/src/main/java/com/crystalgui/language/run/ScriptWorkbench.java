@@ -79,7 +79,10 @@ public final class ScriptWorkbench implements Closeable {
                 MappingSet.IDENTITY, "identity",
                 ScriptWorkbench.class.getClassLoader(), null);
 
-        RunConsole console = new RunConsole();
+        // THE FILTER CHAIN IS THE CONSOLE'S, not the panel's -- what counts as navigable is a property of
+        // the output, and a headless host that keeps a transcript without showing it still wants to know.
+        // Java only for now; M10's JS and M11's GLSL each add one class here and change nothing else.
+        RunConsole console = new RunConsole().addFilter(new JavaStackFrameFilter());
         RunSessions sessions = new RunSessions();
         RunPanel panel = RunPanels.install(workbench, console, sessions, host);
 

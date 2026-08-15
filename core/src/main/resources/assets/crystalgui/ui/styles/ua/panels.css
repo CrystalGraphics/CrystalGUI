@@ -662,6 +662,31 @@ runpanel .__run-console__ .__inspection__ {
     display: none;
 }
 
+/* THE POINTER OVER A NAVIGABLE SPAN. Written as a class the view swaps rather than a `cursor` set from
+ * Java, which agrees with the house rule and is also the only option: `CgCursor` lives in CrystalGraphics'
+ * platform module, which `core` takes as `compileOnly` and so does not pass on to `language/`.
+ *
+ * The underline itself is NOT here — it belongs to the `link` capture in the colour scheme, so a console
+ * hyperlink is coloured by the same scheme as everything else the editor draws. */
+runpanel .__run-console__.__over-link__ {
+    cursor: pointer;
+}
+
+/* A NAVIGABLE SPAN — `Foo.java:42` inside a stack frame.
+ *
+ * Underlined ALWAYS, not on hover, which is what IntelliJ's console does and here is also what the
+ * machinery allows: the editor caches tokens per row and clears that cache wholesale, so restyling one
+ * span under the pointer would discard every realised row's tokens on every mouse move. Hover changes the
+ * cursor and nothing else.
+ *
+ * Scoped under `runpanel` rather than added to the scheme's global capture list, because `link` is emitted
+ * by the console's tokenizer and by nothing else — a global rule would be a promise to colour something no
+ * other producer makes. The colour is still a `var`, so a theme can take it over without this moving. */
+runpanel .__run-console__ .__syntax__::highlight(link) {
+    color: var(--run-link-fg);
+    text-decoration-line: underline;
+}
+
 /* The toolbar. Icon-only and against the trailing edge, which is where every IDE console keeps its run
  * controls -- the leading edge belongs to the transcript, and a control there would sit above the first
  * line of output and read as part of it. */
@@ -698,7 +723,7 @@ runpanel .__run-action__ {
     padding-bottom: 0;
     flex-shrink: 0;
     background: none;
-    color: var(--run-action, #9DA0A8);
+    color: var(--run-action-fg);
 }
 
 /* `background` and `background-color` are separate properties, and a rule setting only the colour is
@@ -706,8 +731,8 @@ runpanel .__run-action__ {
  * a whole release. Both, every time. */
 runpanel .__run-action__:hover {
     background: none;
-    background-color: var(--run-action-hover, #383B40);
-    color: var(--editor-fg, #BCBEC4);
+    background-color: var(--run-action-hover-bg);
+    color: var(--run-action-hover-fg);
 }
 
 /* AFTER the hover rule, because `:disabled` and `:hover` are both one pseudo-class and therefore tie on
@@ -717,7 +742,7 @@ runpanel .__run-action__:disabled,
 runpanel .__run-action__:disabled:hover {
     background: none;
     background-color: transparent;
-    color: var(--run-action-disabled, #4E5157);
+    color: var(--run-action-disabled-fg);
 }
 
 runpanel .__run-stop__ {
@@ -737,7 +762,7 @@ runpanel .__run-notice__ {
     flex-shrink: 0;
     padding-left: 6px;
     padding-right: 6px;
-    color: var(--run-origin, #6B6B6B);
+    color: var(--run-notice-fg);
     white-space: nowrap;
     text-overflow: ellipsis;
 }

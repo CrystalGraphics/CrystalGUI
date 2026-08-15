@@ -355,6 +355,18 @@ workbench .__activity-bar__ .__stripe-separator__ {
     overlay-fit: contain;
 }
 
+/* THE SAME MARK, IN THE RUNNING COLOUR. IntelliJ puts `modified` over the Run tool window's stripe button
+ * while anything is executing, and the drawing above is already that icon and already `currentColor` — so
+ * a running badge is a colour and nothing else.
+ *
+ * A CLASS rather than a colour written into `.__dot__`, because that rule is shared by every container on
+ * the rail: styling the running state there would turn the Problems count green too. The class arrives
+ * through `ViewContainerRegistry.setBadge(id, text, styleClass)` and the rail SWAPS it, so a badge that
+ * changes kind does not end up wearing both. */
+.__activity-bar__ .__badge__.__dot__.__running__ {
+    color: var(--run-live-fg);
+}
+
 .__region-host__ {
     flex-grow: 1;
     overflow: hidden;

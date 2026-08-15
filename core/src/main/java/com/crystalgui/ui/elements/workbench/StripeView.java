@@ -324,7 +324,13 @@ public class StripeView extends UIElement {
             badgeSubscription = workbench.toolWindowManager().viewContainers().onDidChangeBadge
                     .connect((containerId, text) -> {
                         ItemButton button = buttons.get(containerId);
-                        if (button != null) button.setBadge(text);
+                        // The style is READ HERE rather than carried on the signal, so a Pair does not have
+                        // to become a Triple and both rails' subscriptions do not have to change to pass
+                        // along something they can already ask for.
+                        if (button != null) {
+                            button.setBadge(text, workbench.toolWindowManager().viewContainers()
+                                    .badgeStyleOf(containerId));
+                        }
                     });
         }
         if (placementSubscription == null) {
@@ -761,6 +767,9 @@ public class StripeView extends UIElement {
         /** The count or dot over the icon — VS Code's activity badge. Absent until something sets one. */
         private final UIText badge = new UIText("");
 
+        /** The caller's style class currently on {@link #badge}, so it can be swapped rather than added. */
+        @Nullable private String badgeStyle;
+
         ItemButton(Workbench workbench, String typeId, String title) {
             super("");
             this.workbench = workbench;
@@ -785,8 +794,16 @@ public class StripeView extends UIElement {
          * below never fired again either: one stale count, permanently.</p>
          */
         void setBadge(@Nullable String text) {
+            setBadge(text, null);
+        }
+
+        void setBadge(@Nullable String text, @Nullable String styleClass) {
             if (text == null || text.isEmpty()) {
                 removeInternalChild(badge);
+                // CLEARED HERE TOO, not only on the next set. The element is pooled -- clearing detaches it
+                // rather than discarding it -- so a class left behind is a class the next badge inherits,
+                // and a Problems count would come back wearing the last run's green.
+                swapStyle(null);
                 return;
             }
             // A DOT CARRIES NO TEXT. The class is what draws it, so the label is emptied rather than left
@@ -795,7 +812,23 @@ public class StripeView extends UIElement {
             badge.setText(dot ? "" : text);
             if (dot) badge.addClass(DOT_CLASS);
             else badge.removeClass(DOT_CLASS);
+            swapStyle(styleClass);
             if (badge.getParent() == null) addInternalChild(badge);
+        }
+
+        /**
+         * SWAPS the caller's style class; never merely adds it.
+         *
+         * <p>The badge element outlives any one badge, so adding without removing leaves both classes on
+         * it and the cascade resolves whichever rule happens to win — which reads as a random colour
+         * rather than as a stale class. The same rule a recycled tree row follows for its
+         * {@code filetype-*} and {@code decoration-*} classes.</p>
+         */
+        private void swapStyle(@Nullable String styleClass) {
+            if (java.util.Objects.equals(badgeStyle, styleClass)) return;
+            if (badgeStyle != null) badge.removeClass(badgeStyle);
+            badgeStyle = styleClass;
+            if (badgeStyle != null) badge.addClass(badgeStyle);
         }
 
         @Override

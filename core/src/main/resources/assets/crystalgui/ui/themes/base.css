@@ -216,7 +216,12 @@ theme {
 
     --menu-accelerator: var(--fg-hint);
     --menu-arrow: var(--fg-secondary);
-    --menu-bg: var(--surface-overlay);
+    /* THE BASE SURFACE, not the overlay one. A menu is chrome that opens over the workbench, and it reads
+     * as part of the same shell as the menu bar it drops from -- which is already --surface-base. Derived
+     * from --surface-overlay it came out a few points lighter than the bar above it, so the two halves of
+     * one gesture were different greys. Every menu goes through this: the main bar's drops, context menus,
+     * dropdowns and submenus are all Menu. */
+    --menu-bg: var(--surface-base);
     --menu-border: var(--border-base);
     --menu-fg: var(--fg);
     --menu-item-disabled-fg: var(--fg-disabled);
@@ -337,6 +342,24 @@ theme {
     --region-drop-border: var(--accent);
 
     --resizer-grip: var(--border-strong);
+
+    /* The Run console. Chrome DERIVES, exactly as the Problems panel above it does — these were authored
+     * as free-standing hex, which the governance test correctly refused: a panel whose toolbar keeps its
+     * own grey while every other toolbar follows the theme is the drift the token layer exists to stop. */
+    --run-action-disabled-fg: var(--fg-disabled);
+    --run-action-fg: var(--fg-secondary);
+    --run-action-hover-bg: var(--hover-bg);
+    --run-action-hover-fg: var(--fg);
+    /* A console hyperlink, and it is the SYSTEM link colour rather than a syntax token. VS Code draws the
+     * same distinction: link colour is a workbench colour, not a token-scheme colour, because a link is an
+     * affordance rather than a category of code — which is also what spares every scheme having to define
+     * a `--syntax-link` it has no opinion about. */
+    --run-link-fg: var(--link);
+    /* The icon-tier green, not `--success`: that is the body colour for a completed thing and too dark to
+     * read as a 10px mark. Read by the activity bar's dot AND by the file tree's row, from this one name,
+     * so the two greens cannot drift apart again — which they had, having been chosen weeks apart. */
+    --run-live-fg: var(--success-icon);
+    --run-notice-fg: var(--fg-hint);
 
     --scrollbar-corner: #00000000;
     --scrollbar-track: #00000000;

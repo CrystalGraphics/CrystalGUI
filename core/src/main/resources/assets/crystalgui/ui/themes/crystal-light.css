@@ -60,6 +60,9 @@ theme {
     --error-icon: #DB5C5C;
     --warning-icon: #FFAF0F;
     --info-icon: #4682FA;
+    /* Darker than dark's, the same relationship the other three have between the pair: a filled mark has
+     * to hold its own against a light surface, where dark's #5FAD65 washes out. */
+    --success-icon: #3E8E45;
 
     --link: #2A6DB0;
 

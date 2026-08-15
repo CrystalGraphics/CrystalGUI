@@ -950,6 +950,24 @@ public class UIElement implements SettingsScope, DataProvider {
         return false;
     }
 
+    /**
+     * Takes focus <b>as a pointer would</b> — no ring, no scroll. A no-op with no window attached.
+     *
+     * <p>Exists so a caller can ask for the non-ringing focus without naming {@code UIInputHandler}, which
+     * implements {@code CgSystemInput} — a CrystalGraphics <b>platform</b> type that {@code core} takes as
+     * {@code compileOnly} and therefore does not pass on. Reaching the handler from another module
+     * therefore fails to compile on a supertype nobody meant to depend on, and the useful half of that
+     * dependency is one method.</p>
+     *
+     * <p>Deliberately <em>not</em> a wrapper for the programmatic {@code requestFocus} as well: that one
+     * rings and scrolls, and the choice between them is a real decision every caller has to make rather
+     * than a default worth hiding behind a convenience.</p>
+     */
+    public void requestPointerFocus() {
+        UIWindow window = getAttachedWindow();
+        if (window != null) window.getInputHandler().requestPointerFocus(this);
+    }
+
     public boolean focusable() {
         return this.isEnabled() && this.getFocusPolicy() != FocusPolicy.NONE
                 && this.style.taffyBridge.style.display != TaffyDisplay.NONE

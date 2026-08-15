@@ -11,10 +11,14 @@ carrying the output of running scripts, plus the indicator that says which files
 | 9.5.2 | The console as a text area | **rewritten from a ListView** — see below; the list was the wrong shape |
 | 9.5.3 | States | **done** — `RunState`/`RunSessions`, reported from `Running.invoke`, 12 tests. **The rail itself is not built** |
 | 9.5.4 | The ring | **done** — collapsing removed with the list; see below |
-| 9.5.5 | The running indicator | **done in the tree** — `RunDecorations`, 6 tests. **Editor tabs still read no decorations** |
+| 9.5.5 | The running indicator | **done** — `RunDecorations`, 6 tests, and it is now *invalidated* so the row actually repaints. Editor-tab half **cut**, see 9.5.7 |
+| 9.5.6 | Stack-frame links | **done** — `ConsoleFilter` + `JavaStackFrameFilter`, 10 tests |
+| 9.5.7 | The running badge | **done** — `RunIndicators`, 6 tests. Editor tabs cut, see below |
 
-Written before any of it existed; the states above are current. What remains is the rail, the per-script
-filter, the editable input line, clickable stack frames, and the editor-tab half of the indicator.
+Written before any of it existed; the states above are current. What remains is **the rail with its
+filter (9.5.3)**, planned in detail below, and the editable input line for `System.in`, which is deferred
+because `ScriptHost` does not route stdin at all and so is a language-side change before it is a widget
+one.
 
 ### All of it lives in `language/`, not in `core/`
 
@@ -193,6 +197,48 @@ times a second, so surfacing that as `Running` would strobe the indicator twenty
 communicate nothing. Event-driven scripts show `Live` as their steady state, and `Running` is reserved
 for work with a beginning and an end.
 
+
+### The rail's UI, and the one thing the text-area migration made expensive
+
+A `ListView` down the console's leading edge, one row per session: a state glyph, the script's name, and
+the state text. `ListView` because it already solves recycling, focus, type-ahead and the roving tab
+stop -- and because the rail is a genuine list of rows, which is exactly what the transcript turned out
+not to be.
+
+**Hidden until a second script has been seen.** IntelliJ hides its run tree when there is one
+configuration, and it is right to: a rail listing one thing is a caption taking a fifth of the panel.
+The trigger is *seen this session*, not *live now* -- a rail that appears and vanishes as scripts finish
+is worse than one that stays once earned.
+
+**Selection filters the transcript, with an `All` row at the top.** This is where 9.5's "one workspace
+console filtered by script" is actually spent, so the rail and the filter are one piece of work rather
+than two.
+
+> **FILTERING IS NO LONGER FREE, and that is the price of 9.5.2.** In a list, filtering swaps the row
+> source and costs nothing. In a text area the document *is* the transcript, so a filter change has to
+> **rebuild it** -- clear the buffer and re-insert the lines that match. That is one insert of a joined
+> string rather than n inserts, so it is cheap in absolute terms, but three things follow that would
+> otherwise be found the hard way:
+>
+> - **The ring and the filter must be composed in one place.** The ring trims `lines`; the filter selects
+>   from it. `RunConsole` keeps `lines` as the whole truth and derives the document, so eviction and
+>   filtering cannot disagree about what the reader is looking at.
+> - **Selection is lost on a filter change**, because the offsets it names no longer exist. IntelliJ
+>   loses it too when you switch console tabs. Acceptable, and worth saying rather than discovering.
+> - **The line map must be rebuilt with the document.** `lineAt(row)` is what the tokenizer and the link
+>   lane both read; a filtered document's row 3 is not `lines.get(3)`. Deriving both from one pass is the
+>   only arrangement where they cannot drift.
+
+**The state comes from `RunSessions`, never from output arriving.** A tick script prints twenty times a
+second and its state is `Live` throughout -- rendering state from traffic is precisely the strobe this
+section exists to prevent.
+
+**Placement is a `SplitView`**, so the rail can be widened for long names. Three of its traps apply and
+each has cost a session before: a pane is a flex **column** whatever the split's orientation, the divider
+must clamp against the pane's **content** `min-width` and not the `__split-pane__` wrapper, and a split
+cannot go below two panes -- so the "hidden until a second script" state above is the split being absent,
+not a pane sized to nothing.
+
 ---
 
 ## 9.5.4 The bound is the ring, and collapsing is gone
@@ -272,6 +318,149 @@ lossy summary of several runs.
 
 ---
 
+## 9.5.6 Stack-frame links — port the Filter, not the special case
+
+A stack frame in the transcript opens the file at the line. It worked when the transcript was a list of
+rows, because a row is a click target; the text-area migration removed the affordance and left the whole
+chain behind it intact -- `onLineActivated` is declared, forwarded by `RunPanel` and consumed by
+`RunPanels`, and **nothing emits it**. So this is a regression to repair, not a feature to invent.
+
+### Two different questions, and IntelliJ answers both separately
+
+`RunMessage` already carries `file` and `line` -- the **origin**, resolved from the first stack frame the
+script owns. That answers *"where was this printed from"*. It does not answer *"what does this text point
+at"*: a stack trace written by `report(Throwable)` has **one** origin -- the reporter -- and twenty frames
+in its text, each pointing somewhere different. Navigating a trace by its origin lands every frame on the
+same line.
+
+IntelliJ keeps these apart and so should we. Its console knows nothing about stack frames; it runs a chain
+of `Filter`s over each line, each returning `ResultItem(highlightStartOffset, highlightEndOffset,
+HyperlinkInfo)`. That is why the same console links a compiler's `file:line`, a JUnit failure and a URL
+without a line of code about any of them.
+
+So: a **`ConsoleFilter` SPI** over a line's text, with one implementation to begin --
+`JavaStackFrameFilter`, matching `(Name.java:123)`. A GLSL filter and a JS filter follow in M10/M11 with
+no change here, which is the point of porting the shape rather than the case.
+
+### The span is RECOMPUTED, not stored — and this reverses what this section first said
+
+**Planned as a decoration lane, and that was the wrong answer for the right reason.** The reasoning was
+sound as far as it went: link spans are document offsets, **the ring deletes from the front of the
+document**, and that is an edit — so any *stored* offset begins describing the wrong text the moment the
+bound is first reached, silently, since the transcript keeps working and only the destinations are wrong.
+`TextBuffer.decorations()` maintains tracked ranges across edits and would have solved exactly that.
+
+What it missed is that a filter is a **pure function of a row's own string**, so the spans never have to
+be stored at all. Recomputing them cannot desync, because there is nothing to desync — the failure mode
+the lane was there to prevent is removed rather than managed. The cost is a regex over the handful of
+rows actually on screen, and the editor caches tokens per row on top of that.
+
+> `linksAreStillRightAfterTheRingHasEvicted` is the test that would fail if somebody later "optimised"
+> this by caching. It fills past the bound and then checks every surviving row's span against its own
+> text.
+
+### Painting it without two tokens fighting
+
+The tokenizer reads the lane, so there is one source of truth. The trap: `Levels` already emits a
+per-line capture for stderr and warnings, and a link sits **inside** such a line. Two overlapping tokens
+under unrelated names leave the winner to paint order, and both names resolve to real colours -- which is
+exactly the shape that read as a scheme bug for two rounds when semantic and grammar tokens overlapped.
+
+**So the level capture is emitted SPLIT AROUND the link span**, never overlapping it. Three tokens for a
+stderr line containing a frame, not two that intersect.
+
+`link` and `link.active` are new capture names and must be added to the shipped scheme in the same edit.
+A capture with no rule is not an error -- it takes the surface's own foreground -- so a missing entry looks
+exactly like the feature not working.
+
+### The click, and the rule that keeps it from fighting selection
+
+`TextEditor.offsetAt(screenX, screenY)` already exists and is what mouse selection resolves through. No
+new engine machinery: a listener maps the point to an offset and asks the lane.
+
+**Follow on mouse-UP, and only if the press did not become a drag** -- the same rule a browser uses, and
+the reason is the same: a plain press in a console both places the caret and may begin a selection, and a
+link that fires on the down steals the gesture from a drag that had barely started. IntelliJ requires a
+modifier in the *editor* and none in the *console*; ours is a console, so a plain click follows.
+
+Affordance: coloured **and underlined always**, with only the cursor changing on hover. Planned as
+underline-on-hover; the editor settles it — `rowSyntax` is a per-row token cache that is cleared
+*wholesale*, so restyling one span under the pointer would discard every realised row's tokens on every
+mouse move. IntelliJ's console hyperlinks are permanently underlined anyway, so the constraint and the
+reference agree.
+
+The colour is `--run-link-fg`, deriving from the system `--link` rather than from a new `--syntax-link`.
+**VS Code draws the same line**: link colour is a workbench colour, not a token-scheme colour, because a
+link is an affordance rather than a category of code — which also spares all five shipped schemes having
+to define a token they have no opinion about.
+
+---
+
+## 9.5.7 The running badge — the mechanism already exists
+
+IntelliJ marks the **Run tool window's stripe button**, not a file: `modified.svg` over the icon, in
+`#5FAD65`, whenever something is running.
+
+**Almost all of this is already built**, and the discovery is the plan: `ViewContainerRegistry.setBadge`,
+`ViewContainerRegistry.DOT`, `StripeView.ItemButton.setBadge`, and a `.__activity-bar__ .__badge__.__dot__`
+rule that already positions the mark at the glyph's top-right with a deliberate negative offset "so it
+sits against the glyph's top-right rather than inside the button's box". VS Code's activity badge, ported
+before the Run panel existed.
+
+So the work is a **call**, driven off `RunSessions.onDidChange` — `RunIndicators`.
+
+> **Both writes cross a thread, and that was not in the plan.** `onDidChange` fires from wherever the
+> transition happened: a one-shot's own thread, or the game thread inside a tick handler. The badge
+> attaches an internal child and invalidating decorations repaints tree rows — both `UIElement` state. So
+> the signal only *schedules*, through the **shared `JobScheduler`**, whose `drain()` `UIWindow` already
+> calls once a frame. Keyed, so a burst of transitions coalesces into one update.
+>
+> The scheduler rather than a ticker of the panel's own, because `RunPanel`'s ticker stops when the panel
+> is closed — which is exactly when the dot is the only thing left saying anything is running.
+
+> **And the tree mark was never actually appearing.** `RunDecorations` was registered and resolves
+> correctly when asked, and **nothing ever called `FileDecorations.invalidate()`** — a provider is *pulled*
+> during bind, so the row's colour showed up only when the tree happened to rebind for some unrelated
+> reason. Right, and invisible. `RunIndicators` drives both, because they are the same question.
+
+**The one real change is that a badge needs a colour it does not have.** The dot rule is shared by every
+container's badge, so writing `#5FAD65` into `.__dot__` would turn the Problems count green. `setBadge`
+takes only text, so it grows an optional style class -- VS Code's own `IBadge` carries a type for the same
+reason -- and `language/` passes a `__running__` class it styles itself.
+
+> **One token, not two greens — and it went through the governance layer properly.** The first attempt
+> wrote `var(--run-live, #5FAD65)` straight into the sheets, which `StyleGovernanceTest` refused on three
+> separate counts, each a rule worth knowing: **every `var()` a structure sheet reads must be defined**
+> (which also caught four `--run-*` names shipped undefined in the previous commit — the console CSS was
+> written without running that suite); **`base.css` derives only**, so a literal cannot live there; and a
+> component token may derive only into the **pinned system vocabulary**, which is a spec list rather than
+> whatever a theme happens to define.
+>
+> So: `--success-icon` joins the vocabulary — the `-icon` tier already existed for `error`/`warning`/`info`
+> with the stated reason "for a filled MARK rather than for a word", and a running dot is exactly that, so
+> the set was simply incomplete. Both themes define it (`#5FAD65` dark, `#3E8E45` light, the same
+> darker-for-light relationship the other three have). `base.css` maps `--run-live-fg` to it, and the tree
+> row and the activity bar both read that one name.
+
+### Editor tabs: recommend NOT marking them
+
+The exit criteria say "marked on its tree row and its tab". The tree row is done; the tab should be cut,
+for reasons that only became clear once the badge was found:
+
+- **IntelliJ is run-CONFIGURATION based**, so a run does not belong to a file at all — there is nothing
+  for a tab to be highlighted *as*, which is why there is no active-tab mark to copy in the first place.
+- **A tab already carries a dirty dot in that exact place.** A second dot there is one affordance with two
+  meanings, and the two are independent -- a live script is very often also unsaved.
+- **The fact is already stated twice.** The activity-bar dot answers *"is anything running"*; the tree row
+  answers *"which file"*. A tab adds a third statement of the same fact in the place with the least room.
+- It is not cheap. Tabs read **no** decorations today, so the honest form -- the tab's label taking the
+  decoration colour -- is a real hookup rather than a tweak, spent on the weakest of the three signals.
+
+If it is wanted later, the label-colour route is the one to take, and it wants `FileDecorations` on tabs
+as a general capability rather than a Run-panel special case.
+
+---
+
 ## What it reuses
 
 `ListView` — virtualised, and a firehose demands it. `TreeSearch` for the filter, in the permanent
@@ -283,13 +472,15 @@ panel shape of `ProblemsPanel`.
 
 - `System.out.println` from a **one-shot** script and from a **tick handler on the game thread** both
   reach the console, and Minecraft's own logging reaches neither.
-- A script printing every tick does not flood: identical *origins* collapse with a count, and a
-  per-tick overflow is reported rather than dropped silently.
+- A script printing every tick does not flood: the **ring** bounds the transcript and an eviction is
+  reported rather than dropped silently. (Collapsing was removed with the list — see 9.5.4.)
 - The rail shows a tick-driven script as `Live` and does not strobe.
 - Stopping a script through §19.3 moves it to `Stopped` and **leaves its transcript**.
-- A stack-trace frame opens the file at the line.
-- A running script's file is marked in the tree **and** on its editor tab; its folder takes the colour
-  and not the badge.
+- A stack-trace frame opens the file at the line, is visibly a link before it is clicked, and still
+  opens the right line **after the ring has evicted from the front of the transcript**.
+- A running script's file is marked in the tree, its folder taking the colour and not the badge; and
+  **the Run stripe button carries a dot whenever anything is live**. The editor-tab mark is cut, with
+  its reasons in 9.5.7 — three statements of one fact, in the place with the least room.
 - A runtime exception appears in the console and produces **no** Problems row.
 - The buffer is bounded: a script printing without pause does not grow it without limit, and when the
   oldest output is evicted the panel says so rather than quietly beginning in the middle.

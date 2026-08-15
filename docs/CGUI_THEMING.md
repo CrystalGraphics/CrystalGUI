@@ -335,7 +335,7 @@ editor scheme's.
 | `--list-selected-inactive-bg` | `var(--selection-inactive-bg)` | base.css |
 | `--menu-accelerator` | `var(--fg-hint)` | base.css |
 | `--menu-arrow` | `var(--fg-secondary)` | base.css |
-| `--menu-bg` | `var(--surface-overlay)` | base.css |
+| `--menu-bg` | `var(--surface-base)` | base.css |
 | `--menu-border` | `var(--border-base)` | base.css |
 | `--menu-fg` | `var(--fg)` | base.css |
 | `--menu-item-disabled-fg` | `var(--fg-disabled)` | base.css |
@@ -431,6 +431,13 @@ editor scheme's.
 | `--region-drop-bg` | `#3574F055` | crystal-dark.css |
 | `--region-drop-border` | `var(--accent)` | base.css |
 | `--resizer-grip` | `var(--border-strong)` | base.css |
+| `--run-action-disabled-fg` | `var(--fg-disabled)` | base.css |
+| `--run-action-fg` | `var(--fg-secondary)` | base.css |
+| `--run-action-hover-bg` | `var(--hover-bg)` | base.css |
+| `--run-action-hover-fg` | `var(--fg)` | base.css |
+| `--run-link-fg` | `var(--link)` | base.css |
+| `--run-live-fg` | `var(--success-icon)` | base.css |
+| `--run-notice-fg` | `var(--fg-hint)` | base.css |
 | `--scrollbar-corner` | `#00000000` | base.css |
 | `--scrollbar-tail` | `#00000000` | crystal-dark.css |
 | `--scrollbar-tail-hover` | `#8C8C8C33` | crystal-dark.css |
@@ -484,6 +491,7 @@ editor scheme's.
 | `--stripe-info` | `var(--info)` | base.css |
 | `--stripe-warning` | `var(--warning)` | base.css |
 | `--success` | `#3C8527` | crystal-dark.css |
+| `--success-icon` | `#5FAD65` | crystal-dark.css |
 | `--surface-base` | `#26282B` | crystal-dark.css |
 | `--surface-editor` | `#191A1C` | crystal-dark.css |
 | `--surface-overlay` | `#2B2D30` | crystal-dark.css |
