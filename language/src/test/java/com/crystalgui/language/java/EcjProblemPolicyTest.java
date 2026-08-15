@@ -11,6 +11,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -58,6 +59,25 @@ public class EcjProblemPolicyTest extends FixFixture {
         assertNotNull("unusedObjectAllocation must be switched on", problem);
         assertFalse("a discarded allocation is a defect, not dead weight — it keeps its underline",
                 problem.hasTag(DiagnosticTag.UNNECESSARY));
+    }
+
+    /**
+     * <b>The one thing turned DOWN from ECJ's default.</b>
+     *
+     * <p>{@code Throwable} implements {@code Serializable}, so every custom exception a script declares
+     * was flagged for having no {@code serialVersionUID} — a warning about the binary compatibility of
+     * serialized instances across builds, whose only achievable remedy is a magic constant nobody reads.
+     * Asserted rather than assumed because switching a problem off is invisible from everywhere else:
+     * nothing fails, a mark simply stops appearing.</p>
+     */
+    @Test
+    public void aMissingSerialVersionUidIsNotReported() {
+        String source = ""
+                + "public class Script {\n"
+                + "    static final class Failure extends Exception { }\n"
+                + "}\n";
+        assertNull("an exception class must not be nagged about serialVersionUID",
+                first(source, IProblem.MissingSerialVersion));
     }
 
     // ── Drawn as dead weight ────────────────────────────────────────────────────────────────────

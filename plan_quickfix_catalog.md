@@ -349,6 +349,16 @@ Recording these so they are not "found missing" later.
   decision that comes first — the fixes are meaningless until the diagnostics exist.
 - **Module fixes** (`UndefinedModule`, `UndefinedModuleAddReads`). Band 8 has no modules and the
   scripts this engine compiles are not modular.
+- **`MissingSerialVersion`** — and the diagnostic itself is now switched off, which is the only thing
+  this engine turns *down* from ECJ's default. The message ("does not declare a static final
+  serialVersionUID field of type long") is about the binary compatibility of **serialized instances
+  across builds**: with no explicit stamp the compiler derives one from the class's exact shape, so
+  adding a field later breaks streams written by the previous build. Real for code that serializes, and
+  never for a script. It cannot be avoided by not asking for it either — `Throwable` implements
+  `Serializable`, so *every* custom exception is flagged — and its only achievable remedy is a magic
+  constant nobody reads. A diagnostic whose fix is "write this line you do not understand" teaches
+  nothing and costs a line on every exception class. Adding the `= 1L` correction instead was the other
+  option and is a dozen lines if the warning is ever wanted back.
 - **`ArgumentIsNeverUsed` → remove parameter**, and **create-parameter**, per the notes above: both
   are single-file edits with cross-file consequences.
 
