@@ -2021,9 +2021,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         hover.pointerForTest(offset);
     }
 
-    /** Test seam — @see HoverDocumentation#wordStartAtForTest */
+    /** Test seam — @see HoverDocumentation#hoverAnchorAtForTest */
     public int hoverWordStartAtForTest(float localX, float localY) {
-        return hover.wordStartAtForTest(localX, localY);
+        return hover.hoverAnchorAtForTest(localX, localY);
     }
 
     boolean isSelecting() {
