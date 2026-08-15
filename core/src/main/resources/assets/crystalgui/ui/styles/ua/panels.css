@@ -683,7 +683,7 @@ runpanel .__run-console__.__over-link__ {
  * by the console's tokenizer and by nothing else — a global rule would be a promise to colour something no
  * other producer makes. The colour is still a `var`, so a theme can take it over without this moving. */
 runpanel .__run-console__ .__syntax__::highlight(link) {
-    color: var(--run-link-fg);
+    color: var(--run-link-fg, #4A88C7);
     text-decoration-line: underline;
 }
 
@@ -723,7 +723,7 @@ runpanel .__run-action__ {
     padding-bottom: 0;
     flex-shrink: 0;
     background: none;
-    color: var(--run-action-fg);
+    color: var(--run-action-fg, #9DA0A8);
 }
 
 /* `background` and `background-color` are separate properties, and a rule setting only the colour is
@@ -731,8 +731,8 @@ runpanel .__run-action__ {
  * a whole release. Both, every time. */
 runpanel .__run-action__:hover {
     background: none;
-    background-color: var(--run-action-hover-bg);
-    color: var(--run-action-hover-fg);
+    background-color: var(--run-action-hover-bg, #2E3033);
+    color: var(--run-action-hover-fg, #DFE1E5);
 }
 
 /* AFTER the hover rule, because `:disabled` and `:hover` are both one pseudo-class and therefore tie on
@@ -742,7 +742,32 @@ runpanel .__run-action__:disabled,
 runpanel .__run-action__:disabled:hover {
     background: none;
     background-color: transparent;
-    color: var(--run-action-disabled-fg);
+    color: var(--run-action-disabled-fg, #5A5D63);
+}
+
+/* The per-script filter. A `dropdown` is its own tag and inherits nothing from `button` — a widget's
+ * cascade identity is its tag, never its Java supertype, which is why `Dropdown extends Button` needs its
+ * own geometry stated rather than borrowing the action rules above. */
+runpanel .__run-filter__ {
+    height: 18px;
+    min-height: 0;
+    flex-shrink: 0;
+    /* A FLOOR, NOT A SIZE. The head is a packed row and flex-shrink defaults to 0 here, so whatever can
+     * give is the only thing that gives -- and a picker squeezed to nothing is not a picker. */
+    min-width: 90px;
+    max-width: 180px;
+    padding-left: 6px;
+    padding-right: 4px;
+    font-size: 9px;
+    background: none;
+    background-color: transparent;
+    color: var(--run-action-fg, #9DA0A8);
+}
+
+runpanel .__run-filter__:hover {
+    background: none;
+    background-color: var(--run-action-hover-bg, #2E3033);
+    color: var(--run-action-hover-fg, #DFE1E5);
 }
 
 runpanel .__run-stop__ {
@@ -755,6 +780,34 @@ runpanel .__run-clear__ {
     overlay-fit: contain;
 }
 
+/* The System.in row. Present only while something is actually blocked on a read, so it needs no empty
+ * state and no label: a field that appears IS the prompt. Monospace, because what is typed becomes a
+ * line of the transcript and would otherwise jump fonts the moment it was echoed. */
+runpanel .__run-input__ {
+    /* FULL WIDTH AND NO MARGIN. `box-sizing` is border-box here, which covers padding and border and
+     * NOT margin -- so `width: 100%` beside a 6px margin each side is 100% of the content box PLUS 12px:
+     * shifted 6px right and spilling 6px past the panel, which is exactly how it first shipped. The row
+     * spans the panel like a terminal's input does, and its left edge lines up with the transcript. */
+    width: 100%;
+    flex-shrink: 0;
+    height: 20px;
+    min-height: 0;
+    /* RESOURCE PATHS, not CSS family names. `font-family` here resolves each entry through CgIO, so a
+     * stack of familiar-looking names -- "JetBrains Mono", monospace -- loads nothing and FontFamilyCache
+     * throws rather than falling back, taking the whole harness down the first time a script asked for
+     * input. The same two entries the editor above uses, so the line typed and the line echoed into the
+     * transcript are the same face; the sans behind covers glyphs the mono lacks. */
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
+                 "crystalgraphics:IBMPlexSans-Regular.ttf";
+    font-size: 10px;
+    background-color: var(--field-bg, #131416);
+    color: var(--field-fg, #DFE1E5);
+    /* THE EDGE THAT SAYS "answer here". A console's input is the one place in the panel that takes typing,
+     * and without a border it reads as another row of output that happens to have a caret. */
+    border-width: 1px;
+    border-color: var(--accent, #3574F0);
+}
+
 /* The ring's eviction notice. Never hidden when non-empty: a transcript that quietly begins in the
  * middle reads as the console having missed something. */
 runpanel .__run-notice__ {
@@ -762,7 +815,7 @@ runpanel .__run-notice__ {
     flex-shrink: 0;
     padding-left: 6px;
     padding-right: 6px;
-    color: var(--run-notice-fg);
+    color: var(--run-notice-fg, #7A7A7A);
     white-space: nowrap;
     text-overflow: ellipsis;
 }

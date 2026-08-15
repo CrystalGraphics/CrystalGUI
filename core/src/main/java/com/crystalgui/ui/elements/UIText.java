@@ -272,6 +272,26 @@ public final class UIText extends UIElement {
         return this;
     }
 
+    /**
+     * The other half of {@link #forceSelfSizeWidth()}: this element is <b>sized by its box</b>, so the
+     * width must come from the cascade and never from the text.
+     *
+     * <p>Without it there was no way to say so, and the auto-detect answers the wrong way round for
+     * anything whose text is <em>incidental</em> to its size. The activity bar's badge is the case that
+     * found it: in its dot form the text is {@code ""} and the sheet gives it {@code width: 10px}, but the
+     * first {@code recompute()} read a not-yet-laid-out box, latched "self-sizing", and pushed a width of
+     * <b>zero</b> at IMPORTANT — which outranks the sheet permanently. The dot was attached, classed and
+     * coloured, and 0px wide, so it had never once been visible; only counted badges worked, because their
+     * text happens to be the width you want.</p>
+     *
+     * <p>Both locks exist so a caller that knows the answer can state it rather than gamble on the race —
+     * and the badge needs <em>both</em>, since a count sizes to its text and a dot to its box.</p>
+     */
+    public UIText neverSelfSizeWidth() {
+        selfSizesWidth = Boolean.FALSE;
+        return this;
+    }
+
     public UIText(String initialText) {
         text.set(initialText == null ? "" : initialText);
         text.changed.connect((oldVal, newVal) -> {

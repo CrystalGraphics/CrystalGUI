@@ -104,6 +104,10 @@ public final class RunPanels {
         // Installing before the panel is registered would leave output arriving at a console nobody can
         // open, which is the one failure here that looks like the feature working.
         ScriptOutput.install(console);
+        // AND THE READING HALF. Same marker, same reasoning, opposite direction: a script's System.in
+        // waits for the panel's input row, and everybody else's -- the game's, another mod's -- goes to
+        // the real stream untouched. Redirecting it wholesale would park the game on a text field.
+        ScriptInput.install(console);
         return panel;
     }
 

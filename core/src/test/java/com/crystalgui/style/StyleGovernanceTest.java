@@ -592,6 +592,53 @@ public class StyleGovernanceTest {
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * <b>Every {@code font-family} entry in a shipped sheet must actually load.</b>
+     *
+     * <p>{@code font-family} here is a list of RESOURCE PATHS resolved through {@code CgIO} — not CSS
+     * family names. A stack that looks like ordinary CSS ({@code "JetBrains Mono", monospace}) therefore
+     * resolves to nothing, and {@code FontFamilyCache.build} <b>throws</b> rather than falling back:
+     * <i>"no font-family source could be loaded"</i>.</p>
+     *
+     * <p>Which makes it a crash rather than a cosmetic defect, and a <em>latent</em> one — the family is
+     * resolved the first time a widget carrying that rule is measured, so the sheet parses, every test
+     * passes, and the application dies the first time somebody opens that one panel. It shipped exactly
+     * that way on the Run console's input row: fine until a script asked for input, then the whole
+     * harness went down.</p>
+     */
+    @Test
+    public void everyShippedFontFamilyResolves() {
+        Pattern declaration = Pattern.compile("font-family\\s*:\\s*([^;}]+)");
+        List<String> broken = new ArrayList<>();
+        for (String sheet : STRUCTURE_SHEETS) {
+            String css = stripComments(load(STYLES + sheet));
+            Matcher declarations = declaration.matcher(css);
+            while (declarations.find()) {
+                for (String entry : declarations.group(1).split(",")) {
+                    String path = entry.trim().replaceAll("^[\"']|[\"']$", "").trim();
+                    if (path.isEmpty() || path.startsWith("var(")) continue;
+                    if (resolvesAsFont(path)) continue;
+                    broken.add(sheet + ": " + path);
+                }
+            }
+        }
+        assertTrue("font-family entries that load nothing — FontFamilyCache THROWS on these, so the first"
+                + " widget to be measured with one takes the application down:\n" + String.join("\n", broken),
+                broken.isEmpty());
+    }
+
+    /** {@code "namespace:path"} -> {@code /assets/namespace/path}, the way {@code CgIO} resolves one. */
+    private static boolean resolvesAsFont(String path) {
+        int colon = path.indexOf(':');
+        if (colon <= 0) return false;
+        String resource = "/assets/" + path.substring(0, colon) + "/" + path.substring(colon + 1);
+        try (InputStream in = StyleGovernanceTest.class.getResourceAsStream(resource)) {
+            return in != null;
+        } catch (IOException unreadable) {
+            return false;
+        }
+    }
+
     private static String load(String resource) {
         try (InputStream in = StyleGovernanceTest.class.getResourceAsStream(resource)) {
             if (in == null) fail("shipped resource missing: " + resource);

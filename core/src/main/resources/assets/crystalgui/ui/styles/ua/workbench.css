@@ -364,7 +364,7 @@ workbench .__activity-bar__ .__stripe-separator__ {
  * through `ViewContainerRegistry.setBadge(id, text, styleClass)` and the rail SWAPS it, so a badge that
  * changes kind does not end up wearing both. */
 .__activity-bar__ .__badge__.__dot__.__running__ {
-    color: var(--run-live-fg);
+    color: var(--run-live-fg, #5FAD65);
 }
 
 .__region-host__ {

@@ -800,6 +800,10 @@ public class StripeView extends UIElement {
         void setBadge(@Nullable String text, @Nullable String styleClass) {
             if (text == null || text.isEmpty()) {
                 removeInternalChild(badge);
+                // AND THE DOT CLASS. The element is pooled rather than discarded, so a class left on it
+                // is a class the next badge inherits -- a later count would come back wearing the dot's
+                // absolute positioning and its 10px box.
+                badge.removeClass(DOT_CLASS);
                 // CLEARED HERE TOO, not only on the next set. The element is pooled -- clearing detaches it
                 // rather than discarding it -- so a class left behind is a class the next badge inherits,
                 // and a Problems count would come back wearing the last run's green.
@@ -810,6 +814,19 @@ public class StripeView extends UIElement {
             // holding the marker -- otherwise the glyph and the sheet's dot would both be on screen.
             boolean dot = ViewContainerRegistry.DOT.equals(text);
             badge.setText(dot ? "" : text);
+            // WHICH WAY THIS BADGE SIZES, stated rather than auto-detected -- and the two forms differ.
+            //
+            // A COUNT is as wide as its text. A DOT is as wide as the sheet says, and its text is "" --
+            // so UIText's auto-detect (contentBoxWidth() <= 0 on the first recompute, read from a box
+            // that has not been laid out yet) latched "self-sizing" and pushed a width of ZERO at
+            // IMPORTANT, which outranks the sheet's `width: 10px` for the element's whole life. The dot
+            // was attached, classed, coloured and 0px wide: it had never once been visible, and only
+            // counted badges worked because their text is incidentally the width you want.
+            //
+            // Set on every call, because one element serves both forms and the decision must follow the
+            // form rather than whichever one happened to be first.
+            if (dot) badge.neverSelfSizeWidth();
+            else badge.forceSelfSizeWidth();
             if (dot) badge.addClass(DOT_CLASS);
             else badge.removeClass(DOT_CLASS);
             swapStyle(styleClass);
