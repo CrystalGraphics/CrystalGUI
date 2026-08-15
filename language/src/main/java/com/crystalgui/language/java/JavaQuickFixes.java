@@ -56,7 +56,8 @@ final class JavaQuickFixes {
             UnusedCorrections.all(),
             ImportCorrections.all(),
             DidYouMeanCorrections.all(),
-            ExceptionCorrections.all());
+            ExceptionCorrections.all(),
+            CreateCorrections.all());
 
     /** {@code IProblem} id → the corrections that answer for it. Built once. */
     private static final Map<Integer, List<Correction>> BY_PROBLEM = index(ALL);
