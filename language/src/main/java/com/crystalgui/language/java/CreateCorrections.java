@@ -22,8 +22,10 @@ import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IfStatement;
 import org.eclipse.jdt.core.dom.Initializer;
+import org.eclipse.jdt.core.dom.LambdaExpression;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
+import org.eclipse.jdt.core.dom.MethodReference;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.ParameterizedType;
@@ -109,6 +111,15 @@ final class CreateCorrections {
             AbstractTypeDeclaration target = declarationOf(context, receiver);
             if (target == null) return;
 
+            // A LAMBDA OR METHOD REFERENCE ARGUMENT HAS NO TYPE OF ITS OWN -- it takes one from the
+            // parameter it is passed to, and the parameter is what does not exist yet. Writing `Object`
+            // there produces a signature the call still cannot use, which is a fix that looks finished
+            // and is not; nothing offered is the honest answer. (IntelliJ guesses a functional
+            // interface from the lambda's shape, which is a fine thing to add later and is not this.)
+            for (Object each : call.arguments()) {
+                if (each instanceof LambdaExpression || each instanceof MethodReference) return;
+            }
+
             AST ast = context.unit().getAST();
             ASTRewrite rewrite = context.rewrite();
             ImportPlan imports = context.importPlan();
@@ -116,10 +127,16 @@ final class CreateCorrections {
             method.setName(ast.newSimpleName(name.getIdentifier()));
 
             boolean sameType = here != null && here.getErasure().isEqualTo(receiver.getErasure());
-            if (sameType) method.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.PRIVATE_KEYWORD));
-            if (isStaticCall(call, here)) {
-                method.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.STATIC_KEYWORD));
+            boolean isStatic = isStaticCall(call, here);
+            // INTO AN INTERFACE the instance case is an abstract method: a private method with a body is
+            // Java 9 and this engine's floor is 8, and an abstract one is what IntelliJ generates there
+            // too -- the implementors then say what it does. A static one keeps its body, which is legal
+            // in an interface since 8.
+            boolean abstractMember = receiver.getErasure().isInterface() && !isStatic;
+            if (sameType && !abstractMember) {
+                method.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.PRIVATE_KEYWORD));
             }
+            if (isStatic) method.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.STATIC_KEYWORD));
 
             Set<String> taken = new LinkedHashSet<>();
             List<String> shownTypes = new ArrayList<>();
@@ -136,14 +153,16 @@ final class CreateCorrections {
 
             Type returnType = returnTypeFor(call, ast, rewrite, imports);
             method.setReturnType2(returnType);
-            Block body = ast.newBlock();
-            Expression zero = zeroOf(returnType, ast);
-            if (zero != null) {
-                ReturnStatement returned = ast.newReturnStatement();
-                returned.setExpression(zero);
-                body.statements().add(returned);
+            if (!abstractMember) {
+                Block body = ast.newBlock();
+                Expression zero = zeroOf(returnType, ast);
+                if (zero != null) {
+                    ReturnStatement returned = ast.newReturnStatement();
+                    returned.setExpression(zero);
+                    body.statements().add(returned);
+                }
+                method.setBody(body);
             }
-            method.setBody(body);
 
             rewrite.getListRewrite(target, target.getBodyDeclarationsProperty()).insertLast(method, null);
             ChangeSet edit = context.changesFrom(rewrite, imports);

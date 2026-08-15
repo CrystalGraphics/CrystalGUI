@@ -927,9 +927,24 @@ separate plan with cross-document undo as its first line.
    `installDiagnostics` replaced the tracked lane without marking highlights dirty. `SquigglesPart`
    re-reads the lane every frame and never noticed, while the highlight cache is keyed on the visible
    range — so the fade would have appeared only when something else happened to scroll or type.
-6. `ImportPlan`, "did you mean", the list-element fixes, organise imports.
-7. **`commandId + arguments`** with the first command-shaped action (R4).
-8. T3 pair (try/catch, `throws`), then the corpus test (§15 L2), then T4's create-method.
+6. ~~`ImportPlan`, "did you mean", the list-element fixes, organise imports.~~ **Done, as three commits.**
+   The "separator helper" turned out to be `ListRewrite` — remove from `throws`/`implements`/type
+   parameters is one class reading the list off the node's own `getLocationInParent()`. "Did you mean"
+   ranks by optimal-string-alignment distance (tolerance 2, or 1 for ≤ 3 characters, at most five, case
+   counted only as the tie-break) with candidates from the tree for methods and names and from a new
+   `TypeIndex.similar` walk for types; a rename to an unimported type imports it, which is why
+   `ImportPlan` landed here. Organize imports is the registry's first **intention** — a correction with
+   no problems, asked once per request about the range — and refuses over a comment.
+7. ~~**`commandId + arguments`** with the first command-shaped action (R4).~~ **Done.** The first
+   consumer already existed: "Copy problem message" re-read the problems at the *caret* when it ran,
+   and the popup can be opened from a stripe mark nowhere near it. The action now carries the message.
+8. ~~T3 pair (try/catch, `throws`), then the corpus test (§15 L2), then T4's create-method.~~ **Done, as
+   three commits.** The T3 pair found the one thing the substrate could not yet express — a moved
+   statement is a `MoveSourceEdit`/`MoveTargetEdit` pair, and `Rewrites` refused unknown edit types by
+   design; the refusal did its job and the pair is now handled, re-indent modifier included. Create
+   method infers parameter types and names from the arguments and the return type from the use site,
+   only ever into a type declared in this file. The corpus test runs every action over every `.java`
+   in the repository under `-Pcorpus`; see §20 for what it found.
 
 ---
 
@@ -1103,7 +1118,39 @@ from a string, and the unresolved-variable case reports as `UnresolvedVariable`,
 | Try/catch template | `throw new RuntimeException(e);` | IntelliJ's default since 2020, and it does not swallow. A declaration whose value is used afterwards is split — `Type x;` then `try { x = …; }` — which is what IntelliJ does and what keeps definite assignment satisfied |
 | Add `throws` | on the enclosing method or constructor; **refused inside a lambda body and inside an initialiser** | a `throws` added to the method around a lambda is added to the wrong callable and compiles anyway, which is worse than nothing |
 | Create method from usage | in the receiver's type **only if that type is declared in this file**; `private` when it is the enclosing type, package-private otherwise; parameter types from the argument bindings, names from the arguments when they are simple names; return type from the use site (`void` for a statement, the declared type for an initialiser, else `Object`) | anything else is a second file, which is §14-G's deliberate no |
-| Corpus test | every `.java` under `core/` and `language/`, empty classpath, every action applied and re-parsed; gated on `-Pcorpus` | it is minutes, and it is the layer that finds what nobody wrote a fixture for |
+| Corpus test | every `.java` under `core/` and `language/`, empty classpath, every action applied and re-parsed; ~~gated on `-Pcorpus`~~ **runs with the suite** — measured at twelve seconds, see §20 | it is the layer that finds what nobody wrote a fixture for |
+
+---
+
+## 20. What the corpus found
+
+652 files, 21,095 problems, 942 actions offered, all 942 applied and re-parsed, **twelve seconds**. So the
+gate the plan called for was unnecessary — the assumption was minutes — and it now runs with every
+`:language:test`, `-PnoCorpus` to skip. Its first run produced four things worth writing down.
+
+- **Zero correction failures.** Nothing threw, no edit was refused by `ChangeSet.of` or fell outside its
+  document, and no file that parsed before a fix failed to parse after it. That is the assertion the pass
+  exists to make, and it held on the first run against real code none of the fixtures resembled.
+- **ECJ itself crashed on one file** — an `AssertionError` out of its binding layer, *"The constructor
+  `<init>(List<CompletionItem>, boolean)` is wrongly tagged as containing missing types"*, on
+  `CompletionList.java`: a record whose component types were unresolvable at an empty classpath. Not a
+  correction's defect, and recorded as such rather than counted against them. **It is a production
+  finding in its own right:** `EcjSourceAnalyzer.analyze` does not guard `createAST` against an
+  `Error`, so a script declaring a record over a type that is not on the classpath — a mod class, on a
+  server without it — would kill the analysis job rather than report anything. Open; belongs to the
+  analyzer, not this layer.
+- **Two real create-method defects, both fixed and both pinned by a test.** A lambda argument has no
+  type of its own — it takes one from the parameter it is passed to, and that parameter is what does
+  not exist yet — so writing `Object` produced a signature the call still could not use while looking
+  finished; the correction now refuses when any argument is a lambda or method reference. And a call
+  from inside an *interface* generated a private method with a body, which is Java 9 and the floor is
+  8; the instance case is now an abstract method, which is also what IntelliJ generates there.
+- **The 33 remaining "more errors after than before" are the empty classpath speaking**, and are printed,
+  not asserted. A generated `getAttachedWindow()` copies its return type from the use site, and
+  `UIWindow` is unresolvable in this run — so the new declaration is one more unresolvable name. With a
+  real classpath the same fix compiles. The rest are "did you mean" choosing a same-file nested type or
+  an out-of-scope local, which its own javadoc records as an accepted imprecision. Asserting on this count
+  would fail the suite for judgement calls; reading it is what a person does before calling a batch done.
 
 1. **Which of the three optional diagnostics to switch on.** `MissingOverrideAnnotation` is required for
    step 5 to have anything to fix. `SuperfluousSemicolon` and `UnusedObjectAllocation` are opinions —
