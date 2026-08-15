@@ -120,10 +120,9 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
 
     private static Map<String, String> compilerOptions(int releaseLevel) {
         Map<String, String> options = EcjOptions.forLevel(releaseLevel);
-        // Deprecation reported rather than silent: a script calling a removed-next-version API is worth
-        // a squiggle, and SymbolModifier.DEPRECATED already has a drawing contract. The one option that
-        // is this analysis's own -- an attached source is read for its shape, not diagnosed.
-        options.put("org.eclipse.jdt.core.compiler.problem.deprecation", "warning");
+        // WHAT WE CHOOSE TO REPORT, in one table with a reason per line. Applied here and nowhere else --
+        // an attached source is read for its shape, not diagnosed, so it gets the level and none of this.
+        options.putAll(EcjProblemPolicy.severities());
         return options;
     }
 
@@ -203,8 +202,13 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 // one-character problem produces a zero-width squiggle, which paints as nothing at all.
                 TextPoint start = pointOf(resolved, problem.getSourceStart());
                 TextPoint end = pointOf(resolved, problem.getSourceEnd() + 1);
+                // TAGGED HERE, from the same table that decided the problem was worth reporting. A tag
+                // is how the text is DRAWN rather than how bad it is -- unused code faded, deprecated
+                // code struck through -- and without it every "nothing reads this" arrives as one more
+                // underline indistinguishable from a real defect. @see EcjProblemPolicy
                 found.add(new Diagnostic(start, end, severity, problem.getMessage(),
-                        "java", Integer.toString(problem.getID())));
+                        "java", Integer.toString(problem.getID()),
+                        EcjProblemPolicy.tagsFor(problem.getID()), java.util.List.of()));
             }
             return found;
         }

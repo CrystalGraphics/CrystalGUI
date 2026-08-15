@@ -7,9 +7,16 @@ import com.crystalgui.text.lang.CodeActionKind;
 
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
+import org.eclipse.jdt.core.dom.AnnotationTypeDeclaration;
+import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.ChildListPropertyDescriptor;
+import org.eclipse.jdt.core.dom.EmptyStatement;
+import org.eclipse.jdt.core.dom.EnumDeclaration;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
+import org.eclipse.jdt.core.dom.MethodDeclaration;
+import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
@@ -32,6 +39,10 @@ final class UnusedCorrections {
     static final String REMOVE_IMPORTS = "java.unused.removeImports";
     static final String REMOVE_LOCAL = "java.unused.removeLocal";
     static final String REMOVE_FIELD = "java.unused.removeField";
+    static final String REMOVE_METHOD = "java.unused.removeMethod";
+    static final String REMOVE_CONSTRUCTOR = "java.unused.removeConstructor";
+    static final String REMOVE_TYPE = "java.unused.removeType";
+    static final String REMOVE_SEMICOLON = "java.unused.removeSemicolon";
 
     private UnusedCorrections() {
     }
@@ -45,7 +56,11 @@ final class UnusedCorrections {
                         VariableDeclarationStatement.FRAGMENTS_PROPERTY, "Remove variable "),
                 new RemoveUnusedDeclaration(REMOVE_FIELD, IProblem.UnusedPrivateField,
                         FieldDeclaration.class,
-                        FieldDeclaration.FRAGMENTS_PROPERTY, "Remove field "));
+                        FieldDeclaration.FRAGMENTS_PROPERTY, "Remove field "),
+                new RemoveUnusedMember(REMOVE_METHOD, IProblem.UnusedPrivateMethod),
+                new RemoveUnusedMember(REMOVE_CONSTRUCTOR, IProblem.UnusedPrivateConstructor),
+                new RemoveUnusedMember(REMOVE_TYPE, IProblem.UnusedPrivateType),
+                new RemoveSuperfluousSemicolon());
     }
 
     // ── Imports ─────────────────────────────────────────────────────────────────────────────────
@@ -178,6 +193,114 @@ final class UnusedCorrections {
             if (edit == null) return;
             out.add(context.preferredFix(id,
                     titlePrefix + "'" + fragment.getName().getIdentifier() + "'", edit));
+        }
+    }
+
+    // ── Whole members ───────────────────────────────────────────────────────────────────────────
+
+    /**
+     * "Remove method 'x'" / "Remove constructor 'X'" / "Remove class 'X'".
+     *
+     * <p>A private member nothing in the file refers to. One class for three registrations, because the
+     * only thing that differs is the noun — and the noun is <b>read from the declaration</b> rather than
+     * carried as a parameter, so a private {@code interface} says "interface" and an {@code enum} says
+     * "enum" without three more entries. Getting that from a field would be three chances to write
+     * "class" and mean any of them.</p>
+     *
+     * <p>Simpler than its variable counterpart above and for a structural reason: a method or a type is
+     * one declaration of one thing, so there is no list to remove an element from. The whole node goes,
+     * and JDT takes its line with it.</p>
+     *
+     * <p><b>ECJ reports these for private members only</b>, which is what makes the deletion safe to
+     * offer: nothing outside the file can be referring to one. A package-private method with no callers
+     * is not reported at all, and should not be — the compiler cannot see who else is on the classpath.</p>
+     */
+    private static final class RemoveUnusedMember implements Correction {
+
+        private final String id;
+        private final int problem;
+
+        RemoveUnusedMember(String id, int problem) {
+            this.id = id;
+            this.problem = problem;
+        }
+
+        @Override public String id() {
+            return id;
+        }
+
+        @Override public int[] problems() {
+            return new int[] {problem};
+        }
+
+        @Override public void contribute(FixContext context, IProblem reported, List<CodeAction> out) {
+            BodyDeclaration declaration = context.enclosing(reported, BodyDeclaration.class);
+            if (declaration == null) return;
+            String noun = nounFor(declaration);
+            String name = nameOf(declaration);
+            if (noun == null || name == null) return;
+
+            ASTRewrite rewrite = context.rewrite();
+            rewrite.remove(declaration, null);
+            ChangeSet edit = context.changesFrom(rewrite);
+            if (edit == null) return;
+            out.add(context.preferredFix(id, "Remove " + noun + " '" + name + "'", edit));
+        }
+
+        /** What to call it, from what it is — a constructor is not a method and an enum is not a class. */
+        private static String nounFor(BodyDeclaration declaration) {
+            if (declaration instanceof MethodDeclaration) {
+                return ((MethodDeclaration) declaration).isConstructor() ? "constructor" : "method";
+            }
+            if (declaration instanceof EnumDeclaration) return "enum";
+            if (declaration instanceof AnnotationTypeDeclaration) return "annotation";
+            if (declaration instanceof TypeDeclaration) {
+                return ((TypeDeclaration) declaration).isInterface() ? "interface" : "class";
+            }
+            return null;
+        }
+
+        private static String nameOf(BodyDeclaration declaration) {
+            if (declaration instanceof MethodDeclaration) {
+                return ((MethodDeclaration) declaration).getName().getIdentifier();
+            }
+            if (declaration instanceof AbstractTypeDeclaration) {
+                return ((AbstractTypeDeclaration) declaration).getName().getIdentifier();
+            }
+            return null;
+        }
+    }
+
+    // ── Nothing at all ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * "Remove redundant semicolon" — a {@code ;} that parses to an empty statement.
+     *
+     * <p>The smallest correction there is, and the only one whose node carries no name. Reported only
+     * because {@code EcjProblemPolicy} switches {@code emptyStatement} on; ECJ leaves it at
+     * {@code ignore}, which is the reason a fix for it would otherwise be dead code that looks alive.</p>
+     *
+     * <p>Removed through the rewriter rather than by deleting the reported range, so a {@code ;} sitting
+     * alone on a line takes the line with it while one trailing a statement does not.</p>
+     */
+    private static final class RemoveSuperfluousSemicolon implements Correction {
+
+        @Override public String id() {
+            return REMOVE_SEMICOLON;
+        }
+
+        @Override public int[] problems() {
+            return new int[] {IProblem.SuperfluousSemicolon};
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            EmptyStatement statement = context.enclosing(problem, EmptyStatement.class);
+            if (statement == null) return;
+            ASTRewrite rewrite = context.rewrite();
+            rewrite.remove(statement, null);
+            ChangeSet edit = context.changesFrom(rewrite);
+            if (edit == null) return;
+            out.add(context.preferredFix(REMOVE_SEMICOLON, "Remove redundant semicolon", edit));
         }
     }
 }

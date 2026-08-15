@@ -1,0 +1,143 @@
+package com.crystalgui.language.java;
+
+import com.crystalgui.text.diagnostic.DiagnosticTag;
+
+import org.eclipse.jdt.core.compiler.IProblem;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * What this engine chooses to report, and how it should be drawn — the two halves of the same decision.
+ *
+ * <h3>Why the table exists at all</h3>
+ *
+ * <p>Most of ECJ's optional problems default to {@code ignore}, and a correction keyed on one of them is
+ * invisible from its own code: the fix compiles, its unit test passes if the test builds the problem
+ * itself, and the popup simply never offers it. That failure is silent in every direction, which is why
+ * enabling a problem is written down in one place with the reason beside it rather than as a scattering
+ * of {@code options.put} lines.</p>
+ *
+ * <h3>Severity and tag are one decision, so they live together</h3>
+ *
+ * <p>{@link DiagnosticTag}'s own javadoc makes the argument: severity answers "how much should this worry
+ * you" and a tag answers "what does the text look like now". Unused code is not a <em>lesser</em> warning,
+ * it is a different kind of statement — so it keeps a warning's severity and is drawn faded rather than
+ * underlined, which is what IntelliJ and VS Code both do and what lets them afford to report all of it.
+ * Deciding one without the other is how a file ends up with nine squiggles that all mean "delete me".</p>
+ *
+ * <p>The two tables are keyed differently and that is not an inconsistency: an <b>option</b> is ECJ's unit
+ * of configuration and covers a category ({@code unusedPrivateMember} is one switch for fields, methods,
+ * constructors and nested types), while a <b>tag</b> is about one problem's meaning. Merging them would
+ * mean either four switches where ECJ has one, or one tag where four are needed.</p>
+ *
+ * <h3>What is deliberately not enabled</h3>
+ *
+ * <p><b>{@code MissingOverrideAnnotation}.</b> An override is a <em>relationship</em>, not a defect, and
+ * no reference implementation reports one as a diagnostic — IntelliJ draws a gutter marker on the
+ * declaration and lets you navigate to what it overrides. Reporting it here would put a squiggle, a
+ * Problems row and an error-stripe mark on every correctly written override in the file. The marker is a
+ * real feature and is recorded in {@code plan_quickfix_catalog.md} §18.6; it belongs with the editor's
+ * gutter parts and needs nothing from this file.</p>
+ */
+final class EcjProblemPolicy {
+
+    private EcjProblemPolicy() {
+    }
+
+    /**
+     * The options this engine sets, on top of ECJ's defaults.
+     *
+     * <p>Everything absent from here is left at JDT's own default, which for the {@code unused*} family
+     * is already {@code warning} — so the eight problems the corrections in this package key on are
+     * mostly reported with no entry at all. The table is short because it should be: each line is a mark
+     * in somebody's file that ECJ had decided not to make.</p>
+     */
+    static Map<String, String> severities() {
+        Map<String, String> options = new HashMap<>();
+
+        // ALREADY THIS ENGINE'S ONE OPINION before the table existed. A script calling an API that is
+        // going away is worth a mark, and SymbolModifier.DEPRECATED already has a drawing contract.
+        options.put("org.eclipse.jdt.core.compiler.problem.deprecation", "warning");
+
+        // A `;` on its own. Pure tidiness and the mildest thing here, which is why it is drawn faded
+        // rather than underlined -- a stray semicolon is dead weight, not a defect.
+        options.put("org.eclipse.jdt.core.compiler.problem.emptyStatement", "warning");
+
+        // `new FileWriter(f);` with the result discarded. NOT tidiness: an allocation nobody keeps is
+        // almost always a forgotten assignment, so this one is a genuine defect and stays underlined.
+        // Deliberately has no quick fix -- see the class note in UnusedCorrections for why offering to
+        // delete the line would be offering to discard the evidence.
+        options.put("org.eclipse.jdt.core.compiler.problem.unusedObjectAllocation", "warning");
+
+        return options;
+    }
+
+    /**
+     * How a problem is drawn, beyond its severity — {@code null} where it is drawn as usual.
+     *
+     * <p>Membership here is a judgement about what the mark <em>means</em>, and the line is between dead
+     * weight and a defect. "This is never used" tells you to delete something; "you discarded this
+     * object" tells you something is wrong. The first fades, the second keeps its underline.</p>
+     */
+    static Set<DiagnosticTag> tagsFor(int problemId) {
+        Set<DiagnosticTag> tags = TAGS.get(problemId);
+        return tags == null ? Collections.emptySet() : tags;
+    }
+
+    private static final Map<Integer, Set<DiagnosticTag>> TAGS = buildTags();
+
+    private static Map<Integer, Set<DiagnosticTag>> buildTags() {
+        Map<Integer, Set<DiagnosticTag>> tags = new HashMap<>();
+        Set<DiagnosticTag> unnecessary = Collections.singleton(DiagnosticTag.UNNECESSARY);
+        Set<DiagnosticTag> deprecated = Collections.singleton(DiagnosticTag.DEPRECATED);
+
+        // DEAD WEIGHT -- faded. Everything whose message amounts to "nothing reads this".
+        for (int problem : new int[] {
+                IProblem.UnusedImport,
+                IProblem.LocalVariableIsNeverUsed,
+                IProblem.UnusedPrivateField,
+                IProblem.UnusedPrivateMethod,
+                IProblem.UnusedPrivateConstructor,
+                IProblem.UnusedPrivateType,
+                IProblem.UnusedLabel,
+                IProblem.UnusedTypeParameter,
+                // Unreachable rather than unused, and the same statement about the text: nothing runs
+                // this. VS Code fades unreachable code for exactly this reason.
+                IProblem.DeadCode,
+                // A `;` that parses to nothing at all -- the purest case in the table.
+                IProblem.SuperfluousSemicolon}) {
+            tags.put(problem, unnecessary);
+        }
+
+        // STILL WORKS, SHOULD NOT BE USED -- struck through. Reported since before this table existed,
+        // and drawn as an ordinary warning the whole time because nothing produced tags.
+        for (int problem : new int[] {
+                IProblem.UsingDeprecatedType,
+                IProblem.UsingDeprecatedField,
+                IProblem.UsingDeprecatedMethod,
+                IProblem.UsingDeprecatedConstructor,
+                IProblem.OverridingDeprecatedMethod}) {
+            tags.put(problem, deprecated);
+        }
+
+        // NOT TAGGED, and each is a decision rather than an oversight:
+        //   UnusedObjectAllocation  -- a discarded `new` is a bug, not dead weight. Fading it would say
+        //                              "delete this", and the fix is nearly always to assign it.
+        //   AssignmentHasNoEffect   -- `n = n` reads as dead weight and is usually a typo for
+        //                              `this.n = n`, which is a defect worth underlining.
+        return Collections.unmodifiableMap(withImmutableValues(tags));
+    }
+
+    private static Map<Integer, Set<DiagnosticTag>> withImmutableValues(
+            Map<Integer, Set<DiagnosticTag>> tags) {
+        Map<Integer, Set<DiagnosticTag>> copy = new HashMap<>();
+        for (Map.Entry<Integer, Set<DiagnosticTag>> entry : tags.entrySet()) {
+            copy.put(entry.getKey(), Collections.unmodifiableSet(new HashSet<>(entry.getValue())));
+        }
+        return copy;
+    }
+}

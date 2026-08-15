@@ -551,6 +551,7 @@ editor scheme's.
 | `--syntax-type-interface` | `#4EC9A0` | dark-plus.css |
 | `--syntax-type-parameter` | `#4EC9A0` | dark-plus.css |
 | `--syntax-type-qualifier` | `#569CD6` | dark-plus.css |
+| `--syntax-unnecessary` | `#6A6A6A` | dark-plus.css |
 | `--syntax-unresolved` | `#F44747` | dark-plus.css |
 | `--syntax-variable` | `#9CDCFE` | dark-plus.css |
 | `--syntax-variable-builtin` | `#569CD6` | dark-plus.css |

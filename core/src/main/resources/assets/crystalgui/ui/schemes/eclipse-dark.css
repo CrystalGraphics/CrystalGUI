@@ -198,6 +198,8 @@ theme {
      * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
     --syntax-unresolved: #F75464;
     --syntax-deprecated: #6F737A;
+    /* Dead code — nothing reads it. Quieter than deprecated: that still runs, this is not read at all. */
+    --syntax-unnecessary: #5E6269;
 
     /* DEFAULT_OPERATION_SIGN e6e6fa against f9faf4 for every bracket, brace, paren and dot — near-white
      * punctuation, brighter than the body text it sits between, which is unusual and is the scheme's. */

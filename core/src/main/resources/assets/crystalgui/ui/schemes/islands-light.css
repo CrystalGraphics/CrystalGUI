@@ -121,6 +121,8 @@ theme {
      * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
     --syntax-unresolved: #E00000;
     --syntax-deprecated: #8C8C8C;
+    /* Dead code — nothing reads it. Lighter than the body text, as on every light scheme. */
+    --syntax-unnecessary: #ADAFB3;
 
     --syntax-operator: #000000;
     --syntax-punctuation: #000000;

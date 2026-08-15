@@ -138,4 +138,16 @@ theme {
 
     /* The bracket-MATCH highlight, which is not a capture — it is the pair under the caret. */
     --syntax-bracket: #4EC9A0;
+
+    /* DEAD CODE, and the one token here that is not about what a thing IS but about whether anything
+     * reads it. An unused import or a private method nobody calls is faded rather than underlined —
+     * severity says how much to worry, a DiagnosticTag says what the text looks like now, and "nothing
+     * reads this" is the second kind of statement.
+     *
+     * A SCHEME token rather than a theme one, because it replaces a syntax colour and has to be legible
+     * against the same background those were chosen for. VS Code spells it `editorUnnecessaryCode` and
+     * applies opacity; this is a flat colour because a highlight owns the character outright, which is
+     * IntelliJ's rendering of the same idea. #6A6A6A sits between the comment green and the background,
+     * so faded code reads as quieter than a comment rather than as another kind of comment. */
+    --syntax-unnecessary: #6A6A6A;
 }
