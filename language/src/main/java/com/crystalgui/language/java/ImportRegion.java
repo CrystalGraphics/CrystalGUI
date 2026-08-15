@@ -87,6 +87,24 @@ final class ImportRegion {
         return 0;
     }
 
+    /**
+     * The whole import region as {@code {start, end}} — from the first import's line start to just past
+     * the last import's line — or null when the file has no imports.
+     *
+     * <p>Whole lines at both ends, so replacing the region replaces exactly the import lines and nothing
+     * of what surrounds them.</p>
+     */
+    static int[] regionOf(CompilationUnit unit, String source) {
+        List<?> imports = unit.imports();
+        if (imports.isEmpty()) return null;
+        ImportDeclaration first = (ImportDeclaration) imports.get(0);
+        ImportDeclaration last = (ImportDeclaration) imports.get(imports.size() - 1);
+        int start = first.getStartPosition();
+        while (start > 0 && source.charAt(start - 1) != '\n') start--;
+        int end = afterLine(source, last.getStartPosition() + last.getLength());
+        return new int[] {start, end};
+    }
+
     /** Whether {@code qualified} is already imported, so a fix is not offered for what is there. */
     static boolean alreadyImported(CompilationUnit unit, String qualified) {
         for (Object each : unit.imports()) {

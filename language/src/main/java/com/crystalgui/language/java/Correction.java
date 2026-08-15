@@ -35,11 +35,18 @@ interface Correction {
     String id();
 
     /**
-     * The {@code IProblem} ids this answers for.
+     * The {@code IProblem} ids this answers for — or <b>none</b>, which makes it an intention.
      *
      * <p>Named constants, never literals: {@code IProblem} is published API and the ids are inlined at
      * compile time, so these cost nothing at runtime and are the only readable statement of what a
      * correction is for.</p>
+     *
+     * <p><b>An empty array is the third contributor kind</b> — a correction that is not about a problem
+     * at all but about <em>where the caret is</em>: organise imports, and later flip-if or introduce
+     * variable. It is asked once per request with a {@code null} problem and decides for itself from
+     * {@link FixContext#from()} and {@link FixContext#to()} whether it has anything to say. One flag on
+     * the existing type rather than a second type, because the answer, the ranking and the popup are
+     * identical either way — only the trigger differs.</p>
      */
     int[] problems();
 
@@ -50,6 +57,8 @@ interface Correction {
      * suggested, the declaration may be a shape this refuses, or the host may have no candidates. Every
      * such path returns quietly, because the popup still shows the message and the shape-derived
      * actions.</p>
+     *
+     * @param problem what was reported, or {@code null} for an intention (see {@link #problems()})
      */
     void contribute(FixContext context, IProblem problem, List<CodeAction> out);
 }

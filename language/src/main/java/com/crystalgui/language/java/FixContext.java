@@ -36,12 +36,17 @@ final class FixContext {
     private final String source;
     private final long version;
     private final CodeActionContext host;
+    private final int from;
+    private final int to;
 
-    FixContext(CompilationUnit unit, String source, long version, CodeActionContext host) {
+    FixContext(CompilationUnit unit, String source, long version, CodeActionContext host,
+               int from, int to) {
         this.unit = unit;
         this.source = source;
         this.version = version;
         this.host = host == null ? CodeActionContext.NONE : host;
+        this.from = from;
+        this.to = to;
     }
 
     CompilationUnit unit() {
@@ -50,6 +55,15 @@ final class FixContext {
 
     String source() {
         return source;
+    }
+
+    /** Where the actions were asked for — the caret, or a selection. What an intention decides from. */
+    int from() {
+        return from;
+    }
+
+    int to() {
+        return to;
     }
 
     /** What the host knows and a correction cannot work out for itself. */
