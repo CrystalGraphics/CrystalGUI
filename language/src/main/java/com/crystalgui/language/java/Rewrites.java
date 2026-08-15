@@ -6,8 +6,13 @@ import com.crystalgui.text.ChangeSet;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
 import org.eclipse.jface.text.Document;
+import org.eclipse.text.edits.CopySourceEdit;
+import org.eclipse.text.edits.CopyTargetEdit;
 import org.eclipse.text.edits.DeleteEdit;
+import org.eclipse.text.edits.ISourceModifier;
 import org.eclipse.text.edits.InsertEdit;
+import org.eclipse.text.edits.MoveSourceEdit;
+import org.eclipse.text.edits.MoveTargetEdit;
 import org.eclipse.text.edits.MultiTextEdit;
 import org.eclipse.text.edits.ReplaceEdit;
 import org.eclipse.text.edits.TextEdit;
@@ -108,9 +113,14 @@ final class Rewrites {
         try {
             TextEdit edit = rewrite.rewriteAST(new Document(source), formattingOptions(unit));
             List<Change> changes = new ArrayList<>();
-            collect(edit, changes);
+            collect(edit, source, changes);
             if (changes.isEmpty()) return null;
-            changes.sort(Comparator.comparingInt(Change::from));
+            // BY START, THEN BY END. An insertion at an offset that a deletion also starts at must come
+            // first -- ChangeSet.of requires each change to begin at or after the previous one ENDS, and
+            // a zero-width insert sorted after a delete at the same offset would begin inside it. Wrapping
+            // a statement is exactly that shape: the `try {` goes in where the statement was, and the
+            // statement's old text goes out from the same offset.
+            changes.sort(Comparator.comparingInt(Change::from).thenComparingInt(Change::to));
             // ChangeSet.of re-checks sorted-and-non-overlapping and throws if the flatten produced
             // something incoherent. That check is kept rather than bypassed: it is the same guarantee the
             // editor's apply path relies on, and a rewriter emitting overlapping edits is a bug worth
@@ -126,10 +136,20 @@ final class Rewrites {
      *
      * <p>Handled by type rather than by "has no children", because an empty {@link MultiTextEdit} — what a
      * rewrite with nothing recorded produces — is childless and is not a leaf. <b>An unrecognised leaf
-     * throws</b> rather than being skipped: the copy and move edits exist, they carry text, and quietly
-     * dropping one would produce a fix that applies cleanly and loses code.</p>
+     * throws</b> rather than being skipped: an edit that carries text and is quietly dropped would produce
+     * a fix that applies cleanly and loses code — which is how the move pair below was found.</p>
+     *
+     * <h3>Moves and copies</h3>
+     *
+     * <p>{@code createMoveTarget} — wrapping a statement in a {@code try}, lifting an initialiser into an
+     * assignment — comes out as a {@link MoveSourceEdit} where the text was and a {@link MoveTargetEdit}
+     * where it goes. The source becomes a deletion. The target becomes an insertion of the moved text, and
+     * that text is <em>not</em> the original substring: the source edit's own children are edits inside
+     * it, and its {@link ISourceModifier} is how JDT re-indents code that moved to a different nesting
+     * level. Both are applied to the substring here; neither is recursed into by the walk, or the inner
+     * edits would land twice. Copies are the same with no deletion.</p>
      */
-    private static void collect(TextEdit edit, List<Change> out) {
+    private static void collect(TextEdit edit, String source, List<Change> out) {
         if (edit == null) return;
         if (edit instanceof InsertEdit) {
             InsertEdit insert = (InsertEdit) edit;
@@ -140,13 +160,62 @@ final class Rewrites {
         } else if (edit instanceof DeleteEdit) {
             DeleteEdit delete = (DeleteEdit) edit;
             out.add(new Change(delete.getOffset(), delete.getExclusiveEnd(), ""));
+        } else if (edit instanceof MoveSourceEdit) {
+            out.add(new Change(edit.getOffset(), edit.getExclusiveEnd(), ""));
+        } else if (edit instanceof MoveTargetEdit) {
+            MoveSourceEdit from = ((MoveTargetEdit) edit).getSourceEdit();
+            out.add(new Change(edit.getOffset(), edit.getOffset(),
+                    movedText(from, from.getSourceModifier(), source)));
+        } else if (edit instanceof CopySourceEdit) {
+            // The text stays; only the target does anything.
+        } else if (edit instanceof CopyTargetEdit) {
+            CopySourceEdit from = ((CopyTargetEdit) edit).getSourceEdit();
+            out.add(new Change(edit.getOffset(), edit.getOffset(),
+                    movedText(from, from.getSourceModifier(), source)));
         } else if (edit instanceof MultiTextEdit) {
-            for (TextEdit child : edit.getChildren()) collect(child, out);
+            for (TextEdit child : edit.getChildren()) collect(child, source, out);
         } else {
             throw new IllegalStateException(
                     "unhandled TextEdit " + edit.getClass().getName() + " — it may carry text, and "
                             + "skipping it would silently drop part of a fix");
         }
+    }
+
+    /**
+     * The text a source edit contributes at its target: its substring, with its own child edits and then
+     * its modifier's re-indentation applied.
+     *
+     * <p>Children are absolute offsets and are applied back to front so earlier ones stay valid; the
+     * modifier's edits are relative to the text it is handed and are applied the same way. A child that
+     * is itself a move or a copy is refused — nested relocation is a shape nothing here produces, and
+     * guessing at it would be the silent-loss failure this class exists to prevent.</p>
+     */
+    private static String movedText(TextEdit from, ISourceModifier modifier, String source) {
+        int base = from.getOffset();
+        StringBuilder text = new StringBuilder(source.substring(base, from.getExclusiveEnd()));
+        List<TextEdit> children = new ArrayList<>(List.of(from.getChildren()));
+        children.sort(Comparator.comparingInt(TextEdit::getOffset).reversed());
+        for (TextEdit child : children) {
+            int start = child.getOffset() - base;
+            if (child instanceof InsertEdit) {
+                text.insert(start, ((InsertEdit) child).getText());
+            } else if (child instanceof ReplaceEdit) {
+                text.replace(start, start + child.getLength(), ((ReplaceEdit) child).getText());
+            } else if (child instanceof DeleteEdit) {
+                text.delete(start, start + child.getLength());
+            } else {
+                throw new IllegalStateException("nested " + child.getClass().getSimpleName() + " inside a moved region");
+            }
+        }
+        if (modifier != null) {
+            String moved = text.toString();
+            List<ReplaceEdit> reindent = new ArrayList<>(List.of(modifier.getModifications(moved)));
+            reindent.sort(Comparator.comparingInt(TextEdit::getOffset).reversed());
+            for (ReplaceEdit each : reindent) {
+                text.replace(each.getOffset(), each.getExclusiveEnd(), each.getText());
+            }
+        }
+        return text.toString();
     }
 
     /**
