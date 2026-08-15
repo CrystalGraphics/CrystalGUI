@@ -55,8 +55,13 @@ final class InspectionWidgetPart extends EditorViewPart {
      * on whether the content currently overflows, so a widget positioned by it jumps sideways the moment a
      * document grows past one screenful — which is the flick {@link ZoomIndicatorPart} records chasing for
      * the same reason. Sized to clear the bar outright instead.</p>
+     *
+     * <p>Exactly the bar's own width, so the readout sits <em>against</em> the groove rather than a
+     * further six px inside it. It was 14, which left the widget floating in the middle of nothing with
+     * the scrollbar visibly beyond it — noticeable now that the panel behind it is gone and there is no
+     * box edge to explain the gap.</p>
      */
-    private static final float CLEARANCE = 14f;
+    private static final float CLEARANCE = 8f;
 
     /**
      * Logical px between the widget and the editor's top edge — i.e. the separator above it.

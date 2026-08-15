@@ -323,7 +323,6 @@ editor scheme's.
 | `--inspection-arrow-fg` | `var(--fg-secondary)` | base.css |
 | `--inspection-arrow-hover-bg` | `var(--border-base)` | base.css |
 | `--inspection-arrow-hover-fg` | `var(--fg)` | base.css |
-| `--inspection-bg` | `#2D2D2DE0` | crystal-dark.css |
 | `--inspection-clean-fg` | `var(--success)` | base.css |
 | `--inspection-error-fg` | `var(--error)` | base.css |
 | `--inspection-info-fg` | `var(--info)` | base.css |
