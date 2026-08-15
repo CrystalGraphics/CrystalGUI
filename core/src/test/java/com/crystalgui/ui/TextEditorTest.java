@@ -60,6 +60,48 @@ public class TextEditorTest extends UiTestBase {
         });
     }
 
+    /**
+     * <b>Opening the find bar must not move where a click lands.</b>
+     *
+     * <p>The bar floats and insets the editor by its own height, written as {@code padding-top} from a
+     * ticker — so the editor's box changes a frame or more <em>after</em> the bar opens, which is what
+     * made the report intermittent. {@code offsetAtLocal} reads that padding back as the text origin, so
+     * the two have to agree; while they do not, a click resolves to a line it was not on.</p>
+     *
+     * <p>Asserted as "the click lands on the row it was aimed at" rather than on any particular number,
+     * and with a second assertion that the scroll offset is <b>finite</b>: a non-finite scrollTop makes
+     * {@code (int) (relativeY / lineHeight())} clamp to view line zero, which is the reported symptom —
+     * a click anywhere putting the caret at the top of the document.</p>
+     */
+    @Test
+    public void openingTheFindBarDoesNotMoveWhereAClickLands() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 400; i++) document.append("line ").append(i).append(NL);
+        build(document.toString());
+        for (int i = 0; i < 6; i++) settle();
+        // IMMEDIATE, and only once the layout has settled. setScrollTop eases under the user-agent sheet's
+        // `scroll-behavior`, and a target set before the scroll extents are known is clamped on the way
+        // and then keeps travelling as they grow -- which is a moving fixture, not a bug in the widget.
+        editor.setScrollImmediate(0f, 2000f);
+        for (int i = 0; i < 4; i++) settle();
+
+        float y = 60f;
+        float scrollBefore = editor.getScrollTop();
+        int before = editor.offsetAt(20f, y);
+        assertTrue("fixture must be scrolled away from the top", before > 0);
+
+        editor.searchBar().open();
+        // SEVERAL frames: the inset is applied from a ticker, then the layout it changes has to settle.
+        for (int i = 0; i < 6; i++) settle();
+
+        assertTrue("the scroll offset went non-finite, which lands every click at the top",
+                Float.isFinite(editor.getScrollTop()));
+        int after = editor.offsetAt(20f, y);
+        assertTrue("a click at the same point now lands at offset " + after
+                + ", was " + before + "; scrollTop " + scrollBefore + " -> " + editor.getScrollTop(),
+                Math.abs(after - before) < 200);
+    }
+
     private TextEditor build(String text) {
         editor = new TextEditor(text);
         editor.layout(l -> l.width(300).height(120));

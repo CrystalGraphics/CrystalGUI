@@ -268,7 +268,12 @@ public class SearchReplaceBar extends UIElement {
 
     private void runSearch() {
         editor.find(SearchQuery.of(findBox.getText(), options));
-        editor.findNext();
+        // FROM WHAT IS ON SCREEN, not from the caret. findNext() is a STEPPING command -- "somewhere I am
+        // not" -- and a freshly typed query has nowhere to step from, so running it here anchored the
+        // search on the caret. Scrolling is view state and never moves the caret, so after reading your
+        // way down a file the caret is still wherever you last clicked, and typing a query scrolled the
+        // document back to it.
+        editor.findFrom(editor.firstVisibleOffset());
         refresh();
     }
 
