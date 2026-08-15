@@ -129,7 +129,10 @@ public class StyleGovernanceTest {
             // darkened until a sentence in it reads on the theme's surface -- which is why light's
             // --warning is an olive -- and a severity ICON wants the amber the artwork used to carry.
             // Two roles rather than one because the two jobs genuinely disagree, most visibly in light.
-            "error-icon", "warning-icon", "info-icon",
+            // success-icon appended when the Run panel needed a live mark: the same argument as the three
+            // beside it, and the set was simply incomplete -- --success is the body colour for a finished
+            // thing and too dark to read as a 10px dot.
+            "error-icon", "warning-icon", "info-icon", "success-icon",
             // Non-colour, and themeable for the same reason IntelliJ's themes set arcs and insets:
             // "Islands" IS these three plus a palette, and a flat theme is them zeroed.
             "radius-panel", "radius-control", "panel-gap");

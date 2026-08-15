@@ -108,6 +108,12 @@ public final class RunConsole {
     public static final int DEFAULT_BUDGET_KB = 1024;
 
     /** Written from any thread, read only by {@link #drain}. */
+    /**
+     * What makes a span of a line navigable. Copy-on-write because a filter may be registered while the
+     * UI thread is walking the chain to paint a row.
+     */
+    private final List<ConsoleFilter> filters = new java.util.concurrent.CopyOnWriteArrayList<>();
+
     private final ConcurrentLinkedQueue<Line> pending = new ConcurrentLinkedQueue<>();
     private volatile boolean clearRequested;
 
@@ -236,6 +242,47 @@ public final class RunConsole {
 
     public int lineCount() {
         return lines.size();
+    }
+
+    /**
+     * Adds a filter that decides which spans of a line are navigable — see {@link ConsoleFilter}.
+     *
+     * <p>A chain rather than one, so a Java stack frame, a GLSL compiler error and a URL are three small
+     * classes rather than one that grows a branch per language.</p>
+     */
+    public RunConsole addFilter(ConsoleFilter filter) {
+        if (filter != null) filters.add(filter);
+        return this;
+    }
+
+    /**
+     * The navigable spans on a row, recomputed from its text every time.
+     *
+     * <p><b>Never cached and never stored as document offsets.</b> The ring deletes from the front of the
+     * document, which is an edit, so any held offset would begin describing the wrong text the moment the
+     * bound is first reached — silently, since the transcript goes on working and only the destinations
+     * are wrong. Recomputing cannot desync, and it runs over the rows on screen rather than the
+     * transcript.</p>
+     */
+    public List<ConsoleFilter.Link> linksAt(int row) {
+        if (filters.isEmpty()) return List.of();
+        Line line = lineAt(row);
+        // A DIVIDER IS OURS, not the script's. Running filters over a run boundary can only produce a
+        // false positive, and a rule of dashes is exactly the kind of text a loose pattern matches.
+        if (line == null || line.isDivider()) return List.of();
+
+        List<ConsoleFilter.Link> found = null;
+        for (ConsoleFilter filter : filters) {
+            List<ConsoleFilter.Link> some = filter.apply(line.text());
+            if (some == null || some.isEmpty()) continue;
+            if (found == null) found = new ArrayList<>(some);
+            else found.addAll(some);
+        }
+        if (found == null) return List.of();
+        // SORTED, because the tokenizer walks them in order to emit the gaps between them, and two filters
+        // answering the same line have no reason to agree about which comes first.
+        found.sort((a, b) -> Integer.compare(a.start(), b.start()));
+        return found;
     }
 
     /**

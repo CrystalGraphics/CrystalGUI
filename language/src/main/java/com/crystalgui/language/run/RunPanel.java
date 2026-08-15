@@ -32,8 +32,8 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     public static final String STOP_CLASS = "__run-stop__";
     public static final String CLEAR_CLASS = "__run-clear__";
 
-    /** Fired when a line with somewhere to go is activated. */
-    public final Signal.Value<RunConsole.Line> onLineActivated = new Signal.Value<>();
+    /** Fired when a navigable span is clicked — the line it was on, and the span. @see ConsoleFilter */
+    public final Signal.Pair<RunConsole.Line, ConsoleFilter.Link> onLinkActivated = new Signal.Pair<>();
 
     /**
      * Asked to clear, and asked to stop.
@@ -71,7 +71,7 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         addInternalChild(notice);
         addInternalChild(view.element());
 
-        view.onLineActivated.connect(onLineActivated::emit);
+        view.onLinkActivated.connect(onLinkActivated::emit);
     }
 
     /**

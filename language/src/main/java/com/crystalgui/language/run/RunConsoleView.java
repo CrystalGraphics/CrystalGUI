@@ -3,9 +3,11 @@ package com.crystalgui.language.run;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.text.Rope;
+import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.elements.editor.TextEditor;
+import com.crystalgui.ui.event.MouseEvent;
 
 import javax.annotation.Nullable;
 
@@ -50,8 +52,33 @@ public final class RunConsoleView {
 
     public static final String CONSOLE_CLASS = "__run-console__";
 
-    /** Fired when a line with somewhere to go is activated. */
-    public final Signal.Value<RunConsole.Line> onLineActivated = new Signal.Value<>();
+    /**
+     * The capture a navigable span is painted with.
+     *
+     * <p>A new name, so it must be given a rule in the shipped scheme in the same edit — a capture with no
+     * rule is not an error, it simply takes the surface's own foreground, which looks exactly like the
+     * links not working.</p>
+     */
+    public static final String LINK_CAPTURE = "link";
+
+    /**
+     * On the console while the pointer is over a navigable span — what turns the cursor into a pointer.
+     *
+     * <p>A class rather than a {@code cursor} written from Java, for two reasons that agree. The house
+     * rule puts appearance in the sheet; and {@code CgCursor} lives in CrystalGraphics' platform module,
+     * which {@code core} takes as {@code compileOnly} and therefore does not pass on — so {@code language/}
+     * cannot name the type at all. The constraint and the convention point the same way.</p>
+     */
+    public static final String OVER_LINK_CLASS = "__over-link__";
+
+    /**
+     * Fired when a navigable span is clicked — the line it was on, and the span itself.
+     *
+     * <p>Both, because resolving a bare {@code RunTest.java} to a workspace file is easiest with the
+     * line's own origin as the first candidate: a trace printed by a script very often names the script.
+     * The consumer is whoever has a workspace; see {@code RunPanels}.</p>
+     */
+    public final Signal.Pair<RunConsole.Line, ConsoleFilter.Link> onLinkActivated = new Signal.Pair<>();
 
     private final TextEditor editor = new TextEditor("");
 
@@ -76,6 +103,101 @@ public final class RunConsoleView {
         // under it means the tail-follow parks the transcript at the top of an empty screen, and a reader
         // who scrolls down finds nothing there. Neither IntelliJ's console nor VS Code's terminal does it.
         editor.setScrollBeyondLastLine(false);
+        installLinkHandling();
+    }
+
+    // ── Links ────────────────────────────────────────────────────────────────────────────────────────
+
+
+    /** Whether the pointer is currently over a link, so the cursor is written only when it changes. */
+    private boolean pointerOverLink;
+
+    /**
+     * Makes navigable spans clickable, and says so under the pointer.
+     *
+     * <h4>Follow on the RELEASE, not the press</h4>
+     *
+     * <p>A press in a console also places the caret and may begin a selection, and the editor's own
+     * handler runs on the same event. Firing on the down steals a drag that had barely started — the same
+     * rule a browser applies to a link, and for the same reason. So the release navigates only when it
+     * lands on the offset the press did, which is exactly "the pointer did not move".</p>
+     *
+     * <p>No modifier. IntelliJ requires one in the <em>editor</em>, where a plain click is how you put the
+     * caret somewhere you are about to type; a console is read-only, so there is nothing for a plain click
+     * to conflict with, and its console follows a bare click too.</p>
+     */
+    private void installLinkHandling() {
+        // ON THE RELEASE, AND ONLY THE RELEASE -- not because that is tidier but because THE PRESS IS
+        // UNREACHABLE.
+        //
+        // TextEditor's own MouseEvent.Down handler ends with an unconditional stopPropagation(), and in
+        // this engine that is DOM's stopIMMEDIATEPropagation: EventListenerGroup emits through
+        // `continueEmittingUnderCondition(..., UIEvent::isPropagationStopped)`, so it halts the remaining
+        // listeners ON THE SAME ELEMENT AND PHASE rather than merely the walk to the next element. The
+        // editor subscribes from its own constructor and therefore always runs first, so nothing attached
+        // to its Down afterwards can ever run. Its Up handler does not stop propagation, which is the only
+        // reason this works at all.
+        //
+        // The symptom was precise and misleading: the caret moved and double-click selected a word --
+        // every sign that events were arriving -- while the press handler recorded nothing, so the release
+        // had no press to match and refused silently. Two rounds went to the offsets before the phase.
+        editor.onMouseUp.attachListener((element, event) -> {
+            // A DRAG IS A SELECTION GESTURE, and navigating away from text somebody just selected is the
+            // opposite of what they asked for. This is also what makes a double-click safe -- it selects
+            // the word, so it is refused, and a link follows a SINGLE click as IntelliJ's console does.
+            //
+            // Asked of the selection rather than compared against the press offset, which is both
+            // unavailable (above) and wrong: the editor reveals the caret on press and this console
+            // scrolls smoothly, so the same screen point resolves to a different offset either side of it.
+            if (editor.selections().hasSelection()) return;
+            int offset = offsetOf(event);
+            ConsoleFilter.Link link = linkAt(offset);
+            if (link != null) activate(link, offset);
+        }, false, true);
+        // THE ONLY THING HOVER CHANGES. The underline is permanent, as IntelliJ's console hyperlinks are,
+        // because the token cache is per row and cleared wholesale -- restyling one span on hover would
+        // discard every realised row's tokens on every pointer move.
+        editor.onMouseMove.attachListener(
+                (element, event) -> setPointerOverLink(linkAt(offsetOf(event)) != null), false, true);
+        // TARGET PHASE IS RIGHT HERE. Leave does not bubble, but it is dispatched to every element in the
+        // chain being left, so the editor receives its own.
+        editor.onMouseLeave.attachListener((element, event) -> setPointerOverLink(false), false, false);
+    }
+
+    private int offsetOf(MouseEvent event) {
+        return editor.offsetAt(event.getPosition().x(), event.getPosition().y());
+    }
+
+    private void setPointerOverLink(boolean over) {
+        if (over == pointerOverLink) return;
+        pointerOverLink = over;
+        if (over) editor.addClass(OVER_LINK_CLASS);
+        else editor.removeClass(OVER_LINK_CLASS);
+    }
+
+    private void activate(ConsoleFilter.Link link, int offset) {
+        RunConsole showing = console;
+        if (showing == null) return;
+        int row = editor.buffer().offsetToPoint(offset).row();
+        RunConsole.Line line = showing.lineAt(row);
+        if (line != null) onLinkActivated.emit(line, link);
+    }
+
+    /** The navigable span under a document offset, or null. */
+    @Nullable
+    private ConsoleFilter.Link linkAt(int offset) {
+        RunConsole showing = console;
+        if (showing == null || offset < 0) return null;
+        TextBuffer buffer = editor.buffer();
+        if (offset > buffer.length()) return null;
+        int row = buffer.offsetToPoint(offset).row();
+        // COLUMN, because a filter answers in the line's own coordinates -- it was handed a string, not a
+        // document, which is what keeps it testable and keeps eviction out of it.
+        int column = offset - buffer.document().lineStartOffset(row);
+        for (ConsoleFilter.Link link : showing.linksAt(row)) {
+            if (link.contains(column)) return link;
+        }
+        return null;
     }
 
     /** The element to put in a tree. */
@@ -166,16 +288,48 @@ public final class RunConsoleView {
                 int start = document.lineStartOffset(row);
                 if (start >= to) break;
                 int end = document.lineEndOffset(row);
-                RunConsole.Line line = showing.lineAt(row);
-                String capture = captureFor(line);
+                if (end <= start) continue;
+                emitRow(tokens, showing, row, start, end);
+            }
+            return tokens;
+        }
+
+        /**
+         * One row's tokens: its level, <b>split around</b> any navigable spans.
+         *
+         * <p>Never overlapping, and that is the whole reason this is not two loops. Two tokens covering
+         * the same characters under unrelated names leave the winner to paint order, and both names
+         * resolve to real colours — so the wrong one reads as a broken colour scheme rather than as an
+         * ordering mistake. That is exactly how the semantic-over-grammar precedence bug cost two
+         * rounds. A stderr line containing a frame is three tokens, not two that intersect.</p>
+         */
+        private void emitRow(List<SyntaxToken> tokens, RunConsole showing, int row, int start, int end) {
+            RunConsole.Line line = showing.lineAt(row);
+            String capture = captureFor(line);
+            List<ConsoleFilter.Link> links = showing.linksAt(row);
+
+            if (links.isEmpty()) {
                 // ORDINARY OUTPUT IS LEFT ALONE, not given a capture meaning "normal". An uncaptured
                 // span takes the surface's own foreground, which is what plain output is -- and naming
                 // it would put every line of every transcript through the cascade for nothing.
-                if (capture != null && end > start) {
-                    tokens.add(new SyntaxToken(start, end, capture));
-                }
+                if (capture != null) tokens.add(new SyntaxToken(start, end, capture));
+                return;
             }
-            return tokens;
+
+            int cursor = start;
+            for (ConsoleFilter.Link link : links) {
+                int linkStart = Math.min(end, start + link.start());
+                int linkEnd = Math.min(end, start + link.end());
+                // OVERLAPPING FILTERS ARE THE CALLER'S BUSINESS, not a crash. Two chains that both claim a
+                // span would otherwise emit a reversed token; the first claim simply wins.
+                if (linkEnd <= cursor) continue;
+                if (capture != null && linkStart > cursor) {
+                    tokens.add(new SyntaxToken(cursor, linkStart, capture));
+                }
+                tokens.add(new SyntaxToken(Math.max(cursor, linkStart), linkEnd, LINK_CAPTURE));
+                cursor = linkEnd;
+            }
+            if (capture != null && cursor < end) tokens.add(new SyntaxToken(cursor, end, capture));
         }
 
         @Nullable
