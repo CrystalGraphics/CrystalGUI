@@ -8,7 +8,7 @@ since M3 with a stated reason.
 
 | § | Item | State |
 |---|---|---|
-| 24.7 | Navigation primitive | **done** — `Workbench.openAndReveal` + `TextEditor.revealAt` |
+| 24.7 | Navigation primitive | **done** — `Workbench.openFile(path, continuation)` + `TextEditor.revealAt`. **Not `openAndReveal`**, which this row used to name and which deliberately does not exist: `Workbench`'s own comment refuses it, because a shell method taking a `TextPoint` "gives this class a navigation API in terms of a text POSITION — which is knowledge a workbench has no business holding". The shared primitive is the open; where the caret goes is the caller's |
 | 24.8 | Go To Line | **done** — `Mod+G` |
 | 24.9 | Clicking a problem | **done** — reveal is the continuation of the open |
 | 24.2 | Go-to-definition | **done** — `Mod+B`, Ctrl+Click, 6 tests |

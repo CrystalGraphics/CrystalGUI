@@ -143,6 +143,20 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 
+    // @Nullable, the same way `core/` gets it and for the same reason -- javax.annotation is not on the
+    // module path from JDK 11. **compileOnly is the mitigation, not an oversight**: the package only
+    // clashes with the JDK's own when it is on a RUNTIME classpath, and it is on neither module's --
+    // `:language:dependencies --configuration runtimeClasspath` shows no jsr305 at all. Spotbugs'
+    // `edu.umd.cs.findbugs.annotations` would dodge the clash structurally and is the right answer if
+    // these ever have to ship; while both are compile-only it buys nothing and would put two spellings
+    // of @Nullable in one codebase, since core has hundreds of the javax one.
+    //
+    // This module had no nullability annotations at all before, which was an accident of nothing needing
+    // them rather than a decision.
+    compileOnly("com.google.code.findbugs:jsr305:3.0.2")
+    testCompileOnly("com.google.code.findbugs:jsr305:3.0.2")
+
+
     // THE ADAPTER COMPILES AGAINST THE OLDEST BAND, AND ONLY THE OLDEST (§6.3). `compileOnly`, so it
     // never reaches a runtime classpath -- at run time the engine comes from EngineClassLoader and this
     // artifact is not there at all. Pinning band 8's version here is what turns "one adapter across

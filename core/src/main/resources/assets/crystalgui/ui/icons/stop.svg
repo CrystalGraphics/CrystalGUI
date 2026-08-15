@@ -1,0 +1,7 @@
+<!-- Drawn for CrystalGUI to Feather's geometry and stroke conventions, not copied from any icon set.
+     Filled rather than stroked: a stop control reads as a solid block everywhere, and an outlined square
+     at 16px is indistinguishable from a checkbox. -->
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"
+     xmlns="http://www.w3.org/2000/svg">
+  <rect x="6" y="6" width="12" height="12" rx="1.5"/>
+</svg>

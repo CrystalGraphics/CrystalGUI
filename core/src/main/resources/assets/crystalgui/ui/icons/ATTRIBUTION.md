@@ -26,6 +26,12 @@ licence, same "unmodified" statement, and reached through the same `FileIconThem
 convention as the file types; it is a separate directory only because a tool-window mark is not a file type
 and `default.json` should not have to say so.
 
+**`toolwindows/run.svg` is not one of them.** It is ours, drawn to Feather's geometry and stroke
+conventions the same way the severity three below are, because the set above had no run mark to take and
+reproducing one from memory would be a worse kind of copying than none. It uses `currentColor` rather than
+a fixed grey, so unlike its neighbours it needs no `_dark` companion — `withVariant` falls back to the base
+file and the colour arrives from the cascade.
+
 `nodes/java/` holds the same set's **node icons** — the badges a completion list and a structure view draw
 beside a symbol: `method`, `field`, `class`, `interface`, `enum`, `record`, `annotation`, `parameter`,
 `variable`, `constructor`, `lambda`, `exception`, and the abstract/anonymous variants of several. Same

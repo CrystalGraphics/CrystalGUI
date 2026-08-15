@@ -7,6 +7,9 @@ import com.crystalgui.language.java.HostClasspath;
 import com.crystalgui.language.java.ScriptPrelude;
 import com.crystalgui.language.map.InheritanceAwareRemapper;
 import com.crystalgui.language.map.MappingSet;
+import com.crystalgui.fs.Resource;
+
+import javax.annotation.Nullable;
 
 import java.io.Closeable;
 import java.lang.reflect.Field;
@@ -68,6 +71,15 @@ public final class ScriptHost implements Closeable {
     /** The live run, if any. Replaced wholesale; never mutated. */
     private final AtomicReference<Running> running = new AtomicReference<>();
 
+    /**
+     * Where run states are reported, or null for a host nobody is watching.
+     *
+     * <p>Optional for the same reason the output ref is: a dedicated server runs scripts and has no rail
+     * to show them in, and a test should not have to build one. Absent, nothing is recorded and nothing
+     * fails.</p>
+     */
+    private RunSessions sessions;
+
     public ScriptHost(JavaEngine engine, ScriptCache cache, MappingSet mappings, String mappingsId,
                       ClassLoader hostLoader, List<String> classpath) {
         this.engine = engine;
@@ -76,6 +88,18 @@ public final class ScriptHost implements Closeable {
         this.mappingsId = mappingsId == null ? "identity" : mappingsId;
         this.hostLoader = hostLoader == null ? ScriptHost.class.getClassLoader() : hostLoader;
         this.classpath = classpath == null ? HostClasspath.detect() : new ArrayList<>(classpath);
+    }
+
+    /**
+     * Reports every run's state to {@code sessions} — what the rail lists and the indicator marks.
+     *
+     * <p>Set on the host rather than passed per run, because the states this records are the host's own
+     * transitions and it is the only thing that sees all of them: a caller sees the run it started, and
+     * never sees the {@code STOPPED} that another caller's Stop produced.</p>
+     */
+    public ScriptHost reportTo(RunSessions sessions) {
+        this.sessions = sessions;
+        return this;
     }
 
     /** The ordinary setup: identity mappings, an in-memory cache, the host's own classpath. */
@@ -129,6 +153,7 @@ public final class ScriptHost implements Closeable {
         private final List<String> messages;
         private final boolean fromCache;
         private final boolean successful;
+        private ScriptRef ref;
 
         Compiled(ScriptPrelude.Wrapped wrapped, ScriptCacheKey key, Map<String, byte[]> classes,
                  List<String> messages, boolean fromCache, boolean successful) {
@@ -138,6 +163,33 @@ public final class ScriptHost implements Closeable {
             this.messages = messages;
             this.fromCache = fromCache;
             this.successful = successful;
+        }
+
+        /**
+         * Names the file this was compiled from, so its output can be attributed while it runs.
+         *
+         * <p><b>On the compiled script rather than on the run call, deliberately.</b> Whoever compiles
+         * knows which file the source came from; whoever runs may be a keybinding several layers away
+         * that has no idea. Putting it here means {@link #run} and {@link #runAsync} can bracket every
+         * invocation themselves and <em>no caller can forget to</em> — which matters because forgetting
+         * is silent: the output simply goes to the game's log instead of the panel, and looks like the
+         * console not working.</p>
+         *
+         * <p>Optional. A host with no console — a test, a dedicated server — leaves it null and nothing
+         * routes anywhere. @see ScriptOutput</p>
+         */
+        public Compiled withSource(Resource file) {
+            // BUILT HERE, from the two halves neither side has both of: the caller knows which file the
+            // source came from and cannot know what the prelude wrapped it into, while this knows the
+            // generated class and has never heard of a file. Taking a whole ScriptRef instead would let
+            // a caller pair a file with the wrong class -- which fails by attributing nothing, since no
+            // stack frame would ever match.
+            this.ref = file == null ? null : new ScriptRef(file, wrapped.className());
+            return this;
+        }
+
+        public ScriptRef ref() {
+            return ref;
         }
 
         /**
@@ -240,7 +292,7 @@ public final class ScriptHost implements Closeable {
         // the stem compiles fine and then throws ClassNotFoundException for a class that is
         // plainly in the output -- see ScriptPrelude.Wrapped.binaryName.
         Class<?> type = Class.forName(compiled.wrapped().binaryName(), true, loader);
-        return entryPointOf(type, loader, bindings);
+        return entryPointOf(type, loader, bindings, compiled.ref());
     }
 
     /**
@@ -256,17 +308,17 @@ public final class ScriptHost implements Closeable {
      * with both is a file the author meant to run as a class, and it will be reached only if the
      * prelude did not wrap it — in which case there is no {@code run()} to find.</p>
      */
-    private Running entryPointOf(Class<?> type, ScriptClassLoader loader, Map<String, Object> bindings)
-            throws Throwable {
+    private Running entryPointOf(Class<?> type, ScriptClassLoader loader, Map<String, Object> bindings,
+                                 ScriptRef ref) throws Throwable {
         Method entry = methodOrNull(type, ENTRY_POINT);
         if (entry != null && !java.lang.reflect.Modifier.isStatic(entry.getModifiers())) {
             Object instance = type.getDeclaredConstructor().newInstance();
             applyBindings(type, instance, bindings);
-            return new Running(loader, entry, instance, null);
+            return new Running(loader, entry, instance, null, ref, sessions);
         }
         if (entry != null) {
             applyBindings(type, null, bindings);
-            return new Running(loader, entry, null, null);
+            return new Running(loader, entry, null, null, ref, sessions);
         }
 
         Method main = methodOrNull(type, "main", String[].class);
@@ -274,7 +326,7 @@ public final class ScriptHost implements Closeable {
             // BINDINGS ARE SKIPPED, not forced in. A file with a `main` was written as a program, not as
             // a script body, so it has no fields for them -- and setting statics that happen to share a
             // name would be reaching into somebody's class on a guess.
-            return new Running(loader, main, null, new Object[]{new String[0]});
+            return new Running(loader, main, null, new Object[]{new String[0]}, ref, sessions);
         }
 
         throw new IllegalStateException(type.getName() + " has neither a no-argument " + ENTRY_POINT
@@ -339,16 +391,57 @@ public final class ScriptHost implements Closeable {
         private final Method entryPoint;
         private final Object instance;
         private final Object[] arguments;
+        private final ScriptRef ref;
         volatile Thread thread;
 
-        Running(ScriptClassLoader loader, Method entryPoint, Object instance, Object[] arguments) {
+        @Nullable private final RunSessions sessions;
+
+        Running(ScriptClassLoader loader, Method entryPoint, Object instance, Object[] arguments,
+                @Nullable ScriptRef ref, @Nullable RunSessions sessions) {
             this.loader = loader;
             this.entryPoint = entryPoint;
             this.instance = instance;
             this.arguments = arguments == null ? new Object[0] : arguments;
+            this.ref = ref;
+            this.sessions = sessions;
         }
 
+        private void report(RunState state) {
+            if (sessions != null && ref != null) sessions.set(ref.file(), state);
+        }
+
+        /**
+         * Invokes the entry point with the output marker set for its whole duration.
+         *
+         * <p><b>Here rather than at the two call sites</b>, because this is the one place a script
+         * genuinely begins and ends — {@code run} and {@code runAsync} would each have to remember, and
+         * a future third way to start a script would have to remember too. Forgetting is silent: the
+         * output goes to the game's log and reads as the console being broken. @see ScriptOutput</p>
+         */
         Object invoke() throws Throwable {
+            ScriptRef previous = ref == null ? null : ScriptOutput.enter(ref);
+            report(RunState.RUNNING);
+            try {
+                Object answer = invokeEntryPoint();
+                // FINISHED, not LIVE. Nothing here registers handlers yet, so every script that returns
+                // has genuinely left nothing behind -- and when an event model lands, THIS is the line
+                // that has to start asking, rather than a new one somewhere else.
+                report(RunState.FINISHED);
+                return answer;
+            } catch (ScriptStoppedException stopped) {
+                // ASKED FOR, and therefore not a failure. Distinguished here rather than by the caller
+                // because runAsync already swallows this one and would report nothing at all.
+                report(RunState.STOPPED);
+                throw stopped;
+            } catch (Throwable failed) {
+                report(RunState.FAILED);
+                throw failed;
+            } finally {
+                if (ref != null) ScriptOutput.exit(previous);
+            }
+        }
+
+        private Object invokeEntryPoint() throws Throwable {
             try {
                 return entryPoint.invoke(instance, arguments);
             } catch (InvocationTargetException wrapped) {
