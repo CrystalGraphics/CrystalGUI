@@ -619,10 +619,12 @@ problemspanel .__problem__.__leaf__ .__twisty__ {
 }
 
 
-/* ── Run console ───────────────────────────────────────────────────────────────────
+/* ── Run console ─────────────────────────────────────────────────────────────────────────────────────
  *
- * A transcript, so a flat list rather than the tree the Problems panel uses: output does not group, it
- * happened in an order, and nesting it under headings breaks the one thing a console is for.
+ * A TEXT AREA, not a list. This was a virtualised list of rows first, and the disproof was selection: an
+ * IDE console lets you drag from the middle of one line to the middle of another and copy exactly that,
+ * which a row-based list cannot express because its selection unit is the row. So the transcript is a
+ * read-only `texteditor`, and everything below that used to style rows is gone with them.
  *
  * The rules live here rather than in a sheet of their own because the widget is a panel and this is the
  * panel part of the user-agent sheet. It is authored in `language/` -- a selector that matches nothing
@@ -637,86 +639,27 @@ runpanel {
     overflow: hidden;
 }
 
-runpanel .__run-list__ {
+/* The transcript. It IS a `texteditor` -- a plain one, configured, not a subclass -- so it already
+ * carries the editor's monospace family, the document's surface and ink, the caret and the selection
+ * band. That is the whole point of repurposing: a console inherits every decision the editor has already
+ * made about drawing text, including the ones nobody remembers making.
+ *
+ * It was a SUBCLASS first and the panel came up blank on a paler background than the editor above it.
+ * A widget's cascade identity is its tag and a tag is its lowercased class name, so `runconsoleview`
+ * matched none of the twelve `texteditor` rules -- no surface colour, no font, no line height. Nothing
+ * below compensates for that; the fix was to stop subclassing. */
+runpanel .__run-console__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
 }
 
-/* MONOSPACE, and it is correctness rather than taste.
- *
- * A console renders program output, and program output is aligned by its author with SPACES -- every
- * `label       value` table any script has ever printed. Spaces only align in a font whose glyphs are
- * one width, so in the proportional default those columns land at three different x positions and the
- * author's table stops being a table. IntelliJ's console, VS Code's output panel and Unity's console are
- * all monospace for this one reason.
- *
- * The same stack the editor uses, in the same order: the first entry that loads wins and the sans behind
- * it supplies glyphs JetBrains Mono lacks. Declared on the ROW rather than on `runpanel`, because
- * font-size does not inherit here -- `* { font-size: 10 }` in the core part is a candidate at STYLESHEET
- * origin on every element -- and a family declared on a wrapper reaches the label inside it while a size
- * declared beside it silently does not. Keeping both on the element that draws the text avoids the pair
- * disagreeing. */
-runpanel .__run-row__ .__run-text__ {
-    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
-                 "crystalgraphics:IBMPlexSans-Regular.ttf";
-}
-
-/* A line, and the parts of it that are not the line. The text takes the space and the metadata sits
- * against the trailing edge, so scanning down the console reads message-first -- which is what a reader
- * is doing -- rather than stepping past an origin column to reach it. */
-runpanel .__run-row__ {
-    width: 100%;
-    flex-direction: row;
-    align-items: center;
-    gap-all: 6px;
-    padding-left: 6px;
-    padding-right: 6px;
-    white-space: nowrap;
-}
-
-/* `width: 0; flex-grow: 1` and NOT `width: 100%`: in a row it is the former that yields, and the latter
- * pushes the metadata off the end. */
-runpanel .__run-row__ .__run-text__ {
-    width: 0;
-    flex-grow: 1;
-    text-overflow: ellipsis;
-}
-
-/* The repeat count. Present only when a row stands for more than one line, so it must take no space when
- * empty -- a UIText with no text measures to nothing, and the gap is what would otherwise show. */
-runpanel .__run-row__ .__run-count__ {
-    flex-shrink: 0;
-    color: var(--run-count, #8A9199);
-}
-
-
-/* The three levels. Ordinary output takes the document's own ink rather than a colour of its own --
- * colouring everything is the same as colouring nothing, and the two that matter are the two that are
- * not ordinary. They reuse the diagnostic tokens deliberately: an error is an error, and a console that
- * invented its own red would drift from the squiggles describing the same run. */
-runpanel .__run-row__.runlevel-out .__run-text__ {
-    color: var(--editor-fg, #BCBEC4);
-}
-
-runpanel .__run-row__.runlevel-warn .__run-text__ {
-    color: var(--decoration-warning, #CCA700);
-}
-
-runpanel .__run-row__.runlevel-error .__run-text__ {
-    color: var(--decoration-error, #F14C4C);
-}
-
-/* The ring's eviction notice. Never hidden when non-empty: a transcript that quietly begins in the
- * middle reads as the console having missed something. */
-runpanel .__run-notice__ {
-    width: 100%;
-    flex-shrink: 0;
-    padding-left: 6px;
-    padding-right: 6px;
-    color: var(--run-origin, #6B6B6B);
-    white-space: nowrap;
-    text-overflow: ellipsis;
+/* NO INSPECTION WIDGET. It reports what the analysis found in the document, and a console's document is
+ * output -- nothing analyses it, so the widget can only ever show its clean mark: a green tick in the
+ * corner of a transcript, permanently, meaning nothing. Scoped to the console class so a real editor
+ * keeps its own. */
+runpanel .__run-console__ .__inspection__ {
+    display: none;
 }
 
 /* The toolbar. Icon-only and against the trailing edge, which is where every IDE console keeps its run
@@ -787,25 +730,14 @@ runpanel .__run-clear__ {
     overlay-fit: contain;
 }
 
-/* A run boundary. Quiet, because it is punctuation rather than content -- it says "a new run starts
- * here" and anything louder competes with the output it is separating. */
-runpanel .__run-row__.__run-divider__ {
-    padding-top: 4px;
-}
-
-runpanel .__run-row__.__run-divider__ .__run-text__ {
-    color: var(--run-divider, #7A7D83);
-    border-top-width: 1px;
-    border-top-color: var(--run-divider-rule, #3A3D42);
-}
-
-/* A row that can be opened gets a link's affordance. Without it the double-click is a secret: nothing
- * on screen says a stack frame is reachable, which is the same as it not being. */
-runpanel .__run-row__.__run-navigable__:hover .__run-text__ {
-    text-decoration-line: underline;
-    cursor: pointer;
-}
-
-runpanel .__run-row__:hover {
-    background-color: var(--run-row-hover, #2E3135);
+/* The ring's eviction notice. Never hidden when non-empty: a transcript that quietly begins in the
+ * middle reads as the console having missed something. */
+runpanel .__run-notice__ {
+    width: 100%;
+    flex-shrink: 0;
+    padding-left: 6px;
+    padding-right: 6px;
+    color: var(--run-origin, #6B6B6B);
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }

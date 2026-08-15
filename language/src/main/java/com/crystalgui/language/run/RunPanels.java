@@ -61,7 +61,7 @@ public final class RunPanels {
         // why: a method there taking a TextPoint would give the shell a navigation API in terms of a
         // text position, "which is knowledge a workbench has no business holding". The shared primitive
         // is openFile(path, continuation) and the rest is the caller's business.
-        panel.onEntryActivated.connect(entry -> {
+        panel.onLineActivated.connect(entry -> {
             Resource file = entry.file();
             if (file == null || !file.isProject() || entry.line() <= 0) return;
             TextPoint at = new TextPoint(entry.line() - 1, 0);
