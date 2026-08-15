@@ -1,8 +1,12 @@
 package com.crystalgui.ui.elements.editor;
 
 import com.crystalgui.text.WordOperations;
+import com.crystalgui.text.decoration.TrackedRange;
+import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.text.wrap.ProjectedLines;
+
+import java.util.List;
 
 /**
  * The hover trigger for the Quick Documentation popup — <b>when</b> it opens and closes, and nothing
@@ -81,7 +85,7 @@ final class HoverDocumentation {
     }
 
     /**
-     * The start of the word under a point, or -1 when the pointer is not over one.
+     * What the pointer is resting on that is worth a popup — a word, or a <b>problem</b> — or -1.
      *
      * <p><b>The past-the-end check is the whole difficulty.</b> {@code offsetAtLocal} clamps to the
      * nearest position by design — that is what makes clicking in the blank area right of a line put the
@@ -89,8 +93,20 @@ final class HoverDocumentation {
      * that line's last token. The result is a documentation popup for {@code foo} while the pointer sits
      * in empty space two hundred pixels away, which reads as the popup being stuck rather than as a
      * hit-testing question.</p>
+     *
+     * <h3>A word is not the only thing worth hovering</h3>
+     *
+     * <p>Requiring one is right for <em>documentation</em> — you hover a name to be told what it is — and
+     * it silently excluded the case this popup is most useful for. A problem lands wherever the compiler
+     * puts it, and that is regularly not a name: a redundant {@code ;}, a stray brace, an operator. Those
+     * had a squiggle, a Problems row and a lightbulb, and hovering them did nothing at all, because the
+     * word lookup returned nothing and the request was never made.</p>
+     *
+     * <p>The returned offset is an <b>identity</b> as much as a position — the delay must not restart
+     * while the pointer drifts across the same thing — so a problem answers with the start of its tracked
+     * range, which is the exact analogue of a word's start and is stable across the whole mark.</p>
      */
-    private int wordStartAt(float localX, float localY) {
+    private int hoverAnchorAt(float localX, float localY) {
         if (editor.viewLineCount() <= 0 || editor.buffer().length() == 0) return -1;
         int offset = editor.offsetAtLocal(localX, localY);
         int viewLine = editor.viewLineOf(offset, LineProjection.Affinity.RIGHT);
@@ -99,9 +115,17 @@ final class HoverDocumentation {
         float endX = editor.textOriginX() + editor.xOfView(viewLine, projection.viewLineEnd(model.viewLineInRow()))
                 - finiteOrZero(editor.getScrollLeft());
         if (localX > endX) return -1;
-        int[] word = WordOperations.wordAt(editor.buffer().document(), offset, editor.wordClassifier());
-        if (word == null || word[1] <= word[0]) return -1;
-        return word[0];
+        return anchorFor(offset);
+    }
+
+    /** The start of the first tracked problem covering {@code offset}, or -1 when there is none. */
+    private int problemStartAt(int offset) {
+        List<Diagnostic> problems = editor.diagnosticsAt(offset);
+        if (problems.isEmpty()) return -1;
+        TrackedRange tracked = editor.trackedRangeFor(problems.get(0));
+        // The tracked range is the live position; the offset under the pointer is the fallback for a
+        // diagnostic handed in from outside the set, which trackedRangeFor documents as a real answer.
+        return tracked != null && !tracked.isRemoved() ? tracked.from() : offset;
     }
 
     /**
@@ -113,7 +137,7 @@ final class HoverDocumentation {
             cancel();
             return;
         }
-        overWord(wordStartAt(editor.pointerX(), editor.pointerY()));
+        overWord(hoverAnchorAt(editor.pointerX(), editor.pointerY()));
     }
 
     /** No hover while a drag is editor.isSelecting(), while completion owns the caret, or when it is switched off. */
@@ -144,24 +168,31 @@ final class HoverDocumentation {
     }
 
     /**
-     * Test seam: report the pointer as resting on the word containing {@code offset}, or nowhere for -1.
+     * Test seam: report the pointer as resting on whatever is at {@code offset}, or nowhere for -1.
      *
-     * <p>Takes an <b>offset</b> rather than a word start, so the "is this still the same word" rule is the
-     * real one — handing it a word start directly would make two points inside one identifier look like
-     * two different hovers and the test would pass against a broken timer. The geometry that normally
-     * produces the offset is {@link #wordUnderPointerAt}, which is covered from local coordinates.</p>
+     * <p>Takes an <b>offset</b> rather than an anchor, so the "is this still the same thing" rule is the
+     * real one — handing it an anchor directly would make two points inside one identifier look like two
+     * different hovers and the test would pass against a broken timer. The geometry that normally
+     * produces the offset is {@link #hoverAnchorAt}, which is covered from local coordinates.</p>
+     *
+     * <p>It resolves the anchor through {@link #anchorFor} rather than repeating the word lookup, which it
+     * used to do. That copy is why a hover over a problem on punctuation went on failing in tests after
+     * the real path had been fixed: the seam still believed only words could be hovered, so every test
+     * driven through it agreed with the old rule.</p>
      */
     void pointerForTest(int offset) {
         if (suppressed()) {
             cancel();
             return;
         }
-        if (offset < 0) {
-            overWord(-1);
-            return;
-        }
+        overWord(offset < 0 ? -1 : anchorFor(offset));
+    }
+
+    /** A word start, else a problem's start, else -1 — the rule, with no geometry in front of it. */
+    private int anchorFor(int offset) {
         int[] word = WordOperations.wordAt(editor.buffer().document(), offset, editor.wordClassifier());
-        overWord(word == null || word[1] <= word[0] ? -1 : word[0]);
+        if (word != null && word[1] > word[0]) return word[0];
+        return problemStartAt(offset);
     }
 
     /**
@@ -169,8 +200,8 @@ final class HoverDocumentation {
      * geometry the hover path runs, exposed because "is the pointer over a token" is the half of it that
      * a timing test cannot reach and that silently answers yes for empty space.
      */
-    int wordStartAtForTest(float localX, float localY) {
-        return wordStartAt(localX, localY);
+    int hoverAnchorAtForTest(float localX, float localY) {
+        return hoverAnchorAt(localX, localY);
     }
 
     void cancel() {

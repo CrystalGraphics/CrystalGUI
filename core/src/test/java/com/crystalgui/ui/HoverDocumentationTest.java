@@ -142,6 +142,38 @@ public class HoverDocumentationTest extends UiTestBase {
         assertNull("there is no symbol to describe", editor.documentationPopup().shownSymbol());
     }
 
+    /**
+     * <b>A problem on punctuation is hoverable, even though there is no word there.</b>
+     *
+     * <p>The trigger required a word under the pointer, which is right for documentation and silently
+     * excluded the case the popup is most useful for: a problem lands wherever the compiler puts it, and
+     * that is regularly a {@code ;}, a brace or an operator. A redundant semicolon had a squiggle, a
+     * Problems row and a lightbulb, and hovering it did nothing at all.</p>
+     */
+    @Test
+    public void aProblemOnPunctuationIsHoverableEvenWithNoWordThere() {
+        editor.setText("int x = 1;;\ngamma\n");
+        settle();
+        resolver.answerNothing = true;
+        int semicolon = editor.getText().indexOf(";;") + 1;
+        editor.diagnostics().setAll(List.of(com.crystalgui.text.diagnostic.Diagnostic.warning(
+                new com.crystalgui.text.TextPoint(0, semicolon),
+                new com.crystalgui.text.TextPoint(0, semicolon + 1), "Unnecessary semicolon")));
+        settle();
+
+        hoverOver(semicolon, PAST_THE_DELAY);
+        assertTrue("a problem is worth a popup wherever it lands", popupOpen());
+    }
+
+    /** Punctuation with nothing wrong is still not hoverable — the word rule survives where it belongs. */
+    @Test
+    public void punctuationWithNoProblemIsStillNotHoverable() {
+        editor.setText("int x = 1;;\ngamma\n");
+        settle();
+        hoverOver(editor.getText().indexOf(";;") + 1, PAST_THE_DELAY);
+        assertFalse("only a problem earns a popup off a word", popupOpen());
+    }
+
     /** With nothing resolved and nothing wrong, there is nothing to say — and no empty box. */
     @Test
     public void aNameThatResolvesToNothingAndHasNoProblemShowsNothing() {
