@@ -399,20 +399,22 @@ public class JavaQuickFixTest extends FixFixture {
     /**
      * An id nothing knows about offers nothing — the designed answer, not a gap.
      *
-     * <p>{@code DeadCode}, because it is reported by default and no correction answers for it: the
-     * catalogue defers it deliberately, since ECJ points at the unreachable statement while what wants
-     * fixing is the condition above it. This fixture has now been an undefined call (until "create
-     * method" learned to answer it) and a missing {@code serialVersionUID} (until that was switched off),
-     * which is the right way for this test to keep going stale.</p>
+     * <p>{@code AssignmentHasNoEffect}, and this one should stay: it is reported by default and the
+     * catalogue refuses a correction for it on purpose, because {@code n = n} is safe to delete while
+     * {@code x = x} with a call in the expression is not, and one id covers both.</p>
+     *
+     * <p>The fixture has been an undefined call (until "create method" answered it), a missing
+     * {@code serialVersionUID} (until that was switched off) and dead code (until it got a fix) — each
+     * time because the engine learned something, which is the right way for this test to go stale.</p>
      */
     @Test
     public void anUnknownProblemOffersNothing() {
         String source = ""
                 + "public class Script {\n"
-                + "    void go() { if (false) { int unreachable = 1; } }\n"
+                + "    int go(int n) { n = n; return n; }\n"
                 + "}\n";
-        assertReported(source, IProblem.DeadCode);
-        List<CodeAction> actions = actionsIn(source, "int unreachable");
+        assertReported(source, IProblem.AssignmentHasNoEffect);
+        List<CodeAction> actions = actionsIn(source, "n = n");
         assertTrue("an unhandled problem must contribute nothing: " + actions, actions.isEmpty());
     }
 }
