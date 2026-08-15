@@ -25,9 +25,8 @@ import javax.annotation.Nullable;
  *   <li>an <b>edit</b> — the overwhelming majority, and the only kind that is undoable for free: a
  *       {@link ChangeSet} through {@code TextBuffer.edit} is one entry on the document's undo stack
  *       however many places it touches;</li>
- *   <li>a <b>command id</b> — for something that is not a text edit at all. "At least one of the problems
- *       in category 'unused' is not analysed due to a compiler option being ignored" is fixed by changing
- *       a setting, and there is no edit that expresses it.</li>
+ *   <li>a <b>command id</b> — for something that is not a text edit at all: copying a message to the
+ *       clipboard, opening a panel, changing a setting. The shipped one is "Copy problem message".</li>
  * </ul>
  *
  * <p>Both may be present: a fix that edits the file <em>and</em> wants a panel opened afterwards. Neither

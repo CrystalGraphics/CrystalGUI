@@ -105,6 +105,23 @@ final class EcjProblemPolicy {
         // is one entry rather than a rebuild.
         options.put("org.eclipse.jdt.core.compiler.problem.missingSerialVersion", "ignore");
 
+        // AND `@SuppressWarnings` STOPS REPORTING ON THIS COMPILER'S CONFIGURATION.
+        //
+        // Writing @SuppressWarnings("unused") produced an INFO diagnostic reading "At least one of the
+        // problems in category 'unused' is not analysed due to a compiler option being ignored" -- on the
+        // annotation, with a squiggle and a Problems row. It is true, and it is about US: the 'unused'
+        // category includes `unusedParameter` and `unusedExceptionParameter`, which are left at ECJ's
+        // `ignore` deliberately, so the category is not fully analysed and ECJ says so. Nothing the author
+        // of a script can do about it, on one of the most common annotations there is.
+        //
+        // THE TRADE, MEASURED. This option also carries UnusedWarningToken -- "unnecessary
+        // @SuppressWarnings" -- so silencing one silences the other. That costs less than it looks: while
+        // any sub-option of a category is ignored ECJ reports ProblemNotAnalysed *instead of*
+        // UnusedWarningToken, because it cannot know whether the suppression was needed. So for the
+        // "unused" token, the warning being given up is one we could never have produced. Recovering it
+        // would mean enabling `unusedParameter`, which flags every ignored parameter of every override.
+        options.put("org.eclipse.jdt.core.compiler.problem.unusedWarningToken", "ignore");
+
         return options;
     }
 
