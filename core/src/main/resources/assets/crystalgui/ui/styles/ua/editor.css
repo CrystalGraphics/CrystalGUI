@@ -1156,6 +1156,77 @@ documentationpopup {
     z-index: 910;
 }
 
+/* THE PROBLEM BAND — the message, then the one action worth showing without being asked.
+ *
+ * Above the owner and separated from it by a rule, which is IntelliJ's layout and is not arbitrary: the
+ * problem is why you looked, the declaration is what you were looking at. The separator is a bottom
+ * border, and it carries the same uniform-width, three-transparent-edges spelling every hairline in this
+ * codebase needs -- the rounded-background path takes its stroke width from border().left ALONE, so a
+ * bottom-only width resolves, lays out and paints nothing. */
+documentationpopup .__doc-problem__ {
+    flex-direction: column;
+    gap-all: 4px;
+    /* FULL BLEED, which is why the padding is written out rather than inherited: the popup's own padding
+     * would leave the band's ground short of the box's edges and it would read as a floating panel inside
+     * a panel instead of as the header of one. Negative margins pull it back out to the border. */
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-left: 9px;
+    padding-right: 9px;
+    margin-top: -9px;
+    margin-left: -9px;
+    margin-right: -9px;
+    background-color: var(--doc-problem-bg, #26282B);
+    border-width: 1px;
+    border-color: #00000000;
+    border-bottom-color: var(--doc-border, #393B40);
+}
+
+documentationpopup .__doc-problem-message__ {
+    color: var(--editor-fg, #BCBEC4);
+    white-space: normal;
+}
+
+/* A ROW, and it wraps nothing: the two labels and their two accelerators are one line in IntelliJ, and a
+ * shortcut that wrapped under its own action would read as a second action. */
+documentationpopup .__doc-problem-actions__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 6px;
+}
+
+/* THE LINK COLOUR, because these behave like links -- one click, no state, and the accelerator beside
+ * them is the keyboard equivalent rather than a second control. */
+documentationpopup .__doc-problem-action__ {
+    color: var(--link, #548AF7);
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+/* UNDERLINED ON HOVER, which is what says it is clickable at all: the accelerator beside it is the same
+ * size and nearly the same weight, so colour alone leaves two words that differ only in hue. IntelliJ
+ * underlines on hover rather than always, and that is the better half of the choice -- a row with two
+ * permanently underlined runs reads as a form rather than as a sentence with an action in it.
+ *
+ * The pointer is on the rule ABOVE rather than here, deliberately: the cursor is a property of the thing
+ * being pointed at, and a `cursor` that only applies while `:hover` matches is the same statement made
+ * twice with one of them able to go missing. */
+documentationpopup .__doc-problem-action__:hover {
+    text-decoration-line: underline;
+}
+
+/* The accelerator is a caption, not a control: dimmer, never the link colour, and it must not look
+ * pressable or it becomes the thing people click instead of the action it names. */
+documentationpopup .__doc-problem-shortcut__ {
+    color: var(--editor-line-number, #6B6B6B);
+    flex-shrink: 0;
+}
+
+/* The overflow menu. The preferred fix keeps the lightbulb, which is the one row IntelliJ marks. */
+menu.__code-actions__ .__preferred-action__ {
+    color: var(--link, #548AF7);
+}
+
 /* The owner band: the DECLARING type, drawn with that type's own kind icon. Reuses the completion popup's
  * icon vocabulary, which is keyed on SymbolKind and has nothing completion-specific in it but the prefix. */
 documentationpopup .__doc-owner__ {

@@ -1,6 +1,7 @@
 package com.crystalgui.language.engine.bridge;
 
 import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.syntax.SyntaxToken;
@@ -97,6 +98,23 @@ public interface SourceAnalyzer {
         /** The type the language expects at {@code offset}, or null. */
 
         TypeRef expectedTypeAt(int offset);
+
+        /**
+         * What can be done about the problems overlapping {@code [from, to)}.
+         *
+         * <p>Answered <b>in this analysis's own coordinates</b>, and stamped by the caller with
+         * {@link #version()}. That is what makes the offsets safe without any mapping: an action is only
+         * ever applied to a document still at that version, so the analysis's positions and the buffer's
+         * are the same positions or the action is refused. Mapping a stale edit forward is not attempted —
+         * a fix built from a tree that no longer matches the text is not worth salvaging.</p>
+         *
+         * <p>Defaulted to nothing so an adapter that offers no fixes says so by saying nothing, which is
+         * the same three-tier absence the rest of this bridge uses. A band whose JDT is too old for a
+         * particular correction simply does not return it.</p>
+         */
+        default List<CodeAction> codeActionsIn(int from, int to) {
+            return List.of();
+        }
 
         /**
          * Everything reachable on {@code type} from {@code contextOffset} — what completion after a

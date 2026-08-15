@@ -40,6 +40,8 @@ import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.lang.CodeAction;
+import com.crystalgui.text.lang.CodeActionProvider;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SemanticTokenProvider;
 import com.crystalgui.text.lang.Versioned;
@@ -1841,7 +1843,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Go-to-definition, which writes to the caret. */
     private static final int LANE_DEFINITION = 1;
 
-    private final int[] resolveSerials = new int[2];
+    /** Code actions get a lane of their own, so a hover's request cannot cancel the palette's. */
+    private static final int LANE_ACTIONS = 2;
+
+    private final int[] resolveSerials = new int[3];
 
     /**
      * Resolve the name at {@code offset} and hand the answer over, or report that nothing was asked.
@@ -1865,6 +1870,89 @@ public class TextEditor extends ScrollerView implements UndoScope {
      *
      * @return whether a request was issued — false means no engine, which is the ordinary case
      */
+    /**
+     * The problems covering {@code offset} <b>right now</b>, nearest-first.
+     *
+     * <p>Read from the decoration lane rather than from {@link DiagnosticSet}, and that is the whole
+     * point: a diagnostic's own row/column describe the document that was compiled, while the tracked
+     * range has been carried through every edit since. Asking the set would put the hover on a problem
+     * whose text has moved, which is the failure the tracking was built to end.</p>
+     *
+     * <p>Zero-width diagnostics are widened by one before the test — "expected ';'" points <em>between</em>
+     * two characters, and a range that contains nothing contains no offset either.</p>
+     */
+    public List<Diagnostic> diagnosticsAt(int offset) {
+        List<Diagnostic> found = new ArrayList<>();
+        for (TrackedRange range : buffer.decorations().inLane(DIAGNOSTIC_LANE)) {
+            int from = range.from();
+            int to = Math.max(range.to(), from + 1);
+            if (offset >= from && offset <= to && range.payload() instanceof Diagnostic) {
+                found.add((Diagnostic) range.payload());
+            }
+        }
+        return found;
+    }
+
+    /**
+     * Asks every contributor what can be done about the problems at {@code offset}.
+     *
+     * <p>The engine's answers and the ones that need no engine are <b>merged here</b>, because this is the
+     * only place that can see both — a provider answers for itself and never for the list. See
+     * {@link CodeActionProvider} for why nothing is asked to enumerate the whole set.</p>
+     *
+     * <p>Reports whether it <em>asked</em>, never whether anything arrived, for the reason
+     * {@code goToDefinition} sets out at length: the callback may legitimately never fire.</p>
+     */
+    public boolean requestCodeActions(int offset, java.util.function.Consumer<List<CodeAction>> answer) {
+        List<Diagnostic> problems = diagnosticsAt(offset);
+        List<CodeAction> shapeDerived = DiagnosticActions.forProblems(problems);
+        if (languageServices == null) {
+            if (!shapeDerived.isEmpty()) answer.accept(shapeDerived);
+            return false;
+        }
+        final int serial = ++resolveSerials[LANE_ACTIONS];
+        CodeActionProvider.Request request =
+                CodeActionProvider.Request.at(offset, problems, buffer.version());
+        languageServices.codeActions().actionsAt(request, reply -> {
+            if (serial != resolveSerials[LANE_ACTIONS] || reply == null) return;
+            List<CodeAction> merged = new ArrayList<>();
+            // ONLY THE ENGINE'S HALF IS GATED. Its actions carry offsets from a parse that may have been
+            // superseded; the shape-derived ones carry no edit at all and cannot go stale.
+            if (reply.isFresh(buffer.version()) && reply.value() != null) merged.addAll(reply.value());
+            merged.addAll(shapeDerived);
+            merged.sort(CodeAction.ORDER);
+            answer.accept(merged);
+        });
+        return true;
+    }
+
+    /**
+     * Applies one action — the only path, and the only place the version is re-checked.
+     *
+     * <p><b>Re-checked here rather than trusted from the request</b>, because an action is shown in a
+     * popup and applied when the user gets round to pressing the key. An edit is a set of offsets, and
+     * offsets into a document that has since been typed in still resolve — they name different text. So a
+     * stale action does not fail, it silently edits the wrong place, and the gate is the difference
+     * between a quick fix and a corruption.</p>
+     *
+     * <p>Bracketed by {@code breakUndoCoalescing} on both sides so the fix is exactly one entry in the
+     * history: without the leading break it merges into the typing run before it, and without the trailing
+     * one the next keystroke merges into the fix. Either way Ctrl+Z takes back half a fix.</p>
+     *
+     * @return false when the action could not be applied, which a caller should treat as "ask again"
+     */
+    public boolean applyCodeAction(@Nullable CodeAction action) {
+        if (action == null || isReadOnly()) return false;
+        if (!action.isApplicableTo(buffer.version())) return false;
+        if (action.commandId() != null && !DiagnosticActions.run(this, action.commandId())) return false;
+        ChangeSet edit = action.edit();
+        if (edit == null) return action.commandId() != null;
+        buffer.breakUndoCoalescing();
+        buffer.edit(edit);
+        buffer.breakUndoCoalescing();
+        return true;
+    }
+
     private boolean resolveAt(int lane, int offset, java.util.function.Consumer<SymbolInfo> onResolved) {
         if (languageServices == null) return false;
         final int serial = ++resolveSerials[lane];
@@ -1976,8 +2064,85 @@ public class TextEditor extends ScrollerView implements UndoScope {
             float[] anchor = anchorInWindow(offset);
             if (anchor == null) return;
             docPopup.show(window, symbol, anchor[0], anchor[1], anchor[2]);
+            fillProblemSection(offset);
         });
     }
+
+    /**
+     * Fills the popup's problem band, and connects what it offers to what applies it.
+     *
+     * <p>Two passes on purpose. The problems are known synchronously — they are tracked ranges in the
+     * buffer — so the band appears with the popup; the actions come from an engine and grow in when they
+     * arrive. A hover that waited for the compiler would feel broken on exactly the file slow enough for
+     * anyone to notice.</p>
+     *
+     * <p>The signals are re-connected per show, and disconnected first: the popup outlives any one symbol,
+     * so a listener added per hover and never removed would apply the fix for a problem three hovers ago.</p>
+     */
+    private void fillProblemSection(int offset) {
+        if (docPopup == null) return;
+        List<Diagnostic> problems = diagnosticsAt(offset);
+        docPopup.setProblem(problems, List.of());
+        if (problems.isEmpty()) return;
+
+        popupActions.disconnectAll();
+        popupActions.add(docPopup.onActionChosen.connect(action -> {
+            if (applyCodeAction(action)) closeQuickDocumentation();
+        }));
+        popupActions.add(docPopup.onMoreActions.connect(() -> {
+            closeQuickDocumentation();
+            showCodeActionsAt(offset);
+        }));
+        requestCodeActions(offset, available -> {
+            if (docPopup != null && docPopup.isOpen()) docPopup.setProblem(problems, available);
+        });
+    }
+
+    private final com.crystalgui.core.signal.ConnectionGroup popupActions =
+            new com.crystalgui.core.signal.ConnectionGroup();
+
+    /**
+     * The full action list at an offset — Alt+Enter, and the popup's "More actions…".
+     *
+     * <p>A {@code Menu} rather than a list of its own, because that is what it is: rows with titles, an
+     * accelerator column and a keyboard walk, all of which {@code MenuBuilder} and {@code Menu} already
+     * do. A second list widget here would be a second set of the six rules {@code MenuBuilder} records,
+     * and they were each learned from a bug.</p>
+     *
+     * @return whether anything was offered
+     */
+    public boolean showCodeActionsAt(int offset) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return false;
+        float[] anchor = anchorInWindow(offset);
+        if (anchor == null) return false;
+        requestCodeActions(offset, available -> {
+            if (available.isEmpty()) return;
+            com.crystalgui.ui.elements.Menu menu = new com.crystalgui.ui.elements.Menu();
+            menu.addClass(CODE_ACTIONS_CLASS);
+            for (CodeAction action : available) {
+                com.crystalgui.ui.elements.MenuItem row = new com.crystalgui.ui.elements.MenuItem(action.title());
+                if (action.preferred()) row.addClass(PREFERRED_ACTION_CLASS);
+                row.onPressed.connect(() -> {
+                    applyCodeAction(action);
+                    menu.hide();
+                });
+                menu.addItem(row);
+            }
+            // PRESENTED THROUGH MenuBuilder, which is what attaches it and what drops it again when the
+            // root closes by any route -- light dismiss, Escape, or choosing a row. Attaching it here
+            // instead leaves one display:none menu in the tree per press.
+            java.util.List<com.crystalgui.ui.elements.Menu> live = new ArrayList<>(
+                    com.crystalgui.ui.elements.chrome.MenuBuilder.present(menu, this, window));
+            menu.onClosed.connect(() -> com.crystalgui.ui.elements.chrome.MenuBuilder.discard(live));
+            menu.showAt(anchor[0], anchor[1] + anchor[2], null);
+        });
+        return true;
+    }
+
+    /** The overflow menu, and the lightbulb row inside it. */
+    public static final String CODE_ACTIONS_CLASS = "__code-actions__";
+    public static final String PREFERRED_ACTION_CLASS = "__preferred-action__";
 
     /** Closes the documentation popup if it is open. */
     public void closeQuickDocumentation() {

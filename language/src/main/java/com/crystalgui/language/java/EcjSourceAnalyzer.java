@@ -185,6 +185,11 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         }
 
         @Override
+        public List<com.crystalgui.text.lang.CodeAction> codeActionsIn(int from, int to) {
+            return JavaQuickFixes.in(unit, source, version, from, to);
+        }
+
+        @Override
         public List<Diagnostic> diagnostics() {
             List<Diagnostic> found = new ArrayList<>();
             CompilationUnit resolved = unit;
