@@ -16,7 +16,9 @@ import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Everything a {@link Correction} is given, and the small number of things every one of them does.
@@ -64,6 +66,22 @@ final class FixContext {
 
     int to() {
         return to;
+    }
+
+    private final Set<String> claimed = new HashSet<>();
+
+    /**
+     * True the first time {@code key} is claimed in this request, false after — how a correction that
+     * several problems would trigger answers once.
+     *
+     * <p>{@code Class.forName(n).newInstance()} is three unhandled exceptions and one statement, and the
+     * popup must show one "Surround with try/catch", not three. "Only the first problem answers" was tried
+     * and is wrong: the caret can sit on a later one without overlapping the first, and then nothing
+     * answers at all. So a correction claims the thing it is about — the statement, by position — and the
+     * second problem to reach it finds it taken.</p>
+     */
+    boolean claim(String key) {
+        return claimed.add(key);
     }
 
     /** What the host knows and a correction cannot work out for itself. */
