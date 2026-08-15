@@ -40,6 +40,15 @@
 .decoration-dirty      { color: var(--decoration-dirty, #E2C08D); }
 .decoration-readonly   { color: var(--decoration-readonly, #8A9199); }
 
+/* A live script. Green because that is what a run control is everywhere, and it has to read as a STATE
+ * rather than as a problem -- the diagnostic colours above are the ones that mean something is wrong.
+ *
+ * Deliberately close to `decoration-added` without being it: both say "this is fine and it is happening",
+ * and a reader who has learnt one has already learnt the other. RunDecorations states only this colour
+ * and never a letter, so a file that is edited AND running keeps its `M` and shows it in this colour --
+ * which is the case worth seeing, since the text on disk is then not what is running. */
+.decoration-running    { color: var(--decoration-running, #6FBF73); }
+
 /* The badge inherits the row's decoration colour through `color`, so it needs no rule per state --
  * only the shared shrink. Stated here rather than in default.css because a theme that wants no badges
  * at all should be able to say so without editing the user-agent sheet. */

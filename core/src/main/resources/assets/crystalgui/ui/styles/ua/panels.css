@@ -618,3 +618,194 @@ problemspanel .__problem__.__leaf__ .__twisty__ {
     overlay: none;
 }
 
+
+/* ── Run console ───────────────────────────────────────────────────────────────────
+ *
+ * A transcript, so a flat list rather than the tree the Problems panel uses: output does not group, it
+ * happened in an order, and nesting it under headings breaks the one thing a console is for.
+ *
+ * The rules live here rather than in a sheet of their own because the widget is a panel and this is the
+ * panel part of the user-agent sheet. It is authored in `language/` -- a selector that matches nothing
+ * costs nothing, and the alternative is a second sheet somebody has to remember to install. */
+runpanel {
+    width: 100%;
+    /* The fill idiom, and it is the whole reason this measures at all: flex-shrink defaults to 0 here,
+     * so a grow-1 child with no basis keeps its content size and overhangs its parent. */
+    height: 0;
+    flex-grow: 1;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+runpanel .__run-list__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* MONOSPACE, and it is correctness rather than taste.
+ *
+ * A console renders program output, and program output is aligned by its author with SPACES -- every
+ * `label       value` table any script has ever printed. Spaces only align in a font whose glyphs are
+ * one width, so in the proportional default those columns land at three different x positions and the
+ * author's table stops being a table. IntelliJ's console, VS Code's output panel and Unity's console are
+ * all monospace for this one reason.
+ *
+ * The same stack the editor uses, in the same order: the first entry that loads wins and the sans behind
+ * it supplies glyphs JetBrains Mono lacks. Declared on the ROW rather than on `runpanel`, because
+ * font-size does not inherit here -- `* { font-size: 10 }` in the core part is a candidate at STYLESHEET
+ * origin on every element -- and a family declared on a wrapper reaches the label inside it while a size
+ * declared beside it silently does not. Keeping both on the element that draws the text avoids the pair
+ * disagreeing. */
+runpanel .__run-row__ .__run-text__ {
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
+                 "crystalgraphics:IBMPlexSans-Regular.ttf";
+}
+
+/* A line, and the parts of it that are not the line. The text takes the space and the metadata sits
+ * against the trailing edge, so scanning down the console reads message-first -- which is what a reader
+ * is doing -- rather than stepping past an origin column to reach it. */
+runpanel .__run-row__ {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap-all: 6px;
+    padding-left: 6px;
+    padding-right: 6px;
+    white-space: nowrap;
+}
+
+/* `width: 0; flex-grow: 1` and NOT `width: 100%`: in a row it is the former that yields, and the latter
+ * pushes the metadata off the end. */
+runpanel .__run-row__ .__run-text__ {
+    width: 0;
+    flex-grow: 1;
+    text-overflow: ellipsis;
+}
+
+/* The repeat count. Present only when a row stands for more than one line, so it must take no space when
+ * empty -- a UIText with no text measures to nothing, and the gap is what would otherwise show. */
+runpanel .__run-row__ .__run-count__ {
+    flex-shrink: 0;
+    color: var(--run-count, #8A9199);
+}
+
+
+/* The three levels. Ordinary output takes the document's own ink rather than a colour of its own --
+ * colouring everything is the same as colouring nothing, and the two that matter are the two that are
+ * not ordinary. They reuse the diagnostic tokens deliberately: an error is an error, and a console that
+ * invented its own red would drift from the squiggles describing the same run. */
+runpanel .__run-row__.runlevel-out .__run-text__ {
+    color: var(--editor-fg, #BCBEC4);
+}
+
+runpanel .__run-row__.runlevel-warn .__run-text__ {
+    color: var(--decoration-warning, #CCA700);
+}
+
+runpanel .__run-row__.runlevel-error .__run-text__ {
+    color: var(--decoration-error, #F14C4C);
+}
+
+/* The ring's eviction notice. Never hidden when non-empty: a transcript that quietly begins in the
+ * middle reads as the console having missed something. */
+runpanel .__run-notice__ {
+    width: 100%;
+    flex-shrink: 0;
+    padding-left: 6px;
+    padding-right: 6px;
+    color: var(--run-origin, #6B6B6B);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The toolbar. Icon-only and against the trailing edge, which is where every IDE console keeps its run
+ * controls -- the leading edge belongs to the transcript, and a control there would sit above the first
+ * line of output and read as part of it. */
+runpanel > .__head__ {
+    width: 100%;
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    gap-all: 2px;
+    height: 22px;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+/* WHAT PUTS THE GROUP AT THE TRAILING EDGE. width: 0 and not 100%: in a row it is the former that
+ * yields the remaining space, and the latter pushes the buttons off the end. */
+runpanel > .__head__ > .__spacer__ {
+    width: 0;
+    flex-grow: 1;
+}
+
+/* A console control is a glyph, not a labelled button. `min-height` is a DIFFERENT PROPERTY from
+ * `height`, so the base `button` rule's minimum wins at any specificity until it is cleared here --
+ * which is what held earlier attempts at a compact toggle open at 14px through three rounds of shrinking
+ * `height`. The padding has to go for the same reason. */
+runpanel .__run-action__ {
+    width: 18px;
+    height: 18px;
+    min-height: 0;
+    min-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    flex-shrink: 0;
+    background: none;
+    color: var(--run-action, #9DA0A8);
+}
+
+/* `background` and `background-color` are separate properties, and a rule setting only the colour is
+ * painted over by whatever drawable won -- which is how a placeholder red survived on a hover state for
+ * a whole release. Both, every time. */
+runpanel .__run-action__:hover {
+    background: none;
+    background-color: var(--run-action-hover, #383B40);
+    color: var(--editor-fg, #BCBEC4);
+}
+
+/* AFTER the hover rule, because `:disabled` and `:hover` are both one pseudo-class and therefore tie on
+ * specificity -- the later rule wins. A Stop that lights up while dead is the exact thing that teaches
+ * people a control does nothing. */
+runpanel .__run-action__:disabled,
+runpanel .__run-action__:disabled:hover {
+    background: none;
+    background-color: transparent;
+    color: var(--run-action-disabled, #4E5157);
+}
+
+runpanel .__run-stop__ {
+    overlay: icon("crystalgui:stop");
+    overlay-fit: contain;
+}
+
+runpanel .__run-clear__ {
+    overlay: icon("crystalgui:trash");
+    overlay-fit: contain;
+}
+
+/* A run boundary. Quiet, because it is punctuation rather than content -- it says "a new run starts
+ * here" and anything louder competes with the output it is separating. */
+runpanel .__run-row__.__run-divider__ {
+    padding-top: 4px;
+}
+
+runpanel .__run-row__.__run-divider__ .__run-text__ {
+    color: var(--run-divider, #7A7D83);
+    border-top-width: 1px;
+    border-top-color: var(--run-divider-rule, #3A3D42);
+}
+
+/* A row that can be opened gets a link's affordance. Without it the double-click is a secret: nothing
+ * on screen says a stack frame is reachable, which is the same as it not being. */
+runpanel .__run-row__.__run-navigable__:hover .__run-text__ {
+    text-decoration-line: underline;
+    cursor: pointer;
+}
+
+runpanel .__run-row__:hover {
+    background-color: var(--run-row-hover, #2E3135);
+}

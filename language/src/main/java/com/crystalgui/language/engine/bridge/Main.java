@@ -508,5 +508,16 @@ public final class Main {
         System.out.println("big=" + BIG + " sci=" + SCIENTIFIC + " tiny=" + NEGATIVE_EXPONENT);
         System.out.println("tab[" + TAB + "] nothing=" + NOTHING + " path=" + PATH);
         
+        String s = null;
+        s.strip();
+        
+        
+        
+        
+        
+        
+        
+        
+        
     }
 }

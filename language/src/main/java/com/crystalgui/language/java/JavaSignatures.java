@@ -495,13 +495,14 @@ final class JavaSignatures {
         // The pad is the keyword's own length plus its space -- 11 for `implements`, 8 for an
         // interface's `extends` -- so it is derived rather than a magic number.
         //
-        // IT IS EXACT ONLY IN A MONOSPACE FONT, and we do not ship one: `font-family` here resolves
-        // resource PATHS, and the only two assets are Minecraft.otf and MinecraftRegular.otf, both
-        // proportional. IntelliJ's definition block is monospace, which is why a space count aligns
-        // for them. So this under-indents by however much narrower a space is than an average glyph,
-        // and the honest options are a monospace face for code contexts (which would make this exact
-        // with no change here) or a two-column layout in the widget, which needs the clause structure
-        // on the seam. Tuning the count to one font's metrics would be neither.
+        // IT IS EXACT ONLY IN A MONOSPACE FONT, and this comment used to say we ship none -- naming
+        // Minecraft.otf and MinecraftRegular.otf as the only two assets. **That is no longer true.**
+        // JetBrainsMono-Regular.ttf ships and `.__syntax__` already declares it, which is exactly the
+        // class the popup's signature carries, so a space count aligns here for the same reason it
+        // aligns for IntelliJ. The option this note called out as the honest fix was taken.
+        //
+        // It still under-indents anywhere the family fails to resolve and the proportional fallback
+        // draws instead, which is the case worth remembering rather than the one that was fixed.
         boolean perLine = broken && interfaces.length > 1;
         String pad = spaces(keyword.length() + 1);
         for (int i = 0; i < interfaces.length; i++) {
