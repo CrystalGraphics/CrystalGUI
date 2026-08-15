@@ -3,6 +3,7 @@ package com.crystalgui.language.java;
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
+import com.crystalgui.language.engine.bridge.CodeActionContext;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.diagnostic.Diagnostic;
@@ -50,13 +51,15 @@ public abstract class FixFixture {
     private static final long VERSION = 7L;
 
     /**
-     * A stand-in classpath index.
+     * A stand-in host.
      *
-     * <p>The real one is built from jars and is not any correction's subject — what a fix does with a
-     * candidate is, and that is testable only if the candidates are fixed.</p>
+     * <p>The real classpath index is built from jars and is not any correction's subject — what a fix
+     * <em>does</em> with a candidate is, and that is testable only if the candidates are fixed. Two for
+     * {@code List} on purpose: one candidate and several are different cases, and the several-candidate
+     * one is what the "More actions…" list exists for.</p>
      */
-    protected static final java.util.function.Function<String, List<String>> CANDIDATES = name ->
-            "List".equals(name) ? List.of("java.util.List", "java.awt.List") : List.of();
+    protected static final CodeActionContext HOST = simpleName ->
+            "List".equals(simpleName) ? List.of("java.util.List", "java.awt.List") : List.of();
 
     private static JavaEngine engine;
     private static SourceAnalyzer analyzer;
@@ -80,8 +83,19 @@ public abstract class FixFixture {
     /** Every action offered over {@code needle}, which must appear in {@code source}. */
     protected static List<CodeAction> actionsIn(String source, String needle) {
         int at = indexOf(source, needle);
-        try (SourceAnalyzer.Analysis analysis = analyse(source)) {
-            return analysis.codeActionsIn(at, at + needle.length(), CANDIDATES);
+        return actionsOver("Script", source, at, at + needle.length());
+    }
+
+    /**
+     * Every action offered over {@code [from, to)} in a file called {@code className}.
+     *
+     * <p>The name matters for a fixture read off disk: a {@code public class Unused} analysed as
+     * {@code Script.java} is a {@code PublicClassMustMatchFileName} error, and that one error poisons
+     * resolution for the whole unit — so the file would report nothing the fixture was written to show.</p>
+     */
+    protected static List<CodeAction> actionsOver(String className, String source, int from, int to) {
+        try (SourceAnalyzer.Analysis analysis = analyse(className, source)) {
+            return analysis.codeActionsIn(from, to, HOST);
         }
     }
 
@@ -197,7 +211,11 @@ public abstract class FixFixture {
     }
 
     private static SourceAnalyzer.Analysis analyse(String source) {
-        return analyzer.analyze("Script", source, List.of(), RELEASE_LEVEL, VERSION);
+        return analyse("Script", source);
+    }
+
+    private static SourceAnalyzer.Analysis analyse(String className, String source) {
+        return analyzer.analyze(className, source, List.of(), RELEASE_LEVEL, VERSION);
     }
 
     private static int occurrences(List<Diagnostic> found, int problemId) {

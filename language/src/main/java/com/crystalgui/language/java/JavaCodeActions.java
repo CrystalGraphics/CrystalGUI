@@ -29,7 +29,8 @@ import java.util.function.Supplier;
  * wait for. The callback is the contract rather than the mechanism, and keeping it means a future band
  * that has to cross a thread does not change this interface.</p>
  */
-final class JavaCodeActions implements CodeActionProvider {
+final class JavaCodeActions implements CodeActionProvider,
+        com.crystalgui.language.engine.bridge.CodeActionContext {
 
     private final Supplier<SourceAnalyzer.Analysis> analysis;
 
@@ -56,7 +57,8 @@ final class JavaCodeActions implements CodeActionProvider {
      * Importing {@code Listener} because the unresolved name was {@code List} would be a fix that
      * compiles and is not what anyone asked for.</p>
      */
-    private List<String> importCandidates(String simpleName) {
+    @Override
+    public List<String> importCandidates(String simpleName) {
         if (types == null || simpleName == null || simpleName.isEmpty()) return List.of();
         List<String> found = new ArrayList<>();
         for (TypeIndex.Entry entry : types.matching(simpleName).entries()) {
@@ -73,6 +75,6 @@ final class JavaCodeActions implements CodeActionProvider {
             return;
         }
         answer.accept(Versioned.of(current.version(),
-                current.codeActionsIn(request.from(), request.to(), this::importCandidates)));
+                current.codeActionsIn(request.from(), request.to(), this)));
     }
 }

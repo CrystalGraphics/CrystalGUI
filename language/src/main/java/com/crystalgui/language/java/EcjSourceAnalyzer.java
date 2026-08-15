@@ -186,8 +186,8 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
 
         @Override
         public List<com.crystalgui.text.lang.CodeAction> codeActionsIn(
-                int from, int to, java.util.function.Function<String, List<String>> importCandidates) {
-            return JavaQuickFixes.in(unit, source, version, from, to, importCandidates);
+                int from, int to, com.crystalgui.language.engine.bridge.CodeActionContext context) {
+            return JavaQuickFixes.in(unit, source, version, from, to, context);
         }
 
         @Override

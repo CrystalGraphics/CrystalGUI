@@ -112,14 +112,19 @@ public interface SourceAnalyzer {
          * the same three-tier absence the rest of this bridge uses. A band whose JDT is too old for a
          * particular correction simply does not return it.</p>
          *
-         * <p>{@code importCandidates} maps a simple name onto the qualified names that could satisfy it.
-         * It is handed IN rather than looked up here because the split is real: the syntax tree knows
-         * <em>which</em> name is unresolved and <em>where</em> an import belongs, and only the host has an
-         * index of the classpath to say what that name could be. Passing a function rather than the index
-         * also keeps the index type off this bridge, which the band loader would otherwise have to share.</p>
+         * <p>{@code context} is what the host knows and a correction cannot work out for itself — today
+         * only which qualified names could satisfy an unresolved simple name. It is handed IN rather than
+         * looked up here because the split is real: the syntax tree knows <em>which</em> name is
+         * unresolved and <em>where</em> an import belongs, and only the host has an index of the classpath
+         * to say what that name could be.</p>
+         *
+         * <p><b>One interface rather than one parameter per need</b>, which is the difference between this
+         * signature and the {@code Function} it replaced. Every future correction that needs something
+         * host-side — a fuzzy index for "did you mean", the indent for generated code — adds a method
+         * there instead of an argument here, and an argument here is a contract both loaders and the
+         * oldest band must agree on. @see CodeActionContext</p>
          */
-        default List<CodeAction> codeActionsIn(
-                int from, int to, Function<String, List<String>> importCandidates) {
+        default List<CodeAction> codeActionsIn(int from, int to, CodeActionContext context) {
             return List.of();
         }
 

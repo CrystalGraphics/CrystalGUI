@@ -40,19 +40,19 @@ public class JavaQuickFixTest extends FixFixture {
                 + "}\n";
         assertReported(source, IProblem.UnusedImport);
 
-        CodeAction fix = offered(source, "java.util.List", JavaQuickFixes.REMOVE_UNUSED_IMPORT);
+        CodeAction fix = offered(source, "java.util.List", UnusedCorrections.REMOVE_IMPORT);
         assertNotNull("no fix offered", fix);
         assertTrue("the one fix for a problem should be the preferred one", fix.preferred());
         assertEquals(CodeActionKind.QUICK_FIX, fix.kind());
 
         // THE WHOLE LINE, terminator included. Deleting only the node leaves an empty line behind, and a
         // file tidied that way slowly fills with them.
-        assertFix(source, "java.util.List", JavaQuickFixes.REMOVE_UNUSED_IMPORT, ""
+        assertFix(source, "java.util.List", UnusedCorrections.REMOVE_IMPORT, ""
                 + "import java.util.Map;\n"
                 + "public class Script {\n"
                 + "    Map<String, String> go() { return null; }\n"
                 + "}\n");
-        assertResolves(source, "java.util.List", JavaQuickFixes.REMOVE_UNUSED_IMPORT,
+        assertResolves(source, "java.util.List", UnusedCorrections.REMOVE_IMPORT,
                 IProblem.UnusedImport);
     }
 
@@ -69,7 +69,7 @@ public class JavaQuickFixTest extends FixFixture {
         String source = ""
                 + "import java.util.List;\n"
                 + "public class Script { }\n";
-        assertFix(source, "java.util.List", JavaQuickFixes.REMOVE_UNUSED_IMPORT,
+        assertFix(source, "java.util.List", UnusedCorrections.REMOVE_IMPORT,
                 "public class Script { }\n");
     }
 
@@ -86,7 +86,7 @@ public class JavaQuickFixTest extends FixFixture {
                 + "import java.util.Map;\n"
                 + "import java.util.Set;\n"
                 + "public class Script { }\n";
-        CodeAction batch = offered(source, "java.util.List", JavaQuickFixes.REMOVE_UNUSED_IMPORTS);
+        CodeAction batch = offered(source, "java.util.List", UnusedCorrections.REMOVE_IMPORTS);
         assertNotNull("no batch offered", batch);
         assertFalse("the batch must not be the default", batch.preferred());
         assertEquals(CodeActionKind.SOURCE, batch.kind());
@@ -105,13 +105,13 @@ public class JavaQuickFixTest extends FixFixture {
                 + "}\n";
         assertReported(source, IProblem.LocalVariableIsNeverUsed);
         assertEquals("Remove variable 's'",
-                offered(source, "String s", JavaQuickFixes.REMOVE_UNUSED_LOCAL).title());
-        assertFix(source, "String s", JavaQuickFixes.REMOVE_UNUSED_LOCAL, ""
+                offered(source, "String s", UnusedCorrections.REMOVE_LOCAL).title());
+        assertFix(source, "String s", UnusedCorrections.REMOVE_LOCAL, ""
                 + "public class Script {\n"
                 + "    void go() {\n"
                 + "    }\n"
                 + "}\n");
-        assertResolves(source, "String s", JavaQuickFixes.REMOVE_UNUSED_LOCAL,
+        assertResolves(source, "String s", UnusedCorrections.REMOVE_LOCAL,
                 IProblem.LocalVariableIsNeverUsed);
     }
 
@@ -124,12 +124,12 @@ public class JavaQuickFixTest extends FixFixture {
                 + "}\n";
         assertReported(source, IProblem.UnusedPrivateField);
         assertEquals("Remove field 'count'",
-                offered(source, "private int count", JavaQuickFixes.REMOVE_UNUSED_FIELD).title());
-        assertFix(source, "private int count", JavaQuickFixes.REMOVE_UNUSED_FIELD, ""
+                offered(source, "private int count", UnusedCorrections.REMOVE_FIELD).title());
+        assertFix(source, "private int count", UnusedCorrections.REMOVE_FIELD, ""
                 + "public class Script {\n"
                 + "    void go() { }\n"
                 + "}\n");
-        assertResolves(source, "private int count", JavaQuickFixes.REMOVE_UNUSED_FIELD,
+        assertResolves(source, "private int count", UnusedCorrections.REMOVE_FIELD,
                 IProblem.UnusedPrivateField);
     }
 
@@ -150,14 +150,14 @@ public class JavaQuickFixTest extends FixFixture {
                 + "        return a;\n"
                 + "    }\n"
                 + "}\n";
-        assertFix(source, "b = 2", JavaQuickFixes.REMOVE_UNUSED_LOCAL, ""
+        assertFix(source, "b = 2", UnusedCorrections.REMOVE_LOCAL, ""
                 + "public class Script {\n"
                 + "    int go() {\n"
                 + "        int a = 1;\n"
                 + "        return a;\n"
                 + "    }\n"
                 + "}\n");
-        assertResolves(source, "b = 2", JavaQuickFixes.REMOVE_UNUSED_LOCAL,
+        assertResolves(source, "b = 2", UnusedCorrections.REMOVE_LOCAL,
                 IProblem.LocalVariableIsNeverUsed);
     }
 
@@ -198,7 +198,7 @@ public class JavaQuickFixTest extends FixFixture {
                 + "public class Script {\n"
                 + "    List<String> names;\n"
                 + "}\n", applied(source, utilImport));
-        assertResolves(source, "List<String>", JavaQuickFixes.ADD_IMPORT, IProblem.UndefinedType);
+        assertResolves(source, "List<String>", ImportCorrections.ADD_IMPORT, IProblem.UndefinedType);
     }
 
     /** A candidate already imported is not offered again. */
