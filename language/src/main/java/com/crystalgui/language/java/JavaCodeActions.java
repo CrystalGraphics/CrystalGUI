@@ -67,6 +67,12 @@ final class JavaCodeActions implements CodeActionProvider,
         return found;
     }
 
+    /** The near misses, ranked by the index — the "did you mean" half of the same split. */
+    @Override
+    public List<String> similarTypeNames(String simpleName) {
+        return types == null ? List.of() : types.similar(simpleName);
+    }
+
     @Override
     public void actionsAt(Request request, Consumer<Versioned<List<CodeAction>>> answer) {
         SourceAnalyzer.Analysis current = analysis.get();

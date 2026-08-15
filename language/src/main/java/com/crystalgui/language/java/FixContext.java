@@ -4,6 +4,7 @@ import com.crystalgui.language.engine.bridge.CodeActionContext;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
+import com.crystalgui.text.lang.CodeActionKind;
 
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.ASTNode;
@@ -13,6 +14,8 @@ import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.NodeFinder;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -67,7 +70,7 @@ final class FixContext {
     }
 
     /** An action of some other kind — a whole-file tidy rather than a fix for the problem at hand. */
-    CodeAction action(String id, String title, com.crystalgui.text.lang.CodeActionKind kind, ChangeSet edit) {
+    CodeAction action(String id, String title, CodeActionKind kind, ChangeSet edit) {
         return new CodeAction(id, title, kind, edit, null, false, version);
     }
 
@@ -81,6 +84,36 @@ final class FixContext {
     /** What {@code rewrite} amounts to, or null if it cannot be expressed. @see Rewrites#toChangeSet */
     ChangeSet changesFrom(ASTRewrite rewrite) {
         return Rewrites.toChangeSet(rewrite, unit, source);
+    }
+
+    /**
+     * A fresh plan for the type names <em>one action</em> is about to write.
+     *
+     * <p>Per action, never shared: two candidate fixes for the same problem import different things, and a
+     * plan that had seen both would put the second candidate's import into the first one's edit.</p>
+     */
+    ImportPlan importPlan() {
+        return new ImportPlan(unit, source);
+    }
+
+    /**
+     * {@code rewrite}'s changes and {@code imports}' insertions as one edit, or null if the rewrite
+     * cannot be expressed.
+     *
+     * <p>The two halves come from different mechanisms — the body from JDT's rewriter, the import
+     * region from our own arithmetic, for the reasons on {@link ImportRegion} — and meet only here.
+     * They cannot overlap: an import insertion sits above the first type declaration and a rewrite of the
+     * body sits inside one, so the merge is a sort and {@code ChangeSet.of} keeps checking that.</p>
+     */
+    ChangeSet changesFrom(ASTRewrite rewrite, ImportPlan imports) {
+        ChangeSet body = Rewrites.toChangeSet(rewrite, unit, source);
+        if (body == null) return null;
+        List<Change> extra = imports.changes();
+        if (extra.isEmpty()) return body;
+        List<Change> all = new ArrayList<>(body.changes());
+        all.addAll(extra);
+        all.sort(Comparator.comparingInt(Change::from));
+        return ChangeSet.of(source.length(), all);
     }
 
     /** One direct text change — for the import region, which the rewriter is not used on. */
