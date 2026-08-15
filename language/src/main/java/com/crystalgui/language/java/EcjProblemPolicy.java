@@ -87,6 +87,24 @@ final class EcjProblemPolicy {
         // parameters by default for the same reason. The rename-to-`ignored` correction the catalogue
         // lists therefore has no diagnostic to hang off, and is not written.
 
+        // SWITCHED OFF, and it is the only thing here turned DOWN from ECJ's default.
+        //
+        // "The serializable class X does not declare a static final serialVersionUID field of type long"
+        // is about the binary compatibility of SERIALIZED INSTANCES ACROSS BUILDS: without an explicit
+        // stamp the compiler derives one from the class's exact shape, so adding a field later changes it
+        // and streams written by the old build fail to load. That is a real concern for code that
+        // serializes; it is not one for a script.
+        //
+        // And it cannot be avoided by not asking for it: Throwable implements Serializable, so EVERY
+        // custom exception a script declares is flagged. The remedy is a magic constant nobody reads,
+        // which means the warning's only achievable outcome is boilerplate added to silence it -- and a
+        // diagnostic whose fix is "write this line you do not understand" teaches nothing and costs a line
+        // of every exception class in the codebase.
+        //
+        // Left reportable rather than deleted: a project that does serialize turns it back on here, which
+        // is one entry rather than a rebuild.
+        options.put("org.eclipse.jdt.core.compiler.problem.missingSerialVersion", "ignore");
+
         return options;
     }
 
