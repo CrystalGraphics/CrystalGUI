@@ -671,27 +671,41 @@ problemspanel > .__find-bar__ {
     padding-right: 6px;
     gap-all: 4px;
     background-color: var(--editorfind-bg, #303235);
-    /* CONTROL RADIUS, NOT PANEL RADIUS. --radius-panel is 8px — the corner an island the size of the
-     * Project tree carries — and on a 40px-tall toolbar the same number is a proportion, not a style:
-     * it eats most of the bar's own height and reads as a pill. This is chrome sized like a control, so
-     * it rounds like one.
+    /* SQUARE, because this bar is FULL-BLEED. It is laid out `left: 0; width: 100%` against the editor's
+     * top edge, so all four of its corners abut something rather than floating clear of it — and the
+     * thing they abut is a scrolled document, whose text is drawn through the `padding-top` strip this
+     * bar exists to cover. A radius there is not a style, it is four holes: each corner cuts the ground
+     * away and the file shows through the gap.
      *
-     * COSTS THE FBO MASK PATH, knowingly: `.__find-bar__` sets `overflow: hidden` as a narrow-panel
-     * backstop, and rounding + clipping is what resolveOverflowClip() promotes to a layer. One small
-     * element, only while the bar is open — the same trade `textfield` documents for the same reason. */
-    border-radius: var(--radius-control, 0px);
+     * It carried `--radius-control` on the reasoning that this is chrome sized like a control and should
+     * round like one. That reasoning is sound and it is about a widget that FLOATS — VS Code's find
+     * widget is inset from the editor's edges, which is what earns it corners. Give this one a radius
+     * and it has to be inset too; until then the two decisions travel together.
+     *
+     * Squaring it also drops the FBO mask path this used to pay for knowingly: `.__find-bar__` sets
+     * `overflow: hidden` as a narrow-panel backstop, and it is rounding PLUS clipping that
+     * resolveOverflowClip() promotes to a layer. */
+    border-radius: 0px;
 
     /* THE SAME HAIRLINE EVERY PANEL DRAWS between its chrome and its content, from the same token —
      * this bar is chrome sitting above the document exactly as a header sits above a tree.
      *
-     * A UNIFORM WIDTH WITH THREE TRANSPARENT EDGES, which is not a flourish: the rounded-background
-     * path takes its stroke width from `border().left` ALONE and colours the edges separately, so
+     * A UNIFORM WIDTH ON ALL FOUR EDGES, which is not a flourish: the rounded-background path takes its
+     * stroke width from `border().left` ALONE and colours the edges separately, so
      * `border-bottom-width` on its own resolves, lays out, and paints nothing. Every bottom-only
      * hairline in this sheet was invisible for that reason until the panel rule spelled it this way.
-     * `.__view-container__ > .__view-content__` in ua/workbench.css is the reference spelling. */
+     * `.__view-container__ > .__view-content__` in ua/workbench.css is the reference spelling.
+     *
+     * THE OTHER THREE ARE PAINTED IN THE BAR'S OWN GROUND rather than left transparent, and that is the
+     * half this got wrong. A scroll container's text is drawn THROUGH its `padding-top` strip once the
+     * document is scrolled — the padding reserves the space, it does not mask it — and this bar is the
+     * only thing covering that strip. So a transparent edge here is not a spacer, it is a 1px window
+     * onto the document: the file's own glyph tops showed as a hairline between the tab separator and
+     * the bar, which reads as the bar sitting 2px too low rather than as its border being see-through.
+     * Nudging it upward would have tucked it under the tabs and left the same hole at the left and
+     * right edges, where the same 1px shows the same text. */
     border-width: 1px;
-    border-color: #00000000;
-    border-top-color: #00000000;
+    border-color: var(--editorfind-bg, #303235);
     border-bottom-color: var(--editorfind-border, #00000000);
     z-index: 20;
 }
