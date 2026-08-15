@@ -36,7 +36,15 @@ import java.util.List;
 public interface CodeActionContext {
 
     /** Offers nothing — a host with no classpath index, and the default for anything not asked. */
-    CodeActionContext NONE = simpleName -> List.of();
+    CodeActionContext NONE = new CodeActionContext() {
+        @Override public List<String> importCandidates(String simpleName) {
+            return List.of();
+        }
+
+        @Override public List<String> similarTypeNames(String simpleName) {
+            return List.of();
+        }
+    };
 
     /**
      * Every qualified name that could satisfy {@code simpleName} — an <b>exact</b> match on the simple
@@ -47,4 +55,15 @@ public interface CodeActionContext {
      * {@code List} would be a fix that compiles and is not what anyone asked for.</p>
      */
     List<String> importCandidates(String simpleName);
+
+    /**
+     * Qualified names of types whose simple name is a <b>near miss</b> for {@code simpleName} — the
+     * "did you mean" question, closest first, already capped.
+     *
+     * <p>A third query rather than a flag on the other two, because each is a different judgement:
+     * completion is generous because someone is typing, an import wants an exact name, and this wants a
+     * name a keystroke or two away and nothing further. What "near" means is decided on the host, which
+     * is the side that owns the index and can walk it cheaply.</p>
+     */
+    List<String> similarTypeNames(String simpleName);
 }

@@ -54,7 +54,8 @@ final class JavaQuickFixes {
      */
     private static final List<Correction> ALL = concat(
             UnusedCorrections.all(),
-            ImportCorrections.all());
+            ImportCorrections.all(),
+            DidYouMeanCorrections.all());
 
     /** {@code IProblem} id → the corrections that answer for it. Built once. */
     private static final Map<Integer, List<Correction>> BY_PROBLEM = index(ALL);

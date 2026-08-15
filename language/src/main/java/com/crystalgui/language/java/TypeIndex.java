@@ -13,8 +13,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Enumeration;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -166,6 +168,35 @@ final class TypeIndex {
         return at == needle.length();
     }
 
+    /**
+     * Qualified names of types a keystroke or two away from {@code simpleName} — "did you mean".
+     *
+     * <p>A separate walk from {@link #matching}, not a mode of it: that one asks "what starts like this",
+     * this asks "what is this a misspelling of", and {@code Strimg} answers the second and not the first.
+     * The distance function cuts off past the tolerance, and the length pre-check in {@code SimilarNames}
+     * skips most of the index before it is ever computed, so this stays affordable over fifty thousand
+     * entries — it runs on a hover, not a keystroke, and never on a name that resolved.</p>
+     *
+     * <p>Two packages offering the same simple name both come back, in a fixed order, so the correction
+     * can offer each and say which is which; ranking is by simple name and the qualified names then follow
+     * their simple name's rank.</p>
+     */
+    List<String> similar(String simpleName) {
+        if (simpleName == null || simpleName.isEmpty()) return List.of();
+        ensureBuilt();
+        Set<String> simple = new LinkedHashSet<>();
+        for (Entry entry : entries) simple.add(entry.simpleName());
+        List<String> rankedSimple = SimilarNames.rank(simpleName, simple);
+        if (rankedSimple.isEmpty()) return List.of();
+
+        List<String> qualified = new ArrayList<>();
+        for (String candidate : rankedSimple) {
+            for (Entry entry : entries) {
+                if (entry.simpleName().equals(candidate)) qualified.add(entry.qualifiedName());
+            }
+        }
+        return qualified;
+    }
 
     // ── What a type IS, read from its access flags ──────────────────────────────────────────────
 

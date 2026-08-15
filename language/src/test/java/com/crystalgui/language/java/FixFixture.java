@@ -58,8 +58,28 @@ public abstract class FixFixture {
      * {@code List} on purpose: one candidate and several are different cases, and the several-candidate
      * one is what the "More actions…" list exists for.</p>
      */
-    protected static final CodeActionContext HOST = simpleName ->
-            "List".equals(simpleName) ? List.of("java.util.List", "java.awt.List") : List.of();
+    protected static final CodeActionContext HOST = new CodeActionContext() {
+        @Override public List<String> importCandidates(String simpleName) {
+            return "List".equals(simpleName) ? List.of("java.util.List", "java.awt.List") : List.of();
+        }
+
+        /**
+         * A stand-in for the index's distance walk. The ranking itself is {@code SimilarNames}' and is
+         * tested there; what a correction does with a near miss -- rename, import, disambiguate -- is
+         * what these fixtures are about, and that needs the near misses fixed. Deliberately includes a
+         * {@code java.lang} type (no import needed) and a name two packages spell (must disambiguate).
+         */
+        @Override public List<String> similarTypeNames(String simpleName) {
+            switch (simpleName) {
+                case "Strin": case "Strng": case "Sting":
+                    return List.of("java.lang.String");
+                case "Lst": case "Lsit":
+                    return List.of("java.util.List", "java.awt.List");
+                default:
+                    return List.of();
+            }
+        }
+    };
 
     private static JavaEngine engine;
     private static SourceAnalyzer analyzer;
