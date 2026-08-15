@@ -1,0 +1,310 @@
+package com.crystalgui.language.java;
+
+import com.crystalgui.text.ChangeSet;
+import com.crystalgui.text.lang.CodeAction;
+
+import org.eclipse.jdt.core.compiler.IProblem;
+import org.eclipse.jdt.core.dom.AST;
+import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
+import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
+import org.eclipse.jdt.core.dom.ArrayType;
+import org.eclipse.jdt.core.dom.Assignment;
+import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.BodyDeclaration;
+import org.eclipse.jdt.core.dom.CastExpression;
+import org.eclipse.jdt.core.dom.ConditionalExpression;
+import org.eclipse.jdt.core.dom.DoStatement;
+import org.eclipse.jdt.core.dom.Expression;
+import org.eclipse.jdt.core.dom.ExpressionStatement;
+import org.eclipse.jdt.core.dom.FieldDeclaration;
+import org.eclipse.jdt.core.dom.ITypeBinding;
+import org.eclipse.jdt.core.dom.IfStatement;
+import org.eclipse.jdt.core.dom.Initializer;
+import org.eclipse.jdt.core.dom.MethodDeclaration;
+import org.eclipse.jdt.core.dom.MethodInvocation;
+import org.eclipse.jdt.core.dom.Modifier;
+import org.eclipse.jdt.core.dom.Name;
+import org.eclipse.jdt.core.dom.ParameterizedType;
+import org.eclipse.jdt.core.dom.PrefixExpression;
+import org.eclipse.jdt.core.dom.PrimitiveType;
+import org.eclipse.jdt.core.dom.ReturnStatement;
+import org.eclipse.jdt.core.dom.SimpleName;
+import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
+import org.eclipse.jdt.core.dom.Type;
+import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
+import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
+import org.eclipse.jdt.core.dom.WhileStatement;
+import org.eclipse.jdt.core.dom.WildcardType;
+import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+/**
+ * "Create method 'compute(int, String)'" — the first correction that generates a <em>declaration</em>
+ * from the shape of a use.
+ *
+ * <h3>Only into a type declared in this file</h3>
+ *
+ * <p>Anything else is a second file, and a multi-document edit is the one thing the carrier deliberately
+ * cannot express — see the catalogue's §14-G. So the receiver's type has to resolve to a declaration in
+ * this unit; a call on {@code String} or on anything from a jar is refused quietly, and the popup still
+ * offers "did you mean" for it.</p>
+ *
+ * <h3>What is inferred, and from where</h3>
+ *
+ * <ul>
+ *   <li><b>Parameter types</b> from the argument bindings, written through an {@link ImportPlan}. A type
+ *       variable or capture becomes its erasure, because the calling method's {@code T} is not in scope in
+ *       the new one; an anonymous or local type becomes {@code Object} for the same reason.</li>
+ *   <li><b>Parameter names</b> from the arguments when they are simple names, otherwise from the type
+ *       ({@code String} → {@code string}, {@code int} → {@code i}), de-duplicated.</li>
+ *   <li><b>Return type</b> from the use site: {@code void} for a statement, the declared type for an
+ *       initialiser, the target's type for an assignment, the enclosing method's for a {@code return},
+ *       {@code boolean} under a condition or a {@code !}, the cast type under a cast, else
+ *       {@code Object}. The body returns the type's zero, so what is generated compiles.</li>
+ *   <li><b>Modifiers</b>: {@code private} into the enclosing type, package-private into another;
+ *       {@code static} when the receiver is a type name or the call sits in a static context.</li>
+ * </ul>
+ *
+ * <p>Not preferred, and neither is anything else for an unresolved method — "did you mean" competes, and
+ * which is right depends on whether the name was a typo or an intention.</p>
+ */
+@SuppressWarnings("unchecked")   // JDT's DOM lists are raw; every add below is to a list of the declared node type
+final class CreateCorrections {
+
+    static final String CREATE_METHOD = "java.create.method";
+
+    private CreateCorrections() {
+    }
+
+    static List<Correction> all() {
+        return List.of(new CreateMethod());
+    }
+
+    private static final class CreateMethod implements Correction {
+
+        @Override public String id() {
+            return CREATE_METHOD;
+        }
+
+        @Override public int[] problems() {
+            return new int[] {IProblem.UndefinedMethod};
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            SimpleName name = context.enclosing(problem, SimpleName.class);
+            if (name == null || !(name.getParent() instanceof MethodInvocation)) return;
+            MethodInvocation call = (MethodInvocation) name.getParent();
+            if (call.getName() != name) return;
+
+            ITypeBinding here = enclosingTypeOf(call);
+            ITypeBinding receiver = call.getExpression() == null ? here : call.getExpression().resolveTypeBinding();
+            if (receiver == null) return;
+            AbstractTypeDeclaration target = declarationOf(context, receiver);
+            if (target == null) return;
+
+            AST ast = context.unit().getAST();
+            ASTRewrite rewrite = context.rewrite();
+            ImportPlan imports = context.importPlan();
+            MethodDeclaration method = ast.newMethodDeclaration();
+            method.setName(ast.newSimpleName(name.getIdentifier()));
+
+            boolean sameType = here != null && here.getErasure().isEqualTo(receiver.getErasure());
+            if (sameType) method.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.PRIVATE_KEYWORD));
+            if (isStaticCall(call, here)) {
+                method.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.STATIC_KEYWORD));
+            }
+
+            Set<String> taken = new LinkedHashSet<>();
+            List<String> shownTypes = new ArrayList<>();
+            for (Object each : call.arguments()) {
+                Expression argument = (Expression) each;
+                ITypeBinding argumentType = argument.resolveTypeBinding();
+                SingleVariableDeclaration parameter = ast.newSingleVariableDeclaration();
+                Type type = typeFor(argumentType, ast, imports);
+                parameter.setType(type);
+                parameter.setName(ast.newSimpleName(parameterName(argument, argumentType, taken)));
+                method.parameters().add(parameter);
+                shownTypes.add(argumentType == null ? "Object" : argumentType.getErasure().getName());
+            }
+
+            Type returnType = returnTypeFor(call, ast, rewrite, imports);
+            method.setReturnType2(returnType);
+            Block body = ast.newBlock();
+            Expression zero = zeroOf(returnType, ast);
+            if (zero != null) {
+                ReturnStatement returned = ast.newReturnStatement();
+                returned.setExpression(zero);
+                body.statements().add(returned);
+            }
+            method.setBody(body);
+
+            rewrite.getListRewrite(target, target.getBodyDeclarationsProperty()).insertLast(method, null);
+            ChangeSet edit = context.changesFrom(rewrite, imports);
+            if (edit == null) return;
+            out.add(context.fix(CREATE_METHOD,
+                    "Create method '" + name.getIdentifier() + "(" + String.join(", ", shownTypes) + ")'", edit));
+        }
+
+        // ── Where ───────────────────────────────────────────────────────────────────────────────
+
+        /** The declaration of {@code type} in this unit, or null — a type from anywhere else is a second file. */
+        private static AbstractTypeDeclaration declarationOf(FixContext context, ITypeBinding type) {
+            ITypeBinding wanted = type.getErasure();
+            AbstractTypeDeclaration[] found = new AbstractTypeDeclaration[1];
+            context.unit().accept(new ASTVisitor() {
+                @Override public void preVisit(ASTNode node) {
+                    if (found[0] == null && node instanceof AbstractTypeDeclaration) {
+                        ITypeBinding declared = ((AbstractTypeDeclaration) node).resolveBinding();
+                        if (declared != null && declared.getErasure().isEqualTo(wanted)) {
+                            found[0] = (AbstractTypeDeclaration) node;
+                        }
+                    }
+                }
+            });
+            return found[0];
+        }
+
+        private static ITypeBinding enclosingTypeOf(ASTNode node) {
+            for (ASTNode at = node.getParent(); at != null; at = at.getParent()) {
+                if (at instanceof AbstractTypeDeclaration) return ((AbstractTypeDeclaration) at).resolveBinding();
+                if (at instanceof AnonymousClassDeclaration) return ((AnonymousClassDeclaration) at).resolveBinding();
+            }
+            return null;
+        }
+
+        /** {@code Foo.bar()} — the receiver is a type — or a bare call from a static method or initialiser. */
+        private static boolean isStaticCall(MethodInvocation call, ITypeBinding here) {
+            Expression receiver = call.getExpression();
+            if (receiver instanceof Name) {
+                return ((Name) receiver).resolveBinding() instanceof ITypeBinding;
+            }
+            if (receiver != null) return false;
+            for (ASTNode at = call.getParent(); at != null; at = at.getParent()) {
+                if (at instanceof MethodDeclaration) return Modifier.isStatic(((MethodDeclaration) at).getModifiers());
+                if (at instanceof Initializer) return Modifier.isStatic(((Initializer) at).getModifiers());
+                if (at instanceof FieldDeclaration) return Modifier.isStatic(((FieldDeclaration) at).getModifiers());
+                if (at instanceof BodyDeclaration || at instanceof AnonymousClassDeclaration) return false;
+            }
+            return false;
+        }
+
+        // ── Types ───────────────────────────────────────────────────────────────────────────────
+
+        /**
+         * A {@link Type} node spelling {@code binding}, importing what it needs.
+         *
+         * <p>Type variables and captures become their erasure — the calling method's {@code T} is not in
+         * scope in the new method — and anonymous or local types become {@code Object}, which is the
+         * honest name for something the new method cannot name.</p>
+         */
+        private static Type typeFor(ITypeBinding binding, AST ast, ImportPlan imports) {
+            if (binding == null || binding.isNullType() || binding.isAnonymous() || binding.isLocal()) {
+                return ast.newSimpleType(ast.newSimpleName("Object"));
+            }
+            if (binding.isPrimitive()) return ast.newPrimitiveType(PrimitiveType.toCode(binding.getName()));
+            if (binding.isArray()) {
+                return ast.newArrayType(typeFor(binding.getElementType(), ast, imports), binding.getDimensions());
+            }
+            if (binding.isTypeVariable() || binding.isCapture()) {
+                return typeFor(binding.getErasure(), ast, imports);
+            }
+            if (binding.isWildcardType()) {
+                WildcardType wildcard = ast.newWildcardType();
+                ITypeBinding bound = binding.getBound();
+                if (bound != null) {
+                    wildcard.setBound(typeFor(bound, ast, imports), binding.isUpperbound());
+                }
+                return wildcard;
+            }
+            if (binding.isParameterizedType()) {
+                ParameterizedType parameterized = ast.newParameterizedType(typeFor(binding.getErasure(), ast, imports));
+                for (ITypeBinding argument : binding.getTypeArguments()) {
+                    parameterized.typeArguments().add(typeFor(argument, ast, imports));
+                }
+                return parameterized;
+            }
+            return ast.newSimpleType(ast.newName(imports.nameFor(binding.getErasure().getQualifiedName())));
+        }
+
+        private static Type returnTypeFor(MethodInvocation call, AST ast, ASTRewrite rewrite, ImportPlan imports) {
+            ASTNode parent = call.getParent();
+            if (parent instanceof ExpressionStatement) return ast.newPrimitiveType(PrimitiveType.VOID);
+            if (parent instanceof VariableDeclarationFragment && ((VariableDeclarationFragment) parent).getInitializer() == call) {
+                ASTNode declaration = parent.getParent();
+                Type declared = declaration instanceof VariableDeclarationStatement
+                        ? ((VariableDeclarationStatement) declaration).getType()
+                        : declaration instanceof FieldDeclaration ? ((FieldDeclaration) declaration).getType() : null;
+                if (declared != null && !declared.isVar()) return (Type) rewrite.createCopyTarget(declared);
+            }
+            if (parent instanceof Assignment && ((Assignment) parent).getRightHandSide() == call) {
+                return typeFor(((Assignment) parent).getLeftHandSide().resolveTypeBinding(), ast, imports);
+            }
+            if (parent instanceof ReturnStatement) {
+                for (ASTNode at = parent; at != null; at = at.getParent()) {
+                    if (at instanceof MethodDeclaration) {
+                        Type declared = ((MethodDeclaration) at).getReturnType2();
+                        if (declared != null) return (Type) rewrite.createCopyTarget(declared);
+                        break;
+                    }
+                }
+            }
+            if (parent instanceof CastExpression) return (Type) rewrite.createCopyTarget(((CastExpression) parent).getType());
+            if (parent instanceof IfStatement || parent instanceof WhileStatement || parent instanceof DoStatement
+                    || (parent instanceof ConditionalExpression && ((ConditionalExpression) parent).getExpression() == call)
+                    || (parent instanceof PrefixExpression
+                        && ((PrefixExpression) parent).getOperator() == PrefixExpression.Operator.NOT)) {
+                return ast.newPrimitiveType(PrimitiveType.BOOLEAN);
+            }
+            return ast.newSimpleType(ast.newSimpleName("Object"));
+        }
+
+        /** The literal that makes a body of {@code return …;} compile — null for {@code void}. */
+        private static Expression zeroOf(Type type, AST ast) {
+            if (type instanceof PrimitiveType) {
+                PrimitiveType.Code code = ((PrimitiveType) type).getPrimitiveTypeCode();
+                if (code == PrimitiveType.VOID) return null;
+                if (code == PrimitiveType.BOOLEAN) return ast.newBooleanLiteral(false);
+                if (code == PrimitiveType.CHAR) return ast.newNumberLiteral("0");
+                return ast.newNumberLiteral("0");
+            }
+            return ast.newNullLiteral();
+        }
+
+        // ── Names ───────────────────────────────────────────────────────────────────────────────
+
+        private static String parameterName(Expression argument, ITypeBinding type, Set<String> taken) {
+            String base;
+            if (argument instanceof SimpleName) {
+                base = ((SimpleName) argument).getIdentifier();
+            } else if (type == null || type.isNullType()) {
+                base = "o";
+            } else if (type.isPrimitive()) {
+                base = type.getName().substring(0, 1);
+            } else if (type.isArray()) {
+                base = parameterName(null, type.getElementType(), new LinkedHashSet<>()) + "s";
+            } else {
+                String simple = type.getErasure().getName();
+                base = simple.isEmpty() ? "o" : simple.substring(0, 1).toLowerCase(Locale.ROOT) + simple.substring(1);
+            }
+            if (KEYWORDS.contains(base)) base = base + "Value";
+            String candidate = base;
+            for (int i = 2; !taken.add(candidate); i++) candidate = base + i;
+            return candidate;
+        }
+
+        private static final Set<String> KEYWORDS = Set.of(
+                "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
+                "continue", "default", "do", "double", "else", "enum", "extends", "final", "finally", "float",
+                "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long", "native",
+                "new", "package", "private", "protected", "public", "return", "short", "static", "strictfp",
+                "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void",
+                "volatile", "while", "true", "false", "null", "var", "record", "yield", "sealed", "permits");
+    }
+}
