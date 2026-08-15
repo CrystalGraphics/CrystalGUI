@@ -40,7 +40,8 @@ path to links ever. Reusing `SyntaxToken` means the popup's rendering is the sam
 produces a `CgStyledText` directly, entering the pipeline *downstream of the cascade*, so its colours are
 baked and a scheme switch would not reach them.
 | 24.6 | GLSL diagnostics | **blocked, and the plan's premise below is wrong** |
-| 24.5 | `locals.scm` | not started — vendoring question below |
+| 24.1 | The popup's **footer** band | **not built** — the one exit criterion of 24.1 that is unmet, and the only item left in M11 that needs no decision from anybody |
+| 24.5 | `locals.scm` | not started — **the licence fork below, not the standing rule**; that was checked and corrected |
 | 24.3 | `folds.scm` | not started — vendoring question below |
 | 24.4 | `indents.scm` | not started — vendoring question below |
 
@@ -108,12 +109,22 @@ So 24.6 needs a **CrystalGraphics change first**: a position on `CgShaderParseEx
 collecting mode on the parser). That is a genuine new backend capability rather than a reimplementation,
 so it is allowed — but it is a decision to take deliberately, not a side effect of this milestone.
 
-### The three query items share one blocking question
+### The three query items share one blocking question — and it is all three, not two
 
 `locals.scm`, `folds.scm` and `indents.scm` are all **vendored files**, and `Queries.java` records the
 standing rule: query files come from *the grammar author's own* `queries/` directory, "which is the whole
-point". That rule answers 24.5 and does **not** answer 24.3 or 24.4, because upstream grammars generally
-ship neither — those live in editor runtime repos. So the fork §24.4 names is real and gates all three:
+point".
+
+> **This section used to say that rule answers 24.5 and only 24.3/24.4 needed a decision. That was
+> asserted, not checked, and it is wrong.** The authors ship no `locals.scm` either:
+> `tree-sitter/tree-sitter-java` ships `highlights.scm` and `tags.scm` and nothing else, and
+> `tree-sitter-grammars/tree-sitter-glsl` ships `highlights.scm` alone — which are precisely the two
+> this item was justified by, Java for the engine-backed case and GLSL for the engineless one. The
+> pattern is general: a *grammar* repo ships highlights and tags, and the richer query families live in
+> editor **runtime** repos. So the standing rule answers none of the three, and the fork below gates all
+> of them rather than two.
+
+The fork §24.4 names is therefore real and gates all three:
 
 | Source | Licence | Cost |
 |---|---|---|
