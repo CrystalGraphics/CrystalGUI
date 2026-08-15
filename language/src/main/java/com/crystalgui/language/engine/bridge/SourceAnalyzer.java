@@ -7,7 +7,7 @@ import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.syntax.SyntaxToken;
 
 import java.util.List;
-
+import java.util.function.Function;
 
 /**
  * What an engine can say about a source file — the analysis half of the bridge.
@@ -119,7 +119,7 @@ public interface SourceAnalyzer {
          * also keeps the index type off this bridge, which the band loader would otherwise have to share.</p>
          */
         default List<CodeAction> codeActionsIn(
-                int from, int to, java.util.function.Function<String, List<String>> importCandidates) {
+                int from, int to, Function<String, List<String>> importCandidates) {
             return List.of();
         }
 
