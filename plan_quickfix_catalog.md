@@ -891,9 +891,24 @@ separate plan with cross-document undo as its first line.
    `assertFix` on a previously untested correction found a real defect: `UnusedPrivateField`'s
    `getArguments()[0]` is the declaring **type**, so "Remove field 'count'" was titled
    *"Remove field 'Script'"*. Names now come from the declaration's own node.
-2. **§14-A/B + R3** — `CodeActionContext`, the `Correction` registry with `id()`, and `Problems`
-   families — as a pure move of the shipped fixes onto the new shape.
-3. **The fixture files** (§15 L4), seeded into the harness.
+2. ~~**§14-A/B + R3** — `CodeActionContext`, the `Correction` registry with `id()`, and `Problems`
+   families — as a pure move of the shipped fixes onto the new shape.~~ **Done.** The bridge takes a
+   `CodeActionContext` instead of a `Function`, so a future host-side need adds a method there rather
+   than an argument to a signature both loaders must agree on; corrections register and are indexed by
+   problem id; `ImportRegion` makes the import carve-out a place you can stand rather than a paragraph.
+   The proof is that the tests' *logic* did not change — only which class the id constants come from.
+   **`Problems` families were deliberately not created**: exactly one exists today (`UndefinedType` +
+   `ImportNotFound`) and it is already the `problems()` array of the correction that uses it. It belongs
+   beside the severity table (§14-F), which is where a family is both enabled and fixed.
+3. ~~**The fixture files** (§15 L4), seeded into the harness.~~ **Done**, and they landed in the
+   directory that already existed for exactly this — `language/src/test/resources/fixtures/`, whose
+   README had documented the tracked-copy-plus-`cp` arrangement for the syntax-colouring documents.
+   `installHarnessFixtures` replaces that `cp` and is **write-if-absent**, because the destination is a
+   workspace somebody has been typing in. The `// FIX: "…"` lines are **assertions**, not comments:
+   `FixtureFilesTest` reads every fixture containing one, asks the engine what it offers there, and
+   fails naming the file, the line and what it got instead — so a fixture cannot quietly go stale. It
+   selects files on the annotation rather than the extension, which is what keeps the 500-line
+   colouring documents in the same directory out of a quick-fix analysis they make no claim about.
 4. **§14-F severity table, then the T1 batch.**
 5. Annotation insertion, `@Override`/`@Deprecated`, and the `SUPPRESS` product call.
 6. `ImportPlan`, "did you mean", the list-element fixes, organise imports.

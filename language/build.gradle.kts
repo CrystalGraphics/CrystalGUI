@@ -376,6 +376,50 @@ fun signerConflicts(band: String, jars: List<File>): List<String> {
     }
 }
 
+// ── Fixtures → the harness's scratch workspace ──────────────────────────────────────────────────
+//
+// `src/test/resources/fixtures/` holds documents that exist to be OPENED rather than run: the syntax
+// colouring samples, and the `// FIX:` annotated files a person works down to try every quick fix in a
+// family. The harness reads them from `gl-debug-harness/workspace/`, which is GITIGNORED -- it is a
+// scratch project the user edits -- so a tracked copy has to live here and be carried across.
+//
+// That copy was a `cp` line in the fixtures README, which is the kind of step that is done once and then
+// silently not repeated when a fixture changes. This is the same step, spelled so it can be re-run.
+//
+// WRITE-IF-ABSENT, NEVER OVERWRITE, which is the one thing a plain `Copy` task would get wrong: the
+// destination is a workspace somebody has been typing in, and clobbering an edited file to install a
+// fixture would lose work. Delete the file to take a fresh copy.
+val installHarnessFixtures = tasks.register("installHarnessFixtures") {
+    group = "harness"
+    description = "Copies the tracked fixture documents into the GL harness's scratch workspace."
+
+    val from = layout.projectDirectory.dir("src/test/resources/fixtures")
+    val into = rootProject.layout.projectDirectory.dir("gl-debug-harness/workspace/src")
+    inputs.dir(from)
+
+    doLast {
+        val target = into.asFile
+        if (!target.parentFile.parentFile.exists()) {
+            logger.lifecycle("gl-debug-harness is not checked out — nothing to install")
+            return@doLast
+        }
+        target.mkdirs()
+        var written = 0
+        var kept = 0
+        from.asFile.listFiles()?.sortedBy { it.name }?.forEach { source ->
+            if (source.isDirectory || source.name.endsWith(".md")) return@forEach
+            val destination = target.resolve(source.name)
+            if (destination.exists()) {
+                kept++
+            } else {
+                source.copyTo(destination)
+                written++
+            }
+        }
+        logger.lifecycle("harness fixtures: $written installed, $kept already present at $target")
+    }
+}
+
 tasks.register("engineReport") {
     group = "verification"
     description = "Resolves each engine band and reports its jars, sizes and class-file floors."
