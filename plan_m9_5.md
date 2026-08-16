@@ -17,7 +17,7 @@ carrying the output of running scripts, plus the indicator that says which files
 | 9.5.8 | The per-script filter | **done** — folded into 9.5.3's rail; the head's stand-in picker is gone |
 | 9.5.9 | `System.in` | **done** — `ScriptInput`, 7 tests, and an input row that appears only while something is waiting |
 | 9.5.10 | The rail as built | **done** — a lazily-built `SplitView`, elapsed time, the right stripe, and no spinner (and the argument for why) |
-| 9.5.11 | The review pass | **A1–A9 and B1–B10 done**, 160 tests passing. B11–B13 (Preferences, forgotten rail rows, **the empty state**) and the C/D sweeps remain |
+| 9.5.11 | The review pass | **done** — 9 defects, 13 gaps and both sweeps, 167 tests passing |
 
 Written before any of it existed; the states above are current. **M9.5 is complete** — every exit
 criterion below has been met and the last of them, stop-leaves-its-transcript, confirmed in the harness.
@@ -647,9 +647,20 @@ Written 2026-08-16, after every exit criterion above was met, from a read of eve
 the panel leans on (`Keymap.acceleratorFor`, the editor's read-only paths, `ToolWindowManager.showPanel`).
 It is ranked, and the ranking is the recommendation: A and B are the work; C and D are a sweep.
 
-> **State, 2026-08-16 (same day).** **A1–A9 and B1–B10 are done**, across five commits, with the run
-> package at **160 tests passing and none skipped** (up from 133). **B11–B13 and the C/D sweeps are
-> open**, B13 — the empty state — being the one with a user waiting on it.
+> **State, 2026-08-16 (same day). Everything in this section is done** — A1–A9, B1–B13, and both
+> sweeps — across eight commits, with the run package at **167 tests passing and none skipped** (up from
+> 133) and the language suite green at 514.
+>
+> Three entries closed themselves rather than being implemented. **B9** did not need the editor-wide
+> context menu it was filed under: `ContextMenu` composes fixed items with contributed ones, so the
+> console splices Copy and Select All in rather than declaring twins of them. Two **D** items were
+> already gone — the byte-loop `ThreadLocal` hoist shipped with A2, and the per-line stack walk stopped
+> being waste the moment B8 gave it a consumer. And two **C** entries stopped being dead by being used:
+> `RunRail.showing()` (B5) and `RunConsole.transcriptSize()` (B4).
+>
+> One entry was **deliberately reduced**. B11 proposed two Preferences rows and shipped one: soft wrap
+> did not get a global default, because B3 had just made the panel remember it per workspace and a
+> default on top of that is two writers for one value with attach order deciding which wins.
 >
 > Three of the nine defects have **no test**, and the reason is structural rather than an omission:
 > A4 (the soft-wrap mirror), A6 (the All-output tooltip) and A9 (Stop's source) are all widget wiring,
