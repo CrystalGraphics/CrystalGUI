@@ -626,6 +626,23 @@ public class UIElement implements SettingsScope, DataProvider {
         readState(in);
     }
 
+    /**
+     * Whether this element's {@link #writeState} survives the application closing — see
+     * {@link SessionState}.
+     *
+     * <p>Opt-in, and the alternative was considered: persisting everything that has an id would need no
+     * flag at all, but an id is set for {@code querySelector} and for CSS as often as for identity, and
+     * silently restoring a {@code TextField}'s text because somebody named it is a surprise nobody can
+     * search for. One boolean makes the intent explicit and reuses the state hook the widget already
+     * has.</p>
+     *
+     * <p><b>An {@link #setId(String) id} is required</b> and must be stable across runs — it is the only
+     * thing tying a payload to a widget that may not exist yet. Set it on the element that <em>owns</em>
+     * the state, which for a composite is usually an internal child rather than the widget.</p>
+     */
+    @Getter @Setter
+    private boolean sessionPersistent = false;
+
     // ── Networking ───────────────────────────────────────────────────────────
 
     /** Assigned by a session in document order; {@code -1} until then. See {@code NetworkIds}. */
