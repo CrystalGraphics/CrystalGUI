@@ -6,10 +6,13 @@
  * Alt+Enter. Every `// FIX:` line below states, verbatim, the action that must appear on the line
  * beneath it.
  *
- * THIS ONE IS DIFFERENT FROM EVERY OTHER FIXTURE HERE: nothing in it is wrong. There are no squiggles,
- * because no compiler reports a convertible anonymous class -- so there is no error stripe to aim at and
- * the caret has to be put on the header deliberately. That is also why the refusals below matter more
- * than the conversions: a fix that fires where it should not has no diagnostic to give it away.
+ * NOTHING IN THIS FILE IS WRONG, and it still has six findings. No compiler reports a convertible
+ * anonymous class -- this engine does, from the same judgement the fix uses, because a refactor nobody
+ * can see is a refactor nobody applies. They are drawn FADED rather than underlined, which is the
+ * treatment the unused family gets and IntelliJ's own for this inspection.
+ *
+ * That shared judgement is why the refusals below matter more than the conversions: they are what stops
+ * a mark promising a conversion the popup then declines to make.
  *
  * The refused cases carry no `// FIX:` line, so the checker asserts nothing about them; they are here
  * for a person to try, and each says what would go wrong.

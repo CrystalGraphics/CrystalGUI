@@ -1,22 +1,27 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionKind;
 
 import org.junit.Test;
 
+import java.util.List;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * "Replace with lambda", and the far longer list of things that must not be.
  *
  * <h3>Why the refusals outnumber the conversions here</h3>
  *
- * <p>This correction keys on <b>no problem</b> — nothing reports a convertible anonymous class — so
- * nothing outside it decides when it fires. Every other correction in this package is gated by ECJ having
- * already said something is wrong; this one is gated only by its own judgement, and a conversion that
- * fires where it should not has no diagnostic to give it away. So the refusals are the specification and
+ * <p>Every other correction in this package is gated by ECJ having already said something is wrong. No
+ * compiler says anything about a convertible anonymous class, so this one is gated <b>only by its own
+ * judgement</b> — and the analyser reports the site from that same judgement, so a mistake here is a
+ * squiggle promising a conversion the popup then declines to make. The refusals are the specification;
  * the conversions are the easy half.</p>
  */
 public class LambdaCorrectionsTest extends FixFixture {
@@ -84,15 +89,17 @@ public class LambdaCorrectionsTest extends FixFixture {
                         + "}\n");
     }
 
-    /** It is a refactor, not a fix — so it can never outrank a fix for something actually wrong. */
+    /** Titled as IntelliJ titles it, and a fix for the finding the analyser reports beside it. */
     @Test
-    public void itIsOfferedAsARefactor() {
+    public void itIsOfferedAsAQuickFix() {
         CodeAction action = offered(comparator(""
                 + "            public int compare(String left, String right) { return 0; }\n"),
                 HEADER, LambdaCorrections.FROM_ANONYMOUS);
         assertNotNull("nothing was offered at all", action);
         assertEquals("Replace with lambda", action.title());
-        assertEquals(CodeActionKind.REFACTOR, action.kind());
+        // A QUICK_FIX, because the analyser reports the site: the kind is about what an action ANSWERS,
+        // and the popup's inline slot is reserved for the fix to the message above it.
+        assertEquals(CodeActionKind.QUICK_FIX, action.kind());
     }
 
     /**
@@ -347,5 +354,46 @@ public class LambdaCorrectionsTest extends FixFixture {
                         + "        return (a, b) -> Script.this.rank;\n"
                         + "    }\n"
                         + "}\n");
+    }
+    // ── What the analyser reports ───────────────────────────────────────────────────────────────
+
+    private static final String ONE_SITE = ""
+            + "            public int compare(String left, String right) { return 0; }\n";
+
+    /**
+     * <b>The site is reported, not merely fixable.</b> This shipped as an intention with no diagnostic, on
+     * the measurement that no compiler emits one — true, and the wrong conclusion drawn from it. IntelliJ
+     * lists it as a warning beside "Class 'Inner' is never used", because a refactor nobody can see is a
+     * refactor nobody applies.
+     */
+    @Test
+    public void aConvertibleSiteIsReported() {
+        List<Diagnostic> found = diagnosticsOf(comparator(ONE_SITE));
+        assertEquals("one finding for one convertible anonymous class", 1, found.size());
+        assertEquals("Anonymous new Comparator<String>() can be replaced with lambda",
+                found.get(0).message());
+    }
+
+    /**
+     * <b>Faded, not underlined</b> — the drawing the unused family already gets, and IntelliJ's own for
+     * this inspection. A yellow squiggle under every anonymous class in a file would be the loudest thing
+     * on screen for something nobody has to act on.
+     */
+    @Test
+    public void theReportIsDrawnAsDeadWeightRatherThanADefect() {
+        List<Diagnostic> found = diagnosticsOf(comparator(ONE_SITE));
+        assertTrue("the header is ceremony the lambda does without, so it fades",
+                found.get(0).hasTag(DiagnosticTag.UNNECESSARY));
+    }
+
+    /**
+     * <b>And a refusal is not reported either.</b> The mark and the fix come from one call, which is what
+     * stops a squiggle promising a conversion the popup then declines to make.
+     */
+    @Test
+    public void aRefusedSiteIsNotReported() {
+        assertTrue("nothing convertible here", diagnosticsOf(comparator(""
+                + "            private int calls;\n"
+                + "            public int compare(String a, String b) { return ++calls; }\n")).isEmpty());
     }
 }
