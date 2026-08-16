@@ -206,7 +206,13 @@ final class IntentionCorrections {
 
             List<Change> changes = new ArrayList<>();
             changes.add(new Change(gap, body.getStartPosition(), " {\n" + indent + "    "));
-            changes.add(new Change(end, end, "\n" + indent + "}"));
+            // AND THE CONTINUATION COMES BACK UP ONTO THE BRACE. `} else` is the shape Java is written in,
+            // and putting it there is also what makes this the exact inverse of removing them — otherwise
+            // the pair drifts a line apart every time somebody uses both.
+            int continuation = continuationAfter(context.source(), owner, branchOf(owner, body), end);
+            changes.add(continuation < 0
+                    ? new Change(end, end, "\n" + indent + "}")
+                    : new Change(end, continuation, "\n" + indent + "} "));
             ChangeSet edit = context.changeSet(changes);
             if (edit == null) return;
             out.add(context.intention(ADD_BRACES, "Add braces",
@@ -260,7 +266,15 @@ final class IntentionCorrections {
 
             List<Change> changes = new ArrayList<>();
             changes.add(new Change(gap, only.getStartPosition(), "\n" + indent + "    "));
-            changes.add(new Change(innerEnd, blockEnd, ""));
+            // THE CONSTRUCT MAY NOT BE OVER AT THE BRACE. Deleting `\n<indent>}` closes an `else` — or a
+            // `do`'s `while` — up onto the end of the statement that was inside: `println(1); else if (…)`.
+            // It is legal Java and it is unreadable, and the second branch keeps the indentation of a block
+            // that no longer exists. So when something follows, the brace is replaced by the line break it
+            // was providing rather than by nothing.
+            int continuation = continuationAfter(context.source(), owner, branch, blockEnd);
+            changes.add(continuation < 0
+                    ? new Change(innerEnd, blockEnd, "")
+                    : new Change(innerEnd, continuation, "\n" + indent));
             ChangeSet edit = context.changeSet(changes);
             if (edit == null) return;
             out.add(context.intention(REMOVE_BRACES, "Remove braces",
@@ -465,6 +479,31 @@ final class IntentionCorrections {
             return comparison && context.touches(candidate.getStartPosition(),
                     candidate.getStartPosition() + candidate.getLength());
         }
+    }
+
+    /** Which branch of {@code owner} this body is — needed to tell a then-branch from an else. */
+    private static Branch branchOf(Statement owner, Statement body) {
+        for (Branch branch : branchesOf(owner)) {
+            if (branch.body == body) return branch;
+        }
+        return new Branch(body, owner.getStartPosition(), false);
+    }
+
+    /**
+     * Where the construct picks up again after this block — an {@code else}, or a {@code do}'s
+     * {@code while} — or {@code -1} when the block ends it.
+     *
+     * <p>Found by scanning forward over whitespace rather than from the AST, because what is wanted is the
+     * <b>keyword's</b> offset and the tree only offers the else <em>branch</em>, which starts after it.</p>
+     */
+    private static int continuationAfter(String source, Statement owner, Branch branch, int blockEnd) {
+        boolean continues = owner instanceof DoStatement
+                || owner instanceof IfStatement && !branch.isElse
+                        && ((IfStatement) owner).getElseStatement() != null;
+        if (!continues) return -1;
+        int at = blockEnd;
+        while (at < source.length() && Character.isWhitespace(source.charAt(at))) at++;
+        return at;
     }
 
     /** What a node's own characters are — never a regenerated form. */
