@@ -6,9 +6,11 @@ import com.crystalgui.text.lang.CodeAction;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.CastExpression;
+import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.ConditionalExpression;
 import org.eclipse.jdt.core.dom.Expression;
@@ -22,6 +24,7 @@ import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.NodeFinder;
 import org.eclipse.jdt.core.dom.ParenthesizedExpression;
 import org.eclipse.jdt.core.dom.ReturnStatement;
+import org.eclipse.jdt.core.dom.SuperMethodInvocation;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
@@ -63,12 +66,15 @@ final class CastCorrections {
     static final String ADD_CAST = "java.cast.toExpectedType";
     static final String CAST_ARGUMENT = "java.cast.argument";
     static final String CHANGE_TYPE = "java.cast.changeVariableType";
+    static final String CHANGE_RETURN_TYPE = "java.cast.changeReturnType";
+    static final String DROP_RETURNED_VALUE = "java.cast.dropReturnedValue";
 
     private CastCorrections() {
     }
 
     static List<Correction> all() {
-        return List.of(new CastToExpectedType(), new CastArgument(), new ChangeVariableType());
+        return List.of(new CastToExpectedType(), new CastArgument(), new ChangeVariableType(),
+                new ChangeReturnType(), new DropReturnedValue());
     }
 
     private static final class CastToExpectedType implements Correction {
@@ -363,5 +369,114 @@ final class CastCorrections {
                     "Change variable '" + fragment.getName().getIdentifier() + "' type to '" + written + "'",
                     edit));
         }
+    }
+
+    /**
+     * "Change return type to 'int'" — a {@code void} method that returns a value.
+     *
+     * <h3>Why a RETURN type may be changed where a PARAMETER type may not</h3>
+     *
+     * <p>{@link ChangeVariableType} refuses the parameter direction outright: editing a signature means
+     * every caller has to still compile, and this engine cannot see a script's callers. A return type looks
+     * like the same objection and is not — widening {@code void} to anything is <b>source-compatible for
+     * every existing call</b>, because a call whose result is discarded is a legal statement whatever the
+     * method returns. Nothing that compiled stops compiling. That asymmetry is the entire reason one of
+     * these is offered and the other is not, and it is worth stating because "it edits a signature" reads
+     * as the same objection in both cases.</p>
+     *
+     * <p>Preferred over dropping the value: {@code return 5;} was written by somebody who meant to return
+     * something.</p>
+     */
+    private static final class ChangeReturnType implements Correction {
+
+        @Override public String id() {
+            return CHANGE_RETURN_TYPE;
+        }
+
+        @Override public int[] problems() {
+            return new int[] {IProblem.VoidMethodReturnsValue};
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            ReturnStatement returned = context.enclosing(problem, ReturnStatement.class);
+            if (returned == null || returned.getExpression() == null) return;
+            MethodDeclaration method = enclosingMethod(returned);
+            if (method == null || method.isConstructor() || method.getReturnType2() == null) return;
+
+            ITypeBinding value = returned.getExpression().resolveTypeBinding();
+            ImportPlan imports = context.importPlan();
+            String written = TypeNames.writtenName(value, imports, returned);
+            if (written == null) return;
+
+            ASTRewrite rewrite = context.rewrite();
+            rewrite.replace(method.getReturnType2(),
+                    rewrite.createStringPlaceholder(written, ASTNode.SIMPLE_TYPE), null);
+            ChangeSet edit = context.changesFrom(rewrite, imports);
+            if (edit == null) return;
+            out.add(context.preferredFix(CHANGE_RETURN_TYPE,
+                    "Change return type to '" + written + "'", edit));
+        }
+    }
+
+    /**
+     * "Remove returned value" — the other answer, because the code cannot say which was meant.
+     *
+     * <p>Both are ordinary: "I meant this method to return something" and "I left that expression behind"
+     * happen about equally often, so offering one and hiding the other is a guess dressed as a fix.</p>
+     */
+    private static final class DropReturnedValue implements Correction {
+
+        @Override public String id() {
+            return DROP_RETURNED_VALUE;
+        }
+
+        @Override public int[] problems() {
+            return new int[] {IProblem.VoidMethodReturnsValue};
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            ReturnStatement returned = context.enclosing(problem, ReturnStatement.class);
+            if (returned == null || returned.getExpression() == null) return;
+            if (enclosingMethod(returned) == null) return;
+            // A CALL IS NOT A VALUE TO THROW AWAY. `return compute();` discards the RESULT and keeps the
+            // work; `return count;` discards nothing at all. Deleting an invocation deletes its side
+            // effect, which is the same rule the unused-assignment fix is refused under.
+            if (hasCall(returned.getExpression())) return;
+
+            ASTRewrite rewrite = context.rewrite();
+            rewrite.remove(returned.getExpression(), null);
+            ChangeSet edit = context.changesFrom(rewrite);
+            if (edit == null) return;
+            out.add(context.fix(DROP_RETURNED_VALUE, "Remove returned value", edit));
+        }
+
+        private static boolean hasCall(Expression expression) {
+            boolean[] found = {false};
+            expression.accept(new ASTVisitor() {
+                @Override public void preVisit(ASTNode node) {
+                    if (node instanceof MethodInvocation || node instanceof ClassInstanceCreation
+                            || node instanceof SuperMethodInvocation) {
+                        found[0] = true;
+                    }
+                }
+            });
+            return found[0];
+        }
+    }
+
+    /**
+     * The method a {@code return} belongs to, or null.
+     *
+     * <p>Stops at a {@code LambdaExpression}: a lambda body's {@code return} is the lambda's, not the
+     * method's, so walking past one would re-type an enclosing method from a value that was never its own.
+     * ECJ does not report this problem inside a lambda, so the guard is for the shape rather than for a
+     * case seen — which is the kind that survives a refactor and then does not.</p>
+     */
+    private static MethodDeclaration enclosingMethod(ASTNode at) {
+        for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
+            if (walk instanceof MethodDeclaration) return (MethodDeclaration) walk;
+            if (walk instanceof LambdaExpression) return null;
+        }
+        return null;
     }
 }

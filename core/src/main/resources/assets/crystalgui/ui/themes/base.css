@@ -370,6 +370,11 @@ theme {
      *
      * A theme wanting a boundary hue of its own pins one in its fine-tune block; base.css derives. */
     --run-boundary-fg: var(--accent);
+    /* The line the reader typed. `--success` rather than `--success-icon`: this is a SENTENCE on the
+     * console's surface, and the icon tier is tuned to read as a small mark rather than as text — the
+     * same distinction --run-live-fg makes from the other side, where a 10px dot needed the brighter
+     * one. Green because it is what IntelliJ's own input echo uses. */
+    --run-input-fg: var(--success);
     --run-notice-fg: var(--fg-hint);
     /* The live-script rail. Its own surface, one step back from the transcript, because it is chrome
      * beside content -- the same relationship every tool window's header has with its body. */

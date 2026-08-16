@@ -68,6 +68,7 @@ public final class RunConsole {
         private final boolean opening;
         @Nullable private final String origin;
         private final long millis;
+        private final boolean typed;
 
         Line(String text, RunLevel level, String script, @Nullable Resource file, int line,
              boolean divider) {
@@ -81,6 +82,11 @@ public final class RunConsole {
 
         Line(String text, RunLevel level, String script, @Nullable Resource file, int line,
              boolean divider, boolean opening, @Nullable String origin, long millis) {
+            this(text, level, script, file, line, divider, opening, origin, millis, false);
+        }
+
+        Line(String text, RunLevel level, String script, @Nullable Resource file, int line,
+             boolean divider, boolean opening, @Nullable String origin, long millis, boolean typed) {
             this.text = text;
             this.level = level;
             this.script = script;
@@ -90,6 +96,19 @@ public final class RunConsole {
             this.opening = opening;
             this.origin = origin;
             this.millis = millis;
+            this.typed = typed;
+        }
+
+        /**
+         * A line the <b>reader</b> typed, echoed back — not something the script printed.
+         *
+         * <p>It is in the transcript for the reason a terminal echoes: without it the exchange reads as
+         * the script having answered its own question. But it is the one line in a console that did not
+         * come from the program, and drawing it like output makes a conversation indistinguishable from
+         * a monologue. IntelliJ colours its own input echo for exactly this.</p>
+         */
+        public boolean isTyped() {
+            return typed;
         }
 
         /** {@code Ask.java:24} — the script's own line that printed this, or null. @see ConsolePrefix */
@@ -278,7 +297,11 @@ public final class RunConsole {
         if (!awaitingInput) return false;
         String text = line == null ? "" : line;
         String script = awaitingScript;
-        append(RunMessage.of(script == null ? "input" : script, RunLevel.OUT, text));
+        // MARKED AS TYPED, not appended as ordinary output. It has no origin -- nothing in the script
+        // printed it -- and it is the one line in the transcript that did not come from the program, so
+        // the view draws it apart. @see Line#isTyped
+        enqueue(new Line(text, RunLevel.OUT, script == null ? "input" : script, null, 0,
+                false, false, null, System.currentTimeMillis(), true));
         return input.offer(text);
     }
 

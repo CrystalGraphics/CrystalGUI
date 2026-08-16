@@ -14,6 +14,7 @@ import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.CastExpression;
+import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.ConditionalExpression;
 import org.eclipse.jdt.core.dom.DoStatement;
 import org.eclipse.jdt.core.dom.Expression;
@@ -35,11 +36,13 @@ import org.eclipse.jdt.core.dom.ReturnStatement;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.Type;
+import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 import org.eclipse.jdt.core.dom.WhileStatement;
 import org.eclipse.jdt.core.dom.WildcardType;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
+import org.eclipse.jdt.core.dom.rewrite.ListRewrite;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -81,12 +84,13 @@ import java.util.Set;
 final class CreateCorrections {
 
     static final String CREATE_METHOD = "java.create.method";
+    static final String CREATE_CONSTRUCTOR = "java.create.constructor";
 
     private CreateCorrections() {
     }
 
     static List<Correction> all() {
-        return List.of(new CreateMethod());
+        return List.of(new CreateMethod(), new CreateConstructor());
     }
 
     private static final class CreateMethod implements Correction {
@@ -325,5 +329,107 @@ final class CreateCorrections {
                 "new", "package", "private", "protected", "public", "return", "short", "static", "strictfp",
                 "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void",
                 "volatile", "while", "true", "false", "null", "var", "record", "yield", "sealed", "permits");
+    }
+
+    /**
+     * "Create constructor 'Box(int, String)'" — a {@code new} whose argument list nothing matches.
+     *
+     * <h3>The same three rules the method case already settled</h3>
+     *
+     * <p>Into a type <b>declared in this file</b> and nowhere else, because anything else is a second file
+     * and §14-G's deliberate no. Parameter types from the argument bindings and names from the arguments
+     * when they are simple names. And <b>refused when any argument is a lambda or method reference</b>,
+     * which has no type of its own — it takes one from the parameter it is passed to, and that parameter is
+     * exactly what does not exist yet, so {@code Object} produces a signature the call still cannot use
+     * while looking finished.</p>
+     *
+     * <h3>Where it goes, which is not where a method goes</h3>
+     *
+     * <p>After the last existing constructor, or after the last field when there is none. A generated
+     * constructor appended below every method reads as having been bolted on, and the convention it breaks
+     * is one every Java reader has — fields, constructors, methods, in that order.</p>
+     *
+     * <p>The TYPE is read from {@code creation.getType()} rather than from the creation's own binding: for
+     * {@code new Box(1) { }} the latter is the ANONYMOUS subclass, which is not a thing a constructor can
+     * be added to, while the written type is the one whose constructor is missing.</p>
+     */
+    private static final class CreateConstructor implements Correction {
+
+        @Override public String id() {
+            return CREATE_CONSTRUCTOR;
+        }
+
+        @Override public int[] problems() {
+            return new int[] {IProblem.UndefinedConstructor,
+                    IProblem.UndefinedConstructorInDefaultConstructor,
+                    IProblem.UndefinedConstructorInImplicitConstructorCall};
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            ClassInstanceCreation creation = context.enclosing(problem, ClassInstanceCreation.class);
+            if (creation == null || creation.getType() == null) return;
+            ITypeBinding target = creation.getType().resolveBinding();
+            if (target == null) return;
+            AbstractTypeDeclaration declaration = CreateMethod.declarationOf(context, target);
+            if (!(declaration instanceof TypeDeclaration)) return;
+            // AN INTERFACE HAS NO CONSTRUCTOR TO ADD, and `new` on one is a different error entirely.
+            if (((TypeDeclaration) declaration).isInterface()) return;
+            for (Object each : creation.arguments()) {
+                if (each instanceof LambdaExpression || each instanceof MethodReference) return;
+            }
+            if (creation.arguments().isEmpty()) return;
+
+            AST ast = context.unit().getAST();
+            ASTRewrite rewrite = context.rewrite();
+            ImportPlan imports = context.importPlan();
+            MethodDeclaration made = ast.newMethodDeclaration();
+            made.setConstructor(true);
+            made.setName(ast.newSimpleName(declaration.getName().getIdentifier()));
+
+            ITypeBinding here = CreateMethod.enclosingTypeOf(creation);
+            boolean sameType = here != null && here.getErasure().isEqualTo(target.getErasure());
+            made.modifiers().add(ast.newModifier(sameType
+                    ? Modifier.ModifierKeyword.PRIVATE_KEYWORD : Modifier.ModifierKeyword.PUBLIC_KEYWORD));
+
+            Set<String> taken = new LinkedHashSet<>();
+            List<String> shownTypes = new ArrayList<>();
+            for (Object each : creation.arguments()) {
+                Expression argument = (Expression) each;
+                ITypeBinding argumentType = argument.resolveTypeBinding();
+                SingleVariableDeclaration parameter = ast.newSingleVariableDeclaration();
+                parameter.setType(CreateMethod.typeFor(argumentType, ast, imports));
+                parameter.setName(ast.newSimpleName(CreateMethod.parameterName(argument, argumentType, taken)));
+                made.parameters().add(parameter);
+                shownTypes.add(argumentType == null ? "Object" : argumentType.getErasure().getName());
+            }
+            made.setBody(ast.newBlock());
+
+            ListRewrite body = rewrite.getListRewrite(declaration, declaration.getBodyDeclarationsProperty());
+            BodyDeclaration after = lastConstructorOrFieldOf((TypeDeclaration) declaration);
+            if (after == null) {
+                body.insertFirst(made, null);
+            } else {
+                body.insertAfter(made, after, null);
+            }
+            ChangeSet edit = context.changesFrom(rewrite, imports);
+            if (edit == null) return;
+            out.add(context.fix(CREATE_CONSTRUCTOR, "Create constructor '"
+                    + declaration.getName().getIdentifier()
+                    + "(" + String.join(", ", shownTypes) + ")'", edit));
+        }
+
+        /** Fields, constructors, methods — so a generated constructor lands where a reader expects one. */
+        private static BodyDeclaration lastConstructorOrFieldOf(TypeDeclaration owner) {
+            BodyDeclaration last = null;
+            for (Object each : owner.bodyDeclarations()) {
+                if (each instanceof FieldDeclaration) {
+                    last = (BodyDeclaration) each;
+                } else if (each instanceof MethodDeclaration
+                        && ((MethodDeclaration) each).isConstructor()) {
+                    last = (BodyDeclaration) each;
+                }
+            }
+            return last;
+        }
     }
 }
