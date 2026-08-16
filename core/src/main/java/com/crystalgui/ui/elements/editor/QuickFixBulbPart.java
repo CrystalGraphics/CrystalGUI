@@ -24,7 +24,13 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  *
  * <p>That is honest rather than approximate, and only because of what the merge guarantees: every
  * diagnostic offers at least the shape-derived actions, so a bulb over a problem can never promise a list
- * that turns out to be empty. If that ever stops being true, this rule has to change with it.</p>
+ * that turns out to be empty.</p>
+ *
+ * <p><b>And the rule did have to change, exactly as that note said it would.</b> It held only while every
+ * action came from a problem; an INTENTION has none, so "Replace with lambda" lit no bulb, marked no
+ * stripe and left a working feature discoverable by prior knowledge alone. The diagnostic path is still
+ * the synchronous fast path — see {@link #somethingToOffer()} for the half that asks, and for why it asks
+ * once per caret move rather than once per frame.</p>
  */
 final class QuickFixBulbPart extends EditorViewPart {
 
@@ -38,7 +44,7 @@ final class QuickFixBulbPart extends EditorViewPart {
 
     @Override
     void render(int firstViewLine, int lastViewLine) {
-        if (!editor.isGutterVisible() || editor.diagnosticsAt(editor.getCaret()).isEmpty()) {
+        if (!editor.isGutterVisible() || !somethingToOffer()) {
             hide();
             return;
         }
@@ -61,6 +67,50 @@ final class QuickFixBulbPart extends EditorViewPart {
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(0f).top(top).width(width).height(height));
     }
+
+    /**
+     * Whether the caret has anything behind it — a diagnostic synchronously, an intention by asking.
+     *
+     * <h3>The synchronous half is still the fast path and still carries the common case</h3>
+     *
+     * <p>A diagnostic is a tracked range already in the buffer, so "is there a problem here" costs
+     * nothing and cannot flicker. Every diagnostic offers at least the shape-derived actions, so a bulb
+     * lit that way can never promise a list that turns out to be empty.</p>
+     *
+     * <h3>And the other half is what this class's own note said to add when it became necessary</h3>
+     *
+     * <p>The old rule was <em>bulb ⟺ diagnostic</em>, which was the same thing as <em>bulb ⟺ actions</em>
+     * only while every action came from a problem. <b>Intentions broke that</b>: "Replace with lambda"
+     * fires on code where nothing is wrong, so there is no diagnostic, no stripe mark and — under the old
+     * rule — no bulb. The feature shipped invisible: correct, reachable by Alt+Enter, and discoverable by
+     * prior knowledge alone, which is exactly the state the class header says a bulb exists to prevent.</p>
+     *
+     * <p><b>One ask per caret MOVE, never per frame.</b> The warning against keying on the action list was
+     * about firing a request every frame for the caret's row, and it stands — so the answer is remembered
+     * against the offset it was asked for, and a caret that has not moved re-uses it. A stale answer can
+     * only survive an edit that leaves the caret where it was, which the next move corrects.</p>
+     */
+    private boolean somethingToOffer() {
+        int caret = editor.getCaret();
+        if (!editor.diagnosticsAt(caret).isEmpty()) {
+            // Asked again when the caret comes back to a clean position, rather than trusting an answer
+            // taken while a problem was covering it.
+            askedFor = -1;
+            return true;
+        }
+        if (caret != askedFor) {
+            askedFor = caret;
+            intentionHere = false;
+            editor.requestCodeActions(TextEditor.LANE_BULB, caret, actions -> {
+                if (caret == askedFor) intentionHere = !actions.isEmpty();
+            });
+        }
+        return intentionHere;
+    }
+
+    /** The caret offset the outstanding answer belongs to; {@code -1} when there is none. */
+    private int askedFor = -1;
+    private boolean intentionHere;
 
     /**
      * <b>{@code display}, not a collapsed box</b> — and it has to be, which is a trap for the next
