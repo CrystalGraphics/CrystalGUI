@@ -1075,6 +1075,88 @@ target-phase only — hears nothing at all.
   far end stays reachable.
 
 
+## Widget state that outlives the run — `SessionState`
+
+`DockLayoutCodec` records where a panel **is**: which region, which half, how wide. It says nothing
+about what is *inside* one, and deliberately — the dock does not serialize an element tree, because a
+frozen DOM would restore whatever widgets happened to exist when it was written, and every panel
+rebuilds its own from its model on each open.
+
+So a widget's own geometry had nowhere to live. `SessionState` is where — a bag of `writeState`
+payloads keyed by element id, held by the `UIWindow` and persisted by `WorkbenchSession` under a
+`widgets` key.
+
+```java
+split.setId("run.rail-split");
+split.setSessionPersistent(true);
+```
+
+That is the whole of adopting it. The Run panel is the case that found it: the divider between its
+script rail and its transcript is a real preference, and without this it snapped back on every launch.
+
+### It reuses what was already there, and the first attempt did not
+
+> **This was a `PanelViewState` interface a tool window implemented, and that was the wrong shape.**
+> The engine *already* has a way for a widget to say what it wants preserved — `writeState`/`readState`
+> — and a way to name one — `setId`. A second, parallel mechanism made every panel re-implement
+> persistence for widgets that could already describe themselves, and it could only ever reach a
+> panel's **root**: a divider three levels down had to be hand-proxied out through the panel and back.
+> `SplitView` now answers for its own weights, which `UIDescriptionCodec` gets for free.
+
+| Concern | Where it already lived |
+|---|---|
+| What a widget wants preserved | `UIElement.writeState` / `readState` |
+| Which widget it is | `UIElement.setId` |
+| When a widget appears | `UIWindow.registerElement` |
+| When it goes away | `UIWindow.unregisterElement` |
+
+The only new parts are the bag and one boolean.
+
+### Applied on REGISTRATION, captured on UNREGISTRATION
+
+> **`registerElement` is the one moment every element joins a window, whenever it is made — and
+> "whenever" is the point.** A tool window is built the first time it is opened, and a widget inside one
+> may be built later still: the Run panel's split does not exist until a script runs, which can be
+> minutes after the session was restored or never at all. Anything applied once at startup misses all of
+> that, silently, because the widget looks perfectly correct sitting at its default.
+
+> **`unregisterElement` is the mirror, and skipping it loses everything on close.** Hiding a tool window
+> *detaches* it, so a save afterwards walks a tree the widget has left and writes nothing — drag the Run
+> panel's divider, close the panel, quit, and the width is gone. Reading it back as it leaves is also the
+> last moment it can be read at all.
+
+> **The store is installed when the session is CONSTRUCTED, not when a restore succeeds.** A first run
+> has no record to restore, so an install-on-restore would leave that whole session with no store — and
+> the unregister hook above then captures nothing.
+
+### Two more rules, each learned the same way
+
+> **An id is spent when it is applied.** Re-applying would drag a divider back to the session's position
+> every time its panel was rebuilt, undoing wherever the user had since dragged it — the same rule a
+> document's caret restore follows.
+
+> **Entries nobody claimed are kept and re-emitted.** Writing only what is on screen makes every save an
+> erasure for every widget not built that session: a divider survives exactly as long as the habit of
+> opening its panel, and the erosion is invisible because each individual save looks correct.
+
+### Rules for implementers
+
+- **An id is required and must be stable across runs** — it is the only thing tying a payload to a
+  widget that may not exist yet. Namespace it (`run.rail-split`), because the store is keyed across the
+  whole workbench.
+- **Opt in explicitly.** Persisting everything that has an id would need no flag, but an id is set for
+  `querySelector` and for CSS at least as often as for identity, and silently restoring a `TextField`'s
+  text because somebody named it is a surprise nobody can search for.
+- **`readState` is a request, not a command.** Clamp what comes back; a record can be hand-edited or
+  written by a build whose limits differed. `SplitView.setWeights` already states the shape of this —
+  extra values ignored, missing ones left alone — and a restore that threw because a pane count drifted
+  would take the whole arrangement with it.
+- **State, not a model.** A divider is view state; a filter is not. A remembered filter naming a script
+  that is not running again opens a console empty for a reason three clicks away. Same
+  document-versus-view boundary the undo stack draws.
+- **No version bump for adopting it.** The `widgets` key is additive and every read tolerates its
+  absence; bumping discards every existing arrangement.
+
 ## Contributions
 
 **A feature declares what it can do; nothing enumerates features.** This is the principle the six earlier
