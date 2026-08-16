@@ -64,7 +64,8 @@ final class JavaQuickFixes {
             LambdaCorrections.all(),
             CastCorrections.all(),
             AnnotationCorrections.all(),
-            ValueCorrections.all());
+            ValueCorrections.all(),
+            ImplementCorrections.all());
 
     /** {@code IProblem} id → the corrections that answer for it. Built once. */
     private static final Map<Integer, List<Correction>> BY_PROBLEM = index(ALL);
